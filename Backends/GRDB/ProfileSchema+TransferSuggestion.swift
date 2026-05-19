@@ -8,7 +8,10 @@ extension ProfileSchema {
   /// negative-assertion `dismissed_transfer_pair` table.
   ///
   /// - Drops `dismissed_transfer_pair` (negative assertions carry no
-  ///   meaning in the record model; no data is preserved).
+  ///   meaning in the record model; no data is preserved). v12 always
+  ///   runs first, so the table is guaranteed to exist — a plain DROP
+  ///   (no IF EXISTS) surfaces a migration-ordering bug rather than
+  ///   hiding it.
   /// - Drops `transaction.transfer_suggestion_counterpart_id` and
   ///   `transaction.transfer_suggestion_suggested_at` (the denormalised
   ///   annotation; superseded by the new table).
@@ -22,7 +25,7 @@ extension ProfileSchema {
   static func addTransferSuggestion(_ database: Database) throws {
     try database.execute(
       sql: """
-        DROP TABLE IF EXISTS dismissed_transfer_pair;
+        DROP TABLE dismissed_transfer_pair;
 
         ALTER TABLE "transaction" DROP COLUMN transfer_suggestion_counterpart_id;
         ALTER TABLE "transaction" DROP COLUMN transfer_suggestion_suggested_at;

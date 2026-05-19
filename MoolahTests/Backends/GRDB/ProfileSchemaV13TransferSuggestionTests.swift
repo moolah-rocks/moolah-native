@@ -6,37 +6,46 @@ import Testing
 
 @Suite("ProfileSchema v13 transfer suggestion")
 struct ProfileSchemaV13TransferSuggestionTests {
-  @Test("v13 creates transfer_suggestion, drops dismissed_transfer_pair and the 2 tx columns")
-  func v13Shape() async throws {
-    let database = try ProfileDatabase.openInMemory()
-    try await database.read { database in
-      let cols = try Row.fetchAll(database, sql: "PRAGMA table_info(transfer_suggestion)")
-        .map { $0["name"] as String }
+  @Test("v13 creates the transfer_suggestion table with its six columns")
+  func createsTransferSuggestionTable() throws {
+    let queue = try DatabaseQueue()
+    try ProfileSchema.migrator.migrate(queue)
+    try queue.read { database in
+      let cols = try Set(database.columns(in: "transfer_suggestion").map(\.name))
       #expect(
-        Set(cols) == [
+        cols == [
           "id", "record_name", "transaction_id_a", "transaction_id_b",
           "suggested_at", "encoded_system_fields",
         ])
-      let hasOld =
-        try Int.fetchOne(
-          database,
-          sql: """
-            SELECT count(*) FROM sqlite_master
-            WHERE type='table' AND name='dismissed_transfer_pair'
-            """) ?? -1
-      #expect(hasOld == 0)
-      let txCols = try Row.fetchAll(database, sql: "PRAGMA table_info(\"transaction\")")
-        .map { $0["name"] as String }
-      #expect(!txCols.contains("transfer_suggestion_counterpart_id"))
-      #expect(!txCols.contains("transfer_suggestion_suggested_at"))
+    }
+  }
+
+  @Test("v13 drops the dismissed_transfer_pair table")
+  func dropsDismissedTransferPairTable() throws {
+    let queue = try DatabaseQueue()
+    try ProfileSchema.migrator.migrate(queue)
+    try queue.read { database in
+      #expect(!(try database.tableExists("dismissed_transfer_pair")))
+    }
+  }
+
+  @Test("v13 drops the denormalised transfer_suggestion columns from transaction")
+  func dropsDenormalisedTransactionColumns() throws {
+    let queue = try DatabaseQueue()
+    try ProfileSchema.migrator.migrate(queue)
+    try queue.read { database in
+      let cols = try Set(database.columns(in: "transaction").map(\.name))
+      #expect(!cols.contains("transfer_suggestion_counterpart_id"))
+      #expect(!cols.contains("transfer_suggestion_suggested_at"))
     }
   }
 
   @Test("suggestions lookup uses the tx indexes, not a scan")
-  func suggestionLookupUsesIndex() async throws {
-    let database = try ProfileDatabase.openInMemory()
+  func suggestionLookupUsesIndex() throws {
+    let queue = try DatabaseQueue()
+    try ProfileSchema.migrator.migrate(queue)
     let txId = UUID()
-    try await database.read { database in
+    try queue.read { database in
       let plan = try Row.fetchAll(
         database,
         sql: """
