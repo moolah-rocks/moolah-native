@@ -41,6 +41,8 @@ struct TransferSuggestionRepoContractTests {
 
     let all = try await repository.fetchAll()
     #expect(all.count == 1, "Re-creating the same pair must upsert, not duplicate")
+    // A same-id (content-addressed) re-create must upsert and overwrite
+    // every column, including suggestedAt — not insert a duplicate.
     #expect(all[0].suggestedAt == Date(timeIntervalSince1970: 5000))
   }
 
