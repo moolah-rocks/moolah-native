@@ -24,7 +24,7 @@ struct ImportStoreTestsMore {
       backend: backend, staging: staging,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs))
+        suggestions: backend.transferSuggestions))
     return (store, dir)
   }
 

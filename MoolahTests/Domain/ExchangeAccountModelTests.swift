@@ -34,6 +34,6 @@ struct ExchangeAccountModelTests {
 
   @Test
   func dataFormatVersionBumpedForExchange() {
-    #expect(DataFormatVersion.current == 3)
+    #expect(DataFormatVersion.current >= 3)
   }
 }

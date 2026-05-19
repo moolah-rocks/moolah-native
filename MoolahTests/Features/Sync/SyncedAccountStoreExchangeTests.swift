@@ -61,9 +61,8 @@ struct SyncedAccountStoreExchangeTests {
       accounts: backend.accounts,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs,
+        suggestions: backend.transferSuggestions,
         clock: { Self.pinnedNow }),
-      transactions: backend.transactions,
       clock: { Self.pinnedNow })
     return Fixture(store: store, backend: backend, database: database)
   }

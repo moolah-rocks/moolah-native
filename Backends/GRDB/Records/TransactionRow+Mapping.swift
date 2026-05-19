@@ -68,10 +68,6 @@ extension TransactionRow {
     self.importOriginIncomingImportSessionId = incoming?.importSessionId
     self.importOriginIncomingSourceFilename = incoming?.sourceFilename
     self.importOriginIncomingParserIdentifier = incoming?.parserIdentifier
-    // TransferSuggestion denormalisation: both columns are written
-    // together or both cleared.
-    self.transferSuggestionCounterpartId = domain.transferSuggestion?.counterpartTransactionId
-    self.transferSuggestionSuggestedAt = domain.transferSuggestion?.suggestedAt
     self.encodedSystemFields = nil
   }
 
@@ -137,18 +133,6 @@ extension TransactionRow {
     return .single(outgoing)
   }
 
-  /// Reconstructs `TransferSuggestion?` iff both denormalised columns
-  /// are present; one populated and one null yields nil.
-  private var transferSuggestion: TransferSuggestion? {
-    guard let counterpartId = transferSuggestionCounterpartId,
-      let suggestedAt = transferSuggestionSuggestedAt
-    else {
-      return nil
-    }
-    return TransferSuggestion(
-      counterpartTransactionId: counterpartId, suggestedAt: suggestedAt)
-  }
-
   /// Domain projection. Legs come from the repository's join on
   /// `transaction_leg` and are passed through here.
   ///
@@ -165,7 +149,6 @@ extension TransactionRow {
       recurPeriod: try recurPeriod.map { try RecurPeriod.decoded(rawValue: $0) },
       recurEvery: recurEvery,
       legs: legs,
-      importOrigin: importOrigin,
-      transferSuggestion: transferSuggestion)
+      importOrigin: importOrigin)
   }
 }

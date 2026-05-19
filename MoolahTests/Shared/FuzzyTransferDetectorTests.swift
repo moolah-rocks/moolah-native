@@ -35,8 +35,6 @@ struct FuzzyTransferDetectorTests {
     )
   }
 
-  private func noDismissals(_ idA: UUID, _ idB: UUID) -> Bool { false }
-
   // MARK: - Happy path
 
   @Test("cross-account opposite-equal amounts within ±3 days produces a candidate pair")
@@ -48,8 +46,7 @@ struct FuzzyTransferDetectorTests {
 
     let pairs = detector.detect(
       newlyImported: [tx1],
-      existingNearby: [tx2],
-      isDismissed: noDismissals
+      existingNearby: [tx2]
     )
 
     #expect(pairs.count == 1)
@@ -68,8 +65,7 @@ struct FuzzyTransferDetectorTests {
 
     let pairs = detector.detect(
       newlyImported: [tx1],
-      existingNearby: [tx2],
-      isDismissed: noDismissals
+      existingNearby: [tx2]
     )
 
     #expect(pairs.isEmpty)
@@ -88,8 +84,7 @@ struct FuzzyTransferDetectorTests {
 
     let pairs = detector.detect(
       newlyImported: [tx1],
-      existingNearby: [tx2],
-      isDismissed: noDismissals
+      existingNearby: [tx2]
     )
 
     #expect(pairs.isEmpty)
@@ -104,8 +99,7 @@ struct FuzzyTransferDetectorTests {
 
     let pairs = detector.detect(
       newlyImported: [tx1],
-      existingNearby: [tx2],
-      isDismissed: noDismissals
+      existingNearby: [tx2]
     )
 
     #expect(pairs.isEmpty)
@@ -123,8 +117,7 @@ struct FuzzyTransferDetectorTests {
 
     let pairs = detector.detect(
       newlyImported: [tx1],
-      existingNearby: [tx2],
-      isDismissed: noDismissals
+      existingNearby: [tx2]
     )
 
     #expect(pairs.count == 1)
@@ -140,8 +133,7 @@ struct FuzzyTransferDetectorTests {
 
     let pairs = detector.detect(
       newlyImported: [tx1],
-      existingNearby: [tx2],
-      isDismissed: noDismissals
+      existingNearby: [tx2]
     )
 
     #expect(pairs.isEmpty)
@@ -171,8 +163,7 @@ struct FuzzyTransferDetectorTests {
 
     let pairs = detector.detect(
       newlyImported: [merged],
-      existingNearby: [counterpart],
-      isDismissed: noDismissals
+      existingNearby: [counterpart]
     )
 
     #expect(pairs.isEmpty)
@@ -204,34 +195,13 @@ struct FuzzyTransferDetectorTests {
 
     let pairs = detector.detect(
       newlyImported: [onChainSend],
-      existingNearby: [exchangeReceipt],
-      isDismissed: noDismissals
+      existingNearby: [exchangeReceipt]
     )
 
     #expect(pairs.count == 1)
     let pair = try #require(pairs.first)
     #expect(pair.newlyImported.id == onChainSend.id)
     #expect(pair.existingCounterpart.id == exchangeReceipt.id)
-  }
-
-  // MARK: - Dismissed pairs
-
-  @Test("dismissed pair is skipped")
-  func dismissedPairSkipped() {
-    let accountA = UUID()
-    let accountB = UUID()
-    let tx1 = makeTx(date: baseDate, accountId: accountA, quantity: -500)
-    let tx2 = makeTx(date: baseDate, accountId: accountB, quantity: 500)
-
-    let pairs = detector.detect(
-      newlyImported: [tx1],
-      existingNearby: [tx2],
-      isDismissed: { idA, idB in
-        (idA == tx1.id && idB == tx2.id) || (idA == tx2.id && idB == tx1.id)
-      }
-    )
-
-    #expect(pairs.isEmpty)
   }
 
   // MARK: - Ambiguous / tie-break
@@ -249,8 +219,7 @@ struct FuzzyTransferDetectorTests {
 
     let pairs = detector.detect(
       newlyImported: [source],
-      existingNearby: [near, far],
-      isDismissed: noDismissals
+      existingNearby: [near, far]
     )
 
     #expect(pairs.count == 1)
@@ -274,8 +243,7 @@ struct FuzzyTransferDetectorTests {
 
     let pairs = detector.detect(
       newlyImported: [source],
-      existingNearby: [sourceHigher, sourceLower],
-      isDismissed: noDismissals
+      existingNearby: [sourceHigher, sourceLower]
     )
 
     #expect(pairs.count == 1)

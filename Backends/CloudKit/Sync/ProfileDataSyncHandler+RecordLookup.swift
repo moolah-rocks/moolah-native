@@ -95,8 +95,8 @@ extension ProfileDataSyncHandler {
       return fetchCategoryRow(id: uuid).map { row in
         buildCKRecord(from: row, encodedSystemFields: row.encodedSystemFields)
       }
-    case DismissedTransferPairRow.recordType:
-      return fetchDismissedTransferPairRow(id: uuid).map { row in
+    case TransferSuggestionRow.recordType:
+      return fetchTransferSuggestionRow(id: uuid).map { row in
         buildCKRecord(from: row, encodedSystemFields: row.encodedSystemFields)
       }
     case CSVImportProfileRow.recordType:
@@ -180,11 +180,11 @@ extension ProfileDataSyncHandler {
         self.mapBuiltRows(
           self.fetchRowsBatch { try self.grdbRepositories.categories.fetchRowsSync(ids: ids) })
       }
-    case DismissedTransferPairRow.recordType:
+    case TransferSuggestionRow.recordType:
       return {
         self.mapBuiltRows(
           self.fetchRowsBatch {
-            try self.grdbRepositories.dismissedTransferPairs.fetchRowsSync(ids: ids)
+            try self.grdbRepositories.transferSuggestions.fetchRowsSync(ids: ids)
           })
       }
     case CSVImportProfileRow.recordType:
@@ -300,8 +300,8 @@ extension ProfileDataSyncHandler {
     fetchRowOrLog { try grdbRepositories.categories.fetchRowSync(id: id) }
   }
 
-  private func fetchDismissedTransferPairRow(id: UUID) -> DismissedTransferPairRow? {
-    fetchRowOrLog { try grdbRepositories.dismissedTransferPairs.fetchRowSync(id: id) }
+  private func fetchTransferSuggestionRow(id: UUID) -> TransferSuggestionRow? {
+    fetchRowOrLog { try grdbRepositories.transferSuggestions.fetchRowSync(id: id) }
   }
 
   private func fetchEarmarkRow(id: UUID) -> EarmarkRow? {

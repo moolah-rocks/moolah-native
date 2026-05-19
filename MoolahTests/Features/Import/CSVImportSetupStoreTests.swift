@@ -42,7 +42,7 @@ struct CSVImportSetupStoreTests {
       backend: backend, staging: staging,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs))
+        suggestions: backend.transferSuggestions))
     let bytes = try CSVFixtureLoader.data("cba-everyday-standard")
     let pending = try await seedPending(staging, bytes: bytes)
 
@@ -70,7 +70,7 @@ struct CSVImportSetupStoreTests {
       backend: backend, staging: staging,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs))
+        suggestions: backend.transferSuggestions))
     let bytes = try CSVFixtureLoader.data("cba-everyday-standard")
     let pending = try await seedPending(staging, bytes: bytes)
     let store = CSVImportSetupStore(
@@ -101,7 +101,7 @@ struct CSVImportSetupStoreTests {
       backend: backend, staging: staging,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs))
+        suggestions: backend.transferSuggestions))
     let bytes = try CSVFixtureLoader.data("cba-everyday-standard")
     let pending = try await seedPending(staging, bytes: bytes)
     let store = CSVImportSetupStore(
@@ -149,7 +149,7 @@ struct CSVImportSetupStoreTests {
       backend: backend, staging: staging,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs))
+        suggestions: backend.transferSuggestions))
     let bytes = try CSVFixtureLoader.data("cba-everyday-standard")
     let pending = try await seedPending(staging, bytes: bytes)
 
@@ -176,7 +176,7 @@ struct CSVImportSetupStoreTests {
       backend: backend, staging: staging,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs))
+        suggestions: backend.transferSuggestions))
     let bytes = try CSVFixtureLoader.data("cba-everyday-standard")
     let pending = try await seedPending(staging, bytes: bytes)
     let store = CSVImportSetupStore(
@@ -206,7 +206,7 @@ struct CSVImportSetupStoreTests {
       backend: backend, staging: staging,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs))
+        suggestions: backend.transferSuggestions))
     let bytes = try CSVFixtureLoader.data("cba-everyday-standard")
     let pending = try await seedPending(staging, bytes: bytes)
     let store = CSVImportSetupStore(
@@ -243,7 +243,7 @@ struct CSVImportSetupStoreTests {
       backend: backend, staging: staging,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs))
+        suggestions: backend.transferSuggestions))
     let bytes = try CSVFixtureLoader.data("cba-everyday-standard")
     let pending = try await seedPending(staging, bytes: bytes)
     let store = CSVImportSetupStore(

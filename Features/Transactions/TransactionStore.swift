@@ -97,6 +97,25 @@ final class TransactionStore {
   /// from `init`; torn down by `stopObserving()`.
   private var rateObservationTask: Task<Void, Never>?
 
+  /// Member transaction ids of every live `TransferSuggestion` record,
+  /// maintained from `transferSuggestions.observeAll()` by
+  /// `+SuggestionObservation.swift`. The transaction-detail banner
+  /// reads this via `hasSuggestion(for:)` so SwiftUI re-renders
+  /// automatically when a peer (or this device's dismiss / merge)
+  /// deletes the record — the banner vanishes the moment the stream
+  /// emits the shrunk set. Empty when no suggestion repository is
+  /// wired (previews / legacy tests) or before the stream's first
+  /// emission. Observed; written only via `setSuggestedTransactionIds`.
+  private(set) var suggestedTransactionIds: Set<UUID> = []
+
+  /// Observes `transferSuggestions.observeAll()` / `…observeErrors()`
+  /// and keeps `suggestedTransactionIds` in sync. Spawned from `init`
+  /// only when a suggestion repository is wired; torn down by
+  /// `stopObserving()` / `deinit` alongside `rateObservationTask`.
+  /// internal so `+SuggestionObservation.swift` manages its lifecycle
+  /// (the same arrangement `subscriptionTask` has with `+Observation`).
+  var suggestionObservationTask: Task<Void, Never>?
+
   /// Narrow seam onto the shared instrument registry's change stream.
   /// Per-profile list observations do not track the `instrument`
   /// table (identity is resolved once per fetch via the shared
@@ -116,12 +135,21 @@ final class TransactionStore {
   // internal so the `+TransferDetection` extension reaches it.
   /// Owns the merge / dismiss actions a transfer suggestion offers from
   /// the transaction-detail surface. Built once from the transaction
-  /// repository and the dismissed-pair repository the store is wired
-  /// with. `nil` when the store is constructed without a dismissed-pair
-  /// repository (previews and legacy tests that never exercise transfer
-  /// suggestions); the suggestion section self-hides and its actions
-  /// no-op in that case.
+  /// repository and the transfer-suggestion repository the store is
+  /// wired with. `nil` when the store is constructed without a
+  /// transfer-suggestion repository (previews and legacy tests that
+  /// never exercise transfer suggestions); the suggestion section
+  /// self-hides and its actions no-op in that case.
   let transferDetection: TransferDetectionCoordinator?
+
+  // internal so the `+TransferDetection` extension can resolve the
+  // suggested counterpart of a transaction.
+  /// Repository of detected transfer suggestions, used by the
+  /// transaction-detail surface to resolve "is this transaction part of
+  /// a suggested pair, and what is its counterpart?" via the synced
+  /// record (never the denormalised model). `nil` in the same
+  /// preview / legacy-test cases that leave `transferDetection` nil.
+  let transferSuggestions: (any TransferSuggestionRepository)?
 
   /// The long-lived data-subscription task for the current filter. Owned
   /// by the store (not by the view's `.task`) so `load(filter:)` and
@@ -135,7 +163,14 @@ final class TransactionStore {
   /// Production wires this from the default; tests pass `.zero` so the
   /// debounced task completes as soon as it's scheduled and can be
   /// awaited deterministically rather than via a wall-clock sleep.
-  private let debounceInterval: Duration
+  /// internal so `debouncedSave` (in `+Mutations.swift`) can read it.
+  let debounceInterval: Duration
+
+  /// Pending debounced save, cancelled and replaced by each
+  /// `debouncedSave` call. internal so `debouncedSave` (in
+  /// `+Mutations.swift`) can manage it — extensions cannot add stored
+  /// properties, so the storage lives here.
+  var saveTask: Task<Void, Never>?
 
   init(
     repository: TransactionRepository,
@@ -144,13 +179,14 @@ final class TransactionStore {
     pageSize: Int = 50,
     debounceInterval: Duration = .milliseconds(300),
     instrumentChanges: (any InstrumentChangeObserving)? = nil,
-    dismissedTransferPairs: (any DismissedTransferPairRepository)? = nil
+    transferSuggestions: (any TransferSuggestionRepository)? = nil
   ) {
     self.repository = repository
     self.payeeSuggestionSource = PayeeSuggestionSource(repository: repository)
-    if let dismissedTransferPairs {
+    self.transferSuggestions = transferSuggestions
+    if let transferSuggestions {
       self.transferDetection = TransferDetectionCoordinator(
-        transactions: repository, dismissedPairs: dismissedTransferPairs)
+        transactions: repository, suggestions: transferSuggestions)
     } else {
       self.transferDetection = nil
     }
@@ -171,6 +207,7 @@ final class TransactionStore {
     // preventing the retain — and `guard let self else { return }` would
     // mask cancellation-propagation bugs by silently exiting.
     rateObservationTask = Task { await self.observeRateChannels() }
+    startSuggestionObservation()
     if let instrumentChanges {
       let changes = instrumentChanges.observeChanges()
       instrumentChangeObservationTask = Task { [self] in
@@ -191,6 +228,7 @@ final class TransactionStore {
     // code (`ProfileSession`), so the assumption holds in practice.
     MainActor.assumeIsolated {
       rateObservationTask?.cancel()
+      suggestionObservationTask?.cancel()
       instrumentChangeObservationTask?.cancel()
       subscriptionTask?.cancel()
       subscriptionRestartContinuation?.finish()
@@ -268,6 +306,7 @@ final class TransactionStore {
   /// `awaitObservationTermination()` before the assertion.
   func stopObserving() {
     rateObservationTask?.cancel()
+    suggestionObservationTask?.cancel()
     instrumentChangeObservationTask?.cancel()
     subscriptionTask?.cancel()
     subscriptionRestartContinuation?.finish()
@@ -282,6 +321,8 @@ final class TransactionStore {
   func awaitObservationTermination() async {
     await rateObservationTask?.value
     rateObservationTask = nil
+    await suggestionObservationTask?.value
+    suggestionObservationTask = nil
     await instrumentChangeObservationTask?.value
     instrumentChangeObservationTask = nil
     await subscriptionTask?.value
@@ -351,31 +392,7 @@ final class TransactionStore {
   func setTotalCount(_ count: Int?) { totalCount = count }
   func setIsLoading(_ value: Bool) { isLoading = value }
   func setIsPayingScheduled(_ value: Bool) { isPayingScheduled = value }
-
-  // MARK: - Debounced Save
-
-  private var saveTask: Task<Void, Never>?
-
-  /// Debounces save calls: cancels any pending save, waits
-  /// `debounceInterval` (300ms in production), then calls the callback
-  /// on the main actor. Returns the spawned task so tests can await
-  /// the live (uncancelled) save deterministically; callers in
-  /// production fire-and-forget.
-  @discardableResult
-  func debouncedSave(perform action: @escaping @MainActor () -> Void) -> Task<Void, Never> {
-    saveTask?.cancel()
-    let task = Task { [debounceInterval] in
-      try? await Task.sleep(for: debounceInterval)
-      guard !Task.isCancelled else { return }
-      action()
-    }
-    saveTask = task
-    return task
-  }
-
-  enum PayResult {
-    case paid(updatedScheduledTransaction: Transaction?)
-    case deleted
-    case failed
+  func setSuggestedTransactionIds(_ ids: Set<UUID>) {
+    suggestedTransactionIds = ids
   }
 }

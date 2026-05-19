@@ -1,5 +1,3 @@
-// MoolahTests/Backends/GRDB/DismissedTransferPairRollbackTests.swift
-
 import Foundation
 import GRDB
 import Testing
@@ -7,21 +5,21 @@ import Testing
 @testable import Moolah
 
 /// Rollback contract tests for the multi-statement writes on
-/// `GRDBDismissedTransferPairRepository`. Each method opens a single
+/// `GRDBTransferSuggestionRepository`. Each method opens a single
 /// transaction that touches more than one row; if any statement fails,
 /// prior state must survive byte-equal. Mirrors the BEFORE-trigger
 /// sentinel pattern used in `CSVImportRollbackTests` so the production
 /// code path is exercised end-to-end (not a hand-rolled mirror).
-@Suite("Dismissed transfer pair GRDB rollback contracts")
-struct DismissedTransferPairRollbackTests {
+@Suite("Transfer suggestion GRDB rollback contracts")
+struct TransferSuggestionRollbackTests {
 
   // MARK: - applyRemoteChangesSync(saved:deleted:) — saved batch
 
   @Test
   func applyRemoteChangesSavedBatchRollsBackOnFailure() async throws {
     let database = try ProfileDatabase.openInMemory()
-    let repo = GRDBDismissedTransferPairRepository(database: database)
-    let prior = makePairRow(txA: UUID(), txB: UUID())
+    let repo = GRDBTransferSuggestionRepository(database: database)
+    let prior = makeSuggestionRow(txA: UUID(), txB: UUID())
     try await database.write { database in
       try prior.insert(database)
     }
@@ -34,8 +32,8 @@ struct DismissedTransferPairRollbackTests {
     try await database.write { database in
       try database.execute(
         sql: """
-          CREATE TRIGGER fail_dismissed_pair_upsert
-          BEFORE INSERT ON dismissed_transfer_pair
+          CREATE TRIGGER fail_transfer_suggestion_upsert
+          BEFORE INSERT ON transfer_suggestion
           WHEN NEW.record_name = '___FAIL___'
           BEGIN
               SELECT RAISE(ABORT, 'forced failure for rollback test');
@@ -46,7 +44,7 @@ struct DismissedTransferPairRollbackTests {
     // First row mutates the prior row (same id → upsert UPDATE);
     // second row trips the sentinel trigger.
     var mutatingSeed = prior
-    mutatingSeed.dismissedAt = Date(timeIntervalSince1970: 2_000_000_000)
+    mutatingSeed.suggestedAt = Date(timeIntervalSince1970: 2_000_000_000)
     let mutating = mutatingSeed
     let failing = makeSentinelRow(txA: UUID(), txB: UUID())
     do {
@@ -57,14 +55,14 @@ struct DismissedTransferPairRollbackTests {
     }
 
     let surviving = try await database.read { database in
-      try DismissedTransferPairRow
-        .filter(DismissedTransferPairRow.Columns.id == prior.id)
+      try TransferSuggestionRow
+        .filter(TransferSuggestionRow.Columns.id == prior.id)
         .fetchOne(database)
     }
     let row = try #require(surviving)
     // The mutated value from the failed batch must NOT have landed —
-    // the prior row's dismissedAt survives byte-equal.
-    #expect(row.dismissedAt == prior.dismissedAt)
+    // the prior row's suggestedAt survives byte-equal.
+    #expect(row.suggestedAt == prior.suggestedAt)
   }
 
   // MARK: - applyRemoteChangesSync(saved:deleted:) — delete batch
@@ -72,8 +70,8 @@ struct DismissedTransferPairRollbackTests {
   @Test
   func applyRemoteChangesDeleteBatchRollsBackOnFailure() async throws {
     let database = try ProfileDatabase.openInMemory()
-    let repo = GRDBDismissedTransferPairRepository(database: database)
-    let first = makePairRow(txA: UUID(), txB: UUID())
+    let repo = GRDBTransferSuggestionRepository(database: database)
+    let first = makeSuggestionRow(txA: UUID(), txB: UUID())
     let second = makeSentinelRow(txA: UUID(), txB: UUID())
     try await database.write { database in
       try first.insert(database)
@@ -86,8 +84,8 @@ struct DismissedTransferPairRollbackTests {
       // BOTH rows intact.
       try database.execute(
         sql: """
-          CREATE TRIGGER fail_dismissed_pair_delete
-          BEFORE DELETE ON dismissed_transfer_pair
+          CREATE TRIGGER fail_transfer_suggestion_delete
+          BEFORE DELETE ON transfer_suggestion
           WHEN OLD.record_name = '___FAIL___'
           BEGIN
               SELECT RAISE(ABORT, 'forced failure for rollback test');
@@ -104,12 +102,12 @@ struct DismissedTransferPairRollbackTests {
 
     try await database.read { database in
       let firstSurvivor =
-        try DismissedTransferPairRow
-        .filter(DismissedTransferPairRow.Columns.id == first.id)
+        try TransferSuggestionRow
+        .filter(TransferSuggestionRow.Columns.id == first.id)
         .fetchOne(database)
       let secondSurvivor =
-        try DismissedTransferPairRow
-        .filter(DismissedTransferPairRow.Columns.id == second.id)
+        try TransferSuggestionRow
+        .filter(TransferSuggestionRow.Columns.id == second.id)
         .fetchOne(database)
       // The rolled-back first DELETE did NOT leave the first row gone.
       #expect(firstSurvivor != nil)
@@ -122,8 +120,8 @@ struct DismissedTransferPairRollbackTests {
   @Test
   func setEncodedSystemFieldsBatchRollsBackOnFailure() async throws {
     let database = try ProfileDatabase.openInMemory()
-    let repo = GRDBDismissedTransferPairRepository(database: database)
-    var firstSeed = makePairRow(txA: UUID(), txB: UUID())
+    let repo = GRDBTransferSuggestionRepository(database: database)
+    var firstSeed = makeSuggestionRow(txA: UUID(), txB: UUID())
     firstSeed.encodedSystemFields = Data([0xAA, 0xBB])
     var secondSeed = makeSentinelRow(txA: UUID(), txB: UUID())
     secondSeed.encodedSystemFields = Data([0xCC, 0xDD])
@@ -140,8 +138,8 @@ struct DismissedTransferPairRollbackTests {
       // encoded_system_fields unchanged on disk.
       try database.execute(
         sql: """
-          CREATE TRIGGER fail_dismissed_pair_sysfields_update
-          BEFORE UPDATE ON dismissed_transfer_pair
+          CREATE TRIGGER fail_transfer_suggestion_sysfields_update
+          BEFORE UPDATE ON transfer_suggestion
           WHEN OLD.record_name = '___FAIL___'
           BEGIN
               SELECT RAISE(ABORT, 'forced failure for rollback test');
@@ -160,8 +158,8 @@ struct DismissedTransferPairRollbackTests {
     }
 
     let surviving = try await database.read { database in
-      try DismissedTransferPairRow
-        .filter(DismissedTransferPairRow.Columns.id == first.id)
+      try TransferSuggestionRow
+        .filter(TransferSuggestionRow.Columns.id == first.id)
         .fetchOne(database)
     }
     let row = try #require(surviving)
@@ -172,17 +170,17 @@ struct DismissedTransferPairRollbackTests {
 
   // MARK: - Helpers
 
-  private func makePairRow(txA: UUID, txB: UUID) -> DismissedTransferPairRow {
-    DismissedTransferPairRow(
-      domain: DismissedTransferPair(
+  private func makeSuggestionRow(txA: UUID, txB: UUID) -> TransferSuggestionRow {
+    TransferSuggestionRow(
+      domain: TransferSuggestion(
         transactionIds: [txA, txB],
-        dismissedAt: Date(timeIntervalSince1970: 1_700_000_000)))
+        suggestedAt: Date(timeIntervalSince1970: 1_700_000_000)))
   }
 
   /// A row whose `record_name` carries the `___FAIL___` sentinel so the
   /// BEFORE-trigger fires only for this (second) batch entry.
-  private func makeSentinelRow(txA: UUID, txB: UUID) -> DismissedTransferPairRow {
-    var row = makePairRow(txA: txA, txB: txB)
+  private func makeSentinelRow(txA: UUID, txB: UUID) -> TransferSuggestionRow {
+    var row = makeSuggestionRow(txA: txA, txB: txB)
     row.recordName = "___FAIL___"
     return row
   }

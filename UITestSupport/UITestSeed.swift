@@ -112,10 +112,10 @@ public enum UITestSeed: String, CaseIterable, Sendable {
   /// `RecentlyAddedView` 24-hour window regardless of when the suite
   /// runs. The "not re-suggested after relaunch" guarantees are
   /// structural: a merged transaction is `.merged` (filtered from
-  /// Recently Added and structurally ineligible) and a dismissed pair
-  /// records a `DismissedTransferPair` with its suggestion cleared —
-  /// no startup re-detection runs in the seeded app, so a relaunch
-  /// simply re-reads persisted state. See
+  /// Recently Added and structurally ineligible) and dismiss deletes
+  /// the `TransferSuggestion` record so no pair record survives to
+  /// re-surface — no startup re-detection runs in the seeded app, so
+  /// a relaunch simply re-reads persisted state. See
   /// `UITestFixtures.TransferDetection` for the full fixture table.
   case transferDetectionBaseline
 }

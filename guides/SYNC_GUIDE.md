@@ -510,7 +510,7 @@ protocol CloudKitRecordConvertible {
 
 ### Mapping Rules
 
-- Record type strings are the unprefixed `<Entity>Record` form (e.g. `AccountRecord`, `TransactionRecord`, `DismissedTransferPairRecord`). The GRDB sync layer does **not** carry the legacy SwiftData `CD_` prefix; new record types follow the unprefixed convention used by every existing `*Row.recordType`.
+- Record type strings are the unprefixed `<Entity>Record` form (e.g. `AccountRecord`, `TransactionRecord`, `TransferSuggestionRecord`). The GRDB sync layer does **not** carry the legacy SwiftData `CD_` prefix; new record types follow the unprefixed convention used by every existing `*Row.recordType`.
 - UUID fields are stored as strings in CKRecords: `id.uuidString as CKRecordValue`.
 - Boolean fields are stored as integers: `(isHidden ? 1 : 0) as CKRecordValue`.
 - Optional fields are only set if non-nil (avoids storing null values in CloudKit).

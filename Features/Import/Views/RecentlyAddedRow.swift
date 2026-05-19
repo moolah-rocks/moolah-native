@@ -23,7 +23,6 @@ struct TransferSwipeActions: ViewModifier {
           Button(action: onMerge) {
             Label("Merge as Transfer", systemImage: "arrow.left.arrow.right")
           }
-          .tint(.blue)
           .accessibilityIdentifier(mergeIdentifier)
           Button(role: .destructive, action: onDismiss) {
             Label("Not a Transfer", systemImage: "xmark")
@@ -56,8 +55,8 @@ private struct PossibleTransferPill: View {
     .layoutPriority(-1)
     .padding(.horizontal, 6)
     .padding(.vertical, 2)
-    .background(Color.blue.opacity(0.15), in: Capsule())
-    .foregroundStyle(Color.blue)
+    .background(Color.accentColor.opacity(0.15), in: Capsule())
+    .foregroundStyle(Color.accentColor)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(title)
   }
@@ -65,11 +64,14 @@ private struct PossibleTransferPill: View {
 
 /// Row for one imported transaction. Shows date, description, amount, a
 /// "Needs review" badge when all legs are uncategorised, and a passive
-/// "possible transfer" pill when the transaction carries a transfer
-/// suggestion. `pillTitle` and `accessibilityLabel` are computed by
-/// `RecentlyAddedViewModel` — the row stays a thin renderer.
+/// "possible transfer" pill when a `TransferSuggestion` record touches
+/// the transaction. `hasSuggestion`, `pillTitle`, and
+/// `accessibilityLabel` are all resolved by `RecentlyAddedViewModel`
+/// from the synced-record snapshot — the row stays a thin renderer and
+/// never reads the repository or a denormalised model field.
 struct RecentlyAddedRow: View {
   let transaction: Transaction
+  let hasSuggestion: Bool
   let pillTitle: String
   let accessibilityLabel: String
 
@@ -88,7 +90,7 @@ struct RecentlyAddedRow: View {
       if let primary = displayAmount {
         InstrumentAmountView(amount: primary, font: .body)
       }
-      if transaction.transferSuggestion != nil {
+      if hasSuggestion {
         PossibleTransferPill(title: pillTitle)
       }
       if transaction.needsReview {
@@ -109,16 +111,18 @@ struct RecentlyAddedRow: View {
   }
 
   /// Discoverability hint for the secondary transfer actions. Empty for
-  /// rows without a transfer suggestion — those carry no transfer actions,
-  /// so VoiceOver announces no hint. macOS surfaces the actions in the
-  /// context menu; iOS surfaces the leading swipe, which VoiceOver
-  /// announces on its own, so the hint stays generic.
+  /// rows without a transfer suggestion — those carry no transfer
+  /// actions, so VoiceOver announces no hint. macOS surfaces the actions
+  /// in the context menu, so the hint points there. iOS surfaces them on
+  /// the leading swipe, which VoiceOver already announces natively
+  /// ("Actions available") — a custom hint would just be redundant
+  /// noise, so it stays empty there.
   private var actionHint: String {
-    guard transaction.transferSuggestion != nil else { return "" }
+    guard hasSuggestion else { return "" }
     #if os(macOS)
       return "Transfer actions are available in the context menu"
     #else
-      return "Transfer actions available"
+      return ""
     #endif
   }
 
@@ -133,21 +137,28 @@ struct RecentlyAddedRow: View {
   }
 }
 
+// Pinned so the preview `accessibilityLabel` literals can embed the
+// exact string the row renders for this date — a wall-clock `Date()`
+// would drift the rendered date away from the hand-written label and
+// mislead the Accessibility Inspector.
+private let previewDate = Date(timeIntervalSince1970: 1_767_225_600)
+private let previewDateText = previewDate.formatted(
+  .dateTime.day().month().year())
+
 #Preview("Transfer suggestion") {
   let suggested = Transaction(
-    date: Date(),
+    date: previewDate,
     payee: "Transfer to Savings",
     legs: [
       TransactionLeg(
         accountId: UUID(), instrument: .AUD, quantity: -500, type: .expense)
-    ],
-    transferSuggestion: TransferSuggestion(
-      counterpartTransactionId: UUID(), suggestedAt: Date()))
+    ])
   return List {
     RecentlyAddedRow(
       transaction: suggested,
+      hasSuggestion: true,
       pillTitle: "Possible transfer to Savings",
-      accessibilityLabel: "Transfer to Savings, 1 Jan 2026, -$500.00, "
+      accessibilityLabel: "Transfer to Savings, \(previewDateText), -$500.00, "
         + "Possible transfer to Savings, Needs review")
   }
 }
@@ -159,26 +170,27 @@ struct RecentlyAddedRow: View {
     quantity: -42,
     type: .expense,
     categoryId: UUID())
-  let plain = Transaction(date: Date(), payee: "Grocery Store", legs: [categorised])
+  let plain = Transaction(
+    date: previewDate, payee: "Grocery Store", legs: [categorised])
   let pillAndReview = Transaction(
-    date: Date(),
+    date: previewDate,
     payee: "Transfer to a Long-Named Investment Account",
     legs: [
       TransactionLeg(
         accountId: UUID(), instrument: .AUD, quantity: -1200, type: .expense)
-    ],
-    transferSuggestion: TransferSuggestion(
-      counterpartTransactionId: UUID(), suggestedAt: Date()))
+    ])
   return List {
     RecentlyAddedRow(
       transaction: plain,
+      hasSuggestion: false,
       pillTitle: "Possible transfer",
-      accessibilityLabel: "Grocery Store, 1 Jan 2026, -$42.00")
+      accessibilityLabel: "Grocery Store, \(previewDateText), -$42.00")
     RecentlyAddedRow(
       transaction: pillAndReview,
+      hasSuggestion: true,
       pillTitle: "Possible transfer to Long-Named Investment Account",
       accessibilityLabel: "Transfer to a Long-Named Investment Account, "
-        + "1 Jan 2026, -$1,200.00, "
+        + "\(previewDateText), -$1,200.00, "
         + "Possible transfer to Long-Named Investment Account, Needs review")
   }
 }

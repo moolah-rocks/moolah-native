@@ -137,4 +137,90 @@ struct RecentlyAddedViewModelTests {
       importOrigin: .single(outsideOrigin))
     return categorised + uncategorised + [outside]
   }
+
+  // MARK: - Record-backed suggestion snapshot
+
+  @Test("hasSuggestion / counterpart resolve from the injected repo snapshot")
+  func suggestionSnapshotResolvesFromRepository() async throws {
+    let (backend, database) = try TestBackend.create()
+    let accountId = UUID()
+    _ = try await backend.accounts.create(
+      Account(
+        id: accountId, name: "Cash", type: .bank, instrument: .AUD,
+        positions: [], position: 0, isHidden: false),
+      openingBalance: nil)
+
+    let now = Date()
+    let sessionId = UUID()
+    let importedAt = now.addingTimeInterval(-60)
+    let outgoing = Transaction(
+      date: now,
+      legs: [
+        TransactionLeg(
+          accountId: accountId, instrument: .AUD, quantity: -100, type: .expense)
+      ],
+      importOrigin: .single(
+        origin(sessionId: sessionId, importedAt: importedAt, filename: "a.csv")))
+    let incoming = Transaction(
+      date: now,
+      legs: [
+        TransactionLeg(
+          accountId: accountId, instrument: .AUD, quantity: 100, type: .income)
+      ],
+      importOrigin: .single(
+        origin(sessionId: sessionId, importedAt: importedAt, filename: "a.csv")))
+    let unrelated = Transaction(
+      date: now,
+      legs: [
+        TransactionLeg(
+          accountId: accountId, instrument: .AUD, quantity: -7, type: .expense)
+      ],
+      importOrigin: .single(
+        origin(sessionId: sessionId, importedAt: importedAt, filename: "a.csv")))
+    TestBackend.seed(
+      transactions: [outgoing, incoming, unrelated], in: database)
+    _ = try await backend.transferSuggestions.create(
+      TransferSuggestion(
+        transactionIds: [outgoing.id, incoming.id], suggestedAt: now))
+
+    let viewModel = RecentlyAddedViewModel(backend: backend)
+    await viewModel.load(window: .last24Hours, now: now)
+
+    #expect(viewModel.hasSuggestion(outgoing))
+    #expect(viewModel.hasSuggestion(incoming))
+    #expect(viewModel.hasSuggestion(unrelated) == false)
+    #expect(viewModel.counterpart(of: outgoing)?.id == incoming.id)
+    #expect(viewModel.counterpart(of: incoming)?.id == outgoing.id)
+    #expect(viewModel.counterpart(of: unrelated) == nil)
+  }
+
+  @Test("snapshot is empty when no suggestion records exist")
+  func emptySnapshotWhenNoRecords() async throws {
+    let (backend, database) = try TestBackend.create()
+    let accountId = UUID()
+    _ = try await backend.accounts.create(
+      Account(
+        id: accountId, name: "Cash", type: .bank, instrument: .AUD,
+        positions: [], position: 0, isHidden: false),
+      openingBalance: nil)
+
+    let now = Date()
+    let plain = Transaction(
+      date: now,
+      legs: [
+        TransactionLeg(
+          accountId: accountId, instrument: .AUD, quantity: -42, type: .expense)
+      ],
+      importOrigin: .single(
+        origin(
+          sessionId: UUID(), importedAt: now.addingTimeInterval(-60),
+          filename: "a.csv")))
+    TestBackend.seed(transactions: [plain], in: database)
+
+    let viewModel = RecentlyAddedViewModel(backend: backend)
+    await viewModel.load(window: .last24Hours, now: now)
+
+    #expect(viewModel.hasSuggestion(plain) == false)
+    #expect(viewModel.counterpart(of: plain) == nil)
+  }
 }

@@ -28,12 +28,24 @@
 ///   compatibility path in `WalletSyncError`'s custom `Codable`. No rubric
 ///   item (1–6) applies — recorded here so the absence of a bump is a
 ///   documented decision, not an oversight.
+/// - 4: transfer-suggestion reshape. Adds the synced
+///      `TransferSuggestionRecord` (a content-addressed pair of
+///      transaction ids) as the canonical source of a detected
+///      transfer suggestion, and deprecates the old model: the
+///      legacy dismissed-transfer-pair record type and the two
+///      denormalised suggestion fields on the transaction record are
+///      not read or written (the wire-struct generator drops
+///      them via `// DEPRECATED` in `schema.ckdb`; older builds still
+///      write them). A new record type added to `schema.ckdb` is rubric
+///      item 1; the deprecation race over the dropped fields is
+///      rubric item 6. The bump fences both off from this build
+///      forward.
 /// - 3: `importOriginKind` + eight `importOriginIncoming*` + two
 ///      `transferSuggestion*` fields on `TransactionRecord`.
 ///      `importOriginKind` is nil on pre-v3 records, so an older
 ///      build decodes a `.merged` transaction as `.single` and
 ///      drops the incoming side — forward-incompatible. Also adds
-///      the synced `DismissedTransferPairRecord`.
+///      a synced dismissed-transfer-pair record (deprecated in v4).
 /// - 2: `AccountType.exchange` (centralised-exchange accounts) +
 ///      `Account.exchangeProvider` synced field (`exchangeProvider` on
 ///      `AccountRecord`). Older builds decode `.exchange` as `.asset`
@@ -50,5 +62,5 @@
 /// cloud without a `dataFormatVersion` field reads as `0` and is
 /// trivially compatible with any v1+ build.
 enum DataFormatVersion {
-  static let current: Int = 3
+  static let current: Int = 4
 }

@@ -62,12 +62,17 @@ extension AccountStore: Equatable, Hashable { /* ... */ }
 ```
 
 ```swift
-// OK: a small value type whose conformances are all trivial
-// (synthesised, no members) — inline is allowed.
-struct TransferSuggestion: Codable, Sendable, Hashable {
-    let counterpartTransactionId: UUID
+// OK: trivially-synthesised conformances are declared inline...
+struct TransferSuggestion: Sendable, Identifiable, Hashable {
+    let id: UUID
+    let transactionIds: Set<UUID>
     let suggestedAt: Date
 }
+
+// ...while a non-trivial conformance (custom CodingKeys / init(from:)
+// — here `id` is content-addressed and excluded from the wire form)
+// lives in its own extension.
+extension TransferSuggestion: Codable { /* custom CodingKeys + init(from:) */ }
 ```
 
 ---

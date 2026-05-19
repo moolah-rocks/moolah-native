@@ -36,10 +36,16 @@ struct TransferDetectionMergeTests {
     #expect(all.contains { $0.id == outgoing.id } == false)
     #expect(all.contains { $0.id == incoming.id } == false)
     #expect(merged.legs.filter { $0.type == .transfer }.count == 2)
+    // The suggestion record for the merged pair is gone.
+    let suggestionId = TransferSuggestion.contentAddressedID(
+      for: [outgoing.id, incoming.id])
+    #expect(
+      try await backend.transferSuggestions.fetchAll()
+        .contains { $0.id == suggestionId } == false)
   }
 
   @Test
-  func unmergeRoundTripsAndRecordsDismissal() async throws {
+  func unmergeRoundTripsAndDoesNotResuggest() async throws {
     let (backend, database) = try TestBackend.create()
     let date = Date(timeIntervalSince1970: 1_700_000_000)
     let outgoing = Fixture.cashTx(
@@ -61,20 +67,11 @@ struct TransferDetectionMergeTests {
       filter: TransactionFilter())
     #expect(splits.count == 2)
     #expect(splits.contains { $0.id == merged.id } == false)
-    let dismissed = try await backend.dismissedTransferPairs.fetchAll()
-    #expect(dismissed.count == 1)
-    let splitIds = Set(splits.map(\.id))
-    #expect(dismissed.first?.transactionIds == splitIds)
 
-    // The recorded dismissal must keep the next scan from re-pairing
-    // the just-split sides.
-    await coordinator.runDetection(
-      newlyImported: splits,
-      participatingAccountIds: [],
-      windowLowerBound: date.addingTimeInterval(-86_400))
-    let afterScan = try await backend.transactions.fetchAll(
-      filter: TransactionFilter())
-    #expect(afterScan.allSatisfy { $0.transferSuggestion == nil })
+    // Unmerge writes no tombstone. None is needed: the split products
+    // are not "newly imported", so a later detection pass never
+    // re-evaluates them and cannot re-suggest the just-split pair.
+    #expect(try await backend.transferSuggestions.fetchAll().isEmpty)
   }
 
   @Test
@@ -150,6 +147,11 @@ struct TransferDetectionMergeTests {
     let all = try await backend.transactions.fetchAll(filter: TransactionFilter())
     #expect(all.count == 1)
     #expect(all.first?.legs.filter { $0.type == .transfer }.count == 2)
+    let suggestionId = TransferSuggestion.contentAddressedID(
+      for: [outgoing.id, incoming.id])
+    #expect(
+      try await backend.transferSuggestions.fetchAll()
+        .contains { $0.id == suggestionId } == false)
   }
 
   @Test
@@ -165,7 +167,7 @@ struct TransferDetectionMergeTests {
       wrapping: backend.transactions)
     let coordinator = TransferDetectionCoordinator(
       transactions: failing,
-      dismissedPairs: backend.dismissedTransferPairs)
+      suggestions: backend.transferSuggestions)
 
     await coordinator.merge(outgoing, incoming)
 
@@ -189,7 +191,7 @@ struct TransferDetectionMergeTests {
     let gated = GatedReplaceTransactionRepository(wrapping: backend.transactions)
     let coordinator = TransferDetectionCoordinator(
       transactions: gated,
-      dismissedPairs: backend.dismissedTransferPairs)
+      suggestions: backend.transferSuggestions)
 
     async let first: Void = coordinator.merge(outgoing, incoming)
     await gated.waitUntilReplaceStarted()
@@ -225,7 +227,7 @@ struct TransferDetectionMergeTests {
     let gated = GatedReplaceTransactionRepository(wrapping: backend.transactions)
     let coordinator = TransferDetectionCoordinator(
       transactions: gated,
-      dismissedPairs: backend.dismissedTransferPairs)
+      suggestions: backend.transferSuggestions)
 
     async let merge: Void = coordinator.merge(outgoing, incoming)
     await gated.waitUntilReplaceStarted()
@@ -259,7 +261,7 @@ struct TransferDetectionMergeTests {
     let gated = GatedFetchAllTransactionRepository(wrapping: backend.transactions)
     let coordinator = TransferDetectionCoordinator(
       transactions: gated,
-      dismissedPairs: backend.dismissedTransferPairs)
+      suggestions: backend.transferSuggestions)
 
     async let detection: Void = coordinator.runDetection(
       newlyImported: [outgoing, incoming],

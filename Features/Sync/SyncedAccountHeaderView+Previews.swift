@@ -62,8 +62,7 @@ private func syncedAccountHeaderPreview(width: CGFloat = 720) -> some View {
     accounts: session.backend.accounts,
     transferDetection: TransferDetectionCoordinator(
       transactions: session.backend.transactions,
-      dismissedPairs: session.backend.dismissedTransferPairs),
-    transactions: session.backend.transactions)
+      suggestions: session.backend.transferSuggestions))
   let exchangeTokenStore = ExchangeTokenStore()
   let cryptoAccount = Account(
     name: "Preview Wallet",

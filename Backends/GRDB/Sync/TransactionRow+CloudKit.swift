@@ -38,10 +38,7 @@ extension TransactionRow: CloudKitRecordConvertible {
       notes: notes,
       payee: payee,
       recurEvery: recurEvery.map(Int64.init),
-      recurPeriod: recurPeriod,
-      transferSuggestionCounterpartId: transferSuggestionCounterpartId?
-        .uuidString,
-      transferSuggestionSuggestedAt: transferSuggestionSuggestedAt
+      recurPeriod: recurPeriod
     ).write(to: record)
     return record
   }
@@ -81,10 +78,6 @@ extension TransactionRow: CloudKitRecordConvertible {
         fields.importOriginIncomingSourceFilename,
       importOriginIncomingParserIdentifier:
         fields.importOriginIncomingParserIdentifier,
-      transferSuggestionCounterpartId:
-        fields.transferSuggestionCounterpartId
-        .flatMap(UUID.init(uuidString:)),
-      transferSuggestionSuggestedAt: fields.transferSuggestionSuggestedAt,
       // Stamped by applyGRDBBatchSave after upsert; never read from the
       // CKRecord itself.
       encodedSystemFields: nil

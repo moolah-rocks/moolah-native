@@ -24,7 +24,7 @@ struct ImportStoreTests {
       backend: backend, staging: staging,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs))
+        suggestions: backend.transferSuggestions))
     return (store, dir)
   }
 
@@ -200,10 +200,17 @@ struct ImportStoreTests {
     let everydayTx = try #require(everyday.first)
     let savingsTx = try #require(savings.first)
 
+    // Detection writes one synced `TransferSuggestion` record over the
+    // unordered pair; both rows resolve the other via the record.
+    let touchingEveryday = try await backend.transferSuggestions
+      .suggestions(touching: everydayTx.id)
+    let touchingSavings = try await backend.transferSuggestions
+      .suggestions(touching: savingsTx.id)
     #expect(
-      everydayTx.transferSuggestion?.counterpartTransactionId == savingsTx.id)
+      touchingEveryday.first?.counterpart(of: everydayTx.id) == savingsTx.id)
     #expect(
-      savingsTx.transferSuggestion?.counterpartTransactionId == everydayTx.id)
+      touchingSavings.first?.counterpart(of: savingsTx.id) == everydayTx.id)
+    #expect(touchingEveryday.first == touchingSavings.first)
   }
 
   // MARK: - Rules engine integration

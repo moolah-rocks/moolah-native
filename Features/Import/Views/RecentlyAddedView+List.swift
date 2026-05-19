@@ -30,6 +30,7 @@ extension RecentlyAddedView {
     let pillTitle = viewModel.pillTitle(counterpartAccountName: accountName)
     RecentlyAddedRow(
       transaction: transaction,
+      hasSuggestion: viewModel.hasSuggestion(transaction),
       pillTitle: pillTitle,
       accessibilityLabel: viewModel.rowAccessibilityLabel(
         for: transaction, counterpartAccountName: accountName)

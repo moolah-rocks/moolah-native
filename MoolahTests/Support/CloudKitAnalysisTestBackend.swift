@@ -14,7 +14,7 @@ struct CloudKitAnalysisTestBackend: BackendProvider, @unchecked Sendable {
   let accounts: any AccountRepository
   let transactions: any TransactionRepository
   let categories: any CategoryRepository
-  let dismissedTransferPairs: any DismissedTransferPairRepository
+  let transferSuggestions: any TransferSuggestionRepository
   let earmarks: any EarmarkRepository
   let analysis: any AnalysisRepository
   let investments: any InvestmentRepository
@@ -70,7 +70,7 @@ struct CloudKitAnalysisTestBackend: BackendProvider, @unchecked Sendable {
     self.accounts = backend.accounts
     self.transactions = backend.transactions
     self.categories = backend.categories
-    self.dismissedTransferPairs = backend.dismissedTransferPairs
+    self.transferSuggestions = backend.transferSuggestions
     self.earmarks = backend.earmarks
     self.analysis = backend.analysis
     self.investments = backend.investments

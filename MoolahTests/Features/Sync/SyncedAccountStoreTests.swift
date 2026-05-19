@@ -81,9 +81,8 @@ struct SyncedAccountStoreTests {
       accounts: backend.accounts,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs,
+        suggestions: backend.transferSuggestions,
         clock: clock),
-      transactions: backend.transactions,
       clock: clock,
       staleThreshold: staleThreshold,
       timerInterval: timerInterval,

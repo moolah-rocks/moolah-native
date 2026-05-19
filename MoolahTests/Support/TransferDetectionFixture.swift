@@ -36,7 +36,7 @@ enum TransferDetectionFixture {
   ) -> TransferDetectionCoordinator {
     TransferDetectionCoordinator(
       transactions: backend.transactions,
-      dismissedPairs: backend.dismissedTransferPairs,
+      suggestions: backend.transferSuggestions,
       clock: clock)
   }
 }

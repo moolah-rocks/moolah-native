@@ -1,14 +1,12 @@
-// Backends/GRDB/Repositories/GRDBDismissedTransferPairRepository.swift
-
 import Foundation
 import GRDB
 
-/// GRDB-backed implementation of `DismissedTransferPairRepository` over
-/// the `dismissed_transfer_pair` table.
+/// GRDB-backed implementation of `TransferSuggestionRepository` over
+/// the `transfer_suggestion` table.
 ///
 /// `create` upserts on the content-addressed primary key: the domain
-/// `DismissedTransferPair.id` is a deterministic UUID of the unordered
-/// transaction-id pair, so re-dismissing the same pair on any device —
+/// `TransferSuggestion.id` is a deterministic UUID of the unordered
+/// transaction-id pair, so re-detecting the same pair on any device —
 /// in any argument order — writes the same row (idempotent
 /// cross-device convergence).
 ///
@@ -22,7 +20,7 @@ import GRDB
 /// `final class` types meet `Sendable`'s requirements automatically.
 /// See `guides/CONCURRENCY_GUIDE.md` §2 "False Positives to Avoid",
 /// Carve-out 3 (GRDB repositories).
-final class GRDBDismissedTransferPairRepository: DismissedTransferPairRepository,
+final class GRDBTransferSuggestionRepository: TransferSuggestionRepository,
   @unchecked Sendable
 {
   // `database` and `errorChannel` are deliberately not `private` so the
@@ -49,42 +47,42 @@ final class GRDBDismissedTransferPairRepository: DismissedTransferPairRepository
     self.onRecordDeleted = onRecordDeleted
   }
 
-  // MARK: - DismissedTransferPairRepository conformance
+  // MARK: - TransferSuggestionRepository conformance
 
-  func fetchAll() async throws -> [DismissedTransferPair] {
+  func fetchAll() async throws -> [TransferSuggestion] {
     try await database.read { database in
-      try DismissedTransferPairRow
-        .order(DismissedTransferPairRow.Columns.dismissedAt.asc)
+      try TransferSuggestionRow
+        .order(TransferSuggestionRow.Columns.suggestedAt.asc)
         .fetchAll(database)
         .map { $0.toDomain() }
     }
   }
 
-  func create(_ pair: DismissedTransferPair) async throws -> DismissedTransferPair {
-    let row = DismissedTransferPairRow(domain: pair)
+  func create(_ suggestion: TransferSuggestion) async throws -> TransferSuggestion {
+    let row = TransferSuggestionRow(domain: suggestion)
     try await database.write { database in
-      // Content-addressed PK: an identical re-dismissal (any device,
+      // Content-addressed PK: an identical re-detection (any device,
       // any argument order) upserts the same row rather than failing on
       // a duplicate-key constraint.
       try row.upsert(database)
     }
-    onRecordChanged(DismissedTransferPairRow.recordType, pair.id)
+    onRecordChanged(TransferSuggestionRow.recordType, suggestion.id)
     return row.toDomain()
   }
 
   func delete(id: UUID) async throws {
     try await database.write { database in
-      _ = try DismissedTransferPairRow.deleteOne(database, id: id)
+      _ = try TransferSuggestionRow.deleteOne(database, id: id)
     }
-    onRecordDeleted(DismissedTransferPairRow.recordType, id)
+    onRecordDeleted(TransferSuggestionRow.recordType, id)
   }
 
-  func pairs(touching transactionId: UUID) async throws -> [DismissedTransferPair] {
+  func suggestions(touching transactionId: UUID) async throws -> [TransferSuggestion] {
     try await database.read { database in
-      try DismissedTransferPairRow
+      try TransferSuggestionRow
         .filter(
-          DismissedTransferPairRow.Columns.transactionIdA == transactionId
-            || DismissedTransferPairRow.Columns.transactionIdB == transactionId
+          TransferSuggestionRow.Columns.transactionIdA == transactionId
+            || TransferSuggestionRow.Columns.transactionIdB == transactionId
         )
         .fetchAll(database)
         .map { $0.toDomain() }
@@ -99,7 +97,7 @@ final class GRDBDismissedTransferPairRepository: DismissedTransferPairRepository
   // serial executor admits the closure. Never call these from
   // `@MainActor`.
 
-  func applyRemoteChangesSync(saved rows: [DismissedTransferPairRow], deleted ids: [UUID]) throws {
+  func applyRemoteChangesSync(saved rows: [TransferSuggestionRow], deleted ids: [UUID]) throws {
     try database.write { database in
       try applyRemoteChangesSync(saved: rows, deleted: ids, in: database)
     }
@@ -109,13 +107,13 @@ final class GRDBDismissedTransferPairRepository: DismissedTransferPairRepository
   /// `GRDBCSVImportProfileRepository.applyRemoteChangesSync(...:in:)`
   /// for the rationale (one commit per `applyRemoteChanges` batch, issue #872).
   func applyRemoteChangesSync(
-    saved rows: [DismissedTransferPairRow], deleted ids: [UUID], in database: Database
+    saved rows: [TransferSuggestionRow], deleted ids: [UUID], in database: Database
   ) throws {
     for row in rows {
       try row.upsert(database)
     }
     for id in ids {
-      _ = try DismissedTransferPairRow.deleteOne(database, id: id)
+      _ = try TransferSuggestionRow.deleteOne(database, id: id)
     }
   }
 
@@ -124,10 +122,10 @@ final class GRDBDismissedTransferPairRepository: DismissedTransferPairRepository
   @discardableResult
   func setEncodedSystemFieldsSync(id: UUID, data: Data?) throws -> Bool {
     try database.write { database in
-      try DismissedTransferPairRow
-        .filter(DismissedTransferPairRow.Columns.id == id)
+      try TransferSuggestionRow
+        .filter(TransferSuggestionRow.Columns.id == id)
         .updateAll(
-          database, [DismissedTransferPairRow.Columns.encodedSystemFields.set(to: data)])
+          database, [TransferSuggestionRow.Columns.encodedSystemFields.set(to: data)])
         > 0
     }
   }
@@ -137,19 +135,19 @@ final class GRDBDismissedTransferPairRepository: DismissedTransferPairRepository
   func clearAllSystemFieldsSync() throws {
     try database.write { database in
       _ =
-        try DismissedTransferPairRow
+        try TransferSuggestionRow
         .updateAll(
           database,
-          [DismissedTransferPairRow.Columns.encodedSystemFields.set(to: nil)])
+          [TransferSuggestionRow.Columns.encodedSystemFields.set(to: nil)])
     }
   }
 
   /// Returns IDs of rows whose `encoded_system_fields` is `NULL`.
   func unsyncedRowIdsSync() throws -> [UUID] {
     try database.read { database in
-      try DismissedTransferPairRow
-        .filter(DismissedTransferPairRow.Columns.encodedSystemFields == nil)
-        .select(DismissedTransferPairRow.Columns.id, as: UUID.self)
+      try TransferSuggestionRow
+        .filter(TransferSuggestionRow.Columns.encodedSystemFields == nil)
+        .select(TransferSuggestionRow.Columns.id, as: UUID.self)
         .fetchAll(database)
     }
   }
@@ -157,29 +155,29 @@ final class GRDBDismissedTransferPairRepository: DismissedTransferPairRepository
   /// Returns IDs of every row in the table.
   func allRowIdsSync() throws -> [UUID] {
     try database.read { database in
-      try DismissedTransferPairRow
-        .select(DismissedTransferPairRow.Columns.id, as: UUID.self)
+      try TransferSuggestionRow
+        .select(TransferSuggestionRow.Columns.id, as: UUID.self)
         .fetchAll(database)
     }
   }
 
   /// Looks up a single row by id. Used by the per-record upload path in
   /// the sync handler.
-  func fetchRowSync(id: UUID) throws -> DismissedTransferPairRow? {
+  func fetchRowSync(id: UUID) throws -> TransferSuggestionRow? {
     try database.read { database in
-      try DismissedTransferPairRow
-        .filter(DismissedTransferPairRow.Columns.id == id)
+      try TransferSuggestionRow
+        .filter(TransferSuggestionRow.Columns.id == id)
         .fetchOne(database)
     }
   }
 
   /// Batch lookup by ids — used by the batch-build phase of the sync
   /// handler.
-  func fetchRowsSync(ids: [UUID]) throws -> [DismissedTransferPairRow] {
+  func fetchRowsSync(ids: [UUID]) throws -> [TransferSuggestionRow] {
     let idSet = Set(ids)
     return try database.read { database in
-      try DismissedTransferPairRow
-        .filter(idSet.contains(DismissedTransferPairRow.Columns.id))
+      try TransferSuggestionRow
+        .filter(idSet.contains(TransferSuggestionRow.Columns.id))
         .fetchAll(database)
     }
   }
@@ -188,7 +186,7 @@ final class GRDBDismissedTransferPairRepository: DismissedTransferPairRepository
   /// remote zone deletion.
   func deleteAllSync() throws {
     try database.write { database in
-      _ = try DismissedTransferPairRow.deleteAll(database)
+      _ = try TransferSuggestionRow.deleteAll(database)
     }
   }
 }

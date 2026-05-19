@@ -1,9 +1,7 @@
-// Backends/GRDB/Repositories/GRDBDismissedTransferPairRepository+Sync.swift
-
 import Foundation
 import GRDB
 
-extension GRDBDismissedTransferPairRepository {
+extension GRDBTransferSuggestionRepository {
   /// Batch counterpart to `setEncodedSystemFieldsSync` — writes every
   /// update in a single GRDB transaction so `databaseDidCommit` fires
   /// once rather than once per row. See the doc on
@@ -18,11 +16,11 @@ extension GRDBDismissedTransferPairRepository {
       var updatedCount = 0
       for (id, data) in updates {
         updatedCount +=
-          try DismissedTransferPairRow
-          .filter(DismissedTransferPairRow.Columns.id == id)
+          try TransferSuggestionRow
+          .filter(TransferSuggestionRow.Columns.id == id)
           .updateAll(
             database,
-            [DismissedTransferPairRow.Columns.encodedSystemFields.set(to: data)])
+            [TransferSuggestionRow.Columns.encodedSystemFields.set(to: data)])
       }
       return updatedCount
     }

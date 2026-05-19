@@ -79,11 +79,6 @@ final class SyncedAccountStore {
   /// and merge action; the store only orchestrates the post-apply call.
   let transferDetection: TransferDetectionCoordinator
 
-  /// The store's own transaction-repository handle, used solely to fetch
-  /// the participating-account candidate set after the apply pass (the
-  /// apply engine's repository is private and not widened for this).
-  let transactions: any TransactionRepository
-
   let clock: @Sendable () -> Date
   let staleThreshold: TimeInterval
   let timerInterval: Duration
@@ -128,8 +123,6 @@ final class SyncedAccountStore {
   ///   - transferDetection: Cross-account transfer-detection
   ///     coordinator. The store calls `runDetection` once per sync pass
   ///     after the apply + state refresh.
-  ///   - transactions: Transaction repository handle used to fetch the
-  ///     participating-account candidate set for the detection pass.
   ///   - clock: Closure returning "now". The clock injection is for
   ///     per-account `lastSyncedAt` decisions; the timer's
   ///     `Task.sleep` uses the real Swift clock regardless. Tests pass
@@ -145,7 +138,6 @@ final class SyncedAccountStore {
     walletSyncState: any WalletSyncStateRepository,
     accounts: any AccountRepository,
     transferDetection: TransferDetectionCoordinator,
-    transactions: any TransactionRepository,
     clock: @Sendable @escaping () -> Date = { Date() },
     staleThreshold: TimeInterval = 86_400,
     timerInterval: Duration = .seconds(3_600),
@@ -156,7 +148,6 @@ final class SyncedAccountStore {
     self.walletSyncState = walletSyncState
     self.accounts = accounts
     self.transferDetection = transferDetection
-    self.transactions = transactions
     self.clock = clock
     self.staleThreshold = staleThreshold
     self.timerInterval = timerInterval
@@ -320,14 +311,18 @@ final class SyncedAccountStore {
 
     let perAccountResults = await runParallelBuilds(for: inputs)
     updateGlobalError(from: perAccountResults)
-    await runApplyPass(perAccountResults: perAccountResults)
+    let genuinelyNew = await runApplyPass(perAccountResults: perAccountResults)
     await refreshStateFromRepository()
-    // Detection runs after the apply pass and the state refresh so the
-    // just-persisted rows are visible to the candidate fetch. Transfers
+    // Detection runs over the apply pass's genuinely-new survivors only
+    // — the transactions this pass actually merged-and-deduped-and-
+    // persisted. There is no date-window scan, so a previously-existing
+    // row (e.g. a dismissed/merged pair) is never re-evaluated. Transfers
     // already collapsed by `CrossAccountTransferMerger` (same-`externalId`
     // opposing legs) carry a nil `transferDetectionValueLeg` and are
     // structurally skipped by the detector.
-    await runTransferDetection(participatingAccountIds: Set(inputs.map(\.id)))
+    await runTransferDetection(
+      genuinelyNew: genuinelyNew,
+      participatingAccountIds: Set(inputs.map(\.id)))
   }
 
   // MARK: - Internal mutators

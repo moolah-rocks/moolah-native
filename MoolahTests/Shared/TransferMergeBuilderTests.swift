@@ -172,18 +172,6 @@ struct TransferMergeBuilderTests {
     #expect(feeLegs.contains { $0.id == feeB.id && $0.accountId == accountB && $0.quantity == -7 })
   }
 
-  @Test("merge clears transferSuggestion on the merged transaction")
-  func mergedClearsSuggestion() throws {
-    let accountA = UUID()
-    let accountB = UUID()
-    let txA = fixture.cashTx(date: baseDate, accountId: accountA, quantity: -500, type: .expense)
-    let txB = fixture.cashTx(date: baseDate, accountId: accountB, quantity: 500, type: .income)
-
-    let merged = try builder.merged(from: txA, txB)
-
-    #expect(merged.transferSuggestion == nil)
-  }
-
   @Test("merge assigns a new id distinct from both input ids")
   func mergedAssignsNewId() throws {
     let accountA = UUID()

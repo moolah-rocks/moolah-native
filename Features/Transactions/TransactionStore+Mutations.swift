@@ -11,6 +11,15 @@ import Foundation
 // IS the state update.
 extension TransactionStore {
 
+  /// Outcome of `payScheduledTransaction(_:)`. `paid` carries the
+  /// rescheduled occurrence (or `nil` when the series ended); the
+  /// view maps this to its local selection.
+  enum PayResult {
+    case paid(updatedScheduledTransaction: Transaction?)
+    case deleted
+    case failed
+  }
+
   /// Creates a blank expense bound to `accountId` (falling back to
   /// `fallbackAccountId`). See `Transaction.defaultExpense(...)` for the shape.
   func createDefault(
@@ -109,5 +118,24 @@ extension TransactionStore {
       await delete(id: scheduledTransaction.id)
       return .deleted
     }
+  }
+
+  // MARK: - Debounced Save
+
+  /// Debounces save calls: cancels any pending save, waits
+  /// `debounceInterval` (300ms in production), then calls the callback
+  /// on the main actor. Returns the spawned task so tests can await
+  /// the live (uncancelled) save deterministically; callers in
+  /// production fire-and-forget.
+  @discardableResult
+  func debouncedSave(perform action: @escaping @MainActor () -> Void) -> Task<Void, Never> {
+    saveTask?.cancel()
+    let task = Task { [debounceInterval] in
+      try? await Task.sleep(for: debounceInterval)
+      guard !Task.isCancelled else { return }
+      action()
+    }
+    saveTask = task
+    return task
   }
 }
