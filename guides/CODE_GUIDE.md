@@ -65,7 +65,7 @@ extension AccountStore: Equatable, Hashable { /* ... */ }
 // OK: a small value type whose conformances are all trivial
 // (synthesised, no members) — inline is allowed.
 struct TransferSuggestion: Codable, Sendable, Hashable {
-    let counterpartTransactionId: UUID
+    let transactionIds: Set<UUID>
     let suggestedAt: Date
 }
 ```
