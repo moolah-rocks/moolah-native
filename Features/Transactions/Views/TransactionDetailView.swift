@@ -18,18 +18,20 @@ struct TransactionDetailView: View {
   // (TransactionDetailView+Helpers.swift, TransactionDetailView+Actions.swift)
   // can reference them. SwiftLint's strict_fileprivate rule disallows
   // `fileprivate`, making internal the smallest legal cross-file scope.
+  // `draft`, the confirmation flags, the autocomplete/leg state, and
+  // `focusedField` use internal access (no `private`) so the section-
+  // composition builders in `TransactionDetailView+FormContent.swift`
+  // and the action helpers in `+Actions.swift` can reach them across
+  // the file boundary. SwiftLint's strict_fileprivate rule makes
+  // internal the smallest legal cross-file scope.
   @State var draft: TransactionDraft
-  @State private var showDeleteConfirmation = false
-  @State private var showTransferDismissConfirmation = false
-  // Module-internal so the unmerge section in
-  // `TransactionDetailView+Actions.swift` can arm it. SwiftLint's
-  // strict_fileprivate rule makes internal the smallest legal
-  // cross-file scope.
+  @State var showDeleteConfirmation = false
+  @State var showTransferDismissConfirmation = false
   @State var showUnmergeConfirmation = false
-  @State private var payeeState = PayeeAutocompleteState()
-  @State private var categoryState = CategoryAutocompleteState()
-  @State private var legCategoryStates: [Int: CategoryAutocompleteState] = [:]
-  @State private var legPendingDeletion: Int?
+  @State var payeeState = PayeeAutocompleteState()
+  @State var categoryState = CategoryAutocompleteState()
+  @State var legCategoryStates: [Int: CategoryAutocompleteState] = [:]
+  @State var legPendingDeletion: Int?
   /// Snapshot of whether the transaction was a blank/new draft at open
   /// time (empty payee + all-zero legs). Captured once at init so that
   /// `autofillFromPayee` only copies fields from a matched transaction
@@ -38,7 +40,7 @@ struct TransactionDetailView: View {
   /// from the dropdown while editing a $5,000 transfer would clobber the
   /// amount, type, and category.
   @State var openedAsNewTransaction: Bool
-  @FocusState private var focusedField: TransactionDetailFocus?
+  @FocusState var focusedField: TransactionDetailFocus?
 
   init(
     transaction: Transaction,
@@ -159,6 +161,7 @@ struct TransactionDetailView: View {
         Button("Dismiss Suggestion", role: .destructive) {
           Task { await transactionStore.dismissSuggestedTransfer(transaction) }
         }
+        .accessibilityIdentifier(UITestIdentifiers.TransferDetection.dismissConfirm)
       } message: {
         Text(
           "These transactions stay separate and will not be suggested as a "
@@ -180,220 +183,9 @@ struct TransactionDetailView: View {
   }
 }
 
-// MARK: - Form Content & Section Composition
-
-extension TransactionDetailView {
-  private var formContent: some View {
-    Form {
-      modeAwareSections
-      // Banner offering to collapse this transaction and its detected
-      // counterpart into one merged transfer. Hides itself when the
-      // transaction carries no transfer suggestion.
-      TransactionDetailTransferSuggestion(
-        transaction: transaction,
-        transactionStore: transactionStore,
-        showDismissConfirmation: $showTransferDismissConfirmation
-      )
-      // Per-leg block-explorer links for any leg with an externalId
-      // (on-chain tx hash). Skipped when no leg qualifies — the section
-      // hides itself rather than rendering an empty header.
-      TransactionDetailBlockExplorerSection(transaction: transaction)
-      // Per-leg on-chain counterparty rows for any leg with a non-nil
-      // `counterpartyAddress`. Skipped when no leg qualifies. Renders
-      // truncated addresses with copy-to-clipboard buttons; deliberately
-      // not a clickable link (an arbitrary on-chain address shouldn't
-      // look authoritative).
-      TransactionDetailCounterpartySection(transaction: transaction)
-      if isScheduled {
-        TransactionDetailPaySection(
-          transaction: transaction,
-          transactionStore: transactionStore,
-          onUpdate: onUpdate,
-          onDelete: onDelete
-        )
-      }
-      unmergeSection
-      TransactionDetailDeleteSection(onRequestDelete: { showDeleteConfirmation = true })
-    }
-  }
-
-  @ViewBuilder private var modeAwareSections: some View {
-    if isSimpleEarmarkOnly {
-      earmarkOnlyContent
-    } else if isTradeMode {
-      tradeModeContent
-    } else if draft.isCustom {
-      customModeContent
-    } else {
-      simpleModeContent
-    }
-  }
-
-  @ViewBuilder private var earmarkOnlyContent: some View {
-    TransactionDetailEarmarkOnlySection(
-      draft: $draft, earmarks: earmarks, amountBinding: amountBinding)
-    if showRecurrence {
-      TransactionDetailRecurrenceSection(draft: $draft)
-    }
-    TransactionDetailNotesSection(notes: $draft.notes)
-  }
-
-  /// True when the draft is not in custom mode and has at least one `.trade` leg.
-  private var isTradeMode: Bool {
-    !draft.isCustom && draft.legDrafts.contains { $0.type == .trade }
-  }
-
-  @ViewBuilder private var tradeModeContent: some View {
-    modeSection.disabled(!isEditable)
-    // Payee + date sit at the top alongside the type picker, mirroring the
-    // simple income / expense / transfer layout so the form reads
-    // consistently across modes.
-    TransactionDetailCustomDetailsSection(
-      draft: $draft,
-      suggestionSource: transactionStore.payeeSuggestionSource,
-      editingTransactionId: transaction.id,
-      payeeState: $payeeState,
-      onAutofill: autofillFromPayee,
-      focusedField: $focusedField
-    )
-    .disabled(!isEditable)
-
-    TransactionDetailTradeSection(
-      draft: $draft,
-      accounts: accounts,
-      focusedField: $focusedField
-    )
-    .disabled(!isEditable)
-
-    ForEach(Array(draft.feeIndices.enumerated()), id: \.element) { ordinal, legIndex in
-      TransactionDetailFeeSection(
-        legIndex: legIndex,
-        displayNumber: ordinal + 1,
-        draft: $draft,
-        accounts: accounts,
-        categories: categories,
-        earmarks: earmarks,
-        categoryState: legCategoryStateBinding(for: legIndex),
-        focusedField: $focusedField,
-        onRequestRemove: { draft.removeFee(at: legIndex) }
-      )
-    }
-
-    Section {
-      Button {
-        let defaultInstrument =
-          draft.legDrafts.first?.accountId
-          .flatMap { accounts.by(id: $0) }?.instrument ?? Instrument.AUD
-        draft.appendFee(defaultInstrument: defaultInstrument)
-      } label: {
-        Label("Add Fee", systemImage: "plus")
-          .frame(maxWidth: .infinity)
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Detail.tradeAddFeeButton)
-    }
-
-    if showRecurrence {
-      TransactionDetailRecurrenceSection(draft: $draft).disabled(!isEditable)
-    }
-    TransactionDetailNotesSection(notes: $draft.notes)
-  }
-
-  @ViewBuilder private var simpleModeContent: some View {
-    modeSection.disabled(!isEditable)
-    TransactionDetailDetailsSection(
-      draft: $draft,
-      amountBinding: amountBinding,
-      relevantInstrument: relevantInstrument,
-      isCrossCurrency: isCrossCurrency,
-      suggestionSource: transactionStore.payeeSuggestionSource,
-      editingTransactionId: transaction.id,
-      payeeState: $payeeState,
-      onAutofill: autofillFromPayee,
-      focusedField: $focusedField
-    )
-    .disabled(!isEditable)
-    TransactionDetailAccountSection(
-      draft: $draft,
-      accounts: accounts,
-      relevantInstrument: relevantInstrument,
-      counterpartInstrument: counterpartInstrument,
-      counterpartAmountBinding: counterpartAmountBinding,
-      isCrossCurrency: isCrossCurrency,
-      focusedField: $focusedField
-    )
-    .disabled(!isEditable)
-    TransactionDetailCategorySection(
-      draft: $draft, categories: categories, earmarks: earmarks, state: $categoryState
-    )
-    .disabled(!isEditable)
-    if showRecurrence {
-      TransactionDetailRecurrenceSection(draft: $draft).disabled(!isEditable)
-    }
-    TransactionDetailNotesSection(notes: $draft.notes)
-  }
-
-  @ViewBuilder private var customModeContent: some View {
-    modeSection.disabled(!isEditable)
-    TransactionDetailCustomDetailsSection(
-      draft: $draft,
-      suggestionSource: transactionStore.payeeSuggestionSource,
-      editingTransactionId: transaction.id,
-      payeeState: $payeeState,
-      onAutofill: autofillFromPayee,
-      focusedField: $focusedField
-    )
-    ForEach(draft.legDrafts.indices, id: \.self) { index in
-      TransactionDetailLegRow(
-        index: index,
-        totalLegCount: draft.legDrafts.count,
-        draft: $draft,
-        accounts: accounts,
-        categories: categories,
-        earmarks: earmarks,
-        categoryState: legCategoryStateBinding(for: index),
-        focusedField: $focusedField,
-        onRequestDelete: { legPendingDeletion = index }
-      )
-    }
-    TransactionDetailAddLegSection(draft: $draft, accounts: accounts)
-    if showRecurrence {
-      TransactionDetailRecurrenceSection(draft: $draft)
-    }
-    TransactionDetailNotesSection(notes: $draft.notes)
-  }
-
-  private var modeSection: some View {
-    TransactionDetailModeSection(
-      transaction: transaction,
-      draft: $draft,
-      accounts: accounts,
-      focusedField: $focusedField
-    )
-  }
-
-  private func legCategoryStateBinding(
-    for index: Int
-  ) -> Binding<CategoryAutocompleteState> {
-    Binding(
-      get: { legCategoryStates[index] ?? CategoryAutocompleteState() },
-      set: { legCategoryStates[index] = $0 }
-    )
-  }
-
-  /// Re-key the per-leg dropdown state dict after the leg at `removedIndex`
-  /// is removed. Without this, an open dropdown on a higher-indexed leg
-  /// would re-bind to the *new* leg at that shifted index — e.g.
-  /// deleting leg 0 with three legs would leak leg 1's open-dropdown
-  /// flag onto the new leg 0.
-  private func shiftLegCategoryStates(after removedIndex: Int) {
-    var shifted: [Int: CategoryAutocompleteState] = [:]
-    for (key, state) in legCategoryStates where key != removedIndex {
-      shifted[key < removedIndex ? key : key - 1] = state
-    }
-    legCategoryStates = shifted
-  }
-}
-
+// Form body + mode-aware section composition (`formContent`,
+// `simpleModeContent`, `tradeModeContent`, …) live in
+// TransactionDetailView+FormContent.swift.
 // Computed helpers (isEditable, isSimpleEarmarkOnly, instruments,
 // bindings, isScheduled) live in TransactionDetailView+Helpers.swift.
 // Actions (autofillFromPayee, debouncedSave, saveIfValid) and the

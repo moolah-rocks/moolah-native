@@ -67,6 +67,7 @@ extension RecentlyAddedDetailSheet {
               quantity: leg.quantity, instrument: leg.instrument),
             font: .body)
         }
+        .accessibilityElement(children: .combine)
       }
     }
   }

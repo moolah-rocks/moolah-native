@@ -34,7 +34,7 @@
 ///      transfer suggestion, and deprecates the old model: the
 ///      legacy dismissed-transfer-pair record type and the two
 ///      denormalised suggestion fields on the transaction record are
-///      no longer read or written (the wire-struct generator drops
+///      not read or written (the wire-struct generator drops
 ///      them via `// DEPRECATED` in `schema.ckdb`; older builds still
 ///      write them). A new record type added to `schema.ckdb` is rubric
 ///      item 1; the deprecation race over the dropped fields is

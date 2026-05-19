@@ -70,22 +70,16 @@ extension TransactionStore {
     await coordinator.unmerge(transfer)
   }
 
-  /// Whether a `TransferSuggestion` record currently touches
-  /// `transaction`. The transaction-detail banner observes this to
-  /// decide whether to render the merge / dismiss section via a
-  /// synced-record read. `false` when no suggestion repository is
-  /// wired (previews / legacy tests) or the lookup fails.
-  func hasSuggestion(for transaction: Transaction) async -> Bool {
-    guard let transferSuggestions else { return false }
-    do {
-      return try await
-        !transferSuggestions
-        .suggestions(touching: transaction.id).isEmpty
-    } catch {
-      logger.error(
-        "Failed to resolve transfer suggestion: \(error.localizedDescription)")
-      return false
-    }
+  /// Whether a live `TransferSuggestion` record currently touches
+  /// `transaction`. A synchronous read of `suggestedTransactionIds`,
+  /// which the store maintains from `transferSuggestions.observeAll()`
+  /// (see `observeSuggestionChannels`). The transaction-detail banner
+  /// reads this directly so SwiftUI re-renders the moment the record is
+  /// deleted (this device's dismiss / merge, or a peer's). `false` when
+  /// no suggestion repository is wired (previews / legacy tests) or
+  /// before the observation's first emission.
+  func hasSuggestion(for transaction: Transaction) -> Bool {
+    suggestedTransactionIds.contains(transaction.id)
   }
 
   /// Loads the counterpart `Transaction` of a suggested pair. Resolves

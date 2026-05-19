@@ -5,9 +5,13 @@ import SwiftUI
 /// paired it with a likely counterpart on another account). Mirrors the
 /// conditional self-hiding pattern of `TransactionDetailBlockExplorerSection`:
 /// renders nothing until the store confirms a suggestion exists. The
-/// presence check is resolved by `TransactionStore.hasSuggestion(for:)`
-/// (a synced-record read) in a `.task` — the view never touches the
-/// repository or a denormalised model field, staying a thin renderer.
+/// presence check is resolved by `TransactionStore.hasSuggestion(for:)`,
+/// a synchronous read of the store's `@Observable`
+/// `suggestedTransactionIds` (maintained from
+/// `transferSuggestions.observeAll()`). The view derives visibility from
+/// that observed state, so a dismiss / merge (or a peer's dismissal)
+/// deletes the record, the stream shrinks the set, and the banner
+/// vanishes reactively — no `.task` and no denormalised model field.
 ///
 /// Two sections per UI_GUIDE §6/§14: a banner with the affirmative
 /// "Merge as Transfer" action, and a separate trailing section carrying
@@ -32,20 +36,20 @@ struct TransactionDetailTransferSuggestion: View {
   /// flips this; `TransactionDetailView` owns the matching dialog.
   @Binding var showDismissConfirmation: Bool
 
-  /// Resolved from the synced `TransferSuggestion` record via the
-  /// store. `false` until the `.task` completes, so the section stays
-  /// hidden during the lookup and on every transaction with no
-  /// suggestion (the common case).
-  @State private var hasSuggestion = false
+  /// Derived from the store's `@Observable` suggestion-presence set, so
+  /// SwiftUI re-renders this section when the record appears or — after
+  /// a dismiss / merge here or on a peer — disappears. Hidden on every
+  /// transaction with no suggestion (the common case) and before the
+  /// observation's first emission.
+  private var hasSuggestion: Bool {
+    transactionStore.hasSuggestion(for: transaction)
+  }
 
   var body: some View {
     Group {
       if hasSuggestion {
         suggestionSections
       }
-    }
-    .task(id: transaction.id) {
-      hasSuggestion = await transactionStore.hasSuggestion(for: transaction)
     }
   }
 
@@ -58,6 +62,7 @@ struct TransactionDetailTransferSuggestion: View {
           .foregroundStyle(.secondary)
       } icon: {
         Image(systemName: "arrow.left.arrow.right")
+          .symbolRenderingMode(.hierarchical)
           .foregroundStyle(.blue)
       }
       .accessibilityElement(children: .combine)
@@ -70,6 +75,9 @@ struct TransactionDetailTransferSuggestion: View {
       Button("Merge as Transfer") {
         Task { await transactionStore.mergeSuggestedTransfer(transaction) }
       }
+      #if os(iOS)
+        .buttonStyle(.borderedProminent)
+      #endif
       .accessibilityIdentifier(
         UITestIdentifiers.TransferDetection.merge(transaction.id))
     }
