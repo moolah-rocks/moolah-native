@@ -57,12 +57,37 @@ extension GRDBAnalysisRepository {
     return try await withThrowingTaskGroup(of: (Int, Transaction).self) { group in
       for (index, instance) in instances.enumerated() {
         group.addTask {
-          let txn = try await convertLegsToProfileInstrument(
-            instance,
-            to: profileInstrument,
-            on: conversionDate,
-            conversionService: conversionService)
-          return (index, txn)
+          do {
+            let txn = try await convertLegsToProfileInstrument(
+              instance,
+              to: profileInstrument,
+              on: conversionDate,
+              conversionService: conversionService)
+            return (index, txn)
+          } catch let cancel as CancellationError {
+            // Cooperative cancellation surfaces unchanged — never
+            // folded into the per-day degradation path.
+            throw cancel
+          } catch {
+            // Rule 11 (`INSTRUMENT_CONVERSION_GUIDE.md`): a single
+            // instance's conversion failure must not abort the whole
+            // forecast (that surfaced on the Analysis page as a
+            // full-screen "WalletSyncError"). Pass the instance through
+            // *unconverted* and log here — the accumulator's per-day
+            // `catch` then drops that day, and every later occurrence
+            // of an unpriceable recurring leg drops the same way, so a
+            // day's total is never partial. Logging at the point of
+            // failure is required: the accumulator only logs if
+            // `dailyBalance` itself subsequently throws, which is not
+            // guaranteed for every degraded instance.
+            forecastLogger.warning(
+              """
+              Forecast pre-conversion failed for instance \(index, privacy: .public) — \
+              \(error.localizedDescription, privacy: .public). Passing it through \
+              unconverted; affected forecast days drop (Rule 11).
+              """)
+            return (index, instance)
+          }
         }
       }
       var out = Array(repeating: firstInstance, count: instances.count)
