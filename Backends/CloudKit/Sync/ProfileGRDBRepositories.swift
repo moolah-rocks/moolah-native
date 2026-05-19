@@ -22,7 +22,7 @@ import GRDB
 struct ProfileGRDBRepositories: Sendable {
   let csvImportProfiles: GRDBCSVImportProfileRepository
   let importRules: GRDBImportRuleRepository
-  let dismissedTransferPairs: GRDBDismissedTransferPairRepository
+  let transferSuggestions: GRDBTransferSuggestionRepository
   let instruments: GRDBInstrumentRegistryRepository
   let categories: GRDBCategoryRepository
   let accounts: GRDBAccountRepository
@@ -83,7 +83,7 @@ extension ProfileGRDBRepositories {
     return ProfileGRDBRepositories(
       csvImportProfiles: GRDBCSVImportProfileRepository(database: database),
       importRules: GRDBImportRuleRepository(database: database),
-      dismissedTransferPairs: GRDBDismissedTransferPairRepository(database: database),
+      transferSuggestions: GRDBTransferSuggestionRepository(database: database),
       instruments: GRDBInstrumentRegistryRepository(database: database),
       categories: GRDBCategoryRepository(database: database),
       accounts: GRDBAccountRepository(

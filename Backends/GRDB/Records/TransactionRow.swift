@@ -13,9 +13,7 @@ import GRDB
 /// `import_origin_*` columns; `"merged"` projects the outgoing side
 /// through those eight and the incoming side through the eight
 /// `import_origin_incoming_*` columns. A null kind is a pre-v12 row
-/// and reads as `.single`. `transfer_suggestion_*` carry the optional
-/// `TransferSuggestion`; both columns are non-null together or both
-/// null.
+/// and reads as `.single`.
 struct TransactionRow {
   static let databaseTableName = "transaction"
 
@@ -44,8 +42,6 @@ struct TransactionRow {
     case importOriginIncomingImportSessionId = "import_origin_incoming_import_session_id"
     case importOriginIncomingSourceFilename = "import_origin_incoming_source_filename"
     case importOriginIncomingParserIdentifier = "import_origin_incoming_parser_identifier"
-    case transferSuggestionCounterpartId = "transfer_suggestion_counterpart_id"
-    case transferSuggestionSuggestedAt = "transfer_suggestion_suggested_at"
     case encodedSystemFields = "encoded_system_fields"
   }
 
@@ -74,8 +70,6 @@ struct TransactionRow {
     case importOriginIncomingImportSessionId = "import_origin_incoming_import_session_id"
     case importOriginIncomingSourceFilename = "import_origin_incoming_source_filename"
     case importOriginIncomingParserIdentifier = "import_origin_incoming_parser_identifier"
-    case transferSuggestionCounterpartId = "transfer_suggestion_counterpart_id"
-    case transferSuggestionSuggestedAt = "transfer_suggestion_suggested_at"
     case encodedSystemFields = "encoded_system_fields"
   }
 
@@ -112,11 +106,6 @@ struct TransactionRow {
   var importOriginIncomingImportSessionId: UUID?
   var importOriginIncomingSourceFilename: String?
   var importOriginIncomingParserIdentifier: String?
-  // TransferSuggestion denormalised. Both columns are non-null
-  // together or both null; one populated and one null reads as no
-  // suggestion.
-  var transferSuggestionCounterpartId: UUID?
-  var transferSuggestionSuggestedAt: Date?
   var encodedSystemFields: Data?
 }
 

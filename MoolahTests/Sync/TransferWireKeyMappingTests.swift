@@ -4,29 +4,26 @@ import Testing
 
 @testable import Moolah
 
-/// Pins the eleven transfer-detection wire keys on the
-/// `"TransactionRecord"` CKRecord: `importOriginKind`, the eight
-/// `importOriginIncoming*` columns, and the two `transferSuggestion*`
-/// columns. These string keys are a frozen CloudKit contract — existing
-/// iCloud zones reference these exact names — so the round-trip is
-/// asserted by string key, not just by decoded value. A separate suite
-/// (and file) from `RecordMappingTests` keeps each within its length
-/// budget.
+/// Pins the nine merged-import wire keys on the
+/// `"TransactionRecord"` CKRecord: `importOriginKind` and the eight
+/// `importOriginIncoming*` columns. These string keys are a frozen
+/// CloudKit contract — existing iCloud zones reference these exact
+/// names — so the round-trip is asserted by string key, not just by
+/// decoded value. A separate suite (and file) from `RecordMappingTests`
+/// keeps each within its length budget.
 @Suite("TransferWireKeyMapping")
 struct TransferWireKeyMappingTests {
 
   let zoneID = CKRecordZone.ID(zoneName: "profile-test", ownerName: CKCurrentUserDefaultName)
 
   private let importedAt = Date(timeIntervalSince1970: 1_700_000_100)
-  private let suggestedAt = Date(timeIntervalSince1970: 1_700_000_200)
   private let txnDate = Date(timeIntervalSince1970: 1_700_000_000)
 
-  /// Builds a `.merged` transaction whose outgoing/incoming origins and
-  /// `TransferSuggestion` populate all eleven new columns.
+  /// Builds a `.merged` transaction whose outgoing/incoming origins
+  /// populate all nine merged-import columns.
   private func makeMergedTransaction(
     outgoingSessionId: UUID,
-    incomingSessionId: UUID,
-    counterpartId: UUID
+    incomingSessionId: UUID
   ) -> Transaction {
     let outgoing = ImportOrigin(
       rawDescription: "OUT debit raw",
@@ -55,28 +52,20 @@ struct TransferWireKeyMappingTests {
       date: txnDate,
       payee: "Merged transfer",
       legs: [leg],
-      importOrigin: .merged(MergedImportOrigin(outgoing: outgoing, incoming: incoming)),
-      transferSuggestion: TransferSuggestion(
-        counterpartTransactionId: counterpartId, suggestedAt: suggestedAt))
+      importOrigin: .merged(MergedImportOrigin(outgoing: outgoing, incoming: incoming)))
   }
 
-  @Test("merged + suggestion wire keys round-trip by string key")
-  func mergedAndSuggestionWireKeysRoundTrip() throws {
+  @Test("merged import wire keys round-trip by string key")
+  func mergedImportWireKeysRoundTrip() throws {
     let outgoingSessionId = UUID()
     let incomingSessionId = UUID()
-    let counterpartId = UUID()
     let transaction = makeMergedTransaction(
       outgoingSessionId: outgoingSessionId,
-      incomingSessionId: incomingSessionId,
-      counterpartId: counterpartId)
+      incomingSessionId: incomingSessionId)
 
     let ckRecord = TransactionRow(domain: transaction).toCKRecord(in: zoneID)
 
     #expect(ckRecord["importOriginKind"] as? String == "merged")
-    #expect(
-      ckRecord["transferSuggestionCounterpartId"] as? String
-        == counterpartId.uuidString)
-    #expect(ckRecord["transferSuggestionSuggestedAt"] as? Date == suggestedAt)
     #expect(
       ckRecord["importOriginIncomingRawDescription"] as? String
         == "IN credit raw")
@@ -91,12 +80,10 @@ struct TransferWireKeyMappingTests {
     #expect(restored.importOriginIncomingImportSessionId == incomingSessionId)
     #expect(restored.importOriginIncomingSourceFilename == "in.csv")
     #expect(restored.importOriginIncomingParserIdentifier == "csv-parser-in")
-    #expect(restored.transferSuggestionCounterpartId == counterpartId)
-    #expect(restored.transferSuggestionSuggestedAt == suggestedAt)
   }
 
-  @Test("plain transaction skips the new transfer wire keys")
-  func plainTransactionSkipsNewWireKeys() {
+  @Test("plain transaction skips the merged import wire keys")
+  func plainTransactionSkipsMergedWireKeys() {
     let leg = TransactionLeg(
       accountId: UUID(),
       instrument: Instrument.USD,
@@ -107,7 +94,6 @@ struct TransferWireKeyMappingTests {
     let ckRecord = TransactionRow(domain: plain).toCKRecord(in: zoneID)
 
     #expect(ckRecord["importOriginKind"] == nil)
-    #expect(ckRecord["transferSuggestionCounterpartId"] == nil)
     #expect(ckRecord["importOriginIncomingRawDescription"] == nil)
   }
 }

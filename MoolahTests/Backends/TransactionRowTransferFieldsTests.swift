@@ -3,7 +3,7 @@ import Testing
 
 @testable import Moolah
 
-@Suite("TransactionRow ⇄ transfer-detection fields")
+@Suite("TransactionRow ⇄ import-origin fields")
 struct TransactionRowTransferFieldsTests {
   private func origin(_ tag: String) -> ImportOrigin {
     ImportOrigin(
@@ -11,17 +11,14 @@ struct TransactionRowTransferFieldsTests {
       importSessionId: UUID(), parserIdentifier: "p-\(tag)")
   }
 
-  @Test("single origin + suggestion round-trips")
+  @Test("single origin round-trips")
   func single() throws {
     let leg = TransactionLeg(
       accountId: UUID(), instrument: .defaultTestInstrument, quantity: -5, type: .expense)
     var transaction = Transaction(date: Date(timeIntervalSince1970: 1), legs: [leg])
     transaction.importOrigin = .single(origin("a"))
-    transaction.transferSuggestion = TransferSuggestion(
-      counterpartTransactionId: UUID(), suggestedAt: Date(timeIntervalSince1970: 2))
     let back = try TransactionRow(domain: transaction).toDomain(legs: transaction.legs)
     #expect(back.importOrigin == transaction.importOrigin)
-    #expect(back.transferSuggestion == transaction.transferSuggestion)
   }
 
   @Test("merged origin round-trips both sides")

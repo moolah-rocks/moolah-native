@@ -56,21 +56,6 @@ DEFINE SCHEMA
         GRANT READ TO "_world"
     );
 
-    RECORD TYPE DismissedTransferPairRecord (
-        "___createTime" TIMESTAMP,
-        "___createdBy"  REFERENCE,
-        "___etag"       STRING,
-        "___modTime"    TIMESTAMP,
-        "___modifiedBy" REFERENCE,
-        "___recordID"   REFERENCE QUERYABLE,
-        dismissedAt     TIMESTAMP QUERYABLE SORTABLE,
-        transactionIdA  STRING QUERYABLE SEARCHABLE SORTABLE,
-        transactionIdB  STRING QUERYABLE SEARCHABLE SORTABLE,
-        GRANT WRITE TO "_creator",
-        GRANT CREATE TO "_icloud",
-        GRANT READ TO "_world"
-    );
-
     RECORD TYPE EarmarkBudgetItemRecord (
         "___createTime" TIMESTAMP,
         "___createdBy"  REFERENCE,
@@ -233,8 +218,21 @@ DEFINE SCHEMA
         payee                                  STRING QUERYABLE SEARCHABLE SORTABLE,
         recurEvery                             INT64 QUERYABLE SORTABLE,
         recurPeriod                            STRING QUERYABLE SEARCHABLE SORTABLE,
-        transferSuggestionCounterpartId        STRING QUERYABLE SEARCHABLE SORTABLE,
-        transferSuggestionSuggestedAt          TIMESTAMP QUERYABLE SORTABLE,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE TransferSuggestionRecord (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        suggestedAt     TIMESTAMP QUERYABLE SORTABLE,
+        transactionIdA  STRING QUERYABLE SEARCHABLE SORTABLE,
+        transactionIdB  STRING QUERYABLE SEARCHABLE SORTABLE,
         GRANT WRITE TO "_creator",
         GRANT CREATE TO "_icloud",
         GRANT READ TO "_world"

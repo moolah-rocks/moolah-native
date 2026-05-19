@@ -31,7 +31,7 @@ extension AccountRow: IdentifiableRecord {}
 extension TransactionRow: IdentifiableRecord {}
 extension TransactionLegRow: IdentifiableRecord {}
 extension CategoryRow: IdentifiableRecord {}
-extension DismissedTransferPairRow: IdentifiableRecord {}
+extension TransferSuggestionRow: IdentifiableRecord {}
 extension EarmarkRow: IdentifiableRecord {}
 extension EarmarkBudgetItemRow: IdentifiableRecord {}
 extension InvestmentValueRow: IdentifiableRecord {}
@@ -55,7 +55,7 @@ extension ImportRuleRow: ValueTypeSystemFieldsReadable {}
 extension InstrumentRow: ValueTypeSystemFieldsReadable {}
 extension AccountRow: ValueTypeSystemFieldsReadable {}
 extension CategoryRow: ValueTypeSystemFieldsReadable {}
-extension DismissedTransferPairRow: ValueTypeSystemFieldsReadable {}
+extension TransferSuggestionRow: ValueTypeSystemFieldsReadable {}
 extension EarmarkRow: ValueTypeSystemFieldsReadable {}
 extension EarmarkBudgetItemRow: ValueTypeSystemFieldsReadable {}
 extension TransactionRow: ValueTypeSystemFieldsReadable {}
@@ -98,7 +98,7 @@ enum RecordTypeRegistry: Sendable {
     TransactionRow.recordType: TransactionRow.self,
     TransactionLegRow.recordType: TransactionLegRow.self,
     CategoryRow.recordType: CategoryRow.self,
-    DismissedTransferPairRow.recordType: DismissedTransferPairRow.self,
+    TransferSuggestionRow.recordType: TransferSuggestionRow.self,
     EarmarkRow.recordType: EarmarkRow.self,
     EarmarkBudgetItemRow.recordType: EarmarkBudgetItemRow.self,
     InvestmentValueRow.recordType: InvestmentValueRow.self,

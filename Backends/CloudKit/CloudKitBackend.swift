@@ -6,7 +6,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let accounts: any AccountRepository
   let transactions: any TransactionRepository
   let categories: any CategoryRepository
-  let dismissedTransferPairs: any DismissedTransferPairRepository
+  let transferSuggestions: any TransferSuggestionRepository
   let earmarks: any EarmarkRepository
   let analysis: any AnalysisRepository
   let investments: any InvestmentRepository
@@ -34,7 +34,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let grdbInstruments: GRDBInstrumentRegistryRepository
   let grdbAccounts: GRDBAccountRepository
   let grdbCategories: GRDBCategoryRepository
-  let grdbDismissedTransferPairs: GRDBDismissedTransferPairRepository
+  let grdbTransferSuggestions: GRDBTransferSuggestionRepository
   let grdbEarmarks: GRDBEarmarkRepository
   let grdbEarmarkBudgetItems: GRDBEarmarkBudgetItemRepository
   let grdbInvestments: GRDBInvestmentRepository
@@ -56,8 +56,8 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     let onAccountDeleted: @Sendable (String, UUID) -> Void
     let onCategoryChanged: @Sendable (String, UUID) -> Void
     let onCategoryDeleted: @Sendable (String, UUID) -> Void
-    let onDismissedTransferPairChanged: @Sendable (String, UUID) -> Void
-    let onDismissedTransferPairDeleted: @Sendable (String, UUID) -> Void
+    let onTransferSuggestionChanged: @Sendable (String, UUID) -> Void
+    let onTransferSuggestionDeleted: @Sendable (String, UUID) -> Void
     let onEarmarkChanged: @Sendable (String, UUID) -> Void
     let onEarmarkDeleted: @Sendable (String, UUID) -> Void
     let onEarmarkBudgetItemChanged: @Sendable (String, UUID) -> Void
@@ -78,8 +78,8 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
       onAccountDeleted: { _, _ in },
       onCategoryChanged: { _, _ in },
       onCategoryDeleted: { _, _ in },
-      onDismissedTransferPairChanged: { _, _ in },
-      onDismissedTransferPairDeleted: { _, _ in },
+      onTransferSuggestionChanged: { _, _ in },
+      onTransferSuggestionDeleted: { _, _ in },
       onEarmarkChanged: { _, _ in },
       onEarmarkDeleted: { _, _ in },
       onEarmarkBudgetItemChanged: { _, _ in },
@@ -112,7 +112,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.grdbAccounts = repos.accounts
     self.grdbTransactions = repos.transactions
     self.grdbCategories = repos.categories
-    self.grdbDismissedTransferPairs = repos.dismissedTransferPairs
+    self.grdbTransferSuggestions = repos.transferSuggestions
     self.grdbEarmarks = repos.earmarks
     self.grdbEarmarkBudgetItems = repos.earmarkBudgetItems
     self.grdbInvestments = repos.investments
@@ -124,7 +124,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.accounts = repos.accounts
     self.transactions = repos.transactions
     self.categories = repos.categories
-    self.dismissedTransferPairs = repos.dismissedTransferPairs
+    self.transferSuggestions = repos.transferSuggestions
     self.earmarks = repos.earmarks
     self.analysis = repos.analysis
     self.investments = repos.investments
@@ -141,7 +141,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     let accounts: GRDBAccountRepository
     let transactions: GRDBTransactionRepository
     let categories: GRDBCategoryRepository
-    let dismissedTransferPairs: GRDBDismissedTransferPairRepository
+    let transferSuggestions: GRDBTransferSuggestionRepository
     let earmarks: GRDBEarmarkRepository
     let earmarkBudgetItems: GRDBEarmarkBudgetItemRepository
     let investments: GRDBInvestmentRepository
@@ -178,10 +178,10 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
         database: database,
         onRecordChanged: hooks.onCategoryChanged,
         onRecordDeleted: hooks.onCategoryDeleted),
-      dismissedTransferPairs: GRDBDismissedTransferPairRepository(
+      transferSuggestions: GRDBTransferSuggestionRepository(
         database: database,
-        onRecordChanged: hooks.onDismissedTransferPairChanged,
-        onRecordDeleted: hooks.onDismissedTransferPairDeleted),
+        onRecordChanged: hooks.onTransferSuggestionChanged,
+        onRecordDeleted: hooks.onTransferSuggestionDeleted),
       earmarks: resolving.earmarks,
       earmarkBudgetItems: GRDBEarmarkBudgetItemRepository(
         database: database,
