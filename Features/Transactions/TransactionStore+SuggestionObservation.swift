@@ -33,7 +33,7 @@ extension TransactionStore {
   /// `transactionIds`); an error tick is surfaced on `self.error`.
   /// Strong `self` capture matches `observeRateChannels()` — the
   /// task's lifetime is gated by `stopObserving()` / `deinit`.
-  func observeSuggestionChannels(
+  private func observeSuggestionChannels(
     _ suggestions: any TransferSuggestionRepository
   ) async {
     let stream = suggestions.observeAll()

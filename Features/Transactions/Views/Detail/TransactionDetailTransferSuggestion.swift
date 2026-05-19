@@ -63,7 +63,7 @@ struct TransactionDetailTransferSuggestion: View {
       } icon: {
         Image(systemName: "arrow.left.arrow.right")
           .symbolRenderingMode(.hierarchical)
-          .foregroundStyle(.blue)
+          .foregroundStyle(Color.accentColor)
       }
       .accessibilityElement(children: .combine)
       .accessibilityLabel(

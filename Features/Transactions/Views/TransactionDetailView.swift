@@ -13,11 +13,6 @@ struct TransactionDetailView: View {
 
   @Environment(ProfileSession.self) private var session: ProfileSession?
 
-  // `draft` and `openedAsNewTransaction` use internal access (no `private`)
-  // so that extension files in this module
-  // (TransactionDetailView+Helpers.swift, TransactionDetailView+Actions.swift)
-  // can reference them. SwiftLint's strict_fileprivate rule disallows
-  // `fileprivate`, making internal the smallest legal cross-file scope.
   // `draft`, the confirmation flags, the autocomplete/leg state, and
   // `focusedField` use internal access (no `private`) so the section-
   // composition builders in `TransactionDetailView+FormContent.swift`
