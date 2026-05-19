@@ -320,14 +320,18 @@ final class SyncedAccountStore {
 
     let perAccountResults = await runParallelBuilds(for: inputs)
     updateGlobalError(from: perAccountResults)
-    await runApplyPass(perAccountResults: perAccountResults)
+    let genuinelyNew = await runApplyPass(perAccountResults: perAccountResults)
     await refreshStateFromRepository()
-    // Detection runs after the apply pass and the state refresh so the
-    // just-persisted rows are visible to the candidate fetch. Transfers
+    // Detection runs over the apply pass's genuinely-new survivors only
+    // — the transactions this pass actually merged-and-deduped-and-
+    // persisted. There is no date-window scan, so a previously-existing
+    // row (e.g. a dismissed/merged pair) is never re-evaluated. Transfers
     // already collapsed by `CrossAccountTransferMerger` (same-`externalId`
     // opposing legs) carry a nil `transferDetectionValueLeg` and are
     // structurally skipped by the detector.
-    await runTransferDetection(participatingAccountIds: Set(inputs.map(\.id)))
+    await runTransferDetection(
+      genuinelyNew: genuinelyNew,
+      participatingAccountIds: Set(inputs.map(\.id)))
   }
 
   // MARK: - Internal mutators
