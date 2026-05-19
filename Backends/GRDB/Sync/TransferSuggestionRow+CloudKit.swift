@@ -32,6 +32,9 @@ extension TransferSuggestionRow: CloudKitRecordConvertible {
       recordName: ckRecord.recordID.recordName,
       transactionIdA: transactionIdA,
       transactionIdB: transactionIdB,
+      // toCKRecord always writes a non-nil suggestedAt, so nil here means
+      // a genuinely malformed or pre-schema record; epoch-zero is a safe
+      // fallback — the record remains usable, and ordering just sorts it oldest.
       suggestedAt: fields.suggestedAt ?? Date(timeIntervalSince1970: 0),
       // Stamped by applyGRDBBatchSave after upsert; never read from the
       // CKRecord itself.
