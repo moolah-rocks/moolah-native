@@ -6,9 +6,11 @@ import Observation
 /// newly-imported batch for fuzzy counterpart pairs and writing a
 /// `TransferSuggestion` record per pair, collapsing a suggested or
 /// user-asserted pair into one merged two-leg transfer, reversing that
-/// collapse, and dismissing a pair. Dismiss / merge / unmerge delete the
-/// suggestion record. Views bind state and dispatch; all logic lives
-/// here (thin-view discipline, `CLAUDE.md`).
+/// collapse, and dismissing a pair. Dismiss, merge, and manual-merge
+/// delete the pair's `TransferSuggestion` record; unmerge does not —
+/// the suggestion was already deleted by the merge it reverses. Views
+/// bind state and dispatch; all logic lives here (thin-view discipline,
+/// `CLAUDE.md`).
 ///
 /// State (`error`, `isMutating`) is `private(set)` and observed by
 /// views. Errors are caught here and surfaced via `error`; typed
@@ -107,7 +109,12 @@ final class TransferDetectionCoordinator {
 
   /// Collapses an auto-detected pair into one merged two-`.transfer`-leg
   /// transaction, deleting both single-account sources in the same
-  /// atomic write. Re-entrancy is rejected, not queued.
+  /// atomic write. Re-entrancy is rejected, not queued. The atomicity
+  /// covers the `transactions.replace` only; `suggestions.delete` is a
+  /// separate best-effort follow-on write — a process stop between the
+  /// two leaves an orphan `TransferSuggestion` row whose transaction ids
+  /// both point at deleted records, making it invisible to any
+  /// transaction-id-keyed query and harmless.
   func merge(_ sideA: Transaction, _ sideB: Transaction) async {
     await mutate {
       let merged = try self.builder.merged(from: sideA, sideB)
@@ -123,7 +130,12 @@ final class TransferDetectionCoordinator {
   /// instrument, dates within `TransferMergeBuilder.manualMergeWindowSeconds`)
   /// throwing the matching `ManualMergeError` *before* delegating leg
   /// construction to `builder.merged`. The merged transfer replaces
-  /// both sources in one atomic write.
+  /// both sources in one atomic write. The atomicity covers the
+  /// `transactions.replace` only; `suggestions.delete` is a separate
+  /// best-effort follow-on write — a process stop between the two
+  /// leaves an orphan `TransferSuggestion` row whose transaction ids
+  /// both point at deleted records, making it invisible to any
+  /// transaction-id-keyed query and harmless.
   func manualMerge(_ sideA: Transaction, _ sideB: Transaction) async {
     await mutate {
       try self.validateManualMerge(sideA, sideB)

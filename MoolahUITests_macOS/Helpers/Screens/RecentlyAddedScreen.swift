@@ -70,13 +70,13 @@ struct RecentlyAddedScreen {
 
   /// Asserts the transfer pill is gone for the given transaction while
   /// the row itself remains. This is the post-dismiss signal: dismiss
-  /// only clears `transferSuggestion` on both sides and records a
-  /// `DismissedTransferPair`, leaving both `.single` rows in Recently
-  /// Added — the pill title drops out of the row's combined
-  /// accessibility label but the row handle persists. The row's
-  /// continued existence is the presence sentinel, asserted first so
-  /// this cannot pass vacuously, before the bounded wait for the pill
-  /// title to clear from the still-present row's label.
+  /// deletes the `TransferSuggestion` record for the pair, leaving
+  /// both `.single` rows in Recently Added — the pill title drops out
+  /// of the row's combined accessibility label but the row handle
+  /// persists. The row's continued existence is the presence sentinel,
+  /// asserted first so this cannot pass vacuously, before the bounded
+  /// wait for the pill title to clear from the still-present row's
+  /// label.
   func expectPillCleared(for id: UUID) {
     let row = app.element(for: UITestIdentifiers.RecentlyAdded.row(id))
     if !row.waitForExistence(timeout: 3) {
@@ -129,12 +129,12 @@ struct RecentlyAddedScreen {
 
   /// Right-clicks the given row, clicks "Not a Transfer", and confirms
   /// the destructive button in the "Dismiss Transfer Suggestion"
-  /// confirmation dialog. Dismiss clears `transferSuggestion` on both
-  /// sides and records a `DismissedTransferPair`; the transaction stays
-  /// a recently-imported `.single` row, so the row remains while only
-  /// the pill goes away. Returns once the pill title has cleared from
-  /// the still-present row's combined accessibility label — that pill
-  /// clearing on the surviving row is the post-condition.
+  /// confirmation dialog. Dismiss deletes the `TransferSuggestion`
+  /// record for the pair; the transaction stays a recently-imported
+  /// `.single` row, so the row remains while only the pill goes away.
+  /// Returns once the pill title has cleared from the still-present
+  /// row's combined accessibility label — that pill clearing on the
+  /// surviving row is the post-condition.
   func tapDismiss(for id: UUID) {
     Trace.record(#function, detail: "id=\(id)")
     let row = app.element(for: UITestIdentifiers.RecentlyAdded.row(id))
