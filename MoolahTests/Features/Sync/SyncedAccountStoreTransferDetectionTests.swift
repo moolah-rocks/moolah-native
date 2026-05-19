@@ -8,8 +8,8 @@ import Testing
 /// Integration test: a `SyncedAccountStore` sync that imports an
 /// opposing same-instrument pair across two exchange accounts runs the
 /// fuzzy transfer-detection pass after the apply + state-refresh, so
-/// both persisted rows carry a `transferSuggestion` pointing at each
-/// other.
+/// a single `TransferSuggestion` record is stored in the repository for
+/// the detected pair (no per-row denormalised annotation).
 ///
 /// Two scenarios share the harness:
 ///
@@ -19,7 +19,7 @@ import Testing
 /// - Same `externalId` on the opposing legs: Extension B collapses them
 ///   into one merged two-cash-leg transaction during the apply pass; its
 ///   `transferDetectionValueLeg` is `nil`, so the detector structurally
-///   skips it and neither resulting row carries a suggestion.
+///   skips it and no suggestion record is created.
 ///
 /// Mirrors the crypto/exchange suites' `TestBackend` fixture shape — the
 /// per-suite `Fixture` + `makeFixture` helper is the real scaffolding;
@@ -85,7 +85,7 @@ struct SyncedAccountStoreTransferDetectionTests {
       accounts: backend.accounts,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs,
+        suggestions: backend.transferSuggestions,
         clock: { Self.pinnedNow }),
       transactions: backend.transactions,
       clock: { Self.pinnedNow })
@@ -185,20 +185,22 @@ struct SyncedAccountStoreTransferDetectionTests {
     let txnB = try #require(
       txns.first { $0.legs.contains { $0.externalId == "b-deposit-1" } })
 
-    let suggestionA = try #require(txnA.transferSuggestion)
-    let suggestionB = try #require(txnB.transferSuggestion)
-    #expect(suggestionA.counterpartTransactionId == txnB.id)
-    #expect(suggestionB.counterpartTransactionId == txnA.id)
-    #expect(suggestionA.suggestedAt == Self.pinnedNow)
+    let suggestions = try await fixture.backend.transferSuggestions.fetchAll()
+    #expect(suggestions.count == 1)
+    let suggestion = try #require(suggestions.first)
+    #expect(suggestion.transactionIds == [txnA.id, txnB.id])
+    #expect(suggestion.counterpart(of: txnA.id) == txnB.id)
+    #expect(suggestion.suggestedAt == Self.pinnedNow)
   }
 
   /// Drives a sync that imports an opposing pair sharing one
   /// `externalId` across two exchange accounts and returns every
-  /// persisted transaction. Identical `externalId` on the opposing legs
-  /// makes Extension B's same-`externalId` pair predicate fire during
-  /// the apply pass. Shared by the apply-collapse and no-suggestion
-  /// tests so both observe the same single sync run shape.
-  private func syncSameExternalIdOpposingPair() async throws -> [Transaction] {
+  /// persisted transaction plus the backend for follow-on repository
+  /// assertions. Identical `externalId` on the opposing legs makes
+  /// Extension B's same-`externalId` pair predicate fire during the
+  /// apply pass. Shared by the apply-collapse and no-suggestion tests so
+  /// both observe the same single sync run shape.
+  private func syncSameExternalIdOpposingPair() async throws -> ([Transaction], CloudKitBackend) {
     let fixture = try makeFixture()
     let withdraw = ExchangeImportedTransaction(
       externalId: "shared-xfer-1",
@@ -225,13 +227,14 @@ struct SyncedAccountStoreTransferDetectionTests {
 
     await fixture.store.syncAccounts([accountA, accountB])
 
-    return try await fixture.backend.transactions.fetchAll(
+    let txns = try await fixture.backend.transactions.fetchAll(
       filter: TransactionFilter())
+    return (txns, fixture.backend)
   }
 
   @Test("Apply pass collapses the same-externalId opposing pair into one transaction")
   func sameExternalIdPairIsMergedByApply() async throws {
-    let txns = try await syncSameExternalIdOpposingPair()
+    let (txns, _) = try await syncSameExternalIdOpposingPair()
 
     #expect(txns.count == 1)
     let merged = try #require(txns.first)
@@ -243,9 +246,8 @@ struct SyncedAccountStoreTransferDetectionTests {
 
   @Test("Apply-merged same-externalId transaction carries no transfer suggestion")
   func mergedSameExternalIdTransactionHasNoSuggestion() async throws {
-    let txns = try await syncSameExternalIdOpposingPair()
+    let (_, backend) = try await syncSameExternalIdOpposingPair()
 
-    let merged = try #require(txns.first)
-    #expect(merged.transferSuggestion == nil)
+    #expect(try await backend.transferSuggestions.fetchAll().isEmpty)
   }
 }
