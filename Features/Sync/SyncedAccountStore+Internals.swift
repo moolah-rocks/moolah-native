@@ -283,10 +283,9 @@ extension SyncedAccountStore {
   /// is never re-evaluated, so a dismissed/merged pair is never
   /// re-suggested (the record model has no negative-assertion tombstone).
   ///
-  /// `windowLowerBound` still bounds the coordinator's `existingNearby`
-  /// counterpart fetch (the pairing tolerance) — that lives inside
-  /// `runDetection`, unchanged; here it is only the parameter value
-  /// passed through.
+  /// `windowLowerBound` is the lower bound the coordinator applies to
+  /// its `existingNearby` counterpart fetch — the maximum age of a
+  /// candidate counterpart for a freshly-imported transaction.
   ///
   /// The pre-check on `transferDetection.isMutating` exists so a
   /// background sync pass does not write `mutationInProgress` into the
@@ -297,8 +296,16 @@ extension SyncedAccountStore {
     genuinelyNew: [Transaction], participatingAccountIds: Set<UUID>
   ) async {
     guard !transferDetection.isMutating else {
+      // Under the no-window design the genuinely-new survivor set is
+      // computed once per sync pass and never re-fetched, so a skipped
+      // pass means these rows are never evaluated for detection (no
+      // later window scan catches them). The trigger (a sync pass
+      // finishing while the user is mid-merge / mid-dismiss) is rare
+      // enough to accept rather than buffer-and-replay; revisit if a
+      // missed suggestion proves user-visible.
       Self.internalsLogger.notice(
-        "Transfer detection skipped — coordinator busy; a later pass covers new rows")
+        "Transfer detection skipped — coordinator busy; genuinely-new rows from this pass will not be evaluated"
+      )
       return
     }
     let eligible = genuinelyNew.filter { $0.transferDetectionValueLeg != nil }

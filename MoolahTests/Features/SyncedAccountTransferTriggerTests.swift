@@ -40,20 +40,6 @@ struct SyncedAccountTransferTriggerTests {
     let database: DatabaseQueue
   }
 
-  /// `ExchangeClient` that routes a scripted row list per account token.
-  /// An account whose token maps to an empty list (or is absent) syncs
-  /// successfully but persists nothing — the apply pass returns an empty
-  /// survivor set.
-  private struct TokenRoutingExchangeClient: ExchangeClient, Sendable {
-    let rowsByToken: [String: [ExchangeImportedTransaction]]
-
-    func fetchTransactions(
-      token: String
-    ) async throws -> [ExchangeImportedTransaction] {
-      rowsByToken[token] ?? []
-    }
-  }
-
   private func makeFixture() throws -> Fixture {
     let (backend, database) = try TestBackend.create()
     let alchemy = RecordingAlchemyClientStub()
@@ -90,7 +76,6 @@ struct SyncedAccountTransferTriggerTests {
         transactions: backend.transactions,
         suggestions: backend.transferSuggestions,
         clock: { Self.pinnedNow }),
-      transactions: backend.transactions,
       clock: { Self.pinnedNow })
     return Fixture(store: store, backend: backend, database: database)
   }

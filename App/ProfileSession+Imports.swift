@@ -98,7 +98,7 @@ extension ProfileSession {
   ) -> ImportStore {
     let transferDetection = TransferDetectionCoordinator(
       transactions: backend.transactions,
-      dismissedPairs: backend.transferSuggestions)
+      suggestions: backend.transferSuggestions)
     do {
       let staging = try ImportStagingStore(directory: stagingDirectory)
       return ImportStore(

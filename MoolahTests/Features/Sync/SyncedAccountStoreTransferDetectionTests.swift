@@ -35,22 +35,6 @@ struct SyncedAccountStoreTransferDetectionTests {
     let database: DatabaseQueue
   }
 
-  /// `ExchangeClient` that routes a scripted row list per account token,
-  /// so one registered `CoinstashSyncSource` can drive two exchange
-  /// accounts with independently controlled `externalId`s through the
-  /// real build → apply → detection pipeline. `StubExchangeClient`
-  /// ignores the token, so the per-account split needs this routing
-  /// double.
-  private struct TokenRoutingExchangeClient: ExchangeClient, Sendable {
-    let rowsByToken: [String: [ExchangeImportedTransaction]]
-
-    func fetchTransactions(
-      token: String
-    ) async throws -> [ExchangeImportedTransaction] {
-      rowsByToken[token] ?? []
-    }
-  }
-
   private func makeFixture() throws -> Fixture {
     let (backend, database) = try TestBackend.create()
     let alchemy = RecordingAlchemyClientStub()
@@ -87,7 +71,6 @@ struct SyncedAccountStoreTransferDetectionTests {
         transactions: backend.transactions,
         suggestions: backend.transferSuggestions,
         clock: { Self.pinnedNow }),
-      transactions: backend.transactions,
       clock: { Self.pinnedNow })
     return Fixture(store: store, backend: backend, database: database)
   }

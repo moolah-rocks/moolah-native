@@ -79,11 +79,6 @@ final class SyncedAccountStore {
   /// and merge action; the store only orchestrates the post-apply call.
   let transferDetection: TransferDetectionCoordinator
 
-  /// The store's own transaction-repository handle, used solely to fetch
-  /// the participating-account candidate set after the apply pass (the
-  /// apply engine's repository is private and not widened for this).
-  let transactions: any TransactionRepository
-
   let clock: @Sendable () -> Date
   let staleThreshold: TimeInterval
   let timerInterval: Duration
@@ -128,8 +123,6 @@ final class SyncedAccountStore {
   ///   - transferDetection: Cross-account transfer-detection
   ///     coordinator. The store calls `runDetection` once per sync pass
   ///     after the apply + state refresh.
-  ///   - transactions: Transaction repository handle used to fetch the
-  ///     participating-account candidate set for the detection pass.
   ///   - clock: Closure returning "now". The clock injection is for
   ///     per-account `lastSyncedAt` decisions; the timer's
   ///     `Task.sleep` uses the real Swift clock regardless. Tests pass
@@ -145,7 +138,6 @@ final class SyncedAccountStore {
     walletSyncState: any WalletSyncStateRepository,
     accounts: any AccountRepository,
     transferDetection: TransferDetectionCoordinator,
-    transactions: any TransactionRepository,
     clock: @Sendable @escaping () -> Date = { Date() },
     staleThreshold: TimeInterval = 86_400,
     timerInterval: Duration = .seconds(3_600),
@@ -156,7 +148,6 @@ final class SyncedAccountStore {
     self.walletSyncState = walletSyncState
     self.accounts = accounts
     self.transferDetection = transferDetection
-    self.transactions = transactions
     self.clock = clock
     self.staleThreshold = staleThreshold
     self.timerInterval = timerInterval
