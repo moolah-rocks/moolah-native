@@ -12,8 +12,7 @@ struct FuzzyTransferDetector: Sendable {
 
   func detect(
     newlyImported: [Transaction],
-    existingNearby: [Transaction],
-    isDismissed: @Sendable (UUID, UUID) -> Bool
+    existingNearby: [Transaction]
   ) -> [TransferCandidatePair] {
     let pool = newlyImported + existingNearby
     var consumed: Set<UUID> = []
@@ -30,8 +29,7 @@ struct FuzzyTransferDetector: Sendable {
           let oleg = other.transferDetectionValueLeg,
           let oAccount = oleg.accountId, oAccount != accountId,
           oleg.instrument == leg.instrument,
-          oleg.quantity == -leg.quantity,
-          !isDismissed(imported.id, other.id)
+          oleg.quantity == -leg.quantity
         else { return nil }
         let gap = abs(other.date.timeIntervalSince(imported.date))
         guard gap <= Self.windowSeconds else { return nil }

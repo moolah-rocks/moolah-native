@@ -3,10 +3,11 @@ import OSLog
 import Observation
 
 /// Owns every cross-account transfer-detection action: scanning a
-/// newly-imported batch for fuzzy counterpart pairs and annotating both
-/// sides, collapsing a suggested or user-asserted pair into one merged
-/// two-leg transfer, reversing that collapse, and recording a "not a
-/// transfer" dismissal. Views bind state and dispatch; all logic lives
+/// newly-imported batch for fuzzy counterpart pairs and writing a
+/// `TransferSuggestion` record per pair, collapsing a suggested or
+/// user-asserted pair into one merged two-leg transfer, reversing that
+/// collapse, and dismissing a pair. Dismiss / merge / unmerge delete the
+/// suggestion record. Views bind state and dispatch; all logic lives
 /// here (thin-view discipline, `CLAUDE.md`).
 ///
 /// State (`error`, `isMutating`) is `private(set)` and observed by
@@ -28,7 +29,7 @@ final class TransferDetectionCoordinator {
   private(set) var isMutating = false
 
   private let transactions: any TransactionRepository
-  private let dismissedPairs: any DismissedTransferPairRepository
+  private let suggestions: any TransferSuggestionRepository
   private let detector: FuzzyTransferDetector
   private let builder: TransferMergeBuilder
   private let clock: @Sendable () -> Date
@@ -38,22 +39,22 @@ final class TransferDetectionCoordinator {
 
   init(
     transactions: any TransactionRepository,
-    dismissedPairs: any DismissedTransferPairRepository,
+    suggestions: any TransferSuggestionRepository,
     detector: FuzzyTransferDetector = .init(),
     builder: TransferMergeBuilder = .init(),
     clock: @escaping @Sendable () -> Date = { Date() }
   ) {
     self.transactions = transactions
-    self.dismissedPairs = dismissedPairs
+    self.suggestions = suggestions
     self.detector = detector
     self.builder = builder
     self.clock = clock
   }
 
   /// Scans `newlyImported` against transactions on *other* accounts
-  /// dated at or after `windowLowerBound`, and writes a
-  /// `TransferSuggestion` (pointing at the counterpart, stamped with
-  /// `clock()`) onto **both** transactions of every detected pair.
+  /// dated at or after `windowLowerBound`, and writes one
+  /// `TransferSuggestion` record (content-addressed from the unordered
+  /// pair, stamped with `clock()`) per detected pair.
   ///
   /// `participatingAccountIds` are the accounts the import touched; an
   /// existing transaction is a counterpart candidate only when none of
@@ -66,12 +67,11 @@ final class TransferDetectionCoordinator {
   /// `windowLowerBound ... .distantFuture` range and the account
   /// exclusion is done in-memory here over that minimal superset.
   ///
-  /// Idempotent: re-running over an already-suggested pair rewrites the
-  /// same annotation (same counterpart id; `suggestedAt` re-stamped) —
-  /// no duplicate rows, no second pairing because both sides already
-  /// carry the suggestion and the detector re-pairs them identically.
+  /// Idempotent: re-running over an already-suggested pair re-creates a
+  /// record with the same content-addressed id, which the repository
+  /// upserts — no duplicate rows.
   ///
-  /// A detection pass writes annotations across awaits, so it shares the
+  /// A detection pass writes records across awaits, so it shares the
   /// one-at-a-time gate with the mutating actions: a pass observed while
   /// any detection or mutation is in flight is rejected with
   /// `TransferMergeError.mutationInProgress` rather than queued.
@@ -91,27 +91,16 @@ final class TransferDetectionCoordinator {
           && transaction.accountIds.isDisjoint(with: participatingAccountIds)
       }
 
-      let dismissedIds = Set(try await self.dismissedPairs.fetchAll().map(\.id))
-      let isDismissed: @Sendable (UUID, UUID) -> Bool = { first, second in
-        dismissedIds.contains(
-          DismissedTransferPair.contentAddressedID(for: [first, second]))
-      }
-
       let pairs = self.detector.detect(
         newlyImported: newlyImported,
-        existingNearby: existingNearby,
-        isDismissed: isDismissed)
+        existingNearby: existingNearby)
 
       let stamp = self.clock()
       for pair in pairs {
-        try await self.annotate(
-          pair.newlyImported,
-          counterpart: pair.existingCounterpart.id,
-          at: stamp)
-        try await self.annotate(
-          pair.existingCounterpart,
-          counterpart: pair.newlyImported.id,
-          at: stamp)
+        _ = try await self.suggestions.create(
+          TransferSuggestion(
+            transactionIds: [pair.newlyImported.id, pair.existingCounterpart.id],
+            suggestedAt: stamp))
       }
     }
   }
@@ -124,6 +113,8 @@ final class TransferDetectionCoordinator {
       let merged = try self.builder.merged(from: sideA, sideB)
       _ = try await self.transactions.replace(
         deletingIds: [sideA.id, sideB.id], creating: [merged])
+      try await self.suggestions.delete(
+        id: TransferSuggestion.contentAddressedID(for: [sideA.id, sideB.id]))
     }
   }
 
@@ -139,78 +130,36 @@ final class TransferDetectionCoordinator {
       let merged = try self.builder.merged(from: sideA, sideB)
       _ = try await self.transactions.replace(
         deletingIds: [sideA.id, sideB.id], creating: [merged])
+      try await self.suggestions.delete(
+        id: TransferSuggestion.contentAddressedID(for: [sideA.id, sideB.id]))
     }
   }
 
   /// Reverses a merge: splits `transfer` back into its two single-value
-  /// sides and records a `DismissedTransferPair` over them so the very
-  /// next detection scan does not immediately re-suggest the pair the
-  /// user just chose to separate.
-  ///
-  /// Atomicity scope: the `replace` call is a single `transaction`-table
-  /// write (delete the merged tx, create the two splits) and is fully
-  /// atomic. The follow-on `DismissedTransferPair` write is a separate
-  /// table on a separate repository, so it lands *after* the split
-  /// commits and is best-effort. This is not a data-loss path: if the
-  /// process stops between the split and the dismissal the splits are
-  /// already durably persisted; the only consequence is that a later
-  /// scan re-suggests the just-split pair, which the user dismisses
-  /// again. The split itself never rolls back the dismissal and the
-  /// dismissal never affects the split.
+  /// sides. No tombstone is needed — the split products are not "newly
+  /// imported", so a later detection pass never re-evaluates them and
+  /// cannot re-suggest the pair the user just chose to separate.
   func unmerge(_ transfer: Transaction) async {
     await mutate {
       let splits = try self.builder.split(transfer)
-      let created = try await self.transactions.replace(
+      _ = try await self.transactions.replace(
         deletingIds: [transfer.id], creating: splits)
-      let pair = DismissedTransferPair(
-        transactionIds: [created[0].id, created[1].id],
-        dismissedAt: self.clock())
-      _ = try await self.dismissedPairs.create(pair)
     }
   }
 
-  /// Records a user "these are NOT a transfer" assertion over the two
-  /// transactions and clears the `transferSuggestion` annotation on
-  /// both so the suggestion UI no longer surfaces the pair.
+  /// Records a user "these are NOT a transfer" assertion by deleting the
+  /// `TransferSuggestion` record over the two transactions so the
+  /// suggestion UI no longer surfaces the pair.
   func dismiss(_ sideA: Transaction, _ sideB: Transaction) async {
     await mutate {
-      let pair = DismissedTransferPair(
-        transactionIds: [sideA.id, sideB.id],
-        dismissedAt: self.clock())
-      _ = try await self.dismissedPairs.create(pair)
-      try await self.clearSuggestion(sideA)
-      try await self.clearSuggestion(sideB)
+      try await self.suggestions.delete(
+        id: TransferSuggestion.contentAddressedID(for: [sideA.id, sideB.id]))
     }
   }
 
 }
 
 extension TransferDetectionCoordinator {
-  /// Writes the `transferSuggestion` header onto `transaction` via the
-  /// general-purpose `transactions.update`, which re-queues each of the
-  /// transaction's legs to sync even though only the header changes. The
-  /// write is idempotent and correct; the redundant leg re-queue is a
-  /// known sync-queue inefficiency tracked in issue #937
-  /// (https://github.com/ajsutton/moolah-native/issues/937).
-  private func annotate(
-    _ transaction: Transaction,
-    counterpart: UUID,
-    at stamp: Date
-  ) async throws {
-    var annotated = transaction
-    annotated.transferSuggestion = TransferSuggestion(
-      counterpartTransactionId: counterpart,
-      suggestedAt: stamp)
-    _ = try await transactions.update(annotated)
-  }
-
-  private func clearSuggestion(_ transaction: Transaction) async throws {
-    guard transaction.transferSuggestion != nil else { return }
-    var cleared = transaction
-    cleared.transferSuggestion = nil
-    _ = try await transactions.update(cleared)
-  }
-
   nonisolated private func validateManualMerge(
     _ sideA: Transaction,
     _ sideB: Transaction

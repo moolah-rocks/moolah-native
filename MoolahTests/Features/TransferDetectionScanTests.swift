@@ -12,7 +12,7 @@ struct TransferDetectionScanTests {
   private typealias Fixture = TransferDetectionFixture
 
   @Test
-  func detectionWritesSuggestionOnBothSides() async throws {
+  func detectionWritesOneSuggestionRecordForThePair() async throws {
     let (backend, database) = try TestBackend.create()
     let date = Date(timeIntervalSince1970: 1_700_000_000)
     let outgoing = Fixture.cashTx(
@@ -30,17 +30,19 @@ struct TransferDetectionScanTests {
       windowLowerBound: date.addingTimeInterval(-86_400))
 
     #expect(coordinator.error == nil)
+    let suggestions = try await backend.transferSuggestions.fetchAll()
+    #expect(suggestions.count == 1)
+    let suggestion = try #require(suggestions.first)
+    #expect(suggestion.transactionIds == [outgoing.id, incoming.id])
+    #expect(suggestion.suggestedAt == stamp)
+    #expect(suggestion.counterpart(of: outgoing.id) == incoming.id)
+    // The two transactions themselves are untouched.
     let all = try await backend.transactions.fetchAll(filter: TransactionFilter())
-    let outRow = try #require(all.first { $0.id == outgoing.id })
-    let inRow = try #require(all.first { $0.id == incoming.id })
-    #expect(outRow.transferSuggestion?.counterpartTransactionId == incoming.id)
-    #expect(inRow.transferSuggestion?.counterpartTransactionId == outgoing.id)
-    #expect(outRow.transferSuggestion?.suggestedAt == stamp)
-    #expect(inRow.transferSuggestion?.suggestedAt == stamp)
+    #expect(all.count == 2)
   }
 
   @Test
-  func detectionSkipsDismissedPairs() async throws {
+  func dismissDeletesTheSuggestionRecord() async throws {
     let (backend, database) = try TestBackend.create()
     let date = Date(timeIntervalSince1970: 1_700_000_000)
     let outgoing = Fixture.cashTx(
@@ -48,19 +50,19 @@ struct TransferDetectionScanTests {
     let incoming = Fixture.cashTx(
       account: Fixture.accountB, amount: 250, type: .income, on: date)
     TestBackend.seed(transactions: [incoming, outgoing], in: database)
-    _ = try await backend.dismissedTransferPairs.create(
-      DismissedTransferPair(
-        transactionIds: [outgoing.id, incoming.id], dismissedAt: date))
     let coordinator = Fixture.makeCoordinator(backend: backend)
 
     await coordinator.runDetection(
       newlyImported: [outgoing],
       participatingAccountIds: [Fixture.accountA],
       windowLowerBound: date.addingTimeInterval(-86_400))
+    #expect(coordinator.error == nil)
+    #expect(try await backend.transferSuggestions.fetchAll().count == 1)
+
+    await coordinator.dismiss(outgoing, incoming)
 
     #expect(coordinator.error == nil)
-    let all = try await backend.transactions.fetchAll(filter: TransactionFilter())
-    #expect(all.allSatisfy { $0.transferSuggestion == nil })
+    #expect(try await backend.transferSuggestions.fetchAll().isEmpty)
   }
 
   @Test
@@ -82,10 +84,9 @@ struct TransferDetectionScanTests {
     }
 
     #expect(coordinator.error == nil)
-    let all = try await backend.transactions.fetchAll(filter: TransactionFilter())
-    #expect(all.count == 2)
-    let outRow = try #require(all.first { $0.id == outgoing.id })
-    #expect(outRow.transferSuggestion?.counterpartTransactionId == incoming.id)
+    let suggestions = try await backend.transferSuggestions.fetchAll()
+    #expect(suggestions.count == 1)
+    #expect(suggestions.first?.counterpart(of: outgoing.id) == incoming.id)
   }
 
   @Test
@@ -113,6 +114,6 @@ struct TransferDetectionScanTests {
     let after = try await backend.transactions.fetchAll(
       filter: TransactionFilter())
     #expect(after.count == 1)
-    #expect(after.first?.transferSuggestion == nil)
+    #expect(try await backend.transferSuggestions.fetchAll().isEmpty)
   }
 }
