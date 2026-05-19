@@ -14,6 +14,15 @@ struct DismissedTransferPairTests {
     #expect(first.id == second.id)
   }
 
+  @Test("contentAddressedID(for:) matches the instance id and is order-independent")
+  func contentAddressedIDMatchesInstance() {
+    let idA = UUID()
+    let idB = UUID()
+    let instance = DismissedTransferPair(transactionIds: [idA, idB], dismissedAt: Date())
+    #expect(DismissedTransferPair.contentAddressedID(for: [idA, idB]) == instance.id)
+    #expect(DismissedTransferPair.contentAddressedID(for: [idB, idA]) == instance.id)
+  }
+
   @Test("covers a candidate pair regardless of order")
   func covers() {
     let idA = UUID()

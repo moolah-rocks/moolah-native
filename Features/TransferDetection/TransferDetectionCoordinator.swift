@@ -91,9 +91,10 @@ final class TransferDetectionCoordinator {
           && transaction.accountIds.isDisjoint(with: participatingAccountIds)
       }
 
-      let dismissedSnapshot = try await self.dismissedPairs.fetchAll()
+      let dismissedIds = Set(try await self.dismissedPairs.fetchAll().map(\.id))
       let isDismissed: @Sendable (UUID, UUID) -> Bool = { first, second in
-        dismissedSnapshot.contains { $0.covers(first, and: second) }
+        dismissedIds.contains(
+          DismissedTransferPair.contentAddressedID(for: [first, second]))
       }
 
       let pairs = self.detector.detect(
