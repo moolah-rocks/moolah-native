@@ -159,9 +159,10 @@ struct ProfileDataSyncHandlerQueueTests {
     let instrumentId = "AUD"
     // Content-addressed id of the unordered transaction-id pair —
     // computed exactly as production does so the queued recordName
-    // matches `DismissedTransferPairRow.recordName(for:)`.
-    let dismissedPair = DismissedTransferPair(
-      transactionIds: [UUID(), UUID()], dismissedAt: Date())
+    // matches `TransferSuggestionRow.recordName(for:)`.
+    let suggestion = TransferSuggestion(
+      transactionIds: [UUID(), UUID()],
+      suggestedAt: Date(timeIntervalSince1970: 1_700_000_000))
 
     func insert(into database: Database) throws {
       // No `instrumentRow`: the per-profile `instrument` table was
@@ -193,7 +194,7 @@ struct ProfileDataSyncHandlerQueueTests {
         id: legId, transactionId: txnId, accountId: accountId,
         instrumentId: instrumentId
       ).upsert(database)
-      try DismissedTransferPairRow(domain: dismissedPair).upsert(database)
+      try TransferSuggestionRow(domain: suggestion).upsert(database)
     }
   }
 
@@ -226,7 +227,7 @@ struct ProfileDataSyncHandlerQueueTests {
     #expect(recordNames.contains("\(TransactionLegRow.recordType)|\(seed.legId.uuidString)"))
     #expect(
       recordNames.contains(
-        "\(DismissedTransferPairRow.recordType)|\(seed.dismissedPair.id.uuidString)"))
+        "\(TransferSuggestionRow.recordType)|\(seed.suggestion.id.uuidString)"))
     for recordID in recordIDs {
       #expect(recordID.zoneID == handler.zoneID)
     }
