@@ -31,6 +31,7 @@ struct TransferSuggestionTests {
     #expect(decoded.id == original.id)
     #expect(decoded.transactionIds == original.transactionIds)
     #expect(decoded.suggestedAt == original.suggestedAt)
+    #expect(decoded.id == TransferSuggestion.contentAddressedID(for: decoded.transactionIds))
   }
 
   @Test("counterpart(of:) returns the other id in the pair")

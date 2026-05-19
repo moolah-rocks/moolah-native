@@ -8,7 +8,7 @@ import Foundation
 /// (idempotent convergence). Dismiss / merge / unmerge delete the
 /// record; there is no negative-assertion tombstone. A suggestion always
 /// contains exactly two transaction ids.
-struct TransferSuggestion: Codable, Sendable, Identifiable, Hashable {
+struct TransferSuggestion: Sendable, Identifiable, Hashable {
   let id: UUID
   let transactionIds: Set<UUID>
   let suggestedAt: Date
@@ -35,5 +35,23 @@ struct TransferSuggestion: Codable, Sendable, Identifiable, Hashable {
   static func contentAddressedID(for transactionIds: Set<UUID>) -> UUID {
     let ordered = transactionIds.map(\.uuidString).sorted().joined(separator: ":")
     return UUID.deterministic(from: "transfer-suggestion:\(ordered)")
+  }
+}
+
+// `id` is content-addressed from `transactionIds`, so it is derived,
+// not encoded: persisting it would let the stored value drift from the
+// pair it is supposed to identify. Decode rebuilds it through the
+// designated initialiser, which also re-checks the two-id invariant.
+extension TransferSuggestion: Codable {
+  private enum CodingKeys: String, CodingKey {
+    case transactionIds
+    case suggestedAt
+  }
+
+  init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.init(
+      transactionIds: try container.decode(Set<UUID>.self, forKey: .transactionIds),
+      suggestedAt: try container.decode(Date.self, forKey: .suggestedAt))
   }
 }
