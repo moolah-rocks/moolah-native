@@ -38,4 +38,24 @@ struct TransferSuggestionQueryPlanTests {
         "suggestions(touching:) must not full-table scan transfer_suggestion")
     }
   }
+
+  /// `fetchAll`/`observeAll` order by `suggested_at` with no supporting
+  /// index — a full scan + temp-B-tree sort is intentional for this
+  /// small, lifecycle-bounded table. Pinned so adding an index (which
+  /// would change the plan) or dropping the ORDER BY breaks the build
+  /// and forces a deliberate decision.
+  @Test
+  func fetchAllOrderByIsAnIntentionalScan() async throws {
+    let database = try ProfileDatabase.openInMemory()
+    try await database.read { database in
+      let plan = try Row.fetchAll(
+        database,
+        sql: """
+          EXPLAIN QUERY PLAN
+          SELECT * FROM transfer_suggestion ORDER BY suggested_at ASC
+          """
+      ).map { String(describing: $0["detail"] ?? "") }
+      #expect(plan.contains { $0.contains("SCAN transfer_suggestion") })
+    }
+  }
 }

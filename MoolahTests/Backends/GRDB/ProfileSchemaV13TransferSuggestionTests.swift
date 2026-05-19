@@ -55,7 +55,10 @@ struct ProfileSchemaV13TransferSuggestionTests {
           """,
         arguments: [txId, txId]
       ).map { String(describing: $0["detail"] ?? "") }
-      #expect(plan.contains { $0.contains("USING INDEX transfer_suggestion_by_tx_") })
+      let indexUses = plan.filter { $0.contains("USING INDEX transfer_suggestion_by_tx_") }
+      #expect(
+        indexUses.count >= 2,
+        "OR-of-two-indexed-columns must union both transfer_suggestion_by_tx_a and _b")
       #expect(!plan.contains { $0.contains("SCAN transfer_suggestion") })
     }
   }
