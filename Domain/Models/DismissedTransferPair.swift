@@ -13,15 +13,18 @@ struct DismissedTransferPair: Codable, Sendable, Identifiable, Hashable {
   init(transactionIds: Set<UUID>, dismissedAt: Date) {
     self.transactionIds = transactionIds
     self.dismissedAt = dismissedAt
-    self.id = Self.deterministicId(for: transactionIds)
+    self.id = Self.contentAddressedID(for: transactionIds)
   }
 
   func covers(_ first: UUID, and second: UUID) -> Bool {
     transactionIds == [first, second]
   }
 
-  private static func deterministicId(for ids: Set<UUID>) -> UUID {
-    let ordered = ids.map(\.uuidString).sorted().joined(separator: ":")
+  /// The content-addressed id this pair would carry, derived from the
+  /// unordered transaction-id set. Exposed so callers can build an O(1)
+  /// membership set keyed by id rather than scanning pairs linearly.
+  static func contentAddressedID(for transactionIds: Set<UUID>) -> UUID {
+    let ordered = transactionIds.map(\.uuidString).sorted().joined(separator: ":")
     return UUID.deterministic(from: "dismissed-transfer-pair:\(ordered)")
   }
 }
