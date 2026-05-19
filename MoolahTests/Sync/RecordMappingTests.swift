@@ -219,13 +219,15 @@ struct RecordMappingTests {
       ckRecord.recordID.recordName
         == "\(TransferSuggestionRow.recordType)|\(row.id.uuidString)")
     #expect(ckRecord["suggestedAt"] as? Date == suggestedAt)
+    // transactionIdA / transactionIdB are stored sorted by uuidString
+    let sortedIds = [txnIdA, txnIdB].sorted { $0.uuidString < $1.uuidString }
+    #expect(ckRecord["transactionIdA"] as? String == sortedIds[0].uuidString)
+    #expect(ckRecord["transactionIdB"] as? String == sortedIds[1].uuidString)
 
     let restored = try #require(TransferSuggestionRow.fieldValues(from: ckRecord))
     #expect(restored.id == row.id)
     #expect(restored.recordName == row.recordName)
     #expect(restored.suggestedAt == suggestedAt)
-    // transactionIdA / transactionIdB are stored sorted by uuidString
-    let sortedIds = [txnIdA, txnIdB].sorted { $0.uuidString < $1.uuidString }
     #expect(restored.transactionIdA == sortedIds[0])
     #expect(restored.transactionIdB == sortedIds[1])
   }
@@ -237,6 +239,17 @@ struct RecordMappingTests {
     let ckRecord = CKRecord(recordType: "TransferSuggestionRecord", recordID: recordID)
     // transactionIdA / transactionIdB intentionally absent
     ckRecord["suggestedAt"] = Date(timeIntervalSince1970: 1_700_000_000) as CKRecordValue
+    #expect(TransferSuggestionRow.fieldValues(from: ckRecord) == nil)
+  }
+
+  @Test
+  func transferSuggestionRowReturnsNilForMissingTransactionIdB() {
+    let recordID = CKRecord.ID(
+      recordType: TransferSuggestionRow.recordType, uuid: UUID(), zoneID: zoneID)
+    let ckRecord = CKRecord(recordType: "TransferSuggestionRecord", recordID: recordID)
+    ckRecord["suggestedAt"] = Date(timeIntervalSince1970: 1_700_000_000) as CKRecordValue
+    ckRecord["transactionIdA"] = UUID().uuidString as CKRecordValue
+    // transactionIdB intentionally absent
     #expect(TransferSuggestionRow.fieldValues(from: ckRecord) == nil)
   }
 

@@ -157,12 +157,17 @@ struct ProfileDataSyncHandlerQueueTests {
     let budgetItemId = UUID()
     let investmentValueId = UUID()
     let instrumentId = "AUD"
+    let suggestedAt = Date(timeIntervalSince1970: 1_700_000_000)
     // Content-addressed id of the unordered transaction-id pair —
     // computed exactly as production does so the queued recordName
     // matches `TransferSuggestionRow.recordName(for:)`.
-    let suggestion = TransferSuggestion(
-      transactionIds: [UUID(), UUID()],
-      suggestedAt: Date(timeIntervalSince1970: 1_700_000_000))
+    let suggestion: TransferSuggestion
+
+    init() {
+      suggestion = TransferSuggestion(
+        transactionIds: [UUID(), UUID()],
+        suggestedAt: suggestedAt)
+    }
 
     func insert(into database: Database) throws {
       // No `instrumentRow`: the per-profile `instrument` table was
