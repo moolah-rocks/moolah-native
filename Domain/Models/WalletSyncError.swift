@@ -70,6 +70,54 @@ extension WalletSyncError {
   }
 }
 
+// MARK: - LocalizedError
+
+// Account-NEUTRAL, provider-aware fallback message. The rich
+// account-type-aware caption lives in
+// `SyncedAccountHeaderLogic.errorCaption` (a synced-account header knows
+// whether it is crypto or an exchange and says "API token" for an
+// exchange). This conformance is the generic fallback for any *other*
+// surface that renders `error.localizedDescription` — e.g.
+// `AnalysisView`, whose conversion pipeline can surface a price-provider
+// failure. It says "API key" (the generic term, accurate for the
+// price-provider context this surface reports) rather than the NSError
+// bridge string "Moolah.WalletSyncError error 1", which conveys no
+// failure kind. The two surfaces are never shown together for the same
+// error, so the deliberate "key" vs "token" wording split is not
+// user-visible inconsistency.
+extension WalletSyncError: LocalizedError {
+  var errorDescription: String? { description(now: Date()) }
+
+  /// `now`-injectable backing for `errorDescription` so the
+  /// relative-time `.rateLimited(retryAfter:)` rendering is
+  /// deterministically testable (the `LocalizedError.errorDescription`
+  /// signature itself cannot take a parameter).
+  func description(now: Date) -> String {
+    let provider = provider?.displayName
+    switch kind {
+    case .missingApiKey:
+      return provider.map { "Add a \($0) API key to enable sync." }
+        ?? "An API key is required to fetch this data."
+    case .invalidApiKey:
+      return provider.map { "\($0) rejected the API key." }
+        ?? "The API key was rejected."
+    case .rateLimited(let retryAfter):
+      let who = provider ?? "The data provider"
+      guard let retryAfter else { return "\(who) is rate-limiting requests. Try again shortly." }
+      let formatter = RelativeDateTimeFormatter()
+      formatter.unitsStyle = .short
+      let relative = formatter.localizedString(for: retryAfter, relativeTo: now)
+      return "\(who) is rate-limiting requests. Try again \(relative)."
+    case .network(let underlying):
+      return provider.map { "\($0) network error: \(underlying)" }
+        ?? "Network error: \(underlying)"
+    case .providerMalformedResponse(let stage):
+      let who = provider ?? "The data provider"
+      return "\(who) returned a malformed response (\(stage))."
+    }
+  }
+}
+
 // MARK: - Codable with legacy-row migration
 
 // Persisted shape (new): {"provider": "alchemy"|null, "kind": <Kind JSON>}.

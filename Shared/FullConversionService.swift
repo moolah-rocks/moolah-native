@@ -248,8 +248,19 @@ actor FullConversionService: InstrumentConversionService {
   /// rows in `CryptoPriceService` — required after any user mutation
   /// that changes `pricingStatus` for the instrument's registration.
   func invalidateCache(for instrument: Instrument) async {
+    var staleIds: Set<String> = [instrument.id]
+    // A wrapped-native token is priced via its chain's native asset but
+    // its unit rate is memoised under the wrapper's own id, so
+    // invalidating the native asset must also evict the wrapper —
+    // otherwise WETH keeps converting at the pre-update ETH rate.
+    if instrument.kind == .cryptoToken, instrument.contractAddress == nil,
+      let wrapperId = WrappedNativeContracts.canonicalWrappedInstrumentId(
+        forChainId: instrument.chainId)
+    {
+      staleIds.insert(wrapperId)
+    }
     rateCache = rateCache.filter { key, _ in
-      key.fromId != instrument.id && key.toId != instrument.id
+      !staleIds.contains(key.fromId) && !staleIds.contains(key.toId)
     }
     guard instrument.kind == .cryptoToken, let cryptoPrices else { return }
     await cryptoPrices.purgeCache(instrumentId: instrument.id)
@@ -321,7 +332,16 @@ actor FullConversionService: InstrumentConversionService {
       throw ConversionError.noCryptoPriceService
     }
     let registrations = try await cryptoRegistrations()
-    guard let registration = registrations.first(where: { $0.id == instrument.id }) else {
+    // Canonical wrapped-native tokens (WETH, WMATIC, …) have no price
+    // feed of their own but are 1:1 redeemable for the chain's native
+    // asset, so price them via the native registration. The match is an
+    // exact `(chainId, contractAddress)` trust-list lookup — never by
+    // symbol — so a spoofed look-alike cannot inherit the native price.
+    let lookupId =
+      WrappedNativeContracts.nativePricingInstrumentId(
+        chainId: instrument.chainId, contractAddress: instrument.contractAddress)
+      ?? instrument.id
+    guard let registration = registrations.first(where: { $0.id == lookupId }) else {
       throw ConversionError.noProviderMapping(instrumentId: instrument.id)
     }
     return try await cryptoPrices.price(

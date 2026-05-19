@@ -67,4 +67,54 @@ struct WalletSyncErrorTests {
     #expect(decoded == original)
     #expect(decoded.kind == .rateLimited(retryAfter: date))
   }
+
+  // MARK: - LocalizedError
+
+  /// Any surface that renders `error.localizedDescription` (e.g.
+  /// `AnalysisView`) must show a human-readable sentence, never the
+  /// `NSError` fallback "Moolah.WalletSyncError error 1" that hid the
+  /// real failure cause on the analysis page.
+  @Test("localizedDescription is human-readable, never the NSError fallback")
+  func localizedDescriptionIsHumanReadable() {
+    let cases: [WalletSyncError] = [
+      WalletSyncError(provider: nil, kind: .missingApiKey),
+      WalletSyncError(provider: .alchemy, kind: .invalidApiKey),
+      WalletSyncError(provider: .coinGecko, kind: .rateLimited(retryAfter: nil)),
+      WalletSyncError(provider: nil, kind: .network(underlyingDescription: "HTTP 500")),
+      WalletSyncError(
+        provider: .coinGecko, kind: .providerMalformedResponse(stage: "dailyPrices")),
+    ]
+    for error in cases {
+      let message = error.localizedDescription
+      #expect(!message.isEmpty)
+      #expect(!message.contains("WalletSyncError"))
+      #expect(!message.contains("error 1"))
+      #expect(!message.contains("couldn’t be completed"))
+    }
+  }
+
+  @Test("errorDescription names the attributed provider and the failure kind")
+  func errorDescriptionNamesProviderAndKind() throws {
+    let rateLimited = WalletSyncError(
+      provider: .coinGecko, kind: .rateLimited(retryAfter: nil))
+    let message = try #require(rateLimited.errorDescription)
+    #expect(message.contains("CoinGecko"))
+
+    let network = WalletSyncError(
+      provider: nil, kind: .network(underlyingDescription: "HTTP 503"))
+    let networkMessage = try #require(network.errorDescription)
+    #expect(networkMessage.contains("HTTP 503"))
+  }
+
+  @Test("rateLimited renders a deterministic relative retry time via injected now")
+  func rateLimitedRelativeTimeIsDeterministic() {
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    let retryAfter = now.addingTimeInterval(3600)
+    let error = WalletSyncError(
+      provider: .coinGecko, kind: .rateLimited(retryAfter: retryAfter))
+    let message = error.description(now: now)
+    #expect(message.contains("CoinGecko"))
+    #expect(message.contains("1 hr") || message.contains("1 hour"))
+    #expect(!message.contains("WalletSyncError"))
+  }
 }
