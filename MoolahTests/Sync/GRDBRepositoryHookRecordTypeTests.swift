@@ -185,50 +185,50 @@ struct GRDBRepositoryHookRecordTypeTests {
     #expect(reorderIds == [firstRule.id, thirdRule.id])
   }
 
-  // MARK: - GRDBDismissedTransferPairRepository
+  // MARK: - GRDBTransferSuggestionRepository
 
   @Test
-  func dismissedTransferPairCreateEmitsRecordType() async throws {
+  func transferSuggestionCreateEmitsRecordType() async throws {
     let database = try ProfileDatabase.openInMemory()
     let capture = HookCapture()
-    let repo = GRDBDismissedTransferPairRepository(
+    let repo = GRDBTransferSuggestionRepository(
       database: database,
       onRecordChanged: { recordType, id in capture.appendChanged(recordType, id) },
       onRecordDeleted: { recordType, id in capture.appendDeleted(recordType, id) })
 
-    let pair = makeDismissedPair()
-    _ = try await repo.create(pair)
+    let suggestion = makeSuggestion()
+    _ = try await repo.create(suggestion)
 
     #expect(capture.changed.count == 1)
-    #expect(capture.changed.first?.recordType == DismissedTransferPairRow.recordType)
-    #expect(capture.changed.first?.id == pair.id)
+    #expect(capture.changed.first?.recordType == TransferSuggestionRow.recordType)
+    #expect(capture.changed.first?.id == suggestion.id)
     #expect(capture.deleted.isEmpty)
   }
 
   @Test
-  func dismissedTransferPairDeleteEmitsRecordType() async throws {
+  func transferSuggestionDeleteEmitsRecordType() async throws {
     let database = try ProfileDatabase.openInMemory()
     let capture = HookCapture()
-    let repo = GRDBDismissedTransferPairRepository(
+    let repo = GRDBTransferSuggestionRepository(
       database: database,
       onRecordChanged: { recordType, id in capture.appendChanged(recordType, id) },
       onRecordDeleted: { recordType, id in capture.appendDeleted(recordType, id) })
 
-    let pair = makeDismissedPair()
-    _ = try await repo.create(pair)
-    try await repo.delete(id: pair.id)
+    let suggestion = makeSuggestion()
+    _ = try await repo.create(suggestion)
+    try await repo.delete(id: suggestion.id)
 
     #expect(capture.deleted.count == 1)
-    #expect(capture.deleted.first?.recordType == DismissedTransferPairRow.recordType)
-    #expect(capture.deleted.first?.id == pair.id)
+    #expect(capture.deleted.first?.recordType == TransferSuggestionRow.recordType)
+    #expect(capture.deleted.first?.id == suggestion.id)
   }
 
   // MARK: - Helpers
 
-  private func makeDismissedPair() -> DismissedTransferPair {
-    DismissedTransferPair(
+  private func makeSuggestion() -> TransferSuggestion {
+    TransferSuggestion(
       transactionIds: [UUID(), UUID()],
-      dismissedAt: Date(timeIntervalSince1970: 1_700_000_000))
+      suggestedAt: Date(timeIntervalSince1970: 1_700_000_000))
   }
 
   private func makeProfile() -> CSVImportProfile {
