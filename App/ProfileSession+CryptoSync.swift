@@ -89,7 +89,7 @@ extension ProfileSession {
       discovery: discovery)
     let transferDetection = TransferDetectionCoordinator(
       transactions: backend.transactions,
-      dismissedPairs: backend.dismissedTransferPairs)
+      dismissedPairs: backend.transferSuggestions)
     let store = SyncedAccountStore(
       sources: [WalletSyncSource(engine: walletSyncEngine), coinstashSource],
       walletApplyEngine: walletApplyEngine,

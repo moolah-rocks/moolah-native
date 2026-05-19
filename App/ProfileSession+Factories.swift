@@ -280,7 +280,7 @@ extension ProfileSession {
       conversionService: backend.conversionService,
       targetInstrument: profile.instrument,
       instrumentChanges: instrumentChanges,
-      dismissedTransferPairs: backend.dismissedTransferPairs
+      dismissedTransferPairs: backend.transferSuggestions
     )
     let analysis = AnalysisStore(repository: backend.analysis)
     let investment = InvestmentStore(

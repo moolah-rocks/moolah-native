@@ -37,8 +37,8 @@ extension ProfileDataSyncHandler {
       (CSVImportProfileRow.recordType, grdbRepositories.csvImportProfiles.clearAllSystemFieldsSync),
       (ImportRuleRow.recordType, grdbRepositories.importRules.clearAllSystemFieldsSync),
       (
-        DismissedTransferPairRow.recordType,
-        grdbRepositories.dismissedTransferPairs.clearAllSystemFieldsSync
+        TransferSuggestionRow.recordType,
+        grdbRepositories.transferSuggestions.clearAllSystemFieldsSync
       ),
     ]
   }
@@ -237,8 +237,8 @@ extension ProfileDataSyncHandler {
       return { try repos.importRules.setEncodedSystemFieldsBatchSync($0) }
     case CategoryRow.recordType:
       return { try repos.categories.setEncodedSystemFieldsBatchSync($0) }
-    case DismissedTransferPairRow.recordType:
-      return { try repos.dismissedTransferPairs.setEncodedSystemFieldsBatchSync($0) }
+    case TransferSuggestionRow.recordType:
+      return { try repos.transferSuggestions.setEncodedSystemFieldsBatchSync($0) }
     default:
       return nil
     }

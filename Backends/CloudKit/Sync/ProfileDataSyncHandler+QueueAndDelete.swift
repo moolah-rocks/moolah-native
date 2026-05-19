@@ -79,7 +79,7 @@ extension ProfileDataSyncHandler {
     collectTransactionLegIds(source: source, into: &recordIDs)
     collectCSVImportProfileIds(source: source, into: &recordIDs)
     collectImportRuleIds(source: source, into: &recordIDs)
-    collectDismissedTransferPairIds(source: source, into: &recordIDs)
+    collectTransferSuggestionIds(source: source, into: &recordIDs)
     return recordIDs
   }
 
@@ -200,10 +200,10 @@ extension ProfileDataSyncHandler {
     collectAllGRDBUUIDs(ids: ids, recordType: ImportRuleRow.recordType, into: &recordIDs)
   }
 
-  private func collectDismissedTransferPairIds(
+  private func collectTransferSuggestionIds(
     source: GRDBIdSource, into recordIDs: inout [CKRecord.ID]
   ) {
-    let repo = grdbRepositories.dismissedTransferPairs
+    let repo = grdbRepositories.transferSuggestions
     let ids: () throws -> [UUID] = {
       switch source {
       case .all: return try repo.allRowIdsSync()
@@ -211,7 +211,7 @@ extension ProfileDataSyncHandler {
       }
     }
     collectAllGRDBUUIDs(
-      ids: ids, recordType: DismissedTransferPairRow.recordType, into: &recordIDs)
+      ids: ids, recordType: TransferSuggestionRow.recordType, into: &recordIDs)
   }
 
   // MARK: - Local Data Deletion
@@ -252,8 +252,8 @@ extension ProfileDataSyncHandler {
       ),
       (ImportRuleRow.recordType, { try self.grdbRepositories.importRules.deleteAllSync() }),
       (
-        DismissedTransferPairRow.recordType,
-        { try self.grdbRepositories.dismissedTransferPairs.deleteAllSync() }
+        TransferSuggestionRow.recordType,
+        { try self.grdbRepositories.transferSuggestions.deleteAllSync() }
       ),
     ]
     for (recordType, wipe) in wipes {
