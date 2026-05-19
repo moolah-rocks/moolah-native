@@ -20,12 +20,13 @@ struct ProfileSchemaV13TransferSuggestionTests {
     }
   }
 
-  @Test("v13 drops the dismissed_transfer_pair table")
-  func dropsDismissedTransferPairTable() throws {
+  @Test("v13 drops the legacy dismissed_transfer_pair table")
+  func dropsLegacyDismissalTable() throws {
     let queue = try DatabaseQueue()
     try ProfileSchema.migrator.migrate(queue)
     try queue.read { database in
-      #expect(!(try database.tableExists("dismissed_transfer_pair")))
+      let exists = try database.tableExists("dismissed_transfer_pair")
+      #expect(!exists)
     }
   }
 

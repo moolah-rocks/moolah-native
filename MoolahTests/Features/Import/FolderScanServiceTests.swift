@@ -47,7 +47,7 @@ struct FolderScanServiceTests {
       backend: backend, staging: staging,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs))
+        suggestions: backend.transferSuggestions))
     let preferences = ImportPreferences(directory: tempDirectory())
     preferences.setWatchedFolder(watchedFolder)
     let scanner = FolderScanService(
@@ -185,7 +185,7 @@ struct FolderScanServiceTests {
       backend: backend, staging: staging,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
-        dismissedPairs: backend.dismissedTransferPairs))
+        suggestions: backend.transferSuggestions))
     let preferences = ImportPreferences(directory: tempDirectory())
     // No setWatchedFolder → nothing to scan.
     let scanner = FolderScanService(

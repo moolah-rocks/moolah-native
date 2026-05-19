@@ -70,10 +70,11 @@ extension UITestSeedHydrator {
   }
 
   /// One imported single-account side of a detected transfer pair. The
-  /// transaction has a single value leg, a `.single` import origin (so
-  /// it shows in Recently Added), and a `TransferSuggestion` pointing at
-  /// `counterpartId` (so the passive pill renders without any
-  /// detection-timing dependency).
+  /// transaction has a single value leg and a `.single` import origin
+  /// (so it shows in Recently Added). The passive pill is driven by a
+  /// separate synced `TransferSuggestion` record seeded once per pair
+  /// (via `upsertSuggestedTransferRecord`) over `id` and
+  /// `counterpartId` — no detection-timing dependency.
   struct SuggestedTransferSpec {
     let id: UUID
     let payee: String
@@ -247,11 +248,12 @@ extension UITestSeedHydrator {
   }
 
   /// Inserts one imported single-account side of a detected transfer
-  /// pair: a single value leg, a `.single` import origin (so the row
-  /// surfaces in Recently Added's window), and a `TransferSuggestion`
-  /// denormalised onto the transaction record pointing at the
-  /// counterpart. Idempotent via the parent-existence guard, matching
-  /// the other transaction upserts.
+  /// pair: a single value leg and a `.single` import origin (so the row
+  /// surfaces in Recently Added's window). The "possible transfer" pill
+  /// is driven by a separate synced `TransferSuggestion` record seeded
+  /// once per pair via `upsertSuggestedTransferRecord`, not a
+  /// denormalised field on the transaction. Idempotent via the
+  /// parent-existence guard, matching the other transaction upserts.
   static func upsertSuggestedTransfer(
     _ spec: SuggestedTransferSpec,
     in database: Database
@@ -270,10 +272,7 @@ extension UITestSeedHydrator {
       date: spec.date,
       payee: spec.payee,
       legs: [],
-      importOrigin: .single(origin),
-      transferSuggestion: TransferSuggestion(
-        counterpartTransactionId: spec.counterpartId,
-        suggestedAt: spec.suggestedAt))
+      importOrigin: .single(origin))
     try TransactionRow(domain: txn).insert(database)
 
     let leg = TransactionLeg(
@@ -283,6 +282,27 @@ extension UITestSeedHydrator {
       type: spec.type)
     try TransactionLegRow(domain: leg, transactionId: spec.id, sortOrder: 0)
       .insert(database)
+  }
+
+  /// Seeds the synced `TransferSuggestion` record over a detected pair
+  /// so the passive "possible transfer" pill renders for both rows at
+  /// first launch with no detection-timing dependency. The record id is
+  /// content-addressed from the unordered transaction-id pair, so a
+  /// later detection pass on any device upserts the same row.
+  /// Idempotent via the row-existence guard.
+  static func upsertSuggestedTransferRecord(
+    transactionId: UUID,
+    counterpartId: UUID,
+    suggestedAt: Date,
+    in database: Database
+  ) throws {
+    let suggestion = TransferSuggestion(
+      transactionIds: [transactionId, counterpartId],
+      suggestedAt: suggestedAt)
+    if try TransferSuggestionRow.fetchOne(database, key: suggestion.id) != nil {
+      return
+    }
+    try TransferSuggestionRow(domain: suggestion).insert(database)
   }
 
   /// Builds a legless `Transaction` whose only role is to seed

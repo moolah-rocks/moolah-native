@@ -9,7 +9,6 @@ struct Transaction: Codable, Sendable, Identifiable, Hashable {
   var recurEvery: Int?
   var legs: [TransactionLeg]
   var importOrigin: TransactionImportOrigin?
-  var transferSuggestion: TransferSuggestion?
 
   var isScheduled: Bool {
     recurPeriod != nil
@@ -28,8 +27,7 @@ struct Transaction: Codable, Sendable, Identifiable, Hashable {
     recurPeriod: RecurPeriod? = nil,
     recurEvery: Int? = nil,
     legs: [TransactionLeg],
-    importOrigin: TransactionImportOrigin? = nil,
-    transferSuggestion: TransferSuggestion? = nil
+    importOrigin: TransactionImportOrigin? = nil
   ) {
     self.id = id
     self.date = date
@@ -39,7 +37,6 @@ struct Transaction: Codable, Sendable, Identifiable, Hashable {
     self.recurEvery = recurEvery
     self.legs = legs
     self.importOrigin = importOrigin
-    self.transferSuggestion = transferSuggestion
   }
 
   // MARK: - Convenience Accessors

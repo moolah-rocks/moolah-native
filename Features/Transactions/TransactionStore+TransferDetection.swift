@@ -2,22 +2,23 @@ import Foundation
 
 // Transfer-suggestion orchestration for the transaction-detail surface.
 //
-// A suggested transfer carries only the counterpart's id
-// (`TransferSuggestion.counterpartTransactionId`); the detail surface
-// has no loaded transaction set to look the counterpart up in. These
-// methods resolve the counterpart through the repository and delegate
-// the actual collapse / dismissal to `TransferDetectionCoordinator`, so
-// the suggestion section stays a thin renderer dispatching one-line
+// A suggested transfer is a synced `TransferSuggestion` record over an
+// unordered pair of transaction ids; the detail surface has no loaded
+// transaction set to look the counterpart up in. These methods resolve
+// the suggestion (and its counterpart) through the
+// `TransferSuggestionRepository` and delegate the actual collapse /
+// dismissal to `TransferDetectionCoordinator`, so the suggestion
+// section stays a thin renderer dispatching one-line
 // `Task { await transactionStore.mergeSuggestedTransfer(...) }` calls.
 extension TransactionStore {
 
   /// Collapses the suggested pair into one merged two-leg transfer.
-  /// Resolves `transaction.transferSuggestion?.counterpartTransactionId`
-  /// to its `Transaction` and hands both sides to the coordinator. A
-  /// no-op when the store has no coordinator wired, the transaction
-  /// carries no suggestion, or the counterpart row can no longer be
-  /// found. The coordinator surfaces any failure on its own `error`
-  /// channel.
+  /// Resolves the suggested counterpart through the
+  /// `TransferSuggestion` record (never the denormalised model) and
+  /// hands both sides to the coordinator. A no-op when the store has no
+  /// coordinator wired, no suggestion record touches the transaction,
+  /// or the counterpart row can no longer be found. The coordinator
+  /// surfaces any failure on its own `error` channel.
   func mergeSuggestedTransfer(_ transaction: Transaction) async {
     guard let coordinator = transferDetection else { return }
     do {
@@ -69,17 +70,41 @@ extension TransactionStore {
     await coordinator.unmerge(transfer)
   }
 
-  /// Loads the counterpart `Transaction` named by the transaction's
-  /// transfer suggestion. The repository exposes no fetch-by-id, so this
-  /// scans the unfiltered projection and matches on id — acceptable
-  /// because merge / dismiss are deliberate, infrequent user actions on
-  /// the detail surface, not a hot path. Returns `nil` when the
-  /// transaction carries no suggestion or the counterpart row is gone
-  /// (already merged / deleted on another device).
+  /// Whether a `TransferSuggestion` record currently touches
+  /// `transaction`. The transaction-detail banner observes this to
+  /// decide whether to render the merge / dismiss section via a
+  /// synced-record read. `false` when no suggestion repository is
+  /// wired (previews / legacy tests) or the lookup fails.
+  func hasSuggestion(for transaction: Transaction) async -> Bool {
+    guard let transferSuggestions else { return false }
+    do {
+      return try await
+        !transferSuggestions
+        .suggestions(touching: transaction.id).isEmpty
+    } catch {
+      logger.error(
+        "Failed to resolve transfer suggestion: \(error.localizedDescription)")
+      return false
+    }
+  }
+
+  /// Loads the counterpart `Transaction` of a suggested pair. Resolves
+  /// the counterpart id from the `TransferSuggestion` record touching
+  /// `transaction` (never the denormalised model), then fetches that
+  /// transaction. The repository exposes no fetch-by-id, so the second
+  /// step scans the unfiltered projection and matches on id —
+  /// acceptable because merge / dismiss are deliberate, infrequent user
+  /// actions on the detail surface, not a hot path. Returns `nil` when
+  /// no suggestion repository is wired, no suggestion record touches
+  /// the transaction, or the counterpart row is gone (already merged /
+  /// deleted on another device).
   private func suggestedCounterpart(
     of transaction: Transaction
   ) async throws -> Transaction? {
-    guard let counterpartId = transaction.transferSuggestion?.counterpartTransactionId
+    guard let transferSuggestions else { return nil }
+    let touching = try await transferSuggestions.suggestions(
+      touching: transaction.id)
+    guard let counterpartId = touching.first?.counterpart(of: transaction.id)
     else { return nil }
     let all = try await repository.fetchAll(filter: TransactionFilter())
     return all.first { $0.id == counterpartId }

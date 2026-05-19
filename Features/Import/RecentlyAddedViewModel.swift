@@ -62,6 +62,13 @@ final class RecentlyAddedViewModel {
   private(set) var badgeCount: Int = 0
   private(set) var isLoading = false
 
+  /// Repository-backed snapshot of the suggestions touching any loaded
+  /// transaction, keyed by member transaction id. Refreshed by `load`
+  /// alongside `sessions`. The pill / counterpart lookups read this
+  /// synced-record snapshot, so the row stays a thin renderer and the
+  /// view never touches the repository directly.
+  private var suggestionsByTransactionId: [UUID: TransferSuggestion] = [:]
+
   private let backend: any BackendProvider
   private let logger = Logger(
     subsystem: "com.moolah.app", category: "RecentlyAddedViewModel")
@@ -99,6 +106,29 @@ final class RecentlyAddedViewModel {
     let filtered = Self.filter(all, window: window, now: now)
     sessions = Self.group(filtered)
     badgeCount = filtered.filter { $0.needsReview }.count
+    await loadSuggestionSnapshot()
+  }
+
+  /// Rebuilds `suggestionsByTransactionId` from the synced
+  /// `TransferSuggestion` records. Each suggestion is indexed under
+  /// both of its member transaction ids so the row lookups are O(1).
+  /// A failure leaves the snapshot empty (no pills) rather than
+  /// crashing the view — the records re-converge on the next load.
+  private func loadSuggestionSnapshot() async {
+    do {
+      let all = try await backend.transferSuggestions.fetchAll()
+      var byId: [UUID: TransferSuggestion] = [:]
+      for suggestion in all {
+        for transactionId in suggestion.transactionIds {
+          byId[transactionId] = suggestion
+        }
+      }
+      suggestionsByTransactionId = byId
+    } catch {
+      logger.error(
+        "suggestion snapshot load failed: \(error.localizedDescription, privacy: .public)")
+      suggestionsByTransactionId = [:]
+    }
   }
 
   /// Exposed for tests and for the sidebar badge lookup — given a fully-fetched
@@ -120,12 +150,20 @@ final class RecentlyAddedViewModel {
     }
   }
 
+  /// Whether a `TransferSuggestion` record touches `transaction` in the
+  /// current snapshot. Drives the passive "possible transfer" pill.
+  func hasSuggestion(_ transaction: Transaction) -> Bool {
+    suggestionsByTransactionId[transaction.id] != nil
+  }
+
   /// The counterpart transaction for a detected transfer suggestion,
-  /// resolved against the currently-loaded sessions. `nil` when
-  /// `transaction` carries no suggestion or the counterpart is outside
-  /// the loaded window.
+  /// resolved through the synced-record snapshot and against the
+  /// currently-loaded sessions. `nil` when no suggestion record touches
+  /// `transaction` or the counterpart is outside the loaded window.
   func counterpart(of transaction: Transaction) -> Transaction? {
-    guard let counterpartId = transaction.transferSuggestion?.counterpartTransactionId
+    guard
+      let suggestion = suggestionsByTransactionId[transaction.id],
+      let counterpartId = suggestion.counterpart(of: transaction.id)
     else { return nil }
     for group in sessions {
       if let match = group.transactions.first(where: { $0.id == counterpartId }) {
@@ -184,7 +222,7 @@ final class RecentlyAddedViewModel {
       let amount = InstrumentAmount(quantity: leg.quantity, instrument: leg.instrument)
       parts.append(amount.accessibilityString(isSpam: false))
     }
-    if transaction.transferSuggestion != nil {
+    if hasSuggestion(transaction) {
       parts.append(pillTitle(counterpartAccountName: counterpartAccountName))
     }
     if transaction.needsReview {

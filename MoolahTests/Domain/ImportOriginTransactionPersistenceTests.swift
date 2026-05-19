@@ -112,19 +112,15 @@ struct ImportOriginTransactionPersistenceTests {
     #expect(page.transactions.first?.importOrigin == nil)
   }
 
-  @Test("update can set a merged origin and transfer suggestion")
-  func updateSetsMergedOriginAndSuggestion() async throws {
+  @Test("update can flip a single origin to merged")
+  func updateSetsMergedOrigin() async throws {
     let (backend, _) = try TestBackend.create()
     let accountId = try await seededAccount(in: backend)
     let originA = outgoingOrigin()
     let originB = incomingOrigin()
-    let suggestion = TransferSuggestion(
-      counterpartTransactionId: UUID(),
-      suggestedAt: Date(timeIntervalSince1970: 1_700_000_500))
-    // Created as a plain `.single` origin with no suggestion so the
-    // update below must flip the discriminator to "merged", populate
-    // the incoming columns, and write the two suggestion columns —
-    // each of which a field-by-field `applyMetadata` would drop.
+    // Created as a plain `.single` origin so the update below must
+    // flip the discriminator to "merged" and populate the incoming
+    // columns — which a field-by-field `applyMetadata` would drop.
     var transaction = Transaction(
       date: Date(timeIntervalSince1970: 1_700_000_000),
       payee: "Original payee",
@@ -134,7 +130,6 @@ struct ImportOriginTransactionPersistenceTests {
 
     transaction.payee = "Renamed payee"
     transaction.importOrigin = .merged(MergedImportOrigin(outgoing: originA, incoming: originB))
-    transaction.transferSuggestion = suggestion
     _ = try await backend.transactions.update(transaction)
 
     let page = try await backend.transactions.fetch(
@@ -144,7 +139,6 @@ struct ImportOriginTransactionPersistenceTests {
     #expect(fetched?.payee == "Renamed payee")
     #expect(
       fetched?.importOrigin == .merged(MergedImportOrigin(outgoing: originA, incoming: originB)))
-    #expect(fetched?.transferSuggestion == suggestion)
   }
 
   @Test("update can flip a merged origin to single")

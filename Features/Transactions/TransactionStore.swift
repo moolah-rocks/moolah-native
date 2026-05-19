@@ -116,12 +116,21 @@ final class TransactionStore {
   // internal so the `+TransferDetection` extension reaches it.
   /// Owns the merge / dismiss actions a transfer suggestion offers from
   /// the transaction-detail surface. Built once from the transaction
-  /// repository and the dismissed-pair repository the store is wired
-  /// with. `nil` when the store is constructed without a dismissed-pair
-  /// repository (previews and legacy tests that never exercise transfer
-  /// suggestions); the suggestion section self-hides and its actions
-  /// no-op in that case.
+  /// repository and the transfer-suggestion repository the store is
+  /// wired with. `nil` when the store is constructed without a
+  /// transfer-suggestion repository (previews and legacy tests that
+  /// never exercise transfer suggestions); the suggestion section
+  /// self-hides and its actions no-op in that case.
   let transferDetection: TransferDetectionCoordinator?
+
+  // internal so the `+TransferDetection` extension can resolve the
+  // suggested counterpart of a transaction.
+  /// Repository of detected transfer suggestions, used by the
+  /// transaction-detail surface to resolve "is this transaction part of
+  /// a suggested pair, and what is its counterpart?" via the synced
+  /// record (never the denormalised model). `nil` in the same
+  /// preview / legacy-test cases that leave `transferDetection` nil.
+  let transferSuggestions: (any TransferSuggestionRepository)?
 
   /// The long-lived data-subscription task for the current filter. Owned
   /// by the store (not by the view's `.task`) so `load(filter:)` and
@@ -144,13 +153,14 @@ final class TransactionStore {
     pageSize: Int = 50,
     debounceInterval: Duration = .milliseconds(300),
     instrumentChanges: (any InstrumentChangeObserving)? = nil,
-    dismissedTransferPairs: (any DismissedTransferPairRepository)? = nil
+    transferSuggestions: (any TransferSuggestionRepository)? = nil
   ) {
     self.repository = repository
     self.payeeSuggestionSource = PayeeSuggestionSource(repository: repository)
-    if let dismissedTransferPairs {
+    self.transferSuggestions = transferSuggestions
+    if let transferSuggestions {
       self.transferDetection = TransferDetectionCoordinator(
-        transactions: repository, dismissedPairs: dismissedTransferPairs)
+        transactions: repository, suggestions: transferSuggestions)
     } else {
       self.transferDetection = nil
     }

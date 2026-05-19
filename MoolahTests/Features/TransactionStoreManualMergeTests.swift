@@ -13,15 +13,15 @@ import Testing
 struct TransactionStoreManualMergeTests {
   private typealias Fixture = TransferDetectionFixture
 
-  /// Builds a `TransactionStore` with the dismissed-pair repository wired
-  /// so `store.transferDetection != nil` and `manualMerge` / `unmerge`
-  /// reach the coordinator.
+  /// Builds a `TransactionStore` with the transfer-suggestion repository
+  /// wired so `store.transferDetection != nil` and `manualMerge` /
+  /// `unmerge` reach the coordinator.
   private func makeStore(backend: CloudKitBackend) -> TransactionStore {
     TransactionStore(
       repository: backend.transactions,
       conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument,
-      dismissedTransferPairs: backend.dismissedTransferPairs)
+      transferSuggestions: backend.transferSuggestions)
   }
 
   @Test
@@ -70,7 +70,7 @@ struct TransactionStoreManualMergeTests {
   }
 
   @Test
-  func unmergeSplitsTransferAndRecordsDismissal() async throws {
+  func unmergeSplitsTransferWithoutWritingASuggestionRecord() async throws {
     let (backend, database) = try TestBackend.create()
     let date = Date(timeIntervalSince1970: 1_700_000_000)
     let outgoing = Fixture.cashTx(
@@ -90,9 +90,11 @@ struct TransactionStoreManualMergeTests {
     let splits = try await backend.transactions.fetchAll(filter: TransactionFilter())
     #expect(splits.count == 2)
     #expect(splits.contains { $0.id == merged.id } == false)
-    let dismissed = try await backend.dismissedTransferPairs.fetchAll()
-    #expect(dismissed.count == 1)
-    #expect(dismissed.first?.transactionIds == Set(splits.map(\.id)))
+    // Unmerge writes no `TransferSuggestion` record — the split
+    // products are not "newly imported", so a later detection pass
+    // never re-evaluates them and cannot re-suggest the pair.
+    let suggestions = try await backend.transferSuggestions.fetchAll()
+    #expect(suggestions.isEmpty)
   }
 
   @Test
@@ -104,7 +106,7 @@ struct TransactionStoreManualMergeTests {
     let incoming = Fixture.cashTx(
       account: Fixture.accountB, amount: 250, type: .income, on: date)
     TestBackend.seed(transactions: [incoming, outgoing], in: database)
-    // No `dismissedTransferPairs:` argument → no coordinator wired.
+    // No `transferSuggestions:` argument → no coordinator wired.
     let store = TransactionStore(
       repository: backend.transactions,
       conversionService: FixedConversionService(),

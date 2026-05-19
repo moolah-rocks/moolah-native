@@ -76,9 +76,6 @@ struct TransferMergeBuilderSplitTests {
     #expect(inLeg.quantity == 500)
     #expect(inLeg.type == .income)
     #expect(inSplit.importOrigin?.singleOrigin == inOrigin)
-
-    #expect(outSplit.transferSuggestion == nil)
-    #expect(inSplit.transferSuggestion == nil)
   }
 
   @Test("round-trip returns each cross-instrument fee leg to its originating account split")

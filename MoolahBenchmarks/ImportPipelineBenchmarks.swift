@@ -216,7 +216,7 @@ final class ImportPipelineBenchmarks: XCTestCase {
           backend: backend, staging: staging,
           transferDetection: TransferDetectionCoordinator(
             transactions: backend.transactions,
-            dismissedPairs: backend.dismissedTransferPairs))
+            suggestions: backend.transferSuggestions))
         for _ in 0..<10 {
           _ = await importStore.ingest(
             data: data,

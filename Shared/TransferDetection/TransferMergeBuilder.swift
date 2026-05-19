@@ -45,8 +45,7 @@ struct TransferMergeBuilder: Sendable {
       importOrigin: .merged(
         MergedImportOrigin(
           outgoing: outgoingSide.importOrigin?.singleOrigin,
-          incoming: incomingSide.importOrigin?.singleOrigin)),
-      transferSuggestion: nil)
+          incoming: incomingSide.importOrigin?.singleOrigin)))
   }
 
   /// Reverses `merged(from:_:)`. Produces two single-value-leg
@@ -131,8 +130,7 @@ extension TransferMergeBuilder {
       payee: transfer.payee,
       notes: transfer.notes,
       legs: [cashLeg] + feeLegs,
-      importOrigin: origin.map { .single($0) },
-      transferSuggestion: nil)
+      importOrigin: origin.map { .single($0) })
   }
 
   private func mergedPayee(outgoing: String?, incoming: String?) -> String? {

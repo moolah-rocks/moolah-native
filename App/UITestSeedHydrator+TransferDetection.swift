@@ -120,6 +120,11 @@ extension UITestSeedHydrator {
         importedAt: importedAt,
         importSessionId: importSessionId),
       in: database)
+    try upsertSuggestedTransferRecord(
+      transactionId: fixtures.mergeOutgoingId,
+      counterpartId: fixtures.mergeIncomingId,
+      suggestedAt: fixtures.suggestedAt,
+      in: database)
   }
 
   private static func seedDismissPair(
@@ -158,6 +163,11 @@ extension UITestSeedHydrator {
         suggestedAt: fixtures.suggestedAt,
         importedAt: importedAt,
         importSessionId: importSessionId),
+      in: database)
+    try upsertSuggestedTransferRecord(
+      transactionId: fixtures.dismissOutgoingId,
+      counterpartId: fixtures.dismissIncomingId,
+      suggestedAt: fixtures.suggestedAt,
       in: database)
   }
 }
