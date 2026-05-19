@@ -64,6 +64,10 @@ import GRDB
 /// `dismissed_transfer_pair` table (content-addressed `id`, two
 /// tx-id columns + indexes). See
 /// `ProfileSchema+TransferDetection.swift`.
+/// `v13_transfer_suggestion_record` — replaces the denormalised
+/// transfer-suggestion columns and the `dismissed_transfer_pair` table
+/// with the synced `transfer_suggestion` record table. See
+/// `ProfileSchema+TransferSuggestion.swift`.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -84,7 +88,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 12
+  static let version = 13
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -116,6 +120,8 @@ enum ProfileSchema {
       "v11_add_exchange_account_fields", migrate: addExchangeAccountFields)
     migrator.registerMigration(
       "v12_add_transfer_detection", migrate: addTransferDetection)
+    migrator.registerMigration(
+      "v13_transfer_suggestion_record", migrate: addTransferSuggestion)
 
     return migrator
   }
