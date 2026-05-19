@@ -11,8 +11,8 @@ struct TransferSuggestionRowTests {
     uuid: (255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2))
   private let suggestedAt = Date(timeIntervalSince1970: 1_700_000_000)
 
-  @Test("init(domain:).toDomain() round-trips id, transactionIds, suggestedAt")
-  func roundTripsDomain() {
+  @Test("init(domain:) then toDomain() preserves every field")
+  func preservesEveryFieldOnRoundTrip() {
     let suggestion = TransferSuggestion(
       transactionIds: [idLow, idHigh], suggestedAt: suggestedAt)
     let back = TransferSuggestionRow(domain: suggestion).toDomain()

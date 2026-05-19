@@ -22,8 +22,15 @@ extension TransferSuggestionRow {
     self.encodedSystemFields = nil
   }
 
+  /// Maps back to the domain value. `id` is recomputed from the pair via content-addressing; a divergent stored `id` (which a well-formed record never has) trips the debug assertion.
   func toDomain() -> TransferSuggestion {
-    TransferSuggestion(
-      transactionIds: [transactionIdA, transactionIdB], suggestedAt: suggestedAt)
+    let result = TransferSuggestion(
+      transactionIds: [transactionIdA, transactionIdB],
+      suggestedAt: suggestedAt)
+    assert(
+      result.id == id,
+      "TransferSuggestionRow.id \(id) diverges from the content-addressed id "
+        + "\(result.id) of its transaction pair")
+    return result
   }
 }
