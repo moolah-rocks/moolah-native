@@ -5,7 +5,7 @@
 
   private let logger = Logger(subsystem: "com.moolah.app", category: "PayScheduledCommand")
 
-  /// Handles: `pay transaction id "uuid" of profile "X"`
+  /// Handles: `pay txn id "uuid" of profile "X"`
   class PayScheduledCommand: AppLevelScriptCommand {
     override func performDefaultImplementation() -> Any? {
       guard let specifier = directParameter as? NSScriptObjectSpecifier else {
