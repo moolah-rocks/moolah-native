@@ -18,10 +18,13 @@ enum SidebarSelection: Hashable {
 }
 
 struct SidebarView: View {
+  // MARK: - Properties
+
   @Environment(AccountStore.self) private var accountStore
   @Environment(EarmarkStore.self) private var earmarkStore
   @Environment(ProfileSession.self) private var session
   @Environment(ImportStore.self) private var importStore
+  @Environment(TransactionStore.self) private var transactionStore
   @Binding var selection: SidebarSelection?
   @State private var showCreateEarmarkSheet = false
   @State private var showCreateAccountSheet = false
@@ -45,6 +48,8 @@ struct SidebarView: View {
     )
   }
 
+  // MARK: - Body
+
   var body: some View {
     List(selection: $selection) {
       currentAccountsSection
@@ -63,9 +68,13 @@ struct SidebarView: View {
       accountStore.showHidden = newValue
       earmarkStore.showHidden = newValue
     }
+    .onChange(of: showSpam) { _, newValue in
+      transactionStore.showSpam = newValue
+    }
     .onAppear {
       accountStore.showHidden = showHidden
       earmarkStore.showHidden = showHidden
+      transactionStore.showSpam = showSpam
     }
     #if os(iOS)
       .environment(\.editMode, $editMode)
@@ -133,6 +142,11 @@ struct SidebarView: View {
       perform: handleAccountEditRequest
     )
   }
+
+}
+
+extension SidebarView {
+  // MARK: - Sections
 
   private func handleAccountEditRequest(_ note: Notification) {
     guard let id = note.object as? UUID,
@@ -248,12 +262,32 @@ struct SidebarView: View {
       }
       .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("allTransactions"))
       #if os(iOS)
-        Toggle(isOn: $showHidden) {
-          Label("Show Hidden", systemImage: "eye.slash")
-        }
+        navigationToggles
       #endif
     }
   }
+
+  #if os(iOS)
+    /// iOS-only visibility toggles shown at the bottom of the navigation
+    /// section. Extracted from `navigationSection` to keep its closure
+    /// within SwiftLint's `closure_body_length` budget.
+    @ViewBuilder private var navigationToggles: some View {
+      Toggle(isOn: $showHidden) {
+        Label(
+          showHidden ? "Hide Hidden" : "Show Hidden",
+          systemImage: showHidden ? "eye" : "eye.slash"
+        )
+      }
+      Toggle(isOn: $showSpam) {
+        Label(
+          showSpam ? "Hide Spam Transactions" : "Show Spam Transactions",
+          systemImage: showSpam ? "eye" : "eye.slash"
+        )
+      }
+    }
+  #endif
+
+  // MARK: - Helpers
 
   private func reorderCurrentAccounts(from source: IndexSet, to destination: Int) async {
     var accounts = accountStore.currentAccounts
@@ -285,11 +319,13 @@ struct SidebarView: View {
     await accountStore.reorderAccounts(
       accounts, positionOffset: accountStore.currentAccounts.count)
   }
-}
 
-extension SidebarView {
+  // MARK: - Actions
+
   private func addAccountAction() { showCreateAccountSheet = true }
   private func addEarmarkAction() { showCreateEarmarkSheet = true }
+
+  // MARK: - Row Builders
 
   private var recentlyAddedLabel: some View {
     HStack {

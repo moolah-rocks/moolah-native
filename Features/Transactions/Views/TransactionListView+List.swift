@@ -156,11 +156,14 @@ extension TransactionListView {
         Button {
           showSpamTransactions.toggle()
         } label: {
-          Image(systemName: showSpamTransactions ? "eye" : "eye.slash")
+          Label(
+            showSpamTransactions ? "Hide Spam Transactions" : "Show Spam Transactions",
+            systemImage: showSpamTransactions ? "eye" : "eye.slash"
+          )
         }
-        .accessibilityLabel(
-          showSpamTransactions ? "Hide Spam Transactions" : "Show Spam Transactions"
-        )
+        .accessibilityLabel("Spam Transactions")
+        .accessibilityValue(showSpamTransactions ? "shown" : "hidden")
+        .accessibilityIdentifier(UITestIdentifiers.TransactionList.spamToggleButton)
         .help(showSpamTransactions ? "Hide Spam Transactions" : "Show Spam Transactions")
       }
     #endif

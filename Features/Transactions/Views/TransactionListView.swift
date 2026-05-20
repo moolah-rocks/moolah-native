@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct TransactionListView: View {
+  // MARK: - Properties
+
   /// Grouping for the rendered list. Default `.flat` keeps existing
   /// callers unchanged. `.scheduledStatus` bundles a `pendingPayId`
   /// binding that the row's Pay action writes into; the binding is
@@ -142,15 +144,21 @@ struct TransactionListView: View {
   @State var transactionPendingUnmerge: Transaction.ID?
   @State var createRuleFromTransaction: Transaction?
 
-  /// Wraps `transactionsList` with the spam-filter sync modifiers so the
+  // MARK: - Body
+
+  /// Wraps `transactionsList` with the spam-filter priming modifiers so the
   /// `body` modifier chain stays within the Swift type-checker's expression
   /// complexity budget. Keeping these in a separate sub-expression lets the
   /// compiler resolve the view type in two passes rather than one giant chain.
-  private var spamSyncedList: some View {
+  private var spamFilteredList: some View {
     transactionsList
       .onAppear {
+        // Apply both filter inputs in one publish: setSpamInstrumentsValue
+        // writes the backing set without re-publishing, then assigning
+        // showSpam fires didSet → publishFilteredTransactions() once with
+        // both inputs in their final state.
+        transactionStore.setSpamInstrumentsValue(spamInstruments)
         transactionStore.showSpam = showSpamTransactions
-        transactionStore.setSpamInstruments(spamInstruments)
       }
       .onChange(of: showSpamTransactions) { _, newValue in
         transactionStore.showSpam = newValue
@@ -161,7 +169,7 @@ struct TransactionListView: View {
   }
 
   var body: some View {
-    spamSyncedList
+    spamFilteredList
       .modifier(
         OptionalTransactionInspector(
           enabled: handlesOwnInspector,
@@ -291,6 +299,8 @@ struct TransactionListView: View {
           forcedAccountId: filter.accountId,
           ingestDroppedURLs: ingestDroppedURLs))
   }
+
+  // MARK: - Helpers
 
   /// Mirror of `RecentlyAddedView.ingestDroppedURLs` but with a forced
   /// account. Kept here so the view can hand off to `ImportStore`

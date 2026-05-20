@@ -9,9 +9,10 @@ final class TransactionStore {
   /// Written only via `setTransactions(_:)` or `publishFilteredTransactions()`.
   /// See `plans/2026-05-20-hide-spam-transactions-design.md`.
   private(set) var transactions: [TransactionWithBalance] = []
-  // internal so `+SpamFilter.swift` can read it in `publishFilteredTransactions`.
-  // Written only via `setTransactions(_:)`.
-  var unfilteredTransactions: [TransactionWithBalance] = []
+  // private(set): `+SpamFilter.swift` only reads this via the property accessor
+  // in `publishFilteredTransactions`; `setTransactions(_:)` in this file is
+  // the sole writer.
+  private(set) var unfilteredTransactions: [TransactionWithBalance] = []
   /// When `true`, all-legs-spam transactions appear in `transactions`.
   /// Bound to `@AppStorage("showSpamTransactions")` by sidebar / list views.
   var showSpam: Bool = false {
@@ -104,6 +105,14 @@ final class TransactionStore {
   /// helpers in `MoolahTests/Support/TestableStoreObservation.swift` to
   /// await emissions deterministically. `internal` access is intentional;
   /// `@testable import Moolah` exposes it to the test target.
+  ///
+  /// **Spam-filter note:** the `publishFilteredTransactions()` re-publish
+  /// path does NOT yield a tick — ticks are emitted only for DB-driven
+  /// emissions (`applySnapshot`) and rate recomputes. Tests that toggle
+  /// `showSpam` or call `setSpamInstruments(_:)` must assert against
+  /// `store.transactions` synchronously (the property is updated
+  /// synchronously by `publishFilteredTransactions()`) rather than
+  /// awaiting a tick.
   let testObservationTickStream: AsyncStream<Void>
   // internal so `+Observation` and `+Mutations` can yield ticks after
   // mutating state.

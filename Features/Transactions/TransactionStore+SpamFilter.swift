@@ -20,9 +20,15 @@ extension TransactionStore {
     publishFilteredTransactions()
   }
 
-  /// Recomputes `transactions` from `unfilteredTransactions` against
-  /// the current `showSpam` / `spamInstruments` inputs. Cheap when
-  /// `showSpam == true` or `spamInstruments.isEmpty` (no walk).
+  // Internal (not private) because it is called both from this extension
+  // AND from the `showSpam.didSet` observer in `TransactionStore.swift`.
+  // A stored property's `didSet` cannot live in an extension, and Swift
+  // `private` is file-scoped, so the observer in the main file cannot
+  // reach a `private` member declared here. Do not call from feature code.
+  //
+  // Recomputes `transactions` from `unfilteredTransactions` against
+  // the current `showSpam` / `spamInstruments` inputs. Cheap when
+  // `showSpam == true` or `spamInstruments.isEmpty` (no walk).
   func publishFilteredTransactions() {
     if showSpam || spamInstruments.isEmpty {
       setFilteredTransactions(unfilteredTransactions)
