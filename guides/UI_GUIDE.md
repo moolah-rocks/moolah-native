@@ -1424,6 +1424,7 @@ Assign shortcuts only when the action is **frequent** (used more than a few time
 | Show/Hide Sidebar | ⌃⌘S | View |
 | Show/Hide Inspector | ⌥⌘I | View |
 | Show/Hide Hidden Accounts | ⇧⌘H | View |
+| Show/Hide Spam Transactions | — | View |
 | Enter/Exit Full Screen | ⌃⌘F | View |
 | Go to Accounts / Transactions / … | ⌘1…⌘6 | Go |
 | Back / Forward | ⌘[ / ⌘] | Go |
