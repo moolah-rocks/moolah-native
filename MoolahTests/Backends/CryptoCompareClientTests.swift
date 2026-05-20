@@ -199,6 +199,60 @@ struct CryptoCompareClientTests {
     #expect(nativeSymbols.contains("MLS"))
   }
 
+  /// USDT (and other stablecoins primary-listed by CryptoCompare) ship
+  /// without a `SmartContractAddress` field at all. The parser must keep
+  /// the entry around so the by-symbol post-confirm path in the resolver
+  /// can find it once CoinGecko has verified the contract identity.
+  @Test
+  func parseCoinListResponse_preservesEntriesMissingSmartContractAddress() throws {
+    let json = Data(
+      """
+      {
+          "Data": {
+              "USDT": {
+                  "Symbol": "USDT",
+                  "CoinName": "Tether"
+              },
+              "UNI": {
+                  "Symbol": "UNI",
+                  "CoinName": "Uniswap",
+                  "SmartContractAddress": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"
+              }
+          }
+      }
+      """.utf8)
+
+    let index = try CryptoCompareClient.parseCoinListResponse(json)
+    // USDT lacks SmartContractAddress so it has no contract entry — the
+    // contract-address index is unchanged. UNI must still resolve.
+    #expect(index["0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"] == "UNI")
+  }
+
+  @Test
+  func parseCoinSymbols_returnsEverySymbolIncludingThoseWithoutContract() throws {
+    let json = Data(
+      """
+      {
+          "Data": {
+              "USDT": { "Symbol": "USDT", "CoinName": "Tether" },
+              "BTC": { "Symbol": "BTC", "CoinName": "Bitcoin", "SmartContractAddress": "N/A" },
+              "UNI": {
+                  "Symbol": "UNI",
+                  "CoinName": "Uniswap",
+                  "SmartContractAddress": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984"
+              },
+              "BROKEN": null
+          }
+      }
+      """.utf8)
+
+    let symbols = try CryptoCompareClient.parseCoinSymbols(json)
+    #expect(symbols.contains("USDT"))
+    #expect(symbols.contains("BTC"))
+    #expect(symbols.contains("UNI"))
+    #expect(!symbols.contains("BROKEN"))
+  }
+
   // MARK: - Mapping without CryptoCompare symbol
 
   @Test

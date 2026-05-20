@@ -242,3 +242,117 @@ struct CompositeTokenResolutionClientTests {
     #expect(matic.cryptocompareSymbol == "MATIC")
   }
 }
+
+/// Post-confirm CryptoCompare by-symbol path, exercised end-to-end via
+/// `StubURLProtocol` for the CoinGecko round-trips. Separate suite so the
+/// shared-handler reset can be scoped to a class with `deinit` without
+/// disturbing the simpler in-process tests above.
+@Suite("CryptoCompare post-confirm by symbol", .serialized)
+final class PostConfirmBySymbolTests {
+  deinit {
+    StubURLProtocol.handlers = [:]
+  }
+
+  private func makeSession() -> URLSession {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [StubURLProtocol.self]
+    return URLSession(configuration: config)
+  }
+
+  private func stubAssetPlatforms(_ json: String) {
+    StubURLProtocol.handlers["api.coingecko.com:/api/v3/asset_platforms"] = { _ in
+      (HTTPURLResponse.ok(etag: ""), Data(json.utf8))
+    }
+  }
+
+  private func stubContractLookup(platform: String, contract: String, json: String) {
+    let key = "api.coingecko.com:/api/v3/coins/\(platform)/contract/\(contract)"
+    StubURLProtocol.handlers[key] = { _ in
+      (HTTPURLResponse.ok(etag: ""), Data(json.utf8))
+    }
+  }
+
+  /// CryptoCompare ships USDT as a primary, chain-agnostic entry with no
+  /// `SmartContractAddress`. The contract-address index in step 1 of the
+  /// resolver therefore can't find it. After CoinGecko confirms
+  /// `(chainId, contract) → symbol="USDT"`, the by-symbol post-confirm
+  /// must fill in `cryptocompareSymbol` so price fallback chains have
+  /// more than just CoinGecko to rely on.
+  @Test
+  func resolve_usdtPostConfirmsCryptoCompareBySymbol() async throws {
+    let ccCoinList = Data(
+      """
+      { "Data": { "USDT": { "Symbol": "USDT", "CoinName": "Tether" } } }
+      """.utf8)
+    let binanceInfo = Data(#"{ "symbols": [] }"#.utf8)
+    stubAssetPlatforms(#"[{"id": "ethereum", "chain_identifier": 1, "name": "Ethereum"}]"#)
+    stubContractLookup(
+      platform: "ethereum",
+      contract: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      json:
+        #"{"id":"tether","symbol":"usdt","name":"Tether","detail_platforms":{"ethereum":{"decimal_place":6}}}"#
+    )
+
+    let client = CompositeTokenResolutionClient(
+      coinListData: ccCoinList,
+      exchangeInfoData: binanceInfo,
+      coinGeckoApiKey: "",
+      session: makeSession()
+    )
+    let result = try await client.resolve(
+      chainId: 1,
+      contractAddress: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+      symbol: "USDT",
+      isNative: false
+    )
+
+    #expect(result.coingeckoId == "tether")
+    #expect(result.cryptocompareSymbol == "USDT")
+    // USDT is the quote asset on Binance — USDTUSDT pair doesn't exist
+    // and `binanceSymbol` must stay nil even after the post-confirm.
+    #expect(result.binanceSymbol == nil)
+  }
+
+  /// Issue #790 safety: a spam ERC-20 whose user-supplied ticker
+  /// collides with a real token must NOT inherit the legitimate token's
+  /// CryptoCompare attribution via the post-confirm path. CoinGecko
+  /// can't verify the spam contract (no listing on the chain at that
+  /// address), so `resolvedSymbol` stays nil and the by-symbol fallback
+  /// is gated off.
+  @Test
+  func resolve_spamErc20WithCopiedTicker_doesNotPostConfirmBySymbol() async throws {
+    let ccCoinList = Data(
+      """
+      { "Data": { "USDT": { "Symbol": "USDT", "CoinName": "Tether" } } }
+      """.utf8)
+    let binanceInfo = Data(#"{ "symbols": [] }"#.utf8)
+    stubAssetPlatforms(
+      #"[{"id": "optimistic-ethereum", "chain_identifier": 10, "name": "Optimism"}]"#)
+    // CoinGecko returns 200 with an "error" payload for an unknown
+    // contract — `parseContractLookupResponse` then throws and the
+    // resolver's catch block leaves `result.resolvedSymbol` nil, which
+    // is the exact gating condition the post-confirm depends on.
+    stubContractLookup(
+      platform: "optimistic-ethereum",
+      contract: "0xdeadbeef",
+      json: #"{"error":"coin not found"}"#)
+
+    let client = CompositeTokenResolutionClient(
+      coinListData: ccCoinList,
+      exchangeInfoData: binanceInfo,
+      coinGeckoApiKey: "",
+      session: makeSession()
+    )
+    let result = try await client.resolve(
+      chainId: 10,
+      contractAddress: "0xdeadbeef",
+      symbol: "USDT",
+      isNative: false
+    )
+
+    #expect(result.coingeckoId == nil)
+    #expect(result.cryptocompareSymbol == nil)
+    #expect(result.binanceSymbol == nil)
+    #expect(!result.hasAnyProviderId)
+  }
+}

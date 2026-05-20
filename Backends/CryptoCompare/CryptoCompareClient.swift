@@ -127,13 +127,12 @@ struct CryptoCompareClient: CryptoPriceClient, Sendable {
   }
 
   /// Parses the coin list response and builds a reverse index: lowercased contract address → symbol.
-  /// Entries with "N/A" or empty contract addresses are excluded.
+  /// Entries with "N/A", empty, or absent contract addresses are excluded.
   static func parseCoinListResponse(_ data: Data) throws -> [String: String] {
     let container = try JSONDecoder().decode(CoinListContainer.self, from: data)
     var index: [String: String] = [:]
     for coin in container.entries.values {
-      let addr = coin.smartContractAddress
-      guard addr != "N/A", !addr.isEmpty else { continue }
+      guard let addr = coin.smartContractAddress, addr != "N/A", !addr.isEmpty else { continue }
       index[addr.lowercased()] = coin.symbol
     }
     return index
@@ -144,10 +143,28 @@ struct CryptoCompareClient: CryptoPriceClient, Sendable {
     let container = try JSONDecoder().decode(CoinListContainer.self, from: data)
     var symbols: Set<String> = []
     for coin in container.entries.values {
-      let addr = coin.smartContractAddress
+      let addr = coin.smartContractAddress ?? ""
       if addr == "N/A" || addr.isEmpty {
         symbols.insert(coin.symbol)
       }
+    }
+    return symbols
+  }
+
+  /// Returns the set of every symbol present in the coin list, regardless
+  /// of whether the entry carries a smart-contract address. Used by the
+  /// post-confirm path in `CompositeTokenResolutionClient`: once a
+  /// contract-based provider (CoinGecko) has verified that
+  /// `(chainId, contractAddress) → symbol`, the resolver checks this set
+  /// to authorise a CryptoCompare by-symbol fallback. Catches the case
+  /// where CryptoCompare's catalog has the symbol (e.g. USDT) but its
+  /// entry doesn't pin a specific contract — so the contract-address
+  /// index alone doesn't surface it.
+  static func parseCoinSymbols(_ data: Data) throws -> Set<String> {
+    let container = try JSONDecoder().decode(CoinListContainer.self, from: data)
+    var symbols: Set<String> = []
+    for coin in container.entries.values {
+      symbols.insert(coin.symbol)
     }
     return symbols
   }
@@ -213,7 +230,13 @@ private struct CoinListContainer: Decodable {
 
 private struct CoinListEntry: Decodable {
   let symbol: String
-  let smartContractAddress: String
+  /// Optional because CryptoCompare's primary stablecoin entries
+  /// (USDT, USDC, DAI, …) ship without this field — the listing is
+  /// chain-agnostic. Treating it as a required `String` made the entry's
+  /// decode fail and the surrounding per-entry `try?` silently dropped
+  /// it, so post-confirm symbol-based pricing couldn't find USDT in the
+  /// catalog at all.
+  let smartContractAddress: String?
 
   private enum CodingKeys: String, CodingKey {
     case symbol = "Symbol"
