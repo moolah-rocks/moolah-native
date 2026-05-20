@@ -115,37 +115,39 @@ moolah-tell 'delete account "New Account" of profile "Test"'
 
 ```bash
 # Create a simple expense
-moolah-tell 'tell profile "Test" to create transaction with payee "Woolworths" amount -42.50 account "Everyday" category "Groceries"'
+moolah-tell 'tell profile "Test" to create txn with payee "Woolworths" amount -42.50 account "Everyday" category "Groceries"'
 
 # Create with date and notes
-moolah-tell 'tell profile "Test" to create transaction with payee "Rent" amount -2000.00 account "Everyday" date (date "2026-04-01") notes "April rent"'
+moolah-tell 'tell profile "Test" to create txn with payee "Rent" amount -2000.00 account "Everyday" date (date "2026-04-01") notes "April rent"'
 
 # Create income
-moolah-tell 'tell profile "Test" to create transaction with payee "Employer" amount 5000.00 account "Everyday" category "Salary"'
+moolah-tell 'tell profile "Test" to create txn with payee "Employer" amount 5000.00 account "Everyday" category "Salary"'
 
-# List transactions (payee and amount)
-moolah-tell 'get {payee, amount} of every transaction of profile "Test"'
+# List txns (payee and amount)
+moolah-tell 'get {payee, amount} of every txn of profile "Test"'
 
-# Get transaction details
-moolah-tell 'get {payee, date, amount, transaction type} of every transaction of profile "Test"'
+# Get txn details
+moolah-tell 'get {payee, date, amount, transaction type} of every txn of profile "Test"'
 
-# Delete a transaction
-moolah-tell 'delete transaction id "UUID-HERE" of profile "Test"'
+# Delete a txn
+moolah-tell 'delete txn id "UUID-HERE" of profile "Test"'
 
-# Pay a scheduled transaction
-moolah-tell 'pay transaction id "UUID-HERE" of profile "Test"'
+# Pay a scheduled txn
+moolah-tell 'pay txn id "UUID-HERE" of profile "Test"'
 ```
 
-> **Caveat — the singular `transaction` class term is shadowed.** The
-> dictionary defines a `transaction type` *property*, which the AppleScript
-> parser prefers over the `transaction` *class*. As a result, specifiers that
-> use the bare class term — `every transaction whose …`, `transaction id "…"`
-> in some positions — can fail to parse ("Expected class name but found
-> transaction"). `count transactions of profile …` (plural element) and
-> `get … of every transaction of profile …` work. To clear a synced
-> account's imported data, prefer `reset import` (below) over deleting each
-> transaction by id. Tracked in
-> [#923](https://github.com/ajsutton/moolah-native/issues/923).
+> **The transaction class is named `txn` in AppleScript.** The word
+> "transaction" is reserved in AppleScript itself (System Events ships
+> `begin transaction`/`end transaction`/`abort transaction` in its
+> `misc` suite), so the bare class term cannot resolve as a class name
+> in `every transaction`/`transaction id "…"`/`whose` contexts —
+> the parser tokenises it as a keyword. Use `txn` instead:
+> `every txn of profile "…" whose id is "…"`,
+> `delete txn id "…" of profile "…"`,
+> `count txns of profile "…"`,
+> `create txn in profile "…" with payee "…" amount …`. The four-char
+> code `'Txn '` is unchanged, so compiled `.scpt` files keep working.
+> Fixed in [#923](https://github.com/ajsutton/moolah-native/issues/923).
 
 ### Earmark Operations
 
@@ -303,8 +305,8 @@ moolah-tell 'navigate to earmark "Holiday" of profile "Test"'
 # 1. Check initial balance
 moolah-tell 'get balance of account "Everyday" of profile "Test"'
 
-# 2. Create a transaction
-moolah-tell 'tell profile "Test" to create transaction with payee "Test Purchase" amount -25.00 account "Everyday"'
+# 2. Create a txn
+moolah-tell 'tell profile "Test" to create txn with payee "Test Purchase" amount -25.00 account "Everyday"'
 
 # 3. Verify balance changed
 moolah-tell 'get balance of account "Everyday" of profile "Test"'
@@ -332,9 +334,9 @@ tell profile "AI Test"
   create category name "Transport"
   create category name "Salary"
   create earmark name "Emergency Fund" target 10000.00
-  create transaction with payee "Employer" amount 5000.00 account "Checking" category "Salary"
-  create transaction with payee "Groceries" amount -150.00 account "Checking" category "Food"
-  create transaction with payee "Gas" amount -60.00 account "Credit Card" category "Transport"
+  create txn with payee "Employer" amount 5000.00 account "Checking" category "Salary"
+  create txn with payee "Groceries" amount -150.00 account "Checking" category "Food"
+  create txn with payee "Gas" amount -60.00 account "Credit Card" category "Transport"
 end tell
 EOF
 ```
