@@ -147,7 +147,7 @@ moolah-tell 'pay txn id "UUID-HERE" of profile "Test"'
 > `count txns of profile "…"`,
 > `create txn in profile "…" with payee "…" amount …`. The four-char
 > code `'Txn '` is unchanged, so compiled `.scpt` files keep working.
-> Fixed in [#923](https://github.com/ajsutton/moolah-native/issues/923).
+> See [#923](https://github.com/ajsutton/moolah-native/issues/923) for background on the reserved-word constraint.
 
 ### Earmark Operations
 

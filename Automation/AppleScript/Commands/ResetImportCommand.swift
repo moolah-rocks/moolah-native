@@ -7,9 +7,11 @@
 
   /// Handles: `reset import of account "Coinstash" of profile "X"`
   ///
-  /// Deletes every transaction with a leg on the account so a subsequent
-  /// `synchronize` re-imports it from scratch. Uses an account specifier
-  /// rather than iterating by `txn id` for efficiency.
+  /// Deletes every transaction with a leg on the account in a single
+  /// operation so a subsequent `synchronize` re-imports it from scratch.
+  /// Prefer this over iterating `delete txn id` when you want to clear an
+  /// entire synced account — the bulk path is atomic and avoids O(n)
+  /// AppleScript round trips.
   class ResetImportCommand: AppLevelScriptCommand {
     override func performDefaultImplementation() -> Any? {
       guard let specifier = directParameter as? NSScriptObjectSpecifier else {
