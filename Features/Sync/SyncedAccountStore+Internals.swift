@@ -309,8 +309,16 @@ extension SyncedAccountStore {
       return
     }
     let eligible = genuinelyNew.filter { $0.transferDetectionValueLeg != nil }
-    guard !eligible.isEmpty else { return }
-    let windowLowerBound = clock().addingTimeInterval(-FuzzyTransferDetector.windowSeconds)
+    // Anchor on the earliest eligible transaction's `date` (the trade /
+    // transfer date), not `clock()` — a bulk historical exchange import
+    // produces survivors dated months or years in the past, and a
+    // wall-clock floor would drop every peer candidate before the
+    // detector ever saw them. Same pattern as `ImportStore.ingest`.
+    guard let earliest = eligible.min(by: { $0.date < $1.date }) else {
+      return
+    }
+    let windowLowerBound = earliest.date.addingTimeInterval(
+      -FuzzyTransferDetector.windowSeconds)
     await transferDetection.runDetection(
       newlyImported: eligible,
       participatingAccountIds: participatingAccountIds,
