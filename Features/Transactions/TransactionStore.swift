@@ -5,7 +5,24 @@ import Observation
 @Observable
 @MainActor
 final class TransactionStore {
+  /// View-visible list, spam-filtered from `unfilteredTransactions`.
+  /// Written only via `setTransactions(_:)` or `publishFilteredTransactions()`.
+  /// See `plans/2026-05-20-hide-spam-transactions-design.md`.
   private(set) var transactions: [TransactionWithBalance] = []
+  // internal so `+SpamFilter.swift` can read it in `publishFilteredTransactions`.
+  // Written only via `setTransactions(_:)`.
+  var unfilteredTransactions: [TransactionWithBalance] = []
+  /// When `true`, all-legs-spam transactions appear in `transactions`.
+  /// Bound to `@AppStorage("showSpamTransactions")` by sidebar / list views.
+  var showSpam: Bool = false {
+    didSet {
+      guard oldValue != showSpam else { return }
+      publishFilteredTransactions()
+    }
+  }
+  /// Instruments flagged as spam. Written via `setSpamInstruments(_:)`
+  /// in `+SpamFilter.swift`; drives `publishFilteredTransactions()`.
+  private(set) var spamInstruments: Set<Instrument> = []
   /// True until the active subscription's first emission settles.
   /// Distinguishes "still loading" from "loaded but empty" for the
   /// empty-state overlay and the load-more footer. Observed; never
@@ -329,48 +346,6 @@ final class TransactionStore {
     subscriptionTask = nil
   }
 
-  /// Consumes the shared registry's change stream. Each tick re-runs
-  /// the imperative reload for the active filter so an instrument-
-  /// metadata edit applied to the shared registry (which does not
-  /// re-fire the per-profile data observation) live-refreshes the
-  /// open list. No-op until a subscription has been started
-  /// (`lastSnapshotPage != nil`); the first `load`/`observe` will
-  /// fetch fresh data anyway. `Task.isCancelled` is re-checked after
-  /// the stream suspension so a teardown that races a tick exits
-  /// before issuing a fetch. Strong `self` capture matches
-  /// `observeRateChannels()` — the task's lifetime is gated by
-  /// `stopObserving()` / `deinit`.
-  private func observeInstrumentRegistryChanges(
-    _ changes: AsyncStream<Void>
-  ) async {
-    for await _ in changes {
-      if Task.isCancelled { return }
-      guard lastSnapshotPage != nil else { continue }
-      await runImperativeReload(filter: currentFilter)
-    }
-  }
-
-  /// Subscribes to `conversionService.observeRates()` /
-  /// `…observeErrors()`. A rate tick recomputes the running-balance
-  /// column against the most recent snapshot (no DB re-fetch); an error
-  /// tick is surfaced on `self.error`. Spawned from `init`.
-  private func observeRateChannels() async {
-    let rateStream = conversionService.observeRates()
-    let rateErrors = conversionService.observeErrors()
-    await withTaskGroup(of: Void.self) { group in
-      group.addTask { [self] in
-        for await _ in rateStream {
-          await self.recomputeBalances(reason: .rateTick)
-        }
-      }
-      group.addTask { [self] in
-        for await error in rateErrors {
-          await self.surface(observationError: error)
-        }
-      }
-    }
-  }
-
   // MARK: - Internal helpers used by `+Mutations.swift` and `+Observation.swift`
 
   func surface(observationError error: any Error) {
@@ -378,14 +353,22 @@ final class TransactionStore {
     self.error = error
   }
 
-  /// Mutator hooks invoked by `+Observation.swift` (which lives in the
-  /// same module but a separate file, so `private(set)` properties on
-  /// the main type are not directly assignable from there).
+  /// Mutator hooks invoked by extension files (which live in the same
+  /// module but separate files, so `private(set)` properties on the
+  /// main type are not directly assignable from there).
   func setCurrentFilter(_ filter: TransactionFilter) { currentFilter = filter }
   func setCurrentTargetInstrument(_ instrument: Instrument) {
     currentTargetInstrument = instrument
   }
-  func setTransactions(_ rows: [TransactionWithBalance]) { transactions = rows }
+  func setTransactions(_ rows: [TransactionWithBalance]) {
+    unfilteredTransactions = rows
+    publishFilteredTransactions()
+  }
+  // Used by `+SpamFilter.swift` to write `transactions` (private(set)).
+  func setFilteredTransactions(_ rows: [TransactionWithBalance]) { transactions = rows }
+  // Used by `+SpamFilter.swift` to write `spamInstruments` (private(set)).
+  func setSpamInstrumentsValue(_ value: Set<Instrument>) { spamInstruments = value }
+
   func setHasMore(_ value: Bool) { hasMore = value }
   func setError(_ error: (any Error)?) { self.error = error }
   func setLoadedCount(_ count: Int) { loadedCount = count }

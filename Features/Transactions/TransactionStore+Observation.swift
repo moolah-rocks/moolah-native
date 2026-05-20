@@ -273,4 +273,46 @@ extension TransactionStore {
       testObservationTickContinuation.yield(())
     }
   }
+
+  /// Subscribes to `conversionService.observeRates()` /
+  /// `…observeErrors()`. A rate tick recomputes the running-balance
+  /// column against the most recent snapshot (no DB re-fetch); an error
+  /// tick is surfaced on `self.error`. Spawned from `init`.
+  func observeRateChannels() async {
+    let rateStream = conversionService.observeRates()
+    let rateErrors = conversionService.observeErrors()
+    await withTaskGroup(of: Void.self) { group in
+      group.addTask { [self] in
+        for await _ in rateStream {
+          await self.recomputeBalances(reason: .rateTick)
+        }
+      }
+      group.addTask { [self] in
+        for await error in rateErrors {
+          await self.surface(observationError: error)
+        }
+      }
+    }
+  }
+
+  /// Consumes the shared registry's change stream. Each tick re-runs
+  /// the imperative reload for the active filter so an instrument-
+  /// metadata edit applied to the shared registry (which does not
+  /// re-fire the per-profile data observation) live-refreshes the
+  /// open list. No-op until a subscription has been started
+  /// (`lastSnapshotPage != nil`); the first `load`/`observe` will
+  /// fetch fresh data anyway. `Task.isCancelled` is re-checked after
+  /// the stream suspension so a teardown that races a tick exits
+  /// before issuing a fetch. Strong `self` capture matches
+  /// `observeRateChannels()` — the task's lifetime is gated by
+  /// `stopObserving()` / `deinit`.
+  func observeInstrumentRegistryChanges(
+    _ changes: AsyncStream<Void>
+  ) async {
+    for await _ in changes {
+      if Task.isCancelled { return }
+      guard lastSnapshotPage != nil else { continue }
+      await runImperativeReload(filter: currentFilter)
+    }
+  }
 }
