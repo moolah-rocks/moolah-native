@@ -274,7 +274,7 @@ extension SidebarView {
     @ViewBuilder private var navigationToggles: some View {
       Toggle(isOn: $showHidden) {
         Label(
-          showHidden ? "Hide Hidden" : "Show Hidden",
+          showHidden ? "Hide Hidden Accounts" : "Show Hidden Accounts",
           systemImage: showHidden ? "eye" : "eye.slash"
         )
       }
