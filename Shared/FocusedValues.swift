@@ -35,6 +35,11 @@ struct ShowHiddenAccountsKey: FocusedValueKey {
   typealias Value = Binding<Bool>
 }
 
+/// Binding to the View > Show / Hide Spam Transactions toggle.
+struct ShowSpamTransactionsKey: FocusedValueKey {
+  typealias Value = Binding<Bool>
+}
+
 /// The transaction currently selected in the focused window (for Transaction menu).
 struct SelectedTransactionKey: FocusedValueKey {
   typealias Value = Binding<Transaction?>
@@ -165,6 +170,10 @@ extension FocusedValues {
   var showHiddenAccounts: ShowHiddenAccountsKey.Value? {
     get { self[ShowHiddenAccountsKey.self] }
     set { self[ShowHiddenAccountsKey.self] = newValue }
+  }
+  var showSpamTransactions: ShowSpamTransactionsKey.Value? {
+    get { self[ShowSpamTransactionsKey.self] }
+    set { self[ShowSpamTransactionsKey.self] = newValue }
   }
   var selectedTransaction: SelectedTransactionKey.Value? {
     get { self[SelectedTransactionKey.self] }
