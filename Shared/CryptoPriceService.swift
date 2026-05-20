@@ -138,43 +138,13 @@ actor CryptoPriceService {
     // each provider in order. Continues past providers that return
     // empty so a fallback chain (CoinGecko → CryptoCompare → Binance)
     // can collectively fill in the dates one of them has.
-    let symbol = instrument.ticker ?? instrument.name
     let fetchInterval = extensionWindow(
       for: tokenId, requestedDate: date, dateString: dateString)
-    var lastError: (any Error)?
-    var lastProvider: SyncProvider?
-    for client in clients {
-      lastProvider = client.syncProvider
-      do {
-        let fetched = try await client.dailyPrices(for: mapping, in: fetchInterval)
-        if !fetched.isEmpty {
-          let delta = mergeReturningDelta(
-            tokenId: tokenId, symbol: symbol, newPrices: fetched)
-          if !delta.isEmpty {
-            try await persistDelta(tokenId: tokenId, deltaRecords: delta)
-          }
-          if let price = lookupPrice(tokenId: tokenId, dateString: dateString) {
-            return price
-          }
-        }
-      } catch {
-        lastError = error
-        continue
-      }
-    }
-
-    if let fallback = fallbackPrice(tokenId: tokenId, dateString: dateString) {
-      return fallback
-    }
-
-    let underlyingDescription =
-      lastError.map { String(describing: $0) }
-      ?? String(
-        describing: CryptoPriceError.noPriceAvailable(
-          tokenId: tokenId, date: dateString))
-    throw WalletSyncError(
-      provider: lastProvider,
-      kind: .network(underlyingDescription: underlyingDescription))
+    return try await fetchAndExtendCache(
+      instrument: instrument,
+      mapping: mapping,
+      fetchInterval: fetchInterval,
+      dateString: dateString)
   }
 
   /// Resolves the request from the in-memory cache when the requested
@@ -349,12 +319,15 @@ actor CryptoPriceService {
 // MARK: - Cache lookup & merge
 
 extension CryptoPriceService {
-  private func lookupPrice(tokenId: String, dateString: String) -> Decimal? {
+  /// Internal (not private) so `fetchAndExtendCache` in
+  /// `CryptoPriceService+FetchRange.swift` can call it from the sibling
+  /// extension — same actor isolation, just different file.
+  func lookupPrice(tokenId: String, dateString: String) -> Decimal? {
     guard let key = DateKey.from(isoString: dateString) else { return nil }
     return caches[tokenId]?.prices.exact(key)
   }
 
-  private func fallbackPrice(tokenId: String, dateString: String) -> Decimal? {
+  func fallbackPrice(tokenId: String, dateString: String) -> Decimal? {
     guard let key = DateKey.from(isoString: dateString),
       let cache = caches[tokenId]
     else { return nil }
@@ -373,8 +346,9 @@ extension CryptoPriceService {
     return dates
   }
 
-  // `fetchRange(instrument:mapping:from:to:)` lives in
-  // `CryptoPriceService+FetchRange.swift`, `mergeReturningDelta` lives in
-  // `CryptoPriceService+Merge.swift`, and `NoOpTokenResolutionClient`
+  // `fetchAndExtendCache(instrument:mapping:fetchInterval:dateString:)`
+  // and `fetchRange(instrument:mapping:from:to:)` live in
+  // `CryptoPriceService+FetchRange.swift`, `mergeReturningDelta` lives
+  // in `CryptoPriceService+Merge.swift`, and `NoOpTokenResolutionClient`
   // lives in its own sibling file.
 }

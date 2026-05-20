@@ -15,14 +15,23 @@ struct RunningBalanceResult: Sendable {
 /// A typed, Sendable wrapper around the first conversion error encountered
 /// during running-balance computation. Carries the failing transaction id so
 /// diagnostics can correlate logs with the surfaced user-visible error.
+///
+/// `errorDescription` is the user-facing copy and stays free of the raw
+/// `underlyingDescription` — the provider's raw text leaks Swift enum
+/// case names, contract addresses and provider identifiers that are
+/// noise to the user (and often misleadingly attribute the failure,
+/// e.g. blaming Binance for a stablecoin it can't trade).
+/// `underlyingDescription` remains a stored property so the diagnostic
+/// logger in `TransactionStore+Observation` can record the full provider
+/// detail without it ever reaching the alert.
 struct RunningBalanceConversionError: LocalizedError, Sendable {
   let transactionId: UUID
   let targetInstrumentId: String
   let underlyingDescription: String
 
   var errorDescription: String? {
-    "Unable to convert a transaction to \(targetInstrumentId). The running balance is "
-      + "unavailable until the rate source recovers. (\(underlyingDescription))"
+    "Couldn't update the running balance in \(targetInstrumentId). "
+      + "A price source is temporarily unavailable — try again in a moment."
   }
 }
 

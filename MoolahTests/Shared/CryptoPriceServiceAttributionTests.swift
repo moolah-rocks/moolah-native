@@ -71,4 +71,69 @@ struct CryptoPriceServiceAttributionTests {
       Issue.record("Expected WalletSyncError, got \(error)")
     }
   }
+
+  /// `noProviderMapping` is a routing decision (the client has no
+  /// symbol for the token), not a runtime failure — USDT, for instance,
+  /// has no USDT/USDT pair on Binance, so the Binance leg ALWAYS throws
+  /// `noProviderMapping` even when the network is healthy. Attribution
+  /// must fall to a real failure (here, CoinGecko's network error), not
+  /// to the trailing `noProviderMapping`-only leg.
+  @Test("noProviderMapping is not surfaced as a provider failure for price(...)")
+  func singlePriceSkipsNoProviderMappingAttribution() async throws {
+    let frozen = try date("2024-02-01")
+    let database = try ProfileIndexDatabase.openInMemory()
+    let noMapping: any Error = CryptoPriceError.noProviderMapping(
+      tokenId: ethMapping.instrumentId, provider: "Binance")
+    let clients: [CryptoPriceClient] = [
+      FixedCryptoPriceClient(shouldFail: true, syncProvider: .coinGecko),
+      FixedCryptoPriceClient(
+        shouldFail: true, failureError: noMapping, syncProvider: .cryptoCompare),
+      FixedCryptoPriceClient(
+        shouldFail: true, failureError: noMapping, syncProvider: .binance),
+    ]
+    let svc = CryptoPriceService(
+      clients: clients, database: database, resolutionClient: nil, now: { frozen })
+    do {
+      _ = try await svc.price(
+        for: ethInstrument, mapping: ethMapping, on: try date("2024-01-15"))
+      Issue.record("Expected a thrown error, got a value")
+    } catch let error as WalletSyncError {
+      #expect(error.provider == .coinGecko)
+      if case .network(let underlying) = error.kind {
+        #expect(!underlying.contains("noProviderMapping"))
+      }
+    } catch {
+      Issue.record("Expected WalletSyncError, got \(error)")
+    }
+  }
+
+  @Test("noProviderMapping is not surfaced as a provider failure for prices(in:)")
+  func rangePricesSkipsNoProviderMappingAttribution() async throws {
+    let frozen = try date("2024-02-01")
+    let database = try ProfileIndexDatabase.openInMemory()
+    let noMapping: any Error = CryptoPriceError.noProviderMapping(
+      tokenId: ethMapping.instrumentId, provider: "Binance")
+    let clients: [CryptoPriceClient] = [
+      FixedCryptoPriceClient(shouldFail: true, syncProvider: .coinGecko),
+      FixedCryptoPriceClient(
+        shouldFail: true, failureError: noMapping, syncProvider: .cryptoCompare),
+      FixedCryptoPriceClient(
+        shouldFail: true, failureError: noMapping, syncProvider: .binance),
+    ]
+    let svc = CryptoPriceService(
+      clients: clients, database: database, resolutionClient: nil, now: { frozen })
+    do {
+      _ = try await svc.prices(
+        for: ethInstrument, mapping: ethMapping,
+        in: try date("2024-01-10")...(try date("2024-01-20")))
+      Issue.record("Expected a thrown error, got a value")
+    } catch let error as WalletSyncError {
+      #expect(error.provider == .coinGecko)
+      if case .network(let underlying) = error.kind {
+        #expect(!underlying.contains("noProviderMapping"))
+      }
+    } catch {
+      Issue.record("Expected WalletSyncError, got \(error)")
+    }
+  }
 }
