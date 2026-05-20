@@ -27,6 +27,7 @@ struct SidebarView: View {
   @State private var showCreateAccountSheet = false
   @State private var accountToEdit: Account?
   @AppStorage("showHiddenAccounts") private var showHidden = false
+  @AppStorage("showSpamTransactions") private var showSpam = false
 
   #if os(iOS)
     @State private var editMode: EditMode = .inactive
@@ -55,6 +56,7 @@ struct SidebarView: View {
     .listStyle(.sidebar)
     .navigationTitle("")
     .focusedSceneValue(\.showHiddenAccounts, $showHidden)
+    .focusedSceneValue(\.showSpamTransactions, $showSpam)
     .focusedSceneValue(\.sidebarSelection, $selection)
     .focusedSceneValue(\.selectedAccount, selectedAccountBinding)
     .onChange(of: showHidden) { _, newValue in
@@ -253,9 +255,6 @@ struct SidebarView: View {
     }
   }
 
-  private func addAccountAction() { showCreateAccountSheet = true }
-  private func addEarmarkAction() { showCreateEarmarkSheet = true }
-
   private func reorderCurrentAccounts(from source: IndexSet, to destination: Int) async {
     var accounts = accountStore.currentAccounts
     accounts.move(fromOffsets: source, toOffset: destination)
@@ -289,6 +288,9 @@ struct SidebarView: View {
 }
 
 extension SidebarView {
+  private func addAccountAction() { showCreateAccountSheet = true }
+  private func addEarmarkAction() { showCreateEarmarkSheet = true }
+
   private var recentlyAddedLabel: some View {
     HStack {
       Label("Recently Added", systemImage: "tray.full")
