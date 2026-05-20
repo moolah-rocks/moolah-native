@@ -13,6 +13,7 @@ import OSLog
 struct ExchangeSyncEngine: Sendable {
   private let resolver: ExchangeInstrumentResolver
   private let discovery: CryptoTokenDiscoveryService
+  private let importOriginFactory: @Sendable (UUID) -> ImportOrigin
   /// Shared static `Logger` — `Logger` is `Sendable`, so a static let is
   /// safe across actor boundaries without per-instance allocation.
   private static let logger = Logger(
@@ -35,9 +36,25 @@ struct ExchangeSyncEngine: Sendable {
       decimals: 8)
   ]
 
-  init(resolver: ExchangeInstrumentResolver, discovery: CryptoTokenDiscoveryService) {
+  /// - Parameters:
+  ///   - resolver: Maps imported asset symbols to canonical `Instrument`s.
+  ///   - discovery: Actor-coalesced token registry resolver.
+  ///   - importOriginFactory: Builds the `.single` `ImportOrigin` attached
+  ///     to every built `Transaction` for one account-sync. Called once
+  ///     per `build(account:imported:metadata:)` invocation, so every
+  ///     candidate in the same pass shares one `importSessionId` and a
+  ///     single `importedAt`. Required (no default): callers must decide
+  ///     what audit context the rows carry — production uses
+  ///     `parserIdentifier == "coinstash"`, tests pin a deterministic
+  ///     clock + session id.
+  init(
+    resolver: ExchangeInstrumentResolver,
+    discovery: CryptoTokenDiscoveryService,
+    importOriginFactory: @Sendable @escaping (UUID) -> ImportOrigin
+  ) {
     self.resolver = resolver
     self.discovery = discovery
+    self.importOriginFactory = importOriginFactory
   }
 
   // Coinstash category -> Moolah leg type. DEPOSIT/AWARD are inbound
@@ -71,11 +88,20 @@ struct ExchangeSyncEngine: Sendable {
     // their `externalId` keys a singleton group (one single-leg transaction
     // each).
     let groups = Dictionary(grouping: imported) { $0.orderId ?? $0.externalId }
+    // One origin per account-sync: every candidate this pass produces
+    // shares the same `importSessionId`, so `RecentlyAddedViewModel`
+    // groups them as one session. Built once, before the per-group
+    // loop, mirroring `WalletSyncEngine.run(account:)`.
+    let importOrigin = importOriginFactory(account.id)
     var candidates: [BuiltTransaction] = []
     for (groupKey, rows) in groups {
       try Task.checkCancellation()
       if let candidate = try await buildCandidate(
-        groupKey: groupKey, rows: rows, account: account, metadata: metadata)
+        groupKey: groupKey,
+        rows: rows,
+        account: account,
+        metadata: metadata,
+        importOrigin: importOrigin)
       {
         candidates.append(candidate)
       }
@@ -92,11 +118,14 @@ struct ExchangeSyncEngine: Sendable {
   /// `externalId` group. Returns `nil` (dropping the WHOLE group) on the
   /// first row whose instrument is unresolvable — a partial, unbalanced
   /// trade is worse than no trade — and logs the drop for diagnosis.
+  /// `importOrigin` is the per-account-pass origin built by `build`;
+  /// every candidate from the same pass shares it.
   private func buildCandidate(
     groupKey: String,
     rows: [ExchangeImportedTransaction],
     account: Account,
-    metadata: any ExchangeAssetMetadataResolving
+    metadata: any ExchangeAssetMetadataResolving,
+    importOrigin: ImportOrigin
   ) async throws -> BuiltTransaction? {
     var legs: [TransactionLeg] = []
     for row in rows {
@@ -131,7 +160,8 @@ struct ExchangeSyncEngine: Sendable {
     guard let date = rows.map(\.occurredAt).min() else { return nil }
     return BuiltTransaction(
       originAccountId: account.id,
-      transaction: Transaction(date: date, legs: legs))
+      transaction: Transaction(
+        date: date, legs: legs, importOrigin: .single(importOrigin)))
   }
 
   /// Resolution pipeline:

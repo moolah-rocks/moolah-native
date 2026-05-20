@@ -121,6 +121,47 @@ struct ExchangeSyncEngineTests {
     #expect(tradeLeg.type == .trade)
   }
 
+  @Test("Built transactions carry the factory-supplied .single import origin")
+  func builtTransactionsCarryImportOrigin() async throws {
+    let account = Account(
+      name: "Coinstash", type: .exchange,
+      instrument: .AUD, exchangeProvider: .coinstash)
+    let imported = [
+      ExchangeImportedTransaction(
+        externalId: "t1", occurredAt: Date(timeIntervalSince1970: 100),
+        category: "DEPOSIT", direction: .credit, assetSymbol: nil,
+        amount: 500, isFiat: true, orderId: nil),
+      ExchangeImportedTransaction(
+        externalId: "t2", occurredAt: Date(timeIntervalSince1970: 200),
+        category: "WITHDRAW", direction: .debit, assetSymbol: nil,
+        amount: 100, isFiat: true, orderId: nil),
+    ]
+    let pinnedNow = Date(timeIntervalSince1970: 1_700_000_000)
+    let pinnedSessionId = UUID()
+    let engine = makeExchangeSyncEngine(
+      importOriginFactory: { accountId in
+        ImportOrigin(
+          rawDescription: "exchange:\(accountId.uuidString)",
+          rawAmount: 0,
+          importedAt: pinnedNow,
+          importSessionId: pinnedSessionId,
+          parserIdentifier: "coinstash")
+      })
+    let result = try await engine.build(
+      account: account, imported: imported, metadata: Self.emptyMetadata)
+    #expect(result.candidates.count == 2)
+    // Both candidates carry a `.single` ImportOrigin populated by the
+    // factory — gated on the `importedAt` clock and the per-pass session
+    // id so `RecentlyAddedViewModel.filter` (which short-circuits on a
+    // nil `singleOrigin`) surfaces them.
+    for candidate in result.candidates {
+      let origin = try #require(candidate.transaction.importOrigin?.singleOrigin)
+      #expect(origin.importedAt == pinnedNow)
+      #expect(origin.importSessionId == pinnedSessionId)
+      #expect(origin.parserIdentifier == "coinstash")
+    }
+  }
+
   @Test
   func dropsEntireGroupWhenAnyLegUnresolvable() async throws {
     let account = Account(

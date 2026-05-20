@@ -113,7 +113,15 @@ struct SyncedAccountStoreTransferDetectionTests {
           resolver: ExchangeInstrumentResolver(
             registry: registry, fiatInstrument: .AUD,
             existingLegInstrumentIds: { [] }),
-          discovery: discovery),
+          discovery: discovery,
+          importOriginFactory: { accountId in
+            ImportOrigin(
+              rawDescription: "exchange:\(accountId.uuidString)",
+              rawAmount: 0,
+              importedAt: Self.pinnedNow,
+              importSessionId: UUID(),
+              parserIdentifier: "coinstash")
+          }),
         metadataResolverFactory: { _ in StubMetadataResolver([:]) }))
     return (accountA, accountB)
   }

@@ -23,8 +23,8 @@ import Testing
 /// - A second sync pass whose exchange client returns nothing (apply
 ///   persists nothing → empty survivor set) creates NO suggestion even
 ///   though a separate pre-existing opposing pair sits inside the
-///   window. The deleted date-window behaviour would have re-suggested
-///   it.
+///   window. Detection only ever evaluates genuinely-new survivors;
+///   pre-existing pairs are never re-scanned.
 ///
 /// Mirrors `SyncedAccountStoreTransferDetectionTests`' exchange harness;
 /// the coordinator is constructed with the current
@@ -110,7 +110,15 @@ struct SyncedAccountTransferTriggerTests {
           resolver: ExchangeInstrumentResolver(
             registry: registry, fiatInstrument: .AUD,
             existingLegInstrumentIds: { [] }),
-          discovery: discovery),
+          discovery: discovery,
+          importOriginFactory: { accountId in
+            ImportOrigin(
+              rawDescription: "exchange:\(accountId.uuidString)",
+              rawAmount: 0,
+              importedAt: Self.pinnedNow,
+              importSessionId: UUID(),
+              parserIdentifier: "coinstash")
+          }),
         metadataResolverFactory: { _ in StubMetadataResolver([:]) }))
     return account
   }
@@ -185,14 +193,73 @@ struct SyncedAccountTransferTriggerTests {
     #expect(suggestion.suggestedAt == Self.pinnedNow)
   }
 
+  @Test(
+    "Historical-dated genuinely-new survivor still pairs with a same-date pre-existing leg"
+  )
+  func historicalSurvivorPairsWithSameDateExistingLeg() async throws {
+    let fixture = try makeFixture()
+
+    // Both legs are dated 30 days before `pinnedNow` — well outside the
+    // 3-day window from "now", but exactly the same day as each other
+    // (per-pair gap = 0d, inside the detector's ±3-day tolerance). This
+    // is what a bulk historical Coinstash import looks like: the trade
+    // dates are old, but they still pair with bank-account transfers on
+    // the same dates. `windowLowerBound` is anchored on the earliest
+    // survivor's date, so historical imports pair correctly with
+    // same-date counterparts regardless of how far back the survivors
+    // are dated.
+    let historicalDate = Self.pinnedNow.addingTimeInterval(-30 * 86_400)
+    let manualAccountId = UUID()
+    let existingOutgoing = Transaction(
+      id: UUID(),
+      date: historicalDate,
+      legs: [
+        TransactionLeg(
+          accountId: manualAccountId,
+          instrument: .AUD,
+          quantity: -250,
+          type: .expense)
+      ])
+    TestBackend.seed(transactions: [existingOutgoing], in: fixture.database)
+
+    let deposit = ExchangeImportedTransaction(
+      externalId: "synced-historical-deposit",
+      occurredAt: historicalDate,
+      category: "DEPOSIT",
+      direction: .credit,
+      assetSymbol: "AUD",
+      amount: 250,
+      isFiat: true,
+      orderId: nil)
+    let syncedAccount = try seedSyncedExchangeAccount(
+      in: fixture, token: "TOK-HIST", rows: [deposit])
+    try await seedFreshSyncState(for: syncedAccount, in: fixture)
+    await fixture.store.loadInitialState()
+
+    await fixture.store.syncAccounts([syncedAccount])
+
+    let txns = try await fixture.backend.transactions.fetchAll(
+      filter: TransactionFilter())
+    #expect(txns.count == 2)
+    let imported = try #require(
+      txns.first {
+        $0.legs.contains { $0.externalId == "synced-historical-deposit" }
+      })
+
+    let suggestions = try await fixture.backend.transferSuggestions.fetchAll()
+    #expect(suggestions.count == 1)
+    let suggestion = try #require(suggestions.first)
+    #expect(suggestion.transactionIds == [imported.id, existingOutgoing.id])
+  }
+
   @Test("A sync that persists nothing makes no suggestion for a pre-existing window pair")
   func emptySurvivorSetDoesNotReSuggestPreExistingWindowPair() async throws {
     let fixture = try makeFixture()
 
     // A complete opposing pair already exists, both legs on non-synced
-    // manual accounts, both dated inside the 3-day window. The deleted
-    // date-window scan would have re-evaluated these and produced a
-    // suggestion; the survivor-driven trigger must not.
+    // manual accounts, both dated inside the 3-day window. Pre-existing
+    // rows are outside the genuinely-new survivor set, so detection
+    // never sees them and produces no suggestion.
     let manualA = UUID()
     let manualB = UUID()
     let existingOut = cashTx(account: manualA, amount: -250, type: .expense)
