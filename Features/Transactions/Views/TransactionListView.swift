@@ -126,6 +126,14 @@ struct TransactionListView: View {
     self._activeFilter = State(initialValue: filter)
   }
 
+  // Widened from `private` to module-internal so the file-scope extension in
+  // `TransactionListView+List.swift` can sync these into `transactionStore`
+  // from `.onAppear` / `.onChange` modifiers and read them in the iOS toolbar.
+  // SwiftLint's `strict_fileprivate` rule disallows `fileprivate`, making
+  // `internal` the smallest legal cross-file scope.
+  @AppStorage("showSpamTransactions") var showSpamTransactions = false
+  @Environment(\.spamInstruments) var spamInstruments
+
   @State private var showError = false
   @State private var errorMessage = ""
   @State var searchText = ""
@@ -134,8 +142,26 @@ struct TransactionListView: View {
   @State var transactionPendingUnmerge: Transaction.ID?
   @State var createRuleFromTransaction: Transaction?
 
-  var body: some View {
+  /// Wraps `transactionsList` with the spam-filter sync modifiers so the
+  /// `body` modifier chain stays within the Swift type-checker's expression
+  /// complexity budget. Keeping these in a separate sub-expression lets the
+  /// compiler resolve the view type in two passes rather than one giant chain.
+  private var spamSyncedList: some View {
     transactionsList
+      .onAppear {
+        transactionStore.showSpam = showSpamTransactions
+        transactionStore.setSpamInstruments(spamInstruments)
+      }
+      .onChange(of: showSpamTransactions) { _, newValue in
+        transactionStore.showSpam = newValue
+      }
+      .onChange(of: spamInstruments) { _, newValue in
+        transactionStore.setSpamInstruments(newValue)
+      }
+  }
+
+  var body: some View {
+    spamSyncedList
       .modifier(
         OptionalTransactionInspector(
           enabled: handlesOwnInspector,

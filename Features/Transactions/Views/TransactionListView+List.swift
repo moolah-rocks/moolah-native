@@ -150,6 +150,20 @@ extension TransactionListView {
     ToolbarItem(placement: .primaryAction) {
       addToolbarButton
     }
+
+    #if os(iOS)
+      ToolbarItem(placement: .primaryAction) {
+        Button {
+          showSpamTransactions.toggle()
+        } label: {
+          Image(systemName: showSpamTransactions ? "eye" : "eye.slash")
+        }
+        .accessibilityLabel(
+          showSpamTransactions ? "Hide Spam Transactions" : "Show Spam Transactions"
+        )
+        .help(showSpamTransactions ? "Hide Spam Transactions" : "Show Spam Transactions")
+      }
+    #endif
   }
 
   // MARK: - List Content & Toolbar
