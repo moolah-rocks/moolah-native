@@ -164,7 +164,6 @@ extension TransactionListView {
         .accessibilityLabel("Spam Transactions")
         .accessibilityValue(showSpamTransactions ? "shown" : "hidden")
         .accessibilityIdentifier(UITestIdentifiers.TransactionList.spamToggleButton)
-        .help(showSpamTransactions ? "Hide Spam Transactions" : "Show Spam Transactions")
       }
     #endif
   }

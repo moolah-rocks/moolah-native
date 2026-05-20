@@ -11,6 +11,19 @@ import Foundation
 // See `plans/2026-05-20-hide-spam-transactions-design.md`.
 extension TransactionStore {
 
+  /// Primes both spam-filter inputs atomically on first mount. The
+  /// instrument set is written without publishing (via the internal
+  /// `setSpamInstrumentsValue(_:)` helper), then `showSpam`'s `didSet`
+  /// fires `publishFilteredTransactions()` exactly once with both
+  /// inputs in their final state. Use this from `.onAppear` rather
+  /// than two separate assignments — otherwise the intermediate state
+  /// transiently publishes with the new `showSpam` but the stale
+  /// `spamInstruments`.
+  func primeSpamFilter(instruments: Set<Instrument>, showSpam: Bool) {
+    setSpamInstrumentsValue(instruments)
+    self.showSpam = showSpam
+  }
+
   /// Updates `spamInstruments` and re-publishes the filtered
   /// `transactions` if the set actually changed. No-ops if the new
   /// value equals the current one (avoids spurious view re-renders).

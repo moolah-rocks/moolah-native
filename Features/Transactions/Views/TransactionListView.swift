@@ -153,12 +153,8 @@ struct TransactionListView: View {
   private var spamFilteredList: some View {
     transactionsList
       .onAppear {
-        // Apply both filter inputs in one publish: setSpamInstrumentsValue
-        // writes the backing set without re-publishing, then assigning
-        // showSpam fires didSet → publishFilteredTransactions() once with
-        // both inputs in their final state.
-        transactionStore.setSpamInstrumentsValue(spamInstruments)
-        transactionStore.showSpam = showSpamTransactions
+        transactionStore.primeSpamFilter(
+          instruments: spamInstruments, showSpam: showSpamTransactions)
       }
       .onChange(of: showSpamTransactions) { _, newValue in
         transactionStore.showSpam = newValue
