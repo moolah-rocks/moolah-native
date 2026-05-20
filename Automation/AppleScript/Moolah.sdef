@@ -48,7 +48,7 @@
       <element type="account" access="r">
         <cocoa key="scriptableAccounts"/>
       </element>
-      <element type="transaction" access="r">
+      <element type="txn" access="r">
         <cocoa key="scriptableTransactions"/>
       </element>
       <element type="earmark" access="r">
@@ -85,7 +85,7 @@
       </property>
     </class>
 
-    <class name="transaction" code="Txn " description="A financial transaction." plural="transactions">
+    <class name="txn" code="Txn " description="A financial transaction." plural="txns">
       <cocoa class="Moolah.ScriptableTransaction"/>
       <property name="id" code="ID  " type="text" access="r" description="The unique identifier of the transaction.">
         <cocoa key="uniqueID"/>
@@ -172,7 +172,7 @@
       <result type="account" description="The created account."/>
     </command>
 
-    <command name="create transaction" code="Moolcrtx" description="Create a new transaction in a profile.">
+    <command name="create txn" code="Moolcrtx" description="Create a new txn in a profile.">
       <cocoa class="Moolah.CreateTransactionCommand"/>
       <direct-parameter type="specifier" description="The profile to create the transaction in."/>
       <parameter name="with payee" code="Cpay" type="text" description="The payee for the transaction.">
@@ -193,7 +193,7 @@
       <parameter name="notes" code="Cnts" type="text" optional="yes" description="Notes for the transaction.">
         <cocoa key="notes"/>
       </parameter>
-      <result type="transaction" description="The created transaction."/>
+      <result type="txn" description="The created txn."/>
     </command>
 
     <command name="create earmark" code="Moolcrem" description="Create a new earmark in a profile.">
@@ -233,7 +233,7 @@
     <command name="pay" code="Moolpays" description="Pay a scheduled transaction.">
       <cocoa class="Moolah.PayScheduledCommand"/>
       <direct-parameter type="specifier" description="The scheduled transaction to pay."/>
-      <result type="transaction" description="The paid transaction."/>
+      <result type="txn" description="The paid txn."/>
     </command>
 
     <command name="refresh" code="Moolrefr" description="Refresh all data for a profile.">
