@@ -128,6 +128,8 @@ Tests and previews use `CloudKitBackend` backed by an in-memory `ModelContainer`
 
 `@unchecked` waives only Swift's structural check that a `final class` automatically satisfies `Sendable`; it does not introduce shared mutable state. The justification must be repeated as a doc-comment on the class itself, referencing this carve-out by name. New GRDB repositories follow the same pattern; do **not** invent new carve-outs without updating this section.
 
+**Carve-out 4 — `GateRegistry` (`private` to `NetworkingServices.swift`).** `Shared/Networking/NetworkingServices.swift` defines a `private final class GateRegistry: @unchecked Sendable` whose only mutable state is `[String: RateLimitGate]`, fully guarded by an `NSLock`. The async accessor (`gate(forHost:)`) is internal and used only by tests; the production hot path uses the synchronous accessor. The lock is the synchronisation primitive that makes the type genuinely thread-safe; `@unchecked` waives only Swift's structural check that `final class` automatically conforms to `Sendable`. When #938's §4 rewrite lands, this carve-out will be incorporated into the §4 shape description.
+
 **Do not use `@unchecked Sendable` in any other production code.** If you need mutable shared state, use an `actor`.
 
 ---
