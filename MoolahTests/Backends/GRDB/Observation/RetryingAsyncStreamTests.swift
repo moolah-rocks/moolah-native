@@ -29,6 +29,16 @@ struct RetryingAsyncStreamTests {
     .milliseconds(1), .milliseconds(2), .milliseconds(4),
   ]
 
+  // Upper bound on how long any single test will wait for its
+  // retry-loop work to complete. Locally each test finishes in a few
+  // ms, but CI runs the suite with ~3000 other tests competing for the
+  // cooperative thread pool; a 2 s bound has been observed to trip on
+  // contended runners with no actual bug present (the producer task
+  // simply did not get scheduled fast enough to push 5 emissions
+  // through). 30 s is 100× the worst plausible scheduler stall while
+  // still failing fast on a genuine hang.
+  private static let progressTimeout: Duration = .seconds(30)
+
   @Test("transient error triggers a restart and then emits successfully")
   func transientErrorRestarts() async throws {
     // Synthetic factory: first attempt fails immediately with
@@ -67,14 +77,15 @@ struct RetryingAsyncStreamTests {
         backoffs: Self.testBackoffs))
 
     // Read up to one value with a generous timeout; restart + 1 ms
-    // backoff should complete in well under a second.
+    // backoff should complete in well under a second. See
+    // `progressTimeout` for why the bound is generous.
     let result = try await withThrowingTaskGroup(of: Int?.self) { group in
       group.addTask {
         var iterator = stream.makeAsyncIterator()
         return await iterator.next()
       }
       group.addTask {
-        try await Task.sleep(for: .seconds(2))
+        try await Task.sleep(for: Self.progressTimeout)
         return nil  // timeout sentinel
       }
       let first = try await group.next() ?? nil
@@ -109,7 +120,8 @@ struct RetryingAsyncStreamTests {
         maxFailures: maxFailures,
         backoffs: Self.testBackoffs))
 
-    let done = await Self.drainUntilFinishedOrTimeout(stream, timeout: .seconds(2))
+    let done = await Self.drainUntilFinishedOrTimeout(
+      stream, timeout: Self.progressTimeout)
     #expect(done, "stream should have finished within timeout")
 
     let attemptsMade = attemptCounter.withLock { $0 }
@@ -171,7 +183,8 @@ struct RetryingAsyncStreamTests {
 
     // Collect five emissions. If the counter resets correctly we'll
     // get them; if it doesn't we'd hit budget exhaustion at the third
-    // failure (after three attempts).
+    // failure (after three attempts). See `progressTimeout` for why
+    // the bound is generous.
     let collected = try await withThrowingTaskGroup(of: [Int]?.self) { group in
       group.addTask {
         var values: [Int] = []
@@ -182,7 +195,7 @@ struct RetryingAsyncStreamTests {
         return values
       }
       group.addTask {
-        try await Task.sleep(for: .seconds(2))
+        try await Task.sleep(for: Self.progressTimeout)
         return nil
       }
       let first = try await group.next() ?? nil
