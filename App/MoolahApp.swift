@@ -177,7 +177,7 @@ struct MoolahApp: App {
         SidebarCommands()
         ToolbarCommands()
         InspectorCommands()
-        ShowHiddenCommands()
+        ViewMenuToggleCommands()
         MoolahDomainCommands()
       }
 
@@ -230,7 +230,7 @@ struct MoolahApp: App {
       .commands {
         NewItemCommands()
         RefreshCommands()
-        ShowHiddenCommands()
+        ViewMenuToggleCommands()
       }
     #endif
   }

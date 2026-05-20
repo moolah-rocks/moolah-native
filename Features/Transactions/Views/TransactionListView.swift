@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct TransactionListView: View {
+  // MARK: - Properties
+
   /// Grouping for the rendered list. Default `.flat` keeps existing
   /// callers unchanged. `.scheduledStatus` bundles a `pendingPayId`
   /// binding that the row's Pay action writes into; the binding is
@@ -126,6 +128,14 @@ struct TransactionListView: View {
     self._activeFilter = State(initialValue: filter)
   }
 
+  // Widened from `private` to module-internal so the file-scope extension in
+  // `TransactionListView+List.swift` can sync these into `transactionStore`
+  // from `.onAppear` / `.onChange` modifiers and read them in the iOS toolbar.
+  // SwiftLint's `strict_fileprivate` rule disallows `fileprivate`, making
+  // `internal` the smallest legal cross-file scope.
+  @AppStorage("showSpamTransactions") var showSpamTransactions = false
+  @Environment(\.spamInstruments) var spamInstruments
+
   @State private var showError = false
   @State private var errorMessage = ""
   @State var searchText = ""
@@ -134,8 +144,28 @@ struct TransactionListView: View {
   @State var transactionPendingUnmerge: Transaction.ID?
   @State var createRuleFromTransaction: Transaction?
 
-  var body: some View {
+  // MARK: - Body
+
+  /// Wraps `transactionsList` with the spam-filter priming modifiers so the
+  /// `body` modifier chain stays within the Swift type-checker's expression
+  /// complexity budget. Keeping these in a separate sub-expression lets the
+  /// compiler resolve the view type in two passes rather than one giant chain.
+  private var spamFilteredList: some View {
     transactionsList
+      .onAppear {
+        transactionStore.primeSpamFilter(
+          instruments: spamInstruments, showSpam: showSpamTransactions)
+      }
+      .onChange(of: showSpamTransactions) { _, newValue in
+        transactionStore.showSpam = newValue
+      }
+      .onChange(of: spamInstruments) { _, newValue in
+        transactionStore.setSpamInstruments(newValue)
+      }
+  }
+
+  var body: some View {
+    spamFilteredList
       .modifier(
         OptionalTransactionInspector(
           enabled: handlesOwnInspector,
@@ -265,6 +295,8 @@ struct TransactionListView: View {
           forcedAccountId: filter.accountId,
           ingestDroppedURLs: ingestDroppedURLs))
   }
+
+  // MARK: - Helpers
 
   /// Mirror of `RecentlyAddedView.ingestDroppedURLs` but with a forced
   /// account. Kept here so the view can hand off to `ImportStore`

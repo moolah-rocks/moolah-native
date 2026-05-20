@@ -82,3 +82,23 @@ struct Transaction: Codable, Sendable, Identifiable, Hashable {
   }
 
 }
+
+// MARK: - Spam Classification
+
+extension Transaction {
+  /// Whether every leg of this transaction references an instrument in
+  /// the supplied spam set. Returns `false` for a transaction with zero
+  /// legs — defensive, since an empty `allSatisfy` would otherwise
+  /// return `true` and quietly hide an unexpected shape.
+  ///
+  /// This is deliberately *stricter* than the row-level "⚠️ Spam"
+  /// indicator (`legs.contains { spamInstruments.contains($0.instrument) }`):
+  /// the indicator informs the user that *any* leg touched spam, while
+  /// this predicate gates the hide rule that *removes* the transaction
+  /// from the list. Mixed-leg transactions affected a real balance and
+  /// must remain visible. See
+  /// `plans/2026-05-20-hide-spam-transactions-design.md` §"Definition".
+  func isAllSpam(in spamInstruments: Set<Instrument>) -> Bool {
+    !legs.isEmpty && legs.allSatisfy { spamInstruments.contains($0.instrument) }
+  }
+}

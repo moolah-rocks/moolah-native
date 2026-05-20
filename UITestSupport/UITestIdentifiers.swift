@@ -64,6 +64,11 @@ public enum UITestIdentifiers {
     public static func transaction(_ id: UUID) -> String {
       "transactionlist.transaction.\(id.uuidString.lowercased())"
     }
+
+    /// iOS-only toolbar button that toggles spam-transaction visibility.
+    /// Pinned so a UI test can drive the spam toggle without depending on
+    /// the rendered label text (which flips between states).
+    public static let spamToggleButton = "transactionlist.toolbar.spamToggle"
   }
 
   // MARK: - RecentlyAdded

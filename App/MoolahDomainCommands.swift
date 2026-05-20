@@ -76,6 +76,38 @@ struct ShowHiddenCommands: Commands {
   }
 }
 
+/// View menu verb-pair for showing / hiding spam transactions.
+/// Mirrors `ShowHiddenCommands` (per UI_GUIDE §14 "Toggle State") —
+/// a Button whose label flips between "Show Spam Transactions" and
+/// "Hide Spam Transactions" rather than a `Toggle` with a checkmark.
+/// Stays visible when no window is focused; disabled per §14
+/// "Disable, don't hide".
+struct ShowSpamTransactionsCommands: Commands {
+  @FocusedValue(\.showSpamTransactions) private var showSpam
+
+  var body: some Commands {
+    CommandGroup(after: .sidebar) {
+      Button(
+        showSpam?.wrappedValue == true ? "Hide Spam Transactions" : "Show Spam Transactions"
+      ) {
+        showSpam?.wrappedValue.toggle()
+      }
+      .disabled(showSpam == nil)
+    }
+  }
+}
+
+/// Wrapper grouping the View-menu verb-pair toggles into a single
+/// Commands argument so the outer `.commands` block stays within
+/// `CommandsBuilder`'s 10-argument limit (mirrors the
+/// `MoolahDomainCommands` grouping rationale at the top of this file).
+struct ViewMenuToggleCommands: Commands {
+  var body: some Commands {
+    ShowHiddenCommands()
+    ShowSpamTransactionsCommands()
+  }
+}
+
 /// Moolah-specific top-level domain menus grouped into one Commands struct so
 /// the outer `.commands` block stays within `CommandsBuilder`'s 10-argument limit.
 /// CommandMenus are inlined here (rather than references to per-feature structs)
