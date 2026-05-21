@@ -13,11 +13,11 @@ enum ChartSeries: String, CaseIterable, Identifiable {
 
   var color: Color {
     switch self {
-    case .availableFunds: .green
-    case .currentFunds: .orange
-    case .investedAmount: .purple
-    case .investmentValue: .indigo
-    case .netWorth: .blue
+    case .availableFunds: .chartGreen
+    case .currentFunds: .chartOrange
+    case .investedAmount: .chartPurple
+    case .investmentValue: .chartIndigo
+    case .netWorth: .chartBlue
     case .bestFit: .gray
     }
   }

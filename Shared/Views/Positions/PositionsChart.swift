@@ -142,7 +142,7 @@ struct PositionsChart: View {
           Double(truncating: (baseline + row.gainSegment) as NSDecimalNumber)),
         series: .value("Series", "Gain")
       )
-      .foregroundStyle(.green.opacity(Self.gainLossOpacity))
+      .foregroundStyle(Color.chartGreen.opacity(Self.gainLossOpacity))
 
       AreaMark(
         x: .value("Date", row.date),
@@ -153,7 +153,7 @@ struct PositionsChart: View {
           "Baseline", Double(truncating: baseline as NSDecimalNumber)),
         series: .value("Series", "Loss")
       )
-      .foregroundStyle(.red.opacity(Self.gainLossOpacity))
+      .foregroundStyle(Color.chartRed.opacity(Self.gainLossOpacity))
     }
     LineMark(
       x: .value("Date", row.date),
