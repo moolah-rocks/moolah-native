@@ -1,4 +1,3 @@
-// MoolahTests/Backends/BinanceClientTests.swift
 import Foundation
 import Testing
 
@@ -70,7 +69,11 @@ struct BinanceClientTests {
 
   @Test
   func initAcceptsDateAwareUsdtRateClosure() {
-    let client = BinanceClient(session: .shared) { _ in
+    let services = NetworkingServices(
+      session: URLSession(configuration: .ephemeral))
+    let client = BinanceClient(
+      http: services.client(forHost: "api.binance.com")
+    ) { _ in
       dec("0.998")
     }
     // Validates the closure init compiles
@@ -107,7 +110,9 @@ struct BinanceClientTests {
     let mapping = CryptoProviderMapping(
       instrumentId: "1:0xabc", coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil
     )
-    let client = BinanceClient(session: URLSession.shared)
+    let services = NetworkingServices(
+      session: URLSession(configuration: .ephemeral))
+    let client = BinanceClient(http: services.client(forHost: "api.binance.com"))
     await #expect(throws: CryptoPriceError.self) {
       try await client.dailyPrice(for: mapping, on: Date())
     }

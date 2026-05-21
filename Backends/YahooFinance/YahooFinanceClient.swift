@@ -1,4 +1,3 @@
-// Backends/YahooFinance/YahooFinanceClient.swift
 import Foundation
 
 enum YahooFinanceError: Error {
@@ -11,18 +10,10 @@ struct YahooFinanceClient: StockPriceClient, Sendable {
   private static let baseURL =
     URL(string: "https://query2.finance.yahoo.com/v8/finance/chart/")
     ?? URL(fileURLWithPath: "/")
-  private let session: URLSession
-  private let rateLimitGate: RateLimitGate
-  private let failureCache: FailedRequestCache
+  private let http: RateLimitedHTTPClient
 
-  init(
-    session: URLSession = .shared,
-    rateLimitGate: RateLimitGate = RateLimitGate(),
-    failureCache: FailedRequestCache = FailedRequestCache()
-  ) {
-    self.session = session
-    self.rateLimitGate = rateLimitGate
-    self.failureCache = failureCache
+  init(http: RateLimitedHTTPClient) {
+    self.http = http
   }
 
   func fetchDailyPrices(ticker: String, from: Date, to: Date) async throws -> StockPriceResponse {
@@ -41,15 +32,7 @@ struct YahooFinanceClient: StockPriceClient, Sendable {
       forHTTPHeaderField: "User-Agent"
     )
 
-    let (data, response) = try await session.dataRespectingRateLimit(
-      for: request, gate: rateLimitGate, failureCache: failureCache)
-
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw URLError(.badServerResponse)
-    }
-
+    let (data, _) = try await http.data(for: request)
     return try Self.parseResponse(data)
   }
 

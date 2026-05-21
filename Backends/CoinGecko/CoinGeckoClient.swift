@@ -1,4 +1,3 @@
-// Backends/CoinGecko/CoinGeckoClient.swift
 import Foundation
 
 struct CoinGeckoClient: CryptoPriceClient, Sendable {
@@ -14,21 +13,12 @@ struct CoinGeckoClient: CryptoPriceClient, Sendable {
   /// CryptoCompare / Binance if a request 429s.
   private static let publicBaseURL =
     URL(string: "https://api.coingecko.com/api/v3") ?? URL(fileURLWithPath: "/")
-  private let session: URLSession
+  private let http: RateLimitedHTTPClient
   private let apiKey: String
-  private let rateLimitGate: RateLimitGate
-  private let failureCache: FailedRequestCache
 
-  init(
-    session: URLSession = .shared,
-    apiKey: String,
-    rateLimitGate: RateLimitGate = RateLimitGate(),
-    failureCache: FailedRequestCache = FailedRequestCache()
-  ) {
-    self.session = session
+  init(apiKey: String, http: RateLimitedHTTPClient) {
     self.apiKey = apiKey
-    self.rateLimitGate = rateLimitGate
-    self.failureCache = failureCache
+    self.http = http
   }
 
   /// Resolves the base URL by key presence: non-empty → Pro host,
@@ -65,11 +55,7 @@ struct CoinGeckoClient: CryptoPriceClient, Sendable {
       calendar.dateComponents([.day], from: range.lowerBound, to: range.upperBound).day ?? 1
     )
     let url = Self.marketChartURL(coinId: coinId, days: days, apiKey: apiKey)
-    let (data, response) = try await session.dataRespectingRateLimit(
-      for: URLRequest(url: url), gate: rateLimitGate, failureCache: failureCache)
-    guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-      throw URLError(.badServerResponse)
-    }
+    let (data, _) = try await http.data(for: URLRequest(url: url))
     return try Self.parseMarketChartResponse(data)
   }
 
@@ -84,11 +70,7 @@ struct CoinGeckoClient: CryptoPriceClient, Sendable {
     guard !idToMapping.isEmpty else { return [:] }
 
     let url = Self.simplePriceURL(coinIds: Array(idToMapping.keys), apiKey: apiKey)
-    let (data, response) = try await session.dataRespectingRateLimit(
-      for: URLRequest(url: url), gate: rateLimitGate, failureCache: failureCache)
-    guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-      throw URLError(.badServerResponse)
-    }
+    let (data, _) = try await http.data(for: URLRequest(url: url))
     let coinPrices = try Self.parseSimplePriceResponse(data)
 
     var result: [String: Decimal] = [:]

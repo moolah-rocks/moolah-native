@@ -1,4 +1,3 @@
-// Backends/Binance/BinanceClient.swift
 import Foundation
 
 struct BinanceClient: CryptoPriceClient, Sendable {
@@ -7,21 +6,15 @@ struct BinanceClient: CryptoPriceClient, Sendable {
   private static let baseURLString = "https://api.binance.com"
   private static let baseURL =
     URL(string: baseURLString) ?? URL(fileURLWithPath: "/")
-  private let session: URLSession
+  private let http: RateLimitedHTTPClient
   private let usdtRateLookup: @Sendable (Date) async -> Decimal
-  private let rateLimitGate: RateLimitGate
-  private let failureCache: FailedRequestCache
 
   init(
-    session: URLSession = .shared,
-    usdtRateLookup: @escaping @Sendable (Date) async -> Decimal = { _ in Decimal(1) },
-    rateLimitGate: RateLimitGate = RateLimitGate(),
-    failureCache: FailedRequestCache = FailedRequestCache()
+    http: RateLimitedHTTPClient,
+    usdtRateLookup: @escaping @Sendable (Date) async -> Decimal = { _ in Decimal(1) }
   ) {
-    self.session = session
+    self.http = http
     self.usdtRateLookup = usdtRateLookup
-    self.rateLimitGate = rateLimitGate
-    self.failureCache = failureCache
   }
 
   func dailyPrice(for mapping: CryptoProviderMapping, on date: Date) async throws -> Decimal {
@@ -50,11 +43,7 @@ struct BinanceClient: CryptoPriceClient, Sendable {
         calendar.date(byAdding: .day, value: 999, to: chunkStart) ?? range.upperBound
       let chunkEnd = min(candleWindowEnd, range.upperBound)
       let url = Self.klinesURL(symbol: symbol, from: chunkStart, to: chunkEnd)
-      let (data, response) = try await session.dataRespectingRateLimit(
-        for: URLRequest(url: url), gate: rateLimitGate, failureCache: failureCache)
-      guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-        throw URLError(.badServerResponse)
-      }
+      let (data, _) = try await http.data(for: URLRequest(url: url))
       let chunk = try Self.parseKlinesResponse(data)
       for (key, value) in chunk { allPrices[key] = value }
       guard let next = calendar.date(byAdding: .day, value: 1, to: chunkEnd) else { break }

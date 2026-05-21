@@ -47,7 +47,10 @@ enum PreviewBackend {
     // tables.
     let marketDataDatabase = registry.database
     let exchangeRates = ExchangeRateService(
-      client: FrankfurterClient(),
+      // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
+      //   https://github.com/ajsutton/moolah-native/issues/938
+      client: FrankfurterClient(
+        http: NetworkingServices().client(forHost: "api.frankfurter.app")),
       database: marketDataDatabase
     )
     let conversionService = FiatConversionService(

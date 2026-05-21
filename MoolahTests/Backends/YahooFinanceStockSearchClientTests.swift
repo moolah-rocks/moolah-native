@@ -1,4 +1,3 @@
-// MoolahTests/Backends/YahooFinanceStockSearchClientTests.swift
 import Foundation
 import Testing
 
@@ -32,7 +31,9 @@ final class YahooFinanceStockSearchClientTests {
     StubURLProtocol.handlers["query1.finance.yahoo.com:/v1/finance/search"] = { _ in
       (HTTPURLResponse.ok(etag: ""), data)
     }
-    let client = YahooFinanceStockSearchClient(session: makeSession())
+    let services = NetworkingServices(session: makeSession())
+    let client = YahooFinanceStockSearchClient(
+      http: services.client(forHost: "query1.finance.yahoo.com"))
 
     let hits = try await client.search(query: "apple")
 
@@ -45,7 +46,9 @@ final class YahooFinanceStockSearchClientTests {
     StubURLProtocol.handlers["query1.finance.yahoo.com:/v1/finance/search"] = { _ in
       (HTTPURLResponse.ok(etag: ""), data)
     }
-    let client = YahooFinanceStockSearchClient(session: makeSession())
+    let services = NetworkingServices(session: makeSession())
+    let client = YahooFinanceStockSearchClient(
+      http: services.client(forHost: "query1.finance.yahoo.com"))
 
     let hits = try await client.search(query: "apple")
 
@@ -61,7 +64,9 @@ final class YahooFinanceStockSearchClientTests {
       captured.set(request.url)
       return (HTTPURLResponse.ok(etag: ""), data)
     }
-    let client = YahooFinanceStockSearchClient(session: makeSession())
+    let services = NetworkingServices(session: makeSession())
+    let client = YahooFinanceStockSearchClient(
+      http: services.client(forHost: "query1.finance.yahoo.com"))
 
     _ = try await client.search(query: "apple")
 

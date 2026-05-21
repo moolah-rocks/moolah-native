@@ -1,4 +1,3 @@
-// Backends/YahooFinance/YahooFinanceStockSearchClient.swift
 import Foundation
 
 /// Yahoo Finance `/v1/finance/search` name-search adapter.
@@ -8,23 +7,15 @@ import Foundation
 /// trailing spaces). Falls back to `longname` then `symbol` when
 /// `shortname` is missing or empty after trimming.
 struct YahooFinanceStockSearchClient: StockSearchClient {
-  private let session: URLSession
-  private let rateLimitGate: RateLimitGate
-  private let failureCache: FailedRequestCache
+  private let http: RateLimitedHTTPClient
   private static let baseURL: URL = {
     guard let url = URL(string: "https://query1.finance.yahoo.com/v1/finance/search")
     else { preconditionFailure("malformed Yahoo search URL — fix the literal") }
     return url
   }()
 
-  init(
-    session: URLSession = .shared,
-    rateLimitGate: RateLimitGate = RateLimitGate(),
-    failureCache: FailedRequestCache = FailedRequestCache()
-  ) {
-    self.session = session
-    self.rateLimitGate = rateLimitGate
-    self.failureCache = failureCache
+  init(http: RateLimitedHTTPClient) {
+    self.http = http
   }
 
   func search(query: String) async throws -> [StockSearchHit] {
@@ -39,12 +30,7 @@ struct YahooFinanceStockSearchClient: StockSearchClient {
     var request = URLRequest(url: url)
     request.setValue("Mozilla/5.0", forHTTPHeaderField: "User-Agent")
 
-    let (data, response) = try await session.dataRespectingRateLimit(
-      for: request, gate: rateLimitGate, failureCache: failureCache)
-    guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-      throw URLError(.badServerResponse)
-    }
-
+    let (data, _) = try await http.data(for: request)
     let decoded = try JSONDecoder().decode(Wire.self, from: data)
     return decoded.quotes.compactMap { wire in
       guard let quoteType = QuoteType(rawValue: wire.quoteType) else { return nil }
