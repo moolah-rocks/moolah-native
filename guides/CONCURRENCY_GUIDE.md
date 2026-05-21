@@ -93,14 +93,17 @@ protocol AccountRepository: Sendable {
 
 ### Remote Implementations: `Sendable` Final Classes
 
-Remote repository implementations are `final class` conforming to `Sendable`. They hold only `Sendable` state (an `APIClient` with a `URLSession` and `URL`).
+Remote repository implementations are `final class` or `struct` conforming to `Sendable`. They hold only `Sendable` state — typically a `RateLimitedHTTPClient` (from `NetworkingServices`) or the fields needed for one of the other sanctioned shapes in §4.
 
 ```swift
-final class RemoteAccountRepository: AccountRepository, Sendable {
-    private let client: APIClient
+struct RemoteAccountRepository: AccountRepository, Sendable {
+    private let http: RateLimitedHTTPClient
+
+    init(http: RateLimitedHTTPClient) { self.http = http }
 
     func fetchAll() async throws -> [Account] {
-        let data = try await client.get("/api/accounts")
+        let url = URL(string: "/api/accounts", relativeTo: baseURL) ?? baseURL
+        let (data, _) = try await http.data(for: URLRequest(url: url))
         return try JSONDecoder().decode([Account].self, from: data)
     }
 }
@@ -128,7 +131,7 @@ Tests and previews use `CloudKitBackend` backed by an in-memory `ModelContainer`
 
 `@unchecked` waives only Swift's structural check that a `final class` automatically satisfies `Sendable`; it does not introduce shared mutable state. The justification must be repeated as a doc-comment on the class itself, referencing this carve-out by name. New GRDB repositories follow the same pattern; do **not** invent new carve-outs without updating this section.
 
-**Carve-out 4 — `GateRegistry` (`private` to `NetworkingServices.swift`).** `Shared/Networking/NetworkingServices.swift` defines a `private final class GateRegistry: @unchecked Sendable` whose only mutable state is `[String: RateLimitGate]`, fully guarded by an `NSLock`. The async accessor (`gate(forHost:)`) is internal and used only by tests; the production hot path uses the synchronous accessor. The lock is the synchronisation primitive that makes the type genuinely thread-safe; `@unchecked` waives only Swift's structural check that `final class` automatically conforms to `Sendable`. When #938's §4 rewrite lands, this carve-out will be incorporated into the §4 shape description.
+**Carve-out 4 — `GateRegistry` (`private` to `NetworkingServices.swift`).** `Shared/Networking/NetworkingServices.swift` defines a `private final class GateRegistry: @unchecked Sendable` whose only mutable state is `[String: RateLimitGate]`, fully guarded by an `NSLock`. The async accessor (`gate(forHost:)`) is internal and used only by tests; the production hot path uses the synchronous accessor. The lock is the synchronisation primitive that makes the type genuinely thread-safe; `@unchecked` waives only Swift's structural check that `final class` automatically conforms to `Sendable`.
 
 **Do not use `@unchecked Sendable` in any other production code.** If you need mutable shared state, use an `actor`.
 
@@ -271,33 +274,116 @@ Button("Save") {
 
 ## 4. Network Layer
 
-### Single URLSession Entry Point
+The codebase has **four sanctioned shapes** for HTTP work. Production code must use one of them; the `concurrency-review` agent flags any other shape.
 
-All network requests go through `APIClient`, which wraps `URLSession`. No other code should use `URLSession` directly.
+### Sanctioned shape #1 — standard fetch
+
+For single-host clients that need rate-limiting + per-URL failure-caching:
 
 ```swift
-final class APIClient: Sendable {
-    let baseURL: URL
-    private let session: URLSession
+struct CryptoCompareClient: CryptoPriceClient, Sendable {
+  private let http: RateLimitedHTTPClient
+  init(http: RateLimitedHTTPClient) { self.http = http }
 
-    func data(for request: URLRequest) async throws -> Data {
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw BackendError.networkUnavailable
-        }
-        switch httpResponse.statusCode {
-        case 200..<300: return data
-        case 401: throw BackendError.unauthenticated
-        default: throw BackendError.serverError(httpResponse.statusCode)
-        }
-    }
+  func dailyPrices(…) async throws -> [String: Decimal] {
+    let url = Self.histodayURL(…)
+    let (data, _) = try await http.data(for: URLRequest(url: url))
+    return try Self.parseHistodayResponse(data)
+  }
 }
 ```
 
-**Rules:**
-- Always validate HTTP status codes — `URLSession` does not throw on 4xx/5xx
-- Use `URLSession.shared` for simple requests; create custom sessions only for specific timeout/caching needs
-- Never create `URLSession` instances in views or stores
+- `RateLimitedHTTPClient.data(for:)` validates 2xx and returns `(Data, HTTPURLResponse)`. Non-2xx throws `URLError(.badServerResponse)`. Rate-limit responses (429 / 418 / 503+Retry-After) trip the host's `RateLimitGate` and throw `RateLimitGateError.cooldown`. Transport failures mute the URL via the process-shared `FailedRequestCache`.
+- The gate is **host-shared** through `NetworkingServices`: a 429 from one caller of `min-api.cryptocompare.com` cools down every caller of that host.
+- Tests construct `NetworkingServices(session: stub)` and pass `services.client(forHost: "min-api.cryptocompare.com")`.
+
+Used by: `CryptoCompareClient`, `CoinGeckoClient`, `BinanceClient`, `FrankfurterClient`, `YahooFinanceClient`, `YahooFinanceStockSearchClient`, `SQLiteCoinGeckoCatalog+Refresh`.
+
+### Sanctioned shape #2 — multi-host caller
+
+For components that bridge several hosts (e.g. a token resolver that pings CryptoCompare, Binance, and CoinGecko):
+
+```swift
+struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
+  private let networking: NetworkingServices
+  init(networking: NetworkingServices, …) { self.networking = networking }
+
+  private func fetchCoinListData() async throws -> Data {
+    let http = networking.client(forHost: "min-api.cryptocompare.com")
+    let (data, _) = try await http.data(for: URLRequest(url: CryptoCompareClient.coinListURL()))
+    return data
+  }
+  // fetchExchangeInfoData   → api.binance.com
+  // fetchAssetPlatforms     → api.coingecko.com / pro-api.coingecko.com
+}
+```
+
+Resolve the per-host `RateLimitedHTTPClient` at each fetch site. The lookup is a `Dictionary` read under a lock — irrelevant against the HTTPS round-trip cost.
+
+Used by: `CompositeTokenResolutionClient`.
+
+### Sanctioned shape #3 — retry-driven RPC
+
+For clients with no fallback provider (Blockscout) that must retry transient server errors in place:
+
+```swift
+struct LiveBlockscoutClient: Sendable {
+  private let session: URLSession
+  private let retryPolicy: HTTPRetryPolicy
+
+  private func send(request: URLRequest, stage: String) async throws -> Data {
+    let timed: URLRequest = {
+      var request = request
+      request.timeoutInterval = retryPolicy.requestTimeout
+      return request
+    }()
+    return try await withRetry(
+      policy: retryPolicy,
+      classify: { HTTPRetryClassifier.decision(for: $0, idempotent: true) },
+      operation: { @Sendable in
+        try await self.attempt(request: timed, stage: stage)
+      }
+    )
+  }
+}
+```
+
+- Doesn't use `RateLimitGate` (server-error retry in place doesn't fit the host-cooldown model).
+- Translates to a provider-specific error vocabulary (`WalletSyncError`).
+
+Used by: `LiveBlockscoutClient`.
+
+### Sanctioned shape #4 — token-bucket RPC
+
+For paid-tier APIs with explicit req/s quotas (Alchemy's 25 req/s free tier):
+
+```swift
+struct LiveAlchemyClient: Sendable {
+  private let session: URLSession
+  private let rateLimiter: RateLimiter  // token bucket actor
+
+  func fetchReceipt(…) async throws -> AlchemyTransactionReceipt {
+    try await rateLimiter.acquire()
+    let (data, _) = try await session.data(for: request)
+    …
+  }
+}
+```
+
+- `RateLimiter` is a token-bucket actor sized for the API plan (e.g. 25 req/s); not the same as the reactive `RateLimitGate`.
+- Translates to a provider-specific error vocabulary (`WalletSyncError`).
+
+Used by: `LiveAlchemyClient`.
+
+### Why four shapes, not one
+
+The variation is real:
+- Standard fetch needs host-wide reactive 429 cooldown (shape 1).
+- Multi-host clients need to switch hosts per call (shape 2).
+- Retry-driven clients need bounded retry-with-backoff that the gate model doesn't express (shape 3).
+- Token-bucket clients need proactive req/s throttling that doesn't fit a reactive gate (shape 4).
+
+A single `APIClient` abstraction would either flatten this variation (lose the per-shape behaviour the call sites depend on) or absorb it via strategy enums (rename the toolkit without changing anything). The four shapes are the honest minimum.
 
 ### Request Deduplication
 
@@ -305,20 +391,20 @@ If multiple views request the same data simultaneously (e.g., account balances s
 
 ```swift
 actor InFlightTaskCoalescer<Key: Hashable & Sendable, Value: Sendable> {
-    private var inFlightTasks: [Key: Task<Value, Error>] = [:]
+  private var inFlightTasks: [Key: Task<Value, Error>] = [:]
 
-    func deduplicated(
-        key: Key,
-        operation: @escaping @Sendable () async throws -> Value
-    ) async throws -> Value {
-        if let existingTask = inFlightTasks[key] {
-            return try await existingTask.value
-        }
-        let task = Task { try await operation() }
-        inFlightTasks[key] = task
-        defer { inFlightTasks[key] = nil }
-        return try await task.value
+  func deduplicated(
+    key: Key,
+    operation: @escaping @Sendable () async throws -> Value
+  ) async throws -> Value {
+    if let existingTask = inFlightTasks[key] {
+      return try await existingTask.value
     }
+    let task = Task { try await operation() }
+    inFlightTasks[key] = task
+    defer { inFlightTasks[key] = nil }
+    return try await task.value
+  }
 }
 ```
 
@@ -326,11 +412,9 @@ This is not currently implemented but should be considered if duplicate request 
 
 ### Error Handling
 
-- Map network errors to domain-specific `BackendError` cases
-- Use `BackendError.networkUnavailable` for connectivity failures
-- Use `BackendError.unauthenticated` for 401 responses
-- Log errors with `os.Logger` before propagating
-- Stores catch errors and set user-visible error state; repositories throw
+- Each shape's `Sendable` client maps network errors to a domain-specific error type before propagating (`CryptoPriceError`, `WalletSyncError`, `BackendError`, etc.).
+- Shape 1 throws `URLError(.badServerResponse)` on non-2xx, `RateLimitGateError.cooldown` on rate-limit, `FailedRequestCacheError.cooldown` on a muted URL.
+- Log errors with `os.Logger` before propagating.
 
 ---
 
@@ -517,7 +601,7 @@ Alternatively, use the Task cancellation pattern in the store (see Section 3).
 
 | Anti-Pattern | Why It's Bad | Do This Instead |
 |-------------|--------------|-----------------|
-| `URLSession` calls outside `APIClient` | Scattered network code, inconsistent error handling | Route all requests through `APIClient` |
+| Raw `URLSession.data(for:)` in production code outside the four sanctioned shapes | Scattered network code, inconsistent error handling, no host-shared rate-limit | Route through one of §4's four shapes (`RateLimitedHTTPClient`, `NetworkingServices`, `withRetry` + `HTTPRetryPolicy`, or `RateLimiter`) |
 | Not checking HTTP status codes | `URLSession` doesn't throw on 4xx/5xx | Always validate response codes |
 | Retry loops without backoff | Can overwhelm the server, drain battery | Use exponential backoff with jitter |
 | Creating `URLSession` per request | Resource waste, connection pool fragmentation | Reuse `URLSession.shared` or a single custom session |
