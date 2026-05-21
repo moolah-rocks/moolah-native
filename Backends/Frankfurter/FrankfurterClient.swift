@@ -1,6 +1,4 @@
-// Backends/Frankfurter/FrankfurterClient.swift
 import Foundation
-import OSLog
 
 /// Client for the public Frankfurter exchange-rate API.
 /// Uses the range endpoint `<from>..<to>?base=<code>` which returns rates
@@ -11,19 +9,10 @@ import OSLog
 struct FrankfurterClient: ExchangeRateClient, Sendable {
   private static let baseURL =
     URL(string: "https://api.frankfurter.app/") ?? URL(fileURLWithPath: "/")
-  private static let logger = Logger(subsystem: "com.moolah.app", category: "FrankfurterClient")
-  private let session: URLSession
-  private let rateLimitGate: RateLimitGate
-  private let failureCache: FailedRequestCache
+  private let http: RateLimitedHTTPClient
 
-  init(
-    session: URLSession = .shared,
-    rateLimitGate: RateLimitGate = RateLimitGate(),
-    failureCache: FailedRequestCache = FailedRequestCache()
-  ) {
-    self.session = session
-    self.rateLimitGate = rateLimitGate
-    self.failureCache = failureCache
+  init(http: RateLimitedHTTPClient) {
+    self.http = http
   }
 
   func fetchRates(
@@ -42,20 +31,7 @@ struct FrankfurterClient: ExchangeRateClient, Sendable {
 
     let requestURL = components.url ?? url
     let request = URLRequest(url: requestURL)
-    let (data, response) = try await session.dataRespectingRateLimit(
-      for: request, gate: rateLimitGate, failureCache: failureCache)
-
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
-      let body = String(data: data, encoding: .utf8) ?? "<non-utf8>"
-      Self.logger.error(
-        "Exchange rate request failed: \(statusCode, privacy: .public) for \(requestURL.absoluteString, privacy: .public) — \(body, privacy: .public)"
-      )
-      throw URLError(.badServerResponse)
-    }
-
+    let (data, _) = try await http.data(for: request)
     return try Self.parseResponse(data)
   }
 

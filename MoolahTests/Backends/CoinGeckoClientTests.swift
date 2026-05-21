@@ -1,4 +1,3 @@
-// MoolahTests/Backends/CoinGeckoClientTests.swift
 import Foundation
 import Testing
 
@@ -180,7 +179,10 @@ struct CoinGeckoClientTests {
     let mapping = CryptoProviderMapping(
       instrumentId: "1:0xabc", coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil
     )
-    let client = CoinGeckoClient(session: URLSession.shared, apiKey: "key")
+    let services = NetworkingServices(
+      session: URLSession(configuration: .ephemeral))
+    let client = CoinGeckoClient(
+      apiKey: "key", http: services.client(forHost: "pro-api.coingecko.com"))
     await #expect(throws: CryptoPriceError.self) {
       try await client.dailyPrice(for: mapping, on: Date())
     }

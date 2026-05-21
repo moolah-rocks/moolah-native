@@ -27,13 +27,21 @@ extension ProfileSession {
   /// and assign the trio in one step. Each rate service persists to the
   /// supplied per-profile `database`.
   static func makeMarketDataServices(database: any DatabaseWriter) -> MarketDataServices {
-    let yahooClient = YahooFinanceClient()
+    // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
+    //   https://github.com/ajsutton/moolah-native/issues/938
+    let yahooClient = YahooFinanceClient(
+      http: NetworkingServices().client(forHost: "query2.finance.yahoo.com"))
     let apiKeyStore = KeychainStore(
       service: KeychainServices.apiKeys, account: "coingecko", synchronizable: true
     )
     let coinGeckoApiKey = try? apiKeyStore.restoreString()
     return MarketDataServices(
-      exchangeRate: ExchangeRateService(client: FrankfurterClient(), database: database),
+      exchangeRate: ExchangeRateService(
+        // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
+        //   https://github.com/ajsutton/moolah-native/issues/938
+        client: FrankfurterClient(
+          http: NetworkingServices().client(forHost: "api.frankfurter.app")),
+        database: database),
       stockPrice: StockPriceService(client: yahooClient, database: database),
       cryptoPrice: Self.makeCryptoPriceService(
         coinGeckoApiKey: coinGeckoApiKey, database: database),
@@ -52,26 +60,38 @@ extension ProfileSession {
     coinGeckoApiKey: String?,
     database: any DatabaseWriter
   ) -> CryptoPriceService {
-    let cryptoCompareClient = CryptoCompareClient()
-    let binanceClient = BinanceClient { date in
-      let usdtMapping = CryptoProviderMapping(
-        instrumentId: "1:0xdac17f958d2ee523a2206206994597c13d831ec7",
-        coingeckoId: "tether", cryptocompareSymbol: "USDT", binanceSymbol: nil
-      )
-      do {
-        return try await cryptoCompareClient.dailyPrice(for: usdtMapping, on: date)
-      } catch {
-        return Decimal(1)
-      }
-    }
+    // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
+    //   https://github.com/ajsutton/moolah-native/issues/938
+    let cryptoCompareClient = CryptoCompareClient(
+      http: NetworkingServices().client(forHost: "min-api.cryptocompare.com"))
+    // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
+    //   https://github.com/ajsutton/moolah-native/issues/938
+    let binanceClient = BinanceClient(
+      http: NetworkingServices().client(forHost: "api.binance.com"),
+      usdtRateLookup: { date in
+        let usdtMapping = CryptoProviderMapping(
+          instrumentId: "1:0xdac17f958d2ee523a2206206994597c13d831ec7",
+          coingeckoId: "tether", cryptocompareSymbol: "USDT", binanceSymbol: nil
+        )
+        do {
+          return try await cryptoCompareClient.dailyPrice(for: usdtMapping, on: date)
+        } catch {
+          return Decimal(1)
+        }
+      })
 
     // Empty key → CoinGeckoClient targets the free public host;
     // non-empty key → Pro host with `x_cg_pro_api_key`. Always included
     // so users without a Pro key still get coverage for tokens like
     // USDC that CryptoCompare omits from its contract index.
     let resolverApiKey = coinGeckoApiKey ?? ""
+    // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
+    //   https://github.com/ajsutton/moolah-native/issues/938
+    let cgHost = resolverApiKey.isEmpty ? "api.coingecko.com" : "pro-api.coingecko.com"
     let priceClients: [CryptoPriceClient] = [
-      CoinGeckoClient(apiKey: resolverApiKey),
+      CoinGeckoClient(
+        apiKey: resolverApiKey,
+        http: NetworkingServices().client(forHost: cgHost)),
       cryptoCompareClient,
       binanceClient,
     ]
@@ -173,11 +193,14 @@ extension ProfileSession {
       cryptoPriceService: cryptoPriceService,
       conversionService: cloudBackend.conversionService,
       sharedStore: sharedRegistryStore)
+    // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
+    //   https://github.com/ajsutton/moolah-native/issues/938
     let searchService = InstrumentSearchService(
       registry: cloudBackend.instrumentRegistry,
       catalog: catalog,
       resolutionClient: resolutionClient,
-      stockSearchClient: YahooFinanceStockSearchClient()
+      stockSearchClient: YahooFinanceStockSearchClient(
+        http: NetworkingServices().client(forHost: "query1.finance.yahoo.com"))
     )
     return RegistryWiring(
       registry: cloudBackend.instrumentRegistry,

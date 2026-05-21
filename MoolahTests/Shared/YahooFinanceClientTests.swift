@@ -1,4 +1,3 @@
-// MoolahTests/Shared/YahooFinanceClientTests.swift
 import Foundation
 import Testing
 
@@ -22,7 +21,9 @@ struct YahooFinanceClientTests {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [URLProtocolStub.self]
     let session = URLSession(configuration: config)
-    let client = YahooFinanceClient(session: session)
+    let services = NetworkingServices(session: session)
+    let client = YahooFinanceClient(
+      http: services.client(forHost: "query2.finance.yahoo.com"))
     URLProtocolStub.lastRequest = nil
     URLProtocolStub.requestHandler = handler
     return (client, session)

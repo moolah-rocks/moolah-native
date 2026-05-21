@@ -1,4 +1,3 @@
-// MoolahTests/Backends/CryptoCompareClientTests.swift
 import Foundation
 import Testing
 
@@ -260,7 +259,9 @@ struct CryptoCompareClientTests {
     let mapping = CryptoProviderMapping(
       instrumentId: "1:0xabc", coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil
     )
-    let client = CryptoCompareClient(session: URLSession.shared)
+    let services = NetworkingServices(
+      session: URLSession(configuration: .ephemeral))
+    let client = CryptoCompareClient(http: services.client(forHost: "min-api.cryptocompare.com"))
     await #expect(throws: CryptoPriceError.self) {
       try await client.dailyPrice(for: mapping, on: Date())
     }
