@@ -1,4 +1,3 @@
-// Backends/CoinGecko/SQLiteCoinGeckoCatalog+Refresh.swift
 import Foundation
 import SQLite3
 
@@ -30,9 +29,9 @@ extension SQLiteCoinGeckoCatalog {
         return
       }
       async let coinsRequest = Self.fetchConditional(
-        session: session, url: Self.coinsListURL, ifNoneMatch: meta.coinsEtag)
+        http: http, url: Self.coinsListURL, ifNoneMatch: meta.coinsEtag)
       async let platformsRequest = Self.fetchConditional(
-        session: session, url: Self.assetPlatformsURL, ifNoneMatch: meta.platformsEtag)
+        http: http, url: Self.assetPlatformsURL, ifNoneMatch: meta.platformsEtag)
       let coinsResult = try await coinsRequest
       let platformsResult = try await platformsRequest
 
@@ -109,7 +108,7 @@ extension SQLiteCoinGeckoCatalog {
   }
 
   static func fetchConditional(
-    session: URLSession,
+    http: RateLimitedHTTPClient,
     url: URL,
     ifNoneMatch: String?
   ) async throws -> FetchOutcome {
@@ -118,17 +117,14 @@ extension SQLiteCoinGeckoCatalog {
       request.setValue(ifNoneMatch, forHTTPHeaderField: "If-None-Match")
     }
     request.setValue("gzip", forHTTPHeaderField: "Accept-Encoding")
-    let (data, response) = try await session.data(for: request)
-    guard let http = response as? HTTPURLResponse else {
-      throw CatalogError.network("non-HTTP response from \(url.absoluteString)")
-    }
-    switch http.statusCode {
+    let (data, response) = try await http.data(for: request)
+    switch response.statusCode {
     case 200:
-      return .ok(data, etag: http.value(forHTTPHeaderField: "ETag"))
+      return .ok(data, etag: response.value(forHTTPHeaderField: "ETag"))
     case 304:
       return .notModified
     default:
-      throw CatalogError.network("status \(http.statusCode) for \(url.absoluteString)")
+      throw CatalogError.network("status \(response.statusCode) for \(url.absoluteString)")
     }
   }
 }

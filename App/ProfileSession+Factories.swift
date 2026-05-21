@@ -247,7 +247,14 @@ extension ProfileSession {
     let directory = URL.moolahScopedApplicationSupport
       .appending(path: "InstrumentRegistry", directoryHint: .isDirectory)
     do {
-      let catalog = try SQLiteCoinGeckoCatalog.make(directory: directory)
+      // TODO(#938): receive `networking: NetworkingServices` + the resolved
+      //   CoinGecko host as a parameter once PR-5 lands. For now the inline
+      //   NetworkingServices() instance is private to this factory call, so
+      //   the host string is a placeholder.
+      //   https://github.com/ajsutton/moolah-native/issues/938
+      let catalog = try SQLiteCoinGeckoCatalog.make(
+        directory: directory,
+        http: NetworkingServices().client(forHost: "api.coingecko.com"))
       // `SQLiteCoinGeckoCatalog` is an actor, so `await catalog.refreshIfStale()`
       // hops to the catalog's executor regardless of the enclosing Task's
       // isolation — no `Task.detached` needed (CONCURRENCY_GUIDE §8).

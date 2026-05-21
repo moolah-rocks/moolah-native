@@ -1,4 +1,3 @@
-// Backends/CoinGecko/SQLiteCoinGeckoCatalog.swift
 import Foundation
 import SQLite3
 import os
@@ -14,7 +13,7 @@ actor SQLiteCoinGeckoCatalog: CoinGeckoCatalog {
   static let log = Logger(subsystem: "moolah.instrument-registry", category: "catalog")
 
   private let directory: URL
-  let session: URLSession
+  let http: RateLimitedHTTPClient
   private(set) var database: OpaquePointer?
 
   // MARK: - Cross-extension internals
@@ -29,7 +28,7 @@ actor SQLiteCoinGeckoCatalog: CoinGeckoCatalog {
   // `+SQLite.swift`.
   //
   // Used by +Search.swift only:    nothing in this file
-  // Used by +Refresh.swift only:   `session`, `replaceAll`, `insertCoins`,
+  // Used by +Refresh.swift only:   `http`, `replaceAll`, `insertCoins`,
   //                                `insertPlatforms`, `readMeta`
   // Used by both extensions:       `log` (static), `database` (read-only)
 
@@ -41,23 +40,23 @@ actor SQLiteCoinGeckoCatalog: CoinGeckoCatalog {
   /// in one named place.
   static func make(
     directory: URL,
-    session: URLSession = .shared
+    http: RateLimitedHTTPClient
   ) throws -> SQLiteCoinGeckoCatalog {
     try FileManager.default.createDirectory(
       at: directory, withIntermediateDirectories: true
     )
     let database = try open(dbURL: directory.appendingPathComponent("catalog.sqlite"))
     return SQLiteCoinGeckoCatalog(
-      directory: directory, session: session, database: database)
+      directory: directory, http: http, database: database)
   }
 
   private init(
     directory: URL,
-    session: URLSession,
+    http: RateLimitedHTTPClient,
     database: OpaquePointer
   ) {
     self.directory = directory
-    self.session = session
+    self.http = http
     self.database = database
   }
 

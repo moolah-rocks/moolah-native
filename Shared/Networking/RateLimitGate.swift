@@ -1,12 +1,11 @@
-// Shared/Networking/RateLimitGate.swift
 import Foundation
 
-/// Thrown by `URLSession.dataRespectingRateLimit(for:gate:)` when the gate is
-/// in cooldown or when the just-completed response was a rate-limit. The
-/// `until` payload is the deadline after which the next request will be
-/// allowed through; callers can surface it for diagnostics or schedule a
-/// retry, but the standard pattern is to fall through to the next provider
-/// in a fallback chain.
+/// Thrown by `RateLimitedHTTPClient.data(for:)` when the gate is in cooldown
+/// or when the just-completed response was a rate-limit. The `until` payload
+/// is the deadline after which the next request will be allowed through;
+/// callers can surface it for diagnostics or schedule a retry, but the
+/// standard pattern is to fall through to the next provider in a fallback
+/// chain.
 enum RateLimitGateError: Error, Equatable {
   case cooldown(until: Date)
 }

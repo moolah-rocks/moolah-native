@@ -10,7 +10,7 @@ private let rateLimitedHTTPLogger = Logger(
 ///
 /// `data(for:)` runs pre-flight checks (host gate, per-URL failure cache),
 /// dispatches the request, classifies the response, and either returns the
-/// 2xx body or throws — see method doc. Callers never have to repeat the
+/// 2xx or 304 response or throws — see method doc. Callers never have to repeat the
 /// `(200...299).contains(http.statusCode)` boilerplate.
 ///
 /// See `guides/CONCURRENCY_GUIDE.md` §4 sanctioned shape #1.
@@ -32,24 +32,24 @@ struct RateLimitedHTTPClient: Sendable {
   /// - If the cache has a live entry for the URL, throws `FailedRequestCacheError.cooldown(until:)`.
   ///
   /// **Post-flight:**
-  /// - 2xx → records success on gate + cache, returns `(Data, HTTPURLResponse)`.
+  /// - 2xx or 304 → records success on gate + cache, returns `(Data, HTTPURLResponse)`.
+  ///   304 is treated as a well-behaved server response; callers that send
+  ///   conditional GETs detect "not modified" via `response.statusCode`.
   /// - 429 / 418 → trips the gate (`Retry-After` or exponential backoff),
   ///   records on cache, throws `RateLimitGateError.cooldown`.
   /// - 503 with `Retry-After` → trips the gate, records on cache,
   ///   throws `RateLimitGateError.cooldown`.
-  /// - Any other non-2xx (incl. 503 without `Retry-After`, 4xx, 5xx) →
+  /// - Any other non-2xx/non-304 (incl. 503 without `Retry-After`, 4xx, 5xx) →
   ///   records on cache, throws `URLError(.badServerResponse)`.
   /// - Transport failure (DNS, offline, timeout, hangup; not cancellation)
   ///   → records on cache, rethrows the original error.
   /// - Cancellation (`CancellationError` or `URLError(.cancelled)`) →
   ///   propagates without muting the URL.
   ///
-  /// Behavior matches the retired `URLSession.dataRespectingRateLimit`
-  /// extension, with one change: non-2xx now throws
-  /// `URLError(.badServerResponse)` here instead of being returned as
-  /// `(data, response)` for the caller to check. Every previous caller
-  /// implemented exactly that check, so the consolidated behavior is a
-  /// pure DRY-out.
+  /// Unlike the legacy per-call pattern, non-2xx throws
+  /// `URLError(.badServerResponse)` rather than returning `(data, response)`
+  /// for the caller to check. Every previous call site implemented exactly
+  /// that check, so the consolidated behavior is a pure DRY-out.
   func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
     try await gate.ensureAvailable()
     let cacheKey = request.url?.absoluteString
@@ -85,8 +85,13 @@ struct RateLimitedHTTPClient: Sendable {
 
   /// Classifies the response and records gate/cache side effects.
   /// Throws `RateLimitGateError.cooldown` for rate-limit responses,
-  /// `URLError(.badServerResponse)` for any other non-2xx, and returns
-  /// the `HTTPURLResponse` for 2xx.
+  /// `URLError(.badServerResponse)` for any other non-2xx/non-304, and returns
+  /// the `HTTPURLResponse` for 2xx or 304.
+  ///
+  /// 304 Not Modified is treated as a successful response (the server is
+  /// well-behaved) — it records success on the gate and failure cache and
+  /// returns the response so callers that send conditional GETs can detect the
+  /// "not modified" outcome via `statusCode`.
   private static func classify(
     response: URLResponse,
     request: URLRequest,
@@ -100,7 +105,7 @@ struct RateLimitedHTTPClient: Sendable {
     let retryAfter = http.retryAfterSeconds(now: Date())
     let host = request.url?.host ?? "?"
     switch http.statusCode {
-    case 200...299:
+    case 200...299, 304:
       await gate.recordSuccess()
       if let cacheKey {
         await failureCache.recordSuccess(for: cacheKey)

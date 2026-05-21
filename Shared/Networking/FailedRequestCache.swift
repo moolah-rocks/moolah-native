@@ -1,10 +1,9 @@
-// Shared/Networking/FailedRequestCache.swift
 import Foundation
 
-/// Thrown by `URLSession.dataRespectingRateLimit(for:gate:failureCache:)`
-/// when a recently-failed request is repeated before its cooldown
-/// expires. The `until` payload is the deadline after which the same
-/// request will be allowed through again.
+/// Thrown by `RateLimitedHTTPClient.data(for:)` when a recently-failed
+/// request is repeated before its cooldown expires. The `until` payload
+/// is the deadline after which the same request will be allowed through
+/// again.
 enum FailedRequestCacheError: Error, Equatable {
   case cooldown(until: Date)
 }

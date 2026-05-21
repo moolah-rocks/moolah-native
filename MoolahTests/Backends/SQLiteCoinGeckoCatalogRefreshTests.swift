@@ -1,4 +1,3 @@
-// MoolahTests/Backends/SQLiteCoinGeckoCatalogRefreshTests.swift
 import Foundation
 import Testing
 
@@ -22,10 +21,11 @@ final class SQLiteCoinGeckoCatalogRefreshTests {
     try? FileManager.default.removeItem(at: tempDir)
   }
 
-  private func makeSession() -> URLSession {
+  private func makeClient() -> RateLimitedHTTPClient {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [StubURLProtocol.self]
-    return URLSession(configuration: config)
+    let session = URLSession(configuration: config)
+    return NetworkingServices(session: session).client(forHost: "api.coingecko.com")
   }
 
   private func loadFixture(_ name: String) throws -> Data {
@@ -45,7 +45,7 @@ final class SQLiteCoinGeckoCatalogRefreshTests {
       (HTTPURLResponse.ok(etag: "W/\"p1\""), platformsData)
     }
 
-    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, session: makeSession())
+    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, http: makeClient())
     await catalog.refreshIfStale()
 
     let count = try await catalog.coinCountForTesting()
@@ -68,7 +68,7 @@ final class SQLiteCoinGeckoCatalogRefreshTests {
     StubURLProtocol.handlers["api.coingecko.com:/api/v3/asset_platforms"] = { _ in
       (HTTPURLResponse.ok(etag: "W/\"p1\""), platformsData)
     }
-    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, session: makeSession())
+    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, http: makeClient())
     await catalog.refreshIfStale()
 
     // Fast-forward `last_fetched` so the next call is "stale".
@@ -106,7 +106,7 @@ final class SQLiteCoinGeckoCatalogRefreshTests {
     StubURLProtocol.handlers["api.coingecko.com:/api/v3/asset_platforms"] = { _ in
       (HTTPURLResponse.ok(etag: "W/\"p1\""), platformsData)
     }
-    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, session: makeSession())
+    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, http: makeClient())
     await catalog.refreshIfStale()
     await catalog.refreshIfStale()
 
@@ -123,7 +123,7 @@ final class SQLiteCoinGeckoCatalogRefreshTests {
     StubURLProtocol.handlers["api.coingecko.com:/api/v3/asset_platforms"] = { _ in
       (HTTPURLResponse.ok(etag: "W/\"p1\""), platformsData)
     }
-    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, session: makeSession())
+    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, http: makeClient())
     await catalog.refreshIfStale()
     try await catalog.bumpLastFetchedBackwardForTesting(by: 25 * 3600)
 
@@ -150,7 +150,7 @@ final class SQLiteCoinGeckoCatalogRefreshTests {
     StubURLProtocol.handlers["api.coingecko.com:/api/v3/asset_platforms"] = { _ in
       (HTTPURLResponse.ok(etag: "W/\"p1\""), platforms)
     }
-    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, session: makeSession())
+    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, http: makeClient())
     await catalog.refreshIfStale()
     try await catalog.bumpLastFetchedBackwardForTesting(by: 25 * 3600)
 
