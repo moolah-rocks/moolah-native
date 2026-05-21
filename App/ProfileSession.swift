@@ -126,7 +126,8 @@ final class ProfileSession: Identifiable {
     profile: Profile,
     containerManager: ProfileContainerManager? = nil,
     syncCoordinator: SyncCoordinator? = nil,
-    database: DatabaseQueue? = nil
+    database: DatabaseQueue? = nil,
+    networking: NetworkingServices? = nil
   ) throws {
     self.profile = profile
     self.profileID = profile.id
@@ -134,6 +135,11 @@ final class ProfileSession: Identifiable {
     let resolvedDatabase = try Self.resolveDatabase(
       override: database, profile: profile, containerManager: containerManager)
     self.database = resolvedDatabase
+
+    // Prefer the app-level shared `NetworkingServices` via SyncCoordinator,
+    // fall back to the directly-injected one, then to a fresh instance for
+    // preview / test fixtures that didn't pass shared services through.
+    let resolvedNetworking = syncCoordinator?.sharedNetworking ?? networking ?? NetworkingServices()
 
     // Prefer the app-level shared `MarketDataServices` (pointed at
     // the profile-index DB) when the coordinator was constructed
@@ -144,7 +150,7 @@ final class ProfileSession: Identifiable {
     // pass shared services through `SyncCoordinator.init`.
     let services =
       syncCoordinator?.sharedMarketData
-      ?? Self.makeMarketDataServices(database: resolvedDatabase)
+      ?? Self.makeMarketDataServices(database: resolvedDatabase, networking: resolvedNetworking)
     self.exchangeRateService = services.exchangeRate
     self.stockPriceService = services.stockPrice
     self.cryptoPriceService = services.cryptoPrice
@@ -162,6 +168,7 @@ final class ProfileSession: Identifiable {
       cryptoPriceService: services.cryptoPrice,
       yahooPriceFetcher: services.yahooPriceFetcher,
       coinGeckoApiKey: services.coinGeckoApiKey,
+      networking: resolvedNetworking,
       sharedRegistryStore: syncCoordinator?.sharedRegistryStore
     )
     self.instrumentRegistry = registryWiring.registry

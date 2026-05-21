@@ -26,25 +26,24 @@ extension ProfileSession {
   /// profile session. Standalone helper so `ProfileSession.init` can build
   /// and assign the trio in one step. Each rate service persists to the
   /// supplied per-profile `database`.
-  static func makeMarketDataServices(database: any DatabaseWriter) -> MarketDataServices {
-    // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
-    //   https://github.com/ajsutton/moolah-native/issues/938
+  static func makeMarketDataServices(
+    database: any DatabaseWriter,
+    networking: NetworkingServices
+  ) -> MarketDataServices {
     let yahooClient = YahooFinanceClient(
-      http: NetworkingServices().client(forHost: "query2.finance.yahoo.com"))
+      http: networking.client(forHost: "query2.finance.yahoo.com"))
     let apiKeyStore = KeychainStore(
       service: KeychainServices.apiKeys, account: "coingecko", synchronizable: true
     )
     let coinGeckoApiKey = try? apiKeyStore.restoreString()
     return MarketDataServices(
       exchangeRate: ExchangeRateService(
-        // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
-        //   https://github.com/ajsutton/moolah-native/issues/938
         client: FrankfurterClient(
-          http: NetworkingServices().client(forHost: "api.frankfurter.app")),
+          http: networking.client(forHost: "api.frankfurter.app")),
         database: database),
       stockPrice: StockPriceService(client: yahooClient, database: database),
       cryptoPrice: Self.makeCryptoPriceService(
-        coinGeckoApiKey: coinGeckoApiKey, database: database),
+        coinGeckoApiKey: coinGeckoApiKey, database: database, networking: networking),
       yahooPriceFetcher: yahooClient,
       coinGeckoApiKey: coinGeckoApiKey
     )
@@ -58,16 +57,19 @@ extension ProfileSession {
   /// via CryptoCompare/Binance.
   static func makeCryptoPriceService(
     coinGeckoApiKey: String?,
-    database: any DatabaseWriter
+    database: any DatabaseWriter,
+    networking: NetworkingServices
   ) -> CryptoPriceService {
-    // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
-    //   https://github.com/ajsutton/moolah-native/issues/938
+    // Empty key → CoinGeckoClient targets the free public host;
+    // non-empty key → Pro host with `x_cg_pro_api_key`. Always included
+    // so users without a Pro key still get coverage for tokens like
+    // USDC that CryptoCompare omits from its contract index.
+    let resolverApiKey = coinGeckoApiKey ?? ""
+    let cgHost = resolverApiKey.isEmpty ? "api.coingecko.com" : "pro-api.coingecko.com"
     let cryptoCompareClient = CryptoCompareClient(
-      http: NetworkingServices().client(forHost: "min-api.cryptocompare.com"))
-    // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
-    //   https://github.com/ajsutton/moolah-native/issues/938
+      http: networking.client(forHost: "min-api.cryptocompare.com"))
     let binanceClient = BinanceClient(
-      http: NetworkingServices().client(forHost: "api.binance.com"),
+      http: networking.client(forHost: "api.binance.com"),
       usdtRateLookup: { date in
         let usdtMapping = CryptoProviderMapping(
           instrumentId: "1:0xdac17f958d2ee523a2206206994597c13d831ec7",
@@ -79,19 +81,10 @@ extension ProfileSession {
           return Decimal(1)
         }
       })
-
-    // Empty key → CoinGeckoClient targets the free public host;
-    // non-empty key → Pro host with `x_cg_pro_api_key`. Always included
-    // so users without a Pro key still get coverage for tokens like
-    // USDC that CryptoCompare omits from its contract index.
-    let resolverApiKey = coinGeckoApiKey ?? ""
-    // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
-    //   https://github.com/ajsutton/moolah-native/issues/938
-    let cgHost = resolverApiKey.isEmpty ? "api.coingecko.com" : "pro-api.coingecko.com"
     let priceClients: [CryptoPriceClient] = [
       CoinGeckoClient(
         apiKey: resolverApiKey,
-        http: NetworkingServices().client(forHost: cgHost)),
+        http: networking.client(forHost: cgHost)),
       cryptoCompareClient,
       binanceClient,
     ]
@@ -99,10 +92,8 @@ extension ProfileSession {
     return CryptoPriceService(
       clients: priceClients,
       database: database,
-      // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
-      //   https://github.com/ajsutton/moolah-native/issues/938
       resolutionClient: CompositeTokenResolutionClient(
-        networking: NetworkingServices(), coinGeckoApiKey: resolverApiKey)
+        networking: networking, coinGeckoApiKey: resolverApiKey)
     )
   }
 
@@ -166,6 +157,7 @@ extension ProfileSession {
     cryptoPriceService: CryptoPriceService,
     yahooPriceFetcher: any YahooFinancePriceFetcher,
     coinGeckoApiKey: String?,
+    networking: NetworkingServices,
     sharedRegistryStore: SharedRegistryStore? = nil
   ) -> RegistryWiring {
     guard let cloudBackend = backend as? CloudKitBackend else {
@@ -180,15 +172,13 @@ extension ProfileSession {
       refreshTask = nil
       resolutionClient = overrides.resolutionClient
     } else {
-      let made = makeCoinGeckoCatalog()
+      let made = makeCoinGeckoCatalog(apiKey: coinGeckoApiKey, networking: networking)
       catalog = made.catalog
       refreshTask = made.refreshTask
       // Empty string when no key is configured so the resolver targets
       // the free public CoinGecko endpoint. See `makeCryptoPriceService`.
-      // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
-      //   https://github.com/ajsutton/moolah-native/issues/938
       resolutionClient = CompositeTokenResolutionClient(
-        networking: NetworkingServices(), coinGeckoApiKey: coinGeckoApiKey ?? "")
+        networking: networking, coinGeckoApiKey: coinGeckoApiKey ?? "")
     }
     // Pass the shared registry store from the coordinator when
     // wired so cross-session mutations are observed transparently
@@ -199,14 +189,12 @@ extension ProfileSession {
       cryptoPriceService: cryptoPriceService,
       conversionService: cloudBackend.conversionService,
       sharedStore: sharedRegistryStore)
-    // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
-    //   https://github.com/ajsutton/moolah-native/issues/938
     let searchService = InstrumentSearchService(
       registry: cloudBackend.instrumentRegistry,
       catalog: catalog,
       resolutionClient: resolutionClient,
       stockSearchClient: YahooFinanceStockSearchClient(
-        http: NetworkingServices().client(forHost: "query1.finance.yahoo.com"))
+        http: networking.client(forHost: "query1.finance.yahoo.com"))
     )
     return RegistryWiring(
       registry: cloudBackend.instrumentRegistry,
@@ -241,20 +229,17 @@ extension ProfileSession {
   /// search path. The returned `refreshTask` handle is stored on
   /// `ProfileSession` so it can be cancelled on teardown.
   @MainActor
-  private static func makeCoinGeckoCatalog()
-    -> (catalog: (any CoinGeckoCatalog)?, refreshTask: Task<Void, Never>?)
-  {
+  private static func makeCoinGeckoCatalog(
+    apiKey: String?,
+    networking: NetworkingServices
+  ) -> (catalog: (any CoinGeckoCatalog)?, refreshTask: Task<Void, Never>?) {
     let directory = URL.moolahScopedApplicationSupport
       .appending(path: "InstrumentRegistry", directoryHint: .isDirectory)
     do {
-      // TODO(#938): receive `networking: NetworkingServices` + the resolved
-      //   CoinGecko host as a parameter once PR-5 lands. For now the inline
-      //   NetworkingServices() instance is private to this factory call, so
-      //   the host string is a placeholder.
-      //   https://github.com/ajsutton/moolah-native/issues/938
+      let host = (apiKey ?? "").isEmpty ? "api.coingecko.com" : "pro-api.coingecko.com"
       let catalog = try SQLiteCoinGeckoCatalog.make(
         directory: directory,
-        http: NetworkingServices().client(forHost: "api.coingecko.com"))
+        http: networking.client(forHost: host))
       // `SQLiteCoinGeckoCatalog` is an actor, so `await catalog.refreshIfStale()`
       // hops to the catalog's executor regardless of the enclosing Task's
       // isolation — no `Task.detached` needed (CONCURRENCY_GUIDE §8).

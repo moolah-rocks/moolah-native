@@ -12,7 +12,8 @@ extension MoolahApp {
   /// pointed at the profile-index DB, plus the constructed
   /// `SyncCoordinator` with the registry's sync hooks rotated in.
   static func bootstrapSyncCoordinator(setup: ContainerSetup) -> SyncCoordinator {
-    let scope = makeSharedInstrumentScope(setup: setup)
+    let networking = NetworkingServices()
+    let scope = makeSharedInstrumentScope(setup: setup, networking: networking)
     // App-level store of the registry data — every per-session
     // `CryptoTokenStore` proxies its `registrations` /
     // `instruments` / `providerMappings` / `registrationsVersion`
@@ -26,7 +27,8 @@ extension MoolahApp {
       containerManager: setup.manager,
       sharedInstrumentRegistry: scope.registry,
       sharedMarketData: scope.marketData,
-      sharedRegistryStore: registryStore)
+      sharedRegistryStore: registryStore,
+      sharedNetworking: networking)
     attachSharedInstrumentRegistrySyncHooks(
       registry: scope.registry, coordinator: coordinator)
     return coordinator
@@ -48,7 +50,8 @@ extension MoolahApp {
   /// Bundles the shared registry + market-data services, both pointed
   /// at the profile-index DB. Tuple shape keeps `MoolahApp.init` short.
   static func makeSharedInstrumentScope(
-    setup: ContainerSetup
+    setup: ContainerSetup,
+    networking: NetworkingServices
   ) -> (
     registry: GRDBInstrumentRegistryRepository,
     marketData: ProfileSession.MarketDataServices
@@ -56,7 +59,8 @@ extension MoolahApp {
     let database = setup.manager.profileIndexDatabase
     return (
       registry: makeSharedInstrumentRegistry(database: database),
-      marketData: ProfileSession.makeMarketDataServices(database: database)
+      marketData: ProfileSession.makeMarketDataServices(
+        database: database, networking: networking)
     )
   }
 

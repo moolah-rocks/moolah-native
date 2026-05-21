@@ -46,11 +46,10 @@ enum PreviewBackend {
     // on `profileIndexDatabase`). There are no per-profile rate-cache
     // tables.
     let marketDataDatabase = registry.database
+    let networking = NetworkingServices()
     let exchangeRates = ExchangeRateService(
-      // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
-      //   https://github.com/ajsutton/moolah-native/issues/938
       client: FrankfurterClient(
-        http: NetworkingServices().client(forHost: "api.frankfurter.app")),
+        http: networking.client(forHost: "api.frankfurter.app")),
       database: marketDataDatabase
     )
     let conversionService = FiatConversionService(
