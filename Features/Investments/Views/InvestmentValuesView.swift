@@ -67,14 +67,14 @@ struct InvestmentValuesView: View {
           x: .value("Date", value.date),
           y: .value("Value", Double(truncating: value.value.quantity as NSDecimalNumber))
         )
-        .foregroundStyle(Color.blue)
+        .foregroundStyle(Color.chartBlue)
         .interpolationMethod(.catmullRom)
 
         AreaMark(
           x: .value("Date", value.date),
           y: .value("Value", Double(truncating: value.value.quantity as NSDecimalNumber))
         )
-        .foregroundStyle(Color.blue.opacity(0.1))
+        .foregroundStyle(Color.chartBlue.opacity(0.1))
         .interpolationMethod(.catmullRom)
       }
     }

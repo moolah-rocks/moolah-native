@@ -82,14 +82,14 @@ private struct ProfitLossLegendSwatch: View {
           .fill(
             unavailable
               ? Color.gray.opacity(opacity)
-              : Color.green.opacity(opacity)
+              : Color.chartGreen.opacity(opacity)
           )
           .frame(width: 14, height: 4)
         Rectangle()
           .fill(
             unavailable
               ? Color.gray.opacity(opacity)
-              : Color.red.opacity(opacity)
+              : Color.chartRed.opacity(opacity)
           )
           .frame(width: 14, height: 4)
       }

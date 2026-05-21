@@ -50,7 +50,7 @@ struct InvestmentChartView: View {
         x: .value("Date", point.date),
         y: .value("Profit/Loss", Double(truncating: profitLoss as NSDecimalNumber))
       )
-      .foregroundStyle(.orange.opacity(0.2))
+      .foregroundStyle(Color.chartOrange.opacity(0.2))
       .interpolationMethod(.catmullRom)
     }
     // Investment Value line (blue)
@@ -60,7 +60,7 @@ struct InvestmentChartView: View {
         y: .value("Value", Double(truncating: value as NSDecimalNumber)),
         series: .value("Series", "Value")
       )
-      .foregroundStyle(.blue)
+      .foregroundStyle(Color.chartBlue)
       .lineStyle(StrokeStyle(lineWidth: 2))
       .interpolationMethod(.catmullRom)
     }
@@ -134,7 +134,7 @@ struct InvestmentChartView: View {
         detailItem(
           label: "Value",
           amount: InstrumentAmount(quantity: value, instrument: instrument),
-          color: .blue)
+          color: .chartBlue)
       }
 
       if let balance = point.balance {
@@ -148,7 +148,7 @@ struct InvestmentChartView: View {
         detailItem(
           label: "P/L",
           amount: InstrumentAmount(quantity: profitLoss, instrument: instrument),
-          color: .orange)
+          color: .chartOrange)
       }
     }
     .font(.caption)
@@ -169,9 +169,9 @@ struct InvestmentChartView: View {
 
   private var legend: some View {
     HStack(spacing: 16) {
-      LegendItem(color: .blue, label: "Investment Value")
+      LegendItem(color: .chartBlue, label: "Investment Value")
       LegendItem(color: .gray, label: "Invested Amount")
-      LegendItem(color: .orange, label: "Profit/Loss")
+      LegendItem(color: .chartOrange, label: "Profit/Loss")
     }
     .font(.caption)
   }
