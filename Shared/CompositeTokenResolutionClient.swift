@@ -1,34 +1,32 @@
-// Shared/CompositeTokenResolutionClient.swift
 import Foundation
 
 /// Production token resolution client that queries CryptoCompare, Binance, and optionally CoinGecko
 /// to populate provider-specific identifiers for a token.
 struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
-  private let session: URLSession
+  private let networking: NetworkingServices
   private let coinGeckoApiKey: String?
 
   // For testing: inject pre-parsed reference data
   private let preloadedCoinList: Data?
   private let preloadedExchangeInfo: Data?
 
-  init(session: URLSession = .shared, coinGeckoApiKey: String? = nil) {
-    self.session = session
+  init(networking: NetworkingServices, coinGeckoApiKey: String? = nil) {
+    self.networking = networking
     self.coinGeckoApiKey = coinGeckoApiKey
     self.preloadedCoinList = nil
     self.preloadedExchangeInfo = nil
   }
 
   /// Test initializer with pre-loaded reference data. Accepts an optional
-  /// `session` so tests that exercise the CoinGecko-dependent paths (e.g.
-  /// the post-confirm CryptoCompare by-symbol fallback) can plug a
-  /// `StubURLProtocol`-backed session in.
+  /// `networking` so tests that exercise the CoinGecko-dependent paths can
+  /// plug a `StubURLProtocol`-backed `NetworkingServices` in.
   init(
     coinListData: Data,
     exchangeInfoData: Data,
     coinGeckoApiKey: String?,
-    session: URLSession = .shared
+    networking: NetworkingServices = NetworkingServices()
   ) {
-    self.session = session
+    self.networking = networking
     self.coinGeckoApiKey = coinGeckoApiKey
     self.preloadedCoinList = coinListData
     self.preloadedExchangeInfo = exchangeInfoData
@@ -104,9 +102,9 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
       guard let platformSlug = platformMapping[chainId] else { return }
       let url = CoinGeckoClient.contractLookupURL(
         platformId: platformSlug, contractAddress: contractAddress, apiKey: apiKey)
-      let (data, response) = try await session.data(for: URLRequest(url: url))
-      guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode)
-      else { return }
+      let host = apiKey.isEmpty ? "api.coingecko.com" : "pro-api.coingecko.com"
+      let http = networking.client(forHost: host)
+      let (data, _) = try await http.data(for: URLRequest(url: url))
       let lookup = try CoinGeckoClient.parseContractLookupResponse(data)
       result.coingeckoId = lookup.id
       result.resolvedName = lookup.name
@@ -166,29 +164,24 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
   private func fetchCoinListData() async throws -> Data {
     if let preloaded = preloadedCoinList { return preloaded }
     let url = CryptoCompareClient.coinListURL()
-    let (data, response) = try await session.data(for: URLRequest(url: url))
-    guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-      throw URLError(.badServerResponse)
-    }
+    let http = networking.client(forHost: "min-api.cryptocompare.com")
+    let (data, _) = try await http.data(for: URLRequest(url: url))
     return data
   }
 
   private func fetchExchangeInfoData() async throws -> Data {
     if let preloaded = preloadedExchangeInfo { return preloaded }
     let url = BinanceClient.exchangeInfoURL()
-    let (data, response) = try await session.data(for: URLRequest(url: url))
-    guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-      throw URLError(.badServerResponse)
-    }
+    let http = networking.client(forHost: "api.binance.com")
+    let (data, _) = try await http.data(for: URLRequest(url: url))
     return data
   }
 
   private func fetchAssetPlatforms(apiKey: String) async throws -> [Int: String] {
     let url = CoinGeckoClient.assetPlatformsURL(apiKey: apiKey)
-    let (data, response) = try await session.data(for: URLRequest(url: url))
-    guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-      throw URLError(.badServerResponse)
-    }
+    let host = apiKey.isEmpty ? "api.coingecko.com" : "pro-api.coingecko.com"
+    let http = networking.client(forHost: host)
+    let (data, _) = try await http.data(for: URLRequest(url: url))
     return try CoinGeckoClient.parseAssetPlatformsResponse(data)
   }
 }

@@ -1,4 +1,3 @@
-// MoolahTests/Shared/CompositeTokenResolutionClientTests.swift
 import Foundation
 import Testing
 
@@ -253,10 +252,11 @@ final class PostConfirmBySymbolTests {
     StubURLProtocol.handlers = [:]
   }
 
-  private func makeSession() -> URLSession {
+  private func makeNetworking() -> NetworkingServices {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [StubURLProtocol.self]
-    return URLSession(configuration: config)
+    let session = URLSession(configuration: config)
+    return NetworkingServices(session: session)
   }
 
   private func stubAssetPlatforms(_ json: String) {
@@ -297,7 +297,7 @@ final class PostConfirmBySymbolTests {
       coinListData: ccCoinList,
       exchangeInfoData: binanceInfo,
       coinGeckoApiKey: "",
-      session: makeSession()
+      networking: makeNetworking()
     )
     let result = try await client.resolve(
       chainId: 1,
@@ -341,7 +341,7 @@ final class PostConfirmBySymbolTests {
       coinListData: ccCoinList,
       exchangeInfoData: binanceInfo,
       coinGeckoApiKey: "",
-      session: makeSession()
+      networking: makeNetworking()
     )
     let result = try await client.resolve(
       chainId: 10,
