@@ -99,7 +99,10 @@ extension ProfileSession {
     return CryptoPriceService(
       clients: priceClients,
       database: database,
-      resolutionClient: CompositeTokenResolutionClient(coinGeckoApiKey: resolverApiKey)
+      // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
+      //   https://github.com/ajsutton/moolah-native/issues/938
+      resolutionClient: CompositeTokenResolutionClient(
+        networking: NetworkingServices(), coinGeckoApiKey: resolverApiKey)
     )
   }
 
@@ -182,7 +185,10 @@ extension ProfileSession {
       refreshTask = made.refreshTask
       // Empty string when no key is configured so the resolver targets
       // the free public CoinGecko endpoint. See `makeCryptoPriceService`.
-      resolutionClient = CompositeTokenResolutionClient(coinGeckoApiKey: coinGeckoApiKey ?? "")
+      // TODO(#938): replace with shared NetworkingServices once PR-5 lands.
+      //   https://github.com/ajsutton/moolah-native/issues/938
+      resolutionClient = CompositeTokenResolutionClient(
+        networking: NetworkingServices(), coinGeckoApiKey: coinGeckoApiKey ?? "")
     }
     // Pass the shared registry store from the coordinator when
     // wired so cross-session mutations are observed transparently
