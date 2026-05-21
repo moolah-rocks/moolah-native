@@ -105,6 +105,22 @@ struct RateLimitedHTTPClientTests {
     #expect(http.statusCode == 200)
   }
 
+  @Test
+  func threeOhFourReturnsResponseAndDoesNotMuteURL() async throws {
+    Stub.reset()
+    Stub.handler = { _ in (self.httpResponse(statusCode: 304), Data()) }
+
+    let cache = FailedRequestCache()
+    let client = makeClient(session: makeSession(), cache: cache)
+    let (data, http) = try await client.data(for: try request())
+    #expect(http.statusCode == 304)
+    #expect(data.isEmpty)
+
+    // URL not muted — subsequent 2xx succeeds.
+    Stub.handler = { _ in (self.httpResponse(statusCode: 200), Data("OK".utf8)) }
+    _ = try await client.data(for: try request())
+  }
+
   // MARK: - non-2xx now throws
 
   @Test

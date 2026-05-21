@@ -1,4 +1,3 @@
-// MoolahTests/Backends/SQLiteCoinGeckoCatalogSearchTests.swift
 import Foundation
 import Testing
 
@@ -16,7 +15,9 @@ final class SQLiteCoinGeckoCatalogSearchTests {
     tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
       .appendingPathComponent("search-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-    catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir)
+    catalog = try SQLiteCoinGeckoCatalog.make(
+      directory: tempDir,
+      http: NetworkingServices().client(forHost: "api.coingecko.com"))
   }
 
   deinit {
