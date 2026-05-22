@@ -21,7 +21,7 @@
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>NSPrivacyPolicyURL</key>
-    <string>https://moolah.app/privacy</string>
+    <string>https://moolah.rocks/privacy</string>
     <key>NSUbiquitousContainers</key>
     <dict>
         <key>iCloud.rocks.moolah.app.v2</key>
