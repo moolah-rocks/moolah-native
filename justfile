@@ -193,6 +193,9 @@ generate:
     SCHEMA_STAMP="$STAMP_DIR/ckdb-schema-gen.stamp"
     mkdir -p "$STAMP_DIR"
 
+    # ---- help-gen ----
+    just build-help
+
     # ---- ckdb-schema-gen ----
     # Regenerate when the schema, the generator's sources, or the output
     # directory itself has gone missing. The output dir is gitignored, so
