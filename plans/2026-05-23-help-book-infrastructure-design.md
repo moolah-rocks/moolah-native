@@ -87,22 +87,27 @@ produces both output trees from the shared fragments and writes
 
 ## 2. Incremental rebuild
 
-HelpGen tracks inputs by SHA-256 in `Help/Build/.manifest.json`. Every file
-under `Help/Topics/`, `Help/Shells/`, `Help/Assets/`, `Help/Styles/`, plus
-`Help/TOC.json`, `Help/Metadata.plist`, and HelpGen's own version constant
-contributes to the hash set. On each run:
+Change detection lives in the `justfile`, matching the existing
+`tools/CKDBSchemaGen` pattern. A stamp file at `.build/stamps/help-gen.stamp`
+records the last successful generation. The `just build-help` recipe runs the
+generator only when any of the following is true:
 
-1. Compute the current hash set.
-2. Load `Help/Build/.manifest.json` if present.
-3. If every input hash matches *and* every recorded output file exists, print
-   `Help unchanged, skipping` and exit 0 in well under 100 ms.
-4. Otherwise, delete `Help/Build/Moolah.help/` and `site/help/`, regenerate
-   from scratch, then write the new manifest.
+- the stamp is missing (fresh checkout, since `.build/` is gitignored);
+- the output bundle directory `Help/Build/Moolah.help/` is missing or empty;
+- the output site directory `site/help/` is missing;
+- any file under `Help/` (Topics, Shells, Assets, Styles, `TOC.json`,
+  `Metadata.plist`) is newer than the stamp;
+- any Swift source under `tools/HelpGen/Sources/` is newer than the stamp.
 
-Hash-based rather than timestamp-based to survive `git checkout` mtime
-shuffles. Hash-based rather than Xcode `inputFiles:`/`outputFiles:` because the
-`.help` bundle is a tree, and the same generator must run identically from
-`just generate`, the Xcode preBuildScript, and CI.
+On regen the recipe runs the Swift generator, then `/usr/bin/hiutil` for the
+search index, then `touch`es the stamp. On a no-op the recipe exits silently
+in under 50 ms.
+
+HelpGen itself is **unconditional** — when invoked it always regenerates from
+scratch. The single source of truth for "skip if unchanged" is the justfile
+recipe, mirroring CKDBSchemaGen. This means no Xcode preBuildScript: developers
+run `just generate` (or its alias `just build-help`) before `just build-mac`,
+which is already the workflow for CKDB wire types.
 
 ## 3. Placeholder content (this PR only)
 
@@ -163,54 +168,64 @@ sources:
   # …existing entries…
   - path: Help/Build/Moolah.help
     buildPhase: resources
-preBuildScripts:
-  - script: |
-      "${SRCROOT}/scripts/build-help.sh"
-    name: Build Help Book
-    basedOnDependencyAnalysis: false   # HelpGen has its own manifest fast-path
-  # …existing version-check entry…
 ```
 
-xcodegen tolerates missing source paths at generate time; HelpGen runs before
-xcodegen in the `just generate` chain, so the directory exists by the time
-xcodebuild scans it.
-
-### `scripts/build-help.sh`
-
-```sh
-#!/bin/bash
-set -euo pipefail
-cd "$(dirname "$0")/.."
-swift run --package-path tools/HelpGen HelpGen
-```
-
-Mirrors `scripts/check-release-build-number.sh`.
+xcodegen tolerates missing source paths at generate time. Because `just
+generate` runs `build-help` before `xcodegen generate`, the directory always
+exists by the time xcodebuild scans it. No preBuildScript is added — staleness
+is prevented by the `just generate` discipline already in place for CKDB.
 
 ### `justfile`
 
-```make
-build-help:
-    @swift run --package-path tools/HelpGen HelpGen
+A new `build-help` recipe is added, modelled exactly on the existing
+`generate` recipe's stamp-based block. `generate` invokes it before the
+CKDB / xcodegen steps:
 
-generate: build-help
-    @swift run --package-path tools/CKDBSchemaGen CKDBSchemaGen
-    @xcodegen generate
+```bash
+build-help:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    STAMP_DIR=".build/stamps"
+    HELP_STAMP="$STAMP_DIR/help-gen.stamp"
+    mkdir -p "$STAMP_DIR"
+
+    needs=0
+    if [ ! -f "$HELP_STAMP" ]; then
+        needs=1
+    elif [ ! -d "Help/Build/Moolah.help" ] || [ -z "$(ls -A Help/Build/Moolah.help 2>/dev/null)" ]; then
+        needs=1
+    elif [ ! -d "site/help" ]; then
+        needs=1
+    elif find Help -type f \( -name '*.html' -o -name '*.tmpl' -o -name '*.json' -o -name '*.plist' -o -name '*.css' -o -name '*.png' \) -newer "$HELP_STAMP" 2>/dev/null | grep -q .; then
+        needs=1
+    elif find tools/HelpGen/Sources -type f -name '*.swift' -newer "$HELP_STAMP" 2>/dev/null | grep -q .; then
+        needs=1
+    fi
+
+    if [ "$needs" -eq 1 ]; then
+        swift run --package-path tools/HelpGen help-gen
+        /usr/bin/hiutil -Cf \
+            "Help/Build/Moolah.help/Contents/Resources/en.lproj/Moolah.helpindex" \
+            "Help/Build/Moolah.help/Contents/Resources/en.lproj"
+        touch "$HELP_STAMP"
+    fi
 ```
 
-`build-help` is also exposed standalone for manual iteration.
+The existing `generate` recipe gains one line near the top of its bash body:
+
+```bash
+# ---- help-gen ----
+just build-help
+```
+inserted before the `# ---- ckdb-schema-gen ----` block.
 
 ### `hiutil`
 
-Invoked by `HelpBookWriter` after pages are written:
-
-```
-/usr/bin/hiutil -Cf \
-  Help/Build/Moolah.help/Contents/Resources/en.lproj/Moolah.helpindex \
-  Help/Build/Moolah.help/Contents/Resources/en.lproj
-```
-
-Failure stops generation; success is the manifest-write trigger. Skipped
-entirely on the fast path.
+Invoked by the `just build-help` recipe immediately after the Swift generator
+exits successfully (see the recipe snippet above). Lives in the justfile, not
+inside HelpGen, so the bash recipe is the single source of truth for the
+multi-step "generate → index → stamp" pipeline. Non-zero exit from `hiutil`
+fails the recipe and skips the `touch`, so a stale stamp is not written.
 
 ### `.gitignore`
 
@@ -271,7 +286,6 @@ tools/HelpGen/
 └── Sources/HelpGen/
     ├── main.swift
     ├── Inputs.swift
-    ├── Manifest.swift
     ├── TemplateRenderer.swift
     ├── HelpBookWriter.swift
     └── WebWriter.swift
@@ -279,8 +293,9 @@ tools/HelpGen/
 
 ### Dependencies
 
-Foundation + CryptoKit only. JSON decoding for `TOC.json` via `Codable`,
-SHA-256 via CryptoKit, `Process` for `hiutil`, `FileManager` for I/O.
+Foundation only. JSON decoding for `TOC.json` via `Codable`, `FileManager` for
+I/O. No CryptoKit, no Process — the justfile invokes `hiutil` as a separate
+step (see §4).
 
 ### TOC.json
 
@@ -305,19 +320,19 @@ of HTML inside fragments.
 
 ### Run flow
 
-1. Load all inputs; compute SHA-256 of each.
-2. Read `Help/Build/.manifest.json` if present.
-3. If hashes match *and* every recorded output exists → print `Help unchanged,
-   skipping` and exit 0.
-4. Otherwise: delete `Help/Build/Moolah.help/` and `site/help/`; rebuild from
-   scratch.
-5. For the Help Book: write `Contents/Info.plist` (from `Metadata.plist`),
+When invoked, HelpGen unconditionally regenerates (the `just build-help`
+recipe owns skip-if-unchanged):
+
+1. Load inputs: `Help/TOC.json`, `Help/Topics/*.html`, `Help/Shells/*.tmpl`,
+   `Help/Assets/*`, `Help/Styles/*`, `Help/Metadata.plist`.
+2. Delete `Help/Build/Moolah.help/` and `site/help/`.
+3. For the Help Book: write `Contents/Info.plist` (from `Metadata.plist`),
    `en.lproj/*.html` (Topics + help-book shell), `en.lproj/styles.css`,
-   `shared/icon-32.png`. Invoke `hiutil`.
-6. For the web copy: write `site/help/*.html` (Topics + web shell),
+   `shared/icon-32.png`.
+4. For the web copy: write `site/help/*.html` (Topics + web shell),
    `site/help/styles.css`.
-7. Write `Help/Build/.manifest.json` with the new input hashes and full output
-   list.
+
+(The `hiutil` index step is run by the justfile recipe after HelpGen exits.)
 
 ### Atomicity
 
@@ -328,13 +343,14 @@ failure.
 ### Errors
 
 All errors are fatal with a one-line message naming the offending file:
-missing topic referenced by TOC, unknown token in a shell, `hiutil` non-zero
-exit. No silent fallbacks.
+missing topic referenced by TOC, unknown token in a shell. No silent
+fallbacks. `hiutil` failures are surfaced by the justfile recipe (which exits
+non-zero without `touch`ing the stamp).
 
 ### Indexing host requirement
 
-`hiutil` is macOS-only. On Linux the indexing step warns and skips; the rest
-of generation works. Today every CI lane is macOS, so this is defensive.
+`hiutil` is macOS-only. Every CI lane is macOS today; if a Linux build ever
+needs the help bundle, the justfile recipe is the place to add a host check.
 
 ## 7. Testing & verification
 
@@ -343,8 +359,6 @@ of generation works. Today every CI lane is macOS, so this is defensive.
 - TOC decoding: happy path + malformed JSON fails with a named error.
 - Template rendering: every supported `{{token}}` substitutes correctly;
   unknown token raises.
-- Manifest hashing: identical inputs → identical hash; one input changed →
-  different hash; deleted output invalidates the cache.
 
 ### XCUITest regression for the reported bug (`MoolahUITests_macOS/`)
 
@@ -354,9 +368,10 @@ A new test opens the Help menu and asserts there is exactly one item titled
 
 ### Build-pipeline assertion
 
-New `just verify-help` recipe — runs HelpGen twice; the second run *must* print
-`Help unchanged, skipping`. Added to the macOS CI lane. Skipped in iOS lanes
-(the bundle is macOS-only).
+New `just verify-help` recipe — runs `just build-help` twice and asserts the
+second run does not invoke the Swift generator. Implemented by inspecting the
+stamp mtime: first run advances it, second run leaves it unchanged. Added to
+the macOS CI lane; skipped in iOS lanes (the bundle is macOS-only).
 
 ### Manual verification (PR checklist)
 
@@ -369,7 +384,7 @@ New `just verify-help` recipe — runs HelpGen twice; the second run *must* prin
    verify the URL is correct, not that the page renders.)
 4. `just build-ios` + simulator. Settings → Help row → tap → Safari opens at
    `https://moolah.rocks/help`.
-5. `just generate` twice — second run reports the manifest skip.
+5. `just build-help` twice — second run is a silent no-op (stamp unchanged).
 
 ### Out of scope
 
@@ -392,8 +407,9 @@ New `just verify-help` recipe — runs HelpGen twice; the second run *must* prin
 
 - **xcodegen + missing-source ordering.** If `Help/Build/Moolah.help` is
   absent at xcodegen time, the project still generates, but the resource
-  reference is brittle. Mitigation: HelpGen always runs before xcodegen in
-  `just generate`; the Xcode preBuildScript ensures freshness on every build.
+  reference is brittle. Mitigation: `just build-help` runs before `xcodegen
+  generate` inside the `just generate` recipe, so the directory always exists
+  by the time xcodegen scans it.
 - **hiutil availability.** Tool ships with macOS, but a future macOS release
   could deprecate it. Mitigation: the generator names the absolute path; a
   later switch to a replacement indexer is a one-file change in
