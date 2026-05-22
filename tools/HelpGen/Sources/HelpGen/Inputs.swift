@@ -48,7 +48,7 @@ struct Inputs {
       guard fm.fileExists(atPath: url.path) else {
         throw LoadError.missingTopic(entry.slug)
       }
-      topics[entry.slug] = try String(contentsOf: url, encoding: .utf8)
+      topics[entry.slug] = try readString(relative)
     }
 
     return Inputs(
