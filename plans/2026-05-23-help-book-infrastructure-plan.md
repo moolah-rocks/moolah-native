@@ -1458,7 +1458,9 @@ git commit -m "feat(ios): add Help row in Settings linking to moolah.rocks/help"
 
 ## Section D — XCUITest regression for the original bug
 
-### Task 19: Add `HelpMenuDriver` and a duplicate-entry test
+**Skipped.** The user decided a UI test is unnecessary for this fix — registering the Help Book in `Info.plist` and removing the custom button is a structural change reviewable from the diff alone, and the manual macOS smoke step in Task 21 already exercises the resulting Help menu.
+
+### Task 19 (skipped): Add `HelpMenuDriver` and a duplicate-entry test
 
 **Files:**
 - Create: `MoolahUITests_macOS/Helpers/Screens/HelpMenuDriver.swift`
