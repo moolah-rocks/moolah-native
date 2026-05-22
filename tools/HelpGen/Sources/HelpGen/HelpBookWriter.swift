@@ -20,14 +20,14 @@ enum HelpBookWriter {
     try inputs.metadataPlistData.write(
       to: contents.appendingPathComponent("Info.plist"))
 
-    // Per-topic HTML pages wrapped in the help-book shell.
+    // Per-topic HTML pages wrapped in the help-book shell. Inputs.load
+    // guarantees every TOC slug has a corresponding body in inputs.topics.
     for entry in inputs.toc.entries {
-      let body = inputs.topics[entry.slug] ?? ""
       let rendered = try TemplateRenderer.render(
         template: inputs.helpBookShell,
         tokens: [
           "title": entry.title,
-          "body": body,
+          "body": inputs.topics[entry.slug]!,
         ]
       )
       try rendered.write(
