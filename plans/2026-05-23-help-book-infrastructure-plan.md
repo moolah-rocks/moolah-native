@@ -64,10 +64,24 @@ swift run --package-path tools/HelpGen help-gen
 ```
 Expected output (single line): `help-gen: stub — full implementation in subsequent tasks`
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Create the empty `HelpGenTests.swift` placeholder**
+
+SPM warns (and on some toolchain versions errors) when a declared `testTarget`'s directory is missing or empty. Mirror the import-only header used by `tools/CKDBSchemaGen/Tests/`:
+
+```swift
+import Testing
+
+@testable import HelpGen
+```
+
+Save at `tools/HelpGen/Tests/HelpGenTests/HelpGenTests.swift`. Task 3 leaves this placeholder in place and adds a new sibling `TOCTests.swift` next to it.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add tools/HelpGen/Package.swift tools/HelpGen/Sources/HelpGen/main.swift
+git add tools/HelpGen/Package.swift \
+        tools/HelpGen/Sources/HelpGen/main.swift \
+        tools/HelpGen/Tests/HelpGenTests/HelpGenTests.swift
 git commit -m "feat(help-gen): bootstrap empty Swift package"
 ```
 
