@@ -50,4 +50,13 @@ struct TemplateRendererTests {
     )
     #expect(rendered == "no tokens here")
   }
+
+  @Test("preserves unclosed braces verbatim")
+  func preservesUnclosedBrace() throws {
+    let rendered = try TemplateRenderer.render(
+      template: "hello {{ world",
+      tokens: [:]
+    )
+    #expect(rendered == "hello {{ world")
+  }
 }
