@@ -35,6 +35,7 @@ struct TOCTests {
       }
       """.data(using: .utf8)!
     let toc = try JSONDecoder().decode(TOC.self, from: json)
+    #expect(toc.entries.count == 2)
     #expect(toc.entries[1].parent == "accounts")
   }
 
