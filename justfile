@@ -142,6 +142,43 @@ build-ios: generate
         -destination "platform=iOS Simulator,name=$SIM" \
         CODE_SIGNING_ALLOWED=NO
 
+# Regenerate the macOS Help Book bundle and the site/help/ web copy from
+# the shared HTML fragments under Help/. Runs only when source files or
+# the generator have changed since the last successful run.
+build-help:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    STAMP_DIR=".build/stamps"
+    HELP_STAMP="$STAMP_DIR/help-gen.stamp"
+    mkdir -p "$STAMP_DIR"
+
+    needs=0
+    if [ ! -f "$HELP_STAMP" ]; then
+        needs=1
+    elif [ ! -d "Help/Build/Moolah.help" ] \
+        || [ -z "$(ls -A Help/Build/Moolah.help 2>/dev/null)" ]; then
+        needs=1
+    elif [ ! -d "site/help" ]; then
+        needs=1
+    elif find Help -type f \
+        \( -name '*.html' -o -name '*.tmpl' -o -name '*.json' \
+           -o -name '*.plist' -o -name '*.css' -o -name '*.png' \) \
+        -newer "$HELP_STAMP" 2>/dev/null | grep -q .; then
+        needs=1
+    elif find tools/HelpGen/Sources -type f -name '*.swift' \
+        -newer "$HELP_STAMP" 2>/dev/null | grep -q .; then
+        needs=1
+    fi
+
+    if [ "$needs" -eq 1 ]; then
+        swift run --package-path tools/HelpGen help-gen
+        /usr/bin/hiutil -Cf \
+            "Help/Build/Moolah.help/Contents/Resources/en.lproj/Moolah.helpindex" \
+            "Help/Build/Moolah.help/Contents/Resources/en.lproj"
+        touch "$HELP_STAMP"
+    fi
+
 # Regenerate the CloudKit wire-struct layer from CloudKit/schema.ckdb,
 # then regenerate Moolah.xcodeproj from project.yml. Stamp-gated: each
 # sub-step is skipped when its inputs are unchanged since the last
