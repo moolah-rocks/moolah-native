@@ -14,6 +14,7 @@
         addImportProfileSection
         cryptoSection
         importSettingsSection
+        helpSection
       }
       .navigationTitle("Settings")
       .overlay {
@@ -150,6 +151,16 @@
           ImportRulesSettingsView()
         } label: {
           Label("Import Rules", systemImage: "list.bullet.rectangle")
+        }
+      }
+    }
+
+    var helpSection: some View {
+      Section("Help") {
+        if let url = URL(string: "https://moolah.rocks/help") {
+          Link(destination: url) {
+            Label("Moolah Help", systemImage: "questionmark.circle")
+          }
         }
       }
     }

@@ -21,7 +21,7 @@
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>NSPrivacyPolicyURL</key>
-    <string>https://moolah.app/privacy</string>
+    <string>https://moolah.rocks/privacy</string>
     <key>LSMinimumSystemVersion</key>
     <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
     <key>NSAppleScriptEnabled</key>
@@ -44,5 +44,9 @@
     <string>$(CLOUDKIT_ENVIRONMENT)</string>
     <key>MoolahCloudKitContainer</key>
     <string>$(CLOUDKIT_CONTAINER_ID)</string>
+    <key>CFBundleHelpBookFolder</key>
+    <string>Moolah.help</string>
+    <key>CFBundleHelpBookName</key>
+    <string>Moolah Help</string>
 </dict>
 </plist>
