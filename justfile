@@ -430,3 +430,26 @@ install-release-mac:
     version="$(defaults read /Applications/Moolah.app/Contents/Info CFBundleShortVersionString)"
     build="$(defaults read /Applications/Moolah.app/Contents/Info CFBundleVersion)"
     echo "==> Installed Moolah $version (build $build) from $tag"
+
+# Assert that `just build-help` is idempotent — running twice in a row must
+# leave the stamp's modification time unchanged on the second invocation.
+# Catches regressions where the change-detection logic in `build-help` is
+# broken (e.g. always regenerates). Used by CI on the macOS lane.
+verify-help:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just build-help
+    STAMP=".build/stamps/help-gen.stamp"
+    if [ ! -f "$STAMP" ]; then
+        echo "verify-help: stamp missing after first build-help; aborting"
+        exit 1
+    fi
+    before=$(stat -f %m "$STAMP")
+    just build-help
+    after=$(stat -f %m "$STAMP")
+    if [ "$before" != "$after" ]; then
+        echo "verify-help: stamp mtime changed on second run ($before -> $after);"
+        echo "             change detection is broken."
+        exit 1
+    fi
+    echo "verify-help: idempotent, stamp unchanged."
