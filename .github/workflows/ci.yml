@@ -7,6 +7,7 @@ on:
       - main
       - 'mq-spec-*'   # speculative merge-queue branches; CI runs without a PR
   pull_request:
+  merge_group:     # native GitHub merge queue; CI runs against gh-readonly-queue/* branches
 
 jobs:
   test:
@@ -38,10 +39,10 @@ jobs:
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
         run: bash scripts/check-todos.sh --format-only
 
-      # Trusted events only (pushes to origin branches, same-repo PRs):
-      # full check including liveness against the GitHub API.
+      # Trusted events only (pushes to origin branches, same-repo PRs, merge
+      # queue groups): full check including liveness against the GitHub API.
       - name: Validate TODO references (liveness)
-        if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+        if: github.event_name == 'push' || github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: just validate-todos
