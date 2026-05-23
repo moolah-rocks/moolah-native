@@ -20,14 +20,32 @@ enum HelpBookWriter {
     try inputs.metadataPlistData.write(
       to: contents.appendingPathComponent("Info.plist"))
 
+    let toc = TOCRenderer.renderHTML(toc: inputs.toc, excludingSlug: inputs.accessPageSlug)
+
     // Per-topic HTML pages wrapped in the help-book shell. Inputs.load
     // guarantees every TOC slug has a corresponding body in inputs.topics.
     for entry in inputs.toc.entries {
+      let isAccessPage = entry.slug == inputs.accessPageSlug
+      // The access page's `AppleTitle` must match `CFBundleHelpBookName` in
+      // the main app's Info.plist — that's how `helpd` resolves "show the
+      // book for this app". Every other page carries its own per-page
+      // AppleTitle, used for breadcrumbs and search results.
+      let appleTitle = isAccessPage ? inputs.bookTitle : entry.title
+
+      // Pre-process body for the access page so the `{{toc}}` token in
+      // welcome.html expands to the hierarchical nav. Other pages don't
+      // contain the token, so this render is a no-op for them.
+      let body = try TemplateRenderer.render(
+        template: inputs.topics[entry.slug]!,
+        tokens: ["toc": isAccessPage ? toc : ""]
+      )
+
       let rendered = try TemplateRenderer.render(
         template: inputs.helpBookShell,
         tokens: [
           "title": entry.title,
-          "body": inputs.topics[entry.slug]!,
+          "appleTitle": appleTitle,
+          "body": body,
         ]
       )
       try rendered.write(

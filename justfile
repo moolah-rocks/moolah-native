@@ -173,8 +173,15 @@ build-help:
 
     if [ "$needs" -eq 1 ]; then
         swift run --package-path tools/HelpGen help-gen
+        # Legacy LSM index (used by `helpd` for word-occurrence lookup on
+        # older macOS) and CoreSpotlight index (required on macOS 26+ for
+        # `helpd` to discover the book at all). Both files are referenced
+        # from Help/Metadata.plist via HPDBookIndexPath / HPDBookCSIndexPath.
         /usr/bin/hiutil -Cf \
             "Help/Build/Moolah.help/Contents/Resources/en.lproj/Moolah.helpindex" \
+            "Help/Build/Moolah.help/Contents/Resources/en.lproj"
+        /usr/bin/hiutil -I corespotlight -Cagvf \
+            "Help/Build/Moolah.help/Contents/Resources/en.lproj/Moolah.cshelpindex" \
             "Help/Build/Moolah.help/Contents/Resources/en.lproj"
         touch "$HELP_STAMP"
     fi
