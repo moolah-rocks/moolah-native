@@ -142,9 +142,12 @@ build-ios: generate
         -destination "platform=iOS Simulator,name=$SIM" \
         CODE_SIGNING_ALLOWED=NO
 
-# Regenerate the macOS Help Book bundle and the site/help/ web copy from
-# the shared HTML fragments under Help/. Runs only when source files or
-# the generator have changed since the last successful run.
+# Regenerate the site/help/ web copy from the HTML fragments under
+# site/help/_src/. Runs only when source files or the generator have changed
+# since the last successful run. The web copy is the canonical help surface —
+# the macOS Help menu opens https://moolah.rocks/help/ directly. A native
+# HelpViewer book is not built (HelpViewer's sidebar TOC is gated to
+# Apple-CDN-hosted books only).
 build-help:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -156,14 +159,11 @@ build-help:
     needs=0
     if [ ! -f "$HELP_STAMP" ]; then
         needs=1
-    elif [ ! -d "Help/Build/Moolah.help" ] \
-        || [ -z "$(ls -A Help/Build/Moolah.help 2>/dev/null)" ]; then
+    elif [ ! -f "site/help/index.html" ]; then
         needs=1
-    elif [ ! -d "site/help" ]; then
-        needs=1
-    elif find Help -type f \
+    elif find site/help/_src -type f \
         \( -name '*.html' -o -name '*.tmpl' -o -name '*.json' \
-           -o -name '*.plist' -o -name '*.css' -o -name '*.png' \) \
+           -o -name '*.css' \) \
         -newer "$HELP_STAMP" 2>/dev/null | grep -q .; then
         needs=1
     elif find tools/HelpGen/Sources -type f -name '*.swift' \
@@ -173,16 +173,6 @@ build-help:
 
     if [ "$needs" -eq 1 ]; then
         swift run --package-path tools/HelpGen help-gen
-        # Legacy LSM index (used by `helpd` for word-occurrence lookup on
-        # older macOS) and CoreSpotlight index (required on macOS 26+ for
-        # `helpd` to discover the book at all). Both files are referenced
-        # from Help/Metadata.plist via HPDBookIndexPath / HPDBookCSIndexPath.
-        /usr/bin/hiutil -Cf \
-            "Help/Build/Moolah.help/Contents/Resources/en.lproj/Moolah.helpindex" \
-            "Help/Build/Moolah.help/Contents/Resources/en.lproj"
-        /usr/bin/hiutil -I corespotlight -Cagvf \
-            "Help/Build/Moolah.help/Contents/Resources/en.lproj/Moolah.cshelpindex" \
-            "Help/Build/Moolah.help/Contents/Resources/en.lproj"
         touch "$HELP_STAMP"
     fi
 
