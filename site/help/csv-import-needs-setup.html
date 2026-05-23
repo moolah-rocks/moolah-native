@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSV import dropped into Needs Setup — moolah.rocks help</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="help-header">
+    <a href="/" aria-label="moolah.rocks home">moolah.rocks</a>
+  </header>
+  <main class="help-content">
+    <article>
+  <h1>CSV import dropped into Needs Setup</h1>
+  <p>You imported a CSV file and it landed in <strong>Needs Setup</strong> instead of your transaction list. Here's what that means and how to clear it.</p>
+
+  <h2>Moolah doesn't recognise this file shape yet</h2>
+  <p>The auto-detector matches CSV files against shapes it already knows — header signatures, delimiters, date formats. Your file doesn't match a known shape, so Moolah needs you to map the columns once. Future files with the same shape import without setup.</p>
+
+  <h2>Set it up</h2>
+  <ol>
+    <li>Open <strong>Recently Added</strong> in the sidebar.</li>
+    <li>In <strong>Recently Added</strong>, select the <strong>Needs Setup</strong> section, then select the row for this file.</li>
+    <li>Select <strong>Set up CSV import</strong>.</li>
+    <li>Pick the target account for these transactions.</li>
+    <li>Map the file's columns to <strong>Date</strong>, <strong>Description</strong>, <strong>Amount</strong>, and (optionally) <strong>Payee</strong>.</li>
+    <li>Confirm. The transactions move into your account.</li>
+  </ol>
+
+  <h2>What happens next time</h2>
+  <p>Moolah remembers the shape you set up. The next CSV with the same headers and column order imports without asking — even files from the same source you'll add later.</p>
+
+  <h2>To remove a learned shape</h2>
+  <p>If you set up a shape by mistake, open <strong>Settings &gt; Import</strong>. Swipe the profile row and choose <strong>Delete</strong>. The next import of that shape will land in Needs Setup again.</p>
+
+  <h2>If the setup screen won't accept your file</h2>
+  <p>Make sure the file is a real CSV — comma- or tab-separated, with one transaction per row. If the file looks right and setup still refuses, report it at <a href="https://github.com/ajsutton/moolah-native/issues">github.com/ajsutton/moolah-native/issues</a> with a sample.</p>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="how-import-detects-your-file.html">How CSV import works</a></li>
+    <li><a href="import-a-csv-file.html">Import a CSV file</a></li>
+  </ul>
+</article>
+
+  </main>
+  <footer class="help-footer">
+    &copy; 2026 moolah.rocks
+  </footer>
+</body>
+</html>

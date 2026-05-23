@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Set up a watched folder for imports — moolah.rocks help</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="help-header">
+    <a href="/" aria-label="moolah.rocks home">moolah.rocks</a>
+  </header>
+  <main class="help-content">
+    <article>
+  <h1>Set up a watched folder for imports</h1>
+  <p>Point Moolah at a folder so it imports any CSV that lands there. Useful if you regularly drop bank exports into the same place.</p>
+
+  <h2>Before you start</h2>
+  <ul>
+    <li>Pick a folder you'll consistently save your CSV exports to. The Downloads folder works, or a dedicated folder you control.</li>
+    <li>On iOS, a folder in iCloud Drive or On My iPhone is fine.</li>
+  </ul>
+
+  <h2>Steps</h2>
+  <ol>
+    <li>Open <strong>Settings</strong>:
+      <ul>
+        <li><strong>Mac</strong> — press <kbd>⌘,</kbd>.</li>
+        <li><strong>iOS</strong> — open the Settings sheet from the sidebar.</li>
+      </ul>
+    </li>
+    <li>Select <strong>Import</strong>.</li>
+    <li>Under <strong>Folder watch</strong>, choose <strong>Pick folder</strong>.</li>
+    <li>Select the folder you want Moolah to watch and grant access when prompted.</li>
+  </ol>
+
+  <h2>How scanning works on each platform</h2>
+  <p>The two platforms scan the folder differently:</p>
+  <ul>
+    <li><strong>Mac</strong> — Moolah watches the folder live. A CSV is imported within seconds of being saved there, even while the app is in the background.</li>
+    <li><strong>iOS</strong> — Moolah scans the folder once each time the app launches. Files added while the app isn't running are picked up the next time you open it. Live watching is not available on iOS.</li>
+  </ul>
+
+  <h2>Optional: delete CSVs after import</h2>
+  <p>Turn on <strong>Delete CSVs after import</strong> in the same screen if you want Moolah to remove each file from the folder once it's been imported. The transactions stay in Moolah; only the source file goes. Leave it off if you want to keep the originals.</p>
+
+  <h2>Stop watching the folder</h2>
+  <ol>
+    <li>Return to <strong>Settings &gt; Import</strong>.</li>
+    <li>Choose <strong>Stop watching</strong>.</li>
+  </ol>
+  <p>Moolah forgets the folder, and you can pick a different one if you want.</p>
+
+  <h2>Result</h2>
+  <p>New CSV files that arrive in the watched folder are imported automatically. They appear in <strong>Recently Added</strong> for you to review, the same as a manual import.</p>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="import-a-csv-file.html">Import a CSV file</a></li>
+    <li><a href="review-recently-imported-transactions.html">Review recently imported transactions</a></li>
+  </ul>
+</article>
+
+  </main>
+  <footer class="help-footer">
+    &copy; 2026 moolah.rocks
+  </footer>
+</body>
+</html>

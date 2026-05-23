@@ -1,0 +1,49 @@
+<article>
+  <h1>My wallet or exchange account isn't syncing</h1>
+  <p>The synced-account header at the top of a Crypto Wallet or Exchange account shows a caption explaining why. Match the caption to the section below.</p>
+
+  <h2>The API key or token is missing</h2>
+  <p>For a wallet, the caption reads <strong>Add an Alchemy API key to enable sync</strong>. For a Coinstash exchange account, it reads <strong>Add your read-only API token to sync</strong>.</p>
+  <p>For a crypto wallet:</p>
+  <ol>
+    <li>Open <strong>Settings &gt; Crypto Tokens</strong>.</li>
+    <li>Paste your Alchemy API key. (On Mac, the inline hint links straight to this screen.)</li>
+  </ol>
+  <p>For an exchange account:</p>
+  <ol>
+    <li>Open the account.</li>
+    <li>Choose <strong>Edit Account</strong> and paste your read-only Coinstash API token.</li>
+  </ol>
+  <p>Sync starts on its own once the key or token is saved.</p>
+
+  <h2>The provider rejected the key or token</h2>
+  <p>The caption reads <strong>Alchemy rejected the API key</strong> or <strong>Coinstash rejected the API token</strong>. The credential was valid at some point but isn't accepted now. It may have been revoked, hit a plan limit, or been edited by mistake.</p>
+  <p>Sign in to your Alchemy or Coinstash account on the web and regenerate the key or token. Paste the new value into Moolah the same way you added the original.</p>
+  <p>For Coinstash, make sure the token is <strong>read-only</strong>. Moolah doesn't need trading permissions.</p>
+
+  <h2>The provider rate-limited the request</h2>
+  <p>The caption reads <strong>Alchemy rate-limited. Retry in N min.</strong> or its Coinstash equivalent. You've hit the provider's request quota — usually a free-tier limit.</p>
+  <p>Wait the displayed time and Moolah retries on its own. If you hit the limit often, consider upgrading your plan with the provider, or sync fewer wallets at once.</p>
+
+  <h2>Network error from the provider</h2>
+  <p>The caption reads <strong>Alchemy network error</strong> followed by a short detail. The request never reached the provider.</p>
+  <p>Check your connection. If you're on a VPN or restrictive network, the provider's endpoint may be blocked. Try again once you're back on a normal connection, or select <strong>Sync now</strong> in the account header to retry.</p>
+
+  <h2>Malformed response from the provider</h2>
+  <p>The caption reads <strong>Alchemy returned a malformed response</strong> with a stage in brackets. The request got through but the reply didn't make sense to Moolah. This is on the provider's side.</p>
+  <p>Select <strong>Sync now</strong> after a few minutes. If it keeps happening, note the stage name from the caption and report it using the link at the end of this article.</p>
+
+  <h2>The status says Never synced</h2>
+  <p>The account hasn't completed a successful sync yet. If you added it a moment ago, give it time — the first run can take longer than later updates. If you've waited and nothing's changed, work through the other causes in this article starting with the API key.</p>
+
+  <h2>If none of the above helped</h2>
+  <p>Report it at <a href="https://github.com/ajsutton/moolah-native/issues">github.com/ajsutton/moolah-native/issues</a> with the exact caption from the account header and which provider is involved.</p>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="manage-crypto-tokens.html">Manage crypto tokens, discovered tokens, and spam</a></li>
+    <li><a href="add-a-crypto-wallet.html">Add a crypto wallet account</a></li>
+    <li><a href="add-an-exchange-account.html">Add an exchange account</a></li>
+    <li><a href="supported-crypto-chains-and-providers.html">Supported crypto chains and data providers</a></li>
+  </ul>
+</article>

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supported crypto chains and data providers — moolah.rocks help</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="help-header">
+    <a href="/" aria-label="moolah.rocks home">moolah.rocks</a>
+  </header>
+  <main class="help-content">
+    <article>
+  <h1>Supported crypto chains and data providers</h1>
+  <p>The chains Moolah can sync a wallet on, and the third-party services that supply on-chain data, exchange data, and prices. All of these calls go from your device directly to the provider — never via a Moolah server.</p>
+
+  <h2>Supported chains</h2>
+  <table>
+    <thead>
+      <tr><th>Chain</th><th>Native asset</th><th>Block explorer</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Ethereum</td><td>ETH</td><td>etherscan.io</td></tr>
+      <tr><td>OP Mainnet</td><td>ETH</td><td>optimistic.etherscan.io</td></tr>
+      <tr><td>Base</td><td>ETH</td><td>basescan.org</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Not supported</h2>
+  <p>Moolah doesn't sync wallets on Polygon, Arbitrum, Avalanche, or Bitcoin. You can still record holdings on those chains by adding an Investment account in Recorded value mode and entering snapshots manually.</p>
+
+  <h2>Data providers</h2>
+  <table>
+    <thead>
+      <tr><th>Provider</th><th>Used for</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Alchemy</td><td>On-chain transaction fetch for crypto wallets</td><td>Required. Uses your own API key, configured in <strong>Settings &gt; Crypto Tokens</strong>.</td></tr>
+      <tr><td>Blockscout</td><td>On-chain transaction fetch, fallback</td><td>Used automatically when Alchemy is unavailable. No key needed.</td></tr>
+      <tr><td>Coinstash</td><td>Exchange account sync</td><td>Uses your own read-only API token, configured per account.</td></tr>
+      <tr><td>CoinGecko</td><td>Token prices, highest priority</td><td>Optional. Add a free Demo API key in <strong>Settings &gt; Crypto Tokens</strong> to use it.</td></tr>
+      <tr><td>CryptoCompare</td><td>Token prices, fallback</td><td>No key needed.</td></tr>
+      <tr><td>Binance</td><td>Token prices, fallback</td><td>No key needed.</td></tr>
+      <tr><td>Frankfurter</td><td>Fiat exchange rates</td><td>No key needed.</td></tr>
+      <tr><td>Yahoo Finance</td><td>Stock prices and ticker search</td><td>No key needed.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="add-a-crypto-wallet.html">Add a crypto wallet account</a></li>
+    <li><a href="add-an-exchange-account.html">Add an exchange account</a></li>
+    <li><a href="manage-crypto-tokens.html">Manage crypto tokens, discovered tokens, and spam</a></li>
+    <li><a href="sync-and-privacy.html">Sync and privacy</a></li>
+  </ul>
+</article>
+
+  </main>
+  <footer class="help-footer">
+    &copy; 2026 moolah.rocks
+  </footer>
+</body>
+</html>

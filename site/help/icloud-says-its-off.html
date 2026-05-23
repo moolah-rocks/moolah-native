@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>iCloud says it's off — moolah.rocks help</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="help-header">
+    <a href="/" aria-label="moolah.rocks home">moolah.rocks</a>
+  </header>
+  <main class="help-content">
+    <article>
+  <h1>iCloud says it's off</h1>
+  <p>The welcome screen shows an iCloud-off chip with a reason. Here's what each reason means and how to clear it.</p>
+
+  <h2>iCloud is not signed in</h2>
+  <p>This is the most common reason. iCloud isn't signed in at the system level on this device, so Moolah has nothing to sync to.</p>
+  <ol>
+    <li>Select <strong>Open System Settings</strong> on the welcome screen chip. (On iOS the link reads <strong>Settings</strong>.)</li>
+    <li>Sign in to iCloud with your Apple ID.</li>
+    <li>Return to Moolah. The chip clears and sync starts on its own.</li>
+  </ol>
+  <p>If you have more than one device, sign in with the same Apple ID on each so your profiles travel between them.</p>
+
+  <h2>iCloud is restricted</h2>
+  <p>Something at the OS level is preventing apps from using iCloud — typically Screen Time, parental controls, or an MDM profile on a managed device.</p>
+  <p>On your Mac, check <strong>System Settings &gt; Screen Time &gt; Content &amp; Privacy &gt; Apps</strong>. On iOS, check <strong>Settings &gt; Screen Time &gt; Content &amp; Privacy Restrictions</strong>. Allow iCloud, then relaunch Moolah.</p>
+  <p>On a work-managed device, you may need to contact whoever administers it.</p>
+
+  <h2>iCloud is temporarily unavailable</h2>
+  <p>Apple's iCloud service is reachable but not responding right now. Nothing's wrong with your setup.</p>
+  <p>Wait a few minutes and reopen Moolah. If the chip is still there after an hour or so, restart the device.</p>
+
+  <h2>iCloud is not available in this build</h2>
+  <p>The build of Moolah you're running doesn't have iCloud entitlements. This usually means a development or internal build, not an App Store release.</p>
+  <p>Install Moolah from the App Store and open your profile there. The App Store build has the entitlements iCloud needs.</p>
+
+  <h2>If none of these helped</h2>
+  <p>Report it at <a href="https://github.com/ajsutton/moolah-native/issues">github.com/ajsutton/moolah-native/issues</a>, including the exact wording of the chip and which device you're on.</p>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="turn-on-icloud-sync.html">Turn on iCloud sync</a></li>
+    <li><a href="sync-and-privacy.html">Sync and privacy</a></li>
+  </ul>
+</article>
+
+  </main>
+  <footer class="help-footer">
+    &copy; 2026 moolah.rocks
+  </footer>
+</body>
+</html>

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add a crypto wallet account — moolah.rocks help</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="help-header">
+    <a href="/" aria-label="moolah.rocks home">moolah.rocks</a>
+  </header>
+  <main class="help-content">
+    <article>
+  <h1>Add a crypto wallet account</h1>
+  <p>Set up an on-chain crypto wallet account that auto-imports transactions from Alchemy directly to your device.</p>
+
+  <h2>Before you start</h2>
+  <p>You'll need two things:</p>
+  <ul>
+    <li>The wallet's <strong>0x address</strong>. ENS names aren't supported — paste the address itself.</li>
+    <li>An <strong>Alchemy API key</strong>. You create the key in your own Alchemy account. It stays on your device — Moolah uses it to call Alchemy directly, with no Moolah servers in between. If you don't have a key yet, add the wallet first and configure the key after. Sync starts once the key is in place. See <a href="manage-crypto-tokens.html">Manage crypto tokens, discovered tokens, and spam</a>.</li>
+  </ul>
+
+  <h2>Steps</h2>
+  <ol>
+    <li>Select <strong>+</strong> to open the New Account form. (On Mac you can also press <kbd>⌃⌘N</kbd>.)</li>
+    <li>Choose <strong>Crypto Wallet</strong> for the account type.</li>
+    <li>Enter a <strong>Name</strong> for the account.</li>
+    <li>Choose the <strong>Chain</strong>: Ethereum, OP Mainnet, or Base.</li>
+    <li>Paste the wallet's <strong>0x address</strong>.</li>
+    <li>Select <strong>Create</strong>.</li>
+  </ol>
+
+  <h2>First sync</h2>
+  <p>Once your Alchemy key is in place, sync starts automatically. A sync-status bar at the top of the account view shows the last sync, any current attempt, and inline messages if something needs attention.</p>
+  <p>The first sync can take a minute or two on a busy address. Select <strong>Sync now</strong> to trigger another run.</p>
+
+  <h2>Block-explorer link and counterparty addresses</h2>
+  <p>Each imported transaction includes a <strong>block-explorer link</strong> that opens the transaction on Etherscan, Optimistic Etherscan, or Basescan, depending on the chain. The transaction also lists the <strong>counterparty addresses</strong> for each leg.</p>
+  <p>These are read-only and copy-only. Selecting a counterparty address copies it to the clipboard rather than opening a link. The deliberate friction lets you verify the address yourself before pasting it somewhere that matters.</p>
+
+  <h2>Result</h2>
+  <p>The wallet appears in the sidebar under Investments. Once the first sync finishes, the account view lists your on-chain transactions and shows current positions.</p>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="wallet-or-exchange-isnt-syncing.html">My wallet or exchange account isn't syncing</a></li>
+    <li><a href="supported-crypto-chains-and-providers.html">Supported crypto chains and data providers</a></li>
+  </ul>
+</article>
+
+  </main>
+  <footer class="help-footer">
+    &copy; 2026 moolah.rocks
+  </footer>
+</body>
+</html>
