@@ -1,6 +1,76 @@
 {
   "version": "1",
   "entries": [
-    { "slug": "welcome", "title": "Welcome to Moolah", "parent": null }
+    { "slug": "welcome", "title": "Welcome to Moolah", "parent": null },
+
+    { "slug": "getting-started", "title": "Getting started", "parent": null },
+    { "slug": "create-your-first-profile", "title": "Create your first profile", "parent": "getting-started" },
+    { "slug": "try-moolah-without-committing-real-data", "title": "Try Moolah without committing real data", "parent": "getting-started" },
+
+    { "slug": "profiles", "title": "Profiles", "parent": null },
+    { "slug": "manage-your-profiles", "title": "Add, switch, edit, or delete a profile", "parent": "profiles" },
+    { "slug": "export-or-import-a-profile", "title": "Export or import a profile as a file", "parent": "profiles" },
+    { "slug": "pick-up-a-profile-on-another-device", "title": "Pick up a profile on another device", "parent": "profiles" },
+
+    { "slug": "accounts", "title": "Accounts", "parent": null },
+    { "slug": "add-an-account", "title": "Add an account", "parent": "accounts" },
+    { "slug": "edit-hide-reorder-or-delete-an-account", "title": "Edit, hide, reorder, or delete an account", "parent": "accounts" },
+    { "slug": "sidebar-totals", "title": "Sidebar totals", "parent": "accounts" },
+
+    { "slug": "transactions", "title": "Transactions", "parent": null },
+    { "slug": "add-or-edit-a-transaction", "title": "Add or edit a transaction", "parent": "transactions" },
+    { "slug": "record-a-transfer", "title": "Record a transfer between accounts", "parent": "transactions" },
+    { "slug": "split-a-transaction", "title": "Split a transaction across categories", "parent": "transactions" },
+    { "slug": "delete-a-transaction", "title": "Delete a transaction", "parent": "transactions" },
+    { "slug": "filter-and-search-transactions", "title": "Filter and search transactions", "parent": "transactions" },
+
+    { "slug": "scheduled-transactions", "title": "Scheduled transactions", "parent": null },
+    { "slug": "set-up-a-recurring-transaction", "title": "Set up a recurring transaction", "parent": "scheduled-transactions" },
+    { "slug": "pay-a-scheduled-transaction", "title": "Pay a scheduled transaction", "parent": "scheduled-transactions" },
+
+    { "slug": "earmarks-and-budgets", "title": "Earmarks and budgets", "parent": null },
+    { "slug": "create-an-earmark", "title": "Create an earmark", "parent": "earmarks-and-budgets" },
+    { "slug": "assign-a-transaction-to-an-earmark", "title": "Assign a transaction to an earmark", "parent": "earmarks-and-budgets" },
+    { "slug": "set-a-budget-for-an-earmark", "title": "Set a budget for an earmark", "parent": "earmarks-and-budgets" },
+
+    { "slug": "categories", "title": "Categories", "parent": null },
+    { "slug": "create-and-organise-categories", "title": "Create and organise categories", "parent": "categories" },
+
+    { "slug": "reports-and-analysis", "title": "Reports and analysis", "parent": null },
+    { "slug": "view-income-and-expense-by-category", "title": "View income and expense by category", "parent": "reports-and-analysis" },
+    { "slug": "analyse-net-worth-and-forecast", "title": "Analyse net worth and forecast upcoming months", "parent": "reports-and-analysis" },
+
+    { "slug": "investments-and-crypto", "title": "Investments and crypto", "parent": null },
+    { "slug": "add-an-investment-account", "title": "Add an investment account", "parent": "investments-and-crypto" },
+    { "slug": "record-an-investment-snapshot", "title": "Record an investment value snapshot", "parent": "investments-and-crypto" },
+    { "slug": "record-a-trade", "title": "Record a trade", "parent": "investments-and-crypto" },
+    { "slug": "add-a-crypto-wallet", "title": "Add a crypto wallet account", "parent": "investments-and-crypto" },
+    { "slug": "add-an-exchange-account", "title": "Add an exchange account", "parent": "investments-and-crypto" },
+    { "slug": "manage-crypto-tokens", "title": "Manage crypto tokens, discovered tokens, and spam", "parent": "investments-and-crypto" },
+
+    { "slug": "importing-data", "title": "Importing data", "parent": null },
+    { "slug": "import-a-csv-file", "title": "Import a CSV file", "parent": "importing-data" },
+    { "slug": "set-up-a-watched-folder", "title": "Set up a watched folder for imports", "parent": "importing-data" },
+    { "slug": "review-recently-imported-transactions", "title": "Review recently imported transactions", "parent": "importing-data" },
+    { "slug": "create-and-manage-import-rules", "title": "Create and manage import rules", "parent": "importing-data" },
+    { "slug": "how-import-detects-your-file", "title": "How CSV import works", "parent": "importing-data" },
+
+    { "slug": "sync-and-privacy", "title": "Sync and privacy", "parent": null },
+    { "slug": "turn-on-icloud-sync", "title": "Turn on iCloud sync", "parent": "sync-and-privacy" },
+    { "slug": "what-syncs-and-what-stays-on-device", "title": "What Moolah syncs", "parent": "sync-and-privacy" },
+
+    { "slug": "reference", "title": "Reference", "parent": null },
+    { "slug": "keyboard-shortcuts", "title": "Keyboard shortcuts", "parent": "reference" },
+    { "slug": "supported-crypto-chains-and-providers", "title": "Supported crypto chains and data providers", "parent": "reference" },
+
+    { "slug": "troubleshooting", "title": "Troubleshooting", "parent": null },
+    { "slug": "icloud-says-its-off", "title": "iCloud says it's off", "parent": "troubleshooting" },
+    { "slug": "icloud-storage-is-full", "title": "iCloud storage is full", "parent": "troubleshooting" },
+    { "slug": "wont-open-this-profile", "title": "Moolah won't open this profile", "parent": "troubleshooting" },
+    { "slug": "wallet-or-exchange-isnt-syncing", "title": "My wallet or exchange account isn't syncing", "parent": "troubleshooting" },
+    { "slug": "scheduled-transaction-didnt-post", "title": "A scheduled transaction didn't post on its own", "parent": "troubleshooting" },
+    { "slug": "csv-import-needs-setup", "title": "CSV import dropped into Needs Setup", "parent": "troubleshooting" },
+    { "slug": "balance-looks-wrong", "title": "A balance looks wrong", "parent": "troubleshooting" },
+    { "slug": "i-deleted-a-transaction-by-accident", "title": "I deleted a transaction by accident", "parent": "troubleshooting" }
   ]
 }

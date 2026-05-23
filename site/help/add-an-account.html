@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add an account — moolah.rocks help</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="help-header">
+    <a href="/" aria-label="moolah.rocks home">moolah.rocks</a>
+  </header>
+  <main class="help-content">
+    <article>
+  <h1>Add an account</h1>
+  <p>Create a new account so you can record transactions against it.</p>
+
+  <h2>Before you start</h2>
+  <ul>
+    <li>Decide which of the six account types you need — the type drives what fields appear next, and you can't change it later.</li>
+    <li>For a crypto wallet, have the 0x address ready.</li>
+    <li>For an exchange account, have a read-only Coinstash API token ready.</li>
+  </ul>
+
+  <h2>Steps</h2>
+  <ol>
+    <li>In the sidebar, select <strong>New Account</strong>. On Mac you can also press <kbd>⌃⌘N</kbd>.</li>
+    <li>Choose an account type from the picker.</li>
+    <li>Enter a <strong>Name</strong> you'll recognise in the sidebar.</li>
+    <li>Pick the account's <strong>Currency</strong>. The default is your profile currency.</li>
+    <li>Enter the <strong>Opening Balance</strong> and <strong>Opening Date</strong>. Moolah records a system-generated opening transaction so the running balance lines up.</li>
+    <li>Fill in any type-specific fields for your account type.</li>
+    <li>Select <strong>Create</strong>.</li>
+  </ol>
+
+  <h2>Type-specific fields</h2>
+
+  <h3>Credit Card</h3>
+  <p>Enter the balance you owe as a negative number. A balance of 1,200 owing is entered as <code>-1200</code>. Credit card debt is negative; a refund on a credit card appears as a positive expense — this is correct behaviour.</p>
+
+  <h3>Asset</h3>
+  <p>Use Asset for things like a car, a property, or a collectible. The opening balance is your current estimate of its value. You can update the value over time by recording transactions.</p>
+
+  <h3>Investment</h3>
+  <p>Pick a <strong>Valuation</strong> mode. <strong>Recorded value</strong> means you'll add balance snapshots yourself. <strong>Calculated from trades</strong> means you'll record buys and sells, and Moolah will work out the current value at market prices. You can switch modes later. See <a href="add-an-investment-account.html">Add an investment account</a> for the full walkthrough.</p>
+
+  <h3>Crypto Wallet</h3>
+  <p>Pick a <strong>Chain</strong>: Ethereum, OP Mainnet, or Base. Paste the wallet's <strong>0x address</strong>. ENS names aren't supported — paste the 0x address directly. Transaction import runs after you add an Alchemy API key in <strong>Settings &gt; Crypto Tokens</strong>.</p>
+
+  <h3>Exchange</h3>
+  <p>Pick <strong>Coinstash</strong> as the provider. Create a <strong>read-only</strong> API token inside your Coinstash account, then paste it here. Moolah stores the token in iCloud Keychain and begins importing trades.</p>
+
+  <h2>Result</h2>
+  <p>The new account appears in the sidebar, under Current Accounts or Investments depending on its type. Crypto wallets and exchange accounts begin their first import straight away.</p>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="edit-hide-reorder-or-delete-an-account.html">Edit, hide, reorder, or delete an account</a></li>
+    <li><a href="add-a-crypto-wallet.html">Add a crypto wallet account</a></li>
+    <li><a href="add-an-exchange-account.html">Add an exchange account</a></li>
+    <li><a href="sidebar-totals.html">Sidebar totals</a></li>
+  </ul>
+</article>
+
+  </main>
+  <footer class="help-footer">
+    &copy; 2026 moolah.rocks
+  </footer>
+</body>
+</html>

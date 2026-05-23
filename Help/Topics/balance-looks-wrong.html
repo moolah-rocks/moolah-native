@@ -1,0 +1,38 @@
+<article>
+  <h1>A balance looks wrong</h1>
+  <p>The number you're seeing doesn't match what you expect. Work through the checks below — most "wrong" balances are one of these.</p>
+
+  <h2>Hidden accounts are excluded</h2>
+  <p>Sidebar totals don't count hidden accounts. If you hid an account that still holds value, the totals it feeds will look light.</p>
+  <p>On Mac, choose <strong>View &gt; Show Hidden Accounts</strong> (<kbd>⇧⌘H</kbd>). On iOS, toggle <strong>Show Hidden Accounts</strong> at the bottom of the sidebar. The hidden accounts reappear so you can see what they contain and unhide them if needed.</p>
+
+  <h2>Spam transactions are filtered out</h2>
+  <p>If you've marked tokens as spam, transactions involving those tokens are filtered out of balances and lists by default. The balance you see omits them on purpose.</p>
+  <p>On Mac, choose <strong>View &gt; Show Spam Transactions</strong> to confirm what's being hidden. On iOS, toggle the same option at the bottom of the sidebar. If a token is hidden that shouldn't be, see <a href="manage-crypto-tokens.html">Manage crypto tokens, discovered tokens, and spam</a>.</p>
+
+  <h2>A currency conversion couldn't run</h2>
+  <p>For an account that holds more than one currency or asset, Moolah converts each position to the account's denominating currency. If a rate provider was unavailable for one of those positions, the affected total shows as unavailable rather than summed wrong.</p>
+  <p>If you see "—" or a missing total, that's the cause. Wait a moment and reload the view; the rates usually come back on their own. If a position is in a token Moolah doesn't have a price for, register the token in <strong>Settings &gt; Crypto Tokens</strong>.</p>
+
+  <h2>The sign is the opposite of what you'd expect</h2>
+  <p>Moolah uses signs consistently across the app:</p>
+  <ul>
+    <li>Expenses are negative; income is positive.</li>
+    <li>A refund is an expense with a positive amount — that's correct, not a typo.</li>
+    <li>A credit card's opening balance should be the amount you owe, entered as a negative number.</li>
+  </ul>
+  <p>Open the transaction or the account's opening balance and check the sign. Flipping a sign by hand fixes most "off by double the amount" surprises.</p>
+
+  <h2>A change from another device hasn't arrived</h2>
+  <p>If you edited a transaction on your iPhone a moment ago, your Mac may not have caught up yet. Check the sync footer at the bottom of the sidebar for the last-synced time. If sync is paused — for example because <a href="icloud-storage-is-full.html">iCloud storage is full</a> — recent changes won't have landed.</p>
+
+  <h2>If none of the above helped</h2>
+  <p>Report it at <a href="https://github.com/ajsutton/moolah-native/issues">github.com/ajsutton/moolah-native/issues</a> with the account name, the value you see, and the value you expect.</p>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="sidebar-totals.html">Sidebar totals</a></li>
+    <li><a href="add-or-edit-a-transaction.html">Add or edit a transaction</a></li>
+    <li><a href="sync-and-privacy.html">Sync and privacy</a></li>
+  </ul>
+</article>

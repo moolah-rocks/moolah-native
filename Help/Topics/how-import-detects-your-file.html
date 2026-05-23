@@ -1,0 +1,22 @@
+<article>
+  <h1>How CSV import works</h1>
+  <p>Moolah recognises the shape of a CSV file by its structure, not by knowing your bank. This article explains what that means in practice.</p>
+
+  <h2>What Moolah looks at</h2>
+  <p>When you import a CSV, Moolah inspects the file itself — the header row, the column count, the delimiter, and the date format. Together these form a "file shape". Moolah doesn't read the file name or look up the bank that produced it. Two CSVs with the same column layout look identical to Moolah, even if they came from different banks.</p>
+
+  <h2>What happens on a new shape</h2>
+  <p>If the shape matches one Moolah has imported before, the file goes straight through. The rows turn into transactions and land in <strong>Recently Added</strong>.</p>
+  <p>If the shape is new, Moolah can't guess which column is the date, which is the amount, and so on. The file lands in <strong>Recently Added</strong> under <strong>Needs Setup</strong>. You map each column once — Date, Description, Amount, Payee — and pick which account the transactions belong to. Moolah saves the mapping as part of that file shape. The next file with the same columns imports without asking.</p>
+
+  <h2>What this means for you</h2>
+  <p>You set each new file shape up once. After that, the same export imports without further setup. This holds whether you download it monthly from your bank, drop it into a watched folder, or paste it in from a spreadsheet. If your bank changes its export format, that's a new shape, and Moolah will ask you to map it again.</p>
+
+  <p>To remove a learned file shape, go to <strong>Settings &gt; Import</strong>, swipe the row, and select <strong>Delete</strong>. The next CSV with that shape will be treated as new and dropped into <strong>Needs Setup</strong> for fresh mapping.</p>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="import-a-csv-file.html">Import a CSV file</a></li>
+    <li><a href="csv-import-needs-setup.html">CSV import dropped into Needs Setup</a></li>
+  </ul>
+</article>

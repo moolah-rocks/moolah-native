@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add an exchange account — moolah.rocks help</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="help-header">
+    <a href="/" aria-label="moolah.rocks home">moolah.rocks</a>
+  </header>
+  <main class="help-content">
+    <article>
+  <h1>Add an exchange account</h1>
+  <p>Connect a Coinstash account so your trades auto-import from Coinstash directly to your device.</p>
+
+  <h2>Before you start</h2>
+  <p>You'll need a <strong>read-only API token</strong> from your Coinstash account. Create it on Coinstash's website — read-only means Moolah can fetch your trade history but can't move funds or place orders. Follow Coinstash's documentation for the current steps to generate one.</p>
+  <p>The token is stored in iCloud Keychain on your devices, separate from your Moolah data. If you've turned off iCloud Keychain, the token stays on the device you pasted it on.</p>
+
+  <h2>Steps</h2>
+  <ol>
+    <li>Select <strong>+</strong> to open the New Account form. (On Mac you can also press <kbd>⌃⌘N</kbd>.)</li>
+    <li>Choose <strong>Exchange</strong> for the account type.</li>
+    <li>Choose <strong>Coinstash</strong> as the provider.</li>
+    <li>Enter a <strong>Name</strong> for the account.</li>
+    <li>Paste the read-only API token into the <strong>API Token</strong> field.</li>
+    <li>Select <strong>Create</strong>.</li>
+  </ol>
+
+  <h2>Replacing the token later</h2>
+  <p>If you rotate the token on Coinstash, paste the new one in:</p>
+  <ol>
+    <li>Right-click the account in the sidebar (Mac) or open the account and select <strong>Edit Account</strong> (iOS).</li>
+    <li>Paste the new token into the <strong>New token</strong> field.</li>
+    <li>Select <strong>Save</strong>.</li>
+  </ol>
+
+  <h2>Result</h2>
+  <p>The exchange account appears under Investments and sync starts automatically. Trades appear in the account view once the first sync finishes.</p>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="wallet-or-exchange-isnt-syncing.html">My wallet or exchange account isn't syncing</a></li>
+    <li><a href="investments-and-crypto.html">Investments and crypto</a></li>
+  </ul>
+</article>
+
+  </main>
+  <footer class="help-footer">
+    &copy; 2026 moolah.rocks
+  </footer>
+</body>
+</html>

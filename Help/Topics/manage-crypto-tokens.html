@@ -1,0 +1,58 @@
+<article>
+  <h1>Manage crypto tokens, discovered tokens, and spam</h1>
+  <p>Configure how Moolah prices the tokens in your wallets, review new tokens as they appear, and keep junk off your balances.</p>
+
+  <h2>Where to find it</h2>
+  <p>Open <strong>Settings &gt; Crypto Tokens</strong>. The same screen handles three closely-related jobs. You enable on-chain sync, decide which tokens are priced, and deal with unfamiliar tokens that turn up in any wallet's history.</p>
+
+  <h2>Enable sync with your Alchemy key</h2>
+  <p>Crypto wallet sync needs an Alchemy API key — without one, none of the wallets sync. The key is yours; Moolah queries Alchemy directly from your device.</p>
+  <ol>
+    <li>In the <strong>Alchemy</strong> section, paste your API key into the <strong>API Key</strong> field.</li>
+    <li>Select <strong>Save</strong>.</li>
+  </ol>
+  <p>To swap in a new key, select <strong>Remove</strong>, then paste and save the new one. If you don't have a key yet, the section includes a link to Alchemy's pricing page where you can sign up.</p>
+
+  <h2>Optional: add a CoinGecko key for better pricing</h2>
+  <p>Pricing has fallbacks built in. A free CoinGecko Demo API key promotes CoinGecko to the highest-priority price source, which is usually the best fit for crypto.</p>
+  <ol>
+    <li>In the <strong>CoinGecko</strong> section, paste your key into the <strong>API Key</strong> field.</li>
+    <li>Select <strong>Save</strong>.</li>
+  </ol>
+
+  <h2>What gets priced: registered tokens</h2>
+  <p>The <strong>Registered Tokens</strong> list is the set of tokens Moolah prices. Native chain tokens (ETH on Ethereum, OP Mainnet, and Base) are priced automatically. You add other tokens as you want them tracked.</p>
+  <ol>
+    <li>Select <strong>+</strong> at the top of the Registered Tokens list.</li>
+    <li>Search by name, symbol, or contract address.</li>
+    <li>Select the token to register it.</li>
+  </ol>
+  <p>To stop tracking a token, select the ellipsis on its row and choose <strong>Remove</strong>.</p>
+
+  <h2>Review what shows up: discovered tokens</h2>
+  <p>When a wallet sync finds tokens you haven't registered, they land in <strong>Discovered Tokens</strong> rather than being added silently. This is also where airdrops and scam tokens first appear, so it's worth a regular look.</p>
+  <ol>
+    <li>Select <strong>Discovered Tokens</strong>. The badge on the row shows how many are waiting.</li>
+    <li>For each token, decide:
+      <ul>
+        <li><strong>Approve</strong> — Moolah registers the token and starts pricing it. Use this for tokens you actually hold.</li>
+        <li><strong>Mark as Spam</strong> — Moolah hides the token from balances and transaction lists. Use this for airdropped junk and scams.</li>
+      </ul>
+    </li>
+  </ol>
+
+  <h2>Keep junk out: spam tokens</h2>
+  <p>Tokens marked spam move to <strong>Spam Tokens</strong>. They no longer appear on balances or in transaction lists. Moolah keeps the record so it doesn't ask you again the next time the same token turns up.</p>
+  <p>If you marked something as spam by mistake, open <strong>Spam Tokens</strong>, find the row, and select <strong>Approve</strong> to move it back into Registered Tokens.</p>
+  <p>To show spam transactions in lists for a one-off check, on Mac choose <strong>View &gt; Show Spam Transactions</strong>. On iOS, use the <strong>Show Spam</strong> toggle in the sidebar.</p>
+
+  <h2>Result</h2>
+  <p>Your wallets sync against your own Alchemy key. The tokens you care about are priced. New arrivals queue up in Discovered Tokens for review, and scam tokens stay out of your balances.</p>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="add-a-crypto-wallet.html">Add a crypto wallet account</a></li>
+    <li><a href="supported-crypto-chains-and-providers.html">Supported crypto chains and data providers</a></li>
+    <li><a href="wallet-or-exchange-isnt-syncing.html">My wallet or exchange account isn't syncing</a></li>
+  </ul>
+</article>

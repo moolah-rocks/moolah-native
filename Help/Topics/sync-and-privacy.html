@@ -1,0 +1,29 @@
+<article>
+  <h1>Sync and privacy</h1>
+  <p>This section covers where your Moolah data lives, what optional iCloud sync moves between your devices, and which third-party providers your device talks to directly.</p>
+
+  <h2>Where your data lives</h2>
+  <p>Your data lives on your device. Each profile is stored in a local database on whichever Mac, iPhone, or iPad you created it on. There is no Moolah-operated server. No accounts, no cloud servers, no one looking over your shoulder.</p>
+
+  <p>If you want to use Moolah on more than one device, you can turn on optional iCloud sync. Sync uses your own iCloud account through Apple's CloudKit. It is end-to-end encrypted by iCloud. Nothing flows through Moolah on its way between your devices.</p>
+
+  <h2>What sync moves</h2>
+  <p>When iCloud sync is on, the data inside your profiles moves between your devices: accounts, transactions, categories, earmarks, budgets, schedules, import profiles, and import rules. Per-device preferences and caches stay on each device — they don't need to follow you around. For the full inventory, see <a href="what-syncs-and-what-stays-on-device.html">What Moolah syncs</a>.</p>
+
+  <p>Exchange API tokens are a special case. They're stored in iCloud Keychain, which is Apple's encrypted store for secrets. iCloud Keychain is separate from CloudKit. It syncs the token across your devices so you don't have to paste it on every one. The token stays out of the regular profile data.</p>
+
+  <h2>Third-party providers</h2>
+  <p>If you add a crypto wallet or an exchange account, your device talks directly to the relevant providers. That's Alchemy, Blockscout, CoinGecko, and Coinstash, depending on what you've set up. Frankfurter is used for fiat exchange rates. These calls go from your device to those providers; they don't go through Moolah. The API keys and tokens you supply are yours, used by your device.</p>
+
+  <p>For the chains and providers Moolah supports, see <a href="supported-crypto-chains-and-providers.html">Supported crypto chains and data providers</a>.</p>
+
+  <h2>Using Moolah without iCloud</h2>
+  <p>iCloud sync is optional. You can use Moolah fully on a single device with iCloud signed out or unavailable. You can also move profiles between devices by hand using a JSON file — see <a href="export-or-import-a-profile.html">Export or import a profile as a file</a>.</p>
+
+  <h2>Related</h2>
+  <ul>
+    <li><a href="turn-on-icloud-sync.html">Turn on iCloud sync</a></li>
+    <li><a href="icloud-says-its-off.html">iCloud says it's off</a></li>
+    <li><a href="manage-crypto-tokens.html">Manage crypto tokens, discovered tokens, and spam</a></li>
+  </ul>
+</article>
