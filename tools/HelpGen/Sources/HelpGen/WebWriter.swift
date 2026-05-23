@@ -10,17 +10,26 @@ enum WebWriter {
     }
     try fm.createDirectory(at: webDir, withIntermediateDirectories: true)
 
+    let toc = TOCRenderer.renderHTML(toc: inputs.toc, excludingSlug: inputs.accessPageSlug)
+
     // Per-topic HTML pages wrapped in the web shell. Inputs.load guarantees
     // every TOC slug has a corresponding body in inputs.topics.
     for entry in inputs.toc.entries {
+      let isAccessPage = entry.slug == inputs.accessPageSlug
+
+      let body = try TemplateRenderer.render(
+        template: inputs.topics[entry.slug]!,
+        tokens: ["toc": isAccessPage ? toc : ""]
+      )
+
       let rendered = try TemplateRenderer.render(
         template: inputs.webShell,
         tokens: [
           "title": entry.title,
-          "body": inputs.topics[entry.slug]!,
+          "body": body,
         ]
       )
-      let fileName = entry.slug == "welcome" ? "index.html" : "\(entry.slug).html"
+      let fileName = isAccessPage ? "index.html" : "\(entry.slug).html"
       try rendered.write(
         to: webDir.appendingPathComponent(fileName),
         atomically: true, encoding: .utf8)

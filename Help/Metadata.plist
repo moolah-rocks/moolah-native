@@ -26,5 +26,11 @@
   <string>shared/icon-32.png</string>
   <key>HPDBookIndexPath</key>
   <string>Moolah.helpindex</string>
+  <key>HPDBookCSIndexPath</key>
+  <string>Moolah.cshelpindex</string>
+  <key>HPDBookKBProduct</key>
+  <string>rocks.moolah.app</string>
+  <key>HPDBookType</key>
+  <string>3</string>
 </dict>
 </plist>
