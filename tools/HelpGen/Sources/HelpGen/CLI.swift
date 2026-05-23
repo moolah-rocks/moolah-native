@@ -6,17 +6,14 @@ enum HelpGenCLI {
   static func main() {
     do {
       let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-      let helpDir = cwd.appendingPathComponent("Help")
-      let bundleURL = cwd.appendingPathComponent("Help/Build/Moolah.help")
       let webDir = cwd.appendingPathComponent("site/help")
+      let srcDir = webDir.appendingPathComponent("_src")
 
-      let inputs = try Inputs.load(helpDir: helpDir)
-      try HelpBookWriter.write(inputs: inputs, bundleURL: bundleURL)
+      let inputs = try Inputs.load(srcDir: srcDir)
       try WebWriter.write(inputs: inputs, webDir: webDir)
 
       print(
-        "help-gen: wrote \(inputs.toc.entries.count) page(s) to "
-          + "\(bundleURL.path) and \(webDir.path)"
+        "help-gen: wrote \(inputs.toc.entries.count) page(s) to \(webDir.path)"
       )
     } catch {
       fputs("help-gen: \(error)\n", stderr)

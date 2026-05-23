@@ -9,10 +9,16 @@
 <body>
   <header class="help-header">
     <a href="/" aria-label="moolah.rocks home">moolah.rocks</a>
+    <span class="help-header-section">Help</span>
   </header>
-  <main class="help-content">
-    {{body}}
-  </main>
+  <div class="help-layout">
+    <aside class="help-sidebar">
+      {{sidebar}}
+    </aside>
+    <main class="help-content">
+      {{body}}
+    </main>
+  </div>
   <footer class="help-footer">
     &copy; 2026 moolah.rocks
   </footer>

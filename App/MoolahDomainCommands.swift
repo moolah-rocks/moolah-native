@@ -236,17 +236,24 @@ struct MoolahDomainCommands: Commands {
         .disabled(true)
     }
 
-    CommandGroup(after: .help) {
+    CommandGroup(replacing: .help) {
+      // We don't ship a native HelpViewer book — HelpViewer's sidebar TOC is
+      // gated to Apple-CDN-hosted books, and any in-bundle help loses the
+      // sidebar. The Help menu opens moolah.rocks/help instead, where the
+      // full corpus is rendered with a proper TOC sidebar.
+      Button("Moolah Help") {
+        if let url = URL(string: "https://moolah.rocks/help/") { openURL(url) }
+      }
+      .keyboardShortcut("?", modifiers: [.command, .shift])
+
+      Divider()
+
       Button("Keyboard Shortcuts\u{2026}") {
         openWindow(id: "keyboard-shortcuts")
       }
       .keyboardShortcut("/", modifiers: [.command, .shift])
 
       Divider()
-
-      Button("Release Notes") {
-        if let url = URL(string: "https://moolah.rocks/release-notes") { openURL(url) }
-      }
 
       Button("Report a Bug") {
         if let url = URL(string: "https://github.com/moolah-rocks/moolah-native/issues/new") {
@@ -258,10 +265,6 @@ struct MoolahDomainCommands: Commands {
 
       Button("Privacy Policy") {
         if let url = URL(string: "https://moolah.rocks/privacy") { openURL(url) }
-      }
-
-      Button("Terms of Service") {
-        if let url = URL(string: "https://moolah.rocks/terms") { openURL(url) }
       }
     }
   }

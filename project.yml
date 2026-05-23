@@ -148,8 +148,6 @@ targets:
       - path: Shared
       - path: Automation
       - path: UITestSupport
-      - path: Help/Build/Moolah.help
-        buildPhase: resources
     preBuildScripts:
       - script: "${SRCROOT}/scripts/check-release-build-number.sh"
         name: Verify Release build number
