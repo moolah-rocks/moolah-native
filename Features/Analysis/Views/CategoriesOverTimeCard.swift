@@ -139,7 +139,8 @@ struct CategoriesOverTimeCard: View {
   }
 
   private static let chartPalette: [Color] = [
-    .blue, .green, .orange, .purple, .red, .teal, .indigo, .pink, .mint, .cyan, .brown, .yellow,
+    .chartBlue, .chartGreen, .chartOrange, .chartPurple, .chartRed, .chartTeal,
+    .chartIndigo, .chartPink, .chartMint, .chartCyan, .chartBrown, .chartYellow,
   ]
 
   private func categoryColor(for id: UUID?) -> Color {

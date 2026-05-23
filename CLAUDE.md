@@ -215,9 +215,9 @@ Views must be thin wrappers that bind state, dispatch actions, and render. **All
 
 ## Bug Tracking
 
-- **Known bugs and feature issues** are tracked as GitHub issues at https://github.com/ajsutton/moolah-native/issues.
+- **Known bugs and feature issues** are tracked as GitHub issues at https://github.com/moolah-rocks/moolah-native/issues.
 - When fixing a bug, close the corresponding issue from the PR (e.g. `Fixes #123` in the commit or PR body).
-- When adding a TODO or FIXME in Swift source, reference an open GitHub issue: `TODO(#N): reason — https://github.com/ajsutton/moolah-native/issues/N`. Bare `TODO:` / `FIXME:` without an issue reference is disallowed.
+- When adding a TODO or FIXME in Swift source, reference an open GitHub issue: `TODO(#N): reason — https://github.com/moolah-rocks/moolah-native/issues/N`. Bare `TODO:` / `FIXME:` without an issue reference is disallowed.
 - CI blocks merging a PR that introduces a bare `TODO` or a `TODO(#N)` pointing at a closed/missing issue (`just validate-todos`). A nightly watchdog reopens any issue that gets closed while live references still exist and reconciles a `has-todos` label. See `guides/CODE_GUIDE.md` §20.
 
 ## Planning & Documentation
@@ -237,3 +237,4 @@ This project defines specialized review agents in `.claude/agents/`. Invoke them
 - **`instrument-conversion-review`** — Reviews Swift code for `guides/INSTRUMENT_CONVERSION_GUIDE.md` compliance: instrument-safe `InstrumentAmount` arithmetic (mismatches trap) and conversion-date correctness (historic = snapshot date, current/future = `Date()`). Use after modifying aggregation, reporting, forecast, or sidebar totals.
 - **`appstore-review`** — Reviews the app against App Store validation rules and Review Guidelines. Checks Info.plist, project.yml, entitlements, icons, and flags potential review issues. Use before tagging a release.
 - **`ui-test-review`** — Reviews UI test code for `guides/UI_TEST_GUIDE.md` compliance: screen-driver rule (tests import only `XCTest`), driver invariants (trace logs, post-condition waits, single resolver, no element caching), identifier discipline, deterministic seeds, no sleeps/retries. Use after modifying any file under `MoolahUITests_macOS/`, any view that gains or loses an `.accessibilityIdentifier(_:)`, or any constant in `UITestSupport/`.
+- **`help-review`** — Reviews user-facing help content for `guides/HELP_GUIDE.md` and `guides/BRAND_GUIDE.md` compliance: brand voice, topic-type discipline, procedure structure, banned words, UI references, microcopy (errors, empty states, tooltips, confirmations), privacy claim accuracy, accessibility, locale safety. Use after writing or modifying any help article, tooltip, empty state, error message, onboarding string, or settings description.

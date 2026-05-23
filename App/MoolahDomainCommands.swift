@@ -237,10 +237,6 @@ struct MoolahDomainCommands: Commands {
     }
 
     CommandGroup(after: .help) {
-      Button("Moolah Help") {
-        if let url = URL(string: "https://moolah.app/help") { openURL(url) }
-      }
-
       Button("Keyboard Shortcuts\u{2026}") {
         openWindow(id: "keyboard-shortcuts")
       }
@@ -249,11 +245,11 @@ struct MoolahDomainCommands: Commands {
       Divider()
 
       Button("Release Notes") {
-        if let url = URL(string: "https://moolah.app/release-notes") { openURL(url) }
+        if let url = URL(string: "https://moolah.rocks/release-notes") { openURL(url) }
       }
 
       Button("Report a Bug") {
-        if let url = URL(string: "https://github.com/ajsutton/moolah-native/issues/new") {
+        if let url = URL(string: "https://github.com/moolah-rocks/moolah-native/issues/new") {
           openURL(url)
         }
       }
@@ -261,11 +257,11 @@ struct MoolahDomainCommands: Commands {
       Divider()
 
       Button("Privacy Policy") {
-        if let url = URL(string: "https://moolah.app/privacy") { openURL(url) }
+        if let url = URL(string: "https://moolah.rocks/privacy") { openURL(url) }
       }
 
       Button("Terms of Service") {
-        if let url = URL(string: "https://moolah.app/terms") { openURL(url) }
+        if let url = URL(string: "https://moolah.rocks/terms") { openURL(url) }
       }
     }
   }

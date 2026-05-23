@@ -92,7 +92,7 @@ struct BlockscoutAddress: Decodable, Sendable, Hashable {
 /// One item from the address `transactions` endpoint. `value` is wei as
 /// a decimal string. Success is derived from `status`/`result` so a
 /// reverted tx is still enumerated (it paid gas —
-/// https://github.com/ajsutton/moolah-native/issues/919).
+/// https://github.com/moolah-rocks/moolah-native/issues/919).
 struct BlockscoutTransaction: Decodable, Sendable, Hashable {
   let hash: String
   let blockNumber: Int
