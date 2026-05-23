@@ -127,7 +127,7 @@ struct TransactionDraftCategoryTests {
     #expect(draft.legDrafts[0].categoryText.isEmpty)
   }
 
-  // Per https://github.com/ajsutton/moolah-native/issues/509 reopening:
+  // Per https://github.com/moolah-rocks/moolah-native/issues/509 reopening:
   // `commitCategorySelection(id:path:)` must set both fields in a single
   // mutation so call sites doing `draft.commitCategorySelection(...)`
   // through a `@Binding` produce one read-modify-write rather than two

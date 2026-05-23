@@ -30,7 +30,7 @@ fi
 git fetch origin main --quiet
 # Sync tags so downstream tag-based logic (e.g. release-next-version) sees the
 # same set as origin — otherwise stale local state can produce a wrong "next"
-# version. See https://github.com/ajsutton/moolah-native/issues/498.
+# version. See https://github.com/moolah-rocks/moolah-native/issues/498.
 git fetch --tags --prune --force origin --quiet
 local_sha=$(git rev-parse HEAD)
 remote_sha=$(git rev-parse origin/main)

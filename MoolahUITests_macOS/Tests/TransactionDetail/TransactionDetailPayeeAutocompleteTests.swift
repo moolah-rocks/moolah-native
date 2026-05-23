@@ -54,7 +54,7 @@ final class TransactionDetailPayeeAutocompleteTests: MoolahUITestCase {
   }
 
   /// Escape closes the dropdown but must leave the user's typed text
-  /// alone. Per [#510](https://github.com/ajsutton/moolah-native/issues/510),
+  /// alone. Per [#510](https://github.com/moolah-rocks/moolah-native/issues/510),
   /// the user is in control of what is in the payee field — autocomplete
   /// is an aid, not a constraint, so dismissing the dropdown without a
   /// commit must not also wipe what the user has typed.

@@ -6,7 +6,7 @@ import XCTest
 /// matches and the prefix "Gro" matches exactly one.
 @MainActor
 final class TransactionDetailCategoryTests: MoolahUITestCase {
-  /// Per [#509](https://github.com/ajsutton/moolah-native/issues/509),
+  /// Per [#509](https://github.com/moolah-rocks/moolah-native/issues/509),
   /// arrow-key highlighting + Tab must commit the highlighted suggestion
   /// — the same as Enter or clicking the suggestion. Without this, the
   /// blur handler would dismiss the highlight, then the typed text would
@@ -32,7 +32,7 @@ final class TransactionDetailCategoryTests: MoolahUITestCase {
     app.transactionDetail.category.expectSuggestionsHidden()
   }
 
-  /// Regression for [#509](https://github.com/ajsutton/moolah-native/issues/509)
+  /// Regression for [#509](https://github.com/moolah-rocks/moolah-native/issues/509)
   /// reopening: pressing Enter to commit the highlighted suggestion and then
   /// Tabbing to the next field must keep the committed value. The original
   /// fix only handled the "Tab without Enter" path; this case (Enter then Tab)
