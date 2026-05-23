@@ -249,7 +249,7 @@ struct MoolahDomainCommands: Commands {
       }
 
       Button("Report a Bug") {
-        if let url = URL(string: "https://github.com/ajsutton/moolah-native/issues/new") {
+        if let url = URL(string: "https://github.com/moolah-rocks/moolah-native/issues/new") {
           openURL(url)
         }
       }

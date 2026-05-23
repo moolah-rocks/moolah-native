@@ -4,7 +4,7 @@ import Foundation
 extension TransferEventBuilder {
   /// Fetches receipts, builds a transaction per transfer-event group, then
   /// appends a gas-leg-only transaction for every signed hash that produced
-  /// no transfer event (#919 — https://github.com/ajsutton/moolah-native/issues/919).
+  /// no transfer event (#919 — https://github.com/moolah-rocks/moolah-native/issues/919).
   /// Invoked by build(_:) after it validates the wallet and assembles the BuildContext.
   func buildTransactions(
     transfers: [AlchemyTransfer],
@@ -57,7 +57,7 @@ extension TransferEventBuilder {
   /// whether any `AlchemyTransfer` row exists for it. `signedGasTxs` carries
   /// the hashes from Blockscout's account tx list; `groupedHashes` is the
   /// set already covered by transfer-event groups so we don't double-emit.
-  /// See https://github.com/ajsutton/moolah-native/issues/919.
+  /// See https://github.com/moolah-rocks/moolah-native/issues/919.
   private func buildGasOnlyTransactions(
     signedGasTxs: [SignedGasTx],
     groupedHashes: Set<String>,

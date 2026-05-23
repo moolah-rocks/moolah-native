@@ -547,7 +547,7 @@ Every `TODO` or `FIXME` **must reference a tracked GitHub issue**. Bare `TODO:` 
 
   ```swift
   // TODO(#123): drop legacy import path once sync v2 ships
-  //             — https://github.com/ajsutton/moolah-native/issues/123
+  //             — https://github.com/moolah-rocks/moolah-native/issues/123
   ```
 
 Enforcement is automated:

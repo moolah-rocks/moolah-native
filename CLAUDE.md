@@ -215,9 +215,9 @@ Views must be thin wrappers that bind state, dispatch actions, and render. **All
 
 ## Bug Tracking
 
-- **Known bugs and feature issues** are tracked as GitHub issues at https://github.com/ajsutton/moolah-native/issues.
+- **Known bugs and feature issues** are tracked as GitHub issues at https://github.com/moolah-rocks/moolah-native/issues.
 - When fixing a bug, close the corresponding issue from the PR (e.g. `Fixes #123` in the commit or PR body).
-- When adding a TODO or FIXME in Swift source, reference an open GitHub issue: `TODO(#N): reason — https://github.com/ajsutton/moolah-native/issues/N`. Bare `TODO:` / `FIXME:` without an issue reference is disallowed.
+- When adding a TODO or FIXME in Swift source, reference an open GitHub issue: `TODO(#N): reason — https://github.com/moolah-rocks/moolah-native/issues/N`. Bare `TODO:` / `FIXME:` without an issue reference is disallowed.
 - CI blocks merging a PR that introduces a bare `TODO` or a `TODO(#N)` pointing at a closed/missing issue (`just validate-todos`). A nightly watchdog reopens any issue that gets closed while live references still exist and reconciles a `has-todos` label. See `guides/CODE_GUIDE.md` §20.
 
 ## Planning & Documentation

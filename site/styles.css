@@ -1,7 +1,4 @@
-/* moolah.rocks — static site styles.
-   Ported from the legacy Welcome.vue <style lang="scss"> (ajsutton/moolah):
-   SCSS nesting flattened to plain CSS, sign-in removed, header/footer/CTA
-   added. Colours/type follow guides/BRAND_GUIDE.md. */
+/* moolah.rocks — static site styles. Colours/type follow guides/BRAND_GUIDE.md. */
 
 * {
   box-sizing: border-box;
