@@ -17,6 +17,28 @@
       logger.info("Scripting bridge ready")
     }
 
+    /// Receives Handoff `NSUserActivity` continuations from the OS. Routes
+    /// them through `HandoffContinuationHandler`, which drives the same
+    /// `NavigationBridge` that AppleScript and App Intents use. The
+    /// `WindowGroup` is opted out of SwiftUI external-event handling
+    /// (see `MoolahApp.swift`), so this delegate is the sole entry point
+    /// on macOS.
+    @MainActor
+    func application(
+      _ application: NSApplication,
+      continue userActivity: NSUserActivity,
+      restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void
+    ) -> Bool {
+      guard userActivity.activityType == HandoffActivity.continueActivityType,
+        let payload = userActivity.handoffPayload
+      else {
+        logger.warning("Ignoring handoff activity: missing or undecodable payload")
+        return false
+      }
+      HandoffContinuationHandler.continue(payload: payload)
+      return true
+    }
+
     /// Tells the scripting infrastructure which keys the application handles.
     func application(_ sender: NSApplication, delegateHandlesKey key: String) -> Bool {
       key == "scriptableProfiles"
