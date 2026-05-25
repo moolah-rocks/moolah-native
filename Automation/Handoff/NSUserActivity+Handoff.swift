@@ -8,24 +8,20 @@ extension NSUserActivity {
   /// Stamps every field required for Moolah's Handoff continuation.
   /// Centralised so the field map in the design doc stays in sync with
   /// the call sites.
-  static func configureContinueActivity(
-    _ activity: NSUserActivity,
-    payload: HandoffPayload,
-    title: String
-  ) {
-    activity.title = title
-    activity.targetContentIdentifier = payload.profileID.uuidString
-    activity.isEligibleForHandoff = true
-    activity.isEligibleForSearch = false
-    activity.isEligibleForPublicIndexing = false
-    activity.requiredUserInfoKeys = ["payload"]
+  func configureHandoff(payload: HandoffPayload, title: String) {
+    self.title = title
+    targetContentIdentifier = payload.profileID.uuidString
+    isEligibleForHandoff = true
+    isEligibleForSearch = false
+    isEligibleForPublicIndexing = false
+    requiredUserInfoKeys = ["payload"]
     do {
       let data = try JSONEncoder().encode(payload)
-      activity.userInfo = ["payload": data]
+      userInfo = ["payload": data]
     } catch {
       logger.error(
         "Failed to encode HandoffPayload: \(error.localizedDescription, privacy: .public)")
-      activity.userInfo = [:]
+      userInfo = [:]
     }
   }
 
@@ -33,6 +29,12 @@ extension NSUserActivity {
   /// if the activity is malformed (missing key, unparseable JSON).
   var handoffPayload: HandoffPayload? {
     guard let data = userInfo?["payload"] as? Data else { return nil }
-    return try? JSONDecoder().decode(HandoffPayload.self, from: data)
+    do {
+      return try JSONDecoder().decode(HandoffPayload.self, from: data)
+    } catch {
+      logger.warning(
+        "Failed to decode HandoffPayload: \(error.localizedDescription, privacy: .public)")
+      return nil
+    }
   }
 }
