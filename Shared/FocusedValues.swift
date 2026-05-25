@@ -142,6 +142,25 @@ struct SetTransactionTypeActionKey: FocusedValueKey {
   typealias Value = (TransactionDetailMode) -> Void
 }
 
+/// The UUID of the transaction currently selected in whichever
+/// transaction list owns the focused window's selection. Read-only;
+/// used by the Handoff publisher to compose the current route.
+struct SelectedTransactionIDKey: FocusedValueKey {
+  typealias Value = UUID
+}
+
+/// The Analysis view's current parameters when it is the focused detail
+/// view. Read-only; used by the Handoff publisher.
+struct AnalysisRouteKey: FocusedValueKey {
+  typealias Value = AnalysisRouteParams
+}
+
+/// The Reports view's current date range when it is the focused detail
+/// view. Read-only; used by the Handoff publisher.
+struct ReportsRouteKey: FocusedValueKey {
+  typealias Value = ReportsRouteParams
+}
+
 extension FocusedValues {
   var newTransactionAction: NewTransactionActionKey.Value? {
     get { self[NewTransactionActionKey.self] }
@@ -238,5 +257,17 @@ extension FocusedValues {
   var setTransactionTypeAction: SetTransactionTypeActionKey.Value? {
     get { self[SetTransactionTypeActionKey.self] }
     set { self[SetTransactionTypeActionKey.self] = newValue }
+  }
+  var selectedTransactionID: SelectedTransactionIDKey.Value? {
+    get { self[SelectedTransactionIDKey.self] }
+    set { self[SelectedTransactionIDKey.self] = newValue }
+  }
+  var analysisRoute: AnalysisRouteKey.Value? {
+    get { self[AnalysisRouteKey.self] }
+    set { self[AnalysisRouteKey.self] = newValue }
+  }
+  var reportsRoute: ReportsRouteKey.Value? {
+    get { self[ReportsRouteKey.self] }
+    set { self[ReportsRouteKey.self] = newValue }
   }
 }
