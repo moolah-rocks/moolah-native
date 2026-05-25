@@ -41,7 +41,6 @@
           )
         } else if let session = activeSession {
           SessionRootView(session: session)
-            .modifier(HandoffPublisherModifier(profileID: session.profile.id))
         } else if profileStore.hasProfiles
           && profileStore.activeProfileID != nil
         {

@@ -19,6 +19,12 @@ struct SessionRootView: View {
       .environment(session.reportingStore)
       .environment(session.importStore)
       .environment(session.importRuleStore)
+      .modifier(
+        HandoffPublisherModifier(
+          profileID: session.profile.id,
+          accountLookup: session.accountStore,
+          earmarkLookup: session.earmarkStore)
+      )
       .focusedSceneValue(\.authStore, session.authStore)
       .focusedSceneValue(\.activeProfileSession, session)
       .sheet(item: $session.activeExport) { active in

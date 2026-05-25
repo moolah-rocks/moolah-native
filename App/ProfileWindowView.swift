@@ -113,7 +113,6 @@
       case .ready(let session):
         SessionRootView(session: session)
           .environment(profileStore)
-          .modifier(HandoffPublisherModifier(profileID: session.profile.id))
       case .incompatible(let info):
         IncompatibleProfileView(
           info: info,
