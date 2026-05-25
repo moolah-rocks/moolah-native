@@ -18,11 +18,15 @@
     }
 
     /// Receives Handoff `NSUserActivity` continuations from the OS. Routes
-    /// them through `HandoffContinuationHandler`, which drives the same
-    /// `NavigationBridge` that AppleScript and App Intents use. The
-    /// `WindowGroup` is opted out of SwiftUI external-event handling
-    /// (see `MoolahApp.swift`), so this delegate is the sole entry point
-    /// on macOS.
+    /// valid payloads through `HandoffContinuationHandler`, which drives
+    /// the same `NavigationBridge` that AppleScript and App Intents use.
+    ///
+    /// Returns `true` for every activity whose `activityType` matches
+    /// `HandoffActivity.continueActivityType`, even when the payload is
+    /// missing or undecodable — that prevents AppKit from falling through
+    /// to SwiftUI's `WindowGroup` external-event routing, which would
+    /// auto-spawn a phantom window (the #386 class of bug). Activities of
+    /// other types return `false` so the OS can route them elsewhere.
     @MainActor
     func application(
       _ application: NSApplication,
@@ -36,7 +40,7 @@
       }
       guard let payload = userActivity.handoffPayload else {
         logger.warning("Ignoring Handoff activity: payload missing or undecodable")
-        return false
+        return true
       }
       HandoffContinuationHandler.continue(payload: payload)
       return true

@@ -69,8 +69,8 @@
       }
     }
 
-    @Test("returns false when the payload is missing")
-    func missingPayloadReturnsFalse() {
+    @Test("drops silently and returns true when the payload is missing")
+    func missingPayloadIsDropped() {
       let activity = NSUserActivity(activityType: HandoffActivity.continueActivityType)
       // No userInfo set — handoffPayload returns nil.
       let bridge = ScriptingBridge()
@@ -80,14 +80,17 @@
           NSApp,
           continue: activity,
           restorationHandler: { _ in })
-        #expect(!handled)
+        // Returns true so AppKit doesn't fall through to SwiftUI's
+        // WindowGroup external-event routing (which would spawn a phantom
+        // window per #386). No bridge calls.
+        #expect(handled)
         #expect(recorder.openedProfiles.isEmpty)
         #expect(recorder.setNavigations.isEmpty)
       }
     }
 
-    @Test("returns false when the payload is unparseable")
-    func unparseablePayloadReturnsFalse() {
+    @Test("drops silently and returns true when the payload is unparseable")
+    func unparseablePayloadIsDropped() {
       let activity = NSUserActivity(activityType: HandoffActivity.continueActivityType)
       activity.userInfo = ["payload": Data([0xFF, 0xFE])]
       let bridge = ScriptingBridge()
@@ -97,7 +100,7 @@
           NSApp,
           continue: activity,
           restorationHandler: { _ in })
-        #expect(!handled)
+        #expect(handled)
         #expect(recorder.openedProfiles.isEmpty)
         #expect(recorder.setNavigations.isEmpty)
       }
