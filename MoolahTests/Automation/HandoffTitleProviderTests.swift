@@ -71,28 +71,21 @@ struct HandoffTitleProviderTests {
     #expect(title == "Transaction")
   }
 
-  @Test("static destinations return their static titles")
-  func staticTitles() {
-    let accounts = FakeAccountLookup()
-    let earmarks = FakeEarmarkLookup()
-    #expect(
-      HandoffTitleProvider.title(for: .accounts, accounts: accounts, earmarks: earmarks)
-        == "Accounts")
-    #expect(
-      HandoffTitleProvider.title(for: .earmarks, accounts: accounts, earmarks: earmarks)
-        == "Earmarks")
-    #expect(
-      HandoffTitleProvider.title(
-        for: .reports(from: nil, to: nil), accounts: accounts, earmarks: earmarks) == "Reports")
-    #expect(
-      HandoffTitleProvider.title(
-        for: .analysis(history: nil, forecast: nil), accounts: accounts, earmarks: earmarks)
-        == "Analysis")
-    #expect(
-      HandoffTitleProvider.title(for: .categories, accounts: accounts, earmarks: earmarks)
-        == "Categories")
-    #expect(
-      HandoffTitleProvider.title(for: .upcoming, accounts: accounts, earmarks: earmarks)
-        == "Upcoming")
+  @Test(
+    "static destinations return their static titles",
+    arguments: [
+      (NavigationDestination.accounts, "Accounts"),
+      (.earmarks, "Earmarks"),
+      (.reports(from: nil, to: nil), "Reports"),
+      (.analysis(history: nil, forecast: nil), "Analysis"),
+      (.categories, "Categories"),
+      (.upcoming, "Upcoming"),
+    ])
+  func staticDestinationTitle(destination: NavigationDestination, expected: String) {
+    let title = HandoffTitleProvider.title(
+      for: destination,
+      accounts: FakeAccountLookup(),
+      earmarks: FakeEarmarkLookup())
+    #expect(title == expected)
   }
 }
