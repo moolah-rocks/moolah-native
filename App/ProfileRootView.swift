@@ -87,8 +87,8 @@
       }
       .onContinueUserActivity(HandoffActivity.continueActivityType) { activity in
         guard let payload = activity.handoffPayload else {
-          // Decode failure is logged inside NSUserActivity.handoffPayload.
-          // Missing-key path (an unrelated activity) is the normal silent case.
+          // nil covers both the normal case (unrelated activity, no payload
+          // key) and decode failures (logged inside `handoffPayload`).
           return
         }
         HandoffContinuationHandler.continue(payload: payload)
