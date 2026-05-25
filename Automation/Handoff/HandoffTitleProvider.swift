@@ -1,22 +1,5 @@
 import Foundation
 
-/// Read-only window into account display names. Implemented by the real
-/// `AccountStore` and by fakes in tests. `@MainActor` so the real store's
-/// main-actor-isolated `accounts` snapshot can satisfy it without crossing
-/// actor boundaries; the title provider runs from MainActor view code.
-@MainActor
-protocol HandoffAccountLookup {
-  func displayName(for id: UUID) -> String?
-}
-
-/// Read-only window into earmark display names. Implemented by the real
-/// `EarmarkStore` and by fakes in tests. `@MainActor` for the same reason
-/// as `HandoffAccountLookup`.
-@MainActor
-protocol HandoffEarmarkLookup {
-  func displayName(for id: UUID) -> String?
-}
-
 /// Pure function that turns a `NavigationDestination` into the
 /// human-readable title shown in the Handoff badge / Dock icon.
 ///
@@ -26,6 +9,15 @@ protocol HandoffEarmarkLookup {
 /// rather than embedding the UUID, which would be unhelpful in the UI.
 enum HandoffTitleProvider {
 
+  /// Returns the human-readable title for a navigation destination, used
+  /// in the Handoff badge / Dock icon. Account / earmark titles look up
+  /// the display name by id and fall back to the generic noun when the
+  /// id is not present in the local store — embedding the UUID would be
+  /// unhelpful in the UI.
+  ///
+  /// `@MainActor` because the lookup protocols (`HandoffAccountLookup`,
+  /// `HandoffEarmarkLookup`) are main-actor-isolated to match their
+  /// `AccountStore` / `EarmarkStore` conformers.
   @MainActor
   static func title(
     for destination: NavigationDestination,
