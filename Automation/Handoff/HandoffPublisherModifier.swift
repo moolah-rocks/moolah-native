@@ -3,14 +3,19 @@ import SwiftUI
 
 /// Reads the focused-scene navigation state and stamps an
 /// `NSUserActivity` via SwiftUI's `.userActivity(_:isActive:_:)` so the
-/// system can hand the route off to a peer device. Attach to the view
-/// that owns the live profile session — the `AccountStore` /
-/// `EarmarkStore` environment values are read for title lookup and
-/// must be present.
+/// system can hand the route off to a peer device.
+///
+/// The account / earmark stores are passed in as explicit parameters
+/// rather than read from `@Environment`. `@Environment` reads fire as
+/// soon as the modifier is constructed; if the modifier is applied
+/// outside the scope where the stores are injected (or before the
+/// `.environment(...)` chain wraps it), the lookup traps. Threading the
+/// stores in directly side-steps that ordering problem and keeps the
+/// publisher applicable wherever the session is in scope.
 struct HandoffPublisherModifier: ViewModifier {
   let profileID: UUID
-  @Environment(AccountStore.self) private var accountStore
-  @Environment(EarmarkStore.self) private var earmarkStore
+  let accountLookup: any HandoffAccountLookup
+  let earmarkLookup: any HandoffEarmarkLookup
   @FocusedValue(\.sidebarSelection) private var sidebarSelection
   @FocusedValue(\.selectedTransactionID) private var selectedTransactionID
   @FocusedValue(\.analysisRoute) private var analysisRoute
@@ -36,8 +41,8 @@ struct HandoffPublisherModifier: ViewModifier {
       let payload = HandoffPayload(profileID: profileID, destination: route)
       let title = HandoffTitleProvider.title(
         for: route,
-        accounts: accountStore,
-        earmarks: earmarkStore)
+        accounts: accountLookup,
+        earmarks: earmarkLookup)
       activity.configureHandoff(payload: payload, title: title)
     }
   }
