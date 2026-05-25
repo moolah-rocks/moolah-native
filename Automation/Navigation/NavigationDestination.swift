@@ -3,7 +3,7 @@ import Foundation
 /// A typed navigation intent used by AppleScript (`NavigateCommand`) and App
 /// Intents (`OpenAccountIntent`) to drive the UI in-process via
 /// `PendingNavigation` / `ScriptingContext.setPendingNavigation`.
-enum NavigationDestination: Sendable, Equatable, Codable {
+enum NavigationDestination: Sendable, Equatable {
   case accounts
   case account(UUID)
   case transaction(UUID)
