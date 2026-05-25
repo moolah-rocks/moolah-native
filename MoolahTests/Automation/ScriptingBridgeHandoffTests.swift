@@ -37,6 +37,8 @@
     func validActivityDrivesBridge() throws {
       let profileID = try #require(UUID(uuidString: "EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE"))
       let payload = HandoffPayload(profileID: profileID, destination: .accounts)
+      // UUID is not registered with ProfileWindowLocator — locator returns
+      // false and HandoffContinuationHandler takes the open-profile path.
       let bridge = ScriptingBridge()
       let activity = makeActivity(payload)
 

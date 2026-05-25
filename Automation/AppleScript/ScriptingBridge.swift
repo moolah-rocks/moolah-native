@@ -9,7 +9,7 @@
   /// Registered as the NSApplicationDelegate via @NSApplicationDelegateAdaptor.
   /// Exposes scriptableProfiles as the top-level element that NSApplication resolves
   /// via KVC for the SDEF's application class.
-  class ScriptingBridge: NSObject, NSApplicationDelegate {
+  final class ScriptingBridge: NSObject, NSApplicationDelegate {
 
     // MARK: - NSApplicationDelegate
 
@@ -29,10 +29,13 @@
       continue userActivity: NSUserActivity,
       restorationHandler: @escaping ([any NSUserActivityRestoring]) -> Void
     ) -> Bool {
-      guard userActivity.activityType == HandoffActivity.continueActivityType,
-        let payload = userActivity.handoffPayload
-      else {
-        logger.warning("Ignoring handoff activity: missing or undecodable payload")
+      guard userActivity.activityType == HandoffActivity.continueActivityType else {
+        logger.debug(
+          "Skipping non-Handoff activity: \(userActivity.activityType, privacy: .public)")
+        return false
+      }
+      guard let payload = userActivity.handoffPayload else {
+        logger.warning("Ignoring Handoff activity: payload missing or undecodable")
         return false
       }
       HandoffContinuationHandler.continue(payload: payload)
