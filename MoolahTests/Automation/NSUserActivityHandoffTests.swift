@@ -12,11 +12,11 @@ struct NSUserActivityHandoffTests {
       destination: .account(try #require(UUID(uuidString: "BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB"))))
   }
 
-  @Test("configureContinueActivity stamps every required field")
+  @Test("configureHandoff stamps every required field")
   func configureStampsFields() throws {
     let payload = try samplePayload()
     let activity = NSUserActivity(activityType: HandoffActivity.continueActivityType)
-    NSUserActivity.configureContinueActivity(activity, payload: payload, title: "Chase Checking")
+    activity.configureHandoff(payload: payload, title: "Chase Checking")
 
     #expect(activity.activityType == HandoffActivity.continueActivityType)
     #expect(activity.title == "Chase Checking")
@@ -34,7 +34,7 @@ struct NSUserActivityHandoffTests {
   func handoffPayloadRoundTrips() throws {
     let payload = try samplePayload()
     let activity = NSUserActivity(activityType: HandoffActivity.continueActivityType)
-    NSUserActivity.configureContinueActivity(activity, payload: payload, title: "x")
+    activity.configureHandoff(payload: payload, title: "x")
     let recovered = try #require(activity.handoffPayload)
     #expect(recovered == payload)
   }
