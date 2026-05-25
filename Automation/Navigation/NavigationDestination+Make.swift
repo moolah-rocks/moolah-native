@@ -14,7 +14,7 @@ extension NavigationDestination {
   ///    params (when supplied).
   /// 3. `nil` sidebar produces `nil` route — no Handoff activity is
   ///    advertised.
-  static func from(
+  static func make(
     sidebar: SidebarSelection?,
     selectedTransaction: UUID?,
     analysis: AnalysisRouteParams?,
@@ -29,7 +29,7 @@ extension NavigationDestination {
       return .analysis(history: analysis?.history, forecast: analysis?.forecast)
     case .reports:
       return .reports(from: reports?.from, to: reports?.to)
-    default:
+    case .account, .earmark, .allTransactions, .recentlyAdded, .upcomingTransactions, .categories:
       return sidebar.navigationDestination
     }
   }
