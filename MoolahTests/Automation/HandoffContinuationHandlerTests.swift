@@ -7,16 +7,16 @@ import Testing
   import AppKit
 #endif
 
-@Suite("HandoffContinuationHandler")
+/// Captures calls into NavigationBridge so we can assert order/arguments
+/// without driving a real scene graph.
+private final class BridgeRecorder {
+  var openedProfiles: [UUID] = []
+  var setNavigations: [PendingNavigation] = []
+}
+
+@Suite("HandoffContinuationHandler", .serialized)
 @MainActor
 struct HandoffContinuationHandlerTests {
-
-  /// Captures calls into NavigationBridge so we can assert order/arguments
-  /// without driving a real scene graph.
-  final class BridgeRecorder {
-    var openedProfiles: [UUID] = []
-    var setNavigations: [PendingNavigation] = []
-  }
 
   /// Installs recorder closures on NavigationBridge for the duration of
   /// the test, restoring the prior closures on tear-down.
@@ -33,20 +33,20 @@ struct HandoffContinuationHandlerTests {
     return try body(recorder)
   }
 
-  private func samplePayload() -> HandoffPayload {
-    HandoffPayload(profileID: UUID(), destination: .account(UUID()))
+  private func samplePayload() throws -> HandoffPayload {
+    HandoffPayload(
+      profileID: try #require(UUID(uuidString: "CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC")),
+      destination: .account(try #require(UUID(uuidString: "DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD"))))
   }
 
   #if os(macOS)
     @Test("macOS: existing window → openProfile is NOT called, setPendingNavigation IS")
-    func macOSExistingWindowSkipsOpen() {
-      let payload = samplePayload()
-      // Pre-register a window stamped with the locator's identifier so the
-      // locator finds it and returns true.
+    func macOSExistingWindowSkipsOpen() throws {
+      let payload = try samplePayload()
+      // NSWindow() registers automatically with NSApp.windows — no addWindowsItem needed.
       let window = NSWindow()
       window.identifier = ProfileWindowLocator.identifier(for: payload.profileID)
-      NSApp.addWindowsItem(window, title: "test", filename: false)
-      defer { NSApp.removeWindowsItem(window) }
+      defer { window.close() }
 
       withRecorder { recorder in
         HandoffContinuationHandler.continue(payload: payload)
@@ -58,9 +58,9 @@ struct HandoffContinuationHandlerTests {
     }
 
     @Test("macOS: no window → openProfile then setPendingNavigation, in that order")
-    func macOSNoWindowOpensProfileFirst() {
+    func macOSNoWindowOpensProfileFirst() throws {
       // Use a fresh UUID nothing is registered for, so the locator returns false.
-      let payload = samplePayload()
+      let payload = try samplePayload()
       withRecorder { recorder in
         HandoffContinuationHandler.continue(payload: payload)
         #expect(recorder.openedProfiles == [payload.profileID])
@@ -70,8 +70,8 @@ struct HandoffContinuationHandlerTests {
     }
   #else
     @Test("iOS: openProfile then setPendingNavigation, in that order")
-    func iOSAlwaysOpensProfileFirst() {
-      let payload = samplePayload()
+    func iOSAlwaysOpensProfileFirst() throws {
+      let payload = try samplePayload()
       withRecorder { recorder in
         HandoffContinuationHandler.continue(payload: payload)
         #expect(recorder.openedProfiles == [payload.profileID])
