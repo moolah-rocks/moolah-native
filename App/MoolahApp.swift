@@ -157,6 +157,11 @@ struct MoolahApp: App {
             }
           }
       }
+      // Opt out of SwiftUI's external-event auto-spawn. Handoff
+      // continuations arrive via `ScriptingBridge.application(_:continue:…)`
+      // and are routed in-process through `NavigationBridge`. See
+      // `plans/2026-05-25-handoff-design.md` and issue #386.
+      .handlesExternalEvents(matching: [])
       // Opt out of NSWindow state restoration under `--ui-testing` so a
       // stale window from a previous test (e.g. one that ended on the
       // Analysis view with a CancellationError) cannot get restored into
