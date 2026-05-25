@@ -111,12 +111,14 @@ struct NavigationDestinationCodableTests {
   @Test("categories encodes as {type: categories}")
   func categoriesWireShape() throws {
     let json = try encoded(.categories)
+    #expect(json.count == 1)
     #expect(json["type"] as? String == "categories")
   }
 
   @Test("upcoming encodes as {type: upcoming}")
   func upcomingWireShape() throws {
     let json = try encoded(.upcoming)
+    #expect(json.count == 1)
     #expect(json["type"] as? String == "upcoming")
   }
 
