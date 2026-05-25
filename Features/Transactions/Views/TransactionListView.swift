@@ -189,6 +189,7 @@ struct TransactionListView: View {
         if new != nil { searchFieldFocused = false }
       }
       .focusedSceneValue(\.selectedTransaction, selectedTransactionBinding)
+      .focusedSceneValue(\.selectedTransactionID, selectedTransaction?.id)
       .focusedSceneValue(\.transferMergeSelection, transferMergeSelection)
       .focusedSceneValue(
         \.mergeAsTransferAction,

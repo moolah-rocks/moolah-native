@@ -37,6 +37,10 @@ struct ReportsView: View {
     .task(id: DateRangeKey(from: resolvedFrom, to: resolvedTo)) {
       await reportingStore.loadCategoryBalances(dateRange: resolvedFrom...resolvedTo)
     }
+    .focusedSceneValue(
+      \.reportsRoute,
+      ReportsRouteParams(from: resolvedFrom, to: resolvedTo)
+    )
     .onChange(of: dateRange) { _, newValue in
       guard newValue != .custom else { return }
       resolvedFrom = newValue.startDate()

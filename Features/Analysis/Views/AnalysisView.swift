@@ -41,6 +41,10 @@ struct AnalysisView: View {
     )
     .profileNavigationTitle("Analysis")
     .focusedSceneValue(\.newTransactionAction, createNewScheduledTransaction)
+    .focusedSceneValue(
+      \.analysisRoute,
+      AnalysisRouteParams(history: store.historyMonths, forecast: store.forecastMonths)
+    )
     .toolbar {
       ToolbarItem(placement: .primaryAction) {
         Menu {
