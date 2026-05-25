@@ -8,7 +8,7 @@ extension SidebarSelection {
   ///
   /// `analysis` and `reports` map to their parameterless forms here;
   /// callers that want to overlay the current screen-level state should
-  /// use `NavigationDestination.from(sidebar:selectedTransaction:analysis:reports:)`
+  /// use `NavigationDestination.make(sidebar:selectedTransaction:analysis:reports:)`
   /// instead.
   var navigationDestination: NavigationDestination {
     switch self {

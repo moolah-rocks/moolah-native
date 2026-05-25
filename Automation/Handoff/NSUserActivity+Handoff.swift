@@ -2,6 +2,8 @@ import Foundation
 import OSLog
 
 private let logger = Logger(subsystem: "com.moolah.app", category: "Handoff")
+private let encoder = JSONEncoder()
+private let decoder = JSONDecoder()
 
 extension NSUserActivity {
 
@@ -16,7 +18,7 @@ extension NSUserActivity {
     isEligibleForPublicIndexing = false
     requiredUserInfoKeys = ["payload"]
     do {
-      let data = try JSONEncoder().encode(payload)
+      let data = try encoder.encode(payload)
       userInfo = ["payload": data]
     } catch {
       logger.error(
@@ -30,7 +32,7 @@ extension NSUserActivity {
   var handoffPayload: HandoffPayload? {
     guard let data = userInfo?["payload"] as? Data else { return nil }
     do {
-      return try JSONDecoder().decode(HandoffPayload.self, from: data)
+      return try decoder.decode(HandoffPayload.self, from: data)
     } catch {
       logger.warning(
         "Failed to decode HandoffPayload: \(error.localizedDescription, privacy: .public)")

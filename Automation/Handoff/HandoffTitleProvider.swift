@@ -9,12 +9,6 @@ import Foundation
 /// rather than embedding the UUID, which would be unhelpful in the UI.
 enum HandoffTitleProvider {
 
-  /// Returns the human-readable title for a navigation destination, used
-  /// in the Handoff badge / Dock icon. Account / earmark titles look up
-  /// the display name by id and fall back to the generic noun when the
-  /// id is not present in the local store — embedding the UUID would be
-  /// unhelpful in the UI.
-  ///
   /// `@MainActor` because the lookup protocols (`HandoffAccountLookup`,
   /// `HandoffEarmarkLookup`) are main-actor-isolated to match their
   /// `AccountStore` / `EarmarkStore` conformers.
