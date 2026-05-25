@@ -58,5 +58,9 @@
     <string>$(CLOUDKIT_ENVIRONMENT)</string>
     <key>MoolahCloudKitContainer</key>
     <string>$(CLOUDKIT_CONTAINER_ID)</string>
+    <key>NSUserActivityTypes</key>
+    <array>
+        <string>com.moolah.continue</string>
+    </array>
 </dict>
 </plist>
