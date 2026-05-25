@@ -3,13 +3,13 @@ import Testing
 
 @testable import Moolah
 
-@Suite("NavigationDestination.from")
-struct NavigationDestinationFromTests {
+@Suite("NavigationDestination.make")
+struct NavigationDestinationMakeTests {
 
   @Test("nil sidebar produces nil")
   func nilSidebarProducesNil() {
     #expect(
-      NavigationDestination.from(
+      NavigationDestination.make(
         sidebar: nil,
         selectedTransaction: nil,
         analysis: nil,
@@ -19,7 +19,7 @@ struct NavigationDestinationFromTests {
   @Test("transaction selection wins over sidebar")
   func transactionWinsOverSidebar() {
     let txn = UUID()
-    let result = NavigationDestination.from(
+    let result = NavigationDestination.make(
       sidebar: .allTransactions,
       selectedTransaction: txn,
       analysis: nil,
@@ -30,7 +30,7 @@ struct NavigationDestinationFromTests {
   @Test("transaction selection wins even with analysis params")
   func transactionWinsOverAnalysis() {
     let txn = UUID()
-    let result = NavigationDestination.from(
+    let result = NavigationDestination.make(
       sidebar: .analysis,
       selectedTransaction: txn,
       analysis: AnalysisRouteParams(history: 12, forecast: 6),
@@ -41,7 +41,7 @@ struct NavigationDestinationFromTests {
   @Test("sidebar alone produces the sidebar's destination")
   func sidebarAlone() {
     let acct = UUID()
-    let result = NavigationDestination.from(
+    let result = NavigationDestination.make(
       sidebar: .account(acct),
       selectedTransaction: nil,
       analysis: nil,
@@ -51,7 +51,7 @@ struct NavigationDestinationFromTests {
 
   @Test("analysis sidebar overlays analysis params")
   func analysisOverlaysParams() {
-    let result = NavigationDestination.from(
+    let result = NavigationDestination.make(
       sidebar: .analysis,
       selectedTransaction: nil,
       analysis: AnalysisRouteParams(history: 12, forecast: 6),
@@ -59,11 +59,19 @@ struct NavigationDestinationFromTests {
     #expect(result == .analysis(history: 12, forecast: 6))
   }
 
+  @Test("analysis sidebar with nil params produces parameterless analysis")
+  func analysisSidebarNilParamsProducesParameterless() {
+    let result = NavigationDestination.make(
+      sidebar: .analysis, selectedTransaction: nil,
+      analysis: nil, reports: nil)
+    #expect(result == .analysis(history: nil, forecast: nil))
+  }
+
   @Test("reports sidebar overlays reports params")
   func reportsOverlaysParams() {
     let from = Date(timeIntervalSince1970: 1_700_000_000)
     let to = Date(timeIntervalSince1970: 1_800_000_000)
-    let result = NavigationDestination.from(
+    let result = NavigationDestination.make(
       sidebar: .reports,
       selectedTransaction: nil,
       analysis: nil,
@@ -71,9 +79,17 @@ struct NavigationDestinationFromTests {
     #expect(result == .reports(from: from, to: to))
   }
 
+  @Test("reports sidebar with nil params produces parameterless reports")
+  func reportsSidebarNilParamsProducesParameterless() {
+    let result = NavigationDestination.make(
+      sidebar: .reports, selectedTransaction: nil,
+      analysis: nil, reports: nil)
+    #expect(result == .reports(from: nil, to: nil))
+  }
+
   @Test("non-analysis sidebar ignores analysis params")
   func nonAnalysisIgnoresAnalysisParams() {
-    let result = NavigationDestination.from(
+    let result = NavigationDestination.make(
       sidebar: .categories,
       selectedTransaction: nil,
       analysis: AnalysisRouteParams(history: 12, forecast: 6),
@@ -83,7 +99,7 @@ struct NavigationDestinationFromTests {
 
   @Test("non-reports sidebar ignores reports params")
   func nonReportsIgnoresReportsParams() {
-    let result = NavigationDestination.from(
+    let result = NavigationDestination.make(
       sidebar: .categories,
       selectedTransaction: nil,
       analysis: nil,
