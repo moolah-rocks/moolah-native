@@ -85,6 +85,14 @@
           pendingBinding?.wrappedValue = nav
         }
       }
+      .onContinueUserActivity(HandoffActivity.continueActivityType) { activity in
+        guard let payload = activity.handoffPayload else {
+          // Decode failure is logged inside NSUserActivity.handoffPayload.
+          // Missing-key path (an unrelated activity) is the normal silent case.
+          return
+        }
+        HandoffContinuationHandler.continue(payload: payload)
+      }
     }
 
     private func updateSession(for profileID: UUID?) {
