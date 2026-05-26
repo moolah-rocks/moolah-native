@@ -1,4 +1,3 @@
-// SyncBoundary — adding a case requires bumping DataFormatVersion.current.
 /// Sidebar bucket that an account (or group of accounts) lives in.
 ///
 /// Designed for future extension: additional cases (`.savings`,
