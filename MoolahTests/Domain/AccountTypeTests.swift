@@ -73,4 +73,5 @@ struct AccountTypeTests {
       AccountType.allCases.filter { $0.bucket == .investments }
         == [.investment, .crypto, .exchange])
   }
+
 }
