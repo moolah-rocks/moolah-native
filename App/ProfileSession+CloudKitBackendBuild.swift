@@ -82,28 +82,37 @@ extension ProfileSession {
       profileLabel: profile.label,
       conversionService: conversionService,
       instrumentRegistry: registry,
-      hooks: CloudKitBackend.CloudKitBackendHooks(
-        onCSVImportProfileChanged: hooks.changed,
-        onCSVImportProfileDeleted: hooks.deleted,
-        onImportRuleChanged: hooks.changed,
-        onImportRuleDeleted: hooks.deleted,
-        onAccountChanged: hooks.changed,
-        onAccountDeleted: hooks.deleted,
-        onCategoryChanged: hooks.changed,
-        onCategoryDeleted: hooks.deleted,
-        onTransferSuggestionChanged: hooks.changed,
-        onTransferSuggestionDeleted: hooks.deleted,
-        onEarmarkChanged: hooks.changed,
-        onEarmarkDeleted: hooks.deleted,
-        onEarmarkBudgetItemChanged: hooks.changed,
-        onEarmarkBudgetItemDeleted: hooks.deleted,
-        onInvestmentChanged: hooks.changed,
-        onInvestmentDeleted: hooks.deleted,
-        onTransactionChanged: hooks.changed,
-        onTransactionDeleted: hooks.deleted,
-        onTransactionLegChanged: hooks.changed,
-        onTransactionLegDeleted: hooks.deleted)
-    )
+      hooks: makeBackendHooks(hooks))
+  }
+
+  /// Fans the single shared `(changed, deleted)` closure pair across every
+  /// per-record-type field on `CloudKitBackendHooks`.
+  private static func makeBackendHooks(
+    _ hooks: GRDBRepoHooks
+  ) -> CloudKitBackend.CloudKitBackendHooks {
+    CloudKitBackend.CloudKitBackendHooks(
+      onCSVImportProfileChanged: hooks.changed,
+      onCSVImportProfileDeleted: hooks.deleted,
+      onImportRuleChanged: hooks.changed,
+      onImportRuleDeleted: hooks.deleted,
+      onAccountChanged: hooks.changed,
+      onAccountDeleted: hooks.deleted,
+      onAccountGroupChanged: hooks.changed,
+      onAccountGroupDeleted: hooks.deleted,
+      onCategoryChanged: hooks.changed,
+      onCategoryDeleted: hooks.deleted,
+      onTransferSuggestionChanged: hooks.changed,
+      onTransferSuggestionDeleted: hooks.deleted,
+      onEarmarkChanged: hooks.changed,
+      onEarmarkDeleted: hooks.deleted,
+      onEarmarkBudgetItemChanged: hooks.changed,
+      onEarmarkBudgetItemDeleted: hooks.deleted,
+      onInvestmentChanged: hooks.changed,
+      onInvestmentDeleted: hooks.deleted,
+      onTransactionChanged: hooks.changed,
+      onTransactionDeleted: hooks.deleted,
+      onTransactionLegChanged: hooks.changed,
+      onTransactionLegDeleted: hooks.deleted)
   }
 
   /// Bundle of the change/delete closures the GRDB repos call on each

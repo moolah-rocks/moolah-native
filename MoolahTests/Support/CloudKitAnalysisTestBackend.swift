@@ -12,6 +12,7 @@ import GRDB
 struct CloudKitAnalysisTestBackend: BackendProvider, @unchecked Sendable {
   let auth: any AuthProvider
   let accounts: any AccountRepository
+  let accountGroups: any AccountGroupRepository
   let transactions: any TransactionRepository
   let categories: any CategoryRepository
   let transferSuggestions: any TransferSuggestionRepository
@@ -68,6 +69,7 @@ struct CloudKitAnalysisTestBackend: BackendProvider, @unchecked Sendable {
     )
     self.auth = backend.auth
     self.accounts = backend.accounts
+    self.accountGroups = backend.accountGroups
     self.transactions = backend.transactions
     self.categories = backend.categories
     self.transferSuggestions = backend.transferSuggestions

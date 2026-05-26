@@ -115,6 +115,7 @@ struct AuthStoreTests {
 private struct TestAuthBackend: BackendProvider {
   let auth: any AuthProvider
   let accounts: any AccountRepository
+  let accountGroups: any AccountGroupRepository
   let transactions: any TransactionRepository
   let categories: any CategoryRepository
   let transferSuggestions: any TransferSuggestionRepository
@@ -130,6 +131,7 @@ private struct TestAuthBackend: BackendProvider {
     let (backend, _) = try TestBackend.create()
     self.auth = auth
     self.accounts = backend.accounts
+    self.accountGroups = backend.accountGroups
     self.transactions = backend.transactions
     self.categories = backend.categories
     self.transferSuggestions = backend.transferSuggestions
