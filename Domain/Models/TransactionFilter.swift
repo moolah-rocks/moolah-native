@@ -2,6 +2,15 @@ import Foundation
 
 struct TransactionFilter: Sendable, Equatable {
   var accountId: UUID?
+  /// Multi-account filter for composite views (e.g. an `AccountGroup`
+  /// detail view rendering merged transactions across its members).
+  /// Independent of `accountId`; the GRDB fetch layer ORs them together
+  /// (a transaction matches if any of its legs hits `accountId` *or* any
+  /// id in `accountIds`). Typical callers populate exactly one — either
+  /// `accountId` (single-account view) or `accountIds` (group view).
+  /// An empty set means "no multi-account filter" (treated as a no-op
+  /// by the fetch layer).
+  var accountIds: Set<UUID>
   var earmarkId: UUID?
   var scheduled: ScheduledFilter
   var dateRange: ClosedRange<Date>?
@@ -10,6 +19,7 @@ struct TransactionFilter: Sendable, Equatable {
 
   init(
     accountId: UUID? = nil,
+    accountIds: Set<UUID> = [],
     earmarkId: UUID? = nil,
     scheduled: ScheduledFilter = .all,
     dateRange: ClosedRange<Date>? = nil,
@@ -17,6 +27,7 @@ struct TransactionFilter: Sendable, Equatable {
     payee: String? = nil
   ) {
     self.accountId = accountId
+    self.accountIds = accountIds
     self.earmarkId = earmarkId
     self.scheduled = scheduled
     self.dateRange = dateRange
@@ -27,7 +38,17 @@ struct TransactionFilter: Sendable, Equatable {
 
 extension TransactionFilter {
   var hasActiveFilters: Bool {
-    accountId != nil || earmarkId != nil || scheduled != .all
+    accountId != nil || !accountIds.isEmpty || earmarkId != nil
+      || scheduled != .all
       || dateRange != nil || !categoryIds.isEmpty || payee != nil
+  }
+
+  /// True when *any* account-scoped predicate is present (single
+  /// `accountId` or a non-empty `accountIds`). The GRDB fetch path uses
+  /// this to gate running-balance and subtotal computations — those
+  /// only make sense for a single-account view, so a multi-account
+  /// (group) filter disables them.
+  var hasAccountFilter: Bool {
+    accountId != nil || !accountIds.isEmpty
   }
 }

@@ -36,4 +36,25 @@ struct TransactionFilterTests {
     let filter = TransactionFilter(payee: "Coffee Shop")
     #expect(filter.hasActiveFilters == true)
   }
+
+  @Test("Filter with non-empty accountIds is active")
+  func testFilterWithAccountIdsIsActive() {
+    let filter = TransactionFilter(accountIds: [UUID()])
+    #expect(filter.hasActiveFilters == true)
+    #expect(filter.hasAccountFilter == true)
+  }
+
+  @Test("Filter with empty accountIds set is inactive")
+  func testFilterWithEmptyAccountIdsIsInactive() {
+    let filter = TransactionFilter(accountIds: Set<UUID>())
+    #expect(filter.hasActiveFilters == false)
+    #expect(filter.hasAccountFilter == false)
+  }
+
+  @Test("hasAccountFilter is true for single accountId and false otherwise")
+  func testHasAccountFilter() {
+    #expect(TransactionFilter().hasAccountFilter == false)
+    #expect(TransactionFilter(accountId: UUID()).hasAccountFilter == true)
+    #expect(TransactionFilter(accountIds: [UUID(), UUID()]).hasAccountFilter == true)
+  }
 }

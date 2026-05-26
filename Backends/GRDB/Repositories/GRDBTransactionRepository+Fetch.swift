@@ -65,12 +65,18 @@ extension GRDBTransactionRepository {
 
     let totalCount = filteredRows.count
     let offset = input.page * input.pageSize
+    // Running balance / after-page subtotals only make sense for a
+    // single-account view. A multi-account (group) filter renders a
+    // merged list with no running balance, so the subtotal computation
+    // is skipped and `hasAccountFilter` is reported as false to the
+    // caller (it gates running-balance UI).
+    let isSingleAccount = filter.accountId != nil && filter.accountIds.isEmpty
     guard offset < totalCount else {
       return FetchSnapshot(
         pageTransactions: [],
         resolvedTarget: resolvedTarget,
         totalCount: totalCount,
-        hasAccountFilter: filter.accountId != nil,
+        hasAccountFilter: isSingleAccount,
         isPastEnd: true,
         afterPageSubtotals: [])
     }
@@ -85,7 +91,7 @@ extension GRDBTransactionRepository {
     }
 
     let afterPageSubtotals: [SubtotalEntry]
-    if let accountId = filter.accountId {
+    if let accountId = filter.accountId, isSingleAccount {
       let afterPageIds = Array(filteredRows[end...].map(\.id))
       afterPageSubtotals = try subtotalsAfterPage(
         database: database,
@@ -100,7 +106,7 @@ extension GRDBTransactionRepository {
       pageTransactions: pageTransactions,
       resolvedTarget: resolvedTarget,
       totalCount: totalCount,
-      hasAccountFilter: filter.accountId != nil,
+      hasAccountFilter: isSingleAccount,
       isPastEnd: false,
       afterPageSubtotals: afterPageSubtotals)
   }
@@ -163,10 +169,15 @@ extension GRDBTransactionRepository {
   ) throws -> [TransactionRow] {
     var rows = rows
 
-    if let accountId = filter.accountId {
+    // Build the union of account ids the caller is filtering by: a
+    // single `accountId` (single-account view) and / or a `accountIds`
+    // set (composite group view). Empty union → no account filter.
+    var unionAccountIds: Set<UUID> = filter.accountIds
+    if let accountId = filter.accountId { unionAccountIds.insert(accountId) }
+    if !unionAccountIds.isEmpty {
       let allowedIds =
         try TransactionLegRow
-        .filter(TransactionLegRow.Columns.accountId == accountId)
+        .filter(unionAccountIds.contains(TransactionLegRow.Columns.accountId))
         .select(TransactionLegRow.Columns.transactionId, as: UUID.self)
         .fetchAll(database)
       let allowedSet = Set(allowedIds)
@@ -257,8 +268,9 @@ extension GRDBTransactionRepository {
   }
 
   /// Resolves the running-balance label instrument for the page.
-  /// Account-scoped fetches use the account's own instrument; global
-  /// fetches use `defaultInstrument`. Mirrors
+  /// Single-account fetches use the account's own instrument; global
+  /// and multi-account (group) fetches use `defaultInstrument` (no
+  /// running balance in the merged list). Mirrors
   /// `CloudKitTransactionRepository.accountInstrument(id:)`. If the
   /// account row is missing (deleted concurrently) we fall back to
   /// `defaultInstrument` rather than failing the read.
@@ -268,6 +280,9 @@ extension GRDBTransactionRepository {
     instruments: [String: Instrument],
     defaultInstrument: Instrument
   ) throws -> Instrument {
+    // Multi-account (group) filter — no single per-account instrument
+    // applies, so use the profile default.
+    if !filter.accountIds.isEmpty { return defaultInstrument }
     guard let accountId = filter.accountId else { return defaultInstrument }
     guard
       let accountRow =
