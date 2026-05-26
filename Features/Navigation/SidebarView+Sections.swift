@@ -1,11 +1,5 @@
 // Section builders, helper methods, and actions for `SidebarView`.
 
-// Reason: SwiftUI sidebar layout mixes Section / Label / NavigationLink calls
-// whose argument lists span multiple lines for readability; the rule's
-// first-arg-on-opening-line convention fights the SwiftUI declarative idiom
-// without improving clarity.
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 extension SidebarView {
@@ -49,11 +43,14 @@ extension SidebarView {
     Section {
       ForEach(earmarkStore.visibleEarmarks) { earmark in
         NavigationLink(value: SidebarSelection.earmark(earmark.id)) {
-          SidebarRowView(
-            icon: "bookmark.fill", name: earmark.name,
-            amount: earmarkStore.convertedBalance(for: earmark.id),
-            isSelected: selection == .earmark(earmark.id))
+          EarmarkRowView(
+            earmark: earmark,
+            isSelected: selection == .earmark(earmark.id),
+            isEditing: renameBinding(for: earmark.id),
+            onRename: renameAction(for: earmark)
+          )
         }
+        .contextMenu { earmarkContextMenu(for: earmark) }
       }
       .onMove { source, destination in
         Task { await earmarkStore.reorderEarmarks(from: source, to: destination) }
