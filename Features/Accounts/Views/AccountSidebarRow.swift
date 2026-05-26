@@ -1,21 +1,5 @@
 import SwiftUI
 
-/// Shared row view for sidebar items (accounts, earmarks) that displays
-/// an icon, name, and balance with selection-aware color coding.
-/// When `isSelected` is true and the selection background is prominent
-/// (focused sidebar), uses hand-tuned bright greens/reds instead of
-/// `.green` / `.red` so the amount stays legible against the saturated
-/// blue selection highlight. System colours `.mint` / `.pink` were tried
-/// and rejected — too desaturated. See
-/// guides/UI_GUIDE.md §5 "Selected-Row Contrast Override (Exception)"
-/// for the rationale and the rule that this is the only place in the
-/// app where hardcoded RGB values are permitted.
-///
-/// **Inline rename:** when both `isEditing` and `onRename` are provided,
-/// the row supports double-click-to-rename. Callers that do not opt in
-/// still receive a double-click gesture that no-ops, so do not attach a
-/// competing double-click handler to a `SidebarRowView`.
-
 /// TextField used by `SidebarRowView` while a row is in inline-rename
 /// mode. Auto-focuses on appear; commits on Return or focus loss (calls
 /// `onCommit`); cancels on Escape (calls `onCancel`). Separated from
@@ -51,6 +35,21 @@ private struct InlineRenameField: View {
   }
 }
 
+/// Shared row view for sidebar items (accounts, earmarks) that displays
+/// an icon, name, and balance with selection-aware color coding.
+/// When `isSelected` is true and the selection background is prominent
+/// (focused sidebar), uses hand-tuned bright greens/reds instead of
+/// `.green` / `.red` so the amount stays legible against the saturated
+/// blue selection highlight. System colours `.mint` / `.pink` were tried
+/// and rejected — too desaturated. See
+/// guides/UI_GUIDE.md §5 "Selected-Row Contrast Override (Exception)"
+/// for the rationale and the rule that this is the only place in the
+/// app where hardcoded RGB values are permitted.
+///
+/// **Inline rename:** when both `isEditing` and `onRename` are provided,
+/// the row supports double-click-to-rename. Callers that do not opt in
+/// still receive a double-click gesture that no-ops, so do not attach a
+/// competing double-click handler to a `SidebarRowView`.
 struct SidebarRowView: View {
   let icon: String
   let name: String
