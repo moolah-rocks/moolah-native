@@ -126,7 +126,12 @@ struct SidebarRowView: View {
         },
         onCancel: { isEditing.wrappedValue = false }
       )
-    } else if let isEditing, onRename != nil {
+    } else if let isEditing, onRename != nil, isSelected {
+      // Finder pattern: rename gesture only attaches once the row is
+      // selected. Attaching `.onTapGesture(count: 2)` on an unselected
+      // row's Text makes SwiftUI hold the first click waiting for a
+      // second, which prevents the parent NavigationLink from receiving
+      // the click and updating selection.
       Text(name)
         .onTapGesture(count: 2) { isEditing.wrappedValue = true }
     } else {
