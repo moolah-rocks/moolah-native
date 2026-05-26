@@ -78,10 +78,9 @@ struct SidebarView: View {
     .listStyle(.sidebar)
     .onKeyPress(.return) {
       // Only respond to Return when the selection points at a row
-      // that supports inline rename (account or earmark today; group
-      // in Phase 4). Other selections (analysis / reports / etc.)
-      // pass through unhandled so any default Return behaviour is
-      // preserved.
+      // that supports inline rename. Other selections (analysis /
+      // reports / etc.) pass through unhandled so any default Return
+      // behaviour is preserved.
       switch selection {
       case .account(let id):
         guard accountStore.accounts.by(id: id) != nil else { return .ignored }
