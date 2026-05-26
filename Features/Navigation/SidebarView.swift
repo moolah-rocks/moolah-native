@@ -1,9 +1,3 @@
-// Reason: SwiftUI sidebar layout mixes Section / Label / NavigationLink calls
-// whose argument lists span multiple lines for readability; the rule's
-// first-arg-on-opening-line convention fights the SwiftUI declarative idiom
-// without improving clarity.
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 enum SidebarSelection: Hashable {
@@ -20,17 +14,22 @@ enum SidebarSelection: Hashable {
 struct SidebarView: View {
   // MARK: - Properties
 
-  @Environment(AccountStore.self) private var accountStore
-  @Environment(EarmarkStore.self) private var earmarkStore
+  @Environment(AccountStore.self) var accountStore
+  @Environment(EarmarkStore.self) var earmarkStore
   @Environment(ProfileSession.self) private var session
-  @Environment(ImportStore.self) private var importStore
+  @Environment(ImportStore.self) var importStore
   @Environment(TransactionStore.self) private var transactionStore
   @Binding var selection: SidebarSelection?
-  @State private var showCreateEarmarkSheet = false
-  @State private var showCreateAccountSheet = false
-  @State private var accountToEdit: Account?
-  @AppStorage("showHiddenAccounts") private var showHidden = false
-  @AppStorage("showSpamTransactions") private var showSpam = false
+  @State var showCreateEarmarkSheet = false
+  @State var showCreateAccountSheet = false
+  @State var accountToEdit: Account?
+  /// Identifies the sidebar row currently in inline rename mode, if
+  /// any. Local-only — never persisted, never synced. At most one row
+  /// is in edit mode at a time across the entire sidebar (accounts,
+  /// earmarks, future groups).
+  @State var editingRowId: UUID?
+  @AppStorage("showHiddenAccounts") var showHidden = false
+  @AppStorage("showSpamTransactions") var showSpam = false
 
   #if os(iOS)
     @State private var editMode: EditMode = .inactive
@@ -146,188 +145,9 @@ struct SidebarView: View {
 }
 
 extension SidebarView {
-  // MARK: - Sections
-
-  private func handleAccountEditRequest(_ note: Notification) {
-    guard let id = note.object as? UUID,
-      let account = accountStore.accounts.by(id: id)
-    else { return }
-    accountToEdit = account
-  }
-
-  private var currentAccountsSection: some View {
-    Section {
-      ForEach(accountStore.currentAccounts) { account in
-        NavigationLink(value: SidebarSelection.account(account.id)) {
-          AccountSidebarRow(account: account, isSelected: selection == .account(account.id))
-        }
-        .dropDestination(for: URL.self) { urls, _ in
-          Task { await ingestDroppedURLs(urls, forcedAccountId: account.id) }
-          return !urls.isEmpty
-        }
-        .accessibilityIdentifier(UITestIdentifiers.Sidebar.account(account.id))
-        .contextMenu { accountContextMenu(for: account) }
-      }
-      .onMove { source, destination in
-        Task { await reorderCurrentAccounts(from: source, to: destination) }
-      }
-      totalRow(label: "Current Total", value: accountStore.convertedCurrentTotal)
-    } header: {
-      sectionHeader(title: "Current Accounts", addAction: addAccountAction)
-    }
-  }
-
-  private var earmarksSection: some View {
-    Section {
-      ForEach(earmarkStore.visibleEarmarks) { earmark in
-        NavigationLink(value: SidebarSelection.earmark(earmark.id)) {
-          SidebarRowView(
-            icon: "bookmark.fill", name: earmark.name,
-            amount: earmarkStore.convertedBalance(for: earmark.id),
-            isSelected: selection == .earmark(earmark.id))
-        }
-      }
-      .onMove { source, destination in
-        Task { await earmarkStore.reorderEarmarks(from: source, to: destination) }
-      }
-      totalRow(label: "Earmarked Total", value: earmarkStore.convertedTotalBalance)
-    } header: {
-      sectionHeader(title: "Earmarks", addAction: addEarmarkAction)
-    }
-  }
-
-  private var investmentsSection: some View {
-    Section("Investments") {
-      ForEach(accountStore.investmentAccounts) { account in
-        NavigationLink(value: SidebarSelection.account(account.id)) {
-          AccountSidebarRow(account: account, isSelected: selection == .account(account.id))
-        }
-        .accessibilityIdentifier(UITestIdentifiers.Sidebar.account(account.id))
-        .contextMenu { accountContextMenu(for: account) }
-      }
-      .onMove { source, destination in
-        Task { await reorderInvestmentAccounts(from: source, to: destination) }
-      }
-      totalRow(label: "Investment Total", value: accountStore.convertedInvestmentTotal)
-    }
-  }
-
-  @ViewBuilder private var totalsSection: some View {
-    Section {
-      if let currentTotal = accountStore.convertedCurrentTotal,
-        let earmarkedTotal = earmarkStore.convertedTotalBalance,
-        earmarkedTotal.isPositive
-      {
-        LabeledContent("Available Funds") {
-          InstrumentAmountView(amount: currentTotal - earmarkedTotal)
-        }
-        .font(.headline)
-        .accessibilityLabel("Available Funds: \((currentTotal - earmarkedTotal).formatted)")
-      }
-      if let netWorth = accountStore.convertedNetWorth {
-        LabeledContent("Net Worth") {
-          InstrumentAmountView(amount: netWorth)
-        }
-        .font(.headline)
-        .bold()
-        .accessibilityLabel("Net Worth: \(netWorth.formatted)")
-      }
-    }
-  }
-
-  @ViewBuilder private var navigationSection: some View {
-    Section {
-      NavigationLink(value: SidebarSelection.analysis) {
-        Label("Analysis", systemImage: "chart.bar.xaxis")
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("analysis"))
-      NavigationLink(value: SidebarSelection.reports) {
-        Label("Reports", systemImage: "chart.bar.fill")
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("reports"))
-      NavigationLink(value: SidebarSelection.categories) {
-        Label("Categories", systemImage: "tag")
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("categories"))
-      NavigationLink(value: SidebarSelection.upcomingTransactions) {
-        Label("Upcoming", systemImage: "calendar")
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("upcoming"))
-      NavigationLink(value: SidebarSelection.recentlyAdded) {
-        recentlyAddedLabel
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("recentlyAdded"))
-      NavigationLink(value: SidebarSelection.allTransactions) {
-        Label("All Transactions", systemImage: "list.bullet")
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("allTransactions"))
-      #if os(iOS)
-        navigationToggles
-      #endif
-    }
-  }
-
-  #if os(iOS)
-    /// iOS-only visibility toggles shown at the bottom of the navigation
-    /// section. Extracted from `navigationSection` to keep its closure
-    /// within SwiftLint's `closure_body_length` budget.
-    @ViewBuilder private var navigationToggles: some View {
-      Toggle(isOn: $showHidden) {
-        Label(
-          showHidden ? "Hide Hidden Accounts" : "Show Hidden Accounts",
-          systemImage: showHidden ? "eye" : "eye.slash"
-        )
-      }
-      Toggle(isOn: $showSpam) {
-        Label(
-          showSpam ? "Hide Spam Transactions" : "Show Spam Transactions",
-          systemImage: showSpam ? "eye" : "eye.slash"
-        )
-      }
-    }
-  #endif
-
-  // MARK: - Helpers
-
-  private func reorderCurrentAccounts(from source: IndexSet, to destination: Int) async {
-    var accounts = accountStore.currentAccounts
-    accounts.move(fromOffsets: source, toOffset: destination)
-    await accountStore.reorderAccounts(accounts)
-  }
-
-  /// Dropped CSV onto a sidebar account row: force the import onto that
-  /// account, bypassing profile matching. A profile is created on success.
-  private func ingestDroppedURLs(_ urls: [URL], forcedAccountId: UUID) async {
-    for url in urls
-    where url.pathExtension.lowercased() == "csv"
-      || url.pathExtension.isEmpty
-    {
-      let didStart = url.startAccessingSecurityScopedResource()
-      defer {
-        if didStart { url.stopAccessingSecurityScopedResource() }
-      }
-      guard let data = try? Data(contentsOf: url) else { continue }
-      _ = await importStore.ingest(
-        data: data,
-        source: .droppedFile(url: url, forcedAccountId: forcedAccountId))
-    }
-  }
-
-  private func reorderInvestmentAccounts(from source: IndexSet, to destination: Int) async {
-    var accounts = accountStore.investmentAccounts
-    accounts.move(fromOffsets: source, toOffset: destination)
-    await accountStore.reorderAccounts(
-      accounts, positionOffset: accountStore.currentAccounts.count)
-  }
-
-  // MARK: - Actions
-
-  private func addAccountAction() { showCreateAccountSheet = true }
-  private func addEarmarkAction() { showCreateEarmarkSheet = true }
-
   // MARK: - Row Builders
 
-  private var recentlyAddedLabel: some View {
+  var recentlyAddedLabel: some View {
     HStack {
       Label("Recently Added", systemImage: "tray.full")
       Spacer()
@@ -345,7 +165,7 @@ extension SidebarView {
     }
   }
 
-  private func totalRow(label: String, value: InstrumentAmount?) -> some View {
+  func totalRow(label: String, value: InstrumentAmount?) -> some View {
     LabeledContent(label) {
       if let value {
         InstrumentAmountView(amount: value)
@@ -358,8 +178,22 @@ extension SidebarView {
     .font(.callout)
   }
 
+  /// Returns a binding that reports `true` when this row id is the one
+  /// currently being inline-renamed, and (on `set(true)`) makes it so.
+  /// Centralises the one-at-a-time invariant.
+  func renameBinding(for id: UUID) -> Binding<Bool> {
+    Binding(
+      get: { editingRowId == id },
+      set: { newValue in editingRowId = newValue ? id : nil }
+    )
+  }
+
   @ViewBuilder
-  private func accountContextMenu(for account: Account) -> some View {
+  func accountContextMenu(for account: Account) -> some View {
+    Button("Rename", systemImage: "character.cursor.ibeam") {
+      editingRowId = account.id
+    }
+    .accessibilityIdentifier(UITestIdentifiers.Sidebar.renameContextMenuItem)
     Button("Edit Account\u{2026}", systemImage: "pencil") {
       accountToEdit = account
     }
@@ -370,7 +204,7 @@ extension SidebarView {
   }
 
   @ViewBuilder
-  private func sectionHeader(title: String, addAction: @escaping () -> Void) -> some View {
+  func sectionHeader(title: String, addAction: @escaping () -> Void) -> some View {
     HStack {
       Text(title)
       Spacer()

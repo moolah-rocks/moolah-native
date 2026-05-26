@@ -167,6 +167,8 @@ struct SidebarRowView: View {
 struct AccountSidebarRow: View {
   let account: Account
   var isSelected: Bool = false
+  var isEditing: Binding<Bool>?
+  var onRename: ((String) -> Void)?
   @Environment(AccountStore.self) private var accountStore
 
   var body: some View {
@@ -175,7 +177,9 @@ struct AccountSidebarRow: View {
       name: account.name,
       amount: accountStore.convertedBalances[account.id],
       isSelected: isSelected,
-      unsetIndicator: accountStore.hasUnrecordedValue(account) ? "Not set" : nil
+      unsetIndicator: accountStore.hasUnrecordedValue(account) ? "Not set" : nil,
+      isEditing: isEditing,
+      onRename: onRename
     )
   }
 }
