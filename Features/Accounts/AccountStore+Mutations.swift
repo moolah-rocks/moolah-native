@@ -57,6 +57,21 @@ extension AccountStore {
     }
   }
 
+  /// Convenience rename. Trims whitespace; treats empty / whitespace-only
+  /// input as a revert (no write, returns the current account unchanged).
+  /// Same-name input is also a no-op. The reactive observation delivers
+  /// the renamed account; `surfaceError` handling is delegated to
+  /// `update(_:)`.
+  @discardableResult
+  func rename(id: UUID, to newName: String) async throws -> Account? {
+    let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let account = accounts.by(id: id) else { return nil }
+    guard !trimmed.isEmpty, trimmed != account.name else { return account }
+    var updated = account
+    updated.name = trimmed
+    return try await update(updated)
+  }
+
   /// Persists a new ordering. Each underlying `update` is awaited
   /// sequentially; the first error is captured and surfaced. The
   /// reactive observation delivers the authoritative ordering once the
