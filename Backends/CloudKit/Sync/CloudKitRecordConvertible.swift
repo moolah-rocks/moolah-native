@@ -28,6 +28,7 @@ protocol IdentifiableRecord {
 // `InstrumentRow` is string-keyed; no `IdentifiableRecord` conformance.
 extension ProfileRow: IdentifiableRecord {}
 extension AccountRow: IdentifiableRecord {}
+extension AccountGroupRow: IdentifiableRecord {}
 extension TransactionRow: IdentifiableRecord {}
 extension TransactionLegRow: IdentifiableRecord {}
 extension CategoryRow: IdentifiableRecord {}
@@ -54,6 +55,7 @@ extension CSVImportProfileRow: ValueTypeSystemFieldsReadable {}
 extension ImportRuleRow: ValueTypeSystemFieldsReadable {}
 extension InstrumentRow: ValueTypeSystemFieldsReadable {}
 extension AccountRow: ValueTypeSystemFieldsReadable {}
+extension AccountGroupRow: ValueTypeSystemFieldsReadable {}
 extension CategoryRow: ValueTypeSystemFieldsReadable {}
 extension TransferSuggestionRow: ValueTypeSystemFieldsReadable {}
 extension EarmarkRow: ValueTypeSystemFieldsReadable {}
@@ -95,6 +97,7 @@ enum RecordTypeRegistry: Sendable {
     ProfileRow.recordType: ProfileRow.self,
     InstrumentRow.recordType: InstrumentRow.self,
     AccountRow.recordType: AccountRow.self,
+    AccountGroupRow.recordType: AccountGroupRow.self,
     TransactionRow.recordType: TransactionRow.self,
     TransactionLegRow.recordType: TransactionLegRow.self,
     CategoryRow.recordType: CategoryRow.self,
