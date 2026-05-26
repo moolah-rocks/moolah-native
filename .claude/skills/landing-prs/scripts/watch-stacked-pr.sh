@@ -54,6 +54,11 @@ PARENT="${positional[1]}"
 REPO_FLAG=()
 [[ -n "$REPO" ]] && REPO_FLAG=(--repo "$REPO")
 
+# `${REPO_FLAG[@]+"${REPO_FLAG[@]}"}` is required because macOS ships bash
+# 3.2, where `set -u` treats `"${arr[@]}"` of an empty array as unbound.
+# Don't simplify the expansion below to the unguarded form — it works on
+# bash 4.4+ only.
+
 POLL_INTERVAL="${POLL_INTERVAL:-60}"
 
 log() {
@@ -73,7 +78,7 @@ fetch_pr_json() {
   local pr="$1"
   local fields="$2"
   local out
-  if out=$(gh pr view "$pr" "${REPO_FLAG[@]}" --json "$fields" 2>/dev/null); then
+  if out=$(gh pr view "$pr" ${REPO_FLAG[@]+"${REPO_FLAG[@]}"} --json "$fields" 2>/dev/null); then
     echo "$out"
   else
     echo ""  # Empty = "unknown this tick"; caller continues polling.
@@ -130,7 +135,7 @@ while true; do
 
     if [[ "$child_base" != "main" && "$child_base" != "master" ]]; then
       log "Retargeting child #$CHILD: base '$child_base' → main"
-      if ! gh pr edit "$CHILD" "${REPO_FLAG[@]}" --base main >/dev/null 2>&1; then
+      if ! gh pr edit "$CHILD" ${REPO_FLAG[@]+"${REPO_FLAG[@]}"} --base main >/dev/null 2>&1; then
         notify "Retarget of #$CHILD failed. Manual intervention needed."
         exit 1
       fi
@@ -140,7 +145,7 @@ while true; do
     fi
 
     log "Enabling automerge on #$CHILD"
-    if ! gh pr merge "$CHILD" "${REPO_FLAG[@]}" --auto --rebase >/dev/null 2>&1; then
+    if ! gh pr merge "$CHILD" ${REPO_FLAG[@]+"${REPO_FLAG[@]}"} --auto --rebase >/dev/null 2>&1; then
       notify "Failed to enable automerge on #$CHILD. Manual intervention needed."
       exit 1
     fi

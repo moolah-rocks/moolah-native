@@ -55,15 +55,22 @@ done
 REPO_FLAG=()
 [[ -n "$REPO" ]] && REPO_FLAG=(--repo "$REPO")
 
+# `${REPO_FLAG[@]+"${REPO_FLAG[@]}"}` — guard required because macOS ships
+# bash 3.2, where `set -u` treats `"${arr[@]}"` of an empty array as
+# "unbound variable". The `+` form returns the alternate value only when
+# the array has at least one element, and produces zero positional args
+# otherwise. Bash 4.4+ handles the unguarded form, but we cannot rely on
+# Homebrew bash being on PATH.
+
 # Resolve the PR's base. gh exits non-zero if the PR doesn't exist.
-base=$(gh pr view "$PR" "${REPO_FLAG[@]}" --json baseRefName --jq '.baseRefName')
+base=$(gh pr view "$PR" ${REPO_FLAG[@]+"${REPO_FLAG[@]}"} --json baseRefName --jq '.baseRefName')
 
 if [[ "$base" == "main" || "$base" == "master" ]]; then
   echo "PR #$PR targets '$base' → enabling automerge (rebase)."
   # The merge method is overridden by the queue's configured method on this
   # repo (REBASE), but we pass --rebase to be explicit. gh prints a harmless
   # warning if it conflicts; we don't gate on it.
-  gh pr merge "$PR" "${REPO_FLAG[@]}" --auto --rebase
+  gh pr merge "$PR" ${REPO_FLAG[@]+"${REPO_FLAG[@]}"} --auto --rebase
   echo "Done. Native merge queue will land it when checks pass."
   exit 0
 fi
@@ -71,7 +78,7 @@ fi
 echo "PR #$PR targets '$base' (stacked) — looking up parent PR."
 
 # Find the open PR whose head ref matches the child's base ref.
-parent=$(gh pr list "${REPO_FLAG[@]}" --head "$base" --state open --json number --jq '.[0].number // empty')
+parent=$(gh pr list ${REPO_FLAG[@]+"${REPO_FLAG[@]}"} --head "$base" --state open --json number --jq '.[0].number // empty')
 
 if [[ -z "$parent" ]]; then
   cat >&2 <<EOF
