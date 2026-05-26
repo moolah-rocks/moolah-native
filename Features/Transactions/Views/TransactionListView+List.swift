@@ -239,6 +239,27 @@ extension TransactionListView {
     return transactionStore.currentTargetInstrument
   }
 
+  /// Per-row description perspective. When the filter scopes to one or more
+  /// accounts, returns the single in-scope account id iff the transaction
+  /// touches exactly one of them; otherwise nil for the no-context style.
+  /// When the filter has no account scope (all-accounts / scheduled), treats
+  /// every leg's account as in scope so single-account transactions still
+  /// resolve to that account and multi-account ones fall back to no-context.
+  private func accountContext(for transaction: Transaction) -> UUID? {
+    let inScopeAccountIds: [UUID]
+    if filter.hasAccountFilter {
+      var scope: Set<UUID> = filter.accountIds
+      if let id = filter.accountId { scope.insert(id) }
+      inScopeAccountIds = transaction.legs
+        .compactMap(\.accountId)
+        .filter { scope.contains($0) }
+    } else {
+      inScopeAccountIds = transaction.legs.compactMap(\.accountId)
+    }
+    let uniqueAccounts = Set(inScopeAccountIds)
+    return uniqueAccounts.count == 1 ? uniqueAccounts.first : nil
+  }
+
   @ViewBuilder
   private func transactionRow(for entry: TransactionWithBalance) -> some View {
     let scheduled = scheduledRowConfig(for: entry)
@@ -246,7 +267,8 @@ extension TransactionListView {
       transaction: entry.transaction, accounts: accounts,
       categories: categories, earmarks: earmarks, displayAmounts: entry.displayAmounts,
       balance: entry.balance, scopeReferenceInstrument: scopeReferenceInstrument,
-      hideEarmark: filter.earmarkId != nil, viewingAccountId: filter.accountId,
+      hideEarmark: filter.earmarkId != nil,
+      accountContext: accountContext(for: entry.transaction),
       isOverdue: scheduled?.isOverdue ?? false,
       isDueToday: scheduled?.isDueToday ?? false,
       onPay: scheduled?.onPay,
@@ -365,29 +387,4 @@ private struct ScheduledRowConfig {
   let isDueToday: Bool
   let pendingPayId: Transaction.ID?
   let onPay: () -> Void
-}
-
-/// Groups the CSV-import-specific modifiers (create-rule sheet + drop
-/// target) so the main `body` chain stays within the Swift type
-/// checker's complexity budget on the long `.onReceive` / `.sheet`
-/// chain.
-struct TransactionListCSVImportAddons: ViewModifier {
-  @Binding var createRuleFromTransaction: Transaction?
-  let corpusProvider: () -> [String]
-  let forcedAccountId: UUID?
-  let ingestDroppedURLs: (_ urls: [URL], _ forcedAccountId: UUID) async -> Void
-
-  func body(content: Content) -> some View {
-    content
-      .sheet(item: $createRuleFromTransaction) { transaction in
-        CreateRuleFromTransactionSheet(
-          transaction: transaction,
-          corpus: corpusProvider())
-      }
-      .dropDestination(for: URL.self) { urls, _ in
-        guard let accountId = forcedAccountId else { return false }
-        Task { await ingestDroppedURLs(urls, accountId) }
-        return !urls.isEmpty
-      }
-  }
 }

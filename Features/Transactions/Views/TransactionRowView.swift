@@ -9,7 +9,12 @@ struct TransactionRowView: View {
   let balance: InstrumentAmount?
   let scopeReferenceInstrument: Instrument
   var hideEarmark: Bool = false
-  var viewingAccountId: UUID?
+  /// Perspective the row's description / metadata renders from. Derived
+  /// per-row by the parent from the view's `accountIds` set: exactly one
+  /// in-scope leg → that leg's account; otherwise → nil (no-context style).
+  /// nil for scheduled / all-accounts views and for group-view rows that
+  /// touch multiple members.
+  var accountContext: UUID?
 
   /// When true, the payee header shows a red `exclamationmark.triangle.fill`
   /// leading icon and the payee text renders in red. Used by the
@@ -244,7 +249,7 @@ struct TransactionRowView: View {
 
   private var categoryNames: [String] {
     let applicable =
-      viewingAccountId.map { id in
+      accountContext.map { id in
         transaction.legs.filter { $0.accountId == id }
       } ?? transaction.legs
     let uniqueIds = applicable.compactMap(\.categoryId).uniqued()
@@ -253,7 +258,7 @@ struct TransactionRowView: View {
 
   private var earmarkNames: [String] {
     let applicable =
-      viewingAccountId.map { id in
+      accountContext.map { id in
         transaction.legs.filter { $0.accountId == id }
       } ?? transaction.legs
     let uniqueIds = applicable.compactMap(\.earmarkId).uniqued()
@@ -262,7 +267,7 @@ struct TransactionRowView: View {
 
   private var displayPayee: String {
     transaction.displayPayee(
-      viewingAccountId: viewingAccountId, accounts: accounts, earmarks: earmarks)
+      accountContext: accountContext, accounts: accounts, earmarks: earmarks)
   }
 
 }
