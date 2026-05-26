@@ -14,21 +14,39 @@ enum SidebarSelection: Hashable {
 struct SidebarView: View {
   // MARK: - Properties
 
+  // Internal access required by `SidebarView+Sections.swift` extension;
+  // cannot be `private` across file boundaries.
   @Environment(AccountStore.self) var accountStore
+  // Internal access required by `SidebarView+Sections.swift` extension;
+  // cannot be `private` across file boundaries.
   @Environment(EarmarkStore.self) var earmarkStore
   @Environment(ProfileSession.self) private var session
+  // Internal access required by `SidebarView+Sections.swift` extension;
+  // cannot be `private` across file boundaries.
   @Environment(ImportStore.self) var importStore
   @Environment(TransactionStore.self) private var transactionStore
+  // Internal access required by `SidebarView+Sections.swift` extension;
+  // cannot be `private` across file boundaries.
   @Binding var selection: SidebarSelection?
+  // Internal access required by `SidebarView+Sections.swift` extension;
+  // cannot be `private` across file boundaries.
   @State var showCreateEarmarkSheet = false
+  // Internal access required by `SidebarView+Sections.swift` extension;
+  // cannot be `private` across file boundaries.
   @State var showCreateAccountSheet = false
+  // Internal access required by `SidebarView+Sections.swift` extension;
+  // cannot be `private` across file boundaries.
   @State var accountToEdit: Account?
   /// Identifies the sidebar row currently in inline rename mode, if
   /// any. Local-only — never persisted, never synced. At most one row
   /// is in edit mode at a time across the entire sidebar (accounts,
   /// earmarks, future groups).
-  @State var editingRowId: UUID?
+  @State private var editingRowId: UUID?
+  // Internal access required by `SidebarView+Sections.swift` extension;
+  // cannot be `private` across file boundaries.
   @AppStorage("showHiddenAccounts") var showHidden = false
+  // Internal access required by `SidebarView+Sections.swift` extension;
+  // cannot be `private` across file boundaries.
   @AppStorage("showSpamTransactions") var showSpam = false
 
   #if os(iOS)
@@ -145,7 +163,8 @@ struct SidebarView: View {
 }
 
 extension SidebarView {
-  // MARK: - Row Builders
+  // MARK: - View Builders
+  // recentlyAddedLabel, totalRow, accountContextMenu, sectionHeader
 
   var recentlyAddedLabel: some View {
     HStack {
@@ -178,16 +197,6 @@ extension SidebarView {
     .font(.callout)
   }
 
-  /// Returns a binding that reports `true` when this row id is the one
-  /// currently being inline-renamed, and (on `set(true)`) makes it so.
-  /// Centralises the one-at-a-time invariant.
-  func renameBinding(for id: UUID) -> Binding<Bool> {
-    Binding(
-      get: { editingRowId == id },
-      set: { newValue in editingRowId = newValue ? id : nil }
-    )
-  }
-
   @ViewBuilder
   func accountContextMenu(for account: Account) -> some View {
     Button("Rename", systemImage: "character.cursor.ibeam") {
@@ -215,6 +224,28 @@ extension SidebarView {
         .buttonStyle(.plain)
         .accessibilityLabel("Add \(title.lowercased())")
       #endif
+    }
+  }
+
+  // MARK: - State Coordination
+  // renameBinding, renameAction
+
+  /// Returns a binding that reports `true` when this row id is the one
+  /// currently being inline-renamed, and (on `set(true)`) makes it so.
+  /// Centralises the one-at-a-time invariant.
+  func renameBinding(for id: UUID) -> Binding<Bool> {
+    Binding(
+      get: { editingRowId == id },
+      set: { newValue in editingRowId = newValue ? id : nil }
+    )
+  }
+
+  /// Returns the `onRename` closure for an account row — single source
+  /// of truth for the inline-rename dispatch shape, used by both the
+  /// Current and Investments sections.
+  func renameAction(for account: Account) -> (String) -> Void {
+    { newName in
+      Task { _ = try? await accountStore.rename(id: account.id, to: newName) }
     }
   }
 }
