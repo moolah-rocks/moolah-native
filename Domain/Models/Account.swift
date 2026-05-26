@@ -34,6 +34,16 @@ enum AccountType: String, Codable, Sendable, CaseIterable {
     }
   }
 
+  /// Sidebar bucket this type belongs to. Exhaustive switch so a new
+  /// `AccountType` case (a SyncBoundary change) is forced to make a
+  /// bucket decision here.
+  var bucket: AccountBucket {
+    switch self {
+    case .bank, .creditCard, .asset: return .current
+    case .investment, .crypto, .exchange: return .investments
+    }
+  }
+
   var displayName: String {
     switch self {
     case .bank: return "Bank Account"
