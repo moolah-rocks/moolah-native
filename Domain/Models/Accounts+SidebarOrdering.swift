@@ -31,9 +31,10 @@ extension Accounts {
     var current: [Account] = []
     var investment: [Account] = []
     for account in visible {
-      if account.type.isCurrent {
+      switch account.bucket {
+      case .current:
         current.append(account)
-      } else if account.type.isInvestmentLike {
+      case .investments:
         investment.append(account)
       }
     }

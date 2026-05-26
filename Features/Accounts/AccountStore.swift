@@ -240,11 +240,11 @@ final class AccountStore {
   }
 
   var currentAccounts: [Account] {
-    accounts.filter { $0.type.isCurrent && (showHidden || !$0.isHidden) }
+    accounts.filter { $0.bucket == .current && (showHidden || !$0.isHidden) }
   }
 
   var investmentAccounts: [Account] {
-    accounts.filter { $0.type.isInvestmentLike && (showHidden || !$0.isHidden) }
+    accounts.filter { $0.bucket == .investments && (showHidden || !$0.isHidden) }
   }
 
   // Read-only query helpers (`displayBalance`, `hasUnrecordedValue`,
