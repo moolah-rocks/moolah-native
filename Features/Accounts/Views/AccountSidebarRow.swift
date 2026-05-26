@@ -70,6 +70,11 @@ struct SidebarRowView: View {
   /// the user's mental model of the column. See guides/UI_GUIDE.md §"Not set"
   /// and `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11 for the rationale.
   var unsetIndicator: String?
+  /// Optional secondary text rendered below the name, in `.caption` /
+  /// `.secondary`. Used by member rows under a group to surface chain
+  /// / wallet-address / exchange-provider context so the user can pick
+  /// the right member for reconciliation.
+  var secondaryText: String?
   /// When non-nil, the row supports inline rename. The caller flips
   /// `isEditing.wrappedValue` to true (via double-click, context menu,
   /// or keyboard shortcut). The row renders a `TextField` instead of
@@ -117,6 +122,17 @@ struct SidebarRowView: View {
   }
 
   @ViewBuilder private var nameContent: some View {
+    VStack(alignment: .leading, spacing: 1) {
+      nameLabel
+      if let secondaryText, !secondaryText.isEmpty {
+        Text(secondaryText)
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  @ViewBuilder private var nameLabel: some View {
     if let isEditing, let onRename, isEditing.wrappedValue {
       InlineRenameField(
         initialText: name,
@@ -172,6 +188,11 @@ struct SidebarRowView: View {
 struct AccountSidebarRow: View {
   let account: Account
   var isSelected: Bool = false
+  /// When `true`, the row is rendered as a group member: a short
+  /// secondary line (chain / wallet address / exchange provider)
+  /// appears under the name. The indentation itself is supplied by the
+  /// container — this flag toggles only the secondary line.
+  var isMember: Bool = false
   var isEditing: Binding<Bool>?
   var onRename: ((String) -> Void)?
   @Environment(AccountStore.self) private var accountStore
@@ -183,9 +204,37 @@ struct AccountSidebarRow: View {
       amount: accountStore.convertedBalances[account.id],
       isSelected: isSelected,
       unsetIndicator: accountStore.hasUnrecordedValue(account) ? "Not set" : nil,
+      secondaryText: isMember ? memberSecondaryText : nil,
       isEditing: isEditing,
       onRename: onRename
     )
+  }
+
+  /// Truncated wallet address / exchange provider / nothing — what's
+  /// useful as a glance-able subtitle when the account is shown as a
+  /// member under a group row.
+  private var memberSecondaryText: String? {
+    switch account.type {
+    case .crypto:
+      if let address = account.walletAddress, !address.isEmpty {
+        return Self.shortAddress(address)
+      }
+      return nil
+    case .exchange:
+      return account.exchangeProvider?.displayName
+    case .bank, .creditCard, .asset, .investment:
+      return nil
+    }
+  }
+
+  /// Returns a `0xABCD…1234`-style short address. Truncates the middle
+  /// while keeping the `0x` prefix + 4 chars + ellipsis + last 4 chars
+  /// — enough to disambiguate at a glance without taking sidebar width.
+  private static func shortAddress(_ address: String) -> String {
+    guard address.count > 12 else { return address }
+    let prefix = address.prefix(6)
+    let suffix = address.suffix(4)
+    return "\(prefix)…\(suffix)"
   }
 }
 
