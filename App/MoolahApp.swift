@@ -27,7 +27,8 @@ struct MoolahApp: App {
   private let isUITesting: Bool
   /// Stable identifier for the primary `WindowGroup(for:)`. Exposed so
   /// `UITestingLauncherView` can call `openWindow(id:)` to open a default
-  /// instance with a nil binding (for Welcome seeds that have no profile).
+  /// instance with a nil binding — `ProfileWindowView` resolves the
+  /// seeded profile (or falls back to `WelcomeView`) on its own.
   static let mainWindowID = "profile-window"
   @State var profileStore: ProfileStore
   // internal (was private) so `+Lifecycle` can log under the shared
@@ -157,6 +158,20 @@ struct MoolahApp: App {
             }
           }
       }
+      // Opt out of SwiftUI's external-event auto-spawn. `WindowGroup(for:)`
+      // listens to incoming `NSUserActivity` continuations on a channel
+      // that is independent of `NSApplicationDelegate.application(_:continue:)`
+      // — returning `true` from the delegate signals AppKit but does NOT
+      // suppress this channel, so without the opt-out every Handoff
+      // continuation spawns a second window behind the active one
+      // (`#386`). Handoff payloads are routed in-process through
+      // `ScriptingBridge.application(_:continue:)` → `HandoffContinuationHandler`
+      // → `NavigationBridge`, so the WindowGroup never needs to handle
+      // external events itself. `UITestingLauncherView` deliberately uses
+      // `openWindow(id:)` rather than `openWindow(value:)` because the
+      // empty match set also blocks cross-scene `openWindow(value:)`
+      // routing into this group.
+      .handlesExternalEvents(matching: [])
       // Opt out of NSWindow state restoration under `--ui-testing` so a
       // stale window from a previous test (e.g. one that ended on the
       // Analysis view with a CancellationError) cannot get restored into
@@ -210,7 +225,7 @@ struct MoolahApp: App {
       // `WelcomeView` still gets a window to render into. Suppressed in
       // production, where normal scene restoration opens the window.
       Window("UI Testing Launcher", id: "ui-testing-launcher") {
-        UITestingLauncherView(profileId: uiTestingProfileId)
+        UITestingLauncherView()
       }
       .windowResizability(.contentSize)
       .defaultLaunchBehavior(isUITesting ? .presented : .suppressed)
