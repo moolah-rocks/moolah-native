@@ -26,6 +26,7 @@ struct AccountRow {
     case walletAddress = "wallet_address"
     case chainId = "chain_id"
     case exchangeProvider = "exchange_provider"
+    case groupId = "group_id"
   }
 
   enum CodingKeys: String, CodingKey {
@@ -41,6 +42,7 @@ struct AccountRow {
     case walletAddress = "wallet_address"
     case chainId = "chain_id"
     case exchangeProvider = "exchange_provider"
+    case groupId = "group_id"
   }
 
   var id: UUID
@@ -69,6 +71,12 @@ struct AccountRow {
   /// `type == "exchange"`. Defaulted to `nil` so existing memberwise-init
   /// call sites continue to compile.
   var exchangeProvider: String?
+  /// Optional back-reference into `account_group.id`. Nullable column;
+  /// no FK constraint (sync delivery can place an Account ahead of its
+  /// AccountGroup — see `ProfileSchema+AccountGroups.swift`). Domain
+  /// lookup treats unknown ids as nil and renders the account as
+  /// standalone in its bucket.
+  var groupId: UUID?
 }
 
 extension AccountRow: Codable {}
