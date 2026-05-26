@@ -83,10 +83,26 @@ extension TestableStoreObservation {
       storeType: "\(Self.self)",
       predicate: description
     ) {
+      // Fast path: the predicate may already be true (e.g. the store
+      // applied the awaited state before this helper was called).
+      // Otherwise the iterator created below could see the underlying
+      // `AsyncStream` return `nil` immediately — single-consumer streams
+      // give undefined results when iterated twice — and we'd silently
+      // succeed without ever checking the predicate.
+      if await evaluate() { return }
       var iterator = ticks.makeAsyncIterator()
       while await iterator.next() != nil {
         if await evaluate() { return }
       }
+      // Stream finished without a matching tick. The predicate may still
+      // have become true between the last `evaluate()` and now (e.g.
+      // a MainActor hop applied the awaited state between iterations);
+      // re-check once. If it's still false, block until the timeout-task
+      // in `withEmissionTimeout` cancels us so the caller observes a
+      // proper `StoreEmissionTimeoutError` rather than a false-positive
+      // completion. Mirrors the same fallback in `waitForFirstEmission`.
+      if await evaluate() { return }
+      try? await Task.sleep(for: .seconds(3600))
     }
   }
 
