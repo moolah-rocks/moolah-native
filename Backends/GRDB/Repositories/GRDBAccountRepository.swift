@@ -196,6 +196,7 @@ final class GRDBAccountRepository: AccountRepository, @unchecked Sendable {
       existing.position = account.position
       existing.isHidden = account.isHidden
       existing.valuationMode = account.valuationMode.rawValue
+      existing.groupId = account.groupId
       try existing.update(database)
 
       let positions = try Self.computePositions(

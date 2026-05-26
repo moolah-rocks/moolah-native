@@ -68,6 +68,11 @@ import GRDB
 /// transfer-suggestion columns and the `dismissed_transfer_pair` table
 /// with the synced `transfer_suggestion` record table. See
 /// `ProfileSchema+TransferSuggestion.swift`.
+/// `v14_account_groups` — adds the `account_group` table and an
+/// additive `group_id` column on `account` (no FK; sync delivery can
+/// deliver an Account ahead of its AccountGroup, so the lookup layer
+/// resolves unknown ids to nil instead of relying on the database).
+/// See `ProfileSchema+AccountGroups.swift`.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -88,7 +93,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 13
+  static let version = 14
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -122,6 +127,8 @@ enum ProfileSchema {
       "v12_add_transfer_detection", migrate: addTransferDetection)
     migrator.registerMigration(
       "v13_transfer_suggestion_record", migrate: addTransferSuggestion)
+    migrator.registerMigration(
+      "v14_account_groups", migrate: addAccountGroups)
 
     return migrator
   }

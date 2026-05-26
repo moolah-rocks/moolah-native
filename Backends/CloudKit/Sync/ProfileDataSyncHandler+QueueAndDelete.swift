@@ -71,6 +71,7 @@ extension ProfileDataSyncHandler {
     // `SyncCoordinator.queueUnsyncedSharedInstruments`; the per-profile
     // path deliberately does not enumerate them.
     collectCategoryIds(source: source, into: &recordIDs)
+    collectAccountGroupIds(source: source, into: &recordIDs)
     collectAccountIds(source: source, into: &recordIDs)
     collectEarmarkIds(source: source, into: &recordIDs)
     collectEarmarkBudgetItemIds(source: source, into: &recordIDs)
@@ -107,6 +108,19 @@ extension ProfileDataSyncHandler {
       }
     }
     collectAllGRDBUUIDs(ids: ids, recordType: AccountRow.recordType, into: &recordIDs)
+  }
+
+  private func collectAccountGroupIds(
+    source: GRDBIdSource, into recordIDs: inout [CKRecord.ID]
+  ) {
+    let repo = grdbRepositories.accountGroups
+    let ids: () throws -> [UUID] = {
+      switch source {
+      case .all: return try repo.allRowIdsSync()
+      case .unsynced: return try repo.unsyncedRowIdsSync()
+      }
+    }
+    collectAllGRDBUUIDs(ids: ids, recordType: AccountGroupRow.recordType, into: &recordIDs)
   }
 
   private func collectEarmarkIds(
@@ -231,6 +245,10 @@ extension ProfileDataSyncHandler {
       // is no per-profile `instrument` table, so a `deleteAllSync`
       // against it would throw `no such table`.
       (CategoryRow.recordType, { try self.grdbRepositories.categories.deleteAllSync() }),
+      (
+        AccountGroupRow.recordType,
+        { try self.grdbRepositories.accountGroups.deleteAllSync() }
+      ),
       (AccountRow.recordType, { try self.grdbRepositories.accounts.deleteAllSync() }),
       (EarmarkRow.recordType, { try self.grdbRepositories.earmarks.deleteAllSync() }),
       (

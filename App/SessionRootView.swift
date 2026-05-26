@@ -14,6 +14,7 @@ struct SessionRootView: View {
       .environment(session.transactionStore)
       .environment(session.categoryStore)
       .environment(session.earmarkStore)
+      .environment(session.accountGroupStore)
       .environment(session.analysisStore)
       .environment(session.investmentStore)
       .environment(session.reportingStore)

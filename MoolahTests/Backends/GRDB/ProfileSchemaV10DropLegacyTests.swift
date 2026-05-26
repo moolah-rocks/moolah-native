@@ -69,6 +69,8 @@ struct ProfileSchemaV10DropLegacyTests {
     "wallet_sync_state",
     // v13 transfer suggestion (content-addressed pair; replaces dismissed_transfer_pair)
     "transfer_suggestion",
+    // v14 account groups (synced; back-reference column added on `account`)
+    "account_group",
     "grdb_migrations",
   ]
 
@@ -111,6 +113,9 @@ struct ProfileSchemaV10DropLegacyTests {
     // v13 transfer suggestion
     "transfer_suggestion_by_tx_a",
     "transfer_suggestion_by_tx_b",
+    // v14 account groups
+    "account_group_by_bucket_position",
+    "account_by_group_id",
   ]
 
   /// `DATABASE_SCHEMA_GUIDE.md` §6 rule 1 golden gate: after the FULL

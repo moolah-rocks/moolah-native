@@ -1,5 +1,49 @@
 import SwiftUI
 
+/// TextField used by `SidebarRowView` while a row is in inline-rename
+/// mode. Auto-focuses on appear; commits on Return or focus loss (calls
+/// `onCommit`); cancels on Escape (calls `onCancel`). Extracted into its
+/// own type so the `@FocusState` + `@State` text buffer are scoped to
+/// the editing lifecycle (they reset naturally when the field unmounts)
+/// without leaking into `SidebarRowView`'s state.
+private struct InlineRenameField: View {
+  let initialText: String
+  let onCommit: (String) -> Void
+  let onCancel: () -> Void
+
+  @State private var text: String = ""
+  @State private var didCommit = false
+  @FocusState private var isFocused: Bool
+
+  var body: some View {
+    TextField("Name", text: $text)
+      .accessibilityLabel("Name")
+      .textFieldStyle(.plain)
+      .focused($isFocused)
+      .onAppear {
+        text = initialText
+        isFocused = true
+      }
+      .onSubmit {
+        didCommit = true
+        onCommit(text)
+      }
+      .onChange(of: isFocused) { _, focused in
+        // Focus loss without an explicit submit = commit (matches
+        // Finder-style rename). The didCommit guard prevents a
+        // double call when Return triggers onSubmit -> drop focus.
+        if !focused {
+          if !didCommit { onCommit(text) }
+          didCommit = false
+        }
+      }
+      .onKeyPress(.escape) {
+        onCancel()
+        return .handled
+      }
+  }
+}
+
 /// Shared row view for sidebar items (accounts, earmarks) that displays
 /// an icon, name, and balance with selection-aware color coding.
 /// When `isSelected` is true and the selection background is prominent
@@ -10,6 +54,10 @@ import SwiftUI
 /// guides/UI_GUIDE.md §5 "Selected-Row Contrast Override (Exception)"
 /// for the rationale and the rule that this is the only place in the
 /// app where hardcoded RGB values are permitted.
+///
+/// **Inline rename:** when both `isEditing` and `onRename` are provided,
+/// the row supports double-click-to-rename. Without those properties the
+/// row installs no double-click handler.
 struct SidebarRowView: View {
   let icon: String
   let name: String
@@ -22,6 +70,21 @@ struct SidebarRowView: View {
   /// the user's mental model of the column. See guides/UI_GUIDE.md §"Not set"
   /// and `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11 for the rationale.
   var unsetIndicator: String?
+  /// Optional secondary text rendered below the name, in `.caption` /
+  /// `.secondary`. Used by member rows under a group to surface chain
+  /// / wallet-address / exchange-provider context so the user can pick
+  /// the right member for reconciliation.
+  var secondaryText: String?
+  /// When non-nil, the row supports inline rename. The caller flips
+  /// `isEditing.wrappedValue` to true (via double-click, context menu,
+  /// or keyboard shortcut). The row renders a `TextField` instead of
+  /// `Text(name)` while editing; on commit (Return / focus loss) it
+  /// calls `onRename` with the entered text (trimmed by the store).
+  /// On Escape, it sets `isEditing` to false without calling `onRename`.
+  /// Caller is responsible for ensuring only one row is editing at a
+  /// time — there is no global coordination inside this view.
+  var isEditing: Binding<Bool>?
+  var onRename: ((String) -> Void)?
 
   @Environment(\.backgroundProminence) private var backgroundProminence
 
@@ -48,7 +111,7 @@ struct SidebarRowView: View {
         .frame(width: UIConstants.IconSize.listIcon, height: UIConstants.IconSize.listIcon)
         .accessibilityHidden(true)
 
-      Text(name)
+      nameContent
 
       Spacer()
 
@@ -56,6 +119,40 @@ struct SidebarRowView: View {
     }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(accessibilitySummary)
+  }
+
+  @ViewBuilder private var nameContent: some View {
+    VStack(alignment: .leading, spacing: 1) {
+      nameLabel
+      if let secondaryText, !secondaryText.isEmpty {
+        Text(secondaryText)
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+      }
+    }
+  }
+
+  @ViewBuilder private var nameLabel: some View {
+    if let isEditing, let onRename, isEditing.wrappedValue {
+      InlineRenameField(
+        initialText: name,
+        onCommit: { committed in
+          isEditing.wrappedValue = false
+          onRename(committed)
+        },
+        onCancel: { isEditing.wrappedValue = false }
+      )
+    } else if let isEditing, onRename != nil, isSelected {
+      // Finder pattern: rename gesture only attaches once the row is
+      // selected. Attaching `.onTapGesture(count: 2)` on an unselected
+      // row's Text makes SwiftUI hold the first click waiting for a
+      // second, which prevents the parent NavigationLink from receiving
+      // the click and updating selection.
+      Text(name)
+        .onTapGesture(count: 2) { isEditing.wrappedValue = true }
+    } else {
+      Text(name)
+    }
   }
 
   @ViewBuilder private var trailingValue: some View {
@@ -91,6 +188,13 @@ struct SidebarRowView: View {
 struct AccountSidebarRow: View {
   let account: Account
   var isSelected: Bool = false
+  /// When `true`, the row is rendered as a group member: a short
+  /// secondary line (chain / wallet address / exchange provider)
+  /// appears under the name. The indentation itself is supplied by the
+  /// container — this flag toggles only the secondary line.
+  var isMember: Bool = false
+  var isEditing: Binding<Bool>?
+  var onRename: ((String) -> Void)?
   @Environment(AccountStore.self) private var accountStore
 
   var body: some View {
@@ -99,8 +203,38 @@ struct AccountSidebarRow: View {
       name: account.name,
       amount: accountStore.convertedBalances[account.id],
       isSelected: isSelected,
-      unsetIndicator: accountStore.hasUnrecordedValue(account) ? "Not set" : nil
+      unsetIndicator: accountStore.hasUnrecordedValue(account) ? "Not set" : nil,
+      secondaryText: isMember ? memberSecondaryText : nil,
+      isEditing: isEditing,
+      onRename: onRename
     )
+  }
+
+  /// Truncated wallet address / exchange provider / nothing — what's
+  /// useful as a glance-able subtitle when the account is shown as a
+  /// member under a group row.
+  private var memberSecondaryText: String? {
+    switch account.type {
+    case .crypto:
+      if let address = account.walletAddress, !address.isEmpty {
+        return Self.shortAddress(address)
+      }
+      return nil
+    case .exchange:
+      return account.exchangeProvider?.displayName
+    case .bank, .creditCard, .asset, .investment:
+      return nil
+    }
+  }
+
+  /// Returns a `0xABCD…1234`-style short address. Truncates the middle
+  /// while keeping the `0x` prefix + 4 chars + ellipsis + last 4 chars
+  /// — enough to disambiguate at a glance without taking sidebar width.
+  private static func shortAddress(_ address: String) -> String {
+    guard address.count > 12 else { return address }
+    let prefix = address.prefix(6)
+    let suffix = address.suffix(4)
+    return "\(prefix)…\(suffix)"
   }
 }
 
@@ -184,4 +318,21 @@ struct AccountSidebarRow: View {
   }
   .listStyle(.sidebar)
   .preferredColorScheme(.dark)
+}
+
+#Preview("Sidebar row — inline rename") {
+  @Previewable @State var isEditing = true
+  return List(selection: .constant(Optional("selected"))) {
+    SidebarRowView(
+      icon: "building.columns",
+      name: "Bank Account",
+      amount: InstrumentAmount(quantity: 1234.56, instrument: .AUD),
+      isSelected: true,
+      isEditing: $isEditing,
+      onRename: { newName in print("Rename to: \(newName)") }
+    )
+    .tag("selected")
+  }
+  .listStyle(.sidebar)
+  .frame(width: 260)
 }

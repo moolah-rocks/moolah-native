@@ -188,6 +188,13 @@ extension AccountStore: TestableStoreObservation {
   var snapshot: AccountStore { self }
 }
 
+extension AccountGroupStore: TestableStoreObservation {
+  var observationTicks: AsyncStream<Void> { testObservationTickStream }
+  /// Tests assert directly against published `@Observable` state; the
+  /// snapshot is the store itself.
+  var snapshot: AccountGroupStore { self }
+}
+
 extension EarmarkStore: TestableStoreObservation {
   var observationTicks: AsyncStream<Void> { testObservationTickStream }
   /// Tests assert directly against published `@Observable` state; the

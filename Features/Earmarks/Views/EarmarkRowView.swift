@@ -2,6 +2,9 @@ import SwiftUI
 
 struct EarmarkRowView: View {
   let earmark: Earmark
+  var isSelected: Bool = false
+  var isEditing: Binding<Bool>?
+  var onRename: ((String) -> Void)?
   @Environment(EarmarkStore.self) private var earmarkStore
 
   var body: some View {
@@ -9,7 +12,10 @@ struct EarmarkRowView: View {
       icon: "bookmark.fill",
       name: earmark.name,
       amount: earmarkStore.convertedBalance(for: earmark.id)
-        ?? .zero(instrument: earmark.instrument)
+        ?? .zero(instrument: earmark.instrument),
+      isSelected: isSelected,
+      isEditing: isEditing,
+      onRename: onRename
     )
   }
 }

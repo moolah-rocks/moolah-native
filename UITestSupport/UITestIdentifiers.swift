@@ -12,43 +12,8 @@ import Foundation
 /// Identifiers are added incrementally as drivers and tests need them — see
 /// `guides/UI_TEST_GUIDE.md` §4.
 public enum UITestIdentifiers {
-  // MARK: - Sidebar
-
-  public enum Sidebar {
-    /// Sidebar row for a specific account. `id` is the account's UUID, lowercased.
-    ///
-    /// The same UUID identifier is applied whether the account renders in
-    /// the Current Accounts section or the Investments section — `AccountType`
-    /// today is mutually exclusive across the two sections (bank/cc/asset
-    /// for Current; investment for Investments). If a future account type
-    /// can appear in both sections, switch this to a sectioned namespace
-    /// (`sidebar.account.current.<uuid>` vs `sidebar.account.investment.<uuid>`)
-    /// to avoid duplicates resolving via `firstMatch`.
-    public static func account(_ id: UUID) -> String {
-      "sidebar.account.\(id.uuidString.lowercased())"
-    }
-
-    /// Sidebar row for a named top-level view (e.g. `"upcoming"`, `"analysis"`).
-    public static func view(_ name: String) -> String {
-      "sidebar.view.\(name)"
-    }
-
-    /// "New Account" toolbar button in the sidebar (macOS only).
-    public static let newAccountButton = "sidebar.toolbar.newAccount"
-
-    /// "New Earmark" toolbar button in the sidebar (macOS only). Pinned for
-    /// symmetry with `newAccountButton` so a UI test can drive the
-    /// create-earmark flow from a zero-earmark seed without further view
-    /// changes when one is added.
-    public static let newEarmarkButton = "sidebar.toolbar.newEarmark"
-
-    /// "Edit Account…" item in the sidebar account context menu.
-    /// Distinct from the menu-bar Account → Edit Account command,
-    /// which has the same title but lives in the application menu —
-    /// drivers must resolve via this identifier rather than the
-    /// shared label.
-    public static let editAccountContextMenuItem = "sidebar.contextMenu.editAccount"
-  }
+  // The `Sidebar` namespace lives in
+  // `UITestIdentifiers+Sidebar.swift`.
 
   // MARK: - TransactionList
 

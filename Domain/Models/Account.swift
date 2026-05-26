@@ -9,17 +9,6 @@ enum AccountType: String, Codable, Sendable, CaseIterable {
   case crypto
   case exchange
 
-  var isCurrent: Bool {
-    self == .bank || self == .asset || self == .creditCard
-  }
-
-  /// Whether this type should be treated as an investment account for sidebar
-  /// grouping and any query that filters investments. `true` for `.investment`,
-  /// `.crypto`, and `.exchange`.
-  var isInvestmentLike: Bool {
-    self == .investment || self == .crypto || self == .exchange
-  }
-
   /// Whether this account type is populated by an external sync source
   /// (crypto wallets via `WalletSyncSource`, exchange accounts via a
   /// provider source such as `CoinstashSyncSource`) rather than manual
@@ -34,6 +23,18 @@ enum AccountType: String, Codable, Sendable, CaseIterable {
     }
   }
 
+  /// Sidebar bucket this type belongs to. Exhaustive switch so a new
+  /// `AccountType` case (a SyncBoundary change) is forced to make a
+  /// bucket decision here.
+  var bucket: AccountBucket {
+    switch self {
+    case .bank, .creditCard, .asset: return .current
+    case .investment, .crypto, .exchange: return .investments
+    }
+  }
+
+  /// Human-readable type label shown in account creation, edit, and
+  /// sidebar grouping UI.
   var displayName: String {
     switch self {
     case .bank: return "Bank Account"
@@ -63,6 +64,13 @@ struct Account {
   /// `type == .exchange`; nil otherwise.
   var exchangeProvider: ExchangeProvider?
   var valuationMode: ValuationMode
+  /// Back-reference into `AccountGroup.id`. When non-nil, this account
+  /// belongs to the named group; when nil, it belongs to no group.
+  ///
+  /// The reference is advisory: an unknown id (e.g. a group record that
+  /// has not yet arrived from sync) is treated as absent by callers.
+  /// There is no foreign-key enforcement.
+  var groupId: UUID?
 
   init(
     id: UUID = UUID(),
@@ -75,7 +83,8 @@ struct Account {
     valuationMode: ValuationMode = .recordedValue,
     walletAddress: String? = nil,
     chainId: Int? = nil,
-    exchangeProvider: ExchangeProvider? = nil
+    exchangeProvider: ExchangeProvider? = nil,
+    groupId: UUID? = nil
   ) {
     self.id = id
     self.name = name
@@ -88,6 +97,7 @@ struct Account {
     self.walletAddress = walletAddress
     self.chainId = chainId
     self.exchangeProvider = exchangeProvider
+    self.groupId = groupId
   }
 }
 
@@ -107,6 +117,7 @@ extension Account: Codable {
     case walletAddress
     case chainId
     case exchangeProvider
+    case groupId
   }
 
   init(from decoder: Decoder) throws {
@@ -137,6 +148,7 @@ extension Account: Codable {
     chainId = try container.decodeIfPresent(Int.self, forKey: .chainId)
     exchangeProvider = try container.decodeIfPresent(
       ExchangeProvider.self, forKey: .exchangeProvider)
+    groupId = try container.decodeIfPresent(UUID.self, forKey: .groupId)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -151,6 +163,7 @@ extension Account: Codable {
     try container.encodeIfPresent(walletAddress, forKey: .walletAddress)
     try container.encodeIfPresent(chainId, forKey: .chainId)
     try container.encodeIfPresent(exchangeProvider, forKey: .exchangeProvider)
+    try container.encodeIfPresent(groupId, forKey: .groupId)
   }
 }
 
@@ -162,6 +175,7 @@ extension Account: Hashable {
       && lhs.valuationMode == rhs.valuationMode
       && lhs.walletAddress == rhs.walletAddress && lhs.chainId == rhs.chainId
       && lhs.exchangeProvider == rhs.exchangeProvider
+      && lhs.groupId == rhs.groupId
       && lhs.positions == rhs.positions
   }
 
@@ -176,6 +190,7 @@ extension Account: Hashable {
     hasher.combine(walletAddress)
     hasher.combine(chainId)
     hasher.combine(exchangeProvider)
+    hasher.combine(groupId)
     hasher.combine(positions)
   }
 }
@@ -184,6 +199,15 @@ extension Account: Comparable {
   static func < (lhs: Account, rhs: Account) -> Bool {
     lhs.position < rhs.position
   }
+}
+
+extension Account {
+  /// The sidebar bucket this account belongs to.
+  ///
+  /// Canonical property for all bucket decisions on an `Account`. Indirects
+  /// through `type.bucket` so a future per-account `bucketOverride` field
+  /// can be introduced without changing callsites.
+  var bucket: AccountBucket { type.bucket }
 }
 
 struct Accounts: RandomAccessCollection, Sendable {

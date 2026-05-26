@@ -68,4 +68,60 @@ struct AccountTests {
       _ = try JSONDecoder().decode(Account.self, from: json)
     }
   }
+
+  @Test
+  func accountBucketForwardsToType() {
+    let bank = Account(name: "Chequing", type: .bank, instrument: .AUD)
+    let crypto = Account(
+      name: "ETH Wallet", type: .crypto, instrument: .AUD,
+      walletAddress: "0x" + String(repeating: "a", count: 40), chainId: 1)
+    let exchange = Account(
+      name: "Coinstash", type: .exchange, instrument: .AUD,
+      exchangeProvider: .coinstash)
+    #expect(bank.bucket == .current)
+    #expect(crypto.bucket == .investments)
+    #expect(exchange.bucket == .investments)
+  }
+
+  @Test
+  func accountGroupIdDefaultsToNil() {
+    let account = Account(name: "Chequing", type: .bank, instrument: .AUD)
+    #expect(account.groupId == nil)
+  }
+
+  @Test
+  func groupIdRoundTripsViaCodable() throws {
+    let accountId = UUID()
+    let groupId = UUID()
+    let account = Account(
+      id: accountId,
+      name: "Coinstash",
+      type: .exchange,
+      instrument: .AUD,
+      exchangeProvider: .coinstash,
+      groupId: groupId
+    )
+    let encoded = try JSONEncoder().encode(account)
+    let restored = try JSONDecoder().decode(Account.self, from: encoded)
+    #expect(restored.groupId == groupId)
+  }
+
+  @Test
+  func accountWithoutGroupIdDecodesAsNil() throws {
+    // Backwards-compat: a JSON blob from before `groupId` was added
+    // must decode with `groupId == nil`. `init(from:)` uses
+    // `decodeIfPresent` on the key, so absence is valid.
+    //
+    // `instrument` is also absent from this blob: `Account.init(from:)`
+    // decodes it with `decodeIfPresent` and falls back to `.AUD`, so
+    // the minimal fixture is sufficient.
+    let json = Data(
+      #"""
+      {"id":"\#(UUID().uuidString)","name":"Legacy",
+       "type":"bank","position":0,"hidden":false,
+       "valuationMode":"recordedValue"}
+      """#.utf8)
+    let account = try JSONDecoder().decode(Account.self, from: json)
+    #expect(account.groupId == nil)
+  }
 }

@@ -14,6 +14,11 @@ extension SidebarSelection {
     switch self {
     case .account(let id): .account(id)
     case .earmark(let id): .earmark(id)
+    // Phase 5 will introduce a dedicated group detail view bound to an
+    // `AccountViewContext`. Until then, group selection routes to the
+    // all-accounts overview so the user isn't dropped into an empty
+    // pane.
+    case .group: .accounts
     case .allTransactions, .recentlyAdded: .accounts
     case .upcomingTransactions: .upcoming
     case .categories: .categories
