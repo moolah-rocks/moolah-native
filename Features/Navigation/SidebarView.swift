@@ -248,4 +248,21 @@ extension SidebarView {
       Task { _ = try? await accountStore.rename(id: account.id, to: newName) }
     }
   }
+
+  /// Returns the `onRename` closure for an earmark row — earmark
+  /// counterpart of `renameAction(for: Account)`. Same intent-shape;
+  /// dispatches `EarmarkStore.rename`.
+  func renameAction(for earmark: Earmark) -> (String) -> Void {
+    { newName in
+      Task { _ = await earmarkStore.rename(id: earmark.id, to: newName) }
+    }
+  }
+
+  @ViewBuilder
+  func earmarkContextMenu(for earmark: Earmark) -> some View {
+    Button("Rename", systemImage: "character.cursor.ibeam") {
+      editingRowId = earmark.id
+    }
+    .accessibilityIdentifier(UITestIdentifiers.Sidebar.renameContextMenuItem)
+  }
 }
