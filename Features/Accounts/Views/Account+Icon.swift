@@ -9,12 +9,12 @@ extension Account {
     case .creditCard: return "creditcard"
     case .investment: return "chart.line.uptrend.xyaxis"
     // Sharing the .investment chart icon for now: the design treats
-    // crypto wallets as investment-like for sidebar grouping. A
-    // dedicated crypto SF Symbol can land in a UI follow-up once the
-    // wallet feature surfaces a distinct visual identity.
+    // crypto wallets as in the `.investments` bucket. A dedicated crypto
+    // SF Symbol can land in a UI follow-up once the wallet feature
+    // surfaces a distinct visual identity.
     case .crypto: return "chart.line.uptrend.xyaxis"
-    // Exchange accounts share the investment-like chart icon; a
-    // dedicated exchange SF Symbol can land in a UI follow-up.
+    // Exchange accounts share the chart icon (also in the `.investments`
+    // bucket); a dedicated exchange SF Symbol can land in a UI follow-up.
     case .exchange: return "chart.line.uptrend.xyaxis"
     }
   }

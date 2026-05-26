@@ -36,9 +36,9 @@ struct AccountPickerOptions: View {
         }
       }
     }
-    if !groups.investment.isEmpty {
+    if !groups.investments.isEmpty {
       Section("Investments") {
-        ForEach(groups.investment) { account in
+        ForEach(groups.investments) { account in
           Label(account.name, systemImage: account.sidebarIcon)
             .tag(UUID?.some(account.id))
         }
