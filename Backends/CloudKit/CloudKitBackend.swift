@@ -16,6 +16,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let importRules: any ImportRuleRepository
   let instrumentRegistry: any InstrumentRegistryRepository
   let walletSyncState: any WalletSyncStateRepository
+  let groupUIState: any GroupUIStateRepository
 
   /// `BackendProvider` change-notification seam: the shared
   /// `GRDBInstrumentRegistryRepository` exposed as the narrow
@@ -141,6 +142,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.instrumentRegistry = instrumentRegistry
     self.conversionService = conversionService
     self.walletSyncState = GRDBWalletSyncStateRepository(database: database)
+    self.groupUIState = GRDBGroupUIStateRepository(database: database)
   }
 
   /// Bundle of GRDB repositories produced by `makeRepositories`. Keeps
