@@ -49,12 +49,13 @@ extension TestableStoreObservation {
       if await iterator.next() != nil {
         return  // got a real tick
       }
-      // Stream finished without yielding — block until the timeout
-      // wins so the caller observes "no emission" rather than a
-      // false-positive completion. A 1-hour sleep is well beyond any
-      // sensible test timeout; the timeout-task in
-      // `withEmissionTimeout` will cancel it.
-      try? await Task.sleep(for: .seconds(3600))
+      // Stream finished without yielding — block long enough that the
+      // timeout-task in `withEmissionTimeout` always wins, so the
+      // caller observes "no emission" rather than a false-positive
+      // completion. 5 minutes is far past every per-test timeout in
+      // the suite (default 2s) but tight enough that a runaway
+      // cancellation doesn't hang CI for an hour.
+      try? await Task.sleep(for: .seconds(300))
     }
   }
 
@@ -97,12 +98,13 @@ extension TestableStoreObservation {
       // Stream finished without a matching tick. The predicate may still
       // have become true between the last `evaluate()` and now (e.g.
       // a MainActor hop applied the awaited state between iterations);
-      // re-check once. If it's still false, block until the timeout-task
-      // in `withEmissionTimeout` cancels us so the caller observes a
-      // proper `StoreEmissionTimeoutError` rather than a false-positive
-      // completion. Mirrors the same fallback in `waitForFirstEmission`.
+      // re-check once. If it's still false, block long enough that the
+      // timeout-task in `withEmissionTimeout` always wins so the caller
+      // observes a proper `StoreEmissionTimeoutError` rather than a
+      // false-positive completion. 5 minutes matches the fallback in
+      // `waitForFirstEmission`.
       if await evaluate() { return }
-      try? await Task.sleep(for: .seconds(3600))
+      try? await Task.sleep(for: .seconds(300))
     }
   }
 
