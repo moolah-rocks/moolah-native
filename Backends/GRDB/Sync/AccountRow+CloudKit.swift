@@ -22,6 +22,7 @@ extension AccountRow: CloudKitRecordConvertible {
     AccountRecordCloudKitFields(
       chainId: chainId.map(Int64.init),
       exchangeProvider: exchangeProvider,
+      groupId: groupId?.uuidString,
       instrumentId: instrumentId,
       isHidden: isHidden ? 1 : 0,
       name: name,
@@ -50,7 +51,8 @@ extension AccountRow: CloudKitRecordConvertible {
       valuationMode: fields.valuationMode ?? "recordedValue",
       walletAddress: fields.walletAddress,
       chainId: fields.chainId.map(Int.init),
-      exchangeProvider: fields.exchangeProvider
+      exchangeProvider: fields.exchangeProvider,
+      groupId: fields.groupId.flatMap(UUID.init(uuidString:))
     )
   }
 
