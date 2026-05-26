@@ -4,6 +4,7 @@ import GRDB
 final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let auth: any AuthProvider
   let accounts: any AccountRepository
+  let accountGroups: any AccountGroupRepository
   let transactions: any TransactionRepository
   let categories: any CategoryRepository
   let transferSuggestions: any TransferSuggestionRepository
@@ -33,6 +34,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let grdbImportRules: GRDBImportRuleRepository
   let grdbInstruments: GRDBInstrumentRegistryRepository
   let grdbAccounts: GRDBAccountRepository
+  let grdbAccountGroups: GRDBAccountGroupRepository
   let grdbCategories: GRDBCategoryRepository
   let grdbTransferSuggestions: GRDBTransferSuggestionRepository
   let grdbEarmarks: GRDBEarmarkRepository
@@ -54,6 +56,8 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     let onImportRuleDeleted: @Sendable (String, UUID) -> Void
     let onAccountChanged: @Sendable (String, UUID) -> Void
     let onAccountDeleted: @Sendable (String, UUID) -> Void
+    let onAccountGroupChanged: @Sendable (String, UUID) -> Void
+    let onAccountGroupDeleted: @Sendable (String, UUID) -> Void
     let onCategoryChanged: @Sendable (String, UUID) -> Void
     let onCategoryDeleted: @Sendable (String, UUID) -> Void
     let onTransferSuggestionChanged: @Sendable (String, UUID) -> Void
@@ -76,6 +80,8 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
       onImportRuleDeleted: { _, _ in },
       onAccountChanged: { _, _ in },
       onAccountDeleted: { _, _ in },
+      onAccountGroupChanged: { _, _ in },
+      onAccountGroupDeleted: { _, _ in },
       onCategoryChanged: { _, _ in },
       onCategoryDeleted: { _, _ in },
       onTransferSuggestionChanged: { _, _ in },
@@ -110,6 +116,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
       hooks: hooks)
 
     self.grdbAccounts = repos.accounts
+    self.grdbAccountGroups = repos.accountGroups
     self.grdbTransactions = repos.transactions
     self.grdbCategories = repos.categories
     self.grdbTransferSuggestions = repos.transferSuggestions
@@ -122,6 +129,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.grdbInstruments = instrumentRegistry
 
     self.accounts = repos.accounts
+    self.accountGroups = repos.accountGroups
     self.transactions = repos.transactions
     self.categories = repos.categories
     self.transferSuggestions = repos.transferSuggestions
@@ -139,6 +147,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   /// the init body compact by handing back one value rather than ten.
   private struct GRDBRepositoryBundle {
     let accounts: GRDBAccountRepository
+    let accountGroups: GRDBAccountGroupRepository
     let transactions: GRDBTransactionRepository
     let categories: GRDBCategoryRepository
     let transferSuggestions: GRDBTransferSuggestionRepository
@@ -173,6 +182,10 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
       hooks: hooks)
     return GRDBRepositoryBundle(
       accounts: resolving.accounts,
+      accountGroups: GRDBAccountGroupRepository(
+        database: database,
+        onRecordChanged: hooks.onAccountGroupChanged,
+        onRecordDeleted: hooks.onAccountGroupDeleted),
       transactions: resolving.transactions,
       categories: GRDBCategoryRepository(
         database: database,
