@@ -13,25 +13,14 @@ extension SidebarView {
   }
 
   var currentAccountsSection: some View {
-    Section {
-      ForEach(accountStore.currentAccounts) { account in
-        NavigationLink(value: SidebarSelection.account(account.id)) {
-          AccountSidebarRow(
-            account: account,
-            isSelected: selection == .account(account.id),
-            isEditing: renameBinding(for: account.id),
-            onRename: renameAction(for: account)
-          )
-        }
-        .dropDestination(for: URL.self) { urls, _ in
-          Task { await ingestDroppedURLs(urls, forcedAccountId: account.id) }
-          return !urls.isEmpty
-        }
-        .accessibilityIdentifier(UITestIdentifiers.Sidebar.account(account.id))
-        .contextMenu { accountContextMenu(for: account) }
-      }
-      .onMove { source, destination in
-        Task { await reorderCurrentAccounts(from: source, to: destination) }
+    let groupAware = accountStore.accounts.groupAwareSidebar(
+      groups: accountGroupStore.groups,
+      excluding: nil,
+      alwaysInclude: nil
+    )
+    return Section {
+      ForEach(groupAware.current, id: \.bucketEntryId) { entry in
+        bucketEntryView(entry)
       }
       totalRow(label: "Current Total", value: accountStore.convertedCurrentTotal)
     } header: {
@@ -62,23 +51,30 @@ extension SidebarView {
   }
 
   var investmentsSection: some View {
-    Section("Investments") {
-      ForEach(accountStore.investmentAccounts) { account in
-        NavigationLink(value: SidebarSelection.account(account.id)) {
-          AccountSidebarRow(
-            account: account,
-            isSelected: selection == .account(account.id),
-            isEditing: renameBinding(for: account.id),
-            onRename: renameAction(for: account)
-          )
-        }
-        .accessibilityIdentifier(UITestIdentifiers.Sidebar.account(account.id))
-        .contextMenu { accountContextMenu(for: account) }
-      }
-      .onMove { source, destination in
-        Task { await reorderInvestmentAccounts(from: source, to: destination) }
+    let groupAware = accountStore.accounts.groupAwareSidebar(
+      groups: accountGroupStore.groups,
+      excluding: nil,
+      alwaysInclude: nil
+    )
+    return Section("Investments") {
+      ForEach(groupAware.investments, id: \.bucketEntryId) { entry in
+        bucketEntryView(entry)
       }
       totalRow(label: "Investment Total", value: accountStore.convertedInvestmentTotal)
+    }
+  }
+
+  /// Renders a single bucket entry — standalone account or group with
+  /// its members. The switch lives in this helper rather than inline so
+  /// each `Section`'s `ForEach` body stays within SwiftLint's
+  /// `closure_body_length` budget.
+  @ViewBuilder
+  func bucketEntryView(_ entry: SidebarBucketEntry) -> some View {
+    switch entry {
+    case .account(let account):
+      standaloneAccountRowLink(account)
+    case let .group(group, members):
+      groupSidebarEntry(group, members: members)
     }
   }
 
@@ -159,12 +155,6 @@ extension SidebarView {
 
   // MARK: - Helpers
 
-  func reorderCurrentAccounts(from source: IndexSet, to destination: Int) async {
-    var accounts = accountStore.currentAccounts
-    accounts.move(fromOffsets: source, toOffset: destination)
-    await accountStore.reorderAccounts(accounts)
-  }
-
   /// Dropped CSV onto a sidebar account row: force the import onto that
   /// account, bypassing profile matching. A profile is created on success.
   func ingestDroppedURLs(_ urls: [URL], forcedAccountId: UUID) async {
@@ -181,13 +171,6 @@ extension SidebarView {
         data: data,
         source: .droppedFile(url: url, forcedAccountId: forcedAccountId))
     }
-  }
-
-  func reorderInvestmentAccounts(from source: IndexSet, to destination: Int) async {
-    var accounts = accountStore.investmentAccounts
-    accounts.move(fromOffsets: source, toOffset: destination)
-    await accountStore.reorderAccounts(
-      accounts, positionOffset: accountStore.currentAccounts.count)
   }
 
   // MARK: - Actions

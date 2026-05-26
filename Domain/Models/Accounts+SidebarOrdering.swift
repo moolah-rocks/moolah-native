@@ -7,6 +7,16 @@ import Foundation
 enum SidebarBucketEntry: Equatable {
   case account(Account)
   case group(AccountGroup, members: [Account])
+
+  /// Stable identifier suitable for SwiftUI `ForEach` keying. The
+  /// account / group UUID is unique across the entry list because a
+  /// member account doesn't appear as its own top-level entry.
+  var bucketEntryId: UUID {
+    switch self {
+    case .account(let account): return account.id
+    case .group(let group, _): return group.id
+    }
+  }
 }
 
 extension Accounts {

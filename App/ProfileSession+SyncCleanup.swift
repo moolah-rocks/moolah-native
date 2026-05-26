@@ -39,6 +39,7 @@ extension ProfileSession {
     // per-store sync-refresh test suites.
     accountStore.stopObserving()
     earmarkStore.stopObserving()
+    accountGroupStore?.stopObserving()
     categoryStore.stopObserving()
     importRuleStore.stopObserving()
     transactionStore.stopObserving()

@@ -29,7 +29,8 @@ extension NavigationDestination {
       return .analysis(history: analysis?.history, forecast: analysis?.forecast)
     case .reports:
       return .reports(from: reports?.from, to: reports?.to)
-    case .account, .earmark, .allTransactions, .recentlyAdded, .upcomingTransactions, .categories:
+    case .account, .earmark, .group, .allTransactions, .recentlyAdded, .upcomingTransactions,
+      .categories:
       return sidebar.navigationDestination
     }
   }
