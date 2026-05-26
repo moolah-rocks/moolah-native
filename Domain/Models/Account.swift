@@ -9,17 +9,6 @@ enum AccountType: String, Codable, Sendable, CaseIterable {
   case crypto
   case exchange
 
-  var isCurrent: Bool {
-    self == .bank || self == .asset || self == .creditCard
-  }
-
-  /// Whether this type should be treated as an investment account for sidebar
-  /// grouping and any query that filters investments. `true` for `.investment`,
-  /// `.crypto`, and `.exchange`.
-  var isInvestmentLike: Bool {
-    self == .investment || self == .crypto || self == .exchange
-  }
-
   /// Whether this account type is populated by an external sync source
   /// (crypto wallets via `WalletSyncSource`, exchange accounts via a
   /// provider source such as `CoinstashSyncSource`) rather than manual
@@ -44,6 +33,8 @@ enum AccountType: String, Codable, Sendable, CaseIterable {
     }
   }
 
+  /// Human-readable type label shown in account creation, edit, and
+  /// sidebar grouping UI.
   var displayName: String {
     switch self {
     case .bank: return "Bank Account"
