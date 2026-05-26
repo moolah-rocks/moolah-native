@@ -34,6 +34,10 @@ final class ProfileSession: Identifiable {
   /// consumers can force-unwrap if needed; the type stays optional to
   /// satisfy SwiftLint's `implicitly_unwrapped_optional` rule.
   private(set) var accountGroupStore: AccountGroupStore?
+  /// Sidebar expand / collapse state for `AccountGroup` rows.
+  /// Local-only (per-device). Same `finishInit`-assigned pattern as
+  /// `accountGroupStore`; functionally `let` from the consumer.
+  private(set) var groupUIStateStore: GroupUIStateStore?
   let analysisStore: AnalysisStore
   let investmentStore: InvestmentStore
   let reportingStore: ReportingStore
@@ -227,6 +231,7 @@ final class ProfileSession: Identifiable {
     // `function_body_length` budget — same pattern as `cryptoSyncStore`
     // / `cryptoTokenDiscovery` below.
     self.accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
+    self.groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
     let cryptoWiring = Self.makeCryptoSyncWiring(
       backend: backend,
       registry: instrumentRegistry,

@@ -71,6 +71,9 @@ struct ProfileSchemaV10DropLegacyTests {
     "transfer_suggestion",
     // v14 account groups (synced; back-reference column added on `account`)
     "account_group",
+    // v15 sidebar expand / collapse state (local-only; cascades from
+    // `account_group` on delete)
+    "account_group_ui",
     "grdb_migrations",
   ]
 
