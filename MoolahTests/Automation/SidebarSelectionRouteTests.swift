@@ -18,6 +18,15 @@ struct SidebarSelectionRouteTests {
     #expect(SidebarSelection.earmark(id).navigationDestination == .earmark(id))
   }
 
+  @Test("group selection maps to .accounts (Phase 5 placeholder)")
+  func groupMapsToAccountsPlaceholder() {
+    // Phase 5 will route groups to a dedicated destination; until then,
+    // group selection lands at the all-accounts overview so the user
+    // isn't dropped into an empty pane.
+    let id = UUID()
+    #expect(SidebarSelection.group(id).navigationDestination == .accounts)
+  }
+
   @Test("allTransactions maps to .accounts")
   func allTransactionsMaps() {
     #expect(SidebarSelection.allTransactions.navigationDestination == .accounts)

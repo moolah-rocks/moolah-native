@@ -25,6 +25,15 @@ final class ProfileSession: Identifiable {
   let transactionStore: TransactionStore
   let categoryStore: CategoryStore
   let earmarkStore: EarmarkStore
+  /// `private(set) var` (rather than `let`) so it can be assigned from
+  /// `finishInit()` rather than the main `init` body. Functionally
+  /// `let` from the consumer's perspective — no caller mutates it.
+  /// Pattern mirrors `cryptoSyncStore` / `cryptoTokenDiscovery`.
+  /// The optional is *always* set by the end of init (the
+  /// `finishInit()` tail runs synchronously inside `init`), so
+  /// consumers can force-unwrap if needed; the type stays optional to
+  /// satisfy SwiftLint's `implicitly_unwrapped_optional` rule.
+  private(set) var accountGroupStore: AccountGroupStore?
   let analysisStore: AnalysisStore
   let investmentStore: InvestmentStore
   let reportingStore: ReportingStore
@@ -186,10 +195,9 @@ final class ProfileSession: Identifiable {
     self.analysisStore = stores.analysis
     self.investmentStore = stores.investment
     self.reportingStore = stores.reporting
-
-    // CSV import: ImportStore owns the pipeline orchestration; the staging
-    // store lives per-profile on disk so pending/failed files follow the
-    // profile across app restarts.
+    // CSV import: ImportStore owns the pipeline orchestration; the
+    // staging store lives per-profile on disk so pending/failed files
+    // follow the profile across app restarts.
     let importPipeline = Self.makeImportPipeline(
       backend: backend, profileId: profile.id, logger: logger)
     self.importStore = importPipeline.importStore
@@ -214,6 +222,11 @@ final class ProfileSession: Identifiable {
   /// to `SyncCoordinator` here — apply drives GRDB writes and the
   /// observation streams take it from there.
   private func finishInit() {
+    // AccountGroupStore is constructed here (rather than the main
+    // `init` body) so the init stays within the
+    // `function_body_length` budget — same pattern as `cryptoSyncStore`
+    // / `cryptoTokenDiscovery` below.
+    self.accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
     let cryptoWiring = Self.makeCryptoSyncWiring(
       backend: backend,
       registry: instrumentRegistry,

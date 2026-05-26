@@ -12,14 +12,18 @@ import SwiftUI
 
 /// Placeholder main content shown after sign-in. Replaced step-by-step with real screens.
 struct ContentView: View {
+  // Internal (not private) so the `+AccountDetail` and `+GroupDetail`
+  // extension files can reach the environment stores across the file
+  // split.
   @Environment(AuthStore.self) private var authStore
-  @Environment(ProfileSession.self) private var session
-  @Environment(AccountStore.self) private var accountStore
-  @Environment(TransactionStore.self) private var transactionStore
-  @Environment(CategoryStore.self) private var categoryStore
-  @Environment(EarmarkStore.self) private var earmarkStore
+  @Environment(ProfileSession.self) var session
+  @Environment(AccountStore.self) var accountStore
+  @Environment(TransactionStore.self) var transactionStore
+  @Environment(CategoryStore.self) var categoryStore
+  @Environment(EarmarkStore.self) var earmarkStore
+  @Environment(AccountGroupStore.self) var accountGroupStore
   @Environment(AnalysisStore.self) private var analysisStore
-  @Environment(InvestmentStore.self) private var investmentStore
+  @Environment(InvestmentStore.self) var investmentStore
   @Environment(ReportingStore.self) private var reportingStore
 
   #if os(macOS)
@@ -191,6 +195,13 @@ struct ContentView: View {
           transactionStore: transactionStore,
           analysisRepository: analysisStore.repository)
       }
+    case .group(let id):
+      // Phase 5 wires the composite detail view bound to an
+      // `AccountViewContext`. Until then, render a placeholder so the
+      // user has feedback that the group is selected — the existing
+      // `accountDetail(id:)` shape only fits a single account, and
+      // forcing it here would misrepresent the membership.
+      groupDetailPlaceholder(id: id)
     case .recentlyAdded:
       RecentlyAddedView(backend: session.backend)
     case .allTransactions:
@@ -339,51 +350,5 @@ extension ContentView {
   }
 }
 
-// MARK: - Account Detail
-
-extension ContentView {
-  @ViewBuilder
-  private func accountDetail(id: UUID) -> some View {
-    if let account = accountStore.accounts.by(id: id) {
-      switch account.type {
-      case .investment:
-        InvestmentAccountView(
-          account: account,
-          accounts: accountStore.accounts,
-          categories: categoryStore.categories,
-          earmarks: earmarkStore.earmarks,
-          investmentStore: investmentStore,
-          transactionStore: transactionStore)
-      case .crypto:
-        CryptoWalletAccountView(
-          account: account,
-          accounts: accountStore.accounts,
-          categories: categoryStore.categories,
-          earmarks: earmarkStore.earmarks,
-          transactionStore: transactionStore,
-          positions: accountStore.positions(for: account.id),
-          conversionService: session.backend.conversionService,
-          session: session)
-      case .exchange:
-        ExchangeAccountView(
-          account: account,
-          accounts: accountStore.accounts,
-          categories: categoryStore.categories,
-          earmarks: earmarkStore.earmarks,
-          transactionStore: transactionStore,
-          positions: accountStore.positions(for: account.id),
-          conversionService: session.backend.conversionService,
-          session: session)
-      default:
-        StandardAccountView(
-          account: account,
-          positions: accountStore.positions(for: account.id),
-          accounts: accountStore.accounts,
-          categories: categoryStore.categories,
-          earmarks: earmarkStore.earmarks,
-          transactionStore: transactionStore,
-          conversionService: session.backend.conversionService)
-      }
-    }
-  }
-}
+// `accountDetail(id:)` lives in `ContentView+AccountDetail.swift`.
+// `groupDetailPlaceholder(id:)` lives in `ContentView+GroupDetail.swift`.

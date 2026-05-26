@@ -3,6 +3,12 @@ import SwiftUI
 enum SidebarSelection: Hashable {
   case account(UUID)
   case earmark(UUID)
+  /// Selection of an `AccountGroup` row. Phase 5 wires the detail view
+  /// that consumes this case; for Phase 4, selecting a group simply
+  /// updates the binding and the detail leaf falls through to a
+  /// placeholder. Carries the group's UUID so a later detail view can
+  /// resolve the group from `AccountGroupStore`.
+  case group(UUID)
   case recentlyAdded
   case allTransactions
   case upcomingTransactions
@@ -20,6 +26,9 @@ struct SidebarView: View {
   // Internal access required by `SidebarView+Sections.swift` extension;
   // cannot be `private` across file boundaries.
   @Environment(EarmarkStore.self) var earmarkStore
+  // Internal access required by `SidebarView+Sections.swift` extension;
+  // cannot be `private` across file boundaries.
+  @Environment(AccountGroupStore.self) var accountGroupStore
   @Environment(ProfileSession.self) private var session
   // Internal access required by `SidebarView+Sections.swift` extension;
   // cannot be `private` across file boundaries.
@@ -37,11 +46,22 @@ struct SidebarView: View {
   // Internal access required by `SidebarView+Sections.swift` extension;
   // cannot be `private` across file boundaries.
   @State var accountToEdit: Account?
-  /// Identifies the sidebar row currently in inline rename mode, if
-  /// any. Local-only — never persisted, never synced. At most one row
-  /// is in edit mode at a time across the entire sidebar (accounts,
-  /// earmarks, future groups).
-  @State private var editingRowId: UUID?
+  // Identifies the sidebar row currently in inline rename mode, if
+  // any. Local-only — never persisted, never synced. At most one row
+  // is in edit mode at a time across the entire sidebar (accounts,
+  // earmarks, future groups).
+  // Internal access required by `SidebarView+Sections.swift` extension;
+  // cannot be `private` across file boundaries.
+  @State var editingRowId: UUID?
+  // In-memory expand state for account-group rows. Phase 8 will persist
+  // this in a local-only GRDB sidecar (`local_account_group_ui`); for
+  // Phase 4 the state lives only for the lifetime of the sidebar view
+  // instance, so collapse / expand is lost on app relaunch. The Phase 8
+  // migration will swap the storage without changing the
+  // `expandedGroupIds.contains/insert/remove` API used downstream.
+  // Internal access required by `SidebarView+Sections.swift` extension;
+  // cannot be `private` across file boundaries.
+  @State var expandedGroupIds: Set<UUID> = []
   // Internal access required by `SidebarView+Sections.swift` extension;
   // cannot be `private` across file boundaries.
   @AppStorage("showHiddenAccounts") var showHidden = false
@@ -88,6 +108,10 @@ struct SidebarView: View {
         return .handled
       case .earmark(let id):
         guard earmarkStore.earmarks.by(id: id) != nil else { return .ignored }
+        editingRowId = id
+        return .handled
+      case .group(let id):
+        guard accountGroupStore.by(id: id) != nil else { return .ignored }
         editingRowId = id
         return .handled
       case .none, .recentlyAdded, .allTransactions, .upcomingTransactions,
@@ -222,6 +246,7 @@ extension SidebarView {
       editingRowId = account.id
     }
     .accessibilityIdentifier(UITestIdentifiers.Sidebar.renameContextMenuItem)
+    accountGroupSubmenu(for: account)
     Button("Edit Account\u{2026}", systemImage: "pencil") {
       accountToEdit = account
     }
@@ -274,6 +299,15 @@ extension SidebarView {
   func renameAction(for earmark: Earmark) -> (String) -> Void {
     { newName in
       Task { _ = await earmarkStore.rename(id: earmark.id, to: newName) }
+    }
+  }
+
+  /// Returns the `onRename` closure for an account-group row. Same
+  /// intent-shape as the account / earmark variants; dispatches
+  /// `AccountGroupStore.rename`.
+  func renameAction(for group: AccountGroup) -> (String) -> Void {
+    { newName in
+      Task { _ = try? await accountGroupStore.rename(id: group.id, to: newName) }
     }
   }
 
