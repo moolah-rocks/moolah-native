@@ -27,17 +27,33 @@ extension SidebarView {
   /// The clickable group row + its drop / context-menu modifiers. Drop
   /// onto a group row adds an account to that group (cross-bucket
   /// rejected); group-onto-group drop is rejected (no nesting).
+  ///
+  /// The aggregate balance is computed by `GroupAggregateBalanceLoader`
+  /// — a thin wrapper that owns the `@State InstrumentAmount?` and
+  /// recomputes via `AccountStore.aggregateBalance(for:in:)` whenever
+  /// the member set changes. Per
+  /// `feedback_conversion_failure_ux.md`, a conversion failure on any
+  /// member surfaces as `nil` (badge / spinner), never a partial sum.
   @ViewBuilder
   func groupRowLink(_ group: AccountGroup) -> some View {
+    let memberIds = accountStore.accounts.ordered
+      .filter { $0.groupId == group.id }
+      .sorted(by: { $0.position < $1.position })
+      .map(\.id)
     NavigationLink(value: SidebarSelection.group(group.id)) {
-      AccountGroupSidebarRow(
-        group: group,
-        isSelected: selection == .group(group.id),
-        isExpanded: expandBinding(for: group.id),
-        aggregateBalance: nil,  // Phase 5 wires the aggregate
-        isEditing: renameBinding(for: group.id),
-        onRename: renameAction(for: group)
-      )
+      GroupAggregateBalanceLoader(
+        memberIds: memberIds,
+        targetInstrument: group.instrument
+      ) { balance in
+        AccountGroupSidebarRow(
+          group: group,
+          isSelected: selection == .group(group.id),
+          isExpanded: expandBinding(for: group.id),
+          aggregateBalance: balance,
+          isEditing: renameBinding(for: group.id),
+          onRename: renameAction(for: group)
+        )
+      }
     }
     .accessibilityIdentifier(UITestIdentifiers.Sidebar.group(group.id))
     .draggable(DraggableSidebarItem(kind: .group, id: group.id))
