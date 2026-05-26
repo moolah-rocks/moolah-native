@@ -1,3 +1,5 @@
+// Section builders, helper methods, and actions for `SidebarView`.
+
 // Reason: SwiftUI sidebar layout mixes Section / Label / NavigationLink calls
 // whose argument lists span multiple lines for readability; the rule's
 // first-arg-on-opening-line convention fights the SwiftUI declarative idiom
@@ -24,9 +26,7 @@ extension SidebarView {
             account: account,
             isSelected: selection == .account(account.id),
             isEditing: renameBinding(for: account.id),
-            onRename: { newName in
-              Task { _ = try? await accountStore.rename(id: account.id, to: newName) }
-            }
+            onRename: renameAction(for: account)
           )
         }
         .dropDestination(for: URL.self) { urls, _ in
@@ -72,9 +72,7 @@ extension SidebarView {
             account: account,
             isSelected: selection == .account(account.id),
             isEditing: renameBinding(for: account.id),
-            onRename: { newName in
-              Task { _ = try? await accountStore.rename(id: account.id, to: newName) }
-            }
+            onRename: renameAction(for: account)
           )
         }
         .accessibilityIdentifier(UITestIdentifiers.Sidebar.account(account.id))

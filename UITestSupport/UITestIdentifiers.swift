@@ -49,9 +49,10 @@ public enum UITestIdentifiers {
     /// shared label.
     public static let editAccountContextMenuItem = "sidebar.contextMenu.editAccount"
 
-    /// "Rename" item in the sidebar context menu — applies to accounts,
-    /// earmarks, and (Phase 4 onwards) account groups. Triggers inline
-    /// rename mode in the sidebar.
+    /// "Rename" item in the sidebar context menu for account rows.
+    /// Phase 4 will extend this identifier to earmark and account-group
+    /// rows; the identifier is centralised here so the same selector
+    /// works across all three entity types once they are wired.
     public static let renameContextMenuItem = "sidebar.contextMenu.rename"
   }
 
