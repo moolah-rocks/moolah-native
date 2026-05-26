@@ -19,6 +19,10 @@ protocol BackendProvider: Sendable {
   /// (not synced via CKSyncEngine — see `WalletSyncStateRepository`
   /// doc-comment).
   var walletSyncState: any WalletSyncStateRepository { get }
+  /// Per-device sidebar expand / collapse state for `AccountGroup` rows.
+  /// Local-only (not synced via CKSyncEngine — expand state is per-device
+  /// UX preference, not data). See `GroupUIStateRepository` doc-comment.
+  var groupUIState: any GroupUIStateRepository { get }
 
   /// Narrow change-notification seam over the backend's shared
   /// instrument registry, or `nil` for backends that have no shared
