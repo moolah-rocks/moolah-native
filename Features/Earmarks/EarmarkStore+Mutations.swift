@@ -44,16 +44,15 @@ extension EarmarkStore {
     }
   }
 
-  /// Guards the inline-rename UI flow so a cleared or unchanged field
-  /// does not issue a repository write. Trims whitespace; treats empty /
-  /// whitespace-only input as a no-op (no write; returns the current
-  /// earmark unchanged). Same-name input is also a no-op. Errors
-  /// propagate through `update(_:)`, which captures them on
-  /// `self.error` and returns `nil`.
+  /// Prevents spurious repository writes when the user clears or leaves
+  /// unchanged the inline-rename field. Whitespace is trimmed before
+  /// comparison; empty/whitespace-only and same-name inputs are treated
+  /// as no-ops and return the current earmark without touching the
+  /// repository. Errors from `update(_:)` surface on `self.error`.
   @discardableResult
   func rename(id: UUID, to newName: String) async -> Earmark? {
     let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard let earmark = earmarks.first(where: { $0.id == id }) else { return nil }
+    guard let earmark = earmarks.by(id: id) else { return nil }
     guard !trimmed.isEmpty, trimmed != earmark.name else { return earmark }
     var updated = earmark
     updated.name = trimmed
