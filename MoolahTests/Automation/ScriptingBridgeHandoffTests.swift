@@ -80,9 +80,10 @@
           NSApp,
           continue: activity,
           restorationHandler: { _ in })
-        // Returns true so AppKit doesn't fall through to SwiftUI's
-        // WindowGroup external-event routing (which would spawn a phantom
-        // window per #386). No bridge calls.
+        // Returns true to signal AppKit we've consumed the activity. The
+        // `#386` auto-spawn guard lives on the WindowGroup itself
+        // (`.handlesExternalEvents(matching: [])`), not here. No bridge
+        // calls because the payload was malformed.
         #expect(handled)
         #expect(recorder.openedProfiles.isEmpty)
         #expect(recorder.setNavigations.isEmpty)

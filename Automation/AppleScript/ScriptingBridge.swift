@@ -23,10 +23,13 @@
     ///
     /// Returns `true` for every activity whose `activityType` matches
     /// `HandoffActivity.continueActivityType`, even when the payload is
-    /// missing or undecodable — that prevents AppKit from falling through
-    /// to SwiftUI's `WindowGroup` external-event routing, which would
-    /// auto-spawn a phantom window (the #386 class of bug). Activities of
-    /// other types return `false` so the OS can route them elsewhere.
+    /// missing or undecodable — that signals AppKit we've consumed the
+    /// activity rather than leaving it to default handling. SwiftUI's
+    /// `WindowGroup` auto-spawn (the `#386` class of bug) is suppressed
+    /// independently by `.handlesExternalEvents(matching: [])` on the
+    /// `WindowGroup` in `MoolahApp`; returning `true` here does NOT stop
+    /// it. Activities of other types return `false` so the OS can route
+    /// them elsewhere.
     @MainActor
     func application(
       _ application: NSApplication,
