@@ -27,6 +27,9 @@ struct AccountStoreRenameTests {
       matching: { $0.accounts.by(id: original.id)?.name == "New" },
       description: "rename observed"
     )
+    #expect(store.error == nil)
+    let fetched = try await backend.accounts.fetchAll()
+    #expect(fetched.first(where: { $0.id == original.id })?.name == "New")
   }
 
   @Test("rename trims surrounding whitespace before persisting")
@@ -45,9 +48,15 @@ struct AccountStoreRenameTests {
     let result = try await store.rename(id: original.id, to: "  Spaced  ")
 
     #expect(result?.name == "Spaced")
+    try await store.waitForNextEmission(
+      matching: { $0.accounts.by(id: original.id)?.name == "Spaced" },
+      description: "trimmed rename observed"
+    )
+    let fetched = try await backend.accounts.fetchAll()
+    #expect(fetched.first(where: { $0.id == original.id })?.name == "Spaced")
   }
 
-  @Test("rename to empty / whitespace-only string reverts (returns current account)")
+  @Test("rename to empty / whitespace-only string is a no-op (returns current account unchanged)")
   func renameToEmptyReverts() async throws {
     let (backend, database) = try TestBackend.create()
     let original = AccountStoreTestSupport.seedAccount(
@@ -83,6 +92,9 @@ struct AccountStoreRenameTests {
     let result = try await store.rename(id: original.id, to: "Stable")
 
     #expect(result?.name == "Stable")
+    #expect(store.error == nil)
+    let fetched = try await backend.accounts.fetchAll()
+    #expect(fetched.first(where: { $0.id == original.id })?.name == "Stable")
   }
 
   @Test("rename of unknown id returns nil without surfacing an error")

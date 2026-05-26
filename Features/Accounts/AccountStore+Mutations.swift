@@ -57,11 +57,12 @@ extension AccountStore {
     }
   }
 
-  /// Convenience rename. Trims whitespace; treats empty / whitespace-only
-  /// input as a revert (no write, returns the current account unchanged).
-  /// Same-name input is also a no-op. The reactive observation delivers
-  /// the renamed account; `surfaceError` handling is delegated to
-  /// `update(_:)`.
+  /// Convenience rename for the inline-rename UI flow. Trims whitespace;
+  /// treats empty / whitespace-only input as a no-op (no write; returns the
+  /// current account unchanged). Same-name input is also a no-op. Guards the
+  /// call site so a cleared or unchanged field does not issue a repository
+  /// write. Errors propagate through `update(_:)`, which captures them on
+  /// `self.error` and rethrows.
   @discardableResult
   func rename(id: UUID, to newName: String) async throws -> Account? {
     let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
