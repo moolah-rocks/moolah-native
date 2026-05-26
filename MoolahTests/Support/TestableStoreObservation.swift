@@ -95,16 +95,18 @@ extension TestableStoreObservation {
       while await iterator.next() != nil {
         if await evaluate() { return }
       }
-      // Stream finished without a matching tick. The predicate may still
-      // have become true between the last `evaluate()` and now (e.g.
-      // a MainActor hop applied the awaited state between iterations);
-      // re-check once. If it's still false, block long enough that the
-      // timeout-task in `withEmissionTimeout` always wins so the caller
-      // observes a proper `StoreEmissionTimeoutError` rather than a
-      // false-positive completion. 5 minutes matches the fallback in
-      // `waitForFirstEmission`.
-      if await evaluate() { return }
-      try? await Task.sleep(for: .seconds(300))
+      // Stream finished without a matching tick. The store's awaited
+      // state may still be in flight (e.g. a GRDB `ValueObservation`
+      // hasn't fired yet), or the underlying single-consumer
+      // `AsyncStream` may have dropped a tick across multiple iterator
+      // creations within the same test. Fall back to polling the
+      // predicate until the timeout-task in `withEmissionTimeout`
+      // cancels us — that way state arriving after the iterator
+      // misbehaves is still caught instead of falsely timing out.
+      while !Task.isCancelled {
+        if await evaluate() { return }
+        try? await Task.sleep(for: .milliseconds(20))
+      }
     }
   }
 
