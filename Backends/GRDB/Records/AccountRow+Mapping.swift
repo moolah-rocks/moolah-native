@@ -30,6 +30,7 @@ extension AccountRow {
     self.walletAddress = domain.walletAddress
     self.chainId = domain.chainId
     self.exchangeProvider = domain.exchangeProvider?.rawValue
+    self.groupId = domain.groupId
   }
 
   /// Domain projection. `instruments` is the registry lookup
@@ -57,6 +58,7 @@ extension AccountRow {
       valuationMode: ValuationMode(rawValue: valuationMode) ?? .recordedValue,
       walletAddress: walletAddress,
       chainId: chainId,
-      exchangeProvider: resolvedExchangeProvider)
+      exchangeProvider: resolvedExchangeProvider,
+      groupId: groupId)
   }
 }

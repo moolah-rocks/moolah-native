@@ -28,6 +28,16 @@
 ///   compatibility path in `WalletSyncError`'s custom `Codable`. No rubric
 ///   item (1–6) applies — recorded here so the absence of a bump is a
 ///   documented decision, not an oversight.
+/// - 5: account groups. Adds the synced `AccountGroupRecord` and a
+///      `groupId` field on `AccountRecord` (back-reference into
+///      `AccountGroup.id`). Older builds don't know about the new
+///      record type (rubric item 1) and would strip `groupId` from
+///      `Account` round-trips (rubric item 2 — that re-upload would
+///      corrupt membership on other devices once cross-device sync
+///      ships). The bump fences both downgrades off from this build
+///      forward. `AccountGroup` records themselves are local-only in
+///      this build — sync wiring (upload / download / apply-batch
+///      dispatch) is added in a follow-up.
 /// - 4: transfer-suggestion reshape. Adds the synced
 ///      `TransferSuggestionRecord` (a content-addressed pair of
 ///      transaction ids) as the canonical source of a detected
@@ -62,5 +72,5 @@
 /// cloud without a `dataFormatVersion` field reads as `0` and is
 /// trivially compatible with any v1+ build.
 enum DataFormatVersion {
-  static let current: Int = 4
+  static let current: Int = 5
 }

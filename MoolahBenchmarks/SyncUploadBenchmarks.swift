@@ -37,6 +37,7 @@ final class SyncUploadBenchmarks: XCTestCase {
       instruments: result.backend.grdbInstruments,
       categories: result.backend.grdbCategories,
       accounts: result.backend.grdbAccounts,
+      accountGroups: result.backend.grdbAccountGroups,
       earmarks: result.backend.grdbEarmarks,
       earmarkBudgetItems: result.backend.grdbEarmarkBudgetItems,
       investmentValues: result.backend.grdbInvestments,

@@ -3,7 +3,7 @@ import Foundation
 extension Accounts {
   struct SidebarGroups: Equatable {
     let current: [Account]
-    let investment: [Account]
+    let investments: [Account]
   }
 
   /// Accounts grouped and sorted the way the sidebar shows them.
@@ -16,7 +16,7 @@ extension Accounts {
   ///     Used by pickers so an already-selected account that is
   ///     hidden stays in the dropdown.
   /// - Returns: Two arrays — `current` (bank, asset, credit card) and
-  ///   `investment` — each sorted ascending by `Account.position`.
+  ///   `investments` — each sorted ascending by `Account.position`.
   /// - Note: When `excluding` and `alwaysInclude` reference the same
   ///   id, exclusion wins.
   func sidebarGrouped(
@@ -29,15 +29,16 @@ extension Accounts {
       return true
     }
     var current: [Account] = []
-    var investment: [Account] = []
+    var investments: [Account] = []
     for account in visible {
-      if account.type.isCurrent {
+      switch account.bucket {
+      case .current:
         current.append(account)
-      } else if account.type.isInvestmentLike {
-        investment.append(account)
+      case .investments:
+        investments.append(account)
       }
     }
-    return SidebarGroups(current: current, investment: investment)
+    return SidebarGroups(current: current, investments: investments)
   }
 
   /// Flat sidebar-ordered list (current first, then investment) with
@@ -47,6 +48,6 @@ extension Accounts {
     alwaysInclude: UUID? = nil
   ) -> [Account] {
     let groups = sidebarGrouped(excluding: excluding, alwaysInclude: alwaysInclude)
-    return groups.current + groups.investment
+    return groups.current + groups.investments
   }
 }

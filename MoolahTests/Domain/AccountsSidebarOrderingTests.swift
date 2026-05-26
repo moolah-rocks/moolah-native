@@ -31,10 +31,10 @@ struct AccountsSidebarOrderingTests {
     let groups = accounts.sidebarGrouped()
 
     #expect(groups.current.map(\.name) == ["Chequing", "House", "Card"])
-    #expect(groups.investment.map(\.name) == ["Brokerage"])
+    #expect(groups.investments.map(\.name) == ["Brokerage"])
   }
 
-  @Test("Crypto wallets land in the investment group (isInvestmentLike)")
+  @Test("Crypto wallets land in the investments bucket")
   func cryptoWalletsGroupedAsInvestment() {
     let chequing = bank("Chequing", position: 0)
     let brokerage = investment("Brokerage", position: 0)
@@ -47,7 +47,7 @@ struct AccountsSidebarOrderingTests {
     let groups = accounts.sidebarGrouped()
 
     #expect(groups.current.map(\.name) == ["Chequing"])
-    #expect(groups.investment.map(\.name) == ["Brokerage", "ETH Wallet"])
+    #expect(groups.investments.map(\.name) == ["Brokerage", "ETH Wallet"])
   }
 
   @Test("Sorts within each group by position ascending")
