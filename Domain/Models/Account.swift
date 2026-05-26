@@ -64,6 +64,13 @@ struct Account {
   /// `type == .exchange`; nil otherwise.
   var exchangeProvider: ExchangeProvider?
   var valuationMode: ValuationMode
+  /// Back-reference into `AccountGroup.id`. When non-nil, this account
+  /// belongs to the named group; when nil, it belongs to no group.
+  ///
+  /// The reference is advisory: an unknown id (e.g. a group record that
+  /// has not yet arrived from sync) is treated as absent by callers.
+  /// There is no foreign-key enforcement.
+  var groupId: UUID?
 
   init(
     id: UUID = UUID(),
@@ -76,7 +83,8 @@ struct Account {
     valuationMode: ValuationMode = .recordedValue,
     walletAddress: String? = nil,
     chainId: Int? = nil,
-    exchangeProvider: ExchangeProvider? = nil
+    exchangeProvider: ExchangeProvider? = nil,
+    groupId: UUID? = nil
   ) {
     self.id = id
     self.name = name
@@ -89,6 +97,7 @@ struct Account {
     self.walletAddress = walletAddress
     self.chainId = chainId
     self.exchangeProvider = exchangeProvider
+    self.groupId = groupId
   }
 }
 
@@ -108,6 +117,7 @@ extension Account: Codable {
     case walletAddress
     case chainId
     case exchangeProvider
+    case groupId
   }
 
   init(from decoder: Decoder) throws {
@@ -138,6 +148,7 @@ extension Account: Codable {
     chainId = try container.decodeIfPresent(Int.self, forKey: .chainId)
     exchangeProvider = try container.decodeIfPresent(
       ExchangeProvider.self, forKey: .exchangeProvider)
+    groupId = try container.decodeIfPresent(UUID.self, forKey: .groupId)
   }
 
   func encode(to encoder: Encoder) throws {
@@ -152,6 +163,7 @@ extension Account: Codable {
     try container.encodeIfPresent(walletAddress, forKey: .walletAddress)
     try container.encodeIfPresent(chainId, forKey: .chainId)
     try container.encodeIfPresent(exchangeProvider, forKey: .exchangeProvider)
+    try container.encodeIfPresent(groupId, forKey: .groupId)
   }
 }
 
@@ -163,6 +175,7 @@ extension Account: Hashable {
       && lhs.valuationMode == rhs.valuationMode
       && lhs.walletAddress == rhs.walletAddress && lhs.chainId == rhs.chainId
       && lhs.exchangeProvider == rhs.exchangeProvider
+      && lhs.groupId == rhs.groupId
       && lhs.positions == rhs.positions
   }
 
@@ -177,6 +190,7 @@ extension Account: Hashable {
     hasher.combine(walletAddress)
     hasher.combine(chainId)
     hasher.combine(exchangeProvider)
+    hasher.combine(groupId)
     hasher.combine(positions)
   }
 }
