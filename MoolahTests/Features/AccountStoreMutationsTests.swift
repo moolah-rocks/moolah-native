@@ -98,11 +98,11 @@ struct AccountStoreMutationsTests {
     )
   }
 
-  @Test("investmentAccounts includes crypto accounts (isInvestmentLike)")
+  @Test("investmentAccounts includes crypto accounts")
   func investmentAccountsIncludesCrypto() async throws {
     // Sidebar feeds its "Investments" section from `investmentAccounts`. A
     // strict `type == .investment` filter would silently drop newly-created
-    // crypto wallets — the acceptance criterion is to use `isInvestmentLike`
+    // crypto wallets — the acceptance criterion is .bucket == .investments
     // so both kinds appear together.
     let (backend, database) = try TestBackend.create()
     _ = AccountStoreTestSupport.seedAccount(

@@ -34,7 +34,7 @@ struct AccountsSidebarOrderingTests {
     #expect(groups.investment.map(\.name) == ["Brokerage"])
   }
 
-  @Test("Crypto wallets land in the investment group (isInvestmentLike)")
+  @Test("Crypto wallets land in the investments bucket")
   func cryptoWalletsGroupedAsInvestment() {
     let chequing = bank("Chequing", position: 0)
     let brokerage = investment("Brokerage", position: 0)
