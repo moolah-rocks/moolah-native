@@ -73,6 +73,12 @@ import GRDB
 /// deliver an Account ahead of its AccountGroup, so the lookup layer
 /// resolves unknown ids to nil instead of relying on the database).
 /// See `ProfileSchema+AccountGroups.swift`.
+/// `v15_account_group_ui_state` — adds the local-only `account_group_ui`
+/// table for sidebar expand / collapse state. NOT synced via CloudKit
+/// (per-device UX preference, not data). FK with `ON DELETE CASCADE`
+/// against `account_group(id)` reaps rows automatically when their
+/// parent group is deleted. See
+/// `ProfileSchema+AccountGroupUIState.swift`.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -93,7 +99,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 14
+  static let version = 15
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -129,6 +135,8 @@ enum ProfileSchema {
       "v13_transfer_suggestion_record", migrate: addTransferSuggestion)
     migrator.registerMigration(
       "v14_account_groups", migrate: addAccountGroups)
+    migrator.registerMigration(
+      "v15_account_group_ui_state", migrate: addAccountGroupUIState)
 
     return migrator
   }
