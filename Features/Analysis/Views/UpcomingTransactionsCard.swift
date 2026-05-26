@@ -230,7 +230,7 @@ private struct SimpleTransactionRow: View {
 
   private var displayPayee: String {
     let label = transaction.displayPayee(
-      viewingAccountId: nil, accounts: accounts, earmarks: earmarks)
+      accountContext: nil, accounts: accounts, earmarks: earmarks)
     return label.isEmpty ? "Unknown" : label
   }
 }

@@ -4,22 +4,33 @@ import Foundation
 
 extension Transaction {
   /// Builds a display label for the transaction, handling transfers, earmarks, and payees.
+  ///
+  /// `accountContext` is the perspective from which the description is phrased.
+  /// Callers derive it per-row from the selected view's `accountIds`: exactly one
+  /// in-scope leg → that leg's account id; otherwise → nil. The semantics:
+  /// - `accountContext == nil` → no-context style ("Transfer from A to B"),
+  ///   used by scheduled / all-accounts views and by group views where the
+  ///   transaction touches multiple in-scope members.
+  /// - `accountContext == some` → perspective style ("Transfer to/from <other>"),
+  ///   used by single-account views and by group views where the transaction
+  ///   touches exactly one member.
+  ///
   /// - Parameters:
-  ///   - viewingAccountId: The account the user is viewing from (nil for scheduled/unfiltered views).
+  ///   - accountContext: The account perspective to phrase from (nil = no-context).
   ///   - accounts: Account lookup collection.
   ///   - earmarks: Earmark lookup collection.
   /// - Returns: A human-readable label for the transaction.
   func displayPayee(
-    viewingAccountId: UUID?, accounts: Accounts, earmarks: Earmarks
+    accountContext: UUID?, accounts: Accounts, earmarks: Earmarks
   ) -> String {
     if isTransfer {
-      if isSimple, let viewingAccountId,
-        let otherLeg = legs.first(where: { $0.accountId != viewingAccountId })
+      if isSimple, let accountContext,
+        let otherLeg = legs.first(where: { $0.accountId != accountContext })
       {
         // Account-scoped view: show direction relative to the viewer
         let otherAccountName =
           otherLeg.accountId.flatMap { accounts.by(id: $0) }?.name ?? "Unknown Account"
-        let viewingLeg = legs.first(where: { $0.accountId == viewingAccountId })
+        let viewingLeg = legs.first(where: { $0.accountId == accountContext })
         let isOutgoing = (viewingLeg?.quantity ?? 0) < 0
         let transferLabel =
           isOutgoing

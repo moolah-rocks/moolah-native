@@ -41,7 +41,7 @@ private struct PreviewRowSpec {
   let legs: [TransactionLeg]
   let displayAmounts: [InstrumentAmount]
   let balance: Decimal
-  var viewingAccountId: UUID?
+  var accountContext: UUID?
 }
 
 @MainActor
@@ -53,7 +53,7 @@ private func previewRow(
   displayAmounts: [InstrumentAmount],
   balance: Decimal,
   scopeReferenceInstrument: Instrument = .AUD,
-  viewingAccountId: UUID? = nil,
+  accountContext: UUID? = nil,
   date: Date = Date(),
   recurPeriod: RecurPeriod? = nil,
   recurEvery: Int? = nil,
@@ -72,7 +72,7 @@ private func previewRow(
     displayAmounts: displayAmounts,
     balance: InstrumentAmount(quantity: balance, instrument: .AUD),
     scopeReferenceInstrument: scopeReferenceInstrument,
-    viewingAccountId: viewingAccountId,
+    accountContext: accountContext,
     isOverdue: isOverdue,
     isDueToday: isDueToday,
     onPay: onPay,
@@ -112,7 +112,7 @@ private func simplePreviewSpecs(data: PreviewData) -> [PreviewRowSpec] {
           accountId: data.savingsId, instrument: .AUD, quantity: 1000, type: .transfer),
       ],
       displayAmounts: [InstrumentAmount(quantity: -1000, instrument: .AUD)],
-      balance: -2449.77, viewingAccountId: data.sourceId),
+      balance: -2449.77, accountContext: data.sourceId),
     PreviewRowSpec(
       payee: "Rent Split",
       legs: [
@@ -122,7 +122,7 @@ private func simplePreviewSpecs(data: PreviewData) -> [PreviewRowSpec] {
           accountId: data.savingsId, instrument: .AUD, quantity: 500, type: .transfer),
       ],
       displayAmounts: [InstrumentAmount(quantity: -500, instrument: .AUD)],
-      balance: -1449.77, viewingAccountId: data.sourceId),
+      balance: -1449.77, accountContext: data.sourceId),
   ]
 }
 
@@ -143,7 +143,7 @@ private func tradePreviewSpecs(data: PreviewData) -> [PreviewRowSpec] {
         InstrumentAmount(quantity: 950, instrument: .AUD),
         InstrumentAmount(quantity: -50, instrument: .AUD),
       ],
-      balance: -2499.77, viewingAccountId: data.sourceId),
+      balance: -2499.77, accountContext: data.sourceId),
     PreviewRowSpec(
       payee: "",
       legs: [
@@ -156,7 +156,7 @@ private func tradePreviewSpecs(data: PreviewData) -> [PreviewRowSpec] {
         InstrumentAmount(quantity: -100, instrument: .AUD),
         InstrumentAmount(quantity: 1_000_000, instrument: data.scam),
       ],
-      balance: -1_549.77, viewingAccountId: data.sourceId),
+      balance: -1_549.77, accountContext: data.sourceId),
   ]
 }
 
@@ -167,7 +167,7 @@ private func tradePreviewSpecs(data: PreviewData) -> [PreviewRowSpec] {
       previewRow(
         data: data, payee: spec.payee, legs: spec.legs,
         displayAmounts: spec.displayAmounts, balance: spec.balance,
-        viewingAccountId: spec.viewingAccountId)
+        accountContext: spec.accountContext)
     }
   }
   .environment(\.spamInstruments, [data.scam])
