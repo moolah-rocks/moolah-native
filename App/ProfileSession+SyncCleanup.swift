@@ -40,6 +40,7 @@ extension ProfileSession {
     accountStore.stopObserving()
     earmarkStore.stopObserving()
     accountGroupStore?.stopObserving()
+    groupUIStateStore?.stopObserving()
     categoryStore.stopObserving()
     importRuleStore.stopObserving()
     transactionStore.stopObserving()

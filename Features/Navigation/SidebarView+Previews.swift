@@ -29,6 +29,7 @@ private func seedSidebarPreview(backend: any BackendProvider) async {
     conversionService: backend.conversionService,
     targetInstrument: .AUD)
   let accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
+  let groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
   // In-memory preview session can't fail in practice: opens an ephemeral
   // GRDB queue with no disk access. A trap here is acceptable in #Preview.
   // swiftlint:disable:next force_try
@@ -39,6 +40,7 @@ private func seedSidebarPreview(backend: any BackendProvider) async {
       .environment(accountStore)
       .environment(earmarkStore)
       .environment(accountGroupStore)
+      .environment(groupUIStateStore)
       .environment(session)
       .task {
         await seedSidebarPreview(backend: backend)
@@ -96,6 +98,7 @@ private func seedSidebarGroupPreview(
     conversionService: backend.conversionService,
     targetInstrument: .AUD)
   let accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
+  let groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
   // swiftlint:disable:next force_try
   let session = try! ProfileSession.preview()
 
@@ -104,6 +107,7 @@ private func seedSidebarGroupPreview(
       .environment(accountStore)
       .environment(earmarkStore)
       .environment(accountGroupStore)
+      .environment(groupUIStateStore)
       .environment(session)
       .task {
         await seedSidebarGroupPreview(
@@ -127,6 +131,7 @@ private func seedSidebarGroupPreview(
     conversionService: backend.conversionService,
     targetInstrument: .AUD)
   let accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
+  let groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
   // In-memory preview session can't fail in practice: opens an ephemeral
   // GRDB queue with no disk access. A trap here is acceptable in #Preview.
   // swiftlint:disable:next force_try
@@ -137,6 +142,7 @@ private func seedSidebarGroupPreview(
       .environment(accountStore)
       .environment(earmarkStore)
       .environment(accountGroupStore)
+      .environment(groupUIStateStore)
       .environment(session)
       .task {
         // Seed only an account — no earmarks. Validates that the

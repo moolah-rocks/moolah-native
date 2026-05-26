@@ -29,6 +29,11 @@ struct SidebarView: View {
   // Internal access required by `SidebarView+Sections.swift` extension;
   // cannot be `private` across file boundaries.
   @Environment(AccountGroupStore.self) var accountGroupStore
+  // Sidebar expand / collapse state for `AccountGroup` rows. Persisted
+  // per profile in the local-only `account_group_ui` GRDB table —
+  // never synced via CloudKit. Internal access for the
+  // `SidebarView+Groups.swift` extension.
+  @Environment(GroupUIStateStore.self) var groupUIStateStore
   @Environment(ProfileSession.self) private var session
   // Internal access required by `SidebarView+Sections.swift` extension;
   // cannot be `private` across file boundaries.
@@ -53,15 +58,6 @@ struct SidebarView: View {
   // Internal access required by `SidebarView+Sections.swift` extension;
   // cannot be `private` across file boundaries.
   @State var editingRowId: UUID?
-  // In-memory expand state for account-group rows. Phase 8 will persist
-  // this in a local-only GRDB sidecar (`local_account_group_ui`); for
-  // Phase 4 the state lives only for the lifetime of the sidebar view
-  // instance, so collapse / expand is lost on app relaunch. The Phase 8
-  // migration will swap the storage without changing the
-  // `expandedGroupIds.contains/insert/remove` API used downstream.
-  // Internal access required by `SidebarView+Sections.swift` extension;
-  // cannot be `private` across file boundaries.
-  @State var expandedGroupIds: Set<UUID> = []
   // Internal access required by `SidebarView+Sections.swift` extension;
   // cannot be `private` across file boundaries.
   @AppStorage("showHiddenAccounts") var showHidden = false

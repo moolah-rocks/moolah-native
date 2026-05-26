@@ -122,19 +122,20 @@ extension SidebarView {
 
   // MARK: - Expand state
 
-  /// Returns a two-way binding to the expand state of `groupId`. The
-  /// binding is backed by `expandedGroupIds` (in-memory only this
-  /// phase; Phase 8 persists). Setting `true` inserts; `false`
-  /// removes — straightforward Set membership.
+  /// Returns a two-way binding to the expand state of `groupId`.
+  /// Reads from `groupUIStateStore.expandedGroupIds` (driven by the
+  /// reactive observation of the local-only `account_group_ui` table)
+  /// and writes through `setExpanded(_:for:)` so the change is
+  /// persisted per profile and survives app relaunch.
+  ///
+  /// The store closes the loop: setExpanded → repo write → observation
+  /// emits → `expandedGroupIds` updates → the binding's `get` returns
+  /// the new value → SwiftUI re-renders.
   func expandBinding(for groupId: UUID) -> Binding<Bool> {
     Binding(
-      get: { expandedGroupIds.contains(groupId) },
+      get: { groupUIStateStore.expandedGroupIds.contains(groupId) },
       set: { newValue in
-        if newValue {
-          expandedGroupIds.insert(groupId)
-        } else {
-          expandedGroupIds.remove(groupId)
-        }
+        Task { await groupUIStateStore.setExpanded(newValue, for: groupId) }
       }
     )
   }
@@ -223,7 +224,7 @@ extension SidebarView {
         accountStore: accountStore
       )
       editingRowId = created.id
-      expandedGroupIds.insert(created.id)
+      await groupUIStateStore.setExpanded(true, for: created.id)
     } catch {
       // Error already surfaced on the store; no extra UI hop needed.
     }
@@ -255,7 +256,7 @@ extension SidebarView {
       let created = try await accountGroupStore.createGroup(
         from: account, name: "New Group", accountStore: accountStore)
       editingRowId = created.id
-      expandedGroupIds.insert(created.id)
+      await groupUIStateStore.setExpanded(true, for: created.id)
     } catch {
       // Error surfaces on `accountGroupStore.error`; no extra UI hop.
     }
