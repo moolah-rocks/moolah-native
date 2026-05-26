@@ -6,20 +6,6 @@ import Testing
 @Suite("AccountType")
 struct AccountTypeTests {
   @Test
-  func cryptoAndInvestmentBothInvestmentLike() {
-    #expect(AccountType.crypto.isInvestmentLike)
-    #expect(AccountType.investment.isInvestmentLike)
-    #expect(!AccountType.bank.isInvestmentLike)
-    #expect(!AccountType.creditCard.isInvestmentLike)
-    #expect(!AccountType.asset.isInvestmentLike)
-  }
-
-  @Test
-  func cryptoIsNotIsCurrent() {
-    #expect(!AccountType.crypto.isCurrent)
-  }
-
-  @Test
   func syncedTypesAreExactlyCryptoAndExchange() {
     #expect(AccountType.crypto.isSynced)
     #expect(AccountType.exchange.isSynced)

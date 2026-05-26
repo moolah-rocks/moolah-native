@@ -5,8 +5,7 @@ import Testing
 struct ExchangeAccountModelTests {
   @Test
   func exchangeTypeIsSidebarGroupedWithInvestments() {
-    #expect(AccountType.exchange.isInvestmentLike)
-    #expect(!AccountType.exchange.isCurrent)
+    #expect(AccountType.exchange.bucket == .investments)
   }
 
   @Test
