@@ -125,6 +125,24 @@ extension ProfileDataSyncHandler {
     }
   }
 
+  nonisolated func applyBatchSaveAccountGroup(
+    ckRecords: [CKRecord], systemFields: [String: Data], in database: Database
+  ) throws {
+    let context = GRDBBatchSaveContext(
+      ckRecords: ckRecords,
+      systemFields: systemFields,
+      site: "applyGRDBBatchSave[AccountGroup]")
+    let rows = mapRows(
+      context: context,
+      fieldValues: AccountGroupRow.fieldValues(from:),
+      idKey: { $0.id.uuidString },
+      stamp: stampSystemFields)
+    try writeRemote(site: context.site) {
+      try grdbRepositories.accountGroups.applyRemoteChangesSync(
+        saved: rows, deleted: [], in: database)
+    }
+  }
+
   nonisolated func applyBatchSaveEarmark(
     ckRecords: [CKRecord], systemFields: [String: Data], in database: Database
   ) throws {

@@ -99,6 +99,10 @@ extension ProfileDataSyncHandler {
       return fetchTransferSuggestionRow(id: uuid).map { row in
         buildCKRecord(from: row, encodedSystemFields: row.encodedSystemFields)
       }
+    case AccountGroupRow.recordType:
+      return fetchAccountGroupRow(id: uuid).map { row in
+        buildCKRecord(from: row, encodedSystemFields: row.encodedSystemFields)
+      }
     case CSVImportProfileRow.recordType:
       return fetchCSVImportProfileRow(id: uuid).map { row in
         buildCKRecord(from: row, encodedSystemFields: row.encodedSystemFields)
@@ -185,6 +189,13 @@ extension ProfileDataSyncHandler {
         self.mapBuiltRows(
           self.fetchRowsBatch {
             try self.grdbRepositories.transferSuggestions.fetchRowsSync(ids: ids)
+          })
+      }
+    case AccountGroupRow.recordType:
+      return {
+        self.mapBuiltRows(
+          self.fetchRowsBatch {
+            try self.grdbRepositories.accountGroups.fetchRowsSync(ids: ids)
           })
       }
     case CSVImportProfileRow.recordType:
@@ -302,6 +313,10 @@ extension ProfileDataSyncHandler {
 
   private func fetchTransferSuggestionRow(id: UUID) -> TransferSuggestionRow? {
     fetchRowOrLog { try grdbRepositories.transferSuggestions.fetchRowSync(id: id) }
+  }
+
+  private func fetchAccountGroupRow(id: UUID) -> AccountGroupRow? {
+    fetchRowOrLog { try grdbRepositories.accountGroups.fetchRowSync(id: id) }
   }
 
   private func fetchEarmarkRow(id: UUID) -> EarmarkRow? {
