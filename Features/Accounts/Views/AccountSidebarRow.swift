@@ -10,6 +10,47 @@ import SwiftUI
 /// guides/UI_GUIDE.md §5 "Selected-Row Contrast Override (Exception)"
 /// for the rationale and the rule that this is the only place in the
 /// app where hardcoded RGB values are permitted.
+///
+/// **Inline rename:** when both `isEditing` and `onRename` are provided,
+/// the row supports double-click-to-rename. Callers that do not opt in
+/// still receive a double-click gesture that no-ops, so do not attach a
+/// competing double-click handler to a `SidebarRowView`.
+
+/// TextField used by `SidebarRowView` while a row is in inline-rename
+/// mode. Auto-focuses on appear; commits on Return or focus loss (calls
+/// `onCommit`); cancels on Escape (calls `onCancel`). Separated from
+/// `SidebarRowView` so the focus/selection machinery is testable in
+/// isolation via #Preview.
+private struct InlineRenameField: View {
+  let initialText: String
+  let onCommit: (String) -> Void
+  let onCancel: () -> Void
+
+  @State private var text: String = ""
+  @FocusState private var isFocused: Bool
+
+  var body: some View {
+    TextField("", text: $text)
+      .textFieldStyle(.plain)
+      .focused($isFocused)
+      .onAppear {
+        text = initialText
+        isFocused = true
+      }
+      .onSubmit { onCommit(text) }
+      .onChange(of: isFocused) { _, focused in
+        // Focus loss without an explicit submit = commit (matches
+        // Finder-style rename). Escape will have set onCancel via
+        // .onKeyPress before focus drops.
+        if !focused { onCommit(text) }
+      }
+      .onKeyPress(.escape) {
+        onCancel()
+        return .handled
+      }
+  }
+}
+
 struct SidebarRowView: View {
   let icon: String
   let name: String
@@ -22,6 +63,16 @@ struct SidebarRowView: View {
   /// the user's mental model of the column. See guides/UI_GUIDE.md §"Not set"
   /// and `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11 for the rationale.
   var unsetIndicator: String?
+  /// When non-nil, the row supports inline rename. The caller flips
+  /// `isEditing.wrappedValue` to true (via double-click, context menu,
+  /// or keyboard shortcut). The row renders a `TextField` instead of
+  /// `Text(name)` while editing; on commit (Return / focus loss) it
+  /// calls `onRename` with the entered text (trimmed by the store).
+  /// On Escape, it sets `isEditing` to false without calling `onRename`.
+  /// Caller is responsible for ensuring only one row is editing at a
+  /// time — there is no global coordination inside this view.
+  var isEditing: Binding<Bool>?
+  var onRename: ((String) -> Void)?
 
   @Environment(\.backgroundProminence) private var backgroundProminence
 
@@ -48,7 +99,7 @@ struct SidebarRowView: View {
         .frame(width: UIConstants.IconSize.listIcon, height: UIConstants.IconSize.listIcon)
         .accessibilityHidden(true)
 
-      Text(name)
+      nameContent
 
       Spacer()
 
@@ -56,6 +107,25 @@ struct SidebarRowView: View {
     }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(accessibilitySummary)
+  }
+
+  @ViewBuilder private var nameContent: some View {
+    if let isEditing, let onRename, isEditing.wrappedValue {
+      InlineRenameField(
+        initialText: name,
+        onCommit: { committed in
+          isEditing.wrappedValue = false
+          onRename(committed)
+        },
+        onCancel: { isEditing.wrappedValue = false }
+      )
+    } else {
+      Text(name)
+        .onTapGesture(count: 2) {
+          guard let isEditing, onRename != nil else { return }
+          isEditing.wrappedValue = true
+        }
+    }
   }
 
   @ViewBuilder private var trailingValue: some View {
@@ -184,4 +254,21 @@ struct AccountSidebarRow: View {
   }
   .listStyle(.sidebar)
   .preferredColorScheme(.dark)
+}
+
+#Preview("Sidebar row — inline rename") {
+  @Previewable @State var isEditing = true
+  return List(selection: .constant(Optional("selected"))) {
+    SidebarRowView(
+      icon: "building.columns",
+      name: "Bank Account",
+      amount: InstrumentAmount(quantity: 1234.56, instrument: .AUD),
+      isSelected: true,
+      isEditing: $isEditing,
+      onRename: { newName in print("Rename to: \(newName)") }
+    )
+    .tag("selected")
+  }
+  .listStyle(.sidebar)
+  .frame(width: 260)
 }
