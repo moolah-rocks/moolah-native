@@ -48,6 +48,11 @@ public enum UITestIdentifiers {
     /// drivers must resolve via this identifier rather than the
     /// shared label.
     public static let editAccountContextMenuItem = "sidebar.contextMenu.editAccount"
+
+    /// "Rename" item in the sidebar context menu — applies to accounts,
+    /// earmarks, and (Phase 4 onwards) account groups. Triggers inline
+    /// rename mode in the sidebar.
+    public static let renameContextMenuItem = "sidebar.contextMenu.rename"
   }
 
   // MARK: - TransactionList
