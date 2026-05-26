@@ -68,4 +68,18 @@ struct AccountTests {
       _ = try JSONDecoder().decode(Account.self, from: json)
     }
   }
+
+  @Test
+  func accountBucketForwardsToType() {
+    let bank = Account(name: "Chequing", type: .bank, instrument: .AUD)
+    let crypto = Account(
+      name: "ETH Wallet", type: .crypto, instrument: .AUD,
+      walletAddress: "0x" + String(repeating: "a", count: 40), chainId: 1)
+    let exchange = Account(
+      name: "Coinstash", type: .exchange, instrument: .AUD,
+      exchangeProvider: .coinstash)
+    #expect(bank.bucket == .current)
+    #expect(crypto.bucket == .investments)
+    #expect(exchange.bucket == .investments)
+  }
 }

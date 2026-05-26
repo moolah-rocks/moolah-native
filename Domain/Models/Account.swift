@@ -196,6 +196,15 @@ extension Account: Comparable {
   }
 }
 
+extension Account {
+  /// The sidebar bucket this account belongs to.
+  ///
+  /// Canonical property for all bucket decisions on an `Account`. Indirects
+  /// through `type.bucket` so a future per-account `bucketOverride` field
+  /// can be introduced without changing callsites.
+  var bucket: AccountBucket { type.bucket }
+}
+
 struct Accounts: RandomAccessCollection, Sendable {
   let startIndex: Int = 0
 
