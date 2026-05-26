@@ -196,16 +196,26 @@ struct MoolahApp: App {
         MoolahDomainCommands()
       }
 
+      // The auxiliary Windows below all opt out of SwiftUI's external-event
+      // auto-spawn for the same reason as the main `WindowGroup` above
+      // (`#386`). When the main group declines an incoming `NSUserActivity`,
+      // SwiftUI falls through to the next scene in declaration order whose
+      // match set still accepts it — without this opt-out, every Handoff
+      // continuation would spawn the About window (or whichever scene came
+      // next). `openWindow(id:)` from menu items is unaffected, since it
+      // does not route through external-event matching.
       Window("About Moolah", id: "about") {
         AboutView()
       }
       .windowResizability(.contentSize)
       .windowStyle(.hiddenTitleBar)
+      .handlesExternalEvents(matching: [])
 
       Window("Keyboard Shortcuts", id: "keyboard-shortcuts") {
         KeyboardShortcutsView()
       }
       .windowResizability(.contentSize)
+      .handlesExternalEvents(matching: [])
 
       Settings {
         SettingsView()
@@ -229,6 +239,7 @@ struct MoolahApp: App {
       }
       .windowResizability(.contentSize)
       .defaultLaunchBehavior(isUITesting ? .presented : .suppressed)
+      .handlesExternalEvents(matching: [])
     #else
       WindowGroup {
         ProfileRootView(activeSession: $activeSession)
