@@ -3,8 +3,10 @@ import SwiftUI
 /// Sidebar row for an `AccountGroup`. Composes a chevron disclosure
 /// affordance (toggling `isExpanded`) plus the shared `SidebarRowView`
 /// for the icon / name / amount. Aggregated balance is supplied by the
-/// caller — Phase 5 wires that against `AccountGroupStore`; this row
-/// just renders whatever it's given (or shows a spinner if `nil`).
+/// caller — the sidebar wraps each group row in
+/// `GroupAggregateBalanceLoader` which keeps the aggregate refreshed
+/// via `AccountStore.aggregateBalance(for:in:)`; this row itself just
+/// renders whatever it's given (or shows a spinner if `nil`).
 ///
 /// Inline rename, selection styling, and identifier wiring follow the
 /// account-row conventions so context menus / Return-to-rename / the

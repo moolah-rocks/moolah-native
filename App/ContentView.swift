@@ -196,12 +196,8 @@ struct ContentView: View {
           analysisRepository: analysisStore.repository)
       }
     case .group(let id):
-      // Phase 5 wires the composite detail view bound to an
-      // `AccountViewContext`. Until then, render a placeholder so the
-      // user has feedback that the group is selected — the existing
-      // `accountDetail(id:)` shape only fits a single account, and
-      // forcing it here would misrepresent the membership.
-      groupDetailPlaceholder(id: id)
+      // Composite detail view bound to an `AccountViewContext`.
+      groupDetail(id: id)
     case .recentlyAdded:
       RecentlyAddedView(backend: session.backend)
     case .allTransactions:
@@ -351,4 +347,4 @@ extension ContentView {
 }
 
 // `accountDetail(id:)` lives in `ContentView+AccountDetail.swift`.
-// `groupDetailPlaceholder(id:)` lives in `ContentView+GroupDetail.swift`.
+// `groupDetail(id:)` lives in `ContentView+GroupDetail.swift`.
