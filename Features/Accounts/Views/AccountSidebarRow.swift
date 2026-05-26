@@ -2,31 +2,40 @@ import SwiftUI
 
 /// TextField used by `SidebarRowView` while a row is in inline-rename
 /// mode. Auto-focuses on appear; commits on Return or focus loss (calls
-/// `onCommit`); cancels on Escape (calls `onCancel`). Separated from
-/// `SidebarRowView` so the focus/selection machinery is testable in
-/// isolation via #Preview.
+/// `onCommit`); cancels on Escape (calls `onCancel`). Extracted into its
+/// own type so the `@FocusState` + `@State` text buffer are scoped to
+/// the editing lifecycle (they reset naturally when the field unmounts)
+/// without leaking into `SidebarRowView`'s state.
 private struct InlineRenameField: View {
   let initialText: String
   let onCommit: (String) -> Void
   let onCancel: () -> Void
 
   @State private var text: String = ""
+  @State private var didCommit = false
   @FocusState private var isFocused: Bool
 
   var body: some View {
-    TextField("", text: $text)
+    TextField("Name", text: $text)
+      .accessibilityLabel("Name")
       .textFieldStyle(.plain)
       .focused($isFocused)
       .onAppear {
         text = initialText
         isFocused = true
       }
-      .onSubmit { onCommit(text) }
+      .onSubmit {
+        didCommit = true
+        onCommit(text)
+      }
       .onChange(of: isFocused) { _, focused in
         // Focus loss without an explicit submit = commit (matches
-        // Finder-style rename). Escape will have set onCancel via
-        // .onKeyPress before focus drops.
-        if !focused { onCommit(text) }
+        // Finder-style rename). The didCommit guard prevents a
+        // double call when Return triggers onSubmit -> drop focus.
+        if !focused {
+          if !didCommit { onCommit(text) }
+          didCommit = false
+        }
       }
       .onKeyPress(.escape) {
         onCancel()
@@ -47,9 +56,8 @@ private struct InlineRenameField: View {
 /// app where hardcoded RGB values are permitted.
 ///
 /// **Inline rename:** when both `isEditing` and `onRename` are provided,
-/// the row supports double-click-to-rename. Callers that do not opt in
-/// still receive a double-click gesture that no-ops, so do not attach a
-/// competing double-click handler to a `SidebarRowView`.
+/// the row supports double-click-to-rename. Without those properties the
+/// row installs no double-click handler.
 struct SidebarRowView: View {
   let icon: String
   let name: String
@@ -118,12 +126,11 @@ struct SidebarRowView: View {
         },
         onCancel: { isEditing.wrappedValue = false }
       )
+    } else if let isEditing, onRename != nil {
+      Text(name)
+        .onTapGesture(count: 2) { isEditing.wrappedValue = true }
     } else {
       Text(name)
-        .onTapGesture(count: 2) {
-          guard let isEditing, onRename != nil else { return }
-          isEditing.wrappedValue = true
-        }
     }
   }
 
