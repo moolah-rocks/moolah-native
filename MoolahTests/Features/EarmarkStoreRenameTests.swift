@@ -3,7 +3,7 @@ import Testing
 
 @testable import Moolah
 
-@Suite("EarmarkStore/rename")
+@Suite("EarmarkStore -- rename")
 @MainActor
 struct EarmarkStoreRenameTests {
 
@@ -48,6 +48,7 @@ struct EarmarkStoreRenameTests {
     let result = await store.rename(id: original.id, to: "  Spaced  ")
 
     #expect(result?.name == "Spaced")
+    #expect(store.error == nil)
     try await store.waitForNextEmission(
       matching: { $0.earmarks.by(id: original.id)?.name == "Spaced" },
       description: "trimmed rename observed"
@@ -94,6 +95,7 @@ struct EarmarkStoreRenameTests {
     let result = await store.rename(id: original.id, to: "Stable")
 
     #expect(result?.name == "Stable")
+    #expect(store.earmarks.by(id: original.id)?.name == "Stable")
     #expect(store.error == nil)
     let fetched = try await backend.earmarks.fetchAll()
     #expect(fetched.first(where: { $0.id == original.id })?.name == "Stable")
