@@ -60,10 +60,16 @@ enum SidebarRowTree {
       groups: snapshot.groups, showHidden: snapshot.showHidden)
 
     var childMap: [SidebarRow: [SidebarRow]] = [:]
-    childMap[.section(.current)] = grouped.current.map(Self.row(from:))
-    childMap[.section(.investments)] = grouped.investments.map(Self.row(from:))
-    childMap[.section(.earmarks)] = snapshot.earmarks.map { .earmark($0.id) }
-    childMap[.section(.totals)] = Self.totals(from: snapshot)
+    childMap[.section(.current)] =
+      grouped.current.map(Self.row(from:))
+      + Self.trailingTotal(.currentTotal, when: snapshot.currentTotal)
+    childMap[.section(.investments)] =
+      grouped.investments.map(Self.row(from:))
+      + Self.trailingTotal(.investmentTotal, when: snapshot.investmentTotal)
+    childMap[.section(.earmarks)] =
+      snapshot.earmarks.map { .earmark($0.id) }
+      + Self.trailingTotal(.earmarkedTotal, when: snapshot.earmarkedTotal)
+    childMap[.section(.totals)] = Self.summaryTotals(from: snapshot)
     childMap[.section(.navigation)] = Self.navigationRows()
 
     for entry in grouped.current + grouped.investments {
@@ -89,16 +95,22 @@ enum SidebarRowTree {
     }
   }
 
-  /// Build the ordered Totals section. Each total renders only when its
-  /// backing optional is non-nil. `availableFunds` additionally requires
-  /// a non-nil `currentTotal` and a positive `earmarkedTotal` —
-  /// mirroring the existing SwiftUI sidebar's gating in
-  /// `SidebarView+Sections.swift`.
-  private static func totals(from snapshot: Snapshot) -> [SidebarRow] {
+  /// `[.total(kind)]` when `amount` is non-nil; empty array otherwise.
+  /// Used to append per-bucket totals (Current / Investment / Earmarked)
+  /// as the trailing row of their own section — mirroring the iOS
+  /// `totalRow(label:value:)` placement inside each `Section { … }`.
+  private static func trailingTotal(
+    _ kind: SidebarRow.TotalKind, when amount: InstrumentAmount?
+  ) -> [SidebarRow] {
+    amount != nil ? [.total(kind)] : []
+  }
+
+  /// The implicit Totals section's rows: derived summaries that don't
+  /// belong to any single bucket. `availableFunds` requires a non-nil
+  /// `currentTotal` and a positive `earmarkedTotal` — mirroring the
+  /// gating in `SidebarView+Sections.swift`'s `totalsSection` body.
+  private static func summaryTotals(from snapshot: Snapshot) -> [SidebarRow] {
     var totals: [SidebarRow] = []
-    if snapshot.currentTotal != nil { totals.append(.total(.currentTotal)) }
-    if snapshot.investmentTotal != nil { totals.append(.total(.investmentTotal)) }
-    if snapshot.earmarkedTotal != nil { totals.append(.total(.earmarkedTotal)) }
     if snapshot.currentTotal != nil,
       let earmarked = snapshot.earmarkedTotal,
       earmarked.isPositive
