@@ -86,9 +86,11 @@
       }
       return true
     }
+  }
 
-    // MARK: - Dispatch helpers
+  // MARK: - Dispatch helpers
 
+  extension SidebarOutlineDropReceiver {
     private func dispatchAddToGroup(_ sourceId: UUID, _ groupId: UUID) {
       Task {
         try? await SidebarDropDispatch.dropOntoGroup(
