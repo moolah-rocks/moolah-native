@@ -99,6 +99,13 @@ struct SidebarView: View {
     /// `Binding<SidebarSelection?>` so clicks in either surface update
     /// the same source of truth.
     ///
+    /// The two panes scroll **independently** — the VStack does not
+    /// share a single scroll container between them. That matches
+    /// macOS Finder's source-list-plus-fixed-list layout (where the
+    /// "Favorites" outline and the "iCloud / Locations / Tags" list
+    /// each manage their own clipping). Future Phase work may revisit
+    /// this if user feedback prefers a unified scroll.
+    ///
     /// Phase 1 deliberately omits the iOS-only modifiers:
     /// - `.onKeyPress(.return)` for inline rename — not wired on macOS
     ///   until Phase 3 ships AppKit-cell inline editing.
