@@ -2,14 +2,14 @@
   import AppKit
   import Foundation
 
-  /// Drop-outcome policy for `SidebarOutlineDropReceiver`: the
-  /// `DropOutcome` enum, the `Context` snapshot struct, and the
-  /// `outcome(for:bucket:accounts:groups:)` decision table that maps a
-  /// `DropTarget` to a `DropOutcome`. Pure value transforms — no store
-  /// mutation, no awaits — so the entire decision table is unit-testable
-  /// without a live `NSOutlineView`. The accept-time dispatch lives in
-  /// the receiver's main file.
-  extension SidebarOutlineDropReceiver {
+  /// Pure decision-table policy that maps a sidebar `DropTarget` to a
+  /// `DropOutcome`. View-agnostic: no store mutation, no awaits, no
+  /// AppKit calls — every branch is a value transform over the
+  /// (bucket, accounts, groups) snapshot. Lets the whole decision table
+  /// be unit-tested without a live `NSOutlineView`. Accept-time
+  /// dispatch (committing the outcome to a store) lives in whichever
+  /// component owns the outline view.
+  enum SidebarDropPolicy {
 
     /// All possible outcomes of resolving a `DropTarget` against the
     /// current store snapshots. Pure value so the policy is trivially

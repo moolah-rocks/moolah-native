@@ -5,20 +5,20 @@
   @testable import Moolah
 
   /// Covers the deny / accept / reorder rows of the
-  /// `SidebarOutlineDropReceiver.outcome(for:bucket:accounts:groups:)`
-  /// decision table — one test per row, asserting the resolved
-  /// `DropOutcome` against hand-built `DropTarget` fixtures.
+  /// `SidebarDropPolicy.outcome(for:bucket:accounts:groups:)` decision
+  /// table — one test per row, asserting the resolved `DropOutcome`
+  /// against hand-built `DropTarget` fixtures.
   @MainActor
-  @Suite("SidebarOutlineDropReceiver — outcome")
-  struct SidebarOutlineDropReceiverTests {
-    private typealias Support = SidebarOutlineDropReceiverTestSupport
+  @Suite("SidebarDropPolicy — outcome")
+  struct SidebarDropPolicyOutcomeTests {
+    private typealias Support = SidebarDropPolicyTestSupport
 
     // MARK: - Deny rows
 
     @Test("row 1: nil intoElement + nil childIndex denies (drop-onto-root)")
     func denyDropOntoRoot() {
       let account = Support.bankAccount(name: "A", position: 0)
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .account(account.id), intoElement: nil, childIndex: nil),
         bucket: .current,
@@ -30,7 +30,7 @@
     @Test("row 11: self-drop on account denies")
     func denySelfDropOnAccount() {
       let account = Support.bankAccount(name: "A", position: 0)
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .account(account.id),
           intoElement: .account(account.id),
@@ -45,7 +45,7 @@
     func denyGroupDroppedOntoAccount() {
       let group = Support.currentGroup(position: 0)
       let target = Support.bankAccount(name: "T", position: 1)
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .group(group.id),
           intoElement: .account(target.id),
@@ -61,7 +61,7 @@
       let dragged = Support.currentGroup(position: 0)
       let targetGroup = Support.currentGroup(position: 1)
       // dragged group dropped onto another group (intoElement = group, childIndex = nil)
-      let ontoOutcome = SidebarOutlineDropReceiver.outcome(
+      let ontoOutcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .group(dragged.id),
           intoElement: .group(targetGroup.id),
@@ -71,7 +71,7 @@
         groups: [dragged, targetGroup])
       #expect(ontoOutcome == .deny)
       // dragged group dropped between members of a group denies too.
-      let betweenOutcome = SidebarOutlineDropReceiver.outcome(
+      let betweenOutcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .group(dragged.id),
           intoElement: .group(targetGroup.id),
@@ -87,7 +87,7 @@
       let invest = Support.investmentAccount(name: "I", position: 0)
       let bank = Support.bankAccount(name: "B", position: 1)
       // Investment account dragged into .current bucket's root.
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .account(invest.id), intoElement: nil, childIndex: 0),
         bucket: .current,
@@ -100,7 +100,7 @@
     func denyMemberDroppedAtRoot() {
       let group = Support.currentGroup(position: 0)
       let member = Support.bankAccount(name: "M", position: 1, groupId: group.id)
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .account(member.id), intoElement: nil, childIndex: 0),
         bucket: .current,
@@ -114,7 +114,7 @@
       let group = Support.currentGroup(position: 0)
       let member = Support.bankAccount(name: "M", position: 0, groupId: group.id)
       let outsider = Support.bankAccount(name: "O", position: 1)
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .account(outsider.id),
           intoElement: .group(group.id),
@@ -129,7 +129,7 @@
     func denyDropOntoOwnGroup() {
       let group = Support.currentGroup(position: 0)
       let member = Support.bankAccount(name: "M", position: 0, groupId: group.id)
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .account(member.id),
           intoElement: .group(group.id),
@@ -147,7 +147,7 @@
       let group = Support.currentGroup(position: 0)
       let member = Support.bankAccount(name: "M", position: 0, groupId: group.id)
       let source = Support.bankAccount(name: "S", position: 1)
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .account(source.id),
           intoElement: .group(group.id),
@@ -163,7 +163,7 @@
     func dropOntoStandalone() {
       let target = Support.bankAccount(name: "T", position: 0)
       let source = Support.bankAccount(name: "S", position: 1)
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .account(source.id),
           intoElement: .account(target.id),
@@ -182,7 +182,7 @@
       let group = Support.currentGroup(position: 0)
       let member = Support.bankAccount(name: "M", position: 0, groupId: group.id)
       let source = Support.bankAccount(name: "S", position: 1)
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .account(source.id),
           intoElement: .account(member.id),
@@ -202,7 +202,7 @@
     func reorderRootStandalone() {
       let alpha = Support.bankAccount(name: "A", position: 0)
       let bravo = Support.bankAccount(name: "B", position: 1)
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .account(bravo.id), intoElement: nil, childIndex: 0),
         bucket: .current,
@@ -219,7 +219,7 @@
     func reorderRootGroup() {
       let groupOne = Support.currentGroup(position: 0)
       let groupTwo = Support.currentGroup(position: 1)
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .group(groupTwo.id), intoElement: nil, childIndex: 0),
         bucket: .current,
@@ -237,7 +237,7 @@
       let group = Support.currentGroup(position: 0)
       let memberA = Support.bankAccount(name: "MA", position: 0, groupId: group.id)
       let memberB = Support.bankAccount(name: "MB", position: 1, groupId: group.id)
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .account(memberB.id),
           intoElement: .group(group.id),

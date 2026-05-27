@@ -4,12 +4,12 @@
 
   @testable import Moolah
 
-  /// Shared fixtures for the `SidebarOutlineDropReceiver` outcome tests:
-  /// a `DropTarget` builder matching the runtime shape produced by
+  /// Shared fixtures for the `SidebarDropPolicy` outcome tests: a
+  /// `DropTarget` builder matching the runtime shape produced by
   /// `readPasteboard`, plus account / group factories used across the
   /// decision-table and retarget suites.
   @MainActor
-  enum SidebarOutlineDropReceiverTestSupport {
+  enum SidebarDropPolicyTestSupport {
 
     /// Builds a `DropTarget` with a single dragged `SidebarOutlineItem`.
     /// Matches the shape of what `readPasteboard` would return at

@@ -5,10 +5,10 @@ import Foundation
 /// Holds no references — every entry point takes the stores it needs as
 /// parameters so the call shapes are explicit at the use site. The iOS
 /// SwiftUI row builders (`SidebarView+Groups.swift`) and the macOS
-/// AppKit drop receiver (`SidebarOutlineDropReceiver`, Task 3) both call
-/// the same four primitives here, which keeps the policy gate
-/// ("same-bucket, no self-drop, no nesting") in one place rather than
-/// duplicated across platform-specific drop handlers.
+/// AppKit drop receiver both call the same four primitives here, which
+/// keeps the policy gate ("same-bucket, no self-drop, no nesting") in
+/// one place rather than duplicated across platform-specific drop
+/// handlers.
 ///
 /// `@MainActor`-bound because every entry point ultimately writes to
 /// `@MainActor`-isolated store state (`AccountStore`,
