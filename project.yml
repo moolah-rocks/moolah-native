@@ -74,6 +74,10 @@ packages:
     # Package.resolved isn't tracked; pinning here is the substitute.
     # Bump deliberately when we want to take a new release.
     exactVersion: 7.10.0
+  OutlineView:
+    url: https://github.com/Sameesunkaria/OutlineView
+    # Pinned exactly — same convention as GRDB above.
+    exactVersion: 2.0.0
 
 targets:
   Moolah_iOS:
@@ -155,6 +159,7 @@ targets:
     dependencies:
       - sdk: AppIntents.framework
       - package: GRDB
+      - package: OutlineView
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: rocks.moolah.app
@@ -255,6 +260,7 @@ targets:
         TEST_TARGET_NAME: Moolah_macOS
     dependencies:
       - target: Moolah_macOS
+      - package: OutlineView
 
 schemes:
   Moolah:
