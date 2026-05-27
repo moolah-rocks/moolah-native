@@ -97,11 +97,12 @@ extension Accounts {
   func groupAwareSidebar(
     groups: [AccountGroup],
     excluding: UUID? = nil,
-    alwaysInclude: UUID? = nil
+    alwaysInclude: UUID? = nil,
+    showHidden: Bool = false
   ) -> GroupAwareSidebarGroups {
     let visible = ordered.filter { account in
       if account.id == excluding { return false }
-      if account.isHidden && account.id != alwaysInclude { return false }
+      if !showHidden && account.isHidden && account.id != alwaysInclude { return false }
       return true
     }
     return GroupAwareSidebarGroups(
