@@ -3,11 +3,9 @@
   import SwiftUI
 
   /// Builds the AppKit `NSMenu` attached to a sidebar account row's
-  /// right-click menu. Mirrors the menu previously built inline by
-  /// `SidebarOutlineView.makeAccountContextMenu(for:)` so identifiers
-  /// and action shape are preserved across the rewrite — UI tests find
-  /// the menu by `UITestIdentifiers.Sidebar.editAccountContextMenuItem`
-  /// and the "Edit Account…" action opens the standard edit sheet.
+  /// right-click menu. UI tests find the menu by
+  /// `UITestIdentifiers.Sidebar.editAccountContextMenuItem` and the
+  /// "Edit Account…" action opens the standard edit sheet.
   ///
   /// Using an AppKit `NSMenu` (rather than a SwiftUI `.contextMenu` on
   /// the hosted row) keeps the menu open across re-renders of the

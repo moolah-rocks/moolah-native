@@ -94,10 +94,8 @@ struct SidebarView: View {
   #if os(macOS)
     /// macOS body: a single full-bleed `NSOutlineView` rendering every
     /// sidebar row — accounts, groups, earmarks, totals, navigation —
-    /// via the `SidebarOutline` representable. Replaces the previous
-    /// SwiftUI `List(.sidebar)` + per-section embedded
-    /// `SidebarOutlineView` design. Cross-platform toolbar / sheets /
-    /// sync footer are still carried by `sharedBodyModifiers`.
+    /// via the `SidebarOutline` representable. Cross-platform toolbar /
+    /// sheets / sync footer are still carried by `sharedBodyModifiers`.
     var macSidebarBody: some View {
       SidebarOutline(
         accountStore: accountStore,
@@ -187,125 +185,120 @@ struct SidebarView: View {
 
 }
 
-extension SidebarView {
-  // MARK: - View Builders
-  // recentlyAddedLabel, totalRow, accountContextMenu, sectionHeader
+#if os(iOS)
+  // The helpers below are only used by the iOS section builders. macOS
+  // renders the sidebar through `SidebarOutline` (`AppKitSidebar/`),
+  // whose cells produce equivalent SwiftUI / AppKit content directly.
+  extension SidebarView {
+    // MARK: - View Builders
+    // recentlyAddedLabel, totalRow, accountContextMenu, sectionHeader
 
-  var recentlyAddedLabel: some View {
-    HStack {
-      Label("Recently Added", systemImage: "tray.full")
-      Spacer()
-      if importStore.unreviewedBadgeCount > 0 {
-        Text("\(importStore.unreviewedBadgeCount)")
-          .font(.caption)
-          .monospacedDigit()
-          .padding(.horizontal, 6)
-          .padding(.vertical, 2)
-          .background(.tint, in: Capsule())
-          .foregroundStyle(.white)
-          .accessibilityLabel(
-            "\(importStore.unreviewedBadgeCount) recently imported need review")
+    var recentlyAddedLabel: some View {
+      HStack {
+        Label("Recently Added", systemImage: "tray.full")
+        Spacer()
+        if importStore.unreviewedBadgeCount > 0 {
+          Text("\(importStore.unreviewedBadgeCount)")
+            .font(.caption)
+            .monospacedDigit()
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(.tint, in: Capsule())
+            .foregroundStyle(.white)
+            .accessibilityLabel(
+              "\(importStore.unreviewedBadgeCount) recently imported need review")
+        }
       }
     }
-  }
 
-  func totalRow(label: String, value: InstrumentAmount?) -> some View {
-    LabeledContent(label) {
-      if let value {
-        InstrumentAmountView(amount: value)
-      } else {
-        ProgressView()
-          .controlSize(.small)
+    func totalRow(label: String, value: InstrumentAmount?) -> some View {
+      LabeledContent(label) {
+        if let value {
+          InstrumentAmountView(amount: value)
+        } else {
+          ProgressView()
+            .controlSize(.small)
+        }
       }
+      .foregroundStyle(.secondary)
+      .font(.callout)
     }
-    .foregroundStyle(.secondary)
-    .font(.callout)
-  }
 
-  @ViewBuilder
-  func accountContextMenu(for account: Account) -> some View {
-    #if os(iOS)
-      // Inline rename and the Group ▸ submenu are iOS-only until
-      // Phase 3 ships AppKit-cell editing and Phase 2 wires
-      // drag-and-drop / group membership on the macOS outline. macOS
-      // users currently reach grouping via drag-and-drop on the
-      // SwiftUI surface (not yet on the outline) and account renaming
-      // via the "Edit Account…" item below.
+    @ViewBuilder
+    func accountContextMenu(for account: Account) -> some View {
       Button("Rename", systemImage: "character.cursor.ibeam") {
         editingRowId = account.id
       }
       .accessibilityIdentifier(UITestIdentifiers.Sidebar.renameContextMenuItem)
       accountGroupSubmenu(for: account)
-    #endif
-    Button("Edit Account\u{2026}", systemImage: "pencil") {
-      accountToEdit = account
+      Button("Edit Account\u{2026}", systemImage: "pencil") {
+        accountToEdit = account
+      }
+      .accessibilityIdentifier(UITestIdentifiers.Sidebar.editAccountContextMenuItem)
+      Button("View Transactions", systemImage: "list.bullet") {
+        selection = .account(account.id)
+      }
     }
-    .accessibilityIdentifier(UITestIdentifiers.Sidebar.editAccountContextMenuItem)
-    Button("View Transactions", systemImage: "list.bullet") {
-      selection = .account(account.id)
-    }
-  }
 
-  @ViewBuilder
-  func sectionHeader(title: String, addAction: @escaping () -> Void) -> some View {
-    HStack {
-      Text(title)
-      Spacer()
-      #if os(iOS)
+    @ViewBuilder
+    func sectionHeader(title: String, addAction: @escaping () -> Void) -> some View {
+      HStack {
+        Text(title)
+        Spacer()
         Button(action: addAction) {
           Image(systemName: "plus").font(.caption)
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add \(title.lowercased())")
-      #endif
+      }
+    }
+
+    // MARK: - State Coordination
+    // renameBinding, renameAction
+
+    /// Returns a binding that reports `true` when this row id is the one
+    /// currently being inline-renamed, and (on `set(true)`) makes it so.
+    /// Centralises the one-at-a-time invariant.
+    func renameBinding(for id: UUID) -> Binding<Bool> {
+      Binding(
+        get: { editingRowId == id },
+        set: { newValue in editingRowId = newValue ? id : nil }
+      )
+    }
+
+    /// Returns the `onRename` closure for an account row — single source
+    /// of truth for the inline-rename dispatch shape, used by both the
+    /// Current and Investments sections.
+    func renameAction(for account: Account) -> (String) -> Void {
+      { newName in
+        Task { _ = try? await accountStore.rename(id: account.id, to: newName) }
+      }
+    }
+
+    /// Returns the `onRename` closure for an earmark row — earmark
+    /// counterpart of `renameAction(for: Account)`. Same intent-shape;
+    /// dispatches `EarmarkStore.rename`.
+    func renameAction(for earmark: Earmark) -> (String) -> Void {
+      { newName in
+        Task { _ = await earmarkStore.rename(id: earmark.id, to: newName) }
+      }
+    }
+
+    /// Returns the `onRename` closure for an account-group row. Same
+    /// intent-shape as the account / earmark variants; dispatches
+    /// `AccountGroupStore.rename`.
+    func renameAction(for group: AccountGroup) -> (String) -> Void {
+      { newName in
+        Task { _ = try? await accountGroupStore.rename(id: group.id, to: newName) }
+      }
+    }
+
+    @ViewBuilder
+    func earmarkContextMenu(for earmark: Earmark) -> some View {
+      Button("Rename", systemImage: "character.cursor.ibeam") {
+        editingRowId = earmark.id
+      }
+      .accessibilityIdentifier(UITestIdentifiers.Sidebar.renameContextMenuItem)
     }
   }
-
-  // MARK: - State Coordination
-  // renameBinding, renameAction
-
-  /// Returns a binding that reports `true` when this row id is the one
-  /// currently being inline-renamed, and (on `set(true)`) makes it so.
-  /// Centralises the one-at-a-time invariant.
-  func renameBinding(for id: UUID) -> Binding<Bool> {
-    Binding(
-      get: { editingRowId == id },
-      set: { newValue in editingRowId = newValue ? id : nil }
-    )
-  }
-
-  /// Returns the `onRename` closure for an account row — single source
-  /// of truth for the inline-rename dispatch shape, used by both the
-  /// Current and Investments sections.
-  func renameAction(for account: Account) -> (String) -> Void {
-    { newName in
-      Task { _ = try? await accountStore.rename(id: account.id, to: newName) }
-    }
-  }
-
-  /// Returns the `onRename` closure for an earmark row — earmark
-  /// counterpart of `renameAction(for: Account)`. Same intent-shape;
-  /// dispatches `EarmarkStore.rename`.
-  func renameAction(for earmark: Earmark) -> (String) -> Void {
-    { newName in
-      Task { _ = await earmarkStore.rename(id: earmark.id, to: newName) }
-    }
-  }
-
-  /// Returns the `onRename` closure for an account-group row. Same
-  /// intent-shape as the account / earmark variants; dispatches
-  /// `AccountGroupStore.rename`.
-  func renameAction(for group: AccountGroup) -> (String) -> Void {
-    { newName in
-      Task { _ = try? await accountGroupStore.rename(id: group.id, to: newName) }
-    }
-  }
-
-  @ViewBuilder
-  func earmarkContextMenu(for earmark: Earmark) -> some View {
-    Button("Rename", systemImage: "character.cursor.ibeam") {
-      editingRowId = earmark.id
-    }
-    .accessibilityIdentifier(UITestIdentifiers.Sidebar.renameContextMenuItem)
-  }
-}
+#endif

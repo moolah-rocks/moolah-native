@@ -1,9 +1,15 @@
 // Section builders, helper methods, and actions for `SidebarView`.
+//
+// The SwiftUI section builders here are iOS-only. macOS renders the
+// whole sidebar through `SidebarOutline` (`AppKitSidebar/`) — its cells
+// reuse the row views directly and never call into the section
+// builders below. `handleAccountEditRequest` is shared because both
+// platforms wire it into `sharedBodyModifiers`.
 
 import SwiftUI
 
 extension SidebarView {
-  // MARK: - Sections
+  // MARK: - Cross-platform helpers
 
   func handleAccountEditRequest(_ note: Notification) {
     guard let id = note.object as? UUID,
@@ -11,26 +17,13 @@ extension SidebarView {
     else { return }
     accountToEdit = account
   }
+}
 
-  #if os(macOS)
-    /// Current-bucket section — macOS variant. The section header is
-    /// a flat SwiftUI label (non-collapsible); the body embeds
-    /// `SidebarOutlineView` for the `.current` bucket so the
-    /// `NSOutlineView` only renders that bucket's contents. The
-    /// bucket total row stays inside this section so it scrolls with
-    /// the section content.
-    var currentAccountsSection: some View {
-      Section {
-        SidebarOutlineView(
-          selection: $selection, bucket: .current, accountToEdit: $accountToEdit)
-        totalRow(label: "Current Total", value: accountStore.convertedCurrentTotal)
-      } header: {
-        sectionHeader(title: "Current Accounts", addAction: addAccountAction)
-      }
-    }
-  #else
-    /// Current-bucket section — iOS variant. Single SwiftUI list with
-    /// inline rows; macOS has its own outline-backed version above.
+#if os(iOS)
+  extension SidebarView {
+    // MARK: - Sections
+
+    /// Current-bucket section — iOS only.
     var currentAccountsSection: some View {
       let groupAware = accountStore.accounts.groupAwareSidebar(
         groups: accountGroupStore.groups,
@@ -46,43 +39,30 @@ extension SidebarView {
         sectionHeader(title: "Current Accounts", addAction: addAccountAction)
       }
     }
-  #endif
 
-  var earmarksSection: some View {
-    Section {
-      ForEach(earmarkStore.visibleEarmarks) { earmark in
-        NavigationLink(value: SidebarSelection.earmark(earmark.id)) {
-          EarmarkRowView(
-            earmark: earmark,
-            isSelected: selection == .earmark(earmark.id),
-            isEditing: renameBinding(for: earmark.id),
-            onRename: renameAction(for: earmark)
-          )
+    var earmarksSection: some View {
+      Section {
+        ForEach(earmarkStore.visibleEarmarks) { earmark in
+          NavigationLink(value: SidebarSelection.earmark(earmark.id)) {
+            EarmarkRowView(
+              earmark: earmark,
+              isSelected: selection == .earmark(earmark.id),
+              isEditing: renameBinding(for: earmark.id),
+              onRename: renameAction(for: earmark)
+            )
+          }
+          .contextMenu { earmarkContextMenu(for: earmark) }
         }
-        .contextMenu { earmarkContextMenu(for: earmark) }
+        .onMove { source, destination in
+          Task { await earmarkStore.reorderEarmarks(from: source, to: destination) }
+        }
+        totalRow(label: "Earmarked Total", value: earmarkStore.convertedTotalBalance)
+      } header: {
+        sectionHeader(title: "Earmarks", addAction: addEarmarkAction)
       }
-      .onMove { source, destination in
-        Task { await earmarkStore.reorderEarmarks(from: source, to: destination) }
-      }
-      totalRow(label: "Earmarked Total", value: earmarkStore.convertedTotalBalance)
-    } header: {
-      sectionHeader(title: "Earmarks", addAction: addEarmarkAction)
     }
-  }
 
-  #if os(macOS)
-    /// Investments-bucket section — macOS variant. Mirrors
-    /// `currentAccountsSection` above: flat section label, outline
-    /// body, total row inside the section.
-    var investmentsSection: some View {
-      Section("Investments") {
-        SidebarOutlineView(
-          selection: $selection, bucket: .investments, accountToEdit: $accountToEdit)
-        totalRow(label: "Investment Total", value: accountStore.convertedInvestmentTotal)
-      }
-    }
-  #else
-    /// Investments-bucket section — iOS variant. Same SwiftUI rendering
+    /// Investments-bucket section — iOS only. Same SwiftUI rendering
     /// pattern as `currentAccountsSection`.
     var investmentsSection: some View {
       let groupAware = accountStore.accounts.groupAwareSidebar(
@@ -101,9 +81,7 @@ extension SidebarView {
     /// Renders a single bucket entry — standalone account or group with
     /// its members. The switch lives in this helper rather than inline
     /// so each `Section`'s `ForEach` body stays within SwiftLint's
-    /// `closure_body_length` budget. iOS-only since both call sites
-    /// (`currentAccountsSection` and `investmentsSection`) are
-    /// iOS-only.
+    /// `closure_body_length` budget.
     @ViewBuilder
     func bucketEntryView(_ entry: SidebarBucketEntry) -> some View {
       switch entry {
@@ -113,65 +91,61 @@ extension SidebarView {
         groupSidebarEntry(group, members: members)
       }
     }
-  #endif
 
-  @ViewBuilder var totalsSection: some View {
-    Section {
-      if let currentTotal = accountStore.convertedCurrentTotal,
-        let earmarkedTotal = earmarkStore.convertedTotalBalance,
-        earmarkedTotal.isPositive
-      {
-        LabeledContent("Available Funds") {
-          InstrumentAmountView(amount: currentTotal - earmarkedTotal)
+    @ViewBuilder var totalsSection: some View {
+      Section {
+        if let currentTotal = accountStore.convertedCurrentTotal,
+          let earmarkedTotal = earmarkStore.convertedTotalBalance,
+          earmarkedTotal.isPositive
+        {
+          LabeledContent("Available Funds") {
+            InstrumentAmountView(amount: currentTotal - earmarkedTotal)
+          }
+          .font(.headline)
+          .accessibilityLabel("Available Funds: \((currentTotal - earmarkedTotal).formatted)")
         }
-        .font(.headline)
-        .accessibilityLabel("Available Funds: \((currentTotal - earmarkedTotal).formatted)")
-      }
-      if let netWorth = accountStore.convertedNetWorth {
-        LabeledContent("Net Worth") {
-          InstrumentAmountView(amount: netWorth)
+        if let netWorth = accountStore.convertedNetWorth {
+          LabeledContent("Net Worth") {
+            InstrumentAmountView(amount: netWorth)
+          }
+          .font(.headline)
+          .bold()
+          .accessibilityLabel("Net Worth: \(netWorth.formatted)")
         }
-        .font(.headline)
-        .bold()
-        .accessibilityLabel("Net Worth: \(netWorth.formatted)")
       }
     }
-  }
 
-  @ViewBuilder var navigationSection: some View {
-    Section {
-      NavigationLink(value: SidebarSelection.analysis) {
-        Label("Analysis", systemImage: "chart.bar.xaxis")
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("analysis"))
-      NavigationLink(value: SidebarSelection.reports) {
-        Label("Reports", systemImage: "chart.bar.fill")
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("reports"))
-      NavigationLink(value: SidebarSelection.categories) {
-        Label("Categories", systemImage: "tag")
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("categories"))
-      NavigationLink(value: SidebarSelection.upcomingTransactions) {
-        Label("Upcoming", systemImage: "calendar")
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("upcoming"))
-      NavigationLink(value: SidebarSelection.recentlyAdded) {
-        recentlyAddedLabel
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("recentlyAdded"))
-      NavigationLink(value: SidebarSelection.allTransactions) {
-        Label("All Transactions", systemImage: "list.bullet")
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("allTransactions"))
-      #if os(iOS)
+    @ViewBuilder var navigationSection: some View {
+      Section {
+        NavigationLink(value: SidebarSelection.analysis) {
+          Label("Analysis", systemImage: "chart.bar.xaxis")
+        }
+        .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("analysis"))
+        NavigationLink(value: SidebarSelection.reports) {
+          Label("Reports", systemImage: "chart.bar.fill")
+        }
+        .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("reports"))
+        NavigationLink(value: SidebarSelection.categories) {
+          Label("Categories", systemImage: "tag")
+        }
+        .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("categories"))
+        NavigationLink(value: SidebarSelection.upcomingTransactions) {
+          Label("Upcoming", systemImage: "calendar")
+        }
+        .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("upcoming"))
+        NavigationLink(value: SidebarSelection.recentlyAdded) {
+          recentlyAddedLabel
+        }
+        .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("recentlyAdded"))
+        NavigationLink(value: SidebarSelection.allTransactions) {
+          Label("All Transactions", systemImage: "list.bullet")
+        }
+        .accessibilityIdentifier(UITestIdentifiers.Sidebar.view("allTransactions"))
         navigationToggles
-      #endif
+      }
     }
-  }
 
-  #if os(iOS)
-    /// iOS-only visibility toggles shown at the bottom of the navigation
+    /// Visibility toggles shown at the bottom of the navigation
     /// section. Extracted from `navigationSection` to keep its closure
     /// within SwiftLint's `closure_body_length` budget.
     @ViewBuilder var navigationToggles: some View {
@@ -188,30 +162,30 @@ extension SidebarView {
         )
       }
     }
-  #endif
 
-  // MARK: - Helpers
+    // MARK: - Helpers
 
-  /// Dropped CSV onto a sidebar account row: force the import onto that
-  /// account, bypassing profile matching. A profile is created on success.
-  func ingestDroppedURLs(_ urls: [URL], forcedAccountId: UUID) async {
-    for url in urls
-    where url.pathExtension.lowercased() == "csv"
-      || url.pathExtension.isEmpty
-    {
-      let didStart = url.startAccessingSecurityScopedResource()
-      defer {
-        if didStart { url.stopAccessingSecurityScopedResource() }
+    /// Dropped CSV onto a sidebar account row: force the import onto that
+    /// account, bypassing profile matching. A profile is created on success.
+    func ingestDroppedURLs(_ urls: [URL], forcedAccountId: UUID) async {
+      for url in urls
+      where url.pathExtension.lowercased() == "csv"
+        || url.pathExtension.isEmpty
+      {
+        let didStart = url.startAccessingSecurityScopedResource()
+        defer {
+          if didStart { url.stopAccessingSecurityScopedResource() }
+        }
+        guard let data = try? Data(contentsOf: url) else { continue }
+        _ = await importStore.ingest(
+          data: data,
+          source: .droppedFile(url: url, forcedAccountId: forcedAccountId))
       }
-      guard let data = try? Data(contentsOf: url) else { continue }
-      _ = await importStore.ingest(
-        data: data,
-        source: .droppedFile(url: url, forcedAccountId: forcedAccountId))
     }
+
+    // MARK: - Actions
+
+    func addAccountAction() { showCreateAccountSheet = true }
+    func addEarmarkAction() { showCreateEarmarkSheet = true }
   }
-
-  // MARK: - Actions
-
-  func addAccountAction() { showCreateAccountSheet = true }
-  func addEarmarkAction() { showCreateEarmarkSheet = true }
-}
+#endif

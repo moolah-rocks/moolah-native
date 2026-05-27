@@ -4,9 +4,7 @@
   /// `NSViewController` owning the single `NSOutlineView` that drives
   /// the entire macOS sidebar. The outline lives inside an
   /// `NSScrollView`; the scroll view fills the controller's view via
-  /// auto-layout so the sidebar gets a single, full-bleed scrollbar
-  /// (replacing the per-section scrollbars from the earlier hybrid
-  /// `SidebarOutlineView` design).
+  /// auto-layout so the sidebar gets a single, full-bleed scrollbar.
   ///
   /// `apply(tree:expandedGroupIds:selection:)` replaces the current
   /// snapshot, reloads the outline, and reconciles expand + selection
