@@ -4,15 +4,15 @@
 
   @testable import Moolah
 
-  /// Covers row 13 of the `SidebarOutlineDropReceiver` decision table —
+  /// Covers row 13 of the `SidebarDropPolicy` decision table —
   /// hover-near-the-bottom-of-an-account-row retargets to either root or
   /// the hovered account's parent group — together with the pure
   /// `DropOutcome.asValidationResult()` cases that translate each
   /// outcome variant to the vendored `ValidationResult` shape.
   @MainActor
-  @Suite("SidebarOutlineDropReceiver — retarget & validation mapping")
-  struct SidebarOutlineDropReceiverRetargetTests {
-    private typealias Support = SidebarOutlineDropReceiverTestSupport
+  @Suite("SidebarDropPolicy — retarget & validation mapping")
+  struct SidebarDropPolicyRetargetTests {
+    private typealias Support = SidebarDropPolicyTestSupport
 
     // MARK: - Retargeting cases (row 13)
 
@@ -30,7 +30,7 @@
       // Hovering near the bottom of alpha's row reports
       // intoElement = .account(alpha), childIndex non-nil. alpha is at
       // root index 0, so the retargeted insertion goes to index 1.
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .account(source.id),
           intoElement: .account(alpha.id),
@@ -50,7 +50,7 @@
       // Hovering near the bottom of memberA's row reports
       // intoElement = .account(memberA), childIndex non-nil. memberA is
       // member-index 0, so retarget to the parent group at index 1.
-      let outcome = SidebarOutlineDropReceiver.outcome(
+      let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
           dragged: .account(source.id),
           intoElement: .account(memberA.id),
@@ -66,7 +66,7 @@
 
     @Test("DropOutcome.deny maps to ValidationResult.deny")
     func validationDeny() {
-      switch SidebarOutlineDropReceiver.DropOutcome.deny.asValidationResult() {
+      switch SidebarDropPolicy.DropOutcome.deny.asValidationResult() {
       case .deny: break
       default: Issue.record("expected .deny")
       }
@@ -74,7 +74,7 @@
 
     @Test("DropOutcome.addToGroup maps to .move")
     func validationAddToGroup() {
-      let outcome: SidebarOutlineDropReceiver.DropOutcome = .addToGroup(
+      let outcome: SidebarDropPolicy.DropOutcome = .addToGroup(
         sourceAccountId: UUID(), groupId: UUID())
       switch outcome.asValidationResult() {
       case .move: break
@@ -84,7 +84,7 @@
 
     @Test("DropOutcome.retargetRoot maps to .moveRedirect(item: nil, childIndex: idx)")
     func validationRetargetRoot() {
-      let outcome = SidebarOutlineDropReceiver.DropOutcome.retargetRoot(
+      let outcome = SidebarDropPolicy.DropOutcome.retargetRoot(
         insertionIndex: 3)
       switch outcome.asValidationResult() {
       case let .moveRedirect(item, childIndex):
@@ -97,7 +97,7 @@
     @Test("DropOutcome.retargetGroup maps to .moveRedirect(item: group, childIndex: idx)")
     func validationRetargetGroup() {
       let groupId = UUID()
-      let outcome = SidebarOutlineDropReceiver.DropOutcome.retargetGroup(
+      let outcome = SidebarDropPolicy.DropOutcome.retargetGroup(
         groupId: groupId, insertionIndex: 2)
       switch outcome.asValidationResult() {
       case let .moveRedirect(item, childIndex):
