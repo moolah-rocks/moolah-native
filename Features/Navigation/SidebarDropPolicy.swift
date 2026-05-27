@@ -1,6 +1,13 @@
 #if os(macOS)
-  import AppKit
   import Foundation
+
+  // TODO(#991): SidebarDropPolicy currently consumes
+  // `DropTarget<SidebarOutlineItem>` and returns
+  // `ValidationResult<SidebarOutlineItem>` from the vendored OutlineView
+  // package. The unified-AppKit sidebar rewrite removes that package; at
+  // that point the policy's signature needs to adapt to
+  // `NSOutlineViewDataSource`'s native drag/drop shape. Tracking issue:
+  // https://github.com/moolah-rocks/moolah-native/issues/991
 
   /// Pure decision-table policy that maps a sidebar `DropTarget` to a
   /// `DropOutcome`. View-agnostic: no store mutation, no awaits, no
@@ -13,8 +20,8 @@
 
     /// All possible outcomes of resolving a `DropTarget` against the
     /// current store snapshots. Pure value so the policy is trivially
-    /// testable. The `asValidationResult` transform is also pure — UI
-    /// state attachment lives only in `acceptDrop`'s switch.
+    /// testable. The `asValidationResult` transform is equally pure —
+    /// callers own any UI-state side-effects after inspecting the outcome.
     enum DropOutcome: Equatable {
       case deny
       case addToGroup(sourceAccountId: UUID, groupId: UUID)
@@ -56,9 +63,9 @@
     /// the receiver renders and the current store snapshots. Pure —
     /// no awaits, no store mutation. Dispatches into per-`intoElement`
     /// helpers below; each helper covers one column of the decision
-    /// table from the implementation plan (root / group / account)
-    /// and annotates each branch with the row it implements so test
-    /// failures can be matched back.
+    /// table (root / group / account) and annotates each branch with a
+    /// `// row N:` comment so a test failure can be matched back to a
+    /// specific row.
     static func outcome(
       for target: DropTarget<SidebarOutlineItem>,
       bucket: AccountBucket,

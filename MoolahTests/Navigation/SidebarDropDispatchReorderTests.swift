@@ -104,6 +104,55 @@ struct SidebarDropDispatchReorderTests {
       description: "first clamped to after second")
   }
 
+  @Test("reorderRoot preserves the standalone/group interleave (3-entry mixed)")
+  func reorderRootPreservesInterleave() async throws {
+    let (backend, database) = try TestBackend.create()
+    let standaloneA = SidebarDropDispatchTestSupport.bankAccount(
+      name: "StandaloneA", position: 0)
+    let memberA = SidebarDropDispatchTestSupport.bankAccount(name: "MemberA", position: 1)
+    let memberB = SidebarDropDispatchTestSupport.bankAccount(name: "MemberB", position: 2)
+    let standaloneB = SidebarDropDispatchTestSupport.bankAccount(
+      name: "StandaloneB", position: 3)
+    let stores = try await SidebarDropDispatchTestSupport.makeStores(
+      seedAccounts: [standaloneA, memberA, memberB, standaloneB],
+      in: database, backend: backend)
+
+    let group = try await stores.accountGroupStore.createGroup(
+      joining: memberA, and: memberB, name: "G",
+      accountStore: stores.accountStore)
+    try await stores.accountStore.waitForNextEmission(
+      matching: {
+        $0.accounts.by(id: memberA.id)?.groupId == group.id
+          && $0.accounts.by(id: memberB.id)?.groupId == group.id
+      },
+      description: "members joined")
+
+    // Drag the group to the bottom of the bucket (insertionIndex 2 in
+    // the 3-entry root: [standaloneA, group, standaloneB] → after the
+    // group moves to index 2: [standaloneA, standaloneB, group]).
+    try await SidebarDropDispatch.reorderRoot(
+      dragged: DraggableSidebarItem(kind: .group, id: group.id),
+      insertionIndex: 2,
+      bucket: .current,
+      accountStore: stores.accountStore,
+      accountGroupStore: stores.accountGroupStore)
+
+    try await stores.accountGroupStore.waitForNextEmission(
+      matching: { $0.by(id: group.id)?.position == 2 },
+      description: "group walked to position 2")
+
+    // Per-entry walk-index writes — not a contiguous 0..N-1 collapse —
+    // so each entry's absolute position matches its walk-order index.
+    let postStandaloneA = try #require(
+      stores.accountStore.accounts.by(id: standaloneA.id))
+    let postStandaloneB = try #require(
+      stores.accountStore.accounts.by(id: standaloneB.id))
+    let postGroup = try #require(stores.accountGroupStore.by(id: group.id))
+    #expect(postStandaloneA.position == 0)
+    #expect(postStandaloneB.position == 1)
+    #expect(postGroup.position == 2)
+  }
+
   @Test("reorderRoot is a no-op when the dragged id is unknown")
   func reorderRootRejectsMissing() async throws {
     let (backend, database) = try TestBackend.create()

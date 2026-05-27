@@ -129,8 +129,11 @@ enum SidebarDropDispatch {
     // Walk the reordered list and assign every entry its walk-order
     // index as its `position`. Per-entry calls are necessary so the
     // standalone-account / group interleave is preserved across the
-    // shared `position` number space.
+    // shared `position` number space. Cancellation check between
+    // iterations lets a replacement drop's enclosing Task bail out
+    // mid-walk rather than racing the previous drop's tail writes.
     for (walkIndex, entry) in reordered.enumerated() {
+      guard !Task.isCancelled else { return }
       switch entry {
       case .account(let account):
         await accountStore.reorderAccounts(
