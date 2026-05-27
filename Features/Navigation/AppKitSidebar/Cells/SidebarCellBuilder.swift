@@ -118,7 +118,8 @@
         SidebarTotalRowView(
           label: descriptor.label,
           amount: descriptor.amount,
-          emphasised: descriptor.emphasised)
+          emphasised: descriptor.emphasised,
+          bold: descriptor.bold)
       }
     }
 
@@ -140,6 +141,7 @@
       let label: String
       let amount: InstrumentAmount?
       let emphasised: Bool
+      var bold: Bool = false
     }
 
     private func totalDescriptor(for kind: SidebarRow.TotalKind) -> TotalDescriptor {
@@ -164,7 +166,10 @@
           label: "Available Funds", amount: availableFunds(), emphasised: true)
       case .netWorth:
         return TotalDescriptor(
-          label: "Net Worth", amount: accountStore.convertedNetWorth, emphasised: true)
+          label: "Net Worth",
+          amount: accountStore.convertedNetWorth,
+          emphasised: true,
+          bold: true)
       }
     }
 
