@@ -57,7 +57,9 @@ enum SidebarRowTree {
     var childMap: [SidebarRow: [SidebarRow]] = [:]
     childMap[.section(.current)] = grouped.current.map(Self.row(from:))
     childMap[.section(.investments)] = grouped.investments.map(Self.row(from:))
-    // Earmarks, Totals, Navigation populated in later tasks.
+    childMap[.section(.earmarks)] = snapshot.earmarks.map { .earmark($0.id) }
+    childMap[.section(.totals)] = Self.totals(from: snapshot)
+    childMap[.section(.navigation)] = Self.navigationRows()
 
     for entry in grouped.current + grouped.investments {
       if case let .group(group, members) = entry, !members.isEmpty {
@@ -65,7 +67,13 @@ enum SidebarRowTree {
       }
     }
 
-    let roots: [SidebarRow] = [.section(.current), .section(.investments)]
+    let roots: [SidebarRow] = [
+      .section(.current),
+      .section(.earmarks),
+      .section(.investments),
+      .section(.totals),
+      .section(.navigation),
+    ]
     return Result(roots: roots, childMap: childMap)
   }
 
@@ -74,5 +82,38 @@ enum SidebarRowTree {
     case .account(let account): return .account(account.id)
     case .group(let group, _): return .group(group.id)
     }
+  }
+
+  /// Build the ordered Totals section. Each total renders only when its
+  /// backing optional is non-nil. `availableFunds` additionally requires
+  /// a non-nil `currentTotal` and a positive `earmarkedTotal` —
+  /// mirroring the existing SwiftUI sidebar's gating in
+  /// `SidebarView+Sections.swift`.
+  private static func totals(from snapshot: Snapshot) -> [SidebarRow] {
+    var totals: [SidebarRow] = []
+    if snapshot.currentTotal != nil { totals.append(.total(.currentTotal)) }
+    if snapshot.investmentTotal != nil { totals.append(.total(.investmentTotal)) }
+    if snapshot.earmarkedTotal != nil { totals.append(.total(.earmarkedTotal)) }
+    if snapshot.currentTotal != nil,
+      let earmarked = snapshot.earmarkedTotal,
+      earmarked.isPositive
+    {
+      totals.append(.total(.availableFunds))
+    }
+    if snapshot.netWorth != nil { totals.append(.total(.netWorth)) }
+    return totals
+  }
+
+  /// The fixed-order set of Navigation rows. Order is stable across
+  /// snapshots and matches the existing SwiftUI sidebar's order.
+  private static func navigationRows() -> [SidebarRow] {
+    [
+      .navigation(.analysis),
+      .navigation(.reports),
+      .navigation(.categories),
+      .navigation(.upcoming),
+      .navigation(.recentlyAdded),
+      .navigation(.allTransactions),
+    ]
   }
 }
