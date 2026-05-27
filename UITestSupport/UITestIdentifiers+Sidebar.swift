@@ -22,6 +22,13 @@ extension UITestIdentifiers {
       "sidebar.view.\(name)"
     }
 
+    /// Sidebar row for a specific earmark. `id` is the earmark's UUID,
+    /// lowercased. Mirrors the `account(_:)` identifier shape so
+    /// drivers can resolve earmark rows by id.
+    public static func earmark(_ id: UUID) -> String {
+      "sidebar.earmark.\(id.uuidString.lowercased())"
+    }
+
     /// "New Account" toolbar button in the sidebar (macOS only).
     public static let newAccountButton = "sidebar.toolbar.newAccount"
 
@@ -37,6 +44,11 @@ extension UITestIdentifiers {
     /// drivers must resolve via this identifier rather than the
     /// shared label.
     public static let editAccountContextMenuItem = "sidebar.contextMenu.editAccount"
+
+    /// "View Transactions" item in the sidebar account context menu.
+    /// Selecting it sets the sidebar selection to the corresponding
+    /// account row.
+    public static let viewTransactionsContextMenuItem = "sidebar.contextMenu.viewTransactions"
 
     /// "Rename" item in the sidebar context menu for account rows.
     /// Phase 4 will extend this identifier to earmark and account-group

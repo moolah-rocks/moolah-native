@@ -22,9 +22,14 @@ struct SidebarNavigationRowView: View {
           .padding(.vertical, 2)
           .background(.tint, in: Capsule())
           .foregroundStyle(.white)
-          .accessibilityLabel("\(badgeCount) recently imported need review")
       }
     }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(accessibilityLabel)
+  }
+
+  private var accessibilityLabel: String {
+    badgeCount > 0 ? "\(title), \(badgeCount) need review" : title
   }
 }
 
