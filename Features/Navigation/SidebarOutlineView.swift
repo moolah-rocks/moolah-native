@@ -10,13 +10,15 @@
   /// surface updates the same binding.
   ///
   /// Phase 1 scope: render items, support row selection, render section
-  /// headers as source-list group rows. **No expansion-state persistence
-  /// here** (Task 3). **No drag-and-drop** (Phase 2). **No inline rename**
-  /// (Phase 3) — rename remains via the "Edit Account…" context menu
-  /// item which opens the full edit sheet.
+  /// headers as source-list group rows, and persist per-group expand
+  /// state through `GroupUIStateStore` (see
+  /// `expansionBinding(groupStore:)`). **No drag-and-drop** (Phase 2).
+  /// **No inline rename** (Phase 3) — rename remains via the
+  /// "Edit Account…" context menu item which opens the full edit sheet.
   struct SidebarOutlineView: View {
     @Environment(AccountStore.self) private var accountStore
     @Environment(AccountGroupStore.self) private var accountGroupStore
+    @Environment(GroupUIStateStore.self) private var groupUIStateStore
     @Binding var selection: SidebarSelection?
 
     var body: some View {
@@ -35,6 +37,7 @@
         case .account, .group: return false
         }
       }
+      .outlineViewExpandedItems(Self.expansionBinding(groupStore: groupUIStateStore))
     }
 
     // MARK: - Cell rendering
@@ -98,12 +101,14 @@
         ) { balance in
           AccountGroupSidebarRow(
             group: group,
-            // Task 2: no expansion state binding yet. The chevron is
-            // suppressed because `NSOutlineView` draws its own
-            // disclosure triangle; the row still needs *some* binding,
-            // so we hand it a constant `false`. Task 3 replaces the
-            // chevron-control story end-to-end with the persisted
-            // expand-state binding.
+            // `NSOutlineView` draws the disclosure triangle for us; the
+            // row's own chevron is suppressed via `showChevron: false`.
+            // The expand state itself rides through
+            // `.outlineViewExpandedItems` → `expansionBinding` →
+            // `GroupUIStateStore`, so the `isExpanded` binding on the
+            // SwiftUI row is unused in the outline path. A constant
+            // `false` keeps the row API happy without giving it write
+            // authority — it would race the persisted store.
             isExpanded: .constant(false),
             aggregateBalance: balance,
             showChevron: false
@@ -111,6 +116,62 @@
         }
         .environment(accountStore)
       }
+    }
+
+    // MARK: - Expansion mapping
+
+    /// Builds the two-way binding between
+    /// `Set<SidebarOutlineItem.Kind>` (which the vendored `OutlineView`
+    /// uses to drive per-row expand state) and
+    /// `GroupUIStateStore.expandedGroupIds`.
+    ///
+    /// Section-header items (`.currentAccountsHeader` /
+    /// `.investmentsHeader`) are unconditionally reported as expanded —
+    /// the user can't permanently collapse "Current Accounts" or
+    /// "Investments" away. The setter ignores any add / remove of
+    /// header kinds; only `.group(id)` transitions reach the store.
+    ///
+    /// Account-row kinds (`.account(id)`) are leaves with no children,
+    /// so they never appear in the bound set. The setter tolerates
+    /// them defensively but treats them as no-ops.
+    ///
+    /// Each group transition is dispatched as a `Task` calling
+    /// `setExpanded(_:for:)`. `GroupUIStateStore` is `@MainActor`-bound;
+    /// the inherited MainActor context keeps the persistence write off
+    /// the binding's synchronous setter path. The observation stream
+    /// re-emits the authoritative `expandedGroupIds`, which re-renders
+    /// the outline against the new set — the store stays the source of
+    /// truth, the binding is purely a translation layer.
+    @MainActor
+    static func expansionBinding(
+      groupStore: GroupUIStateStore
+    ) -> Binding<Set<SidebarOutlineItem.Kind>> {
+      Binding(
+        get: {
+          var set: Set<SidebarOutlineItem.Kind> = [
+            .currentAccountsHeader,
+            .investmentsHeader,
+          ]
+          for groupId in groupStore.expandedGroupIds {
+            set.insert(.group(groupId))
+          }
+          return set
+        },
+        set: { newValue in
+          let newGroupExpansion: Set<UUID> = Set(
+            newValue.compactMap { kind -> UUID? in
+              if case .group(let id) = kind { return id }
+              return nil
+            })
+          let old = groupStore.expandedGroupIds
+          for groupId in newGroupExpansion.subtracting(old) {
+            Task { await groupStore.setExpanded(true, for: groupId) }
+          }
+          for groupId in old.subtracting(newGroupExpansion) {
+            Task { await groupStore.setExpanded(false, for: groupId) }
+          }
+        }
+      )
     }
 
     // MARK: - Selection mapping
