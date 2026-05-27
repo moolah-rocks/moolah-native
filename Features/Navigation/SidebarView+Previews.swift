@@ -4,6 +4,60 @@
 
 import SwiftUI
 
+/// Builds an in-memory `SyncCoordinator` for `#Preview` use. `SidebarView`
+/// composes `SyncProgressFooter`, which reads
+/// `@Environment(SyncCoordinator.self)`; without the injection SwiftUI
+/// traps inside `EnvironmentBox.update` during initial layout.
+@MainActor
+private func previewSyncCoordinator() -> SyncCoordinator {
+  // swiftlint:disable:next force_try
+  let manager = try! ProfileContainerManager.forTesting()
+  return SyncCoordinator(containerManager: manager)
+}
+
+/// Builds an `AccountStore` against `backend` configured for previews.
+@MainActor
+private func previewAccountStore(_ backend: CloudKitBackend) -> AccountStore {
+  AccountStore(
+    repository: backend.accounts,
+    conversionService: backend.conversionService,
+    targetInstrument: .AUD)
+}
+
+/// Builds an `EarmarkStore` against `backend` configured for previews.
+@MainActor
+private func previewEarmarkStore(_ backend: CloudKitBackend) -> EarmarkStore {
+  EarmarkStore(
+    repository: backend.earmarks,
+    conversionService: backend.conversionService,
+    targetInstrument: .AUD)
+}
+
+/// Wraps `content` in the eight environment values `SidebarView` and
+/// its sub-views read (`AccountStore`, `EarmarkStore`,
+/// `AccountGroupStore`, `GroupUIStateStore`, `ProfileSession`,
+/// `TransactionStore`, `ImportStore`, `SyncCoordinator`). Extracted so
+/// each `#Preview` block fits SwiftLint's 30-line closure budget.
+@MainActor
+@ViewBuilder
+private func sidebarPreviewEnvironment<Content: View>(
+  backend: CloudKitBackend,
+  session: ProfileSession,
+  accountStore: AccountStore,
+  accountGroupStore: AccountGroupStore,
+  @ViewBuilder content: () -> Content
+) -> some View {
+  content()
+    .environment(accountStore)
+    .environment(previewEarmarkStore(backend))
+    .environment(accountGroupStore)
+    .environment(GroupUIStateStore(repository: backend.groupUIState))
+    .environment(session)
+    .environment(session.transactionStore)
+    .environment(session.importStore)
+    .environment(previewSyncCoordinator())
+}
+
 @MainActor
 private func seedSidebarPreview(backend: any BackendProvider) async {
   // Both `accountStore` and `earmarkStore` are reactive — they load
@@ -20,31 +74,23 @@ private func seedSidebarPreview(backend: any BackendProvider) async {
 
 #Preview {
   let backend = PreviewBackend.create()
-  let accountStore = AccountStore(
-    repository: backend.accounts,
-    conversionService: backend.conversionService,
-    targetInstrument: .AUD)
-  let earmarkStore = EarmarkStore(
-    repository: backend.earmarks,
-    conversionService: backend.conversionService,
-    targetInstrument: .AUD)
+  let accountStore = previewAccountStore(backend)
   let accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
-  let groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
   // In-memory preview session can't fail in practice: opens an ephemeral
   // GRDB queue with no disk access. A trap here is acceptable in #Preview.
   // swiftlint:disable:next force_try
   let session = try! ProfileSession.preview()
 
   return NavigationSplitView {
-    SidebarView(selection: .constant(nil))
-      .environment(accountStore)
-      .environment(earmarkStore)
-      .environment(accountGroupStore)
-      .environment(groupUIStateStore)
-      .environment(session)
-      .task {
-        await seedSidebarPreview(backend: backend)
-      }
+    sidebarPreviewEnvironment(
+      backend: backend,
+      session: session,
+      accountStore: accountStore,
+      accountGroupStore: accountGroupStore
+    ) {
+      SidebarView(selection: .constant(nil))
+        .task { await seedSidebarPreview(backend: backend) }
+    }
   } detail: {
     Text("Detail")
   }
@@ -56,9 +102,15 @@ private func seedSidebarGroupPreview(
   accountStore: AccountStore,
   accountGroupStore: AccountGroupStore
 ) async {
-  // Seed two crypto wallets, then create a group joining them. The
-  // preview renders the group as a single row with the two members
-  // tucked underneath when the user expands it.
+  // Seed a standalone bank account (so the Current Accounts section
+  // isn't empty in the preview), then two crypto wallets joined into a
+  // group. The preview renders the group as a single row with the two
+  // members tucked underneath when the user expands it.
+  _ = try? await backend.accounts.create(
+    Account(name: "Bank", type: .bank, instrument: .AUD),
+    openingBalance: InstrumentAmount(quantity: 1000, instrument: .AUD))
+  _ = try? await backend.earmarks.create(
+    Earmark(name: "Holiday Fund", instrument: .AUD))
   let walletAAccount = Account(
     name: "ETH/OP wallet",
     type: .crypto,
@@ -89,32 +141,26 @@ private func seedSidebarGroupPreview(
 
 #Preview("With a group") {
   let backend = PreviewBackend.create()
-  let accountStore = AccountStore(
-    repository: backend.accounts,
-    conversionService: backend.conversionService,
-    targetInstrument: .AUD)
-  let earmarkStore = EarmarkStore(
-    repository: backend.earmarks,
-    conversionService: backend.conversionService,
-    targetInstrument: .AUD)
+  let accountStore = previewAccountStore(backend)
   let accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
-  let groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
   // swiftlint:disable:next force_try
   let session = try! ProfileSession.preview()
 
   return NavigationSplitView {
-    SidebarView(selection: .constant(nil))
-      .environment(accountStore)
-      .environment(earmarkStore)
-      .environment(accountGroupStore)
-      .environment(groupUIStateStore)
-      .environment(session)
-      .task {
-        await seedSidebarGroupPreview(
-          backend: backend,
-          accountStore: accountStore,
-          accountGroupStore: accountGroupStore)
-      }
+    sidebarPreviewEnvironment(
+      backend: backend,
+      session: session,
+      accountStore: accountStore,
+      accountGroupStore: accountGroupStore
+    ) {
+      SidebarView(selection: .constant(nil))
+        .task {
+          await seedSidebarGroupPreview(
+            backend: backend,
+            accountStore: accountStore,
+            accountGroupStore: accountGroupStore)
+        }
+    }
   } detail: {
     Text("Detail")
   }
@@ -171,10 +217,7 @@ private func seedSidebarGroupPreview(
     // eyeballed. The full `SidebarView` preview above exercises both
     // buckets in their natural section context.
     let backend = PreviewBackend.create()
-    let accountStore = AccountStore(
-      repository: backend.accounts,
-      conversionService: backend.conversionService,
-      targetInstrument: .AUD)
+    let accountStore = previewAccountStore(backend)
     let accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
     let groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
     return SidebarOutlineView(
@@ -195,37 +238,28 @@ private func seedSidebarGroupPreview(
 
 #Preview("Empty earmarks") {
   let backend = PreviewBackend.create()
-  let accountStore = AccountStore(
-    repository: backend.accounts,
-    conversionService: backend.conversionService,
-    targetInstrument: .AUD)
-  let earmarkStore = EarmarkStore(
-    repository: backend.earmarks,
-    conversionService: backend.conversionService,
-    targetInstrument: .AUD)
+  let accountStore = previewAccountStore(backend)
   let accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
-  let groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
   // In-memory preview session can't fail in practice: opens an ephemeral
   // GRDB queue with no disk access. A trap here is acceptable in #Preview.
   // swiftlint:disable:next force_try
   let session = try! ProfileSession.preview()
 
   return NavigationSplitView {
-    SidebarView(selection: .constant(nil))
-      .environment(accountStore)
-      .environment(earmarkStore)
-      .environment(accountGroupStore)
-      .environment(groupUIStateStore)
-      .environment(session)
-      .task {
-        // Seed only an account — no earmarks. Validates that the
-        // Earmarks section header (and its iOS "+" button) renders in
-        // the empty-state, and that the macOS toolbar shows both the
-        // "New Account" and "New Earmark" buttons.
-        _ = try? await backend.accounts.create(
-          Account(name: "Bank", type: .bank, instrument: .AUD),
-          openingBalance: InstrumentAmount(quantity: 1000, instrument: .AUD))
-      }
+    sidebarPreviewEnvironment(
+      backend: backend,
+      session: session,
+      accountStore: accountStore,
+      accountGroupStore: accountGroupStore
+    ) {
+      SidebarView(selection: .constant(nil))
+        .task {
+          // Seed only an account — no earmarks.
+          _ = try? await backend.accounts.create(
+            Account(name: "Bank", type: .bank, instrument: .AUD),
+            openingBalance: InstrumentAmount(quantity: 1000, instrument: .AUD))
+        }
+    }
   } detail: {
     Text("Detail")
   }
