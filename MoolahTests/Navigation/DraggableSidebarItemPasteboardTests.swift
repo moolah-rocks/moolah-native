@@ -10,6 +10,7 @@
   /// items onto `NSPasteboardItem`s and the drop receiver reads them
   /// back; if the encoding changes shape we want a unit-test failure
   /// rather than a silent drag-and-drop regression at runtime.
+  @MainActor
   @Suite
   struct DraggableSidebarItemPasteboardTests {
     @Test
