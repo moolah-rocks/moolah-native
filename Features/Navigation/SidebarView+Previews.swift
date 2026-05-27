@@ -176,7 +176,7 @@ private func seedSidebarGroupPreview(
       targetInstrument: .AUD)
     let accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
     let groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
-    return SidebarOutlineView(selection: .constant(nil))
+    return SidebarOutlineView(selection: .constant(nil), accountToEdit: .constant(nil))
       .environment(accountStore)
       .environment(accountGroupStore)
       .environment(groupUIStateStore)
