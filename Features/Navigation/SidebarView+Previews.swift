@@ -120,6 +120,74 @@ private func seedSidebarGroupPreview(
   }
 }
 
+#if os(macOS)
+  /// Seeding helper for the macOS outline preview. Mirrors
+  /// `seedSidebarGroupPreview` above but adds a standalone bank account
+  /// so the preview exercises both the standalone-account and group
+  /// rendering paths in `SidebarOutlineView`. Extracted from the inline
+  /// `.task { }` closure to satisfy SwiftLint's closure_body_length
+  /// rule.
+  @MainActor
+  private func seedOutlinePreview(
+    backend: any BackendProvider,
+    accountStore: AccountStore,
+    accountGroupStore: AccountGroupStore
+  ) async {
+    _ = try? await backend.accounts.create(
+      Account(name: "Bank", type: .bank, instrument: .AUD),
+      openingBalance: InstrumentAmount(quantity: 1000, instrument: .AUD))
+    let walletAAccount = Account(
+      name: "ETH/OP wallet",
+      type: .crypto,
+      instrument: .AUD,
+      walletAddress: "0x7a3f1b5c9d2e8f4a1b6c3d5e7f9a0b2c4d6e8f0a",
+      chainId: 1)
+    let walletBAccount = Account(
+      name: "Polygon wallet",
+      type: .crypto,
+      instrument: .AUD,
+      walletAddress: "0x7a3f1b5c9d2e8f4a1b6c3d5e7f9a0b2c4d6e8f0a",
+      chainId: 137)
+    guard
+      let walletA = try? await backend.accounts.create(
+        walletAAccount,
+        openingBalance: InstrumentAmount(quantity: 5210, instrument: .AUD)),
+      let walletB = try? await backend.accounts.create(
+        walletBAccount,
+        openingBalance: InstrumentAmount(quantity: 410, instrument: .AUD))
+    else { return }
+    _ = try? await accountGroupStore.createGroup(
+      joining: walletA,
+      and: walletB,
+      name: "Trust Fund Crypto",
+      accountStore: accountStore
+    )
+  }
+
+  #Preview("macOS outline — Phase 1 skeleton") {
+    // Drives the new `SidebarOutlineView` directly (no NavigationSplitView,
+    // no surrounding List): Task 4 wires it into the SwiftUI sidebar, this
+    // preview just renders the outline in isolation so the cell layout +
+    // selection wiring can be eyeballed.
+    let backend = PreviewBackend.create()
+    let accountStore = AccountStore(
+      repository: backend.accounts,
+      conversionService: backend.conversionService,
+      targetInstrument: .AUD)
+    let accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
+    return SidebarOutlineView(selection: .constant(nil))
+      .environment(accountStore)
+      .environment(accountGroupStore)
+      .frame(width: 260, height: 480)
+      .task {
+        await seedOutlinePreview(
+          backend: backend,
+          accountStore: accountStore,
+          accountGroupStore: accountGroupStore)
+      }
+  }
+#endif
+
 #Preview("Empty earmarks") {
   let backend = PreviewBackend.create()
   let accountStore = AccountStore(
