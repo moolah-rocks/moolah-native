@@ -71,14 +71,24 @@ struct SidebarDropDispatchReorderTests {
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
+    // `reorderRoot` writes to BOTH stores: the group's new position on
+    // `accountGroupStore`, and the shifted standalone's position on
+    // `accountStore`. The original waiter parked on `accountGroupStore`
+    // and read `accountStore` inside the predicate — if the watched
+    // store emitted first (still showing the pre-shift state on the
+    // other), the predicate was false, no further emission came on
+    // the watched store, and the waiter timed out (#1000). Wait on
+    // both stores' writes individually, then assert the cross-store
+    // invariant synchronously.
+    try await stores.accountStore.waitForNextEmission(
+      matching: { $0.accounts.by(id: standalone.id)?.position == 1 },
+      description: "standalone shifted to position 1")
     try await stores.accountGroupStore.waitForNextEmission(
-      matching: {
-        let groupPos = $0.by(id: group.id)?.position ?? -1
-        let standalonePos =
-          stores.accountStore.accounts.by(id: standalone.id)?.position ?? -1
-        return groupPos < standalonePos
-      },
-      description: "group now positioned ahead of standalone")
+      matching: { $0.by(id: group.id)?.position == 0 },
+      description: "group landed at position 0")
+    let groupPos = stores.accountGroupStore.by(id: group.id)?.position
+    let standalonePos = stores.accountStore.accounts.by(id: standalone.id)?.position
+    #expect((groupPos ?? -1) < (standalonePos ?? -1))
   }
 
   @Test("reorderRoot clamps insertion index past the end")
