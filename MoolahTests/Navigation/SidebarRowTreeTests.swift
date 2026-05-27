@@ -70,21 +70,95 @@ struct SidebarRowTreeTests {
     #expect(tree.children(of: .group(groupId)).isEmpty)
   }
 
+  // MARK: - Earmarks
+
+  @Test("Earmarks section lists earmarks in their incoming order")
+  func earmarksOrder() {
+    let holiday = Earmark(name: "Holiday", instrument: .AUD)
+    let tax = Earmark(name: "Tax", instrument: .AUD)
+    let tree = SidebarRowTree.build(from: snapshot(earmarks: [holiday, tax]))
+    #expect(
+      tree.children(of: .section(.earmarks))
+        == [.earmark(holiday.id), .earmark(tax.id)])
+  }
+
+  // MARK: - Totals
+
+  @Test("Totals are absent when all summary values are nil")
+  func totalsAbsentWhenNil() {
+    let tree = SidebarRowTree.build(from: snapshot())
+    #expect(tree.children(of: .section(.totals)).isEmpty)
+  }
+
+  @Test("Current + Investment + Net Worth totals render when present")
+  func basicTotals() {
+    let tree = SidebarRowTree.build(
+      from: snapshot(
+        currentTotal: Self.testAmount,
+        investmentTotal: Self.testAmount,
+        netWorth: Self.testAmount))
+    #expect(
+      tree.children(of: .section(.totals))
+        == [.total(.currentTotal), .total(.investmentTotal), .total(.netWorth)])
+  }
+
+  @Test("Available Funds only when current+earmarked present and earmarked is positive")
+  func availableFundsGating() {
+    let withAvailable = SidebarRowTree.build(
+      from: snapshot(
+        currentTotal: Self.testAmount, earmarkedTotal: Self.testEarmarked))
+    #expect(
+      withAvailable.children(of: .section(.totals))
+        .contains(.total(.availableFunds)))
+
+    let zeroEarmark = SidebarRowTree.build(
+      from: snapshot(
+        currentTotal: Self.testAmount,
+        earmarkedTotal: .zero(instrument: .AUD)))
+    #expect(
+      !zeroEarmark.children(of: .section(.totals))
+        .contains(.total(.availableFunds)))
+  }
+
+  // MARK: - Navigation
+
+  @Test("Navigation children are the fixed-order set of nav kinds")
+  func navigationOrder() {
+    let tree = SidebarRowTree.build(from: snapshot())
+    #expect(
+      tree.children(of: .section(.navigation)) == [
+        .navigation(.analysis),
+        .navigation(.reports),
+        .navigation(.categories),
+        .navigation(.upcoming),
+        .navigation(.recentlyAdded),
+        .navigation(.allTransactions),
+      ])
+  }
+
   // MARK: - Helpers
 
+  private static let testAmount = InstrumentAmount(quantity: 100, instrument: .AUD)
+  private static let testEarmarked = InstrumentAmount(quantity: 50, instrument: .AUD)
+
   private func snapshot(
-    accounts: [Account],
+    accounts: [Account] = [],
     groups: [AccountGroup] = [],
+    earmarks: [Earmark] = [],
+    currentTotal: InstrumentAmount? = nil,
+    investmentTotal: InstrumentAmount? = nil,
+    earmarkedTotal: InstrumentAmount? = nil,
+    netWorth: InstrumentAmount? = nil,
     showHidden: Bool = false
   ) -> SidebarRowTree.Snapshot {
     SidebarRowTree.Snapshot(
       accounts: Accounts(from: accounts),
       groups: groups,
-      earmarks: [],
-      currentTotal: nil,
-      investmentTotal: nil,
-      earmarkedTotal: nil,
-      netWorth: nil,
+      earmarks: earmarks,
+      currentTotal: currentTotal,
+      investmentTotal: investmentTotal,
+      earmarkedTotal: earmarkedTotal,
+      netWorth: netWorth,
       showHidden: showHidden,
       unreviewedBadgeCount: 0)
   }
