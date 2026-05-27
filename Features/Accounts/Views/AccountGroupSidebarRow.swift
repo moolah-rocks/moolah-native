@@ -26,10 +26,17 @@ struct AccountGroupSidebarRow: View {
   /// Inline-rename plumbing — same shape as account / earmark rows.
   var isEditing: Binding<Bool>?
   var onRename: ((String) -> Void)?
+  /// When `false`, the manual chevron-toggle button is suppressed. Used
+  /// by the macOS outline path where `NSOutlineView` provides its own
+  /// disclosure triangle and a second SwiftUI chevron would be
+  /// redundant. iOS and the default macOS `List` path keep `true`.
+  var showChevron: Bool = true
 
   var body: some View {
     HStack(spacing: 4) {
-      disclosureChevron
+      if showChevron {
+        disclosureChevron
+      }
       SidebarRowView(
         icon: "folder.fill",
         name: group.name,
@@ -109,6 +116,30 @@ struct AccountGroupSidebarRow: View {
       isSelected: false,
       isExpanded: $expanded,
       aggregateBalance: nil
+    )
+    .tag("group")
+  }
+  .listStyle(.sidebar)
+  .frame(width: 260)
+}
+
+#Preview("Group row — no chevron") {
+  // Exercises the macOS outline path where `NSOutlineView` provides
+  // its own disclosure triangle and the row suppresses the manual
+  // chevron button. The row should render flush with no extra leading
+  // spacing where the chevron would have been.
+  @Previewable @State var expanded = true
+  return List(selection: .constant(Optional("group"))) {
+    AccountGroupSidebarRow(
+      group: AccountGroup(
+        name: "Trust Fund Crypto",
+        bucket: .investments,
+        instrument: .AUD,
+        position: 0),
+      isSelected: false,
+      isExpanded: $expanded,
+      aggregateBalance: InstrumentAmount(quantity: 42180, instrument: .AUD),
+      showChevron: false
     )
     .tag("group")
   }
