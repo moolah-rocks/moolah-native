@@ -11,13 +11,24 @@ default:
 # Run swift-format style lint (prints warnings; does not exit non-zero for
 # pre-existing advisory violations). Use `format-check` in CI and pre-commit
 # to enforce actual formatting.
+#
+# `Vendored/` is excluded — third-party MIT source we copied verbatim
+# (with marked local extensions). See Vendored/OutlineView/NOTICE.md.
 lint:
-    swift-format lint -r . --configuration .swift-format
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git ls-files '*.swift' ':!:Vendored/**' \
+        | xargs swift-format lint --configuration .swift-format
 
 # Apply swift-format formatting in place, then run SwiftLint autocorrect.
 # Run this before committing; CI rejects unformatted files or new lint warnings.
+#
+# `Vendored/` is excluded — see the comment on `lint`.
 format:
-    swift-format format -i -r . --configuration .swift-format
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git ls-files '*.swift' ':!:Vendored/**' \
+        | xargs swift-format format -i --configuration .swift-format
     swiftlint lint --fix --quiet
 
 # Back-compat alias for `format`.
@@ -27,6 +38,8 @@ lint-fix: format
 # Non-destructive: does not modify any files. Exits non-zero on any diff.
 # Used by CI; run locally before committing if you want to preview failures
 # without applying changes.
+#
+# `Vendored/` is excluded — see the comment on `lint`.
 format-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -38,7 +51,7 @@ format-check:
                 "$file" <(swift-format format --configuration .swift-format "$file") || true
             fail=1
         fi
-    done < <(git ls-files '*.swift')
+    done < <(git ls-files '*.swift' ':!:Vendored/**')
     if [ "$fail" -ne 0 ]; then
         echo
         echo "One or more files are not formatted correctly."
