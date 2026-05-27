@@ -52,12 +52,11 @@
       // actions object would be deallocated before the user clicks.
       // Associating it with the menu keeps it alive for the menu's
       // lifetime, which matches the cell's lifetime (`cell.menu = menu`).
-      objc_setAssociatedObject(menu, &cellActionsKey, actions, .OBJC_ASSOCIATION_RETAIN)
+      objc_setAssociatedObject(
+        menu, &AssociationKeys.cellActions, actions, .OBJC_ASSOCIATION_RETAIN)
       return menu
     }
   }
-
-  nonisolated(unsafe) private var cellActionsKey: UInt8 = 0
 
   /// Target/action sink for the per-cell AppKit context menu. Each
   /// menu gets its own instance capturing closures bound to a single
@@ -78,5 +77,14 @@
 
     @objc
     func viewTransactionsAction(_ sender: Any?) { onViewTransactions() }
+  }
+
+  /// Storage keys used with `objc_setAssociatedObject`. The address of
+  /// each property is stable for the lifetime of the process, which is
+  /// what `objc_setAssociatedObject` requires; scoping under a
+  /// `@MainActor` enum avoids the `nonisolated(unsafe)` escape hatch.
+  @MainActor
+  private enum AssociationKeys {
+    static var cellActions: UInt8 = 0
   }
 #endif
