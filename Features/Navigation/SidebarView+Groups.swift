@@ -204,19 +204,21 @@ import UniformTypeIdentifiers
     /// dispatch helper owns the policy gate and store calls so the
     /// macOS AppKit drop receiver shares the same logic. The iOS-only
     /// post-hop is setting `editingRowId` to the newly created group's
-    /// id so inline rename starts immediately.
+    /// id so inline rename starts immediately. Store errors are already
+    /// surfaced reactively on `accountGroupStore.error`; discarding the
+    /// throw here keeps the view as the leaf consumer of that path.
     func handleDrop(
       _ item: DraggableSidebarItem,
       ontoAccount target: Account
     ) async {
       guard item.kind == .account else { return }  // group-onto-account = no-op
-      if let created = await SidebarDropDispatch.dropOntoAccount(
+      let created = try? await SidebarDropDispatch.dropOntoAccount(
         sourceId: item.id,
         targetId: target.id,
         accountStore: accountStore,
         accountGroupStore: accountGroupStore,
         groupUIStateStore: groupUIStateStore)
-      {
+      if let created {
         editingRowId = created.id
       }
     }
@@ -225,13 +227,16 @@ import UniformTypeIdentifiers
     /// account to the group; rejects group-onto-group (no nesting) and
     /// cross-bucket.
     ///
-    /// Thin wrapper over `SidebarDropDispatch.dropOntoGroup`.
+    /// Thin wrapper over `SidebarDropDispatch.dropOntoGroup`. Store
+    /// errors are already surfaced reactively on
+    /// `accountGroupStore.error`; discarding the throw here keeps the
+    /// view as the leaf consumer of that path.
     func handleDrop(
       _ item: DraggableSidebarItem,
       ontoGroup target: AccountGroup
     ) async {
       guard item.kind == .account else { return }  // group-onto-group rejected
-      await SidebarDropDispatch.dropOntoGroup(
+      try? await SidebarDropDispatch.dropOntoGroup(
         sourceId: item.id,
         groupId: target.id,
         accountStore: accountStore,

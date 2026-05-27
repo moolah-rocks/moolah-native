@@ -40,15 +40,16 @@ enum SidebarDropDispatchTestSupport {
       repository: backend.accounts,
       conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
-    let groupStore = AccountGroupStore(repository: backend.accountGroups)
+    let accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
     let groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
-    try await groupStore.waitForFirstEmission()
+    try await accountGroupStore.waitForFirstEmission()
     try await accountStore.waitForNextEmission(
       matching: { $0.accounts.ordered.count == seedAccounts.count },
       description: "accounts seeded observed")
+    try await groupUIStateStore.waitForFirstEmission()
     return DispatchTestStores(
       accountStore: accountStore,
-      accountGroupStore: groupStore,
+      accountGroupStore: accountGroupStore,
       groupUIStateStore: groupUIStateStore)
   }
 

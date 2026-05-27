@@ -12,11 +12,11 @@ import Foundation
 ///
 /// `@MainActor`-bound because every entry point ultimately writes to
 /// `@MainActor`-isolated store state (`AccountStore`,
-/// `AccountGroupStore`, `GroupUIStateStore`). Errors propagate
-/// through the underlying store calls; we use `try?` here because each
-/// store captures its own `error` property — re-throwing from this
-/// helper would force every call site to spell out a `do/catch` for an
-/// error that is already surfaced reactively.
+/// `AccountGroupStore`, `GroupUIStateStore`). Store errors propagate
+/// verbatim — the underlying stores *also* capture their own `error`
+/// property so the reactive view path still surfaces failures, but the
+/// dispatch helper itself does not swallow. Callers decide whether to
+/// react to the throw or `try?`-discard at the view layer.
 ///
 /// `dropOntoAccount` returns the newly created `AccountGroup` (or
 /// `nil`) rather than taking a closure or mutating `editingRowId`
@@ -43,7 +43,7 @@ enum SidebarDropDispatch {
     accountStore: AccountStore,
     accountGroupStore: AccountGroupStore,
     groupUIStateStore: GroupUIStateStore
-  ) async -> AccountGroup? {
+  ) async throws -> AccountGroup? {
     guard sourceId != targetId else { return nil }
     guard let source = accountStore.accounts.by(id: sourceId) else { return nil }
     guard let target = accountStore.accounts.by(id: targetId) else { return nil }
@@ -52,22 +52,18 @@ enum SidebarDropDispatch {
     if let targetGroupId = target.groupId {
       // Target is already a member: add source to the same group.
       guard let group = accountGroupStore.by(id: targetGroupId) else { return nil }
-      try? await accountGroupStore.addAccount(
+      try await accountGroupStore.addAccount(
         source, to: group, accountStore: accountStore)
       return nil
     }
 
     // Both standalone: create a 2-member group; the caller is expected
     // to drop into inline-rename mode on the returned group.
-    guard
-      let created = try? await accountGroupStore.createGroup(
-        joining: target,
-        and: source,
-        name: "New Group",
-        accountStore: accountStore)
-    else {
-      return nil
-    }
+    let created = try await accountGroupStore.createGroup(
+      joining: target,
+      and: source,
+      name: "New Group",
+      accountStore: accountStore)
     await groupUIStateStore.setExpanded(true, for: created.id)
     return created
   }
@@ -80,13 +76,13 @@ enum SidebarDropDispatch {
     groupId: UUID,
     accountStore: AccountStore,
     accountGroupStore: AccountGroupStore
-  ) async {
+  ) async throws {
     guard let source = accountStore.accounts.by(id: sourceId) else { return }
     guard let group = accountGroupStore.by(id: groupId) else { return }
     guard source.bucket == group.bucket else { return }
     guard source.groupId != group.id else { return }
 
-    try? await accountGroupStore.addAccount(
+    try await accountGroupStore.addAccount(
       source, to: group, accountStore: accountStore)
   }
 
@@ -116,7 +112,7 @@ enum SidebarDropDispatch {
     bucket: AccountBucket,
     accountStore: AccountStore,
     accountGroupStore: AccountGroupStore
-  ) async {
+  ) async throws {
     let entries = bucketEntries(
       bucket: bucket,
       accountStore: accountStore,
@@ -140,7 +136,7 @@ enum SidebarDropDispatch {
         await accountStore.reorderAccounts(
           [account], positionOffset: walkIndex)
       case .group(let group, _):
-        try? await accountGroupStore.moveGroup(group, to: walkIndex)
+        try await accountGroupStore.moveGroup(group, to: walkIndex)
       }
     }
   }
