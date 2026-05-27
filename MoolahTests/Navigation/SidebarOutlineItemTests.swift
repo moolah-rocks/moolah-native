@@ -5,8 +5,8 @@ import Testing
 
 @Suite("SidebarOutlineItem tree")
 struct SidebarOutlineItemTests {
-  @Test("Current bucket enumeration: standalone, group, standalone in position order")
-  func currentBucketHeaderEnumerationContainsStandaloneThenGroups() throws {
+  @Test("Current bucket: standalone, group, standalone in position order")
+  func currentBucketEnumerationContainsStandaloneThenGroups() throws {
     let bankA = Account(
       id: UUID(), name: "A", type: .bank, instrument: .AUD,
       positions: [], position: 0, isHidden: false)
@@ -23,42 +23,38 @@ struct SidebarOutlineItemTests {
 
     let items = SidebarOutlineItem.tree(
       accounts: Accounts(from: [bankA, bankB, member]),
-      groups: [group]
+      groups: [group],
+      bucket: .current
     )
 
-    // Two section headers at root: Current Accounts, Investments.
-    #expect(items.count == 2)
-    let currentHeader = try #require(items.first)
-    #expect(currentHeader.kind == .currentAccountsHeader)
-    // Children: bankA (pos 0), group G (pos 1), bankB (pos 2).
-    let children = try #require(currentHeader.children)
-    #expect(children.count == 3)
-    #expect(children[0].kind == .account(bankA.id))
-    #expect(children[1].kind == .group(group.id))
-    #expect(children[2].kind == .account(bankB.id))
-    // Group members appear under the group node.
-    let groupChildren = try #require(children[1].children)
+    // Three root items: bankA (pos 0), group G (pos 1), bankB (pos 2).
+    #expect(items.count == 3)
+    #expect(items[0].kind == .account(bankA.id))
+    #expect(items[1].kind == .group(group.id))
+    #expect(items[2].kind == .account(bankB.id))
+    // Group members appear as children of the group node.
+    let groupChildren = try #require(items[1].children)
     #expect(groupChildren.count == 1)
     #expect(groupChildren[0].kind == .account(member.id))
   }
 
-  @Test("Investments header renders even when empty")
-  func investmentsHeaderRendersEvenWhenEmpty() {
-    // Empty investments section still produces the section header
-    // so the user sees "Investments" with a zero-member section.
+  @Test("Investments bucket is empty when no investment accounts exist")
+  func investmentsBucketIsEmptyWhenNoInvestmentAccounts() {
+    // The section header used to live in the tree; now it's supplied
+    // by the surrounding SwiftUI `Section`, so a bucket with no
+    // entries produces an empty array (the section still renders).
     let bank = Account(
       id: UUID(), name: "A", type: .bank, instrument: .AUD,
       positions: [], position: 0, isHidden: false)
     let items = SidebarOutlineItem.tree(
-      accounts: Accounts(from: [bank]), groups: []
+      accounts: Accounts(from: [bank]), groups: [],
+      bucket: .investments
     )
-    #expect(items.count == 2)
-    #expect(items[1].kind == .investmentsHeader)
-    #expect(items[1].children?.isEmpty == true)
+    #expect(items.isEmpty)
   }
 
   @Test("Dangling groupId renders the member as standalone in its bucket")
-  func danglingGroupIdRendersMemberAsStandalone() throws {
+  func danglingGroupIdRendersMemberAsStandaloneInTargetBucket() throws {
     // Sync can deliver an Account ahead of its AccountGroup. The
     // ordering helper folds those into the standalone list — this
     // test asserts SidebarOutlineItem inherits that contract.
@@ -68,10 +64,10 @@ struct SidebarOutlineItemTests {
       positions: [], position: 0, isHidden: false,
       groupId: ghostGroupId)
     let items = SidebarOutlineItem.tree(
-      accounts: Accounts(from: [stranded]), groups: []
+      accounts: Accounts(from: [stranded]), groups: [],
+      bucket: .current
     )
-    let current = try #require(items.first?.children)
-    #expect(current.count == 1)
-    #expect(current[0].kind == .account(stranded.id))
+    #expect(items.count == 1)
+    #expect(items[0].kind == .account(stranded.id))
   }
 }

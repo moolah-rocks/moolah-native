@@ -1,11 +1,13 @@
 import Foundation
 
-/// One node in the macOS sidebar outline. The two top-level entries are
-/// the bucket section headers ("Current Accounts", "Investments"); their
-/// children are bucket entries (standalone accounts + groups intermixed
-/// by `position`, exactly as produced by
-/// `Accounts.groupAwareSidebar(...)`). A group's `children` are its
-/// member accounts (sorted by member `position`); an account's
+/// One node in the macOS sidebar outline. Each `SidebarOutlineView`
+/// instance renders the contents of a single `AccountBucket` (Current
+/// or Investments) — section chrome ("Current Accounts" /
+/// "Investments") is supplied by the surrounding SwiftUI `Section`,
+/// not as items in the tree. Root-level items are therefore the
+/// bucket's standalone accounts + groups intermixed by `position`,
+/// matching `Accounts.groupAwareSidebar(...)`. A group's `children`
+/// are its member accounts (sorted by member `position`); an account's
 /// `children` is always `nil`.
 ///
 /// `Identifiable` is required by the vendored `OutlineView` package;
@@ -14,8 +16,6 @@ import Foundation
 /// identifier).
 struct SidebarOutlineItem: Identifiable, Hashable, Sendable {
   enum Kind: Hashable, Sendable {
-    case currentAccountsHeader
-    case investmentsHeader
     case account(UUID)
     case group(UUID)
   }
@@ -41,29 +41,27 @@ struct SidebarOutlineItem: Identifiable, Hashable, Sendable {
 
   func hash(into hasher: inout Hasher) { hasher.combine(kind) }
 
-  /// Derives the outline tree from the same source-of-truth helper the
-  /// SwiftUI sidebar uses (`Accounts.groupAwareSidebar`). Hidden /
-  /// excluded handling rides along — callers don't pass `excluding` /
-  /// `alwaysInclude` here; the helper is invoked with defaults because
-  /// the sidebar never wants to hide its own rows.
+  // MARK: - Tree construction
+
+  /// Builds a flat outline tree for one bucket. Root-level items are
+  /// the bucket's standalone accounts + groups intermixed by
+  /// `position`, exactly as produced by
+  /// `Accounts.groupAwareSidebar(...)`. **No section-header items** —
+  /// those are now supplied by the surrounding SwiftUI `Section`
+  /// chrome inside `SidebarView+Sections.swift`.
   static func tree(
     accounts: Accounts,
-    groups: [AccountGroup]
+    groups: [AccountGroup],
+    bucket: AccountBucket
   ) -> [SidebarOutlineItem] {
     let grouped = accounts.groupAwareSidebar(groups: groups)
-    return [
-      section(.currentAccountsHeader, entries: grouped.current),
-      section(.investmentsHeader, entries: grouped.investments),
-    ]
-  }
-
-  private static func section(
-    _ kind: Kind, entries: [SidebarBucketEntry]
-  ) -> SidebarOutlineItem {
-    SidebarOutlineItem(
-      kind: kind,
-      children: entries.map(item(from:))
-    )
+    let entries: [SidebarBucketEntry] = {
+      switch bucket {
+      case .current: return grouped.current
+      case .investments: return grouped.investments
+      }
+    }()
+    return entries.map(item(from:))
   }
 
   private static func item(from entry: SidebarBucketEntry) -> SidebarOutlineItem {

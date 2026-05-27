@@ -2,24 +2,36 @@
   import AppKit
   import SwiftUI
 
-  /// macOS-only outline-rendered top section of the sidebar: Current
-  /// Accounts + Investments. Wraps `NSOutlineView` via the vendored
-  /// `OutlineView` package (`Vendored/OutlineView/`). Selection rides
-  /// through a shared `Binding<SidebarSelection?>` with the sibling
-  /// SwiftUI `List` below (earmarks / totals / nav) — clicking in either
-  /// surface updates the same binding.
+  /// macOS-only outline view rendering one bucket of the sidebar
+  /// (Current Accounts **or** Investments — never both). Wraps
+  /// `NSOutlineView` via the vendored `OutlineView` package
+  /// (`Vendored/OutlineView/`). Section chrome ("Current Accounts" /
+  /// "Investments") is supplied by the surrounding SwiftUI `Section`
+  /// in `SidebarView+Sections.swift`; this view renders only the
+  /// bucket's accounts and groups as a flat root with members nested
+  /// under their group.
   ///
-  /// Phase 1 scope: render items, support row selection, render section
-  /// headers as source-list group rows, and persist per-group expand
-  /// state through `GroupUIStateStore` (see
+  /// Selection rides through a shared `Binding<SidebarSelection?>`
+  /// with the host `List(selection:)` (earmarks / totals / nav) —
+  /// clicking in either surface updates the same binding.
+  ///
+  /// Phase 1 scope: render items, support row selection, and persist
+  /// per-group expand state through `GroupUIStateStore` (see
   /// `expansionBinding(groupStore:)`). **No drag-and-drop** (Phase 2).
   /// **No inline rename** (Phase 3) — rename remains via the
-  /// "Edit Account…" context menu item which opens the full edit sheet.
+  /// "Edit Account…" context menu item which opens the full edit
+  /// sheet.
   struct SidebarOutlineView: View {
     @Environment(AccountStore.self) private var accountStore
     @Environment(AccountGroupStore.self) private var accountGroupStore
     @Environment(GroupUIStateStore.self) private var groupUIStateStore
     @Binding var selection: SidebarSelection?
+    /// Which bucket this outline instance renders. The parent
+    /// `SidebarView` instantiates one `SidebarOutlineView` per bucket
+    /// so the two bucket headers can be flat SwiftUI sections with
+    /// Earmarks interleaved between them — the previous
+    /// single-outline layout couldn't express that ordering.
+    let bucket: AccountBucket
     // moolah: account-edit binding owned by the parent `SidebarView`.
     // Right-clicking a row in the NSOutlineView invokes "Edit Account…"
     // which assigns to this binding; `SidebarSharedModifiers` then
@@ -30,54 +42,60 @@
     @Binding var accountToEdit: Account?
 
     var body: some View {
+      let items = SidebarOutlineItem.tree(
+        accounts: accountStore.accounts,
+        groups: accountGroupStore.groups,
+        bucket: bucket)
       OutlineView(
-        SidebarOutlineItem.tree(
-          accounts: accountStore.accounts,
-          groups: accountGroupStore.groups),
+        items,
         children: \.children,
         selection: outlineSelectionBinding,
         content: cellView(for:)
       )
       .outlineViewStyle(.sourceList)
-      .outlineViewIsGroupItem { item in
-        switch item.kind {
-        case .currentAccountsHeader, .investmentsHeader: return true
-        case .account, .group: return false
+      .outlineViewExpandedItems(Self.expansionBinding(groupStore: groupUIStateStore))
+      // `NSViewControllerRepresentable` does not surface an
+      // intrinsic content size to SwiftUI's `List` layout — without
+      // a frame the row collapses to zero height. Compute the
+      // height from the visible row count: each root item is one
+      // row; an expanded group contributes its members on top.
+      .frame(height: computedHeight(for: items))
+    }
+
+    /// Height contributed by this outline inside its host `List`
+    /// row. Each visible row uses `Self.rowHeight`; expanded groups
+    /// add their member rows. Collapsed groups contribute only their
+    /// own row.
+    private func computedHeight(for items: [SidebarOutlineItem]) -> CGFloat {
+      let expanded = groupUIStateStore.expandedGroupIds
+      var visibleRows = 0
+      for item in items {
+        visibleRows += 1
+        if case .group(let id) = item.kind,
+          expanded.contains(id),
+          let children = item.children
+        {
+          visibleRows += children.count
         }
       }
-      .outlineViewExpandedItems(Self.expansionBinding(groupStore: groupUIStateStore))
+      return CGFloat(visibleRows) * Self.rowHeight
     }
+
+    /// Per-row height used by both the height computation above and
+    /// (implicitly) `NSOutlineView`'s automatic row sizing. Sourced
+    /// from the source-list style's default row metric — picking the
+    /// same number here keeps the bound height in sync with the
+    /// actual cells the outline lays out.
+    private static let rowHeight: CGFloat = 24
 
     // MARK: - Cell rendering
 
     @MainActor
     private func cellView(for item: SidebarOutlineItem) -> NSView {
       switch item.kind {
-      case .currentAccountsHeader: return headerCell("Current Accounts")
-      case .investmentsHeader: return headerCell("Investments")
       case .account(let id): return accountCell(id: id)
       case .group(let id): return groupCell(id: id)
       }
-    }
-
-    /// Source-list group-row cell. `NSOutlineView` styles the cell with
-    /// the capitalised, secondary-text-colour treatment when
-    /// `outlineView(_:isGroupItem:)` returns `true` — we just supply the
-    /// text. The explicit title keeps VoiceOver pronunciation
-    /// predictable (NSOutlineView's automatic uppercasing is a render
-    /// transform, not the underlying accessibility string).
-    private func headerCell(_ title: String) -> NSView {
-      let cell = NSTableCellView()
-      let field = NSTextField(labelWithString: title)
-      field.translatesAutoresizingMaskIntoConstraints = false
-      cell.addSubview(field)
-      cell.textField = field
-      NSLayoutConstraint.activate([
-        field.leadingAnchor.constraint(equalTo: cell.leadingAnchor),
-        field.trailingAnchor.constraint(equalTo: cell.trailingAnchor),
-        field.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-      ])
-      return cell
     }
 
     private func accountCell(id: UUID) -> NSView {
@@ -161,15 +179,10 @@
     /// uses to drive per-row expand state) and
     /// `GroupUIStateStore.expandedGroupIds`.
     ///
-    /// Section-header items (`.currentAccountsHeader` /
-    /// `.investmentsHeader`) are unconditionally reported as expanded —
-    /// the user can't permanently collapse "Current Accounts" or
-    /// "Investments" away. The setter ignores any add / remove of
-    /// header kinds; only `.group(id)` transitions reach the store.
-    ///
-    /// Account-row kinds (`.account(id)`) are leaves with no children,
-    /// so they never appear in the bound set. The setter tolerates
-    /// them defensively but treats them as no-ops.
+    /// Only `.group(id)` kinds are tracked — account rows are leaves
+    /// and never appear in the bound set. Section headers no longer
+    /// exist in the tree (they're SwiftUI sections now), so there's
+    /// nothing to anchor open.
     ///
     /// Each group transition is dispatched as a `Task` calling
     /// `setExpanded(_:for:)`. `GroupUIStateStore` is `@MainActor`-bound;
@@ -193,16 +206,7 @@
       groupStore: GroupUIStateStore
     ) -> Binding<Set<SidebarOutlineItem.Kind>> {
       Binding(
-        get: {
-          var set: Set<SidebarOutlineItem.Kind> = [
-            .currentAccountsHeader,
-            .investmentsHeader,
-          ]
-          for groupId in groupStore.expandedGroupIds {
-            set.insert(.group(groupId))
-          }
-          return set
-        },
+        get: { Set(groupStore.expandedGroupIds.map { .group($0) }) },
         set: { newValue in
           let newGroupExpansion: Set<UUID> = Set(
             newValue.compactMap { kind -> UUID? in
@@ -223,12 +227,9 @@
     // MARK: - Selection mapping
 
     /// Maps between the outline's `SidebarOutlineItem?` selection and
-    /// the app's `SidebarSelection?`. Section-header rows are
-    /// non-selectable (the `outlineViewIsGroupItem` hook disables
-    /// selection on them via the vendored delegate); they never reach
-    /// the setter. Earmark / navigation selections that come from the
-    /// sibling SwiftUI `List` map to `nil` on the outline side so the
-    /// outline does not highlight a stale row.
+    /// the app's `SidebarSelection?`. Earmark / navigation selections
+    /// that come from the sibling SwiftUI `List` map to `nil` on the
+    /// outline side so the outline does not highlight a stale row.
     private var outlineSelectionBinding: Binding<SidebarOutlineItem?> {
       Binding(
         get: {
@@ -246,8 +247,7 @@
           switch newItem?.kind {
           case .account(let id): selection = .account(id)
           case .group(let id): selection = .group(id)
-          case .currentAccountsHeader, .investmentsHeader, .none:
-            break
+          case .none: break
           }
         }
       )

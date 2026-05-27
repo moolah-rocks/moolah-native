@@ -166,9 +166,10 @@ private func seedSidebarGroupPreview(
 
   #Preview("macOS outline — Phase 1 skeleton") {
     // Drives the new `SidebarOutlineView` directly (no NavigationSplitView,
-    // no surrounding List): Task 4 wires it into the SwiftUI sidebar, this
-    // preview just renders the outline in isolation so the cell layout +
-    // selection wiring can be eyeballed.
+    // no surrounding List): this preview renders the Investments bucket
+    // outline in isolation so the cell layout + selection wiring can be
+    // eyeballed. The full `SidebarView` preview above exercises both
+    // buckets in their natural section context.
     let backend = PreviewBackend.create()
     let accountStore = AccountStore(
       repository: backend.accounts,
@@ -176,17 +177,19 @@ private func seedSidebarGroupPreview(
       targetInstrument: .AUD)
     let accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
     let groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
-    return SidebarOutlineView(selection: .constant(nil), accountToEdit: .constant(nil))
-      .environment(accountStore)
-      .environment(accountGroupStore)
-      .environment(groupUIStateStore)
-      .frame(width: 260, height: 480)
-      .task {
-        await seedOutlinePreview(
-          backend: backend,
-          accountStore: accountStore,
-          accountGroupStore: accountGroupStore)
-      }
+    return SidebarOutlineView(
+      selection: .constant(nil), bucket: .investments, accountToEdit: .constant(nil)
+    )
+    .environment(accountStore)
+    .environment(accountGroupStore)
+    .environment(groupUIStateStore)
+    .frame(width: 260, height: 480)
+    .task {
+      await seedOutlinePreview(
+        backend: backend,
+        accountStore: accountStore,
+        accountGroupStore: accountGroupStore)
+    }
   }
 #endif
 
