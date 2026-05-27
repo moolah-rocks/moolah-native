@@ -1,41 +1,29 @@
 #if os(macOS)
-  import AppKit
   import Foundation
 
   @testable import Moolah
 
   /// Shared fixtures for the `SidebarDropPolicy` outcome tests: a
-  /// `DropTarget` builder matching the runtime shape produced by
-  /// `readPasteboard`, plus account / group factories used across the
-  /// decision-table and retarget suites.
-  @MainActor
+  /// `SidebarDropTarget` builder, plus account / group factories used
+  /// across the decision-table and retarget suites.
   enum SidebarDropPolicyTestSupport {
 
-    /// Builds a `DropTarget` with a single dragged `SidebarOutlineItem`.
-    /// Matches the shape of what `readPasteboard` would return at
-    /// runtime — the dragged item carries `children: nil` because the
-    /// receiver only needs the `kind` to look the source up in the
-    /// stores. `isItemExpanded` is unused by the policy, so a constant
-    /// `true` is sufficient.
+    /// Builds a `SidebarDropTarget` for tests. The `dragged:` parameter
+    /// reuses `IntoKind` purely for symmetry — both cases carry a UUID,
+    /// which is all the policy needs to look the dragged source up in
+    /// `accounts` / `groups`.
     static func target(
-      dragged: SidebarOutlineItem.Kind,
-      intoElement: SidebarOutlineItem.Kind?,
+      dragged: SidebarDropTarget.IntoKind,
+      intoElement: SidebarDropTarget.IntoKind?,
       childIndex: Int?
-    ) -> DropTarget<SidebarOutlineItem> {
-      let draggedItem = SidebarOutlineItem(kind: dragged, children: nil)
-      let into: SidebarOutlineItem? =
-        intoElement.map { kind in
-          switch kind {
-          case .account: return SidebarOutlineItem(kind: kind, children: nil)
-          case .group: return SidebarOutlineItem(kind: kind, children: [])
-          }
+    ) -> SidebarDropTarget {
+      let draggable: DraggableSidebarItem =
+        switch dragged {
+        case .account(let id): DraggableSidebarItem(kind: .account, id: id)
+        case .group(let id): DraggableSidebarItem(kind: .group, id: id)
         }
-      return DropTarget(
-        items: [(draggedItem, DraggableSidebarItem.pasteboardType)],
-        intoElement: into,
-        childIndex: childIndex,
-        isItemExpanded: { _ in true }
-      )
+      return SidebarDropTarget(
+        dragged: draggable, into: intoElement, childIndex: childIndex)
     }
 
     static func bankAccount(

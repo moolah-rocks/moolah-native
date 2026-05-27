@@ -6,11 +6,9 @@
 
   /// Covers row 13 of the `SidebarDropPolicy` decision table —
   /// hover-near-the-bottom-of-an-account-row retargets to either root or
-  /// the hovered account's parent group — together with the pure
-  /// `DropOutcome.asValidationResult()` cases that translate each
-  /// outcome variant to the vendored `ValidationResult` shape.
+  /// the hovered account's parent group.
   @MainActor
-  @Suite("SidebarDropPolicy — retarget & validation mapping")
+  @Suite("SidebarDropPolicy — retarget")
   struct SidebarDropPolicyRetargetTests {
     private typealias Support = SidebarDropPolicyTestSupport
 
@@ -60,51 +58,6 @@
         groups: [group])
       #expect(
         outcome == .retargetGroup(groupId: group.id, insertionIndex: 1))
-    }
-
-    // MARK: - asValidationResult mapping
-
-    @Test("DropOutcome.deny maps to ValidationResult.deny")
-    func validationDeny() {
-      switch SidebarDropPolicy.DropOutcome.deny.asValidationResult() {
-      case .deny: break
-      default: Issue.record("expected .deny")
-      }
-    }
-
-    @Test("DropOutcome.addToGroup maps to .move")
-    func validationAddToGroup() {
-      let outcome: SidebarDropPolicy.DropOutcome = .addToGroup(
-        sourceAccountId: UUID(), groupId: UUID())
-      switch outcome.asValidationResult() {
-      case .move: break
-      default: Issue.record("expected .move")
-      }
-    }
-
-    @Test("DropOutcome.retargetRoot maps to .moveRedirect(item: nil, childIndex: idx)")
-    func validationRetargetRoot() {
-      let outcome = SidebarDropPolicy.DropOutcome.retargetRoot(
-        insertionIndex: 3)
-      switch outcome.asValidationResult() {
-      case let .moveRedirect(item, childIndex):
-        #expect(item == nil)
-        #expect(childIndex == 3)
-      default: Issue.record("expected .moveRedirect")
-      }
-    }
-
-    @Test("DropOutcome.retargetGroup maps to .moveRedirect(item: group, childIndex: idx)")
-    func validationRetargetGroup() {
-      let groupId = UUID()
-      let outcome = SidebarDropPolicy.DropOutcome.retargetGroup(
-        groupId: groupId, insertionIndex: 2)
-      switch outcome.asValidationResult() {
-      case let .moveRedirect(item, childIndex):
-        #expect(item?.kind == .group(groupId))
-        #expect(childIndex == 2)
-      default: Issue.record("expected .moveRedirect")
-      }
     }
   }
 #endif

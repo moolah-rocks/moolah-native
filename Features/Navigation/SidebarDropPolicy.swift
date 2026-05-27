@@ -1,15 +1,30 @@
 #if os(macOS)
   import Foundation
 
-  // TODO(#991): SidebarDropPolicy currently consumes
-  // `DropTarget<SidebarOutlineItem>` and returns
-  // `ValidationResult<SidebarOutlineItem>` from the vendored OutlineView
-  // package. The unified-AppKit sidebar rewrite removes that package; at
-  // that point the policy's signature needs to adapt to
-  // `NSOutlineViewDataSource`'s native drag/drop shape. Tracking issue:
-  // https://github.com/moolah-rocks/moolah-native/issues/991
+  /// Primitive replacement for the vendored `DropTarget<SidebarOutlineItem>`:
+  /// what was dragged, the row it was dropped onto (if any), and where in
+  /// that row's children the insertion belongs. Builders on the AppKit
+  /// data-source side translate `NSOutlineView`'s `proposedItem` + child
+  /// index into this shape before handing it to `SidebarDropPolicy`.
+  struct SidebarDropTarget: Equatable, Sendable {
+    /// The kind + id of the dragged sidebar item.
+    let dragged: DraggableSidebarItem
+    /// The drop target row's kind, or `nil` for a root-level drop.
+    let into: IntoKind?
+    /// The insertion index inside the target's children list, or `nil`
+    /// when the drop is directly onto the row rather than between items.
+    let childIndex: Int?
 
-  /// Pure decision-table policy that maps a sidebar `DropTarget` to a
+    /// Restricted set of `SidebarRow` cases that can be drop targets.
+    /// Sections, totals, earmarks, and navigation rows reject drops at
+    /// the data-source level, so they never reach the policy.
+    enum IntoKind: Hashable, Sendable, Equatable {
+      case account(UUID)
+      case group(UUID)
+    }
+  }
+
+  /// Pure decision-table policy that maps a `SidebarDropTarget` to a
   /// `DropOutcome`. View-agnostic: no store mutation, no awaits, no
   /// AppKit calls — every branch is a value transform over the
   /// (bucket, accounts, groups) snapshot. Lets the whole decision table
@@ -18,10 +33,10 @@
   /// component owns the outline view.
   enum SidebarDropPolicy {
 
-    /// All possible outcomes of resolving a `DropTarget` against the
-    /// current store snapshots. Pure value so the policy is trivially
-    /// testable. The `asValidationResult` transform is equally pure —
-    /// callers own any UI-state side-effects after inspecting the outcome.
+    /// All possible outcomes of resolving a `SidebarDropTarget` against
+    /// the current store snapshots. Pure value so the policy is
+    /// trivially testable. Callers own any UI-state side-effects after
+    /// inspecting the outcome.
     enum DropOutcome: Equatable {
       case deny
       case addToGroup(sourceAccountId: UUID, groupId: UUID)
@@ -31,21 +46,6 @@
         groupId: UUID, sourceAccountId: UUID, insertionIndex: Int)
       case retargetRoot(insertionIndex: Int)
       case retargetGroup(groupId: UUID, insertionIndex: Int)
-
-      func asValidationResult() -> ValidationResult<SidebarOutlineItem> {
-        switch self {
-        case .deny:
-          return .deny
-        case .addToGroup, .dropOntoAccount, .reorderRoot, .reorderMembers:
-          return .move
-        case .retargetRoot(let idx):
-          return .moveRedirect(item: nil, childIndex: idx)
-        case let .retargetGroup(gId, idx):
-          return .moveRedirect(
-            item: SidebarOutlineItem(kind: .group(gId), children: []),
-            childIndex: idx)
-        }
-      }
     }
 
     /// Bundles the (bucket, accounts, groups) trio every decision-table
@@ -59,60 +59,42 @@
       let groups: [AccountGroup]
     }
 
-    /// Resolves a `DropTarget` into a `DropOutcome` against the bucket
-    /// the receiver renders and the current store snapshots. Pure —
-    /// no awaits, no store mutation. Dispatches into per-`intoElement`
-    /// helpers below; each helper covers one column of the decision
-    /// table (root / group / account) and annotates each branch with a
-    /// `// row N:` comment so a test failure can be matched back to a
-    /// specific row.
+    /// Resolves a `SidebarDropTarget` into a `DropOutcome` against the
+    /// bucket the receiver renders and the current store snapshots.
+    /// Pure — no awaits, no store mutation. Dispatches into
+    /// per-`into` helpers below; each helper covers one column of the
+    /// decision table (root / group / account) and annotates each
+    /// branch with a `// row N:` comment so a test failure can be
+    /// matched back to a specific row.
     static func outcome(
-      for target: DropTarget<SidebarOutlineItem>,
+      for target: SidebarDropTarget,
       bucket: AccountBucket,
       accounts: Accounts,
       groups: [AccountGroup]
     ) -> DropOutcome {
-      // The package only ever delivers a single dragged item for our
-      // single-drag use case. If we ever get an empty `items` array,
-      // bail.
-      guard let droppedSidebarItem = target.items.first?.item else {
-        return .deny
-      }
-      // `droppedSidebarItem` is the `SidebarOutlineItem` we returned
-      // from `readPasteboard`. Translate it back into a
-      // `DraggableSidebarItem` so the source's bucket / groupId can be
-      // resolved from `accounts` / `groups`.
-      let dragged: DraggableSidebarItem =
-        switch droppedSidebarItem.kind {
-        case .account(let id):
-          DraggableSidebarItem(kind: .account, id: id)
-        case .group(let id):
-          DraggableSidebarItem(kind: .group, id: id)
-        }
       let context = Context(bucket: bucket, accounts: accounts, groups: groups)
-
-      switch target.intoElement?.kind {
+      switch target.into {
       case .none:
         return outcomeForRoot(
-          dragged: dragged,
+          dragged: target.dragged,
           childIndex: target.childIndex,
           context: context)
       case .group(let gId):
         return outcomeForGroup(
           gId: gId,
-          dragged: dragged,
+          dragged: target.dragged,
           childIndex: target.childIndex,
           context: context)
       case .account(let aId):
         return outcomeForAccount(
           aId: aId,
-          dragged: dragged,
+          dragged: target.dragged,
           childIndex: target.childIndex,
           context: context)
       }
     }
 
-    /// Decision-table column for `intoElement == nil` (root). Rows 1-5.
+    /// Decision-table column for `into == nil` (root). Rows 1-5.
     private static func outcomeForRoot(
       dragged: DraggableSidebarItem,
       childIndex: Int?,
@@ -143,7 +125,7 @@
       }
     }
 
-    /// Decision-table column for `intoElement == .group(gId)`. Rows 6-10.
+    /// Decision-table column for `into == .group(gId)`. Rows 6-10.
     private static func outcomeForGroup(
       gId: UUID,
       dragged: DraggableSidebarItem,
@@ -178,7 +160,7 @@
       }
     }
 
-    /// Decision-table column for `intoElement == .account(aId)`. Rows
+    /// Decision-table column for `into == .account(aId)`. Rows
     /// 11-13 (the last is the retarget — NSOutlineView reports
     /// `.account` with a non-nil `childIndex` when the cursor hovers
     /// near the bottom half of an account row, but the user means
