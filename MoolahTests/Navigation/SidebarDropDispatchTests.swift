@@ -26,7 +26,7 @@ struct SidebarDropDispatchTests {
     let stores = try await SidebarDropDispatchTestSupport.makeStores(
       seedAccounts: [target, source], in: database, backend: backend)
 
-    let created = await SidebarDropDispatch.dropOntoAccount(
+    let created = try await SidebarDropDispatch.dropOntoAccount(
       sourceId: source.id,
       targetId: target.id,
       accountStore: stores.accountStore,
@@ -62,7 +62,7 @@ struct SidebarDropDispatchTests {
       matching: { $0.accounts.by(id: target.id)?.groupId == preexisting.id },
       description: "target observed as member")
 
-    let result = await SidebarDropDispatch.dropOntoAccount(
+    let result = try await SidebarDropDispatch.dropOntoAccount(
       sourceId: source.id,
       targetId: target.id,
       accountStore: stores.accountStore,
@@ -85,7 +85,7 @@ struct SidebarDropDispatchTests {
     let stores = try await SidebarDropDispatchTestSupport.makeStores(
       seedAccounts: [target, source], in: database, backend: backend)
 
-    let result = await SidebarDropDispatch.dropOntoAccount(
+    let result = try await SidebarDropDispatch.dropOntoAccount(
       sourceId: source.id,
       targetId: target.id,
       accountStore: stores.accountStore,
@@ -105,7 +105,7 @@ struct SidebarDropDispatchTests {
     let stores = try await SidebarDropDispatchTestSupport.makeStores(
       seedAccounts: [account], in: database, backend: backend)
 
-    let result = await SidebarDropDispatch.dropOntoAccount(
+    let result = try await SidebarDropDispatch.dropOntoAccount(
       sourceId: account.id,
       targetId: account.id,
       accountStore: stores.accountStore,
@@ -123,7 +123,7 @@ struct SidebarDropDispatchTests {
     let stores = try await SidebarDropDispatchTestSupport.makeStores(
       seedAccounts: [target], in: database, backend: backend)
 
-    let result = await SidebarDropDispatch.dropOntoAccount(
+    let result = try await SidebarDropDispatch.dropOntoAccount(
       sourceId: UUID(),
       targetId: target.id,
       accountStore: stores.accountStore,
@@ -150,7 +150,7 @@ struct SidebarDropDispatchTests {
       matching: { $0.accounts.by(id: seed.id)?.groupId == group.id },
       description: "seed member observed")
 
-    await SidebarDropDispatch.dropOntoGroup(
+    try await SidebarDropDispatch.dropOntoGroup(
       sourceId: source.id,
       groupId: group.id,
       accountStore: stores.accountStore,
@@ -181,13 +181,15 @@ struct SidebarDropDispatchTests {
       description: "both members observed")
 
     let originalA = try #require(stores.accountStore.accounts.by(id: memberA.id))
-    await SidebarDropDispatch.dropOntoGroup(
+    await stores.accountStore.drainPendingEmissions()
+    try await SidebarDropDispatch.dropOntoGroup(
       sourceId: memberA.id,
       groupId: group.id,
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
-    try? await Task.sleep(for: .milliseconds(50))
+    let emitted = await stores.accountStore.didEmitWithin(timeout: .milliseconds(200))
+    #expect(!emitted, "accountStore should not emit on rejected re-add")
     #expect(stores.accountStore.accounts.by(id: memberA.id)?.position == originalA.position)
     #expect(stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id)
   }
@@ -208,13 +210,15 @@ struct SidebarDropDispatchTests {
       matching: { $0.accounts.by(id: seed.id)?.groupId == group.id },
       description: "seed observed in group")
 
-    await SidebarDropDispatch.dropOntoGroup(
+    await stores.accountStore.drainPendingEmissions()
+    try await SidebarDropDispatch.dropOntoGroup(
       sourceId: crossSource.id,
       groupId: group.id,
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
-    try? await Task.sleep(for: .milliseconds(50))
+    let emitted = await stores.accountStore.didEmitWithin(timeout: .milliseconds(200))
+    #expect(!emitted, "accountStore should not emit on rejected cross-bucket drop")
     #expect(stores.accountStore.accounts.by(id: crossSource.id)?.groupId == nil)
   }
 }

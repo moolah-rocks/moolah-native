@@ -24,7 +24,7 @@ struct SidebarDropDispatchReorderTests {
     let stores = try await SidebarDropDispatchTestSupport.makeStores(
       seedAccounts: [first, second, third], in: database, backend: backend)
 
-    await SidebarDropDispatch.reorderRoot(
+    try await SidebarDropDispatch.reorderRoot(
       dragged: DraggableSidebarItem(kind: .account, id: third.id),
       insertionIndex: 0,
       bucket: .current,
@@ -64,7 +64,7 @@ struct SidebarDropDispatchReorderTests {
     // After the create the bucket entries (tie-break: account first on
     // equal position) are [standalone@0, group@0]. Drop the group at
     // index 0 to put it ahead of the standalone.
-    await SidebarDropDispatch.reorderRoot(
+    try await SidebarDropDispatch.reorderRoot(
       dragged: DraggableSidebarItem(kind: .group, id: group.id),
       insertionIndex: 0,
       bucket: .current,
@@ -89,7 +89,7 @@ struct SidebarDropDispatchReorderTests {
     let stores = try await SidebarDropDispatchTestSupport.makeStores(
       seedAccounts: [first, second], in: database, backend: backend)
 
-    await SidebarDropDispatch.reorderRoot(
+    try await SidebarDropDispatch.reorderRoot(
       dragged: DraggableSidebarItem(kind: .account, id: first.id),
       insertionIndex: 99,
       bucket: .current,
@@ -114,14 +114,16 @@ struct SidebarDropDispatchReorderTests {
 
     let beforeFirst = first.position
     let beforeSecond = second.position
-    await SidebarDropDispatch.reorderRoot(
+    await stores.accountStore.drainPendingEmissions()
+    try await SidebarDropDispatch.reorderRoot(
       dragged: DraggableSidebarItem(kind: .account, id: UUID()),
       insertionIndex: 0,
       bucket: .current,
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
-    try? await Task.sleep(for: .milliseconds(50))
+    let emitted = await stores.accountStore.didEmitWithin(timeout: .milliseconds(200))
+    #expect(!emitted, "accountStore should not emit on unknown-id reorder")
     #expect(stores.accountStore.accounts.by(id: first.id)?.position == beforeFirst)
     #expect(stores.accountStore.accounts.by(id: second.id)?.position == beforeSecond)
   }
@@ -222,13 +224,15 @@ struct SidebarDropDispatchReorderTests {
       description: "members joined")
 
     let outsiderBefore = try #require(stores.accountStore.accounts.by(id: outsider.id))
+    await stores.accountStore.drainPendingEmissions()
     await SidebarDropDispatch.reorderMembers(
       groupId: group.id,
       sourceAccountId: outsider.id,
       insertionIndex: 0,
       accountStore: stores.accountStore)
 
-    try? await Task.sleep(for: .milliseconds(50))
+    let emitted = await stores.accountStore.didEmitWithin(timeout: .milliseconds(200))
+    #expect(!emitted, "accountStore should not emit on foreign-member reorder")
     #expect(stores.accountStore.accounts.by(id: outsider.id)?.position == outsiderBefore.position)
     #expect(stores.accountStore.accounts.by(id: outsider.id)?.groupId == nil)
     let memberOrder = stores.accountStore.accounts.ordered
