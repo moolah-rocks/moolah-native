@@ -74,24 +74,32 @@
 
     private func accountCell(id: UUID) -> NSView {
       guard let account = accountStore.accounts.by(id: id) else {
+        // Defensive: an account row exists in the outline tree but its
+        // record disappeared from the store between tree-build and
+        // cell-build (e.g. mid-deletion). An empty cell renders blank
+        // for one frame; the next data update drops the row entirely.
+        assertionFailure("SidebarOutlineView: account \(id) missing from store")
         return NSTableCellView()
       }
       return NSTableCellView.hosting(
         accessibilityIdentifier: UITestIdentifiers.Sidebar.account(id)
       ) {
-        AccountSidebarRow(account: account)
+        AccountSidebarRow(account: account, isSelected: selection == .account(id))
           .environment(accountStore)
       }
     }
 
     private func groupCell(id: UUID) -> NSView {
       guard let group = accountGroupStore.by(id: id) else {
+        // Defensive: same rationale as `accountCell`.
+        assertionFailure("SidebarOutlineView: group \(id) missing from store")
         return NSTableCellView()
       }
       let memberIds = accountStore.accounts.ordered
         .filter { $0.groupId == id }
         .sorted { $0.position < $1.position }
         .map(\.id)
+      let isSelected = selection == .group(id)
       return NSTableCellView.hosting(
         accessibilityIdentifier: UITestIdentifiers.Sidebar.group(id)
       ) {
@@ -101,6 +109,7 @@
         ) { balance in
           AccountGroupSidebarRow(
             group: group,
+            isSelected: isSelected,
             // `NSOutlineView` draws the disclosure triangle for us; the
             // row's own chevron is suppressed via `showChevron: false`.
             // The expand state itself rides through
@@ -142,6 +151,16 @@
     /// re-emits the authoritative `expandedGroupIds`, which re-renders
     /// the outline against the new set — the store stays the source of
     /// truth, the binding is purely a translation layer.
+    ///
+    /// `setExpanded(_:for:)` is `async` (not `async throws`) and catches
+    /// its own repository errors into `GroupUIStateStore.error`; the
+    /// fire-and-forget `Task` is safe here — no error-swallowing rule is
+    /// violated because the callee, not the callsite, owns recovery.
+    /// `@MainActor`-bound because the returned `Binding`'s `get` reads
+    /// `groupStore.expandedGroupIds` synchronously and the setter
+    /// dispatches into `groupStore.setExpanded(_:for:)`. Both touch
+    /// `@MainActor`-isolated store state, so the surrounding context
+    /// must already be on the main actor when the binding is built.
     @MainActor
     static func expansionBinding(
       groupStore: GroupUIStateStore
