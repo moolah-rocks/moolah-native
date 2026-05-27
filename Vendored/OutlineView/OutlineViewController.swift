@@ -33,8 +33,34 @@ where Drop.DataElement == Data.Element {
     // appears as an opaque off-colour band against a `.listStyle(.sidebar)`
     // List that hosts this view.
     scrollView.backgroundColor = .clear
+    // moolah: NSScrollView delegates its contentView (an `NSClipView`)
+    // to paint the visible region's backdrop; its `drawsBackground`
+    // defaults to `true` and paints `controlBackgroundColor`, which is
+    // the actual source of the opaque grey "band" the user sees around
+    // the outline rows when this view is embedded inside a SwiftUI
+    // `List(.sidebar)`. Clearing it lets the host sidebar material
+    // (vibrancy) show through the entire outline region — not just the
+    // outline view itself.
+    scrollView.contentView.drawsBackground = false
+    if let clipView = scrollView.contentView as NSClipView? {
+      clipView.backgroundColor = .clear
+    }
     outlineView.backgroundColor = .clear
-
+    // moolah: belt-and-braces — disable AppKit's default row-stripe
+    // and grid chrome that would paint over the host SwiftUI sidebar
+    // material. `selectionHighlightStyle = .regular` is the modern
+    // replacement for the deprecated `.sourceList` style; combined
+    // with `usesAlternatingRowBackgroundColors = false` and an empty
+    // gridStyleMask, no per-row backdrop is painted unless a row is
+    // actually selected.
+    outlineView.selectionHighlightStyle = .regular
+    outlineView.usesAlternatingRowBackgroundColors = false
+    outlineView.gridStyleMask = []
+    // moolah: tighten the per-row internal spacing — SwiftUI's
+    // `List(.sidebar)` rows have ~28pt heights with tight intercell
+    // spacing. Default `(3, 2)` adds a visible gap between rows that
+    // doesn't match the host List.
+    outlineView.intercellSpacing = NSSize(width: 0, height: 0)
     outlineView.autoresizesOutlineColumn = false
     outlineView.headerView = nil
     outlineView.usesAutomaticRowHeights = true

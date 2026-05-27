@@ -52,7 +52,11 @@
         selection: outlineSelectionBinding,
         content: cellView(for:)
       )
-      .outlineViewStyle(.sourceList)
+      // Deliberately NOT `.outlineViewStyle(.sourceList)` — the source-list
+      // style paints its own grey background that doubles up against the
+      // host SwiftUI Section's `.listStyle(.sidebar)` chrome. The plain
+      // (`.automatic`) style with cleared background lets the SwiftUI
+      // sidebar material show through cleanly.
       .outlineViewExpandedItems(Self.expansionBinding(groupStore: groupUIStateStore))
       // `NSViewControllerRepresentable` does not surface an
       // intrinsic content size to SwiftUI's `List` layout — without
@@ -82,11 +86,13 @@
     }
 
     /// Per-row height used by both the height computation above and
-    /// (implicitly) `NSOutlineView`'s automatic row sizing. Sourced
-    /// from the source-list style's default row metric — picking the
-    /// same number here keeps the bound height in sync with the
-    /// actual cells the outline lays out.
-    private static let rowHeight: CGFloat = 24
+    /// (implicitly) `NSOutlineView`'s automatic row sizing. Matches
+    /// SwiftUI `List(.sidebar)` row chrome (icon + label + balance with
+    /// 4pt vertical padding either side via
+    /// `NSTableCellView.hosting`); picking the same number here keeps
+    /// the bound `.frame(height:)` in sync with the actual cells the
+    /// outline lays out, so the parent `List` row doesn't crop or pad.
+    private static let rowHeight: CGFloat = 28
 
     // MARK: - Cell rendering
 

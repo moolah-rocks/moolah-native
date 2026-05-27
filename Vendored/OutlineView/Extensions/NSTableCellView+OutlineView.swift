@@ -39,11 +39,16 @@ extension NSTableCellView {
       ))
     host.translatesAutoresizingMaskIntoConstraints = false
     cell.addSubview(host)
+    // moolah: padding mirrors what SwiftUI `List(.sidebar)` rows apply
+    // around their hosted content — without it, NSHostingView's
+    // fittingSize collapses to the bare HStack content height (~16pt)
+    // and the outline rows pack visibly tighter than the surrounding
+    // SwiftUI sections.
     NSLayoutConstraint.activate([
       host.leadingAnchor.constraint(equalTo: cell.leadingAnchor),
       host.trailingAnchor.constraint(equalTo: cell.trailingAnchor),
-      host.topAnchor.constraint(equalTo: cell.topAnchor),
-      host.bottomAnchor.constraint(equalTo: cell.bottomAnchor),
+      host.topAnchor.constraint(equalTo: cell.topAnchor, constant: 4),
+      host.bottomAnchor.constraint(equalTo: cell.bottomAnchor, constant: -4),
     ])
     if let accessibilityIdentifier {
       cell.setAccessibilityIdentifier(accessibilityIdentifier)
