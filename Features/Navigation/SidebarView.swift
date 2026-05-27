@@ -84,19 +84,63 @@ struct SidebarView: View {
   // MARK: - Body
 
   var body: some View {
-    List(selection: $selection) {
-      currentAccountsSection
-      earmarksSection
-      investmentsSection
-      totalsSection
-      navigationSection
+    #if os(macOS)
+      macSidebarBody
+    #else
+      iosSidebarBody
+    #endif
+  }
+
+  #if os(macOS)
+    /// macOS body: the new `SidebarOutlineView` (NSOutlineView-backed)
+    /// renders Current Accounts + Investments at the top, and the
+    /// SwiftUI `List` below it carries Earmarks, Totals, and the
+    /// navigation rows. Selection rides through a shared
+    /// `Binding<SidebarSelection?>` so clicks in either surface update
+    /// the same source of truth.
+    ///
+    /// Phase 1 deliberately omits the iOS-only modifiers:
+    /// - `.onKeyPress(.return)` for inline rename — not wired on macOS
+    ///   until Phase 3 ships AppKit-cell inline editing.
+    /// - `.environment(\.editMode, $editMode)` — iOS list reorder mode
+    ///   only.
+    var macSidebarBody: some View {
+      VStack(spacing: 0) {
+        SidebarOutlineView(selection: $selection)
+        List(selection: $selection) {
+          earmarksSection
+          totalsSection
+          navigationSection
+        }
+        .listStyle(.sidebar)
+      }
+      .modifier(sharedBodyModifiers)
     }
-    .listStyle(.sidebar)
-    .onKeyPress(.return) {
-      // Only respond to Return when the selection points at a row
-      // that supports inline rename. Other selections (analysis /
-      // reports / etc.) pass through unhandled so any default Return
-      // behaviour is preserved.
+  #endif
+
+  #if os(iOS)
+    /// iOS body: preserves the existing single-`List` layout with all
+    /// five sections (Current Accounts, Earmarks, Investments, Totals,
+    /// Navigation). Phase 1 leaves this path completely unchanged.
+    var iosSidebarBody: some View {
+      List(selection: $selection) {
+        currentAccountsSection
+        earmarksSection
+        investmentsSection
+        totalsSection
+        navigationSection
+      }
+      .listStyle(.sidebar)
+      .onKeyPress(.return, action: handleReturnKey)
+      .environment(\.editMode, $editMode)
+      .modifier(sharedBodyModifiers)
+    }
+
+    /// `.onKeyPress(.return)` handler for the iOS body. Only responds
+    /// when the selection points at a row that supports inline rename —
+    /// other selections (analysis / reports / etc.) pass through
+    /// unhandled so any default Return behaviour is preserved.
+    private func handleReturnKey() -> KeyPress.Result {
       switch selection {
       case .account(let id):
         guard accountStore.accounts.by(id: id) != nil else { return .ignored }
@@ -115,87 +159,32 @@ struct SidebarView: View {
         return .ignored
       }
     }
-    .navigationTitle("")
-    .focusedSceneValue(\.showHiddenAccounts, $showHidden)
-    .focusedSceneValue(\.showSpamTransactions, $showSpam)
-    .focusedSceneValue(\.sidebarSelection, $selection)
-    .focusedSceneValue(\.selectedAccount, selectedAccountBinding)
-    .onChange(of: showHidden) { _, newValue in
-      accountStore.showHidden = newValue
-      earmarkStore.showHidden = newValue
-    }
-    .onChange(of: showSpam) { _, newValue in
-      transactionStore.showSpam = newValue
-    }
-    .onAppear {
-      accountStore.showHidden = showHidden
-      earmarkStore.showHidden = showHidden
-      transactionStore.showSpam = showSpam
-    }
-    #if os(iOS)
-      .environment(\.editMode, $editMode)
-    #endif
-    .refreshable {
-      // Both AccountStore and EarmarkStore are reactive (subscribe via
-      // observeAll() in init), so pull-to-refresh has nothing imperative
-      // left to nudge here. Pull is still wired so the system gesture
-      // resolves with the standard animation.
-    }
-    .safeAreaInset(edge: .bottom, spacing: 0) {
-      SyncProgressFooter()
-    }
-    #if os(macOS)
-      .toolbar {
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-            showCreateAccountSheet = true
-          } label: {
-            Label("New Account", systemImage: "plus")
-          }
-          .help("Create new account")
-          .accessibilityIdentifier(UITestIdentifiers.Sidebar.newAccountButton)
-        }
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-            showCreateEarmarkSheet = true
-          } label: {
-            Label("New Earmark", systemImage: "bookmark.fill")
-          }
-          .help("Create new earmark")
-          .accessibilityIdentifier(UITestIdentifiers.Sidebar.newEarmarkButton)
-        }
-      }
-    #endif
-    .focusedSceneValue(\.newEarmarkAction) {
-      showCreateEarmarkSheet = true
-    }
-    .focusedSceneValue(\.newAccountAction) {
-      showCreateAccountSheet = true
-    }
-    .sheet(isPresented: $showCreateEarmarkSheet) {
-      CreateEarmarkSheet(
-        instrument: session.profile.instrument,
-        onCreate: { newEarmark in
-          Task {
-            _ = await earmarkStore.create(newEarmark)
-            showCreateEarmarkSheet = false
-          }
-        }
-      )
-    }
-    .sheet(isPresented: $showCreateAccountSheet) {
-      CreateAccountView(
-        instrument: session.profile.instrument,
-        accountStore: accountStore,
-        cryptoSyncStore: session.cryptoSyncStore)
-    }
-    .sheet(item: $accountToEdit) { account in
-      EditAccountView(
-        account: account, accountStore: accountStore)
-    }
-    .onReceive(
-      NotificationCenter.default.publisher(for: .requestAccountEdit),
-      perform: handleAccountEditRequest
+  #endif
+
+  /// Bundles the cross-platform modifier stack: navigation title,
+  /// focused-scene values, store-driven `onChange` / `onAppear` hooks,
+  /// the macOS toolbar, the sync-progress footer, and the three sheets
+  /// (create earmark / create account / edit account). Built as a
+  /// concrete value here so both the macOS and iOS bodies pick it up
+  /// via `.modifier(...)` without duplicating the chain. The modifier
+  /// itself lives in `SidebarSharedModifiers.swift`.
+  ///
+  /// Platform-only modifiers (`.onKeyPress`, `.environment(editMode)`)
+  /// live on the platform-specific bodies above so they don't leak.
+  private var sharedBodyModifiers: SidebarSharedModifiers {
+    SidebarSharedModifiers(
+      session: session,
+      accountStore: accountStore,
+      earmarkStore: earmarkStore,
+      transactionStore: transactionStore,
+      showHidden: $showHidden,
+      showSpam: $showSpam,
+      selection: $selection,
+      selectedAccountBinding: selectedAccountBinding,
+      showCreateEarmarkSheet: $showCreateEarmarkSheet,
+      showCreateAccountSheet: $showCreateAccountSheet,
+      accountToEdit: $accountToEdit,
+      onRequestAccountEdit: handleAccountEditRequest
     )
   }
 
@@ -238,11 +227,19 @@ extension SidebarView {
 
   @ViewBuilder
   func accountContextMenu(for account: Account) -> some View {
-    Button("Rename", systemImage: "character.cursor.ibeam") {
-      editingRowId = account.id
-    }
-    .accessibilityIdentifier(UITestIdentifiers.Sidebar.renameContextMenuItem)
-    accountGroupSubmenu(for: account)
+    #if os(iOS)
+      // Inline rename and the Group ▸ submenu are iOS-only until
+      // Phase 3 ships AppKit-cell editing and Phase 2 wires
+      // drag-and-drop / group membership on the macOS outline. macOS
+      // users currently reach grouping via drag-and-drop on the
+      // SwiftUI surface (not yet on the outline) and account renaming
+      // via the "Edit Account…" item below.
+      Button("Rename", systemImage: "character.cursor.ibeam") {
+        editingRowId = account.id
+      }
+      .accessibilityIdentifier(UITestIdentifiers.Sidebar.renameContextMenuItem)
+      accountGroupSubmenu(for: account)
+    #endif
     Button("Edit Account\u{2026}", systemImage: "pencil") {
       accountToEdit = account
     }
