@@ -114,31 +114,85 @@
         return NSTableCellView()
       }
       return NSTableCellView.hosting(
-        accessibilityIdentifier: UITestIdentifiers.Sidebar.account(id)
+        accessibilityIdentifier: UITestIdentifiers.Sidebar.account(id),
+        menu: makeAccountContextMenu(for: account)
       ) {
         AccountSidebarRow(account: account, isSelected: selection == .account(id))
           .environment(accountStore)
-          .contextMenu { accountContextMenu(for: account) }
       }
     }
 
-    // moolah: macOS outline-cell context menu. Mirrors the
-    // `accountContextMenu(for:)` builder in `SidebarView` but pared down
-    // to the items that work in Phase 1 (no inline rename, no group
-    // submenu — both are iOS-only until later phases). "Edit Account…"
-    // is the regression-critical item: UI tests right-click a sidebar
-    // account row and expect to find the menu by its accessibility
-    // identifier (see `EditAccountValuationPickerTests`).
-    @ViewBuilder
-    private func accountContextMenu(for account: Account) -> some View {
-      Button("Edit Account\u{2026}", systemImage: "pencil") {
-        accountToEdit = account
-      }
-      .accessibilityIdentifier(UITestIdentifiers.Sidebar.editAccountContextMenuItem)
-      Button("View Transactions", systemImage: "list.bullet") {
-        selection = .account(account.id)
-      }
+    // moolah: macOS outline-cell context menu, materialised as a real
+    // AppKit `NSMenu` rather than a SwiftUI `.contextMenu`. Phase 1
+    // initially used `.contextMenu` on the hosted SwiftUI row, but the
+    // hosted tree gets rebuilt by `OutlineViewController.updateData`
+    // whenever the data source changes (e.g.
+    // `AccountStore.convertedBalances` emitting between the right-click
+    // and the NSMenu materialising): the menu's host view is replaced
+    // under AppKit's foot and the menu dismisses or never opens. An
+    // AppKit `NSMenu` attached to `NSTableCellView.menu` is owned by
+    // AppKit's menu-tracking session, independent of any SwiftUI
+    // re-render, so the menu stays open across data refreshes.
+    //
+    // Mirrors the `accountContextMenu(for:)` builder in `SidebarView`
+    // but pared down to the items that work in Phase 1 (no inline
+    // rename, no group submenu — both are iOS-only until later
+    // phases). "Edit Account…" is the regression-critical item: UI
+    // tests right-click a sidebar account row and expect to find the
+    // menu by its accessibility identifier (see
+    // `EditAccountValuationPickerTests`).
+    @MainActor
+    private func makeAccountContextMenu(for account: Account) -> NSMenu {
+      let accountId = account.id
+      // Capture the bindings (not `self`) so the closures keep working
+      // even though the surrounding `SidebarOutlineView` struct value
+      // is rebuilt on every SwiftUI body re-render. The bindings stay
+      // pointed at the parent `SidebarView`'s source of truth.
+      //
+      // Capture the `AccountStore` and look up the latest account by
+      // ID at click time. `NSOutlineView`'s update path only rebuilds
+      // cells on identity changes (insert / remove), so a cell — and
+      // therefore its menu — persists across in-place account edits.
+      // Capturing the `Account` value would freeze the menu's "Edit
+      // Account…" action against the stale snapshot it was built with,
+      // re-opening the edit dialog with pre-edit data after a save.
+      let accountToEdit = $accountToEdit
+      let selection = $selection
+      let accountStore = accountStore
+      let actions = CellMenuActions(
+        onEdit: {
+          guard let fresh = accountStore.accounts.by(id: accountId) else { return }
+          accountToEdit.wrappedValue = fresh
+        },
+        onViewTransactions: { selection.wrappedValue = .account(accountId) }
+      )
+      let menu = NSMenu()
+      let editItem = NSMenuItem(
+        title: "Edit Account\u{2026}",
+        action: #selector(CellMenuActions.editAction(_:)),
+        keyEquivalent: "")
+      editItem.target = actions
+      editItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
+      editItem.setAccessibilityIdentifier(UITestIdentifiers.Sidebar.editAccountContextMenuItem)
+      menu.addItem(editItem)
+      let viewItem = NSMenuItem(
+        title: "View Transactions",
+        action: #selector(CellMenuActions.viewTransactionsAction(_:)),
+        keyEquivalent: "")
+      viewItem.target = actions
+      viewItem.image = NSImage(systemSymbolName: "list.bullet", accessibilityDescription: nil)
+      menu.addItem(viewItem)
+      // moolah: NSMenuItem's `target` is `weak`/unowned by default, so the
+      // `CellMenuActions` instance has no owner once this function returns.
+      // Attach it to the menu's lifetime via an associated object — the
+      // association is retained as long as the menu lives, and the menu
+      // lives as long as the cell holds it (`cell.menu = menu`).
+      objc_setAssociatedObject(
+        menu, &Self.cellActionsKey, actions, .OBJC_ASSOCIATION_RETAIN)
+      return menu
     }
+
+    nonisolated(unsafe) private static var cellActionsKey: UInt8 = 0
 
     private func groupCell(id: UUID) -> NSView {
       guard let group = accountGroupStore.by(id: id) else {
@@ -257,6 +311,42 @@
           }
         }
       )
+    }
+  }
+
+  /// Target/action sink for the per-cell AppKit context menu.
+  ///
+  /// `NSMenuItem.action` is a selector dispatched against
+  /// `NSMenuItem.target`, so we can't pass a SwiftUI closure directly.
+  /// Each cell gets its own `CellMenuActions` capturing closures bound
+  /// to that cell's account; the actions instance is kept alive for the
+  /// menu's lifetime via `objc_setAssociatedObject` on the `NSMenu`
+  /// (see `SidebarOutlineView.makeAccountContextMenu(for:)`).
+  ///
+  /// `@MainActor` because the captured closures mutate
+  /// `SidebarOutlineView`'s SwiftUI bindings (`accountToEdit`,
+  /// `selection`), which are read/written on the main actor.
+  @MainActor
+  private final class CellMenuActions: NSObject {
+    private let onEdit: () -> Void
+    private let onViewTransactions: () -> Void
+
+    init(
+      onEdit: @escaping () -> Void,
+      onViewTransactions: @escaping () -> Void
+    ) {
+      self.onEdit = onEdit
+      self.onViewTransactions = onViewTransactions
+    }
+
+    @objc
+    func editAction(_ sender: Any?) {
+      onEdit()
+    }
+
+    @objc
+    func viewTransactionsAction(_ sender: Any?) {
+      onViewTransactions()
     }
   }
 #endif
