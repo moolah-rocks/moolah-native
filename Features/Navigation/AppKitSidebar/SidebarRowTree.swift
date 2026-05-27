@@ -14,7 +14,7 @@ import Foundation
 /// reported as non-expandable — the disclosure triangle should not
 /// flash for an empty group.
 enum SidebarRowTree {
-  struct Snapshot {
+  struct Snapshot: Sendable {
     let accounts: Accounts
     let groups: [AccountGroup]
     let earmarks: [Earmark]
