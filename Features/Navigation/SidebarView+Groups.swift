@@ -267,8 +267,8 @@ import UniformTypeIdentifiers
 /// dragged entity's UUID across SwiftUI's drag-and-drop boundary.
 /// `Transferable` requires the payload itself to be `Codable`; the
 /// `CodableRepresentation` defaults to JSON encoding.
-struct DraggableSidebarItem: Codable, Sendable, Transferable {
-  enum Kind: String, Codable, Sendable { case account, group }
+struct DraggableSidebarItem: Codable, Sendable, Equatable, Transferable {
+  enum Kind: String, Codable, Sendable, Equatable { case account, group }
 
   let kind: Kind
   let id: UUID
