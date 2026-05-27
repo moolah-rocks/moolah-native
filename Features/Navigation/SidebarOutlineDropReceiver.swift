@@ -25,7 +25,14 @@
   ///
   /// `@MainActor` because every read of `accountStore.accounts` and
   /// `accountGroupStore.groups` is main-actor-isolated and the dispatch
-  /// `Task`s inherit the receiver's isolation.
+  /// `Task`s inherit the receiver's isolation. The explicit `@MainActor`
+  /// on the `DropReceiver` conformance is intentional under SE-0423:
+  /// the type-level annotation isolates the struct's own members, and
+  /// the conformance-level annotation binds the protocol witnesses to
+  /// the main actor (the vendored `DropReceiver` is not itself declared
+  /// `@MainActor`). Both must stay — removing either breaks isolation
+  /// of the witnesses if the protocol later grows a nonisolated
+  /// requirement upstream.
   @MainActor
   struct SidebarOutlineDropReceiver: @MainActor DropReceiver {
     typealias DataElement = SidebarOutlineItem
@@ -82,15 +89,6 @@
 
     // MARK: - Dispatch helpers
 
-    // Each dispatch helper fires a `Task { try? await … }` against the
-    // matching `SidebarDropDispatch` entry point. Fire-and-forget is
-    // correct: the underlying stores capture their own `error`
-    // property so the reactive view path surfaces failures, the
-    // `DropReceiver.acceptDrop` callback is synchronous, and awaiting
-    // here would force the whole protocol async (which the vendored
-    // package does not support). The `Task` inherits the receiver's
-    // `@MainActor` isolation so the store reads stay isolated.
-
     private func dispatchAddToGroup(_ sourceId: UUID, _ groupId: UUID) {
       Task {
         try? await SidebarDropDispatch.dropOntoGroup(
@@ -136,6 +134,5 @@
           accountStore: accountStore)
       }
     }
-
   }
 #endif

@@ -2,17 +2,13 @@
   import AppKit
   import Foundation
 
-  /// Pure decision-table policy backing `SidebarOutlineDropReceiver`.
-  /// Separated from the protocol-conformance file so the receiver's
-  /// own type body stays under SwiftLint's `type_body_length` ceiling
-  /// — the policy is twelve-ish branches deep and tends to dominate
-  /// the file otherwise.
-  ///
-  /// The shapes here (`DropOutcome`, `Context`, `outcome(for:...)`)
-  /// are still accessible to the test suite as
-  /// `SidebarOutlineDropReceiver.DropOutcome` etc. — the extension
-  /// scopes them inside the receiver's namespace just like nested
-  /// declarations would.
+  /// Drop-outcome policy for `SidebarOutlineDropReceiver`: the
+  /// `DropOutcome` enum, the `Context` snapshot struct, and the
+  /// `outcome(for:bucket:accounts:groups:)` decision table that maps a
+  /// `DropTarget` to a `DropOutcome`. Pure value transforms — no store
+  /// mutation, no awaits — so the entire decision table is unit-testable
+  /// without a live `NSOutlineView`. The accept-time dispatch lives in
+  /// the receiver's main file.
   extension SidebarOutlineDropReceiver {
 
     /// All possible outcomes of resolving a `DropTarget` against the
@@ -219,13 +215,11 @@
     ) -> DropOutcome {
       if let parentId = targetAccount.groupId {
         // Member account: retarget to the parent group at memberIndex+1.
-        let members = context.accounts.ordered
-          .filter { $0.groupId == parentId }
-          .sorted { $0.position < $1.position }
         guard
-          let memberIndex = members.firstIndex(where: {
-            $0.id == targetAccount.id
-          })
+          let memberIndex = context.accounts.ordered
+            .filter({ $0.groupId == parentId })
+            .sorted(by: { $0.position < $1.position })
+            .firstIndex(where: { $0.id == targetAccount.id })
         else { return .deny }
         return .retargetGroup(
           groupId: parentId, insertionIndex: memberIndex + 1)
