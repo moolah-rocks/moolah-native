@@ -19,50 +19,30 @@ enum SidebarSelection: Hashable {
 
 struct SidebarView: View {
   // MARK: - Properties
+  // Properties below are `internal` (not `private`) so the iOS section
+  // builders in `SidebarView+Sections.swift` can reach them across
+  // file boundaries.
 
-  // Internal access required by `SidebarView+Sections.swift` extension;
-  // cannot be `private` across file boundaries.
   @Environment(AccountStore.self) var accountStore
-  // Internal access required by `SidebarView+Sections.swift` extension;
-  // cannot be `private` across file boundaries.
   @Environment(EarmarkStore.self) var earmarkStore
-  // Internal access required by `SidebarView+Sections.swift` extension;
-  // cannot be `private` across file boundaries.
   @Environment(AccountGroupStore.self) var accountGroupStore
-  // Sidebar expand / collapse state for `AccountGroup` rows. Persisted
-  // per profile in the local-only `account_group_ui` GRDB table —
-  // never synced via CloudKit. Internal access for the
-  // `SidebarView+Groups.swift` extension.
+  /// Sidebar expand / collapse state for `AccountGroup` rows. Persisted
+  /// per profile in the local-only `account_group_ui` GRDB table —
+  /// never synced via CloudKit.
   @Environment(GroupUIStateStore.self) var groupUIStateStore
   @Environment(ProfileSession.self) private var session
-  // Internal access required by `SidebarView+Sections.swift` extension;
-  // cannot be `private` across file boundaries.
   @Environment(ImportStore.self) var importStore
   @Environment(TransactionStore.self) private var transactionStore
-  // Internal access required by `SidebarView+Sections.swift` extension;
-  // cannot be `private` across file boundaries.
   @Binding var selection: SidebarSelection?
-  // Internal access required by `SidebarView+Sections.swift` extension;
-  // cannot be `private` across file boundaries.
   @State var showCreateEarmarkSheet = false
-  // Internal access required by `SidebarView+Sections.swift` extension;
-  // cannot be `private` across file boundaries.
   @State var showCreateAccountSheet = false
-  // Internal access required by `SidebarView+Sections.swift` extension;
-  // cannot be `private` across file boundaries.
   @State var accountToEdit: Account?
-  // Identifies the sidebar row currently in inline rename mode, if
-  // any. Local-only — never persisted, never synced. At most one row
-  // is in edit mode at a time across the entire sidebar (accounts,
-  // earmarks, future groups).
-  // Internal access required by `SidebarView+Sections.swift` extension;
-  // cannot be `private` across file boundaries.
+  /// Identifies the sidebar row currently in inline rename mode, if
+  /// any. Local-only — never persisted, never synced. At most one row
+  /// is in edit mode at a time across the entire sidebar (accounts,
+  /// earmarks, future groups).
   @State var editingRowId: UUID?
-  // Internal access required by `SidebarView+Sections.swift` extension;
-  // cannot be `private` across file boundaries.
   @AppStorage("showHiddenAccounts") var showHidden = false
-  // Internal access required by `SidebarView+Sections.swift` extension;
-  // cannot be `private` across file boundaries.
   @AppStorage("showSpamTransactions") var showSpam = false
 
   #if os(iOS)

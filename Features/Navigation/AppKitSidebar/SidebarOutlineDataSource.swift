@@ -35,12 +35,4 @@
     }
   }
 
-  extension SidebarRowTree.Result {
-    /// Empty snapshot used by the data source before the controller's
-    /// first `apply(...)` call. Required because `NSOutlineView` queries
-    /// the data source from `loadView()` before any tree is built.
-    static var empty: SidebarRowTree.Result {
-      SidebarRowTree.Result(roots: [], childMap: [:])
-    }
-  }
 #endif

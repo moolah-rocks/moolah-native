@@ -6,7 +6,7 @@
   /// point so `SidebarOutlineDelegate` stays focused on outline-protocol
   /// glue rather than cell construction. All cells are
   /// `NSHostingView`-wrapped SwiftUI content via
-  /// `NSTableCellView.appKitSidebarHosting(...)` which handles padding,
+  /// `NSTableCellView.hosting(...)` which handles padding,
   /// accessibility-identifier attachment, and right-click menu
   /// forwarding.
   ///
@@ -15,9 +15,9 @@
   /// rebuild gives each cell a fresh snapshot. The one exception is
   /// `availableFunds`, which is a derived value computed by the parent
   /// representable in a single place — kept as a closure so the
-  /// factory doesn't duplicate the derivation.
+  /// builder doesn't duplicate the derivation.
   @MainActor
-  struct SidebarRowFactory {
+  struct SidebarCellBuilder {
     let accountStore: AccountStore
     let accountGroupStore: AccountGroupStore
     let earmarkStore: EarmarkStore
@@ -42,7 +42,7 @@
     // MARK: - Cell builders
 
     private func sectionCell(kind: SidebarRow.SectionKind) -> NSTableCellView {
-      NSTableCellView.appKitSidebarHosting {
+      NSTableCellView.hosting {
         SidebarSectionHeaderRowView(title: Self.sectionTitle(for: kind))
       }
     }
@@ -56,7 +56,7 @@
         accountStore: accountStore,
         selection: selectionBinding,
         accountToEdit: accountToEditBinding)
-      return NSTableCellView.appKitSidebarHosting(
+      return NSTableCellView.hosting(
         accessibilityIdentifier: UITestIdentifiers.Sidebar.account(id),
         menu: menu
       ) {
@@ -79,7 +79,7 @@
         .sorted { $0.position < $1.position }
         .map(\.id)
       let isSelected = selectionBinding.wrappedValue == .group(id)
-      return NSTableCellView.appKitSidebarHosting(
+      return NSTableCellView.hosting(
         accessibilityIdentifier: UITestIdentifiers.Sidebar.group(id)
       ) {
         GroupAggregateBalanceLoader(
@@ -102,7 +102,7 @@
         return NSTableCellView()
       }
       let isSelected = selectionBinding.wrappedValue == .earmark(id)
-      return NSTableCellView.appKitSidebarHosting {
+      return NSTableCellView.hosting {
         EarmarkRowView(earmark: earmark, isSelected: isSelected)
           .environment(earmarkStore)
       }
@@ -110,7 +110,7 @@
 
     private func totalCell(kind: SidebarRow.TotalKind) -> NSTableCellView {
       let descriptor = totalDescriptor(for: kind)
-      return NSTableCellView.appKitSidebarHosting {
+      return NSTableCellView.hosting {
         SidebarTotalRowView(
           label: descriptor.label,
           amount: descriptor.amount,
@@ -120,7 +120,7 @@
 
     private func navigationCell(kind: SidebarRow.NavigationKind) -> NSTableCellView {
       let descriptor = Self.navigationDescriptor(for: kind, importStore: importStore)
-      return NSTableCellView.appKitSidebarHosting(
+      return NSTableCellView.hosting(
         accessibilityIdentifier: UITestIdentifiers.Sidebar.view(descriptor.idSuffix)
       ) {
         SidebarNavigationRowView(

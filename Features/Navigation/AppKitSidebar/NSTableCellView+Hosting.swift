@@ -15,7 +15,7 @@
     /// `setAccessibilityIdentifier` on the cell. `menu` attaches an
     /// AppKit right-click menu directly to the cell so it survives
     /// SwiftUI re-renders that replace the hosted view tree.
-    static func appKitSidebarHosting<Content: View>(
+    static func hosting<Content: View>(
       accessibilityIdentifier: String? = nil,
       menu: NSMenu? = nil,
       @ViewBuilder content: () -> Content
