@@ -1,7 +1,5 @@
 // Group-aware sidebar surface: row builders, context menus, drop
-// handlers, expand-state binding, and creation flows. Lives in its own
-// file to keep `SidebarView.swift` and `SidebarView+Sections.swift`
-// readable as the membership UX is the highest-churn part of Phase 4.
+// handlers, expand-state binding, and creation flows.
 
 import SwiftUI
 import UniformTypeIdentifiers
@@ -13,8 +11,8 @@ import UniformTypeIdentifiers
 
     /// Renders a single group entry: the disclosure-aware group row +
     /// member rows when expanded. Group selection routes through
-    /// `SidebarSelection.group(id)`; Phase 5 will give that a real
-    /// detail surface, Phase 4 lands on a placeholder.
+    /// `SidebarSelection.group(id)`, which currently navigates to a
+    /// placeholder detail surface.
     @ViewBuilder
     func groupSidebarEntry(_ group: AccountGroup, members: [Account]) -> some View {
       groupRowLink(group)
@@ -143,10 +141,10 @@ import UniformTypeIdentifiers
 
     // MARK: - Context menus
 
-    /// Right-click menu for a group row. Phase 4 only exposes Rename;
-    /// the spec explicitly excludes Hide and Delete for groups (membership
-    /// is the unit of group lifecycle: remove the last member to delete
-    /// the group).
+    /// Right-click menu for a group row. Only Rename is exposed —
+    /// Hide and Delete are intentionally absent because membership is
+    /// the unit of group lifecycle: remove the last member to delete
+    /// the group.
     @ViewBuilder
     func groupContextMenu(for group: AccountGroup) -> some View {
       Button("Rename", systemImage: "character.cursor.ibeam") {
@@ -167,6 +165,8 @@ import UniformTypeIdentifiers
       Menu {
         ForEach(groupsInBucket) { group in
           Button(group.name) {
+            // Store errors surface reactively on `accountGroupStore.error`;
+            // discarding the throw here keeps the view as the leaf consumer.
             Task {
               try? await accountGroupStore.addAccount(
                 account, to: group, accountStore: accountStore)
@@ -180,6 +180,8 @@ import UniformTypeIdentifiers
         if account.groupId != nil {
           Divider()
           Button("Remove from Group") {
+            // Store errors surface reactively on `accountGroupStore.error`;
+            // discarding the throw here keeps the view as the leaf consumer.
             Task {
               try? await accountGroupStore.removeAccount(
                 account, accountStore: accountStore)
@@ -199,52 +201,56 @@ import UniformTypeIdentifiers
     /// bucket creates a new 2-member group (or moves the dragged account
     /// into the target's existing group when the target is itself a
     /// member).
+    ///
+    /// Thin wrapper over `SidebarDropDispatch.dropOntoAccount` — the
+    /// dispatch helper owns the policy gate and store calls so the
+    /// macOS AppKit drop receiver shares the same logic. The iOS-only
+    /// post-hop is setting `editingRowId` to the newly created group's
+    /// id so inline rename starts immediately. Store errors are already
+    /// surfaced reactively on `accountGroupStore.error`; discarding the
+    /// throw here keeps the view as the leaf consumer of that path.
     func handleDrop(
       _ item: DraggableSidebarItem,
       ontoAccount target: Account
     ) async {
       guard item.kind == .account else { return }  // group-onto-account = no-op
-      guard let source = accountStore.accounts.by(id: item.id) else { return }
-      guard source.id != target.id else { return }  // self-drop
-      guard source.bucket == target.bucket else { return }  // cross-bucket rejected
-
-      if let targetGroupId = target.groupId {
-        // Target is already a member: add source to the same group.
-        guard let group = accountGroupStore.by(id: targetGroupId) else { return }
-        try? await accountGroupStore.addAccount(
-          source, to: group, accountStore: accountStore)
-        return
-      }
-
-      // Both standalone: create a 2-member group and put it in rename mode.
       do {
-        let created = try await accountGroupStore.createGroup(
-          joining: target,
-          and: source,
-          name: "New Group",
-          accountStore: accountStore
-        )
-        editingRowId = created.id
-        await groupUIStateStore.setExpanded(true, for: created.id)
+        let created = try await SidebarDropDispatch.dropOntoAccount(
+          sourceId: item.id,
+          targetId: target.id,
+          accountStore: accountStore,
+          accountGroupStore: accountGroupStore,
+          groupUIStateStore: groupUIStateStore)
+        if let created {
+          editingRowId = created.id
+        }
       } catch {
-        // Error already surfaced on the store; no extra UI hop needed.
+        // Error already surfaced on `accountGroupStore.error`; no extra UI hop.
       }
     }
 
     /// Policy gate for a drop targeting a group row. Adds the dragged
     /// account to the group; rejects group-onto-group (no nesting) and
     /// cross-bucket.
+    ///
+    /// Thin wrapper over `SidebarDropDispatch.dropOntoGroup`. Store
+    /// errors are already surfaced reactively on
+    /// `accountGroupStore.error`; discarding the throw here keeps the
+    /// view as the leaf consumer of that path.
     func handleDrop(
       _ item: DraggableSidebarItem,
       ontoGroup target: AccountGroup
     ) async {
       guard item.kind == .account else { return }  // group-onto-group rejected
-      guard let source = accountStore.accounts.by(id: item.id) else { return }
-      guard source.bucket == target.bucket else { return }
-      if source.groupId == target.id { return }  // already in this group
-
-      try? await accountGroupStore.addAccount(
-        source, to: target, accountStore: accountStore)
+      do {
+        try await SidebarDropDispatch.dropOntoGroup(
+          sourceId: item.id,
+          groupId: target.id,
+          accountStore: accountStore,
+          accountGroupStore: accountGroupStore)
+      } catch {
+        // Error already surfaced on `accountGroupStore.error`; no extra UI hop.
+      }
     }
 
     // MARK: - Creation flows
@@ -267,16 +273,18 @@ import UniformTypeIdentifiers
 
 // MARK: - Transferable wrapper
 
-/// `Codable` payload carrying the kind (account vs group) + the
-/// dragged entity's UUID across SwiftUI's drag-and-drop boundary.
-/// `Transferable` requires the payload itself to be `Codable`; the
-/// `CodableRepresentation` defaults to JSON encoding.
-struct DraggableSidebarItem: Codable, Sendable, Transferable {
-  enum Kind: String, Codable, Sendable { case account, group }
+/// Payload carrying the kind (account vs group) + the dragged entity's
+/// UUID across SwiftUI's drag-and-drop boundary.
+struct DraggableSidebarItem: Codable, Sendable, Equatable {
+  enum Kind: String, Codable, Sendable, Equatable { case account, group }
 
   let kind: Kind
   let id: UUID
+}
 
+/// `Transferable` requires the payload itself to be `Codable`; the
+/// `CodableRepresentation` defaults to JSON encoding.
+extension DraggableSidebarItem: Transferable {
   static var transferRepresentation: some TransferRepresentation {
     CodableRepresentation(contentType: .moolahSidebarItem)
   }
