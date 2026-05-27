@@ -199,52 +199,43 @@ import UniformTypeIdentifiers
     /// bucket creates a new 2-member group (or moves the dragged account
     /// into the target's existing group when the target is itself a
     /// member).
+    ///
+    /// Thin wrapper over `SidebarDropDispatch.dropOntoAccount` — the
+    /// dispatch helper owns the policy gate and store calls so the
+    /// macOS AppKit drop receiver shares the same logic. The iOS-only
+    /// post-hop is setting `editingRowId` to the newly created group's
+    /// id so inline rename starts immediately.
     func handleDrop(
       _ item: DraggableSidebarItem,
       ontoAccount target: Account
     ) async {
       guard item.kind == .account else { return }  // group-onto-account = no-op
-      guard let source = accountStore.accounts.by(id: item.id) else { return }
-      guard source.id != target.id else { return }  // self-drop
-      guard source.bucket == target.bucket else { return }  // cross-bucket rejected
-
-      if let targetGroupId = target.groupId {
-        // Target is already a member: add source to the same group.
-        guard let group = accountGroupStore.by(id: targetGroupId) else { return }
-        try? await accountGroupStore.addAccount(
-          source, to: group, accountStore: accountStore)
-        return
-      }
-
-      // Both standalone: create a 2-member group and put it in rename mode.
-      do {
-        let created = try await accountGroupStore.createGroup(
-          joining: target,
-          and: source,
-          name: "New Group",
-          accountStore: accountStore
-        )
+      if let created = await SidebarDropDispatch.dropOntoAccount(
+        sourceId: item.id,
+        targetId: target.id,
+        accountStore: accountStore,
+        accountGroupStore: accountGroupStore,
+        groupUIStateStore: groupUIStateStore)
+      {
         editingRowId = created.id
-        await groupUIStateStore.setExpanded(true, for: created.id)
-      } catch {
-        // Error already surfaced on the store; no extra UI hop needed.
       }
     }
 
     /// Policy gate for a drop targeting a group row. Adds the dragged
     /// account to the group; rejects group-onto-group (no nesting) and
     /// cross-bucket.
+    ///
+    /// Thin wrapper over `SidebarDropDispatch.dropOntoGroup`.
     func handleDrop(
       _ item: DraggableSidebarItem,
       ontoGroup target: AccountGroup
     ) async {
       guard item.kind == .account else { return }  // group-onto-group rejected
-      guard let source = accountStore.accounts.by(id: item.id) else { return }
-      guard source.bucket == target.bucket else { return }
-      if source.groupId == target.id { return }  // already in this group
-
-      try? await accountGroupStore.addAccount(
-        source, to: target, accountStore: accountStore)
+      await SidebarDropDispatch.dropOntoGroup(
+        sourceId: item.id,
+        groupId: target.id,
+        accountStore: accountStore,
+        accountGroupStore: accountGroupStore)
     }
 
     // MARK: - Creation flows
