@@ -12,21 +12,26 @@ extension SidebarView {
     accountToEdit = account
   }
 
-  var currentAccountsSection: some View {
-    let groupAware = accountStore.accounts.groupAwareSidebar(
-      groups: accountGroupStore.groups,
-      excluding: nil,
-      alwaysInclude: nil
-    )
-    return Section {
-      ForEach(groupAware.current, id: \.bucketEntryId) { entry in
-        bucketEntryView(entry)
+  #if os(iOS)
+    /// Current-bucket section — iOS only. macOS renders Current
+    /// Accounts via `SidebarOutlineView` (NSOutlineView), so this
+    /// SwiftUI builder is unreferenced on macOS and gated out.
+    var currentAccountsSection: some View {
+      let groupAware = accountStore.accounts.groupAwareSidebar(
+        groups: accountGroupStore.groups,
+        excluding: nil,
+        alwaysInclude: nil
+      )
+      return Section {
+        ForEach(groupAware.current, id: \.bucketEntryId) { entry in
+          bucketEntryView(entry)
+        }
+        totalRow(label: "Current Total", value: accountStore.convertedCurrentTotal)
+      } header: {
+        sectionHeader(title: "Current Accounts", addAction: addAccountAction)
       }
-      totalRow(label: "Current Total", value: accountStore.convertedCurrentTotal)
-    } header: {
-      sectionHeader(title: "Current Accounts", addAction: addAccountAction)
     }
-  }
+  #endif
 
   var earmarksSection: some View {
     Section {
@@ -50,33 +55,40 @@ extension SidebarView {
     }
   }
 
-  var investmentsSection: some View {
-    let groupAware = accountStore.accounts.groupAwareSidebar(
-      groups: accountGroupStore.groups,
-      excluding: nil,
-      alwaysInclude: nil
-    )
-    return Section("Investments") {
-      ForEach(groupAware.investments, id: \.bucketEntryId) { entry in
-        bucketEntryView(entry)
+  #if os(iOS)
+    /// Investments-bucket section — iOS only. macOS renders Investments
+    /// via `SidebarOutlineView` (NSOutlineView), so this SwiftUI
+    /// builder is unreferenced on macOS and gated out.
+    var investmentsSection: some View {
+      let groupAware = accountStore.accounts.groupAwareSidebar(
+        groups: accountGroupStore.groups,
+        excluding: nil,
+        alwaysInclude: nil
+      )
+      return Section("Investments") {
+        ForEach(groupAware.investments, id: \.bucketEntryId) { entry in
+          bucketEntryView(entry)
+        }
+        totalRow(label: "Investment Total", value: accountStore.convertedInvestmentTotal)
       }
-      totalRow(label: "Investment Total", value: accountStore.convertedInvestmentTotal)
     }
-  }
 
-  /// Renders a single bucket entry — standalone account or group with
-  /// its members. The switch lives in this helper rather than inline so
-  /// each `Section`'s `ForEach` body stays within SwiftLint's
-  /// `closure_body_length` budget.
-  @ViewBuilder
-  func bucketEntryView(_ entry: SidebarBucketEntry) -> some View {
-    switch entry {
-    case .account(let account):
-      standaloneAccountRowLink(account)
-    case let .group(group, members):
-      groupSidebarEntry(group, members: members)
+    /// Renders a single bucket entry — standalone account or group with
+    /// its members. The switch lives in this helper rather than inline
+    /// so each `Section`'s `ForEach` body stays within SwiftLint's
+    /// `closure_body_length` budget. iOS-only since both call sites
+    /// (`currentAccountsSection` and `investmentsSection`) are
+    /// iOS-only.
+    @ViewBuilder
+    func bucketEntryView(_ entry: SidebarBucketEntry) -> some View {
+      switch entry {
+      case .account(let account):
+        standaloneAccountRowLink(account)
+      case let .group(group, members):
+        groupSidebarEntry(group, members: members)
+      }
     }
-  }
+  #endif
 
   @ViewBuilder var totalsSection: some View {
     Section {
