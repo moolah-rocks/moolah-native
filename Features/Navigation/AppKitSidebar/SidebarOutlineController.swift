@@ -34,7 +34,10 @@
       outlineView.floatsGroupRows = true
       outlineView.allowsMultipleSelection = false
       outlineView.allowsEmptySelection = true
-      outlineView.intercellSpacing = NSSize(width: 0, height: 0)
+      // 2pt vertical inter-cell spacing matches AppKit's default
+      // source-list breathing room; (0, 0) packed rows tighter than
+      // SwiftUI's `List(.sidebar)`.
+      outlineView.intercellSpacing = NSSize(width: 0, height: 2)
 
       let column = NSTableColumn()
       column.resizingMask = .autoresizingMask
