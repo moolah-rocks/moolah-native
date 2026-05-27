@@ -2,7 +2,7 @@
   import AppKit
 
   /// `NSOutlineViewDelegate` for the unified sidebar. Produces cell
-  /// views via `SidebarRowFactory`, gates selection (sections and
+  /// views via `SidebarCellBuilder`, gates selection (sections and
   /// totals are non-selectable), and emits expand / collapse / selection
   /// notifications back to the controller through callback closures.
   ///
@@ -11,7 +11,7 @@
   /// `GroupUIStateStore` (which would race the data we just applied).
   @MainActor
   final class SidebarOutlineDelegate: NSObject, NSOutlineViewDelegate {
-    var factory: SidebarRowFactory?
+    var cellBuilder: SidebarCellBuilder?
     var selectionChanged: ((SidebarRow?) -> Void)?
     var expansionChanged: ((SidebarRow, Bool) -> Void)?
     var suppressExpansionCallbacks = false
@@ -20,7 +20,7 @@
       _ outlineView: NSOutlineView, viewFor tableColumn: NSTableColumn?, item: Any
     ) -> NSView? {
       guard let row = item as? SidebarRow else { return nil }
-      return factory?.makeCell(for: row)
+      return cellBuilder?.makeCell(for: row)
     }
 
     func outlineView(_ outlineView: NSOutlineView, isGroupItem item: Any) -> Bool {

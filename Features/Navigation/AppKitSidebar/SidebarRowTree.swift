@@ -35,6 +35,11 @@ enum SidebarRowTree {
       self.childMap = childMap
     }
 
+    /// Empty result used by the data source before the controller's
+    /// first `apply(...)` call. Required because `NSOutlineView` queries
+    /// the data source from `loadView()` before any tree is built.
+    static let empty = Result(roots: [], childMap: [:])
+
     /// Whether the outline view should treat `row` as expandable. Returns
     /// `false` for leaf rows (accounts, earmarks, totals, navigation
     /// links) and for conceptual containers with zero current children

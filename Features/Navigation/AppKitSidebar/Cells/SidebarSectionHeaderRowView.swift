@@ -1,15 +1,12 @@
 import SwiftUI
 
 /// Source-list section header used inside the macOS outline. Renders
-/// the section title in the standard uppercased secondary style.
-/// `onAddAction` shows a trailing "+" button when non-nil; in the
-/// current configuration the toolbar carries the add buttons (see
-/// `Features/Navigation/SidebarSharedModifiers.swift`), so the factory
-/// passes `nil` and no inline `+` appears.
+/// the section title in the standard uppercased secondary style. The
+/// toolbar carries the section add buttons (see
+/// `Features/Navigation/SidebarSharedModifiers.swift`), so this header
+/// is title-only.
 struct SidebarSectionHeaderRowView: View {
   let title: String
-  var onAddAction: (() -> Void)?
-  var addAccessibilityIdentifier: String?
 
   var body: some View {
     HStack {
@@ -19,24 +16,6 @@ struct SidebarSectionHeaderRowView: View {
         .foregroundStyle(.secondary)
         .textCase(.uppercase)
       Spacer()
-      if let onAddAction {
-        addButton(action: onAddAction)
-      }
-    }
-  }
-
-  @ViewBuilder
-  private func addButton(action: @escaping () -> Void) -> some View {
-    let button =
-      Button(action: action) {
-        Image(systemName: "plus").font(.caption)
-      }
-      .buttonStyle(.plain)
-      .accessibilityLabel("Add \(title.lowercased())")
-    if let addAccessibilityIdentifier {
-      button.accessibilityIdentifier(addAccessibilityIdentifier)
-    } else {
-      button
     }
   }
 }
@@ -47,18 +26,6 @@ struct SidebarSectionHeaderRowView: View {
       Text("Row content")
     } header: {
       SidebarSectionHeaderRowView(title: "Current Accounts")
-    }
-  }
-  .listStyle(.sidebar)
-  .frame(width: 260)
-}
-
-#Preview("With add button") {
-  List {
-    Section {
-      Text("Row content")
-    } header: {
-      SidebarSectionHeaderRowView(title: "Earmarks", onAddAction: {})
     }
   }
   .listStyle(.sidebar)

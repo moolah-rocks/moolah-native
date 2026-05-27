@@ -3,7 +3,7 @@
 
   /// SwiftUI bridge to `SidebarOutlineController`. Owned by the macOS
   /// body of `SidebarView`. Rebuilds the `SidebarRowTree.Snapshot` and
-  /// the `SidebarRowFactory` on every SwiftUI update; both are passed
+  /// the `SidebarCellBuilder` on every SwiftUI update; both are passed
   /// into the controller so it can apply the new state to its
   /// `NSOutlineView` and reconcile expand / selection.
   ///
@@ -41,7 +41,7 @@
       _ controller: SidebarOutlineController, context: Context
     ) {
       let tree = SidebarRowTree.build(from: makeSnapshot())
-      controller.delegate.factory = makeFactory()
+      controller.delegate.cellBuilder = makeCellBuilder()
       controller.apply(
         tree: tree,
         expandedGroupIds: groupUIStateStore.expandedGroupIds,
@@ -61,8 +61,8 @@
         unreviewedBadgeCount: importStore.unreviewedBadgeCount)
     }
 
-    private func makeFactory() -> SidebarRowFactory {
-      SidebarRowFactory(
+    private func makeCellBuilder() -> SidebarCellBuilder {
+      SidebarCellBuilder(
         accountStore: accountStore,
         accountGroupStore: accountGroupStore,
         earmarkStore: earmarkStore,
