@@ -175,9 +175,11 @@ private func seedSidebarGroupPreview(
       conversionService: backend.conversionService,
       targetInstrument: .AUD)
     let accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
+    let groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
     return SidebarOutlineView(selection: .constant(nil))
       .environment(accountStore)
       .environment(accountGroupStore)
+      .environment(groupUIStateStore)
       .frame(width: 260, height: 480)
       .task {
         await seedOutlinePreview(
