@@ -84,25 +84,64 @@ struct SidebarRowTreeTests {
 
   // MARK: - Totals
 
-  @Test("Totals are absent when all summary values are nil")
+  @Test("Totals section is empty when all summary values are nil")
   func totalsAbsentWhenNil() {
     let tree = SidebarRowTree.build(from: snapshot())
     #expect(tree.children(of: .section(.totals)).isEmpty)
   }
 
-  @Test("Current + Investment + Net Worth totals render when present")
-  func basicTotals() {
+  @Test("Current Total renders as trailing row inside Current Accounts section")
+  func currentTotalUnderCurrentSection() {
+    let account = Account(name: "Checking", type: .bank, instrument: .AUD, position: 0)
     let tree = SidebarRowTree.build(
-      from: snapshot(
-        currentTotal: Self.testAmount,
-        investmentTotal: Self.testAmount,
-        netWorth: Self.testAmount))
+      from: snapshot(accounts: [account], currentTotal: Self.testAmount))
     #expect(
-      tree.children(of: .section(.totals))
-        == [.total(.currentTotal), .total(.investmentTotal), .total(.netWorth)])
+      tree.children(of: .section(.current))
+        == [.account(account.id), .total(.currentTotal)])
+    #expect(!tree.children(of: .section(.totals)).contains(.total(.currentTotal)))
   }
 
-  @Test("Available Funds only when current+earmarked present and earmarked is positive")
+  @Test("Investment Total renders as trailing row inside Investments section")
+  func investmentTotalUnderInvestmentsSection() {
+    let account = Account(name: "Brokerage", type: .investment, instrument: .AUD, position: 0)
+    let tree = SidebarRowTree.build(
+      from: snapshot(accounts: [account], investmentTotal: Self.testAmount))
+    #expect(
+      tree.children(of: .section(.investments))
+        == [.account(account.id), .total(.investmentTotal)])
+    #expect(!tree.children(of: .section(.totals)).contains(.total(.investmentTotal)))
+  }
+
+  @Test("Earmarked Total renders as trailing row inside Earmarks section")
+  func earmarkedTotalUnderEarmarksSection() {
+    let earmark = Earmark(name: "Holiday", instrument: .AUD)
+    let tree = SidebarRowTree.build(
+      from: snapshot(earmarks: [earmark], earmarkedTotal: Self.testEarmarked))
+    #expect(
+      tree.children(of: .section(.earmarks))
+        == [.earmark(earmark.id), .total(.earmarkedTotal)])
+    #expect(!tree.children(of: .section(.totals)).contains(.total(.earmarkedTotal)))
+  }
+
+  @Test("Net Worth renders in the implicit Totals section")
+  func netWorthInTotalsSection() {
+    let tree = SidebarRowTree.build(from: snapshot(netWorth: Self.testAmount))
+    #expect(tree.children(of: .section(.totals)) == [.total(.netWorth)])
+  }
+
+  @Test("Per-bucket totals are absent when their backing amount is nil")
+  func perBucketTotalsHiddenWhenNil() {
+    let bank = Account(name: "Checking", type: .bank, instrument: .AUD, position: 0)
+    let brokerage = Account(name: "Brokerage", type: .investment, instrument: .AUD, position: 0)
+    let earmark = Earmark(name: "Holiday", instrument: .AUD)
+    let tree = SidebarRowTree.build(
+      from: snapshot(accounts: [bank, brokerage], earmarks: [earmark]))
+    #expect(tree.children(of: .section(.current)) == [.account(bank.id)])
+    #expect(tree.children(of: .section(.investments)) == [.account(brokerage.id)])
+    #expect(tree.children(of: .section(.earmarks)) == [.earmark(earmark.id)])
+  }
+
+  @Test("Available Funds appears in Totals section only when earmarked is positive")
   func availableFundsGating() {
     let withAvailable = SidebarRowTree.build(
       from: snapshot(
