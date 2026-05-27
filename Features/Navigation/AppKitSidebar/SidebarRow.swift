@@ -54,3 +54,51 @@ enum SidebarRow: Hashable, Sendable, Identifiable {
     }
   }
 }
+
+extension SidebarRow {
+  /// The parent `SidebarSelection?` value that corresponds to this
+  /// row, or `nil` if the row is non-selectable (sections, totals).
+  var asSelection: SidebarSelection? {
+    switch self {
+    case .section, .total: return nil
+    case .account(let id): return .account(id)
+    case .group(let id): return .group(id)
+    case .earmark(let id): return .earmark(id)
+    case .navigation(let kind): return kind.asSelection
+    }
+  }
+
+  /// The `SidebarRow` that corresponds to the given selection. Every
+  /// `SidebarSelection` case maps to a row, so this is non-failable —
+  /// the optional-init signature is preserved purely for symmetry with
+  /// `asSelection` (which can be nil for non-selectable rows).
+  init?(selection: SidebarSelection) {
+    switch selection {
+    case .account(let id): self = .account(id)
+    case .group(let id): self = .group(id)
+    case .earmark(let id): self = .earmark(id)
+    case .analysis: self = .navigation(.analysis)
+    case .reports: self = .navigation(.reports)
+    case .categories: self = .navigation(.categories)
+    case .upcomingTransactions: self = .navigation(.upcoming)
+    case .recentlyAdded: self = .navigation(.recentlyAdded)
+    case .allTransactions: self = .navigation(.allTransactions)
+    }
+  }
+}
+
+extension SidebarRow.NavigationKind {
+  /// The `SidebarSelection` value that corresponds to this navigation
+  /// kind. Split out from `SidebarRow.asSelection` so the parent switch
+  /// stays under SwiftLint's `cyclomatic_complexity` threshold.
+  var asSelection: SidebarSelection {
+    switch self {
+    case .analysis: return .analysis
+    case .reports: return .reports
+    case .categories: return .categories
+    case .upcoming: return .upcomingTransactions
+    case .recentlyAdded: return .recentlyAdded
+    case .allTransactions: return .allTransactions
+    }
+  }
+}
