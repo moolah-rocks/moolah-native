@@ -15,8 +15,8 @@
   @Suite("SidebarOutlineView.expansionBinding")
   @MainActor
   struct SidebarOutlineViewTests {
-    @Test("Getter reports section headers and currently-expanded groups")
-    func expansionBindingReportsSectionHeadersAndCurrentlyExpandedGroups() async throws {
+    @Test("Getter reports currently-expanded groups")
+    func expansionBindingReportsCurrentlyExpandedGroups() async throws {
       let (backend, _) = try TestBackend.create()
       let store = GroupUIStateStore(repository: backend.groupUIState)
       try await store.waitForFirstEmission()
@@ -31,9 +31,10 @@
 
       let binding = SidebarOutlineView.expansionBinding(groupStore: store)
       let expanded = binding.wrappedValue
-      #expect(expanded.contains(.currentAccountsHeader))
-      #expect(expanded.contains(.investmentsHeader))
-      #expect(expanded.contains(.group(group.id)))
+      // Only `.group(id)` kinds are tracked now — section headers
+      // moved out of the tree into SwiftUI sections, so they no
+      // longer appear in the bound set.
+      #expect(expanded == [.group(group.id)])
     }
 
     @Test("Setter writes a newly-inserted group through to the store")
@@ -47,9 +48,7 @@
           name: "G", bucket: .investments, instrument: .defaultTestInstrument))
 
       let binding = SidebarOutlineView.expansionBinding(groupStore: store)
-      binding.wrappedValue = [
-        .currentAccountsHeader, .investmentsHeader, .group(group.id),
-      ]
+      binding.wrappedValue = [.group(group.id)]
 
       // The setter dispatches `setExpanded(true:)` asynchronously; wait
       // for the observation stream to reflect the persisted state.
@@ -76,31 +75,12 @@
       let binding = SidebarOutlineView.expansionBinding(groupStore: store)
       #expect(binding.wrappedValue.contains(.group(group.id)))
 
-      binding.wrappedValue = [.currentAccountsHeader, .investmentsHeader]
+      binding.wrappedValue = []
 
       try await store.waitForNextEmission(
         matching: { !$0.expandedGroupIds.contains(group.id) },
         description: "collapsed observed")
       #expect(!store.expandedGroupIds.contains(group.id))
-    }
-
-    @Test("Setter ignores removal of section headers; getter still reports them")
-    func expansionBindingIgnoresRemovalOfSectionHeaders() async throws {
-      let (backend, _) = try TestBackend.create()
-      let store = GroupUIStateStore(repository: backend.groupUIState)
-      try await store.waitForFirstEmission()
-
-      let binding = SidebarOutlineView.expansionBinding(groupStore: store)
-
-      // Try to remove everything — including the section headers.
-      binding.wrappedValue = []
-
-      // The store stays empty (no group writes were dispatched), and
-      // the next getter re-injects the section headers.
-      #expect(store.expandedGroupIds.isEmpty)
-      let after = binding.wrappedValue
-      #expect(after.contains(.currentAccountsHeader))
-      #expect(after.contains(.investmentsHeader))
     }
   }
 #endif

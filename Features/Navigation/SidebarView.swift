@@ -92,19 +92,15 @@ struct SidebarView: View {
   }
 
   #if os(macOS)
-    /// macOS body: the new `SidebarOutlineView` (NSOutlineView-backed)
-    /// renders Current Accounts + Investments at the top, and the
-    /// SwiftUI `List` below it carries Earmarks, Totals, and the
-    /// navigation rows. Selection rides through a shared
-    /// `Binding<SidebarSelection?>` so clicks in either surface update
-    /// the same source of truth.
-    ///
-    /// The two panes scroll **independently** — the VStack does not
-    /// share a single scroll container between them. That matches
-    /// macOS Finder's source-list-plus-fixed-list layout (where the
-    /// "Favorites" outline and the "iCloud / Locations / Tags" list
-    /// each manage their own clipping). Future Phase work may revisit
-    /// this if user feedback prefers a unified scroll.
+    /// macOS body: a single `List(selection:)` with the same 5-section
+    /// structure as iOS — Current Accounts, Earmarks, Investments,
+    /// Totals, Navigation. Within Current Accounts and Investments,
+    /// `SidebarOutlineView` embeds an `NSOutlineView` so the
+    /// account/group rows render with native source-list chrome
+    /// (disclosure triangles, selection highlight) while the section
+    /// headers themselves remain flat, non-collapsible SwiftUI
+    /// `Section` chrome. See `SidebarView+Sections.swift` for the
+    /// per-bucket builders.
     ///
     /// Phase 1 deliberately omits the iOS-only modifiers:
     /// - `.onKeyPress(.return)` for inline rename — not wired on macOS
@@ -112,15 +108,14 @@ struct SidebarView: View {
     /// - `.environment(\.editMode, $editMode)` — iOS list reorder mode
     ///   only.
     var macSidebarBody: some View {
-      VStack(spacing: 0) {
-        SidebarOutlineView(selection: $selection, accountToEdit: $accountToEdit)
-        List(selection: $selection) {
-          earmarksSection
-          totalsSection
-          navigationSection
-        }
-        .listStyle(.sidebar)
+      List(selection: $selection) {
+        currentAccountsSection
+        earmarksSection
+        investmentsSection
+        totalsSection
+        navigationSection
       }
+      .listStyle(.sidebar)
       .modifier(sharedBodyModifiers)
     }
   #endif

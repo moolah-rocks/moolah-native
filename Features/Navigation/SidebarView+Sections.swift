@@ -12,10 +12,25 @@ extension SidebarView {
     accountToEdit = account
   }
 
-  #if os(iOS)
-    /// Current-bucket section — iOS only. macOS renders Current
-    /// Accounts via `SidebarOutlineView` (NSOutlineView), so this
-    /// SwiftUI builder is unreferenced on macOS and gated out.
+  #if os(macOS)
+    /// Current-bucket section — macOS variant. The section header is
+    /// a flat SwiftUI label (non-collapsible); the body embeds
+    /// `SidebarOutlineView` for the `.current` bucket so the
+    /// `NSOutlineView` only renders that bucket's contents. The
+    /// bucket total row stays inside this section so it scrolls with
+    /// the section content.
+    var currentAccountsSection: some View {
+      Section {
+        SidebarOutlineView(
+          selection: $selection, bucket: .current, accountToEdit: $accountToEdit)
+        totalRow(label: "Current Total", value: accountStore.convertedCurrentTotal)
+      } header: {
+        sectionHeader(title: "Current Accounts", addAction: addAccountAction)
+      }
+    }
+  #else
+    /// Current-bucket section — iOS variant. Single SwiftUI list with
+    /// inline rows; macOS has its own outline-backed version above.
     var currentAccountsSection: some View {
       let groupAware = accountStore.accounts.groupAwareSidebar(
         groups: accountGroupStore.groups,
@@ -55,10 +70,20 @@ extension SidebarView {
     }
   }
 
-  #if os(iOS)
-    /// Investments-bucket section — iOS only. macOS renders Investments
-    /// via `SidebarOutlineView` (NSOutlineView), so this SwiftUI
-    /// builder is unreferenced on macOS and gated out.
+  #if os(macOS)
+    /// Investments-bucket section — macOS variant. Mirrors
+    /// `currentAccountsSection` above: flat section label, outline
+    /// body, total row inside the section.
+    var investmentsSection: some View {
+      Section("Investments") {
+        SidebarOutlineView(
+          selection: $selection, bucket: .investments, accountToEdit: $accountToEdit)
+        totalRow(label: "Investment Total", value: accountStore.convertedInvestmentTotal)
+      }
+    }
+  #else
+    /// Investments-bucket section — iOS variant. Same SwiftUI rendering
+    /// pattern as `currentAccountsSection`.
     var investmentsSection: some View {
       let groupAware = accountStore.accounts.groupAwareSidebar(
         groups: accountGroupStore.groups,
