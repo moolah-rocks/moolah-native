@@ -42,8 +42,10 @@
     // MARK: - Cell builders
 
     private func sectionCell(kind: SidebarRow.SectionKind) -> NSTableCellView {
-      NSTableCellView.hosting {
-        SidebarSectionHeaderRowView(title: Self.sectionTitle(for: kind))
+      let title = Self.sectionTitle(for: kind)
+      return NSTableCellView.hosting {
+        SidebarSectionHeaderRowView(title: title)
+          .accessibilityHidden(title.isEmpty)
       }
     }
 
@@ -102,7 +104,9 @@
         return NSTableCellView()
       }
       let isSelected = selectionBinding.wrappedValue == .earmark(id)
-      return NSTableCellView.hosting {
+      return NSTableCellView.hosting(
+        accessibilityIdentifier: UITestIdentifiers.Sidebar.earmark(id)
+      ) {
         EarmarkRowView(earmark: earmark, isSelected: isSelected)
           .environment(earmarkStore)
       }

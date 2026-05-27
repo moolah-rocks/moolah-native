@@ -46,6 +46,8 @@
         keyEquivalent: "")
       viewItem.target = actions
       viewItem.image = NSImage(systemSymbolName: "list.bullet", accessibilityDescription: nil)
+      viewItem.setAccessibilityIdentifier(
+        UITestIdentifiers.Sidebar.viewTransactionsContextMenuItem)
       menu.addItem(viewItem)
 
       // `NSMenuItem.target` is unowned; without a separate owner the
