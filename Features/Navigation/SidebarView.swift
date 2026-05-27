@@ -92,30 +92,25 @@ struct SidebarView: View {
   }
 
   #if os(macOS)
-    /// macOS body: a single `List(selection:)` with the same 5-section
-    /// structure as iOS — Current Accounts, Earmarks, Investments,
-    /// Totals, Navigation. Within Current Accounts and Investments,
-    /// `SidebarOutlineView` embeds an `NSOutlineView` so the
-    /// account/group rows render with native source-list chrome
-    /// (disclosure triangles, selection highlight) while the section
-    /// headers themselves remain flat, non-collapsible SwiftUI
-    /// `Section` chrome. See `SidebarView+Sections.swift` for the
-    /// per-bucket builders.
-    ///
-    /// Phase 1 deliberately omits the iOS-only modifiers:
-    /// - `.onKeyPress(.return)` for inline rename — not wired on macOS
-    ///   until Phase 3 ships AppKit-cell inline editing.
-    /// - `.environment(\.editMode, $editMode)` — iOS list reorder mode
-    ///   only.
+    /// macOS body: a single full-bleed `NSOutlineView` rendering every
+    /// sidebar row — accounts, groups, earmarks, totals, navigation —
+    /// via the `SidebarOutline` representable. Replaces the previous
+    /// SwiftUI `List(.sidebar)` + per-section embedded
+    /// `SidebarOutlineView` design. Cross-platform toolbar / sheets /
+    /// sync footer are still carried by `sharedBodyModifiers`.
     var macSidebarBody: some View {
-      List(selection: $selection) {
-        currentAccountsSection
-        earmarksSection
-        investmentsSection
-        totalsSection
-        navigationSection
-      }
-      .listStyle(.sidebar)
+      SidebarOutline(
+        accountStore: accountStore,
+        accountGroupStore: accountGroupStore,
+        earmarkStore: earmarkStore,
+        importStore: importStore,
+        groupUIStateStore: groupUIStateStore,
+        selection: $selection,
+        accountToEdit: $accountToEdit,
+        onAddAccount: { showCreateAccountSheet = true },
+        onAddEarmark: { showCreateEarmarkSheet = true },
+        showHidden: showHidden
+      )
       .modifier(sharedBodyModifiers)
     }
   #endif
