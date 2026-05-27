@@ -20,6 +20,14 @@
     @Environment(AccountGroupStore.self) private var accountGroupStore
     @Environment(GroupUIStateStore.self) private var groupUIStateStore
     @Binding var selection: SidebarSelection?
+    // moolah: account-edit binding owned by the parent `SidebarView`.
+    // Right-clicking a row in the NSOutlineView invokes "Edit Account…"
+    // which assigns to this binding; `SidebarSharedModifiers` then
+    // presents the edit sheet. Threading the binding (rather than
+    // hosting state inside `SidebarOutlineView`) keeps a single source
+    // of truth across the outline + SwiftUI-list halves of the
+    // sidebar so the SwiftUI sheet driver remains the parent.
+    @Binding var accountToEdit: Account?
 
     var body: some View {
       OutlineView(
@@ -86,6 +94,25 @@
       ) {
         AccountSidebarRow(account: account, isSelected: selection == .account(id))
           .environment(accountStore)
+          .contextMenu { accountContextMenu(for: account) }
+      }
+    }
+
+    // moolah: macOS outline-cell context menu. Mirrors the
+    // `accountContextMenu(for:)` builder in `SidebarView` but pared down
+    // to the items that work in Phase 1 (no inline rename, no group
+    // submenu — both are iOS-only until later phases). "Edit Account…"
+    // is the regression-critical item: UI tests right-click a sidebar
+    // account row and expect to find the menu by its accessibility
+    // identifier (see `EditAccountValuationPickerTests`).
+    @ViewBuilder
+    private func accountContextMenu(for account: Account) -> some View {
+      Button("Edit Account\u{2026}", systemImage: "pencil") {
+        accountToEdit = account
+      }
+      .accessibilityIdentifier(UITestIdentifiers.Sidebar.editAccountContextMenuItem)
+      Button("View Transactions", systemImage: "list.bullet") {
+        selection = .account(account.id)
       }
     }
 

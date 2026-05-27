@@ -113,7 +113,7 @@ struct SidebarView: View {
     ///   only.
     var macSidebarBody: some View {
       VStack(spacing: 0) {
-        SidebarOutlineView(selection: $selection)
+        SidebarOutlineView(selection: $selection, accountToEdit: $accountToEdit)
         List(selection: $selection) {
           earmarksSection
           totalsSection

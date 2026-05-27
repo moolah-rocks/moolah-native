@@ -74,42 +74,27 @@ where Data.Element: Identifiable {
     }
   }
 
-  func outlineView(
-    _ outlineView: NSOutlineView,
-    heightOfRowByItem item: Any
-  ) -> CGFloat {
-    // It appears that for outline views with automatic row heights, the
-    // initial height of the row still needs to be provided. Not providing
-    // a height for each cell would lead to the outline view defaulting to the
-    // `outlineView.rowHeight` when inserted. The cell may resize to the correct
-    // height if the outline view is reloaded.
-
-    // I am not able to find a better way to compute the final width of the cell
-    // other than hard-coding some of the constants.
-    let columnHorizontalInset: CGFloat
-    if #available(macOS 11.0, *) {
-      if outlineView.effectiveStyle == .plain {
-        columnHorizontalInset = 18
-      } else {
-        columnHorizontalInset = 9
-      }
-    } else {
-      columnHorizontalInset = 9
-    }
-
-    let column = outlineView.tableColumns.first.unsafelyUnwrapped
-    let indentInset = CGFloat(outlineView.level(forItem: item)) * outlineView.indentationPerLevel
-
-    let width = column.width - indentInset - columnHorizontalInset
-
-    // The view is provided by the user. And the width info is not provided
-    // separately. It does not seem efficient to create a new cell to find
-    // out the width of a cell. In practice I have not experienced any issues
-    // with a moderate number of cells.
-    let view = content(typedItem(item).value)
-    view.widthAnchor.constraint(equalToConstant: width).isActive = true
-    return view.fittingSize.height
-  }
+  // moolah: removed upstream's custom `heightOfRowByItem:` implementation.
+  //
+  // Upstream allocated a *fresh* `NSHostingView`-bearing cell on every
+  // height query just to read its `fittingSize.height`. Under XCUITest,
+  // AppKit's accessibility instrumentation forces a full-tree row-height
+  // scan inside `NSOutlineView.endUpdates`, calling this delegate method
+  // for rows that the in-flight diff has already removed from the data
+  // source. The freshly built `NSHostingView` then tried to resolve the
+  // SwiftUI environment chain (e.g. `@Environment(AccountStore.self)` on
+  // `AccountSidebarRow`) against an item whose backing record has been
+  // dropped — the resulting use-after-free dispatched through a freed
+  // pointer and crashed inside `_safeSendDelegateHeightOfRow:`. Manual
+  // (non-XCUITest) launches survived because AppKit only queries heights
+  // for visible rows there, not the full tree.
+  //
+  // `OutlineViewController` configures `outlineView.usesAutomaticRowHeights
+  // = true`, so AppKit derives the row height from each cell view's
+  // intrinsic content size on first display. Not implementing the
+  // delegate optional means AppKit falls back to that automatic path
+  // entirely — heights resolve once the cell is realised, which is the
+  // semantics we actually want for SwiftUI-hosted rows.
 
   // moolah: source-list group-row chrome (capitalised label,
   // secondary text colour, no disclosure on the row itself). Returns
