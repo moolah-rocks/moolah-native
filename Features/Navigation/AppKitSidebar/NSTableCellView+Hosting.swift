@@ -15,11 +15,6 @@
     /// `setAccessibilityIdentifier` on the cell. `menu` attaches an
     /// AppKit right-click menu directly to the cell so it survives
     /// SwiftUI re-renders that replace the hosted view tree.
-    ///
-    /// Named `appKitSidebarHosting` to avoid colliding with the legacy
-    /// `NSTableCellView.hosting(...)` symbol in `Vendored/OutlineView/`
-    /// during the cutover; Task 14 deletes the vendored copy and may
-    /// rename this back.
     static func appKitSidebarHosting<Content: View>(
       accessibilityIdentifier: String? = nil,
       menu: NSMenu? = nil,

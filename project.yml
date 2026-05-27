@@ -148,11 +148,6 @@ targets:
       - path: Shared
       - path: Automation
       - path: UITestSupport
-      # Vendored fork of Sameesunkaria/OutlineView with three local
-      # extensions (isGroupItem, expandedItems binding, NSTableCellView
-      # hosting helper). macOS-only — iOS does not have NSOutlineView.
-      # See Vendored/OutlineView/NOTICE.md for the rationale.
-      - path: Vendored/OutlineView
     preBuildScripts:
       - script: "${SRCROOT}/scripts/check-release-build-number.sh"
         name: Verify Release build number
