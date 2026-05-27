@@ -6,10 +6,10 @@
   @testable import Moolah
 
   /// Pins the JSON round-trip behaviour of the `DraggableSidebarItem`
-  /// pasteboard codec. The Phase 2 `NSOutlineView` drag source writes
-  /// these items onto `NSPasteboardItem`s and the drop receiver reads
-  /// them back; if the encoding changes shape we want a unit-test
-  /// failure rather than a silent drag-and-drop regression at runtime.
+  /// pasteboard codec. The macOS `NSOutlineView` drag source writes
+  /// items onto `NSPasteboardItem`s and the drop receiver reads them
+  /// back; if the encoding changes shape we want a unit-test failure
+  /// rather than a silent drag-and-drop regression at runtime.
   @Suite
   struct DraggableSidebarItemPasteboardTests {
     @Test
@@ -42,7 +42,7 @@
     @Test
     func readReturnsNilForCorruptPayload() {
       let pbItem = NSPasteboardItem()
-      pbItem.setData(Data("not json".utf8), forType: DraggableSidebarItem.pasteboardType())
+      pbItem.setData(Data("not json".utf8), forType: DraggableSidebarItem.pasteboardType)
       #expect(DraggableSidebarItem.read(from: pbItem) == nil)
     }
   }
