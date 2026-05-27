@@ -4,13 +4,10 @@
 
   @testable import Moolah
 
-  /// Tests the deny / accept / reorder rows of the
+  /// Covers the deny / accept / reorder rows of the
   /// `SidebarOutlineDropReceiver.outcome(for:bucket:accounts:groups:)`
-  /// decision table. The retarget row and the pure
-  /// `DropOutcome.asValidationResult` mapping live in their own files
-  /// to keep each suite under SwiftLint's `type_body_length`
-  /// threshold. The split is by decision-table column, not by
-  /// arbitrary numeric balance.
+  /// decision table — one test per row, asserting the resolved
+  /// `DropOutcome` against hand-built `DropTarget` fixtures.
   @MainActor
   @Suite("SidebarOutlineDropReceiver — outcome")
   struct SidebarOutlineDropReceiverTests {

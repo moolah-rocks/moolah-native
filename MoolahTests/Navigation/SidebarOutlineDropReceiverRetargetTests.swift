@@ -4,11 +4,11 @@
 
   @testable import Moolah
 
-  /// Row 13 of the `SidebarOutlineDropReceiver` decision table — the
-  /// retarget — and the pure `DropOutcome.asValidationResult()`
-  /// mapping. Kept separate from the main outcome suite so the
-  /// per-row tests stay readable and SwiftLint's `type_body_length`
-  /// threshold doesn't force a re-split later.
+  /// Covers row 13 of the `SidebarOutlineDropReceiver` decision table —
+  /// hover-near-the-bottom-of-an-account-row retargets to either root or
+  /// the hovered account's parent group — together with the pure
+  /// `DropOutcome.asValidationResult()` cases that translate each
+  /// outcome variant to the vendored `ValidationResult` shape.
   @MainActor
   @Suite("SidebarOutlineDropReceiver — retarget & validation mapping")
   struct SidebarOutlineDropReceiverRetargetTests {

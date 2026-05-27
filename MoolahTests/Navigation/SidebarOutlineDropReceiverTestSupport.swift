@@ -4,12 +4,10 @@
 
   @testable import Moolah
 
-  /// Shared helpers for the `SidebarOutlineDropReceiver` outcome tests.
-  /// The receiver's policy is pure (no live NSOutlineView, no stores)
-  /// so the tests construct `DropTarget` values directly. Extracted into
-  /// its own file to keep each test file under SwiftLint's
-  /// `file_length` / `type_body_length` thresholds without the helpers
-  /// dominating either.
+  /// Shared fixtures for the `SidebarOutlineDropReceiver` outcome tests:
+  /// a `DropTarget` builder matching the runtime shape produced by
+  /// `readPasteboard`, plus account / group factories used across the
+  /// decision-table and retarget suites.
   @MainActor
   enum SidebarOutlineDropReceiverTestSupport {
 
