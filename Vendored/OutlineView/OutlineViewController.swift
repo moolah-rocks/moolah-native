@@ -27,6 +27,13 @@ where Drop.DataElement == Data.Element {
     scrollView.hasVerticalScroller = true
     scrollView.hasHorizontalRuler = true
     scrollView.drawsBackground = false
+    // moolah: clear the scroll view + outline view backgrounds so the
+    // host SwiftUI sidebar material (vibrancy) shows through. Default
+    // AppKit chrome paints `controlBackgroundColor` here, which
+    // appears as an opaque off-colour band against a `.listStyle(.sidebar)`
+    // List that hosts this view.
+    scrollView.backgroundColor = .clear
+    outlineView.backgroundColor = .clear
 
     outlineView.autoresizesOutlineColumn = false
     outlineView.headerView = nil
