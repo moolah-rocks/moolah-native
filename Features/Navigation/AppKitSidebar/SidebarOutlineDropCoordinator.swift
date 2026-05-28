@@ -24,9 +24,9 @@
   ///    binding can enter inline-rename mode.
   @MainActor
   final class SidebarOutlineDropCoordinator {
-    private let accountStore: AccountStore
-    private let accountGroupStore: AccountGroupStore
-    private let groupUIStateStore: GroupUIStateStore
+    let accountStore: AccountStore
+    let accountGroupStore: AccountGroupStore
+    let groupUIStateStore: GroupUIStateStore
 
     /// Fired after `commit` lands a `dropOntoAccount` outcome that
     /// joined two standalone accounts into a new group. The host
