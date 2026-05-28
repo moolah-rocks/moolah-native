@@ -70,6 +70,11 @@
       try await stores.accountStore.waitForNextEmission(
         matching: { $0.accounts.by(id: seedMember.id)?.groupId == group.id },
         description: "seed member observed")
+      // Collapse the target group so the auto-expand effect is observable.
+      await stores.groupUIStateStore.setExpanded(false, for: group.id)
+      try await stores.groupUIStateStore.waitForNextEmission(
+        matching: { !$0.expandedGroupIds.contains(group.id) },
+        description: "target group starts collapsed")
       let coordinator = SidebarOutlineDropCoordinator(
         accountStore: stores.accountStore,
         accountGroupStore: stores.accountGroupStore,
@@ -83,6 +88,9 @@
       try await stores.accountStore.waitForNextEmission(
         matching: { $0.accounts.by(id: source.id)?.groupId == group.id },
         description: "source joined existing group")
+      try await stores.groupUIStateStore.waitForNextEmission(
+        matching: { $0.expandedGroupIds.contains(group.id) },
+        description: "target group auto-expanded after commit")
     }
 
     @Test("commit .reorderRoot reassigns positions")

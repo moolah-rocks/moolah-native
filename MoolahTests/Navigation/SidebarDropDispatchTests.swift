@@ -154,12 +154,48 @@ struct SidebarDropDispatchTests {
       sourceId: source.id,
       groupId: group.id,
       accountStore: stores.accountStore,
-      accountGroupStore: stores.accountGroupStore)
+      accountGroupStore: stores.accountGroupStore,
+      groupUIStateStore: stores.groupUIStateStore)
 
     try await stores.accountStore.waitForNextEmission(
       matching: { $0.accounts.by(id: source.id)?.groupId == group.id },
       description: "source joined target group")
     #expect(stores.accountStore.accounts.by(id: source.id)?.position == 1)
+    try await stores.groupUIStateStore.waitForNextEmission(
+      matching: { $0.expandedGroupIds.contains(group.id) },
+      description: "target group auto-expanded after drop")
+  }
+
+  @Test("dropOntoGroup auto-expands the target group so the new member is visible")
+  func dropOntoGroupAutoExpands() async throws {
+    let (backend, database) = try TestBackend.create()
+    let seed = SidebarDropDispatchTestSupport.bankAccount(name: "Seed", position: 0)
+    let source = SidebarDropDispatchTestSupport.bankAccount(name: "Source", position: 1)
+    let stores = try await SidebarDropDispatchTestSupport.makeStores(
+      seedAccounts: [seed, source], in: database, backend: backend)
+
+    let group = try await stores.accountGroupStore.createGroup(
+      from: seed, name: "G", accountStore: stores.accountStore)
+    try await stores.accountStore.waitForNextEmission(
+      matching: { $0.accounts.by(id: seed.id)?.groupId == group.id },
+      description: "seed member observed")
+    // Collapse the target group so the auto-expand effect is observable.
+    await stores.groupUIStateStore.setExpanded(false, for: group.id)
+    try await stores.groupUIStateStore.waitForNextEmission(
+      matching: { !$0.expandedGroupIds.contains(group.id) },
+      description: "target group starts collapsed")
+
+    try await SidebarDropDispatch.dropOntoGroup(
+      sourceId: source.id,
+      groupId: group.id,
+      accountStore: stores.accountStore,
+      accountGroupStore: stores.accountGroupStore,
+      groupUIStateStore: stores.groupUIStateStore)
+
+    try await stores.groupUIStateStore.waitForNextEmission(
+      matching: { $0.expandedGroupIds.contains(group.id) },
+      description: "target group auto-expanded after drop")
+    #expect(stores.groupUIStateStore.expandedGroupIds.contains(group.id))
   }
 
   @Test("dropOntoGroup is a no-op when the account is already in the target group")
@@ -186,7 +222,8 @@ struct SidebarDropDispatchTests {
       sourceId: memberA.id,
       groupId: group.id,
       accountStore: stores.accountStore,
-      accountGroupStore: stores.accountGroupStore)
+      accountGroupStore: stores.accountGroupStore,
+      groupUIStateStore: stores.groupUIStateStore)
 
     let emitted = await stores.accountStore.didEmitWithin(timeout: .milliseconds(200))
     #expect(!emitted, "accountStore should not emit on rejected re-add")
@@ -215,7 +252,8 @@ struct SidebarDropDispatchTests {
       sourceId: crossSource.id,
       groupId: group.id,
       accountStore: stores.accountStore,
-      accountGroupStore: stores.accountGroupStore)
+      accountGroupStore: stores.accountGroupStore,
+      groupUIStateStore: stores.groupUIStateStore)
 
     let emitted = await stores.accountStore.didEmitWithin(timeout: .milliseconds(200))
     #expect(!emitted, "accountStore should not emit on rejected cross-bucket drop")
