@@ -27,11 +27,15 @@
     let accountToEditBinding: Binding<Account?>
     /// `nil` when no row is being inline-renamed.
     let editingRowIdBinding: Binding<UUID?>
-    /// Factories returning the `onRename` closure for a single row of
-    /// each type. The closure is invoked with the trimmed text on
-    /// commit; stores handle empty / same-name as no-ops.
+    /// Factory returning the `onRename` closure for an account row.
+    /// The closure is invoked with the trimmed text on commit;
+    /// `AccountStore.rename` handles empty / same-name as no-ops.
     let onRenameAccount: (Account) -> (String) -> Void
+    /// Factory returning the `onRename` closure for an earmark row.
+    /// See `onRenameAccount` for the full contract.
     let onRenameEarmark: (Earmark) -> (String) -> Void
+    /// Factory returning the `onRename` closure for a group row.
+    /// See `onRenameAccount` for the full contract.
     let onRenameGroup: (AccountGroup) -> (String) -> Void
     let onAddAccount: () -> Void
     let onAddEarmark: () -> Void

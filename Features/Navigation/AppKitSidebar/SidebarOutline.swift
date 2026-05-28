@@ -40,7 +40,8 @@
         guard case .group(let groupId) = row else { return }
         Task { await groupUIStateStore.setExpanded(isExpanded, for: groupId) }
       }
-      controller.delegate.beginRenameRequested = { [controller] in
+      controller.delegate.beginRenameRequested = { [weak controller] in
+        guard let controller else { return }
         let view = controller.outlineView
         guard view.selectedRow >= 0,
           let row = view.item(atRow: view.selectedRow) as? SidebarRow
