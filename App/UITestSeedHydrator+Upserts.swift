@@ -136,6 +136,54 @@ extension UITestSeedHydrator {
     try row.upsert(database)
   }
 
+  struct EarmarkSpec {
+    let id: UUID
+    let name: String
+    let instrumentId: String
+    var position: Int = 0
+  }
+
+  static func upsertEarmark(_ spec: EarmarkSpec, in database: Database) throws {
+    let row = EarmarkRow(
+      id: spec.id,
+      recordName: EarmarkRow.recordName(for: spec.id),
+      name: spec.name,
+      position: spec.position,
+      isHidden: false,
+      instrumentId: spec.instrumentId,
+      savingsTarget: nil,
+      savingsTargetInstrumentId: nil,
+      savingsStartDate: nil,
+      savingsEndDate: nil,
+      encodedSystemFields: nil)
+    try row.upsert(database)
+  }
+
+  struct AccountGroupSpec {
+    let id: UUID
+    let name: String
+    /// `AccountBucket.rawValue` — `"current"` or `"investments"`. Stored
+    /// raw to mirror the row shape (the v14 migration pinned the column
+    /// with a CHECK constraint, see `AccountGroupRow`).
+    let bucketRawValue: String
+    let instrumentId: String
+    let position: Int
+  }
+
+  static func upsertAccountGroup(
+    _ spec: AccountGroupSpec, in database: Database
+  ) throws {
+    let row = AccountGroupRow(
+      id: spec.id,
+      recordName: AccountGroupRow.recordName(for: spec.id),
+      name: spec.name,
+      bucket: spec.bucketRawValue,
+      instrumentId: spec.instrumentId,
+      position: spec.position,
+      encodedSystemFields: nil)
+    try row.upsert(database)
+  }
+
   /// Inserts a single `InvestmentValue` snapshot for an investment
   /// account. Idempotent — if a row with the same id already exists
   /// (e.g. on re-hydration), `upsert` overwrites with the same values.

@@ -162,6 +162,7 @@ enum UITestSeedHydrator {
       // dependency chain reads top-to-bottom.
       try seedTradeBaselineInvestmentValues(instrument: instrument, in: database)
       try seedTradeBaselineTransactions(instrument: instrument, in: database)
+      try seedTradeBaselineRenameTargets(instrument: instrument, in: database)
     }
     return profile
   }
@@ -288,6 +289,30 @@ enum UITestSeedHydrator {
           quantity: Decimal(fixtures.splitShopLegBAmountCents) / 100,
           instrument: instrument),
         accountId: fixtures.checkingAccountId),
+      in: database)
+  }
+
+  /// Seeds one earmark + one investments-bucket account group used by
+  /// the macOS sidebar-rename UI tests. Both are nominal fixtures with
+  /// no balance / membership; the tests only need the rows present and
+  /// renameable.
+  private static func seedTradeBaselineRenameTargets(
+    instrument: Instrument, in database: Database
+  ) throws {
+    let fixtures = UITestFixtures.TradeBaseline.self
+    try upsertEarmark(
+      EarmarkSpec(
+        id: fixtures.renameTargetEarmarkId,
+        name: fixtures.renameTargetEarmarkName,
+        instrumentId: instrument.id),
+      in: database)
+    try upsertAccountGroup(
+      AccountGroupSpec(
+        id: fixtures.renameTargetGroupId,
+        name: fixtures.renameTargetGroupName,
+        bucketRawValue: AccountBucket.investments.rawValue,
+        instrumentId: instrument.id,
+        position: 0),
       in: database)
   }
 
