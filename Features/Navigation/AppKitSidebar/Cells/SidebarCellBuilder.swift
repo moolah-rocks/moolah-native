@@ -57,7 +57,8 @@
         accountId: id,
         accountStore: accountStore,
         selection: selectionBinding,
-        accountToEdit: accountToEditBinding)
+        accountToEdit: accountToEditBinding,
+        onBeginRename: {})
       return NSTableCellView.hosting(
         accessibilityIdentifier: UITestIdentifiers.Sidebar.account(id),
         menu: menu

@@ -2,10 +2,10 @@
   import AppKit
   import SwiftUI
 
-  /// Builds the AppKit `NSMenu` attached to a sidebar account row's
-  /// right-click menu. UI tests find the menu by
-  /// `UITestIdentifiers.Sidebar.editAccountContextMenuItem` and the
-  /// "Edit Account…" action opens the standard edit sheet.
+  /// Builds the AppKit `NSMenu` attached to each sidebar row's
+  /// right-click menu. UI tests find menu items by accessibility
+  /// identifier (e.g. `renameContextMenuItem`, `editAccountContextMenuItem`)
+  /// and dispatch fires the associated `on…` closure.
   ///
   /// Using an AppKit `NSMenu` (rather than a SwiftUI `.contextMenu` on
   /// the hosted row) keeps the menu open across re-renders of the
@@ -17,13 +17,12 @@
       accountId: UUID,
       accountStore: AccountStore,
       selection: Binding<SidebarSelection?>,
-      accountToEdit: Binding<Account?>
+      accountToEdit: Binding<Account?>,
+      onBeginRename: @escaping () -> Void
     ) -> NSMenu {
-      let actions = CellMenuActions(
+      let actions = AccountMenuActions(
+        onRename: onBeginRename,
         onEdit: {
-          // Look up the latest account by ID at click time. Capturing
-          // a snapshot would freeze "Edit Account…" against pre-edit
-          // data after a save.
           guard let fresh = accountStore.accounts.by(id: accountId) else { return }
           accountToEdit.wrappedValue = fresh
         },
@@ -31,9 +30,21 @@
 
       let menu = NSMenu()
 
+      let renameItem = NSMenuItem(
+        title: "Rename",
+        action: #selector(AccountMenuActions.renameAction(_:)),
+        keyEquivalent: "")
+      renameItem.target = actions
+      renameItem.image = NSImage(
+        systemSymbolName: "character.cursor.ibeam",
+        accessibilityDescription: nil)
+      renameItem.setAccessibilityIdentifier(
+        UITestIdentifiers.Sidebar.renameContextMenuItem)
+      menu.addItem(renameItem)
+
       let editItem = NSMenuItem(
         title: "Edit Account\u{2026}",
-        action: #selector(CellMenuActions.editAction(_:)),
+        action: #selector(AccountMenuActions.editAction(_:)),
         keyEquivalent: "")
       editItem.target = actions
       editItem.image = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil)
@@ -42,7 +53,7 @@
 
       let viewItem = NSMenuItem(
         title: "View Transactions",
-        action: #selector(CellMenuActions.viewTransactionsAction(_:)),
+        action: #selector(AccountMenuActions.viewTransactionsAction(_:)),
         keyEquivalent: "")
       viewItem.target = actions
       viewItem.image = NSImage(systemSymbolName: "list.bullet", accessibilityDescription: nil)
@@ -50,29 +61,79 @@
         UITestIdentifiers.Sidebar.viewTransactionsContextMenuItem)
       menu.addItem(viewItem)
 
-      // `NSMenuItem.target` is unowned; without a separate owner the
-      // actions object would be deallocated before the user clicks.
-      // Associating it with the menu keeps it alive for the menu's
-      // lifetime, which matches the cell's lifetime (`cell.menu = menu`).
+      objc_setAssociatedObject(
+        menu, &AssociationKeys.cellActions, actions, .OBJC_ASSOCIATION_RETAIN)
+      return menu
+    }
+
+    @MainActor
+    static func earmarkMenu(
+      earmarkId: UUID,
+      onBeginRename: @escaping () -> Void
+    ) -> NSMenu {
+      let actions = RenameOnlyMenuActions(onRename: onBeginRename)
+      let menu = NSMenu()
+      let renameItem = NSMenuItem(
+        title: "Rename",
+        action: #selector(RenameOnlyMenuActions.renameAction(_:)),
+        keyEquivalent: "")
+      renameItem.target = actions
+      renameItem.image = NSImage(
+        systemSymbolName: "character.cursor.ibeam",
+        accessibilityDescription: nil)
+      renameItem.setAccessibilityIdentifier(
+        UITestIdentifiers.Sidebar.renameContextMenuItem)
+      menu.addItem(renameItem)
+      objc_setAssociatedObject(
+        menu, &AssociationKeys.cellActions, actions, .OBJC_ASSOCIATION_RETAIN)
+      return menu
+    }
+
+    @MainActor
+    static func groupMenu(
+      groupId: UUID,
+      onBeginRename: @escaping () -> Void
+    ) -> NSMenu {
+      let actions = RenameOnlyMenuActions(onRename: onBeginRename)
+      let menu = NSMenu()
+      let renameItem = NSMenuItem(
+        title: "Rename",
+        action: #selector(RenameOnlyMenuActions.renameAction(_:)),
+        keyEquivalent: "")
+      renameItem.target = actions
+      renameItem.image = NSImage(
+        systemSymbolName: "character.cursor.ibeam",
+        accessibilityDescription: nil)
+      renameItem.setAccessibilityIdentifier(
+        UITestIdentifiers.Sidebar.renameContextMenuItem)
+      menu.addItem(renameItem)
       objc_setAssociatedObject(
         menu, &AssociationKeys.cellActions, actions, .OBJC_ASSOCIATION_RETAIN)
       return menu
     }
   }
 
-  /// Target/action sink for the per-cell AppKit context menu. Each
-  /// menu gets its own instance capturing closures bound to a single
-  /// account; the instance is kept alive for the menu's lifetime via
-  /// `objc_setAssociatedObject` on the `NSMenu`.
+  /// Target/action sink for the account context menu. Each menu gets
+  /// its own instance, retained via `objc_setAssociatedObject` on the
+  /// menu (matches the lifetime of the cell it is attached to).
   @MainActor
-  private final class CellMenuActions: NSObject {
+  private final class AccountMenuActions: NSObject {
+    private let onRename: () -> Void
     private let onEdit: () -> Void
     private let onViewTransactions: () -> Void
 
-    init(onEdit: @escaping () -> Void, onViewTransactions: @escaping () -> Void) {
+    init(
+      onRename: @escaping () -> Void,
+      onEdit: @escaping () -> Void,
+      onViewTransactions: @escaping () -> Void
+    ) {
+      self.onRename = onRename
       self.onEdit = onEdit
       self.onViewTransactions = onViewTransactions
     }
+
+    @objc
+    func renameAction(_ sender: Any?) { onRename() }
 
     @objc
     func editAction(_ sender: Any?) { onEdit() }
@@ -81,10 +142,20 @@
     func viewTransactionsAction(_ sender: Any?) { onViewTransactions() }
   }
 
-  /// Storage keys used with `objc_setAssociatedObject`. The address of
-  /// each property is stable for the lifetime of the process, which is
-  /// what `objc_setAssociatedObject` requires; scoping under a
-  /// `@MainActor` enum avoids the `nonisolated(unsafe)` escape hatch.
+  /// Target/action sink for the earmark and group context menus —
+  /// both expose a single "Rename" entry.
+  @MainActor
+  private final class RenameOnlyMenuActions: NSObject {
+    private let onRename: () -> Void
+
+    init(onRename: @escaping () -> Void) {
+      self.onRename = onRename
+    }
+
+    @objc
+    func renameAction(_ sender: Any?) { onRename() }
+  }
+
   @MainActor
   private enum AssociationKeys {
     static var cellActions: UInt8 = 0

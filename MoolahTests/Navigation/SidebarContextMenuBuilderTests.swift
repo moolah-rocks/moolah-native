@@ -43,41 +43,41 @@
     }
 
     @Test("earmarkMenu has a single Rename item that fires onBeginRename")
-    func earmarkMenuRenameFiresClosure() {
+    func earmarkMenuRenameFiresClosure() throws {
       var beginRenameFired = false
       let menu = SidebarContextMenuBuilder.earmarkMenu(
         earmarkId: UUID(),
         onBeginRename: { beginRenameFired = true })
 
       #expect(menu.items.count == 1)
-      let first = try? #require(menu.items.first)
-      #expect(first?.title == "Rename")
+      let first = try #require(menu.items.first)
+      #expect(first.title == "Rename")
       #expect(
-        first?.accessibilityIdentifier()
+        first.accessibilityIdentifier()
           == UITestIdentifiers.Sidebar.renameContextMenuItem)
 
-      if let item = first, let action = item.action, let target = item.target {
-        _ = target.perform(action, with: item)
+      if let action = first.action, let target = first.target {
+        _ = target.perform(action, with: first)
       }
       #expect(beginRenameFired)
     }
 
     @Test("groupMenu has a single Rename item that fires onBeginRename")
-    func groupMenuRenameFiresClosure() {
+    func groupMenuRenameFiresClosure() throws {
       var beginRenameFired = false
       let menu = SidebarContextMenuBuilder.groupMenu(
         groupId: UUID(),
         onBeginRename: { beginRenameFired = true })
 
       #expect(menu.items.count == 1)
-      let first = try? #require(menu.items.first)
-      #expect(first?.title == "Rename")
+      let first = try #require(menu.items.first)
+      #expect(first.title == "Rename")
       #expect(
-        first?.accessibilityIdentifier()
+        first.accessibilityIdentifier()
           == UITestIdentifiers.Sidebar.renameContextMenuItem)
 
-      if let item = first, let action = item.action, let target = item.target {
-        _ = target.perform(action, with: item)
+      if let action = first.action, let target = first.target {
+        _ = target.perform(action, with: first)
       }
       #expect(beginRenameFired)
     }
