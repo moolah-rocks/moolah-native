@@ -24,9 +24,9 @@
   ///    binding can enter inline-rename mode.
   @MainActor
   final class SidebarOutlineDropCoordinator {
-    let accountStore: AccountStore
-    let accountGroupStore: AccountGroupStore
-    let groupUIStateStore: GroupUIStateStore
+    private let accountStore: AccountStore
+    private let accountGroupStore: AccountGroupStore
+    private let groupUIStateStore: GroupUIStateStore
 
     /// Fired after `commit` lands a `dropOntoAccount` outcome that
     /// joined two standalone accounts into a new group. The host
@@ -64,7 +64,7 @@
       switch item {
       case .section(.current): return .current
       case .section(.investments): return .investments
-      case .section: return nil
+      case .section(.earmarks), .section(.totals), .section(.navigation): return nil
       case .account(let id): return accounts.by(id: id)?.bucket
       case .group(let id):
         return groups.first(where: { $0.id == id })?.bucket
