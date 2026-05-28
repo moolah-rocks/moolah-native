@@ -15,16 +15,25 @@
     /// `setAccessibilityIdentifier` on the cell. `menu` attaches an
     /// AppKit right-click menu directly to the cell so it survives
     /// SwiftUI re-renders that replace the hosted view tree.
+    ///
+    /// `exposeChildAccessibility: true` skips the SwiftUI-level
+    /// identifier wrap so descendant elements (e.g. the inline rename
+    /// `TextField`) remain individually discoverable in the accessibility
+    /// tree. The AppKit-level `setAccessibilityIdentifier` on the cell
+    /// still fires, so the row stays findable via the cell element. Use
+    /// this for rows that contain a discoverable editable control.
     static func hosting<Content: View>(
       accessibilityIdentifier: String? = nil,
+      exposeChildAccessibility: Bool = false,
       menu: NSMenu? = nil,
       @ViewBuilder content: () -> Content
     ) -> NSTableCellView {
       let cell = NSTableCellView()
+      let swiftUIIdentifier = exposeChildAccessibility ? nil : accessibilityIdentifier
       let host = MenuForwardingHostingView(
         rootView: cellRootView(
           content: content(),
-          accessibilityIdentifier: accessibilityIdentifier))
+          accessibilityIdentifier: swiftUIIdentifier))
       host.translatesAutoresizingMaskIntoConstraints = false
       cell.addSubview(host)
       // 4pt vertical padding mirrors what SwiftUI `List(.sidebar)`
