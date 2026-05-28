@@ -23,8 +23,7 @@ struct InstrumentAmountView: View {
       .foregroundStyle(effectiveColor)
       .monospacedDigit()
       .font(font)
-      .accessibilityLabel(Text("Amount"))
-      .accessibilityValue(amount.accessibilityString(isSpam: isSpamInstrument))
+      .accessibilityLabel(Text(amount.accessibilityString(isSpam: isSpamInstrument)))
   }
 
   private var text: Text {
