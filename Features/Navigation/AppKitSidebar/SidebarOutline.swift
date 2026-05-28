@@ -11,8 +11,10 @@
   /// writes back into the parent's `Binding<SidebarSelection?>` via
   /// `SidebarRow.asSelection`. Expansion round-trip: the controller's
   /// `expansionChanged` callback writes back into
-  /// `GroupUIStateStore.setExpanded(_:for:)` for `.group` rows only —
-  /// section headers persist no state.
+  /// `GroupUIStateStore.setExpanded(_:for:)` for `.group` rows only.
+  /// Rename round-trip: the controller's `beginRenameRequested` callback
+  /// flips `editingRowId` to the currently selected row's id, which
+  /// drives the inline `TextField` swap in the hosted SwiftUI row.
   struct SidebarOutline: NSViewControllerRepresentable {
     let accountStore: AccountStore
     let accountGroupStore: AccountGroupStore
@@ -21,6 +23,10 @@
     let groupUIStateStore: GroupUIStateStore
     @Binding var selection: SidebarSelection?
     @Binding var accountToEdit: Account?
+    @Binding var editingRowId: UUID?
+    let onRenameAccount: (Account) -> (String) -> Void
+    let onRenameEarmark: (Earmark) -> (String) -> Void
+    let onRenameGroup: (AccountGroup) -> (String) -> Void
     let onAddAccount: () -> Void
     let onAddEarmark: () -> Void
     let showHidden: Bool
@@ -33,6 +39,18 @@
       controller.delegate.expansionChanged = { row, isExpanded in
         guard case .group(let groupId) = row else { return }
         Task { await groupUIStateStore.setExpanded(isExpanded, for: groupId) }
+      }
+      controller.delegate.beginRenameRequested = { [controller] in
+        let view = controller.outlineView
+        guard view.selectedRow >= 0,
+          let row = view.item(atRow: view.selectedRow) as? SidebarRow
+        else { return }
+        switch row {
+        case .account(let id), .earmark(let id), .group(let id):
+          editingRowId = id
+        case .section, .total, .navigation:
+          return
+        }
       }
       return controller
     }
@@ -75,6 +93,10 @@
         },
         selectionBinding: $selection,
         accountToEditBinding: $accountToEdit,
+        editingRowIdBinding: $editingRowId,
+        onRenameAccount: onRenameAccount,
+        onRenameEarmark: onRenameEarmark,
+        onRenameGroup: onRenameGroup,
         onAddAccount: onAddAccount,
         onAddEarmark: onAddEarmark)
     }
