@@ -311,3 +311,59 @@ extension SidebarScreen {
     }
   }
 }
+
+extension SidebarScreen {
+  // MARK: - Drag-and-drop (issue #991)
+
+  /// Drags the source account's row onto the target account's row using
+  /// `press(forDuration:thenDragTo:)`. XCUITest's primitive always lands
+  /// the drop on the centre of the target row, which the
+  /// `SidebarDropPolicy` interprets as "drop onto" rather than "reorder
+  /// between rows" — callers expecting a group-create outcome are aligned
+  /// with the API's affordance.
+  ///
+  /// Waits on both rows existing before initiating the press so a slow
+  /// first paint doesn't race the gesture. Post-condition assertions are
+  /// the caller's responsibility — drag outcomes are scenario-specific
+  /// (group created / rename field visible / membership changed).
+  func dragAccount(_ source: SidebarAccount, ontoAccount target: SidebarAccount) {
+    Trace.record(detail: "source=\(source) target=\(target)")
+    let sourceIdentifier = UITestIdentifiers.Sidebar.account(source.id)
+    let targetIdentifier = UITestIdentifiers.Sidebar.account(target.id)
+    let sourceRow = app.element(for: sourceIdentifier)
+    let targetRow = app.element(for: targetIdentifier)
+    if !sourceRow.waitForExistence(timeout: 3) {
+      Trace.recordFailure("sidebar row '\(sourceIdentifier)' did not appear")
+      XCTFail("Sidebar row for source account \(source) did not appear within 3s")
+      return
+    }
+    if !targetRow.waitForExistence(timeout: 3) {
+      Trace.recordFailure("sidebar row '\(targetIdentifier)' did not appear")
+      XCTFail("Sidebar row for target account \(target) did not appear within 3s")
+      return
+    }
+    sourceRow.press(forDuration: 0.4, thenDragTo: targetRow)
+  }
+
+  /// Drags the source account's row onto the target group's row. Same
+  /// centre-of-row landing semantics as `dragAccount(_:ontoAccount:)`;
+  /// the policy maps a centre-of-row drop on a group to "add to group".
+  func dragAccount(_ source: SidebarAccount, ontoGroup target: SidebarGroup) {
+    Trace.record(detail: "source=\(source) group=\(target)")
+    let sourceIdentifier = UITestIdentifiers.Sidebar.account(source.id)
+    let targetIdentifier = UITestIdentifiers.Sidebar.group(target.id)
+    let sourceRow = app.element(for: sourceIdentifier)
+    let targetRow = app.element(for: targetIdentifier)
+    if !sourceRow.waitForExistence(timeout: 3) {
+      Trace.recordFailure("sidebar row '\(sourceIdentifier)' did not appear")
+      XCTFail("Sidebar row for source account \(source) did not appear within 3s")
+      return
+    }
+    if !targetRow.waitForExistence(timeout: 3) {
+      Trace.recordFailure("sidebar row '\(targetIdentifier)' did not appear")
+      XCTFail("Sidebar row for target group \(target) did not appear within 3s")
+      return
+    }
+    sourceRow.press(forDuration: 0.4, thenDragTo: targetRow)
+  }
+}
