@@ -121,4 +121,88 @@
       }
     }
   }
+
+  extension SidebarOutlineDropCoordinator {
+    /// Reads current store snapshots and resolves the policy outcome
+    /// for an `NSOutlineView` drop's `(proposedItem, childIndex)` plus
+    /// the dragged `DraggableSidebarItem`. Returns `.deny` when the
+    /// proposed item is not a valid drop surface or when the inferred
+    /// bucket is `nil` (earmark / total / navigation sections).
+    ///
+    /// Instance method (not `nonisolated static`) because it reads
+    /// `@MainActor`-isolated store state. Tests call it from a
+    /// `@MainActor` suite.
+    func outcome(
+      forProposedItem item: SidebarRow?,
+      childIndex: Int,
+      dragged: DraggableSidebarItem
+    ) -> SidebarDropPolicy.DropOutcome {
+      let accounts = accountStore.accounts
+      let groups = accountGroupStore.groups
+      guard
+        let bucket = Self.bucket(
+          forProposedItem: item, accounts: accounts, groups: groups),
+        let target = Self.target(
+          forProposedItem: item,
+          childIndex: childIndex,
+          dragged: dragged,
+          accounts: accounts,
+          groups: groups)
+      else { return .deny }
+      return SidebarDropPolicy.outcome(
+        for: target, bucket: bucket, accounts: accounts, groups: groups)
+    }
+
+    /// Dispatches a `DropOutcome` to the matching `SidebarDropDispatch`
+    /// entry point. Fires `onCreatedGroup` when `dropOntoAccount`
+    /// creates a new group so the host binding can flip
+    /// `editingRowId` to the new group.
+    ///
+    /// Returns `true` when the outcome resulted in a store mutation
+    /// (or the dispatch was attempted) — the caller uses this to
+    /// decide whether to claim the drop on `acceptDrop`. `.deny` and
+    /// the two `.retarget*` outcomes return `false`; retargets are
+    /// visual-hint-only and never survive into accept.
+    @discardableResult
+    func commit(
+      _ outcome: SidebarDropPolicy.DropOutcome,
+      bucket: AccountBucket
+    ) async -> Bool {
+      switch outcome {
+      case .deny, .retargetRoot, .retargetGroup:
+        return false
+      case let .addToGroup(sourceId, groupId):
+        try? await SidebarDropDispatch.dropOntoGroup(
+          sourceId: sourceId,
+          groupId: groupId,
+          accountStore: accountStore,
+          accountGroupStore: accountGroupStore)
+        return true
+      case let .dropOntoAccount(sourceId, targetId):
+        let created = try? await SidebarDropDispatch.dropOntoAccount(
+          sourceId: sourceId,
+          targetId: targetId,
+          accountStore: accountStore,
+          accountGroupStore: accountGroupStore,
+          groupUIStateStore: groupUIStateStore)
+        if let created { onCreatedGroup?(created) }
+        return true
+      case let .reorderRoot(item, idx):
+        try? await SidebarDropDispatch.reorderRoot(
+          dragged: item,
+          insertionIndex: idx,
+          bucket: bucket,
+          accountStore: accountStore,
+          accountGroupStore: accountGroupStore)
+        return true
+      case let .reorderMembers(groupId, sourceId, idx):
+        await SidebarDropDispatch.reorderMembers(
+          groupId: groupId,
+          sourceAccountId: sourceId,
+          insertionIndex: idx,
+          accountStore: accountStore)
+        return true
+      }
+    }
+  }
 #endif
