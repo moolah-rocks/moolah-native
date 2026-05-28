@@ -43,4 +43,22 @@ final class SidebarInlineRenameMacTests: MoolahUITestCase {
       .completed,
       "Sidebar row did not reflect the renamed earmark label within 3s")
   }
+
+  func testContextMenuRenameGroup() {
+    let app = launch(seed: .tradeBaseline)
+    let renamed = "Investments Renamed"
+
+    app.sidebar.beginRenameGroup(.renameTarget)
+    app.sidebar.typeRenameAndCommit(renamed)
+
+    let renamedRow = app.element(
+      for: UITestIdentifiers.Sidebar.group(SidebarGroup.renameTarget.id))
+    let predicate = NSPredicate(format: "label CONTAINS %@", renamed)
+    let expectation = XCTNSPredicateExpectation(
+      predicate: predicate, object: renamedRow)
+    XCTAssertEqual(
+      XCTWaiter.wait(for: [expectation], timeout: 3),
+      .completed,
+      "Sidebar row did not reflect the renamed group label within 3s")
+  }
 }
