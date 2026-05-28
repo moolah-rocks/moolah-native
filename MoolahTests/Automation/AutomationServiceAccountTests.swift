@@ -25,7 +25,7 @@ struct AutomationServiceAccountTests {
     // AccountStore is reactive — wait for the first emission so any
     // pre-seeded accounts are visible. For a fresh test session there
     // are none, but the wait keeps the public API consistent.
-    try? await session.accountStore.waitForFirstEmission()
+    try await session.accountStore.waitForFirstEmission()
     let service = AutomationService(sessionManager: sessionManager)
     return (service, session)
   }
@@ -46,7 +46,7 @@ struct AutomationServiceAccountTests {
 
     // AccountStore is reactive — the new account is observable via
     // `accounts` once `observeAll()` delivers the post-write snapshot.
-    try? await session.accountStore.waitForNextEmission(
+    try await session.accountStore.waitForNextEmission(
       matching: { $0.accounts.count == 1 },
       description: "new account observable"
     )
@@ -65,7 +65,7 @@ struct AutomationServiceAccountTests {
       type: .bank
     )
 
-    try? await session.accountStore.waitForNextEmission(
+    try await session.accountStore.waitForNextEmission(
       matching: { $0.accounts.contains { $0.name == "My Savings" } },
       description: "new account observable"
     )
@@ -92,7 +92,7 @@ struct AutomationServiceAccountTests {
       type: .bank
     )
 
-    try? await session.accountStore.waitForNextEmission(
+    try await session.accountStore.waitForNextEmission(
       matching: { $0.accounts.by(id: created.id) != nil },
       description: "new account observable"
     )
@@ -118,7 +118,7 @@ struct AutomationServiceAccountTests {
 
     // Wait for the reactive observation to deliver the position
     // computed from the opening-balance transaction.
-    try? await session.accountStore.waitForNextEmission(
+    try await session.accountStore.waitForNextEmission(
       matching: { !($0.positions(for: bankAccount.id).isEmpty) },
       description: "opening balance position observable"
     )
@@ -136,7 +136,7 @@ struct AutomationServiceAccountTests {
       type: .bank
     )
 
-    try? await session.accountStore.waitForNextEmission(
+    try await session.accountStore.waitForNextEmission(
       matching: { $0.accounts.by(id: created.id) != nil },
       description: "new account observable"
     )
@@ -159,7 +159,7 @@ struct AutomationServiceAccountTests {
       type: .bank
     )
 
-    try? await session.accountStore.waitForNextEmission(
+    try await session.accountStore.waitForNextEmission(
       matching: { $0.accounts.by(id: created.id) != nil },
       description: "new account observable"
     )
@@ -169,7 +169,7 @@ struct AutomationServiceAccountTests {
     // `AccountRepository.delete` is a soft delete (flips `isHidden`).
     // Under the reactive observation contract, the row stays in GRDB
     // (and therefore in `accounts`) but with `isHidden == true`.
-    try? await session.accountStore.waitForNextEmission(
+    try await session.accountStore.waitForNextEmission(
       matching: { $0.accounts.by(id: created.id)?.isHidden == true },
       description: "account hidden observable"
     )

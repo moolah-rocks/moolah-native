@@ -28,7 +28,7 @@ struct AddInvestmentValueIntentPolicyTests {
       Issue.record("expected .ready")
       throw OpenSessionFailed()
     }
-    try? await session.accountStore.waitForFirstEmission()
+    try await session.accountStore.waitForFirstEmission()
     let service = AutomationService(sessionManager: sessionManager)
     return (service, session)
   }
@@ -43,7 +43,7 @@ struct AddInvestmentValueIntentPolicyTests {
     let saved = try await session.accountStore.create(
       Account(name: "Brokerage", type: .investment, instrument: session.profile.instrument))
     #expect(saved.valuationMode == .calculatedFromTrades)
-    try? await session.accountStore.waitForNextEmission(
+    try await session.accountStore.waitForNextEmission(
       matching: { $0.accounts.contains { $0.name == "Brokerage" } },
       description: "new account observable"
     )

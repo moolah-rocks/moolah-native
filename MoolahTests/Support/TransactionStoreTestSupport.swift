@@ -68,7 +68,7 @@ enum TransactionStoreTestSupport {
     database: any DatabaseWriter,
     accounts: [SeededAccount] = [],
     earmarks: [Earmark] = []
-  ) async -> Stores {
+  ) async throws -> Stores {
     if !accounts.isEmpty {
       let tuples = accounts.map { ($0.account, $0.openingBalance) }
       TestBackend.seed(accounts: tuples, in: database)
@@ -91,19 +91,19 @@ enum TransactionStoreTestSupport {
     // TransactionStore code path that depends on them being visible
     // runs. Without seeded entries the first emission is enough.
     if accounts.isEmpty {
-      try? await accountStore.waitForFirstEmission()
+      try await accountStore.waitForFirstEmission()
     } else {
       let expectedCount = accounts.count
-      try? await accountStore.waitForNextEmission(
+      try await accountStore.waitForNextEmission(
         matching: { $0.accounts.count == expectedCount },
         description: "seeded accounts observable"
       )
     }
     if earmarks.isEmpty {
-      try? await earmarkStore.waitForFirstEmission()
+      try await earmarkStore.waitForFirstEmission()
     } else {
       let expectedCount = earmarks.count
-      try? await earmarkStore.waitForNextEmission(
+      try await earmarkStore.waitForNextEmission(
         matching: { $0.earmarks.count == expectedCount },
         description: "seeded earmarks observable"
       )
