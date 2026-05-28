@@ -244,9 +244,7 @@ struct SidebarView: View {
 #endif
 
 extension SidebarView {
-  // MARK: - Inline Rename State Coordination
-  // renameBinding, renameAction — shared by iOS list rows and the
-  // macOS AppKit outline cells.
+  // MARK: - Inline Rename State Coordination (iOS + macOS)
 
   /// Returns a binding that reports `true` when this row id is the one
   /// currently being inline-renamed, and (on `set(true)`) makes it so.
@@ -255,9 +253,11 @@ extension SidebarView {
     Self.renameBinding(for: id, editingId: $editingRowId)
   }
 
-  /// Pure factory used by both `SidebarView` (above) and the AppKit
-  /// `SidebarCellBuilder` so the one-at-a-time invariant has a single
-  /// definition.
+  /// Extracted as a static so the one-at-a-time invariant can be
+  /// unit-tested (see `SidebarRenameBindingTests`) without constructing
+  /// a view. The instance wrapper `renameBinding(for:)` delegates here;
+  /// `SidebarCellBuilder` calls the static directly with its own
+  /// `editingRowId` binding.
   static func renameBinding(
     for id: UUID, editingId: Binding<UUID?>
   ) -> Binding<Bool> {
@@ -277,14 +277,18 @@ extension SidebarView {
     }
   }
 
-  /// Returns the `onRename` closure for an earmark row.
+  /// Returns the `onRename` closure for an earmark row. Mirrors the
+  /// account variant but without `try?` — `EarmarkStore.rename` is
+  /// non-throwing (errors surface on `earmarkStore.error` internally).
   func renameAction(for earmark: Earmark) -> (String) -> Void {
     { newName in
       Task { _ = await earmarkStore.rename(id: earmark.id, to: newName) }
     }
   }
 
-  /// Returns the `onRename` closure for an account-group row.
+  /// Returns the `onRename` closure for an account-group row. Same
+  /// dispatch shape as the account / earmark variants; errors surface
+  /// on `accountGroupStore.error` before the rethrow is discarded here.
   func renameAction(for group: AccountGroup) -> (String) -> Void {
     { newName in
       Task { _ = try? await accountGroupStore.rename(id: group.id, to: newName) }
