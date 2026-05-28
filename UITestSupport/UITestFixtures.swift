@@ -41,6 +41,11 @@ public enum UITestFixtures {
   ///     give `fetchPayeeSuggestions` something to match against. "Woolworths"
   ///     occurs twice so it sorts strictly above single-occurrence payees
   ///     regardless of dictionary iteration order.
+  ///   - Earmark `renameTargetEarmark` — "Holiday", no balance/target. Gives
+  ///     sidebar-rename UI tests an earmark row to drive.
+  ///   - Account group `renameTargetGroup` — "Investments Group", investments
+  ///     bucket, no members. Gives sidebar-rename UI tests a group row to
+  ///     drive.
   public enum TradeBaseline {
     public static let profileId = uuidLiteral("A1000000-0000-0000-0000-000000000001")
     public static let profileLabel = "Personal"
@@ -65,6 +70,21 @@ public enum UITestFixtures {
     public static let tradesBrokerageAccountId =
       uuidLiteral("A1000000-0000-0000-0000-000000000013")
     public static let tradesBrokerageAccountName = "Trades brokerage"
+
+    // Earmark for sidebar-rename UI coverage. Lives in the same profile;
+    // no balance / target. Drive via UITestIdentifiers.Sidebar.earmark(id).
+    public static let renameTargetEarmarkId =
+      uuidLiteral("A1000000-0000-0000-0000-0000000000E1")
+    public static let renameTargetEarmarkName = "Holiday"
+
+    // Account group for sidebar-rename UI coverage. Bucket: investments
+    // so it nests under the same source-list section as the existing
+    // brokerage / tradesBrokerage accounts. Has no members — group
+    // membership is out of scope for #999 and the rename test only
+    // needs the row to be present and renameable.
+    public static let renameTargetGroupId =
+      uuidLiteral("A1000000-0000-0000-0000-0000000000F1")
+    public static let renameTargetGroupName = "Investments Group"
 
     /// One `InvestmentValue` snapshot for the existing `brokerage`
     /// (recordedValue mode) account. Drives the "recordedValue + has
