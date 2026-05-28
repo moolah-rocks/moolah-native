@@ -307,7 +307,7 @@ struct CryptoAccountCreationStoreTests {
     // exists but was never handed to the logic, so the alchemy stub
     // saw no activity). AccountStore is reactive — wait for the
     // observation to deliver the new account before reading.
-    try? await fixture.accountStore.waitForNextEmission(
+    try await fixture.accountStore.waitForNextEmission(
       matching: { $0.accounts.count == 1 },
       description: "new account observable"
     )

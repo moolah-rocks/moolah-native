@@ -24,7 +24,7 @@ struct AutomationServiceEarmarkTests {
     }
     // EarmarkStore is reactive — wait for the first emission so any
     // pre-seeded earmarks are visible.
-    try? await session.earmarkStore.waitForFirstEmission()
+    try await session.earmarkStore.waitForFirstEmission()
     let service = AutomationService(sessionManager: sessionManager)
     return (service, session)
   }
@@ -44,7 +44,7 @@ struct AutomationServiceEarmarkTests {
 
     // EarmarkStore is reactive — the new earmark is observable via
     // observeAll() shortly after the GRDB write commits, not synchronously.
-    try? await session.earmarkStore.waitForNextEmission(
+    try await session.earmarkStore.waitForNextEmission(
       matching: { $0.earmarks.contains { $0.name == "Holiday Fund" } },
       description: "new earmark observable"
     )
@@ -63,7 +63,7 @@ struct AutomationServiceEarmarkTests {
       name: "Emergency Fund"
     )
 
-    try? await session.earmarkStore.waitForNextEmission(
+    try await session.earmarkStore.waitForNextEmission(
       matching: { $0.earmarks.contains { $0.name == "Emergency Fund" } },
       description: "new earmark observable"
     )

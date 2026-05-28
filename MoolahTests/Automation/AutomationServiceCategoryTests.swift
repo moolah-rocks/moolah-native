@@ -24,7 +24,7 @@ struct AutomationServiceCategoryTests {
     }
     // CategoryStore is reactive — wait for the first emission so any
     // pre-seeded rows are visible.
-    try? await session.categoryStore.waitForFirstEmission()
+    try await session.categoryStore.waitForFirstEmission()
     let service = AutomationService(sessionManager: sessionManager)
     return (service, session)
   }
@@ -44,7 +44,7 @@ struct AutomationServiceCategoryTests {
 
     // CategoryStore is reactive — the new category is observable via
     // `categories` once `observeAll()` delivers the post-write snapshot.
-    try? await session.categoryStore.waitForNextEmission(
+    try await session.categoryStore.waitForNextEmission(
       matching: { $0.categories.roots.count == 1 },
       description: "new category observable"
     )
@@ -64,7 +64,7 @@ struct AutomationServiceCategoryTests {
       parentName: nil
     )
 
-    try? await session.categoryStore.waitForNextEmission(
+    try await session.categoryStore.waitForNextEmission(
       matching: { $0.categories.roots.contains { $0.name == "Transport" } },
       description: "new category observable"
     )
@@ -95,7 +95,7 @@ struct AutomationServiceCategoryTests {
     // The subsequent createCategory call resolves "Food" against the
     // store's `categories` cache — wait for the first create to land
     // there before issuing the second.
-    try? await session.categoryStore.waitForNextEmission(
+    try await session.categoryStore.waitForNextEmission(
       matching: { $0.categories.roots.contains { $0.name == "Food" } },
       description: "parent category observable"
     )

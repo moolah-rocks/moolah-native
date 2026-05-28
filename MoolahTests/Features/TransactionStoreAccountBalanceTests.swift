@@ -14,7 +14,7 @@ struct TransactionStoreAccountBalanceTests {
   func testCreateUpdatesAccountBalance() async throws {
     let account = TransactionStoreTestSupport.acct(id: accountId, name: "Bank", balance: 1000)
     let (backend, database) = try TestBackend.create()
-    let stores = await TransactionStoreTestSupport.makeStores(
+    let stores = try await TransactionStoreTestSupport.makeStores(
       backend: backend, database: database, accounts: [account])
     let store = stores.transactions
     let accountStore = stores.accounts
@@ -61,7 +61,7 @@ struct TransactionStoreAccountBalanceTests {
     )
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(transactions: [transaction], in: database)
-    let stores = await TransactionStoreTestSupport.makeStores(
+    let stores = try await TransactionStoreTestSupport.makeStores(
       backend: backend, database: database, accounts: [account])
     let store = stores.transactions
     let accountStore = stores.accounts
@@ -107,7 +107,7 @@ struct TransactionStoreAccountBalanceTests {
     )
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(transactions: [transaction], in: database)
-    let stores = await TransactionStoreTestSupport.makeStores(
+    let stores = try await TransactionStoreTestSupport.makeStores(
       backend: backend, database: database, accounts: [account])
     let store = stores.transactions
     let accountStore = stores.accounts
