@@ -65,7 +65,7 @@
       // source holds it weakly to break the controller <-> data source
       // <-> coordinator cycle, and the delegate's lifetime matches the
       // controller's.
-      controller.delegate.coordinatorRetainBox = coordinator
+      controller.delegate.retainedDropCoordinator = coordinator
       return controller
     }
 
