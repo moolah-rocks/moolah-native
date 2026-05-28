@@ -15,6 +15,14 @@
   final class SidebarOutlineDataSource: NSObject, NSOutlineViewDataSource {
     var tree: SidebarRowTree.Result = .empty
 
+    /// Coordinator the drag-and-drop methods (in
+    /// `SidebarOutlineDataSource+DragDrop.swift`) delegate to. Held
+    /// `weak` because the coordinator's lifetime is owned by
+    /// `SidebarOutline.makeNSViewController`'s controller closure —
+    /// retaining strongly would create a cycle through the controller's
+    /// references back to the data source.
+    weak var dropCoordinator: SidebarOutlineDropCoordinator?
+
     func outlineView(
       _ outlineView: NSOutlineView, numberOfChildrenOfItem item: Any?
     ) -> Int {
