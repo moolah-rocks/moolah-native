@@ -18,6 +18,7 @@ private struct InlineRenameField: View {
   var body: some View {
     TextField("Name", text: $text)
       .accessibilityLabel("Name")
+      .accessibilityIdentifier(UITestIdentifiers.Sidebar.renameNameField)
       .textFieldStyle(.plain)
       .focused($isFocused)
       .onAppear {

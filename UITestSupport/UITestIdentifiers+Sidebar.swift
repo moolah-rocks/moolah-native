@@ -56,6 +56,12 @@ extension UITestIdentifiers {
     /// works across all three entity types once they are wired.
     public static let renameContextMenuItem = "sidebar.contextMenu.rename"
 
+    /// Accessibility identifier on the inline `TextField` rendered while
+    /// a sidebar row is being renamed. Used by `SidebarScreen` driver
+    /// methods to resolve the field through the `NSHostingView` boundary
+    /// without relying on the accessibility label "Name".
+    public static let renameNameField = "sidebar.row.renameField"
+
     /// Sidebar row for a specific account group. `id` is the group's
     /// UUID, lowercased. Distinct namespace from `account(_:)` so a
     /// driver can disambiguate group-vs-account rows when needed.
