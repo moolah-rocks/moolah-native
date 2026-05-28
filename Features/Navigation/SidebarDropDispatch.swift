@@ -70,12 +70,18 @@ enum SidebarDropDispatch {
 
   /// Drop-onto-group. Same-bucket only; rejects re-adding to the same
   /// group and missing source. Adds the source account to the target
-  /// group via `accountGroupStore.addAccount`.
+  /// group via `accountGroupStore.addAccount`, then auto-expands the
+  /// target group via `groupUIStateStore` so the freshly added member
+  /// is visible (otherwise a drop into a collapsed group would hide
+  /// the new member with no visual feedback that the drop succeeded —
+  /// mirrors the auto-expand `dropOntoAccount` does for a newly
+  /// created group).
   static func dropOntoGroup(
     sourceId: UUID,
     groupId: UUID,
     accountStore: AccountStore,
-    accountGroupStore: AccountGroupStore
+    accountGroupStore: AccountGroupStore,
+    groupUIStateStore: GroupUIStateStore
   ) async throws {
     guard let source = accountStore.accounts.by(id: sourceId) else { return }
     guard let group = accountGroupStore.by(id: groupId) else { return }
@@ -84,6 +90,7 @@ enum SidebarDropDispatch {
 
     try await accountGroupStore.addAccount(
       source, to: group, accountStore: accountStore)
+    await groupUIStateStore.setExpanded(true, for: group.id)
   }
 
   /// Root-level reorder: rewrites `position` so the dragged

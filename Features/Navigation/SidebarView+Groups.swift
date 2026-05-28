@@ -247,7 +247,8 @@ import UniformTypeIdentifiers
           sourceId: item.id,
           groupId: target.id,
           accountStore: accountStore,
-          accountGroupStore: accountGroupStore)
+          accountGroupStore: accountGroupStore,
+          groupUIStateStore: groupUIStateStore)
       } catch {
         // Error already surfaced on `accountGroupStore.error`; no extra UI hop.
       }

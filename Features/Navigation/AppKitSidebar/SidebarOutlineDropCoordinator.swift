@@ -193,7 +193,8 @@
             sourceId: sourceId,
             groupId: groupId,
             accountStore: accountStore,
-            accountGroupStore: accountGroupStore)
+            accountGroupStore: accountGroupStore,
+            groupUIStateStore: groupUIStateStore)
         } catch {
           // Error already surfaced reactively on accountGroupStore.error.
         }
