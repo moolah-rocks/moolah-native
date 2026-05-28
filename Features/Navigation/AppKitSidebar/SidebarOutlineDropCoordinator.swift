@@ -72,4 +72,53 @@
       }
     }
   }
+
+  extension SidebarOutlineDropCoordinator {
+    /// Translates `NSOutlineView`'s `(proposedItem, childIndex)` plus
+    /// the dragged item into a `SidebarDropTarget` ready for
+    /// `SidebarDropPolicy.outcome(...)`. Returns `nil` only when the
+    /// proposed item is not a valid drop surface (nil, earmark / total /
+    /// navigation rows, or the earmarks / totals / navigation section
+    /// headers); out-of-bucket and self-drop denials happen inside the
+    /// policy.
+    ///
+    /// `NSOutlineViewDropOnItemIndex` (`-1`) maps to `childIndex: nil`
+    /// — the policy uses `nil` to mean "drop directly onto the
+    /// target row" (full-row highlight); a non-negative integer means
+    /// "drop between children at insertion slot N" (insertion line).
+    ///
+    /// `nonisolated` for the same reason as `bucket(...)`.
+    nonisolated static func target(
+      forProposedItem item: SidebarRow?,
+      childIndex: Int,
+      dragged: DraggableSidebarItem,
+      accounts: Accounts,
+      groups: [AccountGroup]
+    ) -> SidebarDropTarget? {
+      let mappedChildIndex: Int? =
+        (childIndex == NSOutlineViewDropOnItemIndex) ? nil : childIndex
+      guard let item else { return nil }
+      switch item {
+      case .section(.current), .section(.investments):
+        return SidebarDropTarget(
+          dragged: dragged, into: nil, childIndex: mappedChildIndex)
+      case .section(.earmarks), .section(.totals), .section(.navigation):
+        return nil
+      case .account(let id):
+        guard accounts.by(id: id) != nil else { return nil }
+        return SidebarDropTarget(
+          dragged: dragged,
+          into: .account(id),
+          childIndex: mappedChildIndex)
+      case .group(let id):
+        guard groups.contains(where: { $0.id == id }) else { return nil }
+        return SidebarDropTarget(
+          dragged: dragged,
+          into: .group(id),
+          childIndex: mappedChildIndex)
+      case .earmark, .total, .navigation:
+        return nil
+      }
+    }
+  }
 #endif
