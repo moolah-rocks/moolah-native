@@ -64,6 +64,16 @@
           return
         }
       }
+
+      // Register the sidebar pasteboard type so the outline's data-source
+      // drag methods (`pasteboardWriter(forItem:)`, `validateDrop`,
+      // `acceptDrop` in `SidebarOutlineDataSource+DragDrop.swift`) become
+      // reachable. The `.move` source-operation mask allows the internal
+      // drag initiated by our pasteboard writer to land inside the same
+      // outline — `.copy` is intentionally absent so the cursor never
+      // shows a "+" badge.
+      outlineView.registerForDraggedTypes([DraggableSidebarItem.pasteboardType])
+      outlineView.setDraggingSourceOperationMask([.move], forLocal: true)
     }
 
     private func configureScrollView() {
