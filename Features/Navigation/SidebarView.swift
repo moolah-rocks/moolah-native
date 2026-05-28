@@ -85,6 +85,10 @@ struct SidebarView: View {
         groupUIStateStore: groupUIStateStore,
         selection: $selection,
         accountToEdit: $accountToEdit,
+        editingRowId: $editingRowId,
+        onRenameAccount: renameAction(for:),
+        onRenameEarmark: renameAction(for:),
+        onRenameGroup: renameAction(for:),
         onAddAccount: { showCreateAccountSheet = true },
         onAddEarmark: { showCreateEarmarkSheet = true },
         showHidden: showHidden

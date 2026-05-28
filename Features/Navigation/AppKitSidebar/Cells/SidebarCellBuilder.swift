@@ -25,8 +25,23 @@
     let availableFunds: () -> InstrumentAmount?
     let selectionBinding: Binding<SidebarSelection?>
     let accountToEditBinding: Binding<Account?>
+    /// `nil` when no row is being inline-renamed.
+    let editingRowIdBinding: Binding<UUID?>
+    /// Factories returning the `onRename` closure for a single row of
+    /// each type. The closure is invoked with the trimmed text on
+    /// commit; stores handle empty / same-name as no-ops.
+    let onRenameAccount: (Account) -> (String) -> Void
+    let onRenameEarmark: (Earmark) -> (String) -> Void
+    let onRenameGroup: (AccountGroup) -> (String) -> Void
     let onAddAccount: () -> Void
     let onAddEarmark: () -> Void
+
+    /// Returns the per-row `Binding<Bool>` consumed by the SwiftUI row
+    /// view. Delegates to `SidebarView.renameBinding(for:editingId:)`
+    /// so the one-at-a-time invariant has a single definition.
+    private func renameBinding(for id: UUID) -> Binding<Bool> {
+      SidebarView.renameBinding(for: id, editingId: editingRowIdBinding)
+    }
 
     func makeCell(for row: SidebarRow) -> NSTableCellView {
       switch row {
@@ -53,12 +68,13 @@
       guard let account = accountStore.accounts.by(id: id) else {
         return NSTableCellView()
       }
+      let editingBinding = editingRowIdBinding
       let menu = SidebarContextMenuBuilder.accountMenu(
         accountId: id,
         accountStore: accountStore,
         selection: selectionBinding,
         accountToEdit: accountToEditBinding,
-        onBeginRename: {})
+        onBeginRename: { editingBinding.wrappedValue = id })
       return NSTableCellView.hosting(
         accessibilityIdentifier: UITestIdentifiers.Sidebar.account(id),
         menu: menu
@@ -66,7 +82,9 @@
         AccountSidebarRow(
           account: account,
           isSelected: selectionBinding.wrappedValue == .account(id),
-          isMember: account.groupId != nil
+          isMember: account.groupId != nil,
+          isEditing: renameBinding(for: id),
+          onRename: onRenameAccount(account)
         )
         .environment(accountStore)
       }
@@ -82,8 +100,13 @@
         .sorted { $0.position < $1.position }
         .map(\.id)
       let isSelected = selectionBinding.wrappedValue == .group(id)
+      let editingBinding = editingRowIdBinding
+      let menu = SidebarContextMenuBuilder.groupMenu(
+        groupId: id,
+        onBeginRename: { editingBinding.wrappedValue = id })
       return NSTableCellView.hosting(
-        accessibilityIdentifier: UITestIdentifiers.Sidebar.group(id)
+        accessibilityIdentifier: UITestIdentifiers.Sidebar.group(id),
+        menu: menu
       ) {
         GroupAggregateBalanceLoader(
           memberIds: memberIds,
@@ -94,6 +117,8 @@
             isSelected: isSelected,
             isExpanded: .constant(false),
             aggregateBalance: balance,
+            isEditing: renameBinding(for: id),
+            onRename: onRenameGroup(group),
             showChevron: false)
         }
         .environment(accountStore)
@@ -105,11 +130,21 @@
         return NSTableCellView()
       }
       let isSelected = selectionBinding.wrappedValue == .earmark(id)
+      let editingBinding = editingRowIdBinding
+      let menu = SidebarContextMenuBuilder.earmarkMenu(
+        earmarkId: id,
+        onBeginRename: { editingBinding.wrappedValue = id })
       return NSTableCellView.hosting(
-        accessibilityIdentifier: UITestIdentifiers.Sidebar.earmark(id)
+        accessibilityIdentifier: UITestIdentifiers.Sidebar.earmark(id),
+        menu: menu
       ) {
-        EarmarkRowView(earmark: earmark, isSelected: isSelected)
-          .environment(earmarkStore)
+        EarmarkRowView(
+          earmark: earmark,
+          isSelected: isSelected,
+          isEditing: renameBinding(for: id),
+          onRename: onRenameEarmark(earmark)
+        )
+        .environment(earmarkStore)
       }
     }
 
