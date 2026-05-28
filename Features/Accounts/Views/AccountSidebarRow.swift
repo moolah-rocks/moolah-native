@@ -118,8 +118,10 @@ struct SidebarRowView: View {
 
       trailingValue
     }
-    .accessibilityElement(children: .ignore)
-    .accessibilityLabel(accessibilitySummary)
+    .modifier(
+      SidebarRowAccessibility(
+        isEditing: isEditing?.wrappedValue == true,
+        summary: accessibilitySummary))
   }
 
   @ViewBuilder private var nameContent: some View {
@@ -173,6 +175,30 @@ struct SidebarRowView: View {
     if let unsetIndicator { return "\(name), \(unsetIndicator)" }
     guard let amount else { return "\(name), balance loading" }
     return "\(name), \(amount.formatted)"
+  }
+}
+
+/// Accessibility wrapper for `SidebarRowView`. When the row is in
+/// inline-rename mode, exposes children as individual accessibility
+/// elements (`.contain`) so XCUITest and VoiceOver can resolve the
+/// inline `TextField` by its `renameNameField` identifier. When the
+/// row is static, collapses the children into a single element
+/// labelled with `summary` (`.ignore` + `accessibilityLabel`) so
+/// VoiceOver reads the row as one logical item
+/// ("Checking, -$1,234.56") rather than navigating each subview.
+private struct SidebarRowAccessibility: ViewModifier {
+  let isEditing: Bool
+  let summary: String
+
+  func body(content: Content) -> some View {
+    if isEditing {
+      content
+        .accessibilityElement(children: .contain)
+    } else {
+      content
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(summary)
+    }
   }
 }
 

@@ -73,6 +73,7 @@
         return NSTableCellView()
       }
       let editingBinding = editingRowIdBinding
+      let isEditing = editingBinding.wrappedValue == id
       let menu = SidebarContextMenuBuilder.accountMenu(
         accountId: id,
         accountStore: accountStore,
@@ -81,6 +82,7 @@
         onBeginRename: { editingBinding.wrappedValue = id })
       return NSTableCellView.hosting(
         accessibilityIdentifier: UITestIdentifiers.Sidebar.account(id),
+        exposeChildAccessibility: isEditing,
         menu: menu
       ) {
         AccountSidebarRow(
@@ -105,11 +107,13 @@
         .map(\.id)
       let isSelected = selectionBinding.wrappedValue == .group(id)
       let editingBinding = editingRowIdBinding
+      let isEditing = editingBinding.wrappedValue == id
       let menu = SidebarContextMenuBuilder.groupMenu(
         groupId: id,
         onBeginRename: { editingBinding.wrappedValue = id })
       return NSTableCellView.hosting(
         accessibilityIdentifier: UITestIdentifiers.Sidebar.group(id),
+        exposeChildAccessibility: isEditing,
         menu: menu
       ) {
         GroupAggregateBalanceLoader(
@@ -135,11 +139,13 @@
       }
       let isSelected = selectionBinding.wrappedValue == .earmark(id)
       let editingBinding = editingRowIdBinding
+      let isEditing = editingBinding.wrappedValue == id
       let menu = SidebarContextMenuBuilder.earmarkMenu(
         earmarkId: id,
         onBeginRename: { editingBinding.wrappedValue = id })
       return NSTableCellView.hosting(
         accessibilityIdentifier: UITestIdentifiers.Sidebar.earmark(id),
+        exposeChildAccessibility: isEditing,
         menu: menu
       ) {
         EarmarkRowView(
