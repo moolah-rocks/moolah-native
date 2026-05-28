@@ -233,46 +233,6 @@ struct SidebarView: View {
       }
     }
 
-    // MARK: - State Coordination
-    // renameBinding, renameAction
-
-    /// Returns a binding that reports `true` when this row id is the one
-    /// currently being inline-renamed, and (on `set(true)`) makes it so.
-    /// Centralises the one-at-a-time invariant.
-    func renameBinding(for id: UUID) -> Binding<Bool> {
-      Binding(
-        get: { editingRowId == id },
-        set: { newValue in editingRowId = newValue ? id : nil }
-      )
-    }
-
-    /// Returns the `onRename` closure for an account row — single source
-    /// of truth for the inline-rename dispatch shape, used by both the
-    /// Current and Investments sections.
-    func renameAction(for account: Account) -> (String) -> Void {
-      { newName in
-        Task { _ = try? await accountStore.rename(id: account.id, to: newName) }
-      }
-    }
-
-    /// Returns the `onRename` closure for an earmark row — earmark
-    /// counterpart of `renameAction(for: Account)`. Same intent-shape;
-    /// dispatches `EarmarkStore.rename`.
-    func renameAction(for earmark: Earmark) -> (String) -> Void {
-      { newName in
-        Task { _ = await earmarkStore.rename(id: earmark.id, to: newName) }
-      }
-    }
-
-    /// Returns the `onRename` closure for an account-group row. Same
-    /// intent-shape as the account / earmark variants; dispatches
-    /// `AccountGroupStore.rename`.
-    func renameAction(for group: AccountGroup) -> (String) -> Void {
-      { newName in
-        Task { _ = try? await accountGroupStore.rename(id: group.id, to: newName) }
-      }
-    }
-
     @ViewBuilder
     func earmarkContextMenu(for earmark: Earmark) -> some View {
       Button("Rename", systemImage: "character.cursor.ibeam") {
@@ -282,3 +242,52 @@ struct SidebarView: View {
     }
   }
 #endif
+
+extension SidebarView {
+  // MARK: - Inline Rename State Coordination
+  // renameBinding, renameAction — shared by iOS list rows and the
+  // macOS AppKit outline cells.
+
+  /// Returns a binding that reports `true` when this row id is the one
+  /// currently being inline-renamed, and (on `set(true)`) makes it so.
+  /// Centralises the one-at-a-time invariant.
+  func renameBinding(for id: UUID) -> Binding<Bool> {
+    Self.renameBinding(for: id, editingId: $editingRowId)
+  }
+
+  /// Pure factory used by both `SidebarView` (above) and the AppKit
+  /// `SidebarCellBuilder` so the one-at-a-time invariant has a single
+  /// definition.
+  static func renameBinding(
+    for id: UUID, editingId: Binding<UUID?>
+  ) -> Binding<Bool> {
+    Binding(
+      get: { editingId.wrappedValue == id },
+      set: { newValue in editingId.wrappedValue = newValue ? id : nil }
+    )
+  }
+
+  /// Returns the `onRename` closure for an account row — single source
+  /// of truth for the inline-rename dispatch shape, used by both the
+  /// Current and Investments sections on iOS and by the AppKit outline
+  /// cells on macOS.
+  func renameAction(for account: Account) -> (String) -> Void {
+    { newName in
+      Task { _ = try? await accountStore.rename(id: account.id, to: newName) }
+    }
+  }
+
+  /// Returns the `onRename` closure for an earmark row.
+  func renameAction(for earmark: Earmark) -> (String) -> Void {
+    { newName in
+      Task { _ = await earmarkStore.rename(id: earmark.id, to: newName) }
+    }
+  }
+
+  /// Returns the `onRename` closure for an account-group row.
+  func renameAction(for group: AccountGroup) -> (String) -> Void {
+    { newName in
+      Task { _ = try? await accountGroupStore.rename(id: group.id, to: newName) }
+    }
+  }
+}
