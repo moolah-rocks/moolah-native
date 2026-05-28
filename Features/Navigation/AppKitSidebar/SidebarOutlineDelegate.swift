@@ -14,6 +14,11 @@
     var cellBuilder: SidebarCellBuilder?
     var selectionChanged: ((SidebarRow?) -> Void)?
     var expansionChanged: ((SidebarRow, Bool) -> Void)?
+    /// Fired when the user requests "rename current selection" via a
+    /// keyboard / menu trigger. The receiver (`SidebarOutline`) is
+    /// expected to map the current selection to its row id and flip
+    /// `editingRowId`.
+    var beginRenameRequested: (() -> Void)?
     var suppressExpansionCallbacks = false
 
     func outlineView(
