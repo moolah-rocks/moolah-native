@@ -156,48 +156,51 @@ extension SidebarScreen {
   // MARK: - Inline rename
 
   /// Right-clicks the row, clicks the "Rename" item, and waits for the
-  /// inline `TextField` to materialise inside the row.
+  /// inline `TextField` to materialise.
   func beginRenameAccount(_ account: SidebarAccount) {
     Trace.record(detail: "account=\(account)")
     rightClick(rowIdentifier: UITestIdentifiers.Sidebar.account(account.id))
     clickRenameMenuItem()
-    waitForRenameField(rowIdentifier: UITestIdentifiers.Sidebar.account(account.id))
+    waitForRenameField()
   }
 
   func beginRenameEarmark(_ earmark: SidebarEarmark) {
     Trace.record(detail: "earmark=\(earmark)")
     rightClick(rowIdentifier: UITestIdentifiers.Sidebar.earmark(earmark.id))
     clickRenameMenuItem()
-    waitForRenameField(rowIdentifier: UITestIdentifiers.Sidebar.earmark(earmark.id))
+    waitForRenameField()
   }
 
   func beginRenameGroup(_ group: SidebarGroup) {
     Trace.record(detail: "group=\(group)")
     rightClick(rowIdentifier: UITestIdentifiers.Sidebar.group(group.id))
     clickRenameMenuItem()
-    waitForRenameField(rowIdentifier: UITestIdentifiers.Sidebar.group(group.id))
+    waitForRenameField()
   }
 
   /// Types `text` into the active inline rename field, then presses
-  /// Return to commit. The currently-active field (set by
-  /// `beginRename*`) keeps keyboard focus; resolving via the most
-  /// recently inserted row's `textFields["Name"]` would race the
-  /// `beginRename*` wait, so we use the focused-window field instead.
-  func typeRenameAndCommit(text: String, inside rowIdentifier: String) {
-    Trace.record(detail: "text=\(text) row=\(rowIdentifier)")
-    let field = renameField(inside: rowIdentifier)
+  /// Return to commit. Waits for the field to unmount as the
+  /// post-condition: SwiftUI removes the `TextField` once the store
+  /// processes the commit.
+  func typeRenameAndCommit(_ text: String) {
+    Trace.record(detail: "text=\(text)")
+    let field = renameField()
     field.typeText(text)
     app.pressKeyboardShortcut(XCUIKeyboardKey.return.rawValue)
+    waitForRenameFieldGone()
   }
 
-  /// Presses Esc to cancel the active inline rename.
+  /// Presses Esc to cancel the active inline rename. Waits for the
+  /// field to unmount as the post-condition.
   func cancelRename() {
     Trace.record()
     app.pressKeyboardShortcut(XCUIKeyboardKey.escape.rawValue)
+    waitForRenameFieldGone()
   }
 
   /// Selects the account row by clicking it, then presses Return —
-  /// the keyboard trigger for inline rename.
+  /// the keyboard trigger for inline rename. Waits for the field to
+  /// appear as the post-condition.
   func selectAndPressReturn(_ account: SidebarAccount) {
     Trace.record(detail: "account=\(account)")
     let identifier = UITestIdentifiers.Sidebar.account(account.id)
@@ -209,11 +212,13 @@ extension SidebarScreen {
     }
     row.click()
     app.pressKeyboardShortcut(XCUIKeyboardKey.return.rawValue)
+    waitForRenameField()
   }
 
   /// Double-clicks the account row's name to begin rename. Selects
-  /// the row first (single click), which is the precondition for the
-  /// `.onTapGesture(count: 2)` to attach inside `SidebarRowView`.
+  /// the row first (single click) so the `.onTapGesture(count: 2)`
+  /// attaches inside `SidebarRowView.nameLabel`. Waits for the field
+  /// as the post-condition.
   func doubleClickAccountName(_ account: SidebarAccount) {
     Trace.record(detail: "account=\(account)")
     let identifier = UITestIdentifiers.Sidebar.account(account.id)
@@ -225,30 +230,28 @@ extension SidebarScreen {
     }
     row.click()
     row.doubleClick()
+    waitForRenameField()
   }
 
-  /// Expects the row identified by `rowIdentifier` to be currently
-  /// in inline-rename mode. Resolves the inline `TextField` (label
-  /// "Name") inside the row's cell descendants.
-  func expectRenameFieldVisible(rowIdentifier: String) {
-    Trace.record(detail: "row=\(rowIdentifier)")
-    let field = renameField(inside: rowIdentifier)
-    if !field.waitForExistence(timeout: 3) {
-      Trace.recordFailure("rename field did not appear inside '\(rowIdentifier)'")
-      XCTFail("Inline rename TextField did not appear within 3s of trigger")
+  /// Synchronous assertion that the rename field is currently visible.
+  /// Action methods carry the wait; this is for tests verifying that a
+  /// trigger landed the UI in edit mode.
+  func expectRenameFieldVisible() {
+    Trace.record()
+    if !renameField().exists {
+      Trace.recordFailure("rename field not visible")
+      XCTFail("Inline rename TextField is not present")
     }
   }
 
-  /// Expects the row to be back in static-label mode (no rename field).
-  func expectRenameFieldGone(rowIdentifier: String) {
-    Trace.record(detail: "row=\(rowIdentifier)")
-    let field = renameField(inside: rowIdentifier)
-    let predicate = NSPredicate(format: "exists == false")
-    let expectation = XCTNSPredicateExpectation(predicate: predicate, object: field)
-    let result = XCTWaiter.wait(for: [expectation], timeout: 3)
-    if result != .completed {
-      Trace.recordFailure("rename field still present inside '\(rowIdentifier)'")
-      XCTFail("Inline rename TextField did not disappear within 3s of cancel")
+  /// Synchronous assertion that the rename field is not currently
+  /// visible. Action methods carry the wait; this is for tests
+  /// verifying that the UI has returned to static-label mode.
+  func expectRenameFieldGone() {
+    Trace.record()
+    if renameField().exists {
+      Trace.recordFailure("rename field still visible")
+      XCTFail("Inline rename TextField is still present")
     }
   }
 
@@ -276,23 +279,35 @@ extension SidebarScreen {
     renameItem.click()
   }
 
-  private func waitForRenameField(rowIdentifier: String) {
-    let field = renameField(inside: rowIdentifier)
+  /// Resolves the inline rename `TextField` via the stable
+  /// `renameNameField` identifier. Only ever applied to the single
+  /// inline `TextField` in `InlineRenameField`, so a global lookup
+  /// through `MoolahApp.element(for:)` is unambiguous.
+  private func renameField() -> XCUIElement {
+    app.element(for: UITestIdentifiers.Sidebar.renameNameField)
+  }
+
+  /// Waits for the inline rename field to materialise. Used as the
+  /// post-condition for `beginRename*`, `selectAndPressReturn`, and
+  /// `doubleClickAccountName`.
+  private func waitForRenameField() {
+    let field = renameField()
     if !field.waitForExistence(timeout: 3) {
-      Trace.recordFailure("rename field did not appear inside '\(rowIdentifier)'")
-      XCTFail("Inline rename TextField did not appear within 3s of Rename click")
+      Trace.recordFailure("rename field did not appear")
+      XCTFail("Inline rename TextField did not appear within 3s of trigger")
     }
   }
 
-  private func renameField(inside rowIdentifier: String) -> XCUIElement {
-    // The inline TextField inside SidebarRowView is given a stable
-    // identifier (`UITestIdentifiers.Sidebar.renameNameField`) so it
-    // resolves deterministically through the NSHostingView boundary.
-    // We scope the lookup under the row cell so unrelated text fields
-    // on other screens don't shadow it during navigation.
-    let row = app.element(for: rowIdentifier)
-    return row.descendants(matching: .textField)
-      .matching(identifier: UITestIdentifiers.Sidebar.renameNameField)
-      .firstMatch
+  /// Waits for the inline rename field to disappear. Used as the
+  /// post-condition for `typeRenameAndCommit` and `cancelRename`.
+  private func waitForRenameFieldGone() {
+    let field = renameField()
+    let predicate = NSPredicate(format: "exists == false")
+    let expectation = XCTNSPredicateExpectation(predicate: predicate, object: field)
+    let result = XCTWaiter.wait(for: [expectation], timeout: 3)
+    if result != .completed {
+      Trace.recordFailure("rename field still present")
+      XCTFail("Inline rename TextField did not disappear within 3s")
+    }
   }
 }
