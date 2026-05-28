@@ -53,6 +53,19 @@
           return
         }
       }
+      let coordinator = SidebarOutlineDropCoordinator(
+        accountStore: accountStore,
+        accountGroupStore: accountGroupStore,
+        groupUIStateStore: groupUIStateStore)
+      coordinator.onCreatedGroup = { created in
+        editingRowId = created.id
+      }
+      controller.dataSource.dropCoordinator = coordinator
+      // Retain the coordinator on the controller's delegate — the data
+      // source holds it weakly to break the controller <-> data source
+      // <-> coordinator cycle, and the delegate's lifetime matches the
+      // controller's.
+      controller.delegate.coordinatorRetainBox = coordinator
       return controller
     }
 

@@ -19,6 +19,13 @@
     /// expected to map the current selection to its row id and flip
     /// `editingRowId`.
     var beginRenameRequested: (() -> Void)?
+    /// Strong reference to the drop coordinator. The data source holds
+    /// it weakly to break the controller <-> data source <-> coordinator
+    /// cycle; this property anchors the coordinator's lifetime to the
+    /// controller's. The delegate is the natural owner because it lives
+    /// for the entire controller lifetime and never changes identity
+    /// across SwiftUI updates (`cellBuilder` is the only field that does).
+    var coordinatorRetainBox: SidebarOutlineDropCoordinator?
     var suppressExpansionCallbacks = false
 
     func outlineView(
