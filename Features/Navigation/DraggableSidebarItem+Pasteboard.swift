@@ -43,5 +43,19 @@
       guard let data = item.data(forType: pasteboardType) else { return nil }
       return try? JSONDecoder().decode(Self.self, from: data)
     }
+
+    /// `NSPasteboard` convenience over `read(from: NSPasteboardItem)`.
+    /// Returns the first `DraggableSidebarItem` decodable from any of
+    /// the pasteboard's items, or `nil` when no item carries our
+    /// pasteboard type. Used by `SidebarOutlineDataSource+DragDrop`'s
+    /// `validateDrop` / `acceptDrop` paths — `NSDraggingInfo` only
+    /// hands them the full pasteboard, not individual items.
+    static func read(from pasteboard: NSPasteboard) -> DraggableSidebarItem? {
+      guard let items = pasteboard.pasteboardItems else { return nil }
+      for item in items {
+        if let decoded = read(from: item) { return decoded }
+      }
+      return nil
+    }
   }
 #endif
