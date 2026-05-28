@@ -37,7 +37,7 @@
     /// the current store snapshots. Pure value so the policy is
     /// trivially testable. Callers own any UI-state side-effects after
     /// inspecting the outcome.
-    enum DropOutcome: Equatable {
+    enum DropOutcome: Equatable, Sendable {
       case deny
       case addToGroup(sourceAccountId: UUID, groupId: UUID)
       case dropOntoAccount(sourceAccountId: UUID, targetAccountId: UUID)

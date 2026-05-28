@@ -25,7 +25,7 @@
     /// controller's. The delegate is the natural owner because it lives
     /// for the entire controller lifetime and never changes identity
     /// across SwiftUI updates (`cellBuilder` is the only field that does).
-    var coordinatorRetainBox: SidebarOutlineDropCoordinator?
+    var retainedDropCoordinator: SidebarOutlineDropCoordinator?
     var suppressExpansionCallbacks = false
 
     func outlineView(

@@ -173,10 +173,11 @@
     /// creates a new group so the host binding can flip
     /// `editingRowId` to the new group.
     ///
-    /// Returns `true` when the outcome resulted in a store mutation
-    /// (or the dispatch was attempted) — the caller uses this to
-    /// decide whether to claim the drop on `acceptDrop`. `.deny` and
-    /// the two `.retarget*` outcomes return `false`; retargets are
+    /// Returns `true` when the dispatch was attempted (even if the store
+    /// call threw — store errors are surfaced reactively on
+    /// `accountStore.error` / `accountGroupStore.error`, so the caller
+    /// shouldn't gate the drop animation on the throw). `false` for
+    /// `.deny` and the two `.retarget*` outcomes; retargets are
     /// visual-hint-only and never survive into accept.
     @discardableResult
     func commit(
@@ -187,28 +188,41 @@
       case .deny, .retargetRoot, .retargetGroup:
         return false
       case let .addToGroup(sourceId, groupId):
-        try? await SidebarDropDispatch.dropOntoGroup(
-          sourceId: sourceId,
-          groupId: groupId,
-          accountStore: accountStore,
-          accountGroupStore: accountGroupStore)
+        do {
+          try await SidebarDropDispatch.dropOntoGroup(
+            sourceId: sourceId,
+            groupId: groupId,
+            accountStore: accountStore,
+            accountGroupStore: accountGroupStore)
+        } catch {
+          // Error already surfaced reactively on accountGroupStore.error.
+        }
         return true
       case let .dropOntoAccount(sourceId, targetId):
-        let created = try? await SidebarDropDispatch.dropOntoAccount(
-          sourceId: sourceId,
-          targetId: targetId,
-          accountStore: accountStore,
-          accountGroupStore: accountGroupStore,
-          groupUIStateStore: groupUIStateStore)
+        var created: AccountGroup?
+        do {
+          created = try await SidebarDropDispatch.dropOntoAccount(
+            sourceId: sourceId,
+            targetId: targetId,
+            accountStore: accountStore,
+            accountGroupStore: accountGroupStore,
+            groupUIStateStore: groupUIStateStore)
+        } catch {
+          // Error already surfaced reactively on accountGroupStore.error.
+        }
         if let created { onCreatedGroup?(created) }
         return true
       case let .reorderRoot(item, idx):
-        try? await SidebarDropDispatch.reorderRoot(
-          dragged: item,
-          insertionIndex: idx,
-          bucket: bucket,
-          accountStore: accountStore,
-          accountGroupStore: accountGroupStore)
+        do {
+          try await SidebarDropDispatch.reorderRoot(
+            dragged: item,
+            insertionIndex: idx,
+            bucket: bucket,
+            accountStore: accountStore,
+            accountGroupStore: accountGroupStore)
+        } catch {
+          // Error already surfaced reactively on accountGroupStore.error.
+        }
         return true
       case let .reorderMembers(groupId, sourceId, idx):
         await SidebarDropDispatch.reorderMembers(
