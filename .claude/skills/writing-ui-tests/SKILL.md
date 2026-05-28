@@ -77,6 +77,14 @@ Add the identifier constants to `UITestSupport/UITestIdentifiers.swift` using th
    just test-ui <ClassName>/<testName> 2>&1 | tee .agent-tmp/test-ui.txt
    ```
 
+   **From a worktree, first copy `.env` from the main checkout** (it is gitignored):
+
+   ```bash
+   cp ../../../.env .env   # adjust the path for your worktree depth
+   ```
+
+   The `.env` file pins `DEVELOPMENT_TEAM` and the code-signing identity. Without it, the worktree build is signed differently than the main checkout, so macOS treats it as a distinct app and pops a TCC prompt for Documents-folder access on first launch. That prompt blocks `XCUIApplication.launch()` indefinitely and the UI test times out with no useful artefacts. Symptom: the test hangs at launch, `tree.txt` is empty, and a system dialog is visible if you `open .agent-tmp/ui-fail-<TestName>/screenshot.png`.
+
 2. **On failure, read artefacts before editing anything**:
 
    ```bash
