@@ -24,9 +24,9 @@
   ///    binding can enter inline-rename mode.
   @MainActor
   final class SidebarOutlineDropCoordinator {
-    let accountStore: AccountStore
-    let accountGroupStore: AccountGroupStore
-    let groupUIStateStore: GroupUIStateStore
+    private let accountStore: AccountStore
+    private let accountGroupStore: AccountGroupStore
+    private let groupUIStateStore: GroupUIStateStore
 
     /// Fired after `commit` lands a `dropOntoAccount` outcome that
     /// joined two standalone accounts into a new group. The host
@@ -119,6 +119,21 @@
       case .earmark, .total, .navigation:
         return nil
       }
+    }
+  }
+
+  extension SidebarOutlineDropCoordinator {
+    /// Reads the coordinator's live `accountStore` and
+    /// `accountGroupStore` snapshots and forwards to the static
+    /// `bucket(forProposedItem:accounts:groups:)` helper. Lets call
+    /// sites that already hold a coordinator infer the bucket of a
+    /// proposed drop item without reaching into the private store
+    /// properties.
+    func bucket(forProposedItem item: SidebarRow?) -> AccountBucket? {
+      Self.bucket(
+        forProposedItem: item,
+        accounts: accountStore.accounts,
+        groups: accountGroupStore.groups)
     }
   }
 

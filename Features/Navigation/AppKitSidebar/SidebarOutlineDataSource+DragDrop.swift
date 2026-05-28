@@ -56,8 +56,7 @@
         return []
       case .retargetRoot(let idx):
         let bucketSection = sectionRow(
-          forBucket: inferredBucket(
-            forProposedItem: proposedRow, coordinator: coordinator))
+          forBucket: coordinator.bucket(forProposedItem: proposedRow))
         outlineView.setDropItem(bucketSection, dropChildIndex: idx)
         return .move
       case let .retargetGroup(gId, idx):
@@ -81,9 +80,7 @@
       let proposedRow = item as? SidebarRow
       let outcome = coordinator.outcome(
         forProposedItem: proposedRow, childIndex: index, dragged: dragged)
-      guard
-        let bucket = inferredBucket(
-          forProposedItem: proposedRow, coordinator: coordinator)
+      guard let bucket = coordinator.bucket(forProposedItem: proposedRow)
       else { return false }
       switch outcome {
       case .deny, .retargetRoot, .retargetGroup:
@@ -95,16 +92,6 @@
     }
 
     // MARK: - Helpers
-
-    private func inferredBucket(
-      forProposedItem item: SidebarRow?,
-      coordinator: SidebarOutlineDropCoordinator
-    ) -> AccountBucket? {
-      SidebarOutlineDropCoordinator.bucket(
-        forProposedItem: item,
-        accounts: coordinator.accountStore.accounts,
-        groups: coordinator.accountGroupStore.groups)
-    }
 
     private func sectionRow(forBucket bucket: AccountBucket?) -> SidebarRow? {
       switch bucket {
