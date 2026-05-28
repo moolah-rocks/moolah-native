@@ -79,4 +79,15 @@ final class SidebarInlineRenameMacTests: MoolahUITestCase {
       row.label.contains(originalName),
       "Esc on rename should leave the account name unchanged; got '\(row.label)'")
   }
+
+  func testDoubleClickAccountNameEntersRename() {
+    let app = launch(seed: .tradeBaseline)
+    let account = SidebarAccount.checking
+
+    app.sidebar.doubleClickAccountName(account)
+    app.sidebar.expectRenameFieldVisible()
+
+    // Cancel so the seed is left unchanged.
+    app.sidebar.cancelRename()
+  }
 }
