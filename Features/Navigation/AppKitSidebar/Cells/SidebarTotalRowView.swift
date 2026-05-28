@@ -10,6 +10,11 @@ import SwiftUI
 /// `Features/Navigation/SidebarView+Sections.swift`). `bold` additionally
 /// applies `.bold()` on top of the headline, matching the iOS path's
 /// extra weight on "Net Worth".
+///
+/// Uses an explicit `HStack { … Spacer() … }` rather than
+/// `LabeledContent`: inside the AppKit outline's `NSHostingView` the
+/// `LabeledContent` automatic style does not push the value to the
+/// trailing edge, so the amount renders flush against the label.
 struct SidebarTotalRowView: View {
   let label: String
   let amount: InstrumentAmount?
@@ -17,7 +22,9 @@ struct SidebarTotalRowView: View {
   var bold: Bool = false
 
   var body: some View {
-    LabeledContent(label) {
+    HStack {
+      Text(label)
+      Spacer()
       if let amount {
         InstrumentAmountView(amount: amount)
       } else {
@@ -26,6 +33,7 @@ struct SidebarTotalRowView: View {
     }
     .foregroundStyle(emphasised ? .primary : .secondary)
     .font(font)
+    .accessibilityElement(children: .combine)
   }
 
   private var font: Font {
