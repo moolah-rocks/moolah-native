@@ -61,4 +61,22 @@ final class SidebarInlineRenameMacTests: MoolahUITestCase {
       .completed,
       "Sidebar row did not reflect the renamed group label within 3s")
   }
+
+  func testReturnKeyEntersRenameAndEscCancels() {
+    let app = launch(seed: .tradeBaseline)
+    let original = SidebarAccount.checking
+    let originalName = UITestFixtures.TradeBaseline.checkingAccountName
+
+    app.sidebar.selectAndPressReturn(original)
+    app.sidebar.expectRenameFieldVisible()
+
+    app.sidebar.cancelRename()
+    app.sidebar.expectRenameFieldGone()
+
+    // After Esc the row label should be unchanged.
+    let row = app.element(for: UITestIdentifiers.Sidebar.account(original.id))
+    XCTAssertTrue(
+      row.label.contains(originalName),
+      "Esc on rename should leave the account name unchanged; got '\(row.label)'")
+  }
 }
