@@ -14,7 +14,7 @@
   /// reload-induced collapse/expand events.
   @MainActor
   final class SidebarOutlineController: NSViewController {
-    let outlineView = NSOutlineView()
+    let outlineView = SidebarKeyHandlingOutlineView()
     private let scrollView = NSScrollView()
     let dataSource = SidebarOutlineDataSource()
     let delegate = SidebarOutlineDelegate()
@@ -46,6 +46,24 @@
 
       outlineView.dataSource = dataSource
       outlineView.delegate = delegate
+
+      // Return on a renamable selected row → ask SidebarOutline to start
+      // inline rename. Non-renamable selections (navigation / total rows
+      // are non-selectable anyway; section headers likewise) are
+      // silently ignored.
+      outlineView.onReturnKey = { [weak self] in
+        guard let self,
+          self.outlineView.selectedRow >= 0,
+          let row = self.outlineView.item(atRow: self.outlineView.selectedRow)
+            as? SidebarRow
+        else { return }
+        switch row {
+        case .account, .earmark, .group:
+          self.delegate.beginRenameRequested?()
+        case .section, .total, .navigation:
+          return
+        }
+      }
     }
 
     private func configureScrollView() {
