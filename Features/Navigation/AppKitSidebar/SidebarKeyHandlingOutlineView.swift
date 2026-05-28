@@ -1,5 +1,6 @@
 #if os(macOS)
   import AppKit
+  import Carbon.HIToolbox
 
   /// `NSOutlineView` subclass that intercepts Return and forwards it as
   /// a high-level "begin rename on the current selection" signal via
@@ -14,11 +15,16 @@
   /// `SidebarRow` into the key-handling surface.
   @MainActor
   final class SidebarKeyHandlingOutlineView: NSOutlineView {
+    /// Called when the physical Return key (`kVK_Return`) is pressed.
+    /// When `nil`, the event falls through to `super.keyDown(with:)`
+    /// so default AppKit behaviour is preserved. Numpad Enter
+    /// (`kVK_ANSI_KeypadEnter`, 76) is intentionally excluded — the
+    /// iOS path does not fire on it either.
     var onReturnKey: (() -> Void)?
 
     override func keyDown(with event: NSEvent) {
-      if event.keyCode == 36 {  // Return
-        onReturnKey?()
+      if event.keyCode == kVK_Return, let handler = onReturnKey {
+        handler()
         return
       }
       super.keyDown(with: event)
