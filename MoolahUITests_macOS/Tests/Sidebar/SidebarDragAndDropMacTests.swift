@@ -100,22 +100,17 @@ final class SidebarDragAndDropMacTests: MoolahUITestCase {
   /// extensions: drag `.brokerage` onto the empty `.renameTarget` group
   /// first to make it a 1-member group, then drag it back out onto
   /// `.tradesBrokerage`.
-  func testDragSoleMemberOntoStandaloneDeletesOldGroup() {
+  func testDragLastAccountOutOfGroupRemovesEmptyGroup() {
     let app = launch(seed: .tradeBaseline)
 
     // Step 1: populate the empty .renameTarget group with .brokerage.
     app.sidebar.dragAccount(.brokerage, ontoGroup: .renameTarget)
-    let brokerageRow = app.element(
-      for: UITestIdentifiers.Sidebar.account(SidebarAccount.brokerage.id))
-    let brokerageExists = XCTNSPredicateExpectation(
-      predicate: NSPredicate(format: "exists == true"), object: brokerageRow)
-    XCTAssertEqual(
-      XCTWaiter.wait(for: [brokerageExists], timeout: 3), .completed,
-      "Brokerage row missing after dropping into renameTarget group")
 
     // Step 2: drag .brokerage (now sole member of .renameTarget) onto
     // .tradesBrokerage. With the new dropOntoAccount path, .renameTarget
-    // is emptied + auto-deleted.
+    // is emptied + auto-deleted. The driver waits for both rows to exist
+    // before issuing the gesture, so no intermediate sanity wait is
+    // needed between the two drag steps.
     app.sidebar.dragAccount(.brokerage, ontoAccount: .tradesBrokerage)
 
     // Post-condition: the renameTarget group row disappears.
@@ -124,7 +119,8 @@ final class SidebarDragAndDropMacTests: MoolahUITestCase {
     let groupGone = XCTNSPredicateExpectation(
       predicate: NSPredicate(format: "exists == false"), object: groupRow)
     XCTAssertEqual(
-      XCTWaiter.wait(for: [groupGone], timeout: 3), .completed,
+      XCTWaiter.wait(for: [groupGone], timeout: 3),
+      .completed,
       "renameTarget group row still present 3s after sole member dragged out")
   }
 }
