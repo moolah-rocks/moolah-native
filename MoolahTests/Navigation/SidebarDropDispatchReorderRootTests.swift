@@ -4,16 +4,11 @@ import Testing
 
 @testable import Moolah
 
-/// Tests for `SidebarDropDispatch.reorderRoot` /
-/// `SidebarDropDispatch.reorderMembers`. Lives in its own file
-/// alongside `SidebarDropDispatchTests` (drop-onto) so each file stays
-/// focused; shared fixtures live in
+/// Tests for `SidebarDropDispatch.reorderRoot`. Shared fixtures live in
 /// `SidebarDropDispatchTestSupport.swift`.
-@Suite("SidebarDropDispatch — reorder")
+@Suite("SidebarDropDispatch — reorderRoot")
 @MainActor
-struct SidebarDropDispatchReorderTests {
-
-  // MARK: - reorderRoot
+struct SidebarDropDispatchReorderRootTests {
 
   @Test("reorderRoot moves a standalone account ahead of another")
   func reorderRootMovesAccount() async throws {
@@ -187,57 +182,15 @@ struct SidebarDropDispatchReorderTests {
     #expect(stores.accountStore.accounts.by(id: second.id)?.position == beforeSecond)
   }
 
-  // MARK: - reorderMembers
-
-  @Test("reorderMembers moves a member within its group")
-  func reorderMembersUpdatesPositions() async throws {
+  @Test("reorderRoot clears groupId when source is a member; old group keeps its remaining member")
+  func reorderRootClearsGroupIdAndKeepsNonEmptyOldGroup() async throws {
     let (backend, database) = try TestBackend.create()
-    let memberA = SidebarDropDispatchTestSupport.bankAccount(name: "A", position: 0)
-    let memberB = SidebarDropDispatchTestSupport.bankAccount(name: "B", position: 1)
-    let memberC = SidebarDropDispatchTestSupport.bankAccount(name: "C", position: 2)
+    let standalone = SidebarDropDispatchTestSupport.bankAccount(
+      name: "Standalone", position: 0)
+    let memberA = SidebarDropDispatchTestSupport.bankAccount(name: "MemberA", position: 1)
+    let memberB = SidebarDropDispatchTestSupport.bankAccount(name: "MemberB", position: 2)
     let stores = try await SidebarDropDispatchTestSupport.makeStores(
-      seedAccounts: [memberA, memberB, memberC], in: database, backend: backend)
-
-    let group = try await stores.accountGroupStore.createGroup(
-      joining: memberA, and: memberB, name: "G",
-      accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: {
-        $0.accounts.by(id: memberA.id)?.groupId == group.id
-          && $0.accounts.by(id: memberB.id)?.groupId == group.id
-      },
-      description: "A,B joined")
-
-    let postC = try #require(stores.accountStore.accounts.by(id: memberC.id))
-    try await stores.accountGroupStore.addAccount(
-      postC, to: group, accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: memberC.id)?.groupId == group.id },
-      description: "C joined")
-
-    await SidebarDropDispatch.reorderMembers(
-      groupId: group.id,
-      sourceAccountId: memberC.id,
-      insertionIndex: 0,
-      accountStore: stores.accountStore)
-
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: memberC.id)?.position == 0 },
-      description: "C now first member")
-    let members = stores.accountStore.accounts.ordered
-      .filter { $0.groupId == group.id }
-      .sorted { $0.position < $1.position }
-      .map(\.id)
-    #expect(members == [memberC.id, memberA.id, memberB.id])
-  }
-
-  @Test("reorderMembers clamps insertion index past the end")
-  func reorderMembersClampsEnd() async throws {
-    let (backend, database) = try TestBackend.create()
-    let memberA = SidebarDropDispatchTestSupport.bankAccount(name: "A", position: 0)
-    let memberB = SidebarDropDispatchTestSupport.bankAccount(name: "B", position: 1)
-    let stores = try await SidebarDropDispatchTestSupport.makeStores(
-      seedAccounts: [memberA, memberB], in: database, backend: backend)
+      seedAccounts: [standalone, memberA, memberB], in: database, backend: backend)
 
     let group = try await stores.accountGroupStore.createGroup(
       joining: memberA, and: memberB, name: "G",
@@ -249,55 +202,49 @@ struct SidebarDropDispatchReorderTests {
       },
       description: "members joined")
 
-    await SidebarDropDispatch.reorderMembers(
-      groupId: group.id,
-      sourceAccountId: memberA.id,
-      insertionIndex: 99,
-      accountStore: stores.accountStore)
+    // Drop memberA at root insertion index 0 (ahead of standalone + group).
+    try await SidebarDropDispatch.reorderRoot(
+      dragged: DraggableSidebarItem(kind: .account, id: memberA.id),
+      insertionIndex: 0,
+      bucket: .current,
+      accountStore: stores.accountStore,
+      accountGroupStore: stores.accountGroupStore)
 
     try await stores.accountStore.waitForNextEmission(
-      matching: {
-        ($0.accounts.by(id: memberA.id)?.position ?? -1)
-          > ($0.accounts.by(id: memberB.id)?.position ?? -1)
-      },
-      description: "A clamped to end")
+      matching: { $0.accounts.by(id: memberA.id)?.groupId == nil },
+      description: "memberA back to root")
+    #expect(stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id)
+    #expect(stores.accountGroupStore.by(id: group.id) != nil)
   }
 
-  @Test("reorderMembers is a no-op when the source is not in the group")
-  func reorderMembersRejectsForeignMember() async throws {
+  @Test("reorderRoot deletes the old group when the source was its sole member")
+  func reorderRootDeletesEmptyOldGroup() async throws {
     let (backend, database) = try TestBackend.create()
-    let memberA = SidebarDropDispatchTestSupport.bankAccount(name: "A", position: 0)
-    let memberB = SidebarDropDispatchTestSupport.bankAccount(name: "B", position: 1)
-    let outsider = SidebarDropDispatchTestSupport.bankAccount(name: "Outsider", position: 2)
+    let standalone = SidebarDropDispatchTestSupport.bankAccount(
+      name: "Standalone", position: 0)
+    let soleMember = SidebarDropDispatchTestSupport.bankAccount(
+      name: "Sole", position: 1)
     let stores = try await SidebarDropDispatchTestSupport.makeStores(
-      seedAccounts: [memberA, memberB, outsider], in: database, backend: backend)
+      seedAccounts: [standalone, soleMember], in: database, backend: backend)
 
     let group = try await stores.accountGroupStore.createGroup(
-      joining: memberA, and: memberB, name: "G",
-      accountStore: stores.accountStore)
+      from: soleMember, name: "Lonely", accountStore: stores.accountStore)
     try await stores.accountStore.waitForNextEmission(
-      matching: {
-        $0.accounts.by(id: memberA.id)?.groupId == group.id
-          && $0.accounts.by(id: memberB.id)?.groupId == group.id
-      },
-      description: "members joined")
+      matching: { $0.accounts.by(id: soleMember.id)?.groupId == group.id },
+      description: "soleMember joined group")
 
-    let outsiderBefore = try #require(stores.accountStore.accounts.by(id: outsider.id))
-    await stores.accountStore.drainPendingEmissions()
-    await SidebarDropDispatch.reorderMembers(
-      groupId: group.id,
-      sourceAccountId: outsider.id,
+    try await SidebarDropDispatch.reorderRoot(
+      dragged: DraggableSidebarItem(kind: .account, id: soleMember.id),
       insertionIndex: 0,
-      accountStore: stores.accountStore)
+      bucket: .current,
+      accountStore: stores.accountStore,
+      accountGroupStore: stores.accountGroupStore)
 
-    let emitted = await stores.accountStore.didEmitWithin(timeout: .milliseconds(200))
-    #expect(!emitted, "accountStore should not emit on foreign-member reorder")
-    #expect(stores.accountStore.accounts.by(id: outsider.id)?.position == outsiderBefore.position)
-    #expect(stores.accountStore.accounts.by(id: outsider.id)?.groupId == nil)
-    let memberOrder = stores.accountStore.accounts.ordered
-      .filter { $0.groupId == group.id }
-      .sorted { $0.position < $1.position }
-      .map(\.id)
-    #expect(memberOrder == [memberA.id, memberB.id])
+    try await stores.accountStore.waitForNextEmission(
+      matching: { $0.accounts.by(id: soleMember.id)?.groupId == nil },
+      description: "soleMember back to root")
+    try await stores.accountGroupStore.waitForNextEmission(
+      matching: { $0.by(id: group.id) == nil },
+      description: "lonely group auto-deleted")
   }
 }
