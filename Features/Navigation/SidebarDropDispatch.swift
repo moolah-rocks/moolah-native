@@ -141,9 +141,9 @@ enum SidebarDropDispatch {
     // first. `removeAccount` clears `Account.groupId`, parks the source at
     // end-of-standalone, and auto-deletes the now-empty old group. The
     // walk-order rewrite below overwrites the temporary position with the
-    // dropped insertion-slot one.
-    if case .account = dragged.kind,
-      let source = accountStore.accounts.by(id: dragged.id),
+    // dropped insertion-slot one. Group sources fall through (they have
+    // no `groupId`, and `accounts.by(id:)` returns nil for a group's id).
+    if let source = accountStore.accounts.by(id: dragged.id),
       source.groupId != nil
     {
       try await accountGroupStore.removeAccount(source, accountStore: accountStore)
