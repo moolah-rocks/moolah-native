@@ -10,6 +10,10 @@ Three related gestures are currently denied and in scope here:
 2. **Source (member of A, or standalone) → between members of group B.** Currently the policy only allows reordering *within* the source's existing group. Dropping a non-member account between B's members should add it to B at the dropped position.
 3. **Bottom-of-row retarget for member sources.** When the cursor hovers the lower half of a top-level account row, `NSOutlineView` reports `.account` + child index, and the policy retargets to a root insertion slot. Today that retarget then fails the second pass through `outcomeForRoot` because of row 3. Once row 3 is permissive, the retarget completes naturally.
 
+A related latent bug, also in scope:
+
+4. **Old-group leak on drop-onto.** `SidebarDropDispatch.dropOntoAccount` (when target is already a member) and `dropOntoGroup` (always) accept a member of group A as the source and set its `groupId` to the destination group, but neither auto-deletes A when the source was its sole remaining member. Today this is hard to trigger because there's no other gesture that moves a member account, but it's reachable: drag the sole member of A onto a member of B (or onto group B). With drag-out shipping, the leak becomes easier to discover. The fix is uniform with the new gestures (`removeAccount` first when source has an old group), so all four call sites are addressed in one pass.
+
 ## Non-goals
 
 - Changing the iOS sidebar drop semantics. The iOS drop coordinator path in `SidebarView+Groups.swift` shares the dispatch layer; behaviour there changes only inasmuch as the new dispatch shape applies. No new iOS gestures are added in scope.
@@ -19,9 +23,9 @@ Three related gestures are currently denied and in scope here:
 
 ## Approach
 
-Relax the two policy guards that reject the source's group membership, and absorb the membership transition inside the two existing dispatch entry points (`reorderRoot` and `reorderMembers`). The decision table grows zero new outcomes; the dispatch grows two small "if source isn't already where it needs to be, fix it first" branches.
+Relax the two policy guards that reject the source's group membership, and absorb the membership transition inside the four dispatch entry points (`reorderRoot`, `reorderMembers`, `dropOntoAccount`, `dropOntoGroup`). The decision table grows zero new outcomes; the dispatch grows small "if source is currently in a group different from where it's heading, remove from old group first" branches.
 
-The membership transition leans on the existing `AccountGroupStore.removeAccount(_:accountStore:)` — that method already clears `Account.groupId`, repositions the source to the end of its bucket's standalone list, and auto-deletes a group that becomes empty. The position-walk in `reorderRoot` / `reorderMembers` then overwrites the temp position with the dropped insertion-index position. Reusing `removeAccount` is one extra `accountStore.update` per drag-out vs. a hand-rolled minimal-write path, but reuses tested code and inherits the auto-delete bookkeeping for free.
+The membership transition leans on the existing `AccountGroupStore.removeAccount(_:accountStore:)` — that method already clears `Account.groupId`, repositions the source to the end of its bucket's standalone list, and auto-deletes a group that becomes empty. The position-walk in `reorderRoot` / `reorderMembers` then overwrites the temp position with the dropped insertion-index position; for `dropOntoAccount` / `dropOntoGroup`, the subsequent `addAccount` (or join into a new group) sets the final state. Reusing `removeAccount` is one extra `accountStore.update` per cross-group transition vs. a hand-rolled minimal-write path, but reuses tested code and inherits the auto-delete bookkeeping for free.
 
 ## Architecture
 
@@ -122,6 +126,85 @@ static func reorderMembers(
 ```
 
 For cross-group: `removeAccount` clears the source's `groupId` and auto-deletes the old group when empty. The subsequent `accountStore.update` sets `groupId = groupId` (target). The member walk then assigns the final position. For standalone-source: the first `if` skips `removeAccount` (no old group to handle) and falls through to the `groupId = groupId` write directly.
+
+**`dropOntoAccount` — remove from old group first when source is a cross-group member.**
+
+```swift
+static func dropOntoAccount(
+  sourceId: UUID,
+  targetId: UUID,
+  accountStore: AccountStore,
+  accountGroupStore: AccountGroupStore,
+  groupUIStateStore: GroupUIStateStore
+) async throws -> AccountGroup? {
+  guard sourceId != targetId else { return nil }
+  guard let source = accountStore.accounts.by(id: sourceId) else { return nil }
+  guard let target = accountStore.accounts.by(id: targetId) else { return nil }
+  guard source.bucket == target.bucket else { return nil }
+
+  // NEW: if source is currently in a group, and either the target is
+  // standalone (will join a new group) or the target is in a different
+  // group (will join target's group), clean up the source's old group
+  // first. The exception is target.groupId == source.groupId — that's
+  // a no-op transition and removeAccount would needlessly churn.
+  if let sourceGroupId = source.groupId, sourceGroupId != target.groupId {
+    try await accountGroupStore.removeAccount(source, accountStore: accountStore)
+    // Refresh the source snapshot — its groupId is nil now.
+    guard accountStore.accounts.by(id: sourceId) != nil else { return nil }
+  }
+
+  // EXISTING (unchanged): target-already-member adds to group; otherwise
+  // creates a 2-member group joining the two.
+  if let targetGroupId = target.groupId {
+    guard let group = accountGroupStore.by(id: targetGroupId) else { return nil }
+    // Re-read source post-removeAccount.
+    guard let refreshed = accountStore.accounts.by(id: sourceId) else { return nil }
+    try await accountGroupStore.addAccount(
+      refreshed, to: group, accountStore: accountStore)
+    return nil
+  }
+
+  guard let refreshed = accountStore.accounts.by(id: sourceId) else { return nil }
+  let created = try await accountGroupStore.createGroup(
+    joining: target,
+    and: refreshed,
+    name: "New Group",
+    accountStore: accountStore)
+  await groupUIStateStore.setExpanded(true, for: created.id)
+  return created
+}
+```
+
+**`dropOntoGroup` — remove from old group first when source is a cross-group member.**
+
+```swift
+static func dropOntoGroup(
+  sourceId: UUID,
+  groupId: UUID,
+  accountStore: AccountStore,
+  accountGroupStore: AccountGroupStore,
+  groupUIStateStore: GroupUIStateStore
+) async throws {
+  guard let source = accountStore.accounts.by(id: sourceId) else { return }
+  guard let group = accountGroupStore.by(id: groupId) else { return }
+  guard source.bucket == group.bucket else { return }
+  guard source.groupId != group.id else { return }
+
+  // NEW: if source is currently in a different group, remove from it
+  // first so the old group auto-deletes when emptied.
+  if source.groupId != nil {
+    try await accountGroupStore.removeAccount(source, accountStore: accountStore)
+  }
+
+  // Re-read post-removeAccount; addAccount sets groupId to target.
+  guard let refreshed = accountStore.accounts.by(id: sourceId) else { return }
+  try await accountGroupStore.addAccount(
+    refreshed, to: group, accountStore: accountStore)
+  await groupUIStateStore.setExpanded(true, for: group.id)
+}
+```
+
+Both retain their existing same-bucket and not-already-in-this-group guards. The `source.groupId != group.id` (resp. `targetGroupId != source.groupId`) check above the `removeAccount` call avoids the wasteful "remove and re-add to the same group" sequence.
 
 ### Coordinator — `Features/Navigation/AppKitSidebar/SidebarOutlineDropCoordinator.swift`
 
@@ -225,6 +308,20 @@ For `reorderMembers`:
 3. Member of group A dropped between members of group B, A still has ≥2 members — assert source's `groupId == B.id`, A still exists with reduced membership.
 4. Sole member of group A dropped between members of group B — assert source's `groupId == B.id`, A is deleted.
 
+For `dropOntoAccount`:
+
+1. Two standalones — regression; existing 2-member group is created joining them.
+2. Standalone source dropped onto a member of existing group B — regression; source is added to B.
+3. Member of A dropped onto a member of B, A still has ≥2 members — source joins B, A still exists with reduced membership.
+4. Sole member of A dropped onto a member of B — source joins B, A is deleted.
+5. Sole member of A dropped onto a standalone in the same bucket — source + standalone are joined into a new group; A is deleted.
+
+For `dropOntoGroup`:
+
+1. Standalone source dropped onto group B — regression; source is added to B.
+2. Member of A dropped onto group B, A still has ≥2 members — source joins B, A still exists.
+3. Sole member of A dropped onto group B — source joins B, A is deleted.
+
 ### Unit — coordinator
 
 `MoolahTests/Navigation/SidebarOutlineDropCoordinatorCommitTests.swift`:
@@ -233,13 +330,13 @@ For `reorderMembers`:
 
 ### XCUITest — `MoolahUITests_macOS/Tests/Sidebar/SidebarDragAndDropMacTests.swift`
 
-Add scenarios:
+XCUITest's `press(forDuration:thenDragTo:)` primitive lands at the centre of the target row, which `SidebarDropPolicy` interprets as "drop onto" rather than "drop between". The drop-between gestures from §1, §2, §3 of this spec therefore cannot be exercised through the existing `SidebarScreen.dragAccount(...)` driver as drop-between gestures — those branches are covered by the policy / dispatch unit tests above.
 
-1. Drag a group member to a top-level insertion slot — verify the row appears at the dropped position and is no longer rendered as a child of the group.
-2. Drag a standalone account between members of an existing group — verify the row appears at the dropped position inside the group.
-3. Drag the sole member of a 1-member group to a top-level slot — verify the group row disappears.
+The new XCUITest scenario that *is* exercisable via the existing centre-of-row drag is the cross-group drop-onto case (§4):
 
-Existing drag-into tests stay as regression coverage.
+1. Drag the sole member of a 1-member group A onto a standalone account in the same bucket — verify A is no longer rendered in the sidebar after the drop completes (its row disappears from the accessibility tree).
+
+The existing drag-into tests (`testDragAccountOntoAccountCreatesGroup`, `testDragAccountOntoGroupJoinsIt`, `testDragReordersStandaloneAccounts`) stay as regression coverage for the unchanged drop-onto paths.
 
 ## Risks
 
