@@ -162,7 +162,7 @@ struct AccountsSidebarOrderingTests {
 
     let result = accounts.groupAwareSidebar(groups: [group])
 
-    guard case .group(let observedGroup, let observedMembers) = result.investments.first else {
+    guard case let .group(observedGroup, observedMembers) = result.investments.first else {
       Issue.record("expected single group entry")
       return
     }

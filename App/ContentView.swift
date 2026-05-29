@@ -296,7 +296,7 @@ struct ContentView: View {
     if let sidebarSelection = destination.sidebarSelection {
       selection = sidebarSelection
     }
-    if case .analysis(let history, let forecast) = destination {
+    if case let .analysis(history, forecast) = destination {
       if let history { analysisStore.historyMonths = history }
       if let forecast { analysisStore.forecastMonths = forecast }
     }

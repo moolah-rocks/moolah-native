@@ -74,7 +74,7 @@ struct ImportStoreTestsMoreSecondHalf {
     let result = await store.ingest(
       data: data,
       source: .pickedFile(url: URL(fileURLWithPath: "/tmp/cba.csv"), securityScoped: false))
-    guard case .imported(let sessionId, let imported, _) = result else {
+    guard case let .imported(sessionId, imported, _) = result else {
       Issue.record("expected .imported")
       return
     }
@@ -145,7 +145,7 @@ struct ImportStoreTestsMoreSecondHalf {
       data: data,
       source: .pickedFile(
         url: URL(fileURLWithPath: "/tmp/selfwealth-movements.csv"), securityScoped: false))
-    guard case .imported(_, let imported, _) = result else {
+    guard case let .imported(_, imported, _) = result else {
       Issue.record("expected .imported; got \(result)")
       return []
     }
