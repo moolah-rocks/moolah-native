@@ -5,7 +5,7 @@ enum CoinstashGraphQL {
   /// Coinstash GraphQL endpoint.
   ///
   /// String-literal URL: a parse failure is a programming error, not runtime input.
-  static let endpoint = URL(string: "https://graph.coinstash.com.au/graphql")!
+  static let endpoint = URL(string: "https://graph.coinstash.com.au/graphql")!  // swiftlint:disable:this force_unwrapping
 
   /// Fetches the authenticated user's profile.
   ///

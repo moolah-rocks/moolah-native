@@ -35,8 +35,8 @@ enum ExchangeProvider: String, Codable, Sendable, CaseIterable {
   private enum Links {
     static let coinstashHelp = URL(
       string:
-        "https://help.coinstash.com.au/en/articles/13481155-how-do-i-use-the-coinstash-api")!
+        "https://help.coinstash.com.au/en/articles/13481155-how-do-i-use-the-coinstash-api")!  // swiftlint:disable:this force_unwrapping
     static let coinstashHome = URL(
-      string: "https://coinstash.com.au")!
+      string: "https://coinstash.com.au")!  // swiftlint:disable:this force_unwrapping
   }
 }
