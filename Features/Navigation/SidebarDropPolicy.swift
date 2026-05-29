@@ -110,7 +110,10 @@
         }
         // row 5: cross-bucket drop.
         guard sourceAccount.bucket == context.bucket else { return .deny }
-        // row 2.
+        // rows 2 & 3: standalone and member account sources both land
+        // here. The dispatch's `reorderRoot` clears the source's
+        // `groupId` when it's a member (and auto-deletes the now-empty
+        // old group).
         return .reorderRoot(item: dragged, insertionIndex: idx)
       case .group:
         guard
