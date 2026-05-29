@@ -56,7 +56,7 @@ struct ParsedTransactionShapeTests {
   func csvParserErrorShape() {
     let error = CSVParserError.malformedRow(
       index: 7, reason: "unparseable amount", row: ["a", "b", "c"])
-    if case .malformedRow(let index, let reason, let row) = error {
+    if case let .malformedRow(index, reason, row) = error {
       #expect(index == 7)
       #expect(reason == "unparseable amount")
       #expect(row == ["a", "b", "c"])

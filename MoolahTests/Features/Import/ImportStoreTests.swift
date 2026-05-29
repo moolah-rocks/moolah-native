@@ -95,7 +95,7 @@ struct ImportStoreTests {
       data: data,
       source: .pickedFile(url: URL(fileURLWithPath: "/tmp/cba.csv"), securityScoped: false))
 
-    if case .imported(_, let imported, let skipped) = result {
+    if case let .imported(_, imported, skipped) = result {
       // CBA fixture has 5 data rows; row 1 is opening balance (.skip from parser),
       // so 4 real transactions land.
       #expect(imported.count == 4)
@@ -123,7 +123,7 @@ struct ImportStoreTests {
     let result = await store.ingest(
       data: data,
       source: .pickedFile(url: URL(fileURLWithPath: "/tmp/cba.csv"), securityScoped: false))
-    if case .imported(_, let imported, let skipped) = result {
+    if case let .imported(_, imported, skipped) = result {
       #expect(imported.isEmpty)
       #expect(skipped == 4)  // 4 non-skip candidates all match existing
     } else {

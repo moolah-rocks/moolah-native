@@ -48,8 +48,8 @@ enum IngestError: Error, Sendable {
   /// (e.g. an `.empty` / `.decode` / `.other` error, or a parser error
   /// other than `.malformedRow`).
   var offendingRow: (row: [String], index: Int?) {
-    if case .parse(let parserError) = self,
-      case .malformedRow(let index, _, let row) = parserError
+    if case let .parse(parserError) = self,
+      case let .malformedRow(index, _, row) = parserError
     {
       return (row, index)
     }
@@ -126,7 +126,7 @@ final class ImportStore {
     let sessionId = UUID()
     do {
       let result = try await runPipeline(data: data, source: source, sessionId: sessionId)
-      if case .imported(_, let imported, let skipped) = result {
+      if case let .imported(_, imported, skipped) = result {
         recentSessions.insert(
           ImportSessionSummary(
             id: sessionId,

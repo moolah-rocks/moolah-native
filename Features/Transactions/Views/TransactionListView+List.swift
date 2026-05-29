@@ -318,7 +318,7 @@ extension TransactionListView {
   /// `isOverdue` flag can never disagree) and exposes a typed Pay
   /// closure that writes the row id into the case's binding.
   private func scheduledRowConfig(for entry: TransactionWithBalance) -> ScheduledRowConfig? {
-    guard case .scheduledStatus(let today, let pendingPayId) = grouping else {
+    guard case let .scheduledStatus(today, pendingPayId) = grouping else {
       return nil
     }
     let isOverdue = overdueTransactionIds.contains(entry.transaction.id)
