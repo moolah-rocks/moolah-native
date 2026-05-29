@@ -54,7 +54,7 @@ enum SidebarDropDispatch {
     // the old group when it becomes empty. The `target.groupId` guard
     // avoids a wasteful remove/re-add when source and target are already
     // in the same group.
-    if let sourceGroupId = source.groupId, sourceGroupId != target.groupId {
+    if let groupId = source.groupId, groupId != target.groupId {
       try await accountGroupStore.removeAccount(source, accountStore: accountStore)
     }
 
