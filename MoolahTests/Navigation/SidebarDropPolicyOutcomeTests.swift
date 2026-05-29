@@ -113,20 +113,24 @@
             insertionIndex: 1))
     }
 
-    @Test("row 9: account NOT in target group, dropped between its members, denies")
-    func denyOutsiderDroppedBetweenGroupMembers() {
-      let group = Support.currentGroup(position: 0)
-      let member = Support.bankAccount(name: "M", position: 0, groupId: group.id)
-      let outsider = Support.bankAccount(name: "O", position: 1)
+    @Test("row 9: account from another group dropped between target group members → reorderMembers")
+    func outsiderDroppedBetweenGroupMembersReorders() {
+      let groupA = Support.currentGroup(position: 0)
+      let groupB = Support.currentGroup(position: 1)
+      let source = Support.bankAccount(name: "S", position: 0, groupId: groupA.id)
+      let member = Support.bankAccount(name: "M", position: 0, groupId: groupB.id)
       let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
-          dragged: .account(outsider.id),
-          intoElement: .group(group.id),
+          dragged: .account(source.id),
+          intoElement: .group(groupB.id),
           childIndex: 1),
         bucket: .current,
-        accounts: Accounts(from: [member, outsider]),
-        groups: [group])
-      #expect(outcome == .deny)
+        accounts: Accounts(from: [source, member]),
+        groups: [groupA, groupB])
+      #expect(
+        outcome
+          == .reorderMembers(
+            groupId: groupB.id, sourceAccountId: source.id, insertionIndex: 1))
     }
 
     @Test("row 6 variant: drop onto same group as current membership denies")
@@ -234,6 +238,25 @@
           == .reorderRoot(
             item: DraggableSidebarItem(kind: .group, id: groupTwo.id),
             insertionIndex: 0))
+    }
+
+    @Test("row 9 variant: standalone source dragged between group members → reorderMembers")
+    func standaloneBetweenGroupMembersReorders() {
+      let group = Support.currentGroup(position: 0)
+      let member = Support.bankAccount(name: "M", position: 0, groupId: group.id)
+      let standalone = Support.bankAccount(name: "SL", position: 1)
+      let outcome = SidebarDropPolicy.outcome(
+        for: Support.target(
+          dragged: .account(standalone.id),
+          intoElement: .group(group.id),
+          childIndex: 0),
+        bucket: .current,
+        accounts: Accounts(from: [member, standalone]),
+        groups: [group])
+      #expect(
+        outcome
+          == .reorderMembers(
+            groupId: group.id, sourceAccountId: standalone.id, insertionIndex: 0))
     }
 
     @Test("row 8: member dropped between members of its group → reorderMembers")
