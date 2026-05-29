@@ -83,4 +83,38 @@ struct SidebarDropDispatchCrossGroupTests {
       matching: { $0.by(id: groupA.id) == nil },
       description: "group A auto-deleted")
   }
+
+  @Test("dropOntoGroup from a sole-member-group deletes the old group")
+  func dropOntoGroupCrossGroupDeletesEmptyOldGroup() async throws {
+    let (backend, database) = try TestBackend.create()
+    let aSole = SidebarDropDispatchTestSupport.bankAccount(name: "ASole", position: 0)
+    let bMember = SidebarDropDispatchTestSupport.bankAccount(name: "B1", position: 1)
+    let stores = try await SidebarDropDispatchTestSupport.makeStores(
+      seedAccounts: [aSole, bMember], in: database, backend: backend)
+
+    let groupA = try await stores.accountGroupStore.createGroup(
+      from: aSole, name: "A", accountStore: stores.accountStore)
+    try await stores.accountStore.waitForNextEmission(
+      matching: { $0.accounts.by(id: aSole.id)?.groupId == groupA.id },
+      description: "aSole joined group A")
+    let groupB = try await stores.accountGroupStore.createGroup(
+      from: bMember, name: "B", accountStore: stores.accountStore)
+    try await stores.accountStore.waitForNextEmission(
+      matching: { $0.accounts.by(id: bMember.id)?.groupId == groupB.id },
+      description: "bMember joined group B")
+
+    try await SidebarDropDispatch.dropOntoGroup(
+      sourceId: aSole.id,
+      groupId: groupB.id,
+      accountStore: stores.accountStore,
+      accountGroupStore: stores.accountGroupStore,
+      groupUIStateStore: stores.groupUIStateStore)
+
+    try await stores.accountStore.waitForNextEmission(
+      matching: { $0.accounts.by(id: aSole.id)?.groupId == groupB.id },
+      description: "aSole now in groupB")
+    try await stores.accountGroupStore.waitForNextEmission(
+      matching: { $0.by(id: groupA.id) == nil },
+      description: "group A auto-deleted")
+  }
 }

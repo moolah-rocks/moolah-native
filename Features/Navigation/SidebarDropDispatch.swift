@@ -96,8 +96,15 @@ enum SidebarDropDispatch {
     guard source.bucket == group.bucket else { return }
     guard source.groupId != group.id else { return }
 
+    // If the source is currently in a different group, remove from it
+    // first so the old group auto-deletes when emptied.
+    if source.groupId != nil {
+      try await accountGroupStore.removeAccount(source, accountStore: accountStore)
+    }
+
+    guard let refreshed = accountStore.accounts.by(id: sourceId) else { return }
     try await accountGroupStore.addAccount(
-      source, to: group, accountStore: accountStore)
+      refreshed, to: group, accountStore: accountStore)
     await groupUIStateStore.setExpanded(true, for: group.id)
   }
 
