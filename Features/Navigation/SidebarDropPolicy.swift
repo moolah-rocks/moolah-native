@@ -146,10 +146,9 @@
         targetGroup.bucket == context.bucket
       else { return .deny }
       if let idx = childIndex {
-        // row 9: an account NOT currently in this group cannot be
-        // dropped between its members (use drop-onto-group instead).
-        guard sourceAccount.groupId == gId else { return .deny }
-        // row 8.
+        // row 8 & 9: any same-bucket account (member or not) dropped
+        // between members resolves to reorderMembers; dispatch handles
+        // clearing the old group when the source is moving across groups.
         return .reorderMembers(
           groupId: gId, sourceAccountId: dragged.id, insertionIndex: idx)
       } else {
