@@ -234,7 +234,8 @@
             accountStore: accountStore,
             accountGroupStore: accountGroupStore)
         } catch {
-          // Error already surfaced reactively on accountGroupStore.error.
+          // Error already surfaced reactively on accountStore.error
+          // or accountGroupStore.error.
         }
         return true
       }
