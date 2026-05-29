@@ -91,4 +91,40 @@ final class SidebarDragAndDropMacTests: MoolahUITestCase {
       .completed,
       "Inline rename TextField did not appear on the new group within 3s")
   }
+
+  /// Cross-group drop-onto: drag the sole member of a 1-member group onto
+  /// another standalone account in the same bucket. With the dropOnto
+  /// dispatch generalised to remove the source from its old group first,
+  /// the old group auto-deletes when emptied — its row should disappear
+  /// from the sidebar. Built from `.tradeBaseline` without seed
+  /// extensions: drag `.brokerage` onto the empty `.renameTarget` group
+  /// first to make it a 1-member group, then drag it back out onto
+  /// `.tradesBrokerage`.
+  func testDragSoleMemberOntoStandaloneDeletesOldGroup() {
+    let app = launch(seed: .tradeBaseline)
+
+    // Step 1: populate the empty .renameTarget group with .brokerage.
+    app.sidebar.dragAccount(.brokerage, ontoGroup: .renameTarget)
+    let brokerageRow = app.element(
+      for: UITestIdentifiers.Sidebar.account(SidebarAccount.brokerage.id))
+    let brokerageExists = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == true"), object: brokerageRow)
+    XCTAssertEqual(
+      XCTWaiter.wait(for: [brokerageExists], timeout: 3), .completed,
+      "Brokerage row missing after dropping into renameTarget group")
+
+    // Step 2: drag .brokerage (now sole member of .renameTarget) onto
+    // .tradesBrokerage. With the new dropOntoAccount path, .renameTarget
+    // is emptied + auto-deleted.
+    app.sidebar.dragAccount(.brokerage, ontoAccount: .tradesBrokerage)
+
+    // Post-condition: the renameTarget group row disappears.
+    let groupRow = app.element(
+      for: UITestIdentifiers.Sidebar.group(SidebarGroup.renameTarget.id))
+    let groupGone = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == false"), object: groupRow)
+    XCTAssertEqual(
+      XCTWaiter.wait(for: [groupGone], timeout: 3), .completed,
+      "renameTarget group row still present 3s after sole member dragged out")
+  }
 }
