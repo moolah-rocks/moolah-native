@@ -49,6 +49,11 @@ enum SidebarDropDispatch {
     guard let target = accountStore.accounts.by(id: targetId) else { return nil }
     guard source.bucket == target.bucket else { return nil }
 
+    // If the source is currently in a group different from where it's
+    // heading, clean up the old group first. `removeAccount` auto-deletes
+    // the old group when it becomes empty. The `target.groupId` guard
+    // avoids a wasteful remove/re-add when source and target are already
+    // in the same group.
     if let sourceGroupId = source.groupId, sourceGroupId != target.groupId {
       try await accountGroupStore.removeAccount(source, accountStore: accountStore)
     }
