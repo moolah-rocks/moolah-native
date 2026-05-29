@@ -110,8 +110,6 @@
         }
         // row 5: cross-bucket drop.
         guard sourceAccount.bucket == context.bucket else { return .deny }
-        // row 3: dragging a member to root denies (no silent un-group).
-        guard sourceAccount.groupId == nil else { return .deny }
         // row 2.
         return .reorderRoot(item: dragged, insertionIndex: idx)
       case .group:
