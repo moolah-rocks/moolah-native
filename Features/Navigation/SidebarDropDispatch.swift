@@ -49,19 +49,22 @@ enum SidebarDropDispatch {
     guard let target = accountStore.accounts.by(id: targetId) else { return nil }
     guard source.bucket == target.bucket else { return nil }
 
+    if let sourceGroupId = source.groupId, sourceGroupId != target.groupId {
+      try await accountGroupStore.removeAccount(source, accountStore: accountStore)
+    }
+
     if let targetGroupId = target.groupId {
-      // Target is already a member: add source to the same group.
       guard let group = accountGroupStore.by(id: targetGroupId) else { return nil }
+      guard let refreshed = accountStore.accounts.by(id: sourceId) else { return nil }
       try await accountGroupStore.addAccount(
-        source, to: group, accountStore: accountStore)
+        refreshed, to: group, accountStore: accountStore)
       return nil
     }
 
-    // Both standalone: create a 2-member group; the caller is expected
-    // to drop into inline-rename mode on the returned group.
+    guard let refreshed = accountStore.accounts.by(id: sourceId) else { return nil }
     let created = try await accountGroupStore.createGroup(
       joining: target,
-      and: source,
+      and: refreshed,
       name: "New Group",
       accountStore: accountStore)
     await groupUIStateStore.setExpanded(true, for: created.id)
