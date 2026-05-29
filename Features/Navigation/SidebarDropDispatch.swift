@@ -96,8 +96,10 @@ enum SidebarDropDispatch {
     guard source.bucket == group.bucket else { return }
     guard source.groupId != group.id else { return }
 
-    // If the source is currently in a different group, remove from it
-    // first so the old group auto-deletes when emptied.
+    // If the source is currently in a group, remove it first so the
+    // old group auto-deletes when emptied. The `source.groupId !=
+    // group.id` guard above already rejects same-group sources, so any
+    // non-nil groupId here is definitely a different group.
     if source.groupId != nil {
       try await accountGroupStore.removeAccount(source, accountStore: accountStore)
     }
