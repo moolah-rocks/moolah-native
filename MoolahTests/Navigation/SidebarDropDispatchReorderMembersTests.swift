@@ -114,6 +114,10 @@ struct SidebarDropDispatchReorderMembersTests {
 
     let emitted = await stores.accountStore.didEmitWithin(timeout: .milliseconds(200))
     #expect(!emitted, "accountStore should not emit on unknown-id reorder")
+    let memberAAfter = try #require(stores.accountStore.accounts.by(id: memberA.id))
+    let memberBAfter = try #require(stores.accountStore.accounts.by(id: memberB.id))
+    #expect(memberAAfter.position == 0)
+    #expect(memberBAfter.position == 1)
     let memberOrder = stores.accountStore.accounts.ordered
       .filter { $0.groupId == group.id }
       .sorted { $0.position < $1.position }
