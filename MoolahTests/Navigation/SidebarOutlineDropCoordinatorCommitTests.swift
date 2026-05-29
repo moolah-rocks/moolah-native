@@ -201,5 +201,41 @@
 
       #expect(result == false)
     }
+
+    @Test("commit .reorderMembers routes a cross-group move through the throwing dispatch")
+    func commitReorderMembersCrossGroup() async throws {
+      let (backend, database) = try TestBackend.create()
+      let aSole = DispatchSupport.bankAccount(name: "ASole", position: 0)
+      let accB1 = DispatchSupport.bankAccount(name: "B1", position: 1)
+      let accB2 = DispatchSupport.bankAccount(name: "B2", position: 2)
+      let stores = try await DispatchSupport.makeStores(
+        seedAccounts: [aSole, accB1, accB2], in: database, backend: backend)
+      let groupA = try await stores.accountGroupStore.createGroup(
+        from: aSole, name: "A", accountStore: stores.accountStore)
+      try await stores.accountStore.waitForNextEmission(
+        matching: { $0.accounts.by(id: aSole.id)?.groupId == groupA.id },
+        description: "aSole joined A")
+      let groupB = try await stores.accountGroupStore.createGroup(
+        joining: accB1, and: accB2, name: "B", accountStore: stores.accountStore)
+      try await stores.accountStore.waitForNextEmission(
+        matching: { $0.accounts.by(id: accB1.id)?.groupId == groupB.id },
+        description: "group B seeded")
+      let coordinator = SidebarOutlineDropCoordinator(
+        accountStore: stores.accountStore,
+        accountGroupStore: stores.accountGroupStore,
+        groupUIStateStore: stores.groupUIStateStore)
+
+      let result = await coordinator.commit(
+        .reorderMembers(groupId: groupB.id, sourceAccountId: aSole.id, insertionIndex: 1),
+        bucket: .current)
+
+      #expect(result == true)
+      try await stores.accountStore.waitForNextEmission(
+        matching: { $0.accounts.by(id: aSole.id)?.groupId == groupB.id },
+        description: "aSole moved to B via coordinator commit")
+      try await stores.accountGroupStore.waitForNextEmission(
+        matching: { $0.by(id: groupA.id) == nil },
+        description: "group A auto-deleted via coordinator commit")
+    }
   }
 #endif
