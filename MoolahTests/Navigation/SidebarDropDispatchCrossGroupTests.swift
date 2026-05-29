@@ -4,9 +4,10 @@ import Testing
 
 @testable import Moolah
 
-/// Tests for `SidebarDropDispatch.dropOntoAccount` cross-group membership
-/// transitions — source leaves its old group and joins the target's group.
-/// Shared fixtures live in `SidebarDropDispatchTestSupport.swift`.
+/// Tests for `SidebarDropDispatch` cross-group membership transitions —
+/// covers `dropOntoAccount` and `dropOntoGroup` cases where the source
+/// leaves its old group to join the destination's. Shared fixtures live
+/// in `SidebarDropDispatchTestSupport.swift`.
 @Suite("SidebarDropDispatch — cross-group drops")
 @MainActor
 struct SidebarDropDispatchCrossGroupTests {
