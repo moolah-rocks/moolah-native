@@ -187,20 +187,56 @@ enum SidebarDropDispatch {
     }
   }
 
-  /// In-group member reorder: rewrites member `position` values so
-  /// the dragged account lands at `insertionIndex` in the group's
-  /// member list. Cross-group movement is not handled here — use
-  /// `dropOntoGroup` for that. Silently no-ops when the source is not
-  /// a member of `groupId`.
+  /// Places the source account at `insertionIndex` inside `groupId`'s
+  /// member list. Handles three source states: (1) already a member of
+  /// `groupId` — pure reorder; (2) member of a different group — moves
+  /// across, auto-deleting the old group when emptied; (3) standalone —
+  /// joins the target group. Silently no-ops when the source id doesn't
+  /// resolve. Throws on any underlying store error.
   static func reorderMembers(
     groupId: UUID,
     sourceAccountId: UUID,
     insertionIndex: Int,
-    accountStore: AccountStore
-  ) async {
+    accountStore: AccountStore,
+    accountGroupStore: AccountGroupStore
+  ) async throws {
+    guard let source = accountStore.accounts.by(id: sourceAccountId) else { return }
+
+    // If the source isn't already a member of the destination group,
+    // transition membership before the member-list reorder.
+    if source.groupId != groupId {
+      if source.groupId != nil {
+        // Cross-group: removeAccount clears groupId AND auto-deletes the
+        // old group when emptied.
+        try await accountGroupStore.removeAccount(source, accountStore: accountStore)
+      }
+      // Re-read after the (possibly skipped) removeAccount; groupId is
+      // nil now. The member walk below overwrites the position.
+      guard let refreshed = accountStore.accounts.by(id: sourceAccountId)
+      else { return }
+      var member = refreshed
+      member.groupId = groupId
+      _ = try await accountStore.update(member)
+    }
+
+    // Rewrite member positions for `groupId`. The store snapshot may
+    // not yet have the reactive emission from the membership update
+    // above, so build the working list from snapshot members PLUS the
+    // source (deduplicated). When the source is not yet visible in the
+    // snapshot (stale), insert it with the correct `groupId` so that
+    // `reorderAccounts` doesn't overwrite the membership write above.
     var members = accountStore.accounts.ordered
       .filter { $0.groupId == groupId }
       .sorted { $0.position < $1.position }
+    if !members.contains(where: { $0.id == sourceAccountId }) {
+      guard var sourceForReorder = accountStore.accounts.by(id: sourceAccountId)
+      else { return }
+      // The snapshot still carries the old groupId (emission pending).
+      // Override it so reorderAccounts writes the correct groupId when
+      // it persists the position update.
+      sourceForReorder.groupId = groupId
+      members.append(sourceForReorder)
+    }
     guard let removalIndex = members.firstIndex(where: { $0.id == sourceAccountId })
     else { return }
     let dragged = members.remove(at: removalIndex)

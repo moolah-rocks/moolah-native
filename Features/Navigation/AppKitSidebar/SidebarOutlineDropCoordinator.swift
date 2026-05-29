@@ -226,11 +226,16 @@
         }
         return true
       case let .reorderMembers(groupId, sourceId, idx):
-        await SidebarDropDispatch.reorderMembers(
-          groupId: groupId,
-          sourceAccountId: sourceId,
-          insertionIndex: idx,
-          accountStore: accountStore)
+        do {
+          try await SidebarDropDispatch.reorderMembers(
+            groupId: groupId,
+            sourceAccountId: sourceId,
+            insertionIndex: idx,
+            accountStore: accountStore,
+            accountGroupStore: accountGroupStore)
+        } catch {
+          // Error already surfaced reactively on accountGroupStore.error.
+        }
         return true
       }
     }
