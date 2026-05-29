@@ -96,17 +96,21 @@
       #expect(outcome == .deny)
     }
 
-    @Test("row 3: member dragged at root denies (would silently un-group)")
-    func denyMemberDroppedAtRoot() {
+    @Test("row 3: member dragged to root insertion slot → reorderRoot")
+    func memberDroppedAtRootReorders() {
       let group = Support.currentGroup(position: 0)
       let member = Support.bankAccount(name: "M", position: 1, groupId: group.id)
       let outcome = SidebarDropPolicy.outcome(
         for: Support.target(
-          dragged: .account(member.id), intoElement: nil, childIndex: 0),
+          dragged: .account(member.id), intoElement: nil, childIndex: 1),
         bucket: .current,
         accounts: Accounts(from: [member]),
         groups: [group])
-      #expect(outcome == .deny)
+      #expect(
+        outcome
+          == .reorderRoot(
+            item: DraggableSidebarItem(kind: .account, id: member.id),
+            insertionIndex: 1))
     }
 
     @Test("row 9: account NOT in target group, dropped between its members, denies")
