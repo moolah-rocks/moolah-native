@@ -137,6 +137,18 @@ enum SidebarDropDispatch {
     accountStore: AccountStore,
     accountGroupStore: AccountGroupStore
   ) async throws {
+    // If the dragged source is a group member, remove it from its group
+    // first. `removeAccount` clears `Account.groupId`, parks the source at
+    // end-of-standalone, and auto-deletes the now-empty old group. The
+    // walk-order rewrite below overwrites the temporary position with the
+    // dropped insertion-slot one.
+    if case .account = dragged.kind,
+      let source = accountStore.accounts.by(id: dragged.id),
+      source.groupId != nil
+    {
+      try await accountGroupStore.removeAccount(source, accountStore: accountStore)
+    }
+
     let entries = bucketEntries(
       bucket: bucket,
       accountStore: accountStore,
@@ -162,7 +174,14 @@ enum SidebarDropDispatch {
       case .account(let account):
         await accountStore.reorderAccounts(
           [account], positionOffset: walkIndex)
-      case .group(let group, _):
+      case let .group(group, members):
+        // Skip phantom empty-group entries: when a member was just removed
+        // via `removeAccount` above, the account observation can fire before
+        // the group-deletion observation, leaving a zero-member group in the
+        // snapshot. Calling `moveGroup` on a group the DB already deleted
+        // throws 404. The next observation tick removes the phantom; skipping
+        // here is safe because the group's position is irrelevant once empty.
+        guard !members.isEmpty else { continue }
         try await accountGroupStore.moveGroup(group, to: walkIndex)
       }
     }
