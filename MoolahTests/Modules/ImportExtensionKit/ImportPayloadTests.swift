@@ -26,12 +26,18 @@ struct ImportPayloadTests {
     }
     """#
 
-  @Test("decodes a well-formed payload")
-  func decodesWellFormed() throws {
+  @Test("decodes top-level scalar fields")
+  func decodesTopLevelFields() throws {
     let payload = try JSONDecoder.importPayload.decode(
       ImportPayload.self, from: Data(sampleJSON.utf8))
     #expect(payload.schemaVersion == 1)
     #expect(payload.sourceHost == "chase.com")
+  }
+
+  @Test("decodes rows array correctly")
+  func decodesRowsArray() throws {
+    let payload = try JSONDecoder.importPayload.decode(
+      ImportPayload.self, from: Data(sampleJSON.utf8))
     #expect(payload.rows.count == 1)
     #expect(payload.rows[0].amount == "-42.50")
     #expect(payload.rows[0].reference == "TXN-0001")

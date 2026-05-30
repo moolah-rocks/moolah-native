@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ImportPayload: Codable, Sendable, Equatable {
+public struct ImportPayload: Sendable {
   public let schemaVersion: Int
   public let sourceHost: String
   public let sourceURL: String
@@ -26,7 +26,11 @@ public struct ImportPayload: Codable, Sendable, Equatable {
     self.currencyHint = currencyHint
     self.rows = rows
   }
+}
 
+extension ImportPayload: Equatable {}
+
+extension ImportPayload: Codable {
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     let version = try container.decode(Int.self, forKey: .schemaVersion)
@@ -70,18 +74,22 @@ public enum ImportPayloadDecodingError: Error, Equatable {
 }
 
 extension JSONDecoder {
-  public static var importPayload: JSONDecoder {
+  // Configured once during initialisation; Foundation documents JSONDecoder.decode
+  // as thread-safe after configuration, so sharing a single instance is safe.
+  nonisolated(unsafe) public static let importPayload: JSONDecoder = {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     return decoder
-  }
+  }()
 }
 
 extension JSONEncoder {
-  public static var importPayload: JSONEncoder {
+  // Configured once during initialisation; Foundation documents JSONEncoder.encode
+  // as thread-safe after configuration, so sharing a single instance is safe.
+  nonisolated(unsafe) public static let importPayload: JSONEncoder = {
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
     encoder.outputFormatting = [.sortedKeys]
     return encoder
-  }
+  }()
 }
