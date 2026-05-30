@@ -53,6 +53,7 @@ struct PlistEmitterTests {
   func javaScriptPreprocessingFile() {
     let xml = PlistEmitter.emit(manifests: [])
     #expect(xml.contains("<key>NSExtensionJavaScriptPreprocessingFile</key>"))
-    #expect(xml.contains("<string>extension-entry</string>"))
+    // Matches the base name of the generated bundle (`extension-entry.bundle.js`).
+    #expect(xml.contains("<string>extension-entry.bundle</string>"))
   }
 }

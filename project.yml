@@ -198,6 +198,12 @@ targets:
     platform: iOS
     sources:
       - path: MoolahImportExtension_iOS
+      # The generated JS bundle is the single
+      # NSExtensionJavaScriptPreprocessingFile Safari loads — pull it into
+      # the .appex resources phase. xcodegen treats non-source files
+      # under `sources:` as resources automatically.
+      - path: MoolahImportExtension_Shared/Generated/extension-entry.bundle.js
+        type: file
     dependencies:
       - package: ImportExtensionKit
     settings:
@@ -219,6 +225,10 @@ targets:
     platform: macOS
     sources:
       - path: MoolahImportExtension_macOS
+      # See MoolahImportExtension_iOS for the rationale on bundling the
+      # generated JS as a target resource.
+      - path: MoolahImportExtension_Shared/Generated/extension-entry.bundle.js
+        type: file
     dependencies:
       - package: ImportExtensionKit
     settings:
