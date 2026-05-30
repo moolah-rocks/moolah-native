@@ -1,4 +1,7 @@
 // swiftlint:disable multiline_arguments
+// Reason: swift-format wraps long os_signpost and resolveProfile calls in
+// ways the multiline_arguments rule disagrees with; matching the existing
+// disable+reason pattern from MoolahApp+Setup.swift.
 
 import Foundation
 import ImportExtensionKit
@@ -153,20 +156,32 @@ extension ImportStore {
     [row.date, row.description, row.amount, row.balance ?? "", row.reference ?? ""]
   }
 
+  // Cached formatters — `DateFormatter` and `ISO8601DateFormatter` are
+  // expensive to construct, and `parseWebDate` runs once per imported
+  // row. Both formatter classes are thread-safe for reads on Apple
+  // platforms in the configurations used here.
+  static let webDateFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(identifier: "UTC")
+    formatter.dateFormat = "yyyy-MM-dd"
+    return formatter
+  }()
+
+  static let webISO8601Formatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    return formatter
+  }()
+
   /// Accept the canonical `yyyy-MM-dd` form the extension emits and the
   /// full ISO-8601 form (`yyyy-MM-ddTHH:mm:ssZ`) as a fallback so a plugin
   /// that captures a timestamp instead of a date still imports.
   static func parseWebDate(_ field: String) -> Date? {
     let trimmed = field.trimmingCharacters(in: .whitespaces)
     if trimmed.isEmpty { return nil }
-    let dateOnly = DateFormatter()
-    dateOnly.locale = Locale(identifier: "en_US_POSIX")
-    dateOnly.timeZone = TimeZone(identifier: "UTC")
-    dateOnly.dateFormat = "yyyy-MM-dd"
-    if let date = dateOnly.date(from: trimmed) { return date }
-    let iso = ISO8601DateFormatter()
-    iso.formatOptions = [.withInternetDateTime]
-    return iso.date(from: trimmed)
+    if let date = webDateFormatter.date(from: trimmed) { return date }
+    return webISO8601Formatter.date(from: trimmed)
   }
 
   /// Decimal parsing that mirrors `GenericBankCSVParser.parseAmount`. The

@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ImportPayload: Sendable {
+public struct ImportPayload {
   public let schemaVersion: Int
   public let sourceHost: String
   public let sourceURL: String
@@ -9,6 +9,12 @@ public struct ImportPayload: Sendable {
   public let currencyHint: String?
   public let rows: [ImportPayloadRow]
 
+  /// Memberwise initialiser. Swift's synthesised memberwise init for a
+  /// public struct is `internal`, so we have to spell the `public` form
+  /// out for cross-module construction (the iOS / macOS extension
+  /// principals and the app target both call it). This is the documented
+  /// exception to CODE_GUIDE.md §10 — without it, callers outside
+  /// `ImportExtensionKit` cannot construct a payload.
   public init(
     schemaVersion: Int,
     sourceHost: String,
@@ -27,6 +33,8 @@ public struct ImportPayload: Sendable {
     self.rows = rows
   }
 }
+
+extension ImportPayload: Sendable {}
 
 extension ImportPayload: Equatable {}
 
@@ -84,6 +92,12 @@ public struct ImportPayloadRow: Codable, Sendable, Equatable {
   public let balance: String?
   public let reference: String?
 
+  /// Public memberwise initialiser with default-nil for the optional
+  /// fields. Same rationale as `ImportPayload.init` — Swift's
+  /// synthesised memberwise init for a public struct is `internal`,
+  /// so cross-module construction (tests, app target, principals)
+  /// needs this spelled out. The defaults are pure caller ergonomics
+  /// so most callers can omit `balance:` and `reference:`.
   public init(
     date: String,
     amount: String,

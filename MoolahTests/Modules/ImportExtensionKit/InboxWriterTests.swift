@@ -44,6 +44,21 @@ struct InboxWriterTests {
     #expect(throws: InboxWriterError.self) { try writer.read(id: id) }
   }
 
+  @Test("read of a missing id throws .notFound")
+  func readMissingThrowsNotFound() {
+    let dir = makeTempDir()
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let writer = InboxWriter(rootDirectory: dir)
+    do {
+      _ = try writer.read(id: UUID())
+      Issue.record("Expected throw")
+    } catch let error as InboxWriterError {
+      if case .notFound = error {} else { Issue.record("Expected .notFound, got \(error)") }
+    } catch {
+      Issue.record("Expected InboxWriterError, got \(error)")
+    }
+  }
+
   @Test("list returns all pending ids, newest first")
   func listOrdersNewestFirst() throws {
     let dir = makeTempDir()

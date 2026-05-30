@@ -18,11 +18,11 @@ import os
 /// app resolves the current session at call time.
 @MainActor
 @Observable
-public final class DeepLinkCoordinator {
+final class DeepLinkCoordinator {
   /// Last destination the router handed in. Retained so a deep link that
   /// arrives while no profile session is open can be replayed once a
   /// session is available.
-  public private(set) var pendingDestination: DeepLinkDestination?
+  private(set) var pendingDestination: DeepLinkDestination?
 
   /// Resolver for the currently active `ImportStore`. Returns `nil` when
   /// no profile session is open (e.g. on the Welcome view); in that case
@@ -33,12 +33,11 @@ public final class DeepLinkCoordinator {
   private let inboxProvider: @Sendable () -> InboxWriter?
   private let logger = Logger(subsystem: "com.moolah.app", category: "DeepLinkCoordinator")
 
-  /// Public init for the no-arg / stubbed case (previews, tests that don't
-  /// exercise the inbox-drain path). Production constructs the coordinator
-  /// via the internal initialiser in `MoolahApp.init` so the
-  /// `importStoreProvider` closure can capture the (internal) session
-  /// manager.
-  public convenience init() {
+  /// No-arg / stubbed initialiser (previews, tests that don't exercise
+  /// the inbox-drain path). Production constructs the coordinator via
+  /// the designated initialiser in `MoolahApp.init` so the
+  /// `importStoreProvider` closure can capture the session manager.
+  convenience init() {
     self.init(
       importStoreProvider: { nil },
       inboxProvider: { InboxWriter.shared() })
@@ -52,7 +51,7 @@ public final class DeepLinkCoordinator {
     self.inboxProvider = inboxProvider
   }
 
-  public func handle(_ destination: DeepLinkDestination) async {
+  func handle(_ destination: DeepLinkDestination) async {
     logger.info("Deep link received: \(String(describing: destination), privacy: .public)")
     pendingDestination = destination
     switch destination {
