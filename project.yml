@@ -212,13 +212,18 @@ targets:
         PRODUCT_NAME: ImportExtension
         PRODUCT_MODULE_NAME: ImportExtension
         INFOPLIST_FILE: MoolahImportExtension_iOS/Generated/Info.plist
-        CODE_SIGN_ENTITLEMENTS: MoolahImportExtension_iOS/Entitlements.entitlements
         SKIP_INSTALL: NO
       configs:
-        Debug-Tests:
-          # Tests never sign anything — match the app target's stance so the
-          # extension doesn't drag in entitlements during `just test`.
-          CODE_SIGN_ENTITLEMENTS: ""
+        Release:
+          # Entitlements are Release-only — Debug builds the extension
+          # without the App Group capability so local builds don't need
+          # a Mac App Development provisioning profile (mirrors the main
+          # app target's pattern, see Moolah_macOS.configs.Release).
+          # Local Debug runs of the extension can't access the App Group
+          # inbox; rely on TestFlight builds for end-to-end testing of
+          # the import flow, or extend scripts/inject-entitlements.sh
+          # to inject extension entitlements at local build time.
+          CODE_SIGN_ENTITLEMENTS: MoolahImportExtension_iOS/Entitlements.entitlements
 
   MoolahImportExtension_macOS:
     type: app-extension
@@ -237,13 +242,12 @@ targets:
         PRODUCT_NAME: ImportExtension
         PRODUCT_MODULE_NAME: ImportExtension
         INFOPLIST_FILE: MoolahImportExtension_macOS/Generated/Info.plist
-        CODE_SIGN_ENTITLEMENTS: MoolahImportExtension_macOS/Entitlements.entitlements
         SKIP_INSTALL: NO
       configs:
-        Debug-Tests:
-          # Tests never sign anything — match the app target's stance so the
-          # extension doesn't drag in entitlements during `just test`.
-          CODE_SIGN_ENTITLEMENTS: ""
+        Release:
+          # Release-only entitlements — see MoolahImportExtension_iOS for
+          # the rationale.
+          CODE_SIGN_ENTITLEMENTS: MoolahImportExtension_macOS/Entitlements.entitlements
 
   MoolahTests_iOS:
     type: bundle.unit-test
