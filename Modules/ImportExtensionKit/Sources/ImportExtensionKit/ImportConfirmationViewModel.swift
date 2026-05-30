@@ -1,6 +1,14 @@
 import Foundation
+import Observation
 
+/// View model for `ImportConfirmationView`. `@Observable` because the
+/// controller mutates `state` after the view is already on screen — most
+/// notably a `.success` → `.writeFailed` transition when the inbox write
+/// fails on a `Review Later` or `Open Moolah` tap. Construct with
+/// `init(payload:registry:)` for the loaded-payload happy path or
+/// `init(state:)` for the schema-mismatch / write-failed seed.
 @MainActor
+@Observable
 public final class ImportConfirmationViewModel {
   public enum State: Equatable, Sendable {
     case success(rows: Int, displayName: String)
@@ -9,7 +17,7 @@ public final class ImportConfirmationViewModel {
     case writeFailed
   }
 
-  public let state: State
+  public private(set) var state: State
 
   public init(payload: ImportPayload, registry: PluginRegistry) {
     let manifest = registry.match(host: payload.sourceHost, path: "/")
@@ -22,6 +30,13 @@ public final class ImportConfirmationViewModel {
   }
 
   public init(state: State) {
+    self.state = state
+  }
+
+  /// Mutates `state` in place so observers (SwiftUI `ImportConfirmationView`
+  /// already on screen) re-render. Used by `PrincipalController` when an
+  /// inbox write fails after the success view has been presented.
+  public func update(state: State) {
     self.state = state
   }
 }

@@ -59,7 +59,12 @@ final class PrincipalController {
     }
   }
 
-  /// Applies a pre-decoded result on the main actor.
+  /// Applies a pre-decoded result on the main actor. Runs before
+  /// `showHost()` builds the SwiftUI view in the principal, so this
+  /// path replaces the view-model wholesale; subsequent in-flight state
+  /// transitions (e.g. write failure after the success view is on
+  /// screen) mutate the existing instance via `viewModel.update(state:)`
+  /// so observers re-render.
   func apply(_ result: Result<ImportPayload, ExtensionItemReaderError>) {
     switch result {
     case .success(let decoded):
@@ -69,7 +74,7 @@ final class PrincipalController {
       // Every reader error collapses to the same user-facing
       // "couldn't read this page" state — the user can't act on the
       // distinction and we don't want to leak parser internals.
-      viewModel = ImportConfirmationViewModel(state: .schemaMismatch)
+      viewModel.update(state: .schemaMismatch)
     }
   }
 
@@ -100,7 +105,9 @@ final class PrincipalController {
 
   private func write() -> Bool {
     guard let payload, let writer = InboxWriter.shared() else {
-      viewModel = ImportConfirmationViewModel(state: .writeFailed)
+      // The success view is already on screen; mutate `state` in place
+      // so the @Observable view re-renders into the writeFailed surface.
+      viewModel.update(state: .writeFailed)
       return false
     }
     let id = UUID()
@@ -109,7 +116,7 @@ final class PrincipalController {
       inboxId = id
       return true
     } catch {
-      viewModel = ImportConfirmationViewModel(state: .writeFailed)
+      viewModel.update(state: .writeFailed)
       return false
     }
   }
