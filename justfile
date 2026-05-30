@@ -111,7 +111,18 @@ build-mac: generate
     set -euo pipefail
     args=(-scheme Moolah-macOS -destination 'platform=macOS' -derivedDataPath .build)
     if [ -z "${DEVELOPMENT_TEAM:-}" ]; then
-        args+=(CODE_SIGN_IDENTITY="-" ENABLE_HARDENED_RUNTIME=NO)
+        # CODE_SIGNING_ALLOWED=NO skips signing for every target in the
+        # graph — including the bundled MoolahImportExtension_macOS, whose
+        # App Group entitlement would otherwise require a provisioning
+        # profile under Automatic signing even when the parent app falls
+        # back to ad-hoc identity. (Pairing this with CODE_SIGN_IDENTITY=-
+        # is counter-productive: Xcode still resolves an Automatic
+        # provisioning profile for the extension before consulting the
+        # identity, and fails fast on the missing profile.) Developers
+        # with a DEVELOPMENT_TEAM in their .env build through real signing
+        # and need a provisioning profile registered for the extension's
+        # bundle id (rocks.moolah.app.importextension).
+        args+=(CODE_SIGNING_ALLOWED=NO ENABLE_HARDENED_RUNTIME=NO)
     fi
     xcodebuild build "${args[@]}"
 
