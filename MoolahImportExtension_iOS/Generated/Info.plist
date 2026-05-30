@@ -25,7 +25,12 @@
     <key>NSExtensionAttributes</key>
     <dict>
       <key>NSExtensionActivationRule</key>
-      <string>FALSEPREDICATE</string>
+      <string>SUBQUERY(extensionItems, $item,
+  SUBQUERY($item.attachments, $att,
+    ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url"
+    AND ((($att.URL.host == "macquarie.com.au" OR $att.URL.host ENDSWITH ".macquarie.com.au") AND $att.URL.path BEGINSWITH "/io"))
+  ).@count > 0
+).@count > 0</string>
       <key>NSExtensionJavaScriptPreprocessingFile</key>
       <string>extension-entry.bundle</string>
     </dict>

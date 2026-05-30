@@ -1,9 +1,10 @@
 import Foundation
 
-/// Concatenates the hand-maintained `extension-entry.js` dispatcher with each
-/// plugin's `parser.js`, replacing the placeholder `const plugins = {};`
-/// declaration with a host → plugin-class map. Safari loads the resulting
-/// bundle as the action extension's single `NSExtensionJavaScriptPreprocessingFile`.
+/// Concatenates the hand-maintained `extension-entry.js` dispatcher with any
+/// shared helper scripts (`Plugins/_shared/*.js`) and each plugin's
+/// `parser.js`, replacing the placeholder `const plugins = {};` declaration
+/// with a host → plugin-class map. Safari loads the resulting bundle as the
+/// action extension's single `NSExtensionJavaScriptPreprocessingFile`.
 public enum JSBundleEmitter {
   public struct Parser {
     public let host: String
@@ -16,22 +17,73 @@ public enum JSBundleEmitter {
     }
   }
 
-  public static func emit(entry: String, parsers: [Parser]) -> String {
+  public static func emit(
+    entry: String,
+    sharedScripts: [String] = [],
+    parsers: [Parser]
+  ) -> String {
+    let unique = deduplicate(parsers)
     let replacement: String
-    if parsers.isEmpty {
+    if unique.isEmpty {
       // Leave the placeholder verbatim — keeps the bundle byte-stable when
       // there are no plugins and avoids `{  }` (literal-empty-braces with
       // padding) appearing in the diff.
       replacement = "const plugins = {};"
     } else {
-      let map = parsers.map { #""\#($0.host)": \#($0.className)"# }.joined(separator: ", ")
+      let map = unique.map { #""\#($0.host)": \#($0.className)"# }
+        .joined(separator: ", ")
       replacement = "const plugins = { \(map) };"
     }
-    let dispatcher = entry.replacingOccurrences(
-      of: #"const plugins = {};"#,
-      with: replacement)
-    let appended = parsers.map { $0.source }.joined(separator: "\n\n")
-    return dispatcher + "\n\n" + appended
+    // Replace ONLY the placeholder inside the marker block — a literal
+    // `replacingOccurrences(of:)` would also rewrite the same text in
+    // the header comment that describes what the codegen does, leaving
+    // a misleading documentation diff.
+    let markerStart = "/* GENERATED-PLUGIN-MAP-START */"
+    let markerEnd = "/* GENERATED-PLUGIN-MAP-END */"
+    let dispatcher: String
+    if let startRange = entry.range(of: markerStart),
+      let endRange = entry.range(of: markerEnd, range: startRange.upperBound..<entry.endIndex)
+    {
+      var rewritten = entry
+      rewritten.replaceSubrange(
+        startRange.upperBound..<endRange.lowerBound,
+        with: "\n    \(replacement)\n    ")
+      dispatcher = rewritten
+    } else {
+      // Defensive fallback — the markers are required, but if they're
+      // missing, fall back to a one-off replacement of the placeholder
+      // so we don't silently emit an unrewritten bundle.
+      if let range = entry.range(of: "const plugins = {};") {
+        var rewritten = entry
+        rewritten.replaceSubrange(range, with: replacement)
+        dispatcher = rewritten
+      } else {
+        dispatcher = entry
+      }
+    }
+    let appendedParsers = unique.map { $0.source }.joined(separator: "\n\n")
+    let appendedShared = sharedScripts.joined(separator: "\n\n")
+    var parts: [String] = [dispatcher]
+    if !appendedShared.isEmpty { parts.append(appendedShared) }
+    if !appendedParsers.isEmpty { parts.append(appendedParsers) }
+    return parts.joined(separator: "\n\n")
+  }
+
+  /// Two manifest rows are allowed to point at the same parser `file` (and
+  /// therefore the same host + class) — e.g. Amex `/dashboard` and
+  /// `/activity` both map to one parser via different `pathPrefix`es. Emit
+  /// each (host, className) only once in the map and append each source
+  /// only once, preserving manifest order for the first occurrence.
+  private static func deduplicate(_ parsers: [Parser]) -> [Parser] {
+    var seen = Set<String>()
+    var result: [Parser] = []
+    for p in parsers {
+      let key = "\(p.host)|\(p.className)"
+      if seen.insert(key).inserted {
+        result.append(p)
+      }
+    }
+    return result
   }
 
   /// Derives a JavaScript class name from a manifest `file` path of the form

@@ -1,1 +1,11 @@
-{ "plugins": [] }
+{
+  "plugins": [
+    {
+      "host": "macquarie.com.au",
+      "pathPrefix": "/io",
+      "file": "macquarie.com.au/parser.js",
+      "displayName": "Macquarie",
+      "emptyHint": "Open one of your accounts to see transactions before importing."
+    }
+  ]
+}

@@ -13,6 +13,7 @@ public enum SwiftEmitter {
       try check(m.pathPrefix)
       try check(m.file)
       try check(m.displayName)
+      if let hint = m.emptyHint { try check(hint) }
     }
     let body: String
     if manifests.isEmpty {
@@ -25,10 +26,11 @@ public enum SwiftEmitter {
       // when there are 2+ entries — matches swift-format's idempotent shape.
       let raw = manifests.map { m in
         let resource = m.file.replacingOccurrences(of: ".js", with: "")
+        let hint = m.emptyHint.map { "\"\($0)\"" } ?? "nil"
         return """
                 PluginManifest(
                   host: "\(m.host)", pathPrefix: "\(m.pathPrefix)", jsResource: "\(resource)",
-                  displayName: "\(m.displayName)")
+                  displayName: "\(m.displayName)", emptyHint: \(hint))
           """
       }
       let entries: String

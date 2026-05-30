@@ -49,11 +49,12 @@ struct ImportConfirmationView: View {
         .font(.body).foregroundStyle(.secondary)
       }
       .accessibilityElement(children: .combine)
-    case .emptyResult(let name):
+    case let .emptyResult(name, hint):
       Group {
         Text("No transactions found").font(.headline)
         Text(
-          "Couldn't find any transactions on this page. Make sure you're on \(name)'s account activity page and try again."
+          hint
+            ?? "Couldn't find any transactions on this page. Make sure you're on \(name)'s account activity page and try again."
         )
         .font(.body).foregroundStyle(.secondary)
       }
@@ -87,7 +88,19 @@ struct ImportConfirmationView: View {
 
   #Preview("emptyResult") {
     ImportConfirmationView(
-      viewModel: ImportConfirmationViewModel(state: .emptyResult(displayName: "Chase")),
+      viewModel: ImportConfirmationViewModel(
+        state: .emptyResult(displayName: "Chase", hint: nil)),
+      onCancel: {},
+      onReviewLater: {},
+      onOpenMoolah: {})
+  }
+
+  #Preview("emptyResult.hint") {
+    ImportConfirmationView(
+      viewModel: ImportConfirmationViewModel(
+        state: .emptyResult(
+          displayName: "Macquarie",
+          hint: "Open one of your accounts to see transactions before importing.")),
       onCancel: {},
       onReviewLater: {},
       onOpenMoolah: {})

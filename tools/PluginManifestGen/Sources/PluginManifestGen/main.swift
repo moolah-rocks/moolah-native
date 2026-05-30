@@ -20,13 +20,28 @@ let plist = PlistEmitter.emit(manifests: index.plugins)
 try plist.write(toFile: args[3], atomically: true, encoding: .utf8)
 try plist.write(toFile: args[4], atomically: true, encoding: .utf8)
 
-// JS bundle: read the hand-maintained dispatcher, then concatenate each
-// plugin's parser source (loaded relative to plugins.json) and rewrite the
-// placeholder host → class map. A missing parser.js is a hard failure —
-// the generator refuses to ship a broken bundle.
+// JS bundle: read the hand-maintained dispatcher, then concatenate shared
+// helper scripts (Plugins/_shared/*.js, single source of truth for parser
+// utilities) and each plugin's parser source (loaded relative to
+// plugins.json) and rewrite the placeholder host → class map. A missing
+// parser.js is a hard failure — the generator refuses to ship a broken
+// bundle.
 let entryURL = URL(fileURLWithPath: args[5])
 let entrySource = try String(contentsOf: entryURL, encoding: .utf8)
 let pluginsDir = manifestURL.deletingLastPathComponent()
+
+let sharedDir = pluginsDir.appendingPathComponent("_shared")
+let sharedScripts: [String]
+if FileManager.default.fileExists(atPath: sharedDir.path) {
+  let urls = try FileManager.default
+    .contentsOfDirectory(at: sharedDir, includingPropertiesForKeys: nil)
+    .filter { $0.pathExtension == "js" }
+    .sorted { $0.lastPathComponent < $1.lastPathComponent }
+  sharedScripts = try urls.map { try String(contentsOf: $0, encoding: .utf8) }
+} else {
+  sharedScripts = []
+}
+
 let parsers: [JSBundleEmitter.Parser] = try index.plugins.map { manifest in
   let parserURL = pluginsDir.appendingPathComponent(manifest.file)
   guard FileManager.default.fileExists(atPath: parserURL.path) else {
@@ -38,5 +53,6 @@ let parsers: [JSBundleEmitter.Parser] = try index.plugins.map { manifest in
   let className = JSBundleEmitter.className(for: manifest.file)
   return JSBundleEmitter.Parser(host: manifest.host, className: className, source: source)
 }
-let bundle = JSBundleEmitter.emit(entry: entrySource, parsers: parsers)
+let bundle = JSBundleEmitter.emit(
+  entry: entrySource, sharedScripts: sharedScripts, parsers: parsers)
 try bundle.write(toFile: args[6], atomically: true, encoding: .utf8)

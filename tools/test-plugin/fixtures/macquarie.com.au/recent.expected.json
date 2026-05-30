@@ -1,0 +1,710 @@
+{
+  "schemaVersion": 1,
+  "sourceHost": "online.macquarie.com.au",
+  "sourceURL": "https://online.macquarie.com.au/io/",
+  "capturedAt": "2026-05-30T08:00:00.000Z",
+  "accountHint": null,
+  "currencyHint": "AUD",
+  "rows": [
+    {
+      "date": "2026-05-29",
+      "amount": "-61.40",
+      "description": "MERCHANT ALPHA",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-05-29",
+      "amount": "-12.50",
+      "description": "MERCHANT BRAVO",
+      "balance": "14.00",
+      "reference": null
+    },
+    {
+      "date": "2026-05-29",
+      "amount": "-9.99",
+      "description": "MERCHANT CHARLIE",
+      "balance": "42.85",
+      "reference": null
+    },
+    {
+      "date": "2026-05-28",
+      "amount": "-42.85",
+      "description": "MERCHANT DELTA",
+      "balance": "130.00",
+      "reference": null
+    },
+    {
+      "date": "2026-05-27",
+      "amount": "-14.00",
+      "description": "MERCHANT ECHO",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-05-27",
+      "amount": "61.40",
+      "description": "MERCHANT FOXTROT",
+      "balance": "14.00",
+      "reference": null
+    },
+    {
+      "date": "2026-05-26",
+      "amount": "-199.00",
+      "description": "MERCHANT GOLF",
+      "balance": "33.15",
+      "reference": null
+    },
+    {
+      "date": "2026-05-26",
+      "amount": "-7.20",
+      "description": "MERCHANT HOTEL",
+      "balance": "18.95",
+      "reference": null
+    },
+    {
+      "date": "2026-05-25",
+      "amount": "5.40",
+      "description": "MERCHANT INDIA",
+      "balance": "12.50",
+      "reference": null
+    },
+    {
+      "date": "2026-05-23",
+      "amount": "-12.50",
+      "description": "MERCHANT JULIET",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-05-22",
+      "amount": "-42.85",
+      "description": "MERCHANT KILO",
+      "balance": "42.85",
+      "reference": null
+    },
+    {
+      "date": "2026-05-21",
+      "amount": "33.15",
+      "description": "MERCHANT LIMA",
+      "balance": "18.95",
+      "reference": null
+    },
+    {
+      "date": "2026-05-19",
+      "amount": "-12.50",
+      "description": "MERCHANT ALPHA",
+      "balance": "33.15",
+      "reference": null
+    },
+    {
+      "date": "2026-05-19",
+      "amount": "-42.85",
+      "description": "MERCHANT BRAVO",
+      "balance": "14.00",
+      "reference": null
+    },
+    {
+      "date": "2026-05-19",
+      "amount": "61.40",
+      "description": "MERCHANT CHARLIE",
+      "balance": "14.00",
+      "reference": null
+    },
+    {
+      "date": "2026-05-19",
+      "amount": "-33.15",
+      "description": "MERCHANT DELTA",
+      "balance": "5.40",
+      "reference": null
+    },
+    {
+      "date": "2026-05-19",
+      "amount": "42.85",
+      "description": "MERCHANT ECHO",
+      "balance": "250.00",
+      "reference": null
+    },
+    {
+      "date": "2026-05-18",
+      "amount": "-18.95",
+      "description": "MERCHANT FOXTROT",
+      "balance": "9.99",
+      "reference": null
+    },
+    {
+      "date": "2026-05-17",
+      "amount": "75.50",
+      "description": "MERCHANT GOLF",
+      "balance": "3.99",
+      "reference": null
+    },
+    {
+      "date": "2026-05-17",
+      "amount": "-12.50",
+      "description": "MERCHANT HOTEL",
+      "balance": "75.50",
+      "reference": null
+    },
+    {
+      "date": "2026-05-16",
+      "amount": "-75.50",
+      "description": "MERCHANT INDIA",
+      "balance": "130.00",
+      "reference": null
+    },
+    {
+      "date": "2026-05-16",
+      "amount": "-14.00",
+      "description": "MERCHANT JULIET",
+      "balance": "5.40",
+      "reference": null
+    },
+    {
+      "date": "2026-05-16",
+      "amount": "88.30",
+      "description": "MERCHANT KILO",
+      "balance": "9.99",
+      "reference": null
+    },
+    {
+      "date": "2026-05-15",
+      "amount": "-130.00",
+      "description": "MERCHANT LIMA",
+      "balance": "42.85",
+      "reference": null
+    },
+    {
+      "date": "2026-05-15",
+      "amount": "-75.50",
+      "description": "MERCHANT ALPHA",
+      "balance": "88.30",
+      "reference": null
+    },
+    {
+      "date": "2026-05-13",
+      "amount": "7.20",
+      "description": "MERCHANT BRAVO",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-05-08",
+      "amount": "-5.40",
+      "description": "MERCHANT CHARLIE",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-05-07",
+      "amount": "88.30",
+      "description": "MERCHANT DELTA",
+      "balance": "3.99",
+      "reference": null
+    },
+    {
+      "date": "2026-05-05",
+      "amount": "-88.30",
+      "description": "MERCHANT ECHO",
+      "balance": "18.95",
+      "reference": null
+    },
+    {
+      "date": "2026-05-04",
+      "amount": "-9.99",
+      "description": "MERCHANT FOXTROT",
+      "balance": "75.50",
+      "reference": null
+    },
+    {
+      "date": "2026-05-04",
+      "amount": "-12.50",
+      "description": "MERCHANT GOLF",
+      "balance": "14.00",
+      "reference": null
+    },
+    {
+      "date": "2026-05-04",
+      "amount": "-250.00",
+      "description": "MERCHANT HOTEL",
+      "balance": "33.15",
+      "reference": null
+    },
+    {
+      "date": "2026-05-04",
+      "amount": "7.20",
+      "description": "MERCHANT INDIA",
+      "balance": "199.00",
+      "reference": null
+    },
+    {
+      "date": "2026-05-03",
+      "amount": "-5.40",
+      "description": "MERCHANT JULIET",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-05-03",
+      "amount": "-33.15",
+      "description": "MERCHANT KILO",
+      "balance": "9.99",
+      "reference": null
+    },
+    {
+      "date": "2026-05-03",
+      "amount": "3.99",
+      "description": "MERCHANT LIMA",
+      "balance": "61.40",
+      "reference": null
+    },
+    {
+      "date": "2026-05-03",
+      "amount": "-18.95",
+      "description": "MERCHANT ALPHA",
+      "balance": "199.00",
+      "reference": null
+    },
+    {
+      "date": "2026-05-03",
+      "amount": "-3.99",
+      "description": "MERCHANT BRAVO",
+      "balance": "88.30",
+      "reference": null
+    },
+    {
+      "date": "2026-05-02",
+      "amount": "-18.95",
+      "description": "MERCHANT CHARLIE",
+      "balance": "42.85",
+      "reference": null
+    },
+    {
+      "date": "2026-05-02",
+      "amount": "14.00",
+      "description": "MERCHANT DELTA",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-05-02",
+      "amount": "-12.50",
+      "description": "MERCHANT ECHO",
+      "balance": "61.40",
+      "reference": null
+    },
+    {
+      "date": "2026-05-01",
+      "amount": "-42.85",
+      "description": "MERCHANT FOXTROT",
+      "balance": "75.50",
+      "reference": null
+    },
+    {
+      "date": "2026-05-01",
+      "amount": "-9.99",
+      "description": "MERCHANT GOLF",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-04-30",
+      "amount": "3.99",
+      "description": "MERCHANT HOTEL",
+      "balance": "42.85",
+      "reference": null
+    },
+    {
+      "date": "2026-04-30",
+      "amount": "3.99",
+      "description": "MERCHANT INDIA",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-04-30",
+      "amount": "-5.40",
+      "description": "MERCHANT JULIET",
+      "balance": "9.99",
+      "reference": null
+    },
+    {
+      "date": "2026-04-29",
+      "amount": "250.00",
+      "description": "MERCHANT KILO",
+      "balance": "61.40",
+      "reference": null
+    },
+    {
+      "date": "2026-04-29",
+      "amount": "-3.99",
+      "description": "MERCHANT LIMA",
+      "balance": "88.30",
+      "reference": null
+    },
+    {
+      "date": "2026-04-29",
+      "amount": "130.00",
+      "description": "MERCHANT ALPHA",
+      "balance": "88.30",
+      "reference": null
+    },
+    {
+      "date": "2026-04-24",
+      "amount": "88.30",
+      "description": "MERCHANT BRAVO",
+      "balance": "42.85",
+      "reference": null
+    },
+    {
+      "date": "2026-04-24",
+      "amount": "61.40",
+      "description": "MERCHANT CHARLIE",
+      "balance": "9.99",
+      "reference": null
+    },
+    {
+      "date": "2026-04-24",
+      "amount": "-14.00",
+      "description": "MERCHANT DELTA",
+      "balance": "199.00",
+      "reference": null
+    },
+    {
+      "date": "2026-04-23",
+      "amount": "61.40",
+      "description": "MERCHANT ECHO",
+      "balance": "61.40",
+      "reference": null
+    },
+    {
+      "date": "2026-04-22",
+      "amount": "-7.20",
+      "description": "MERCHANT FOXTROT",
+      "balance": "18.95",
+      "reference": null
+    },
+    {
+      "date": "2026-04-21",
+      "amount": "-61.40",
+      "description": "MERCHANT GOLF",
+      "balance": "130.00",
+      "reference": null
+    },
+    {
+      "date": "2026-04-20",
+      "amount": "-33.15",
+      "description": "MERCHANT HOTEL",
+      "balance": "14.00",
+      "reference": null
+    },
+    {
+      "date": "2026-04-17",
+      "amount": "-42.85",
+      "description": "MERCHANT INDIA",
+      "balance": "130.00",
+      "reference": null
+    },
+    {
+      "date": "2026-04-16",
+      "amount": "250.00",
+      "description": "MERCHANT JULIET",
+      "balance": "5.40",
+      "reference": null
+    },
+    {
+      "date": "2026-04-15",
+      "amount": "-9.99",
+      "description": "MERCHANT KILO",
+      "balance": "199.00",
+      "reference": null
+    },
+    {
+      "date": "2026-04-15",
+      "amount": "61.40",
+      "description": "MERCHANT LIMA",
+      "balance": "14.00",
+      "reference": null
+    },
+    {
+      "date": "2026-04-14",
+      "amount": "-33.15",
+      "description": "MERCHANT ALPHA",
+      "balance": "42.85",
+      "reference": null
+    },
+    {
+      "date": "2026-04-14",
+      "amount": "-61.40",
+      "description": "MERCHANT BRAVO",
+      "balance": "88.30",
+      "reference": null
+    },
+    {
+      "date": "2026-04-14",
+      "amount": "3.99",
+      "description": "MERCHANT CHARLIE",
+      "balance": "75.50",
+      "reference": null
+    },
+    {
+      "date": "2026-04-10",
+      "amount": "-75.50",
+      "description": "MERCHANT DELTA",
+      "balance": "12.50",
+      "reference": null
+    },
+    {
+      "date": "2026-04-09",
+      "amount": "42.85",
+      "description": "MERCHANT ECHO",
+      "balance": "3.99",
+      "reference": null
+    },
+    {
+      "date": "2026-04-07",
+      "amount": "-12.50",
+      "description": "MERCHANT FOXTROT",
+      "balance": "75.50",
+      "reference": null
+    },
+    {
+      "date": "2026-04-03",
+      "amount": "-88.30",
+      "description": "MERCHANT GOLF",
+      "balance": "5.40",
+      "reference": null
+    },
+    {
+      "date": "2026-04-03",
+      "amount": "-9.99",
+      "description": "MERCHANT HOTEL",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-04-01",
+      "amount": "-42.85",
+      "description": "MERCHANT INDIA",
+      "balance": "199.00",
+      "reference": null
+    },
+    {
+      "date": "2026-04-01",
+      "amount": "-18.95",
+      "description": "MERCHANT JULIET",
+      "balance": "199.00",
+      "reference": null
+    },
+    {
+      "date": "2026-04-01",
+      "amount": "-14.00",
+      "description": "MERCHANT KILO",
+      "balance": "88.30",
+      "reference": null
+    },
+    {
+      "date": "2026-03-31",
+      "amount": "42.85",
+      "description": "MERCHANT LIMA",
+      "balance": "61.40",
+      "reference": null
+    },
+    {
+      "date": "2026-03-31",
+      "amount": "-250.00",
+      "description": "MERCHANT ALPHA",
+      "balance": "5.40",
+      "reference": null
+    },
+    {
+      "date": "2026-03-31",
+      "amount": "199.00",
+      "description": "MERCHANT BRAVO",
+      "balance": "199.00",
+      "reference": null
+    },
+    {
+      "date": "2026-03-30",
+      "amount": "-61.40",
+      "description": "MERCHANT CHARLIE",
+      "balance": "250.00",
+      "reference": null
+    },
+    {
+      "date": "2026-03-28",
+      "amount": "130.00",
+      "description": "MERCHANT DELTA",
+      "balance": "9.99",
+      "reference": null
+    },
+    {
+      "date": "2026-03-28",
+      "amount": "-130.00",
+      "description": "MERCHANT ECHO",
+      "balance": "42.85",
+      "reference": null
+    },
+    {
+      "date": "2026-03-27",
+      "amount": "-14.00",
+      "description": "MERCHANT FOXTROT",
+      "balance": "33.15",
+      "reference": null
+    },
+    {
+      "date": "2026-03-27",
+      "amount": "-33.15",
+      "description": "MERCHANT GOLF",
+      "balance": "9.99",
+      "reference": null
+    },
+    {
+      "date": "2026-03-27",
+      "amount": "14.00",
+      "description": "MERCHANT HOTEL",
+      "balance": "18.95",
+      "reference": null
+    },
+    {
+      "date": "2026-03-27",
+      "amount": "-5.40",
+      "description": "MERCHANT INDIA",
+      "balance": "199.00",
+      "reference": null
+    },
+    {
+      "date": "2026-03-27",
+      "amount": "18.95",
+      "description": "MERCHANT JULIET",
+      "balance": "5.40",
+      "reference": null
+    },
+    {
+      "date": "2026-03-27",
+      "amount": "88.30",
+      "description": "MERCHANT KILO",
+      "balance": "42.85",
+      "reference": null
+    },
+    {
+      "date": "2026-03-27",
+      "amount": "-130.00",
+      "description": "MERCHANT LIMA",
+      "balance": "33.15",
+      "reference": null
+    },
+    {
+      "date": "2026-03-26",
+      "amount": "250.00",
+      "description": "MERCHANT ALPHA",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-03-25",
+      "amount": "-75.50",
+      "description": "MERCHANT BRAVO",
+      "balance": "12.50",
+      "reference": null
+    },
+    {
+      "date": "2026-03-25",
+      "amount": "-3.99",
+      "description": "MERCHANT CHARLIE",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-03-24",
+      "amount": "130.00",
+      "description": "MERCHANT DELTA",
+      "balance": "61.40",
+      "reference": null
+    },
+    {
+      "date": "2026-03-23",
+      "amount": "130.00",
+      "description": "MERCHANT ECHO",
+      "balance": "75.50",
+      "reference": null
+    },
+    {
+      "date": "2026-03-22",
+      "amount": "-61.40",
+      "description": "MERCHANT FOXTROT",
+      "balance": "5.40",
+      "reference": null
+    },
+    {
+      "date": "2026-03-20",
+      "amount": "-18.95",
+      "description": "MERCHANT GOLF",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-03-20",
+      "amount": "-5.40",
+      "description": "MERCHANT HOTEL",
+      "balance": "5.40",
+      "reference": null
+    },
+    {
+      "date": "2026-03-18",
+      "amount": "18.95",
+      "description": "MERCHANT INDIA",
+      "balance": "250.00",
+      "reference": null
+    },
+    {
+      "date": "2026-03-17",
+      "amount": "33.15",
+      "description": "MERCHANT JULIET",
+      "balance": "9.99",
+      "reference": null
+    },
+    {
+      "date": "2026-03-17",
+      "amount": "-33.15",
+      "description": "MERCHANT KILO",
+      "balance": "3.99",
+      "reference": null
+    },
+    {
+      "date": "2026-03-17",
+      "amount": "-12.50",
+      "description": "MERCHANT LIMA",
+      "balance": "61.40",
+      "reference": null
+    },
+    {
+      "date": "2026-03-17",
+      "amount": "14.00",
+      "description": "MERCHANT ALPHA",
+      "balance": "7.20",
+      "reference": null
+    },
+    {
+      "date": "2026-03-16",
+      "amount": "61.40",
+      "description": "MERCHANT BRAVO",
+      "balance": "199.00",
+      "reference": null
+    },
+    {
+      "date": "2026-03-15",
+      "amount": "33.15",
+      "description": "MERCHANT CHARLIE",
+      "balance": "75.50",
+      "reference": null
+    },
+    {
+      "date": "2026-03-13",
+      "amount": "-9.99",
+      "description": "MERCHANT DELTA",
+      "balance": "75.50",
+      "reference": null
+    }
+  ]
+}

@@ -25,13 +25,27 @@ struct ImportConfirmationViewModelTests {
     #expect(viewModel.state == .success(rows: 24, displayName: "Chase"))
   }
 
-  @Test("empty rows produces emptyResult state with displayName")
+  @Test("empty rows produces emptyResult state with displayName and nil hint")
   func emptyState() {
     let registry = PluginRegistry(manifests: [
       PluginManifest(host: "chase.com", pathPrefix: "/", jsResource: "x", displayName: "Chase")
     ])
     let viewModel = ImportConfirmationViewModel(payload: samplePayload(rows: 0), registry: registry)
-    #expect(viewModel.state == .emptyResult(displayName: "Chase"))
+    #expect(viewModel.state == .emptyResult(displayName: "Chase", hint: nil))
+  }
+
+  @Test("emptyResult surfaces manifest.emptyHint when set")
+  func emptyHintFromManifest() {
+    let registry = PluginRegistry(manifests: [
+      PluginManifest(
+        host: "chase.com", pathPrefix: "/", jsResource: "x", displayName: "Chase",
+        emptyHint: "Open an account before importing.")
+    ])
+    let viewModel = ImportConfirmationViewModel(payload: samplePayload(rows: 0), registry: registry)
+    #expect(
+      viewModel.state
+        == .emptyResult(
+          displayName: "Chase", hint: "Open an account before importing."))
   }
 
   @Test("payload from unknown host falls back to displayName = host")
