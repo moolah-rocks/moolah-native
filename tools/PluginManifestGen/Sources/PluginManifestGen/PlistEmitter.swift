@@ -37,7 +37,7 @@ public enum PlistEmitter {
             <key>NSExtensionActivationRule</key>
             <string>\(predicate)</string>
             <key>NSExtensionJavaScriptPreprocessingFile</key>
-            <string>extension-entry</string>
+            <string>extension-entry.bundle</string>
           </dict>
           <key>NSExtensionPointIdentifier</key>
           <string>com.apple.ui-services</string>

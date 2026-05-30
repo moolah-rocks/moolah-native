@@ -253,13 +253,20 @@ generate:
     PLUGIN_SWIFT="Modules/ImportExtensionKit/Sources/ImportExtensionKit/Generated/PluginRegistry+Bundled.swift"
     PLUGIN_IOS_PLIST="MoolahImportExtension_iOS/Generated/Info.plist"
     PLUGIN_MAC_PLIST="MoolahImportExtension_macOS/Generated/Info.plist"
+    PLUGIN_JS_ENTRY="MoolahImportExtension_Shared/Resources/extension-entry.js"
+    PLUGIN_JS_BUNDLE="MoolahImportExtension_Shared/Generated/extension-entry.bundle.js"
     needs_plugin_gen=0
     if [ ! -f "$PLUGINS_STAMP" ]; then
         needs_plugin_gen=1
     elif [ ! -f "$PLUGIN_SWIFT" ] || [ ! -f "$PLUGIN_IOS_PLIST" ] \
-        || [ ! -f "$PLUGIN_MAC_PLIST" ]; then
+        || [ ! -f "$PLUGIN_MAC_PLIST" ] || [ ! -f "$PLUGIN_JS_BUNDLE" ]; then
         needs_plugin_gen=1
     elif [ "Plugins/plugins.json" -nt "$PLUGINS_STAMP" ]; then
+        needs_plugin_gen=1
+    elif [ "$PLUGIN_JS_ENTRY" -nt "$PLUGINS_STAMP" ]; then
+        needs_plugin_gen=1
+    elif find Plugins -type f -name 'parser.js' \
+        -newer "$PLUGINS_STAMP" 2>/dev/null | grep -q .; then
         needs_plugin_gen=1
     elif find tools/PluginManifestGen/Sources -type f -name '*.swift' \
         -newer "$PLUGINS_STAMP" 2>/dev/null | grep -q .; then
@@ -270,12 +277,15 @@ generate:
         mkdir -p \
             "$(dirname "$PLUGIN_SWIFT")" \
             "$(dirname "$PLUGIN_IOS_PLIST")" \
-            "$(dirname "$PLUGIN_MAC_PLIST")"
+            "$(dirname "$PLUGIN_MAC_PLIST")" \
+            "$(dirname "$PLUGIN_JS_BUNDLE")"
         swift run --package-path tools/PluginManifestGen PluginManifestGen \
             Plugins/plugins.json \
             "$PLUGIN_SWIFT" \
             "$PLUGIN_IOS_PLIST" \
-            "$PLUGIN_MAC_PLIST"
+            "$PLUGIN_MAC_PLIST" \
+            "$PLUGIN_JS_ENTRY" \
+            "$PLUGIN_JS_BUNDLE"
         touch "$PLUGINS_STAMP"
     fi
 
