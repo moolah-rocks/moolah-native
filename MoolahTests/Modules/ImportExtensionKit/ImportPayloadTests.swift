@@ -75,4 +75,58 @@ struct ImportPayloadTests {
       try JSONDecoder.importPayload.decode(ImportPayload.self, from: Data(json.utf8))
     }
   }
+
+  private func makePayload(sourceURL: String) -> ImportPayload {
+    ImportPayload(
+      schemaVersion: 1, sourceHost: "chase.com", sourceURL: sourceURL,
+      capturedAt: Date(timeIntervalSince1970: 0),
+      accountHint: nil, currencyHint: nil, rows: [])
+  }
+
+  @Test("strippingSourceURLQueryAndFragment removes query string")
+  func stripsQueryString() {
+    let stripped = makePayload(sourceURL: "https://chase.com/x?token=abc")
+      .strippingSourceURLQueryAndFragment()
+    #expect(stripped.sourceURL == "https://chase.com/x")
+  }
+
+  @Test("strippingSourceURLQueryAndFragment removes fragment")
+  func stripsFragment() {
+    let stripped = makePayload(sourceURL: "https://chase.com/x#section")
+      .strippingSourceURLQueryAndFragment()
+    #expect(stripped.sourceURL == "https://chase.com/x")
+  }
+
+  @Test("strippingSourceURLQueryAndFragment removes both query and fragment")
+  func stripsBoth() {
+    let stripped = makePayload(sourceURL: "https://chase.com/x?token=abc#foo")
+      .strippingSourceURLQueryAndFragment()
+    #expect(stripped.sourceURL == "https://chase.com/x")
+  }
+
+  @Test("strippingSourceURLQueryAndFragment leaves clean URL unchanged")
+  func cleanURLUnchanged() {
+    let stripped = makePayload(sourceURL: "https://chase.com/x")
+      .strippingSourceURLQueryAndFragment()
+    #expect(stripped.sourceURL == "https://chase.com/x")
+  }
+
+  @Test("strippingSourceURLQueryAndFragment preserves all other fields")
+  func preservesOtherFields() {
+    let original = ImportPayload(
+      schemaVersion: 1, sourceHost: "chase.com",
+      sourceURL: "https://chase.com/x?t=1",
+      capturedAt: Date(timeIntervalSince1970: 1_716_000_000),
+      accountHint: "1234", currencyHint: "USD",
+      rows: [
+        ImportPayloadRow(date: "2026-05-29", amount: "1.00", description: "x")
+      ])
+    let stripped = original.strippingSourceURLQueryAndFragment()
+    #expect(stripped.schemaVersion == original.schemaVersion)
+    #expect(stripped.sourceHost == original.sourceHost)
+    #expect(stripped.capturedAt == original.capturedAt)
+    #expect(stripped.accountHint == original.accountHint)
+    #expect(stripped.currencyHint == original.currencyHint)
+    #expect(stripped.rows == original.rows)
+  }
 }

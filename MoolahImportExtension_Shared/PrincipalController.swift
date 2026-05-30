@@ -37,6 +37,11 @@ final class PrincipalController {
   /// Called from the loader closure (off-main) on both platforms — the
   /// `[String: Any]` JS dictionary is not `Sendable`, so the decode has
   /// to happen before crossing back to the main actor.
+  ///
+  /// The `sourceURL` is normalised to scheme+host+path before the payload
+  /// crosses the App Group boundary. Some banks encode short-lived
+  /// session tokens in the query string; stripping them here avoids
+  /// retaining sensitive bearer-style data on disk in the inbox JSON.
   nonisolated static func decode(payload: Any?)
     -> Result<ImportPayload, ExtensionItemReaderError>?
   {
@@ -45,7 +50,8 @@ final class PrincipalController {
         "NSExtensionJavaScriptPreprocessingResultsKey"] as? [String: Any]
     else { return nil }
     do {
-      return .success(try ExtensionItemReader.decode(jsResult: dict))
+      let decoded = try ExtensionItemReader.decode(jsResult: dict)
+      return .success(decoded.strippingSourceURLQueryAndFragment())
     } catch let error as ExtensionItemReaderError {
       return .failure(error)
     } catch {
