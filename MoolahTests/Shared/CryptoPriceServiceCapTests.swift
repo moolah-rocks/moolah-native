@@ -26,11 +26,15 @@ struct CryptoPriceServiceCapTests {
   ) throws -> CryptoPriceService {
     let client = FixedCryptoPriceClient(prices: prices, shouldFail: shouldFail)
     let resolved = try database ?? ProfileIndexDatabase.openInMemory()
+    // Pin to UTC so the `YYYY-MM-DD` labels in the fixtures below match
+    // the cap's output regardless of the host machine's local zone.
+    let utc = try #require(TimeZone(identifier: "UTC"))
     return CryptoPriceService(
       clients: [client],
       database: resolved,
       resolutionClient: nil,
-      now: now)
+      now: now,
+      timeZone: utc)
   }
 
   private func date(_ string: String) throws -> Date {

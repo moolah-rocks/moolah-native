@@ -76,9 +76,15 @@ struct StockPositionDisplayTests {
         instrument: .AUD, prices: [dateKey: dec("45.00"), yKey: dec("45.00")])
     ])
     let cacheDatabase = try ProfileIndexDatabase.openInMemory()
-    let stockService = StockPriceService(client: stockClient, database: cacheDatabase)
+    // Pin to UTC — `dateString` / `today.addingTimeInterval(-86400)`
+    // build the fixture's `YYYY-MM-DD` labels in UTC, so the cap must
+    // resolve "yesterday" in UTC too for the lookup to match.
+    let utc = try #require(TimeZone(identifier: "UTC"))
+    let stockService = StockPriceService(
+      client: stockClient, database: cacheDatabase, timeZone: utc)
     let rateClient = FixedRateClient(rates: [:])
-    let rateService = ExchangeRateService(client: rateClient, database: cacheDatabase)
+    let rateService = ExchangeRateService(
+      client: rateClient, database: cacheDatabase, timeZone: utc)
     let conversionService = FullConversionService(
       exchangeRates: rateService,
       stockPrices: stockService
@@ -163,9 +169,13 @@ struct StockPositionDisplayTests {
         instrument: .AUD, prices: [dateKey: dec("120.00"), yKey: dec("120.00")]),
     ])
     let database = try ProfileIndexDatabase.openInMemory()
-    let stockService = StockPriceService(client: stockClient, database: database)
+    // Pin to UTC — same rationale as `valuedPositionsIncludeMarketValue`.
+    let utc = try #require(TimeZone(identifier: "UTC"))
+    let stockService = StockPriceService(
+      client: stockClient, database: database, timeZone: utc)
     let rateClient = FixedRateClient(rates: [:])
-    let rateService = ExchangeRateService(client: rateClient, database: database)
+    let rateService = ExchangeRateService(
+      client: rateClient, database: database, timeZone: utc)
     return FullConversionService(
       exchangeRates: rateService,
       stockPrices: stockService

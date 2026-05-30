@@ -32,17 +32,23 @@ actor CryptoPriceService {
   private let resolutionClient: TokenResolutionClient
   /// Injected clock so tests can pin "today" deterministically.
   private let now: @Sendable () -> Date
+  /// Injected zone used by `cappedToYesterday` to compute "yesterday".
+  /// Production defaults to `TimeZone.current`; tests asserting on a
+  /// specific `YYYY-MM-DD` label pin to `UTC`.
+  private let timeZone: TimeZone
 
   init(
     clients: [CryptoPriceClient],
     database: any DatabaseWriter,
     resolutionClient: (any TokenResolutionClient)? = nil,
-    now: @Sendable @escaping () -> Date = { Date() }
+    now: @Sendable @escaping () -> Date = { Date() },
+    timeZone: TimeZone = .current
   ) {
     self.clients = clients
     self.database = database
     self.resolutionClient = resolutionClient ?? NoOpTokenResolutionClient()
     self.now = now
+    self.timeZone = timeZone
     self.dateFormatter = ISO8601DateFormatter()
     self.dateFormatter.formatOptions = [.withFullDate]
   }
@@ -114,7 +120,7 @@ actor CryptoPriceService {
     mapping: CryptoProviderMapping,
     on date: Date
   ) async throws -> Decimal {
-    let date = cappedToYesterday(date, now: now)
+    let date = cappedToYesterday(date, now: now, timeZone: timeZone)
     let tokenId = instrument.id
     let dateString = dateFormatter.string(from: date)
 
@@ -228,7 +234,7 @@ actor CryptoPriceService {
     // Cap the *fetch* upper bound at yesterday — same rationale as
     // `price(for:mapping:on:)`. The result series below still walks the
     // caller-supplied range; today's slot fills via `lastKnownPrice`.
-    let fetchUpperBound = cappedToYesterday(range.upperBound, now: now)
+    let fetchUpperBound = cappedToYesterday(range.upperBound, now: now, timeZone: timeZone)
     let rangeStart = dateFormatter.string(from: range.lowerBound)
     let fetchEndString = dateFormatter.string(from: fetchUpperBound)
 
@@ -290,10 +296,12 @@ actor CryptoPriceService {
       )
       return
     }
-    // Tag the live tick as yesterday-UTC; see `Shared/PriceCacheCap.swift`.
-    // The next forward `dailyPrices` extension overwrites this best-effort
-    // value with the finalised close.
-    let dateString = dateFormatter.string(from: cappedToYesterday(now(), now: now))
+    // Tag the live tick as the local-yesterday calendar day; see
+    // `Shared/PriceCacheCap.swift`. The next forward `dailyPrices`
+    // extension overwrites this best-effort value with the finalised
+    // close.
+    let dateString = dateFormatter.string(
+      from: cappedToYesterday(now(), now: now, timeZone: timeZone))
     for (tokenId, price) in prices {
       let registration = registrations.first { $0.id == tokenId }
       let symbol = registration?.instrument.ticker ?? registration?.instrument.name ?? ""

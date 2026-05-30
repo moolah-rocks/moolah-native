@@ -18,7 +18,11 @@ struct ExchangeRateServiceCapTests {
   ) throws -> ExchangeRateService {
     let client = FixedRateClient(rates: rates, shouldFail: shouldFail)
     let resolved = try database ?? ProfileIndexDatabase.openInMemory()
-    return ExchangeRateService(client: client, database: resolved, now: now)
+    // Pin to UTC so the `YYYY-MM-DD` labels in the fixtures below match
+    // the cap's output regardless of the host machine's local zone.
+    let utc = try #require(TimeZone(identifier: "UTC"))
+    return ExchangeRateService(
+      client: client, database: resolved, now: now, timeZone: utc)
   }
 
   private func date(_ string: String) throws -> Date {

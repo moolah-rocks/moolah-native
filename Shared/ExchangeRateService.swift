@@ -24,21 +24,27 @@ actor ExchangeRateService {
   let logger = Logger(
     subsystem: "com.moolah.app", category: "ExchangeRateService")
 
-  // `dateFormatter` and `now` are accessed by `prefetchLatest` in
-  // `ExchangeRateService+Prefetch.swift`, so they must be at least
-  // internal.
+  // `dateFormatter`, `now`, and `timeZone` are accessed by
+  // `prefetchLatest` in `ExchangeRateService+Prefetch.swift`, so they
+  // must be at least internal.
   let dateFormatter: ISO8601DateFormatter
   /// Injected clock so tests can pin "today" deterministically.
   let now: @Sendable () -> Date
+  /// Injected zone used by `cappedToYesterday` to compute "yesterday".
+  /// Production defaults to `TimeZone.current`; tests asserting on a
+  /// specific `YYYY-MM-DD` label pin to `UTC`.
+  let timeZone: TimeZone
 
   init(
     client: ExchangeRateClient,
     database: any DatabaseWriter,
-    now: @Sendable @escaping () -> Date = { Date() }
+    now: @Sendable @escaping () -> Date = { Date() },
+    timeZone: TimeZone = .current
   ) {
     self.client = client
     self.database = database
     self.now = now
+    self.timeZone = timeZone
     self.dateFormatter = ISO8601DateFormatter()
     self.dateFormatter.formatOptions = [.withFullDate]
   }
@@ -143,7 +149,7 @@ actor ExchangeRateService {
 
   /// See `Shared/PriceCacheCap.swift` for the rationale.
   private func cappedDate(_ date: Date) -> Date {
-    cappedToYesterday(date, now: now)
+    cappedToYesterday(date, now: now, timeZone: timeZone)
   }
 
   func rates(
