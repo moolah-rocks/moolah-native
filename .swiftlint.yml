@@ -23,6 +23,9 @@ excluded:
   # local modifications are flagged with `// moolah:` comments.
   # See Vendored/OutlineView/NOTICE.md.
   - Vendored
+  # SPM build artifacts under local-package modules (gitignored, regenerated
+  # by `swift test --package-path Modules/<name>`).
+  - Modules/ImportExtensionKit/.build
 
 disabled_rules:
   # swift-format territory — do not enable these.
