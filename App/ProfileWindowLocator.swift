@@ -49,13 +49,25 @@
 
     /// `true` when any window in `windows` is tagged with a per-profile
     /// identifier (i.e. some profile is presented in a
-    /// `ProfileWindowView`). Used by
-    /// `ProfileWindowView.nilBindingIsRedundant` so a state-restored
-    /// nil-binding window can dismiss itself instead of lingering on a
-    /// Welcome screen beside an already-presented profile.
+    /// `ProfileWindowView`).
     @MainActor
     static func anyProfileWindowPresent(in windows: [NSWindow]) -> Bool {
+      anyOtherProfileWindowPresent(excluding: nil, in: windows)
+    }
+
+    /// `true` when any window in `windows` other than `currentWindow`
+    /// is tagged with a per-profile identifier. Used by
+    /// `ProfileWindowView.nilBindingIsRedundant` so a state-restored
+    /// nil-binding window can dismiss itself instead of lingering on a
+    /// Welcome screen beside an already-presented profile — without
+    /// counting itself as a sibling once `tagHostingWindow` has
+    /// stamped its own identifier.
+    @MainActor
+    static func anyOtherProfileWindowPresent(
+      excluding currentWindow: NSWindow?, in windows: [NSWindow]
+    ) -> Bool {
       windows.contains { window in
+        guard window !== currentWindow else { return false }
         guard let raw = window.identifier?.rawValue else { return false }
         return raw.hasPrefix(identifierPrefix)
       }
