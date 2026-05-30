@@ -8,7 +8,6 @@ let package = Package(
     .library(name: "ImportExtensionKit", targets: ["ImportExtensionKit"])
   ],
   targets: [
-    .target(name: "ImportExtensionKit"),
-    .testTarget(name: "ImportExtensionKitTests", dependencies: ["ImportExtensionKit"]),
+    .target(name: "ImportExtensionKit")
   ],
   swiftLanguageModes: [.v6])
