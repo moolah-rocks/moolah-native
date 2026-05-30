@@ -4,6 +4,7 @@
 # See guides/CODE_GUIDE.md and plans/2026-04-22-swift-code-guide-design.md.
 
 excluded:
+  - .agent-tmp
   - .build
   - .DerivedData-bench
   - .DerivedData-ios
