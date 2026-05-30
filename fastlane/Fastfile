@@ -48,6 +48,23 @@ platform :ios do
     )
   end
 
+  desc "Force-regenerate iOS profiles after a portal capability change (rare; usually `certificates` is enough)"
+  lane :force_certificates do
+    api_key = app_store_connect_api_key(
+      key_id: ENV["ASC_KEY_ID"],
+      issuer_id: ENV["ASC_ISSUER_ID"],
+      key_content: ENV["ASC_KEY_CONTENT"],
+      is_key_content_base64: true
+    )
+
+    match(
+      type: "appstore",
+      app_identifier: ["rocks.moolah.app", "rocks.moolah.app.importextension"],
+      api_key: api_key,
+      force: true
+    )
+  end
+
   desc "Build and validate iOS archive against App Store rules (no upload)"
   lane :validate do
     certificates
@@ -171,6 +188,24 @@ platform :mac do
       platform: "macos",
       api_key: api_key,
       readonly: is_ci
+    )
+  end
+
+  desc "Force-regenerate macOS profiles after a portal capability change (rare; usually `certificates` is enough)"
+  lane :force_certificates do
+    api_key = app_store_connect_api_key(
+      key_id: ENV["ASC_KEY_ID"],
+      issuer_id: ENV["ASC_ISSUER_ID"],
+      key_content: ENV["ASC_KEY_CONTENT"],
+      is_key_content_base64: true
+    )
+
+    match(
+      type: "developer_id",
+      app_identifier: ["rocks.moolah.app", "rocks.moolah.app.importextension"],
+      platform: "macos",
+      api_key: api_key,
+      force: true
     )
   end
 
