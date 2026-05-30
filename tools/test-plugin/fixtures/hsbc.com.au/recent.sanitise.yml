@@ -1,0 +1,66 @@
+# DRAFT for PR 2 (HSBC plugin). Stage into:
+#   tools/test-plugin/fixtures/hsbc.com.au/recent.sanitise.yml
+#
+# HSBC Australia internet banking — credit card account view.
+# Page structure: dojo `gridx` widget with role="row" / role="gridcell"
+# inside `<div class="gridxRow">` wrappers. Amount sign convention:
+# bare positive = charge (outflow), text-negative = payment/credit
+# (inflow). Sign INVERTED from on-page to checkbook view by parser.
+
+source: "~/Downloads/Moolah Sites/services.online-banking.hsbc.com.au.html"
+seed: 99
+synthetic_url: "https://services.online-banking.hsbc.com.au/gpib/group/gpib/cmn/layouts/default.html?uid=dashboard"
+
+keep_classes:
+  - "gridxRow"
+  - "gridxRowOdd"
+  - "gridxRowTable"
+  - "creditCardTransactionDate"
+  - "creditCardPostingDate"
+  - "creditCardPayee"
+  - "creditcardTransAmtHK"
+  - "creditcardTransHK"
+  - "payee"
+  - "amount"
+  - "payeeItem0"
+  - "pendingTxnLink"
+
+merchant_selectors:
+  - ".payeeItem0"
+
+amount_selectors:
+  - "td.amount"
+
+date_selectors:
+  - "td.creditCardPostingDate"
+  - "td.creditCardTransactionDate"
+
+account_hint_selectors: []
+
+strip_selectors:
+  - "head"
+  - "script"
+  - "style"
+  - "noscript"
+  - "svg"
+  - "img"
+  - "iframe"
+  - ".gridxHeaderRowInner"
+  - ".gridHeaderColContainer"
+  - ".gridxArrowButtonNode"
+  - ".gridxSortNode"
+  - ".pendingTxnLink"
+  - "header"
+  - "nav"
+  - "footer"
+  - "button"
+  - ".dijitDialog"
+  - ".dijitTooltip"
+
+keep_attributes:
+  - "data-testid"
+  - "role"
+  - "colid"
+  - "rowid"
+  - "visualindex"
+  - "rowindex"

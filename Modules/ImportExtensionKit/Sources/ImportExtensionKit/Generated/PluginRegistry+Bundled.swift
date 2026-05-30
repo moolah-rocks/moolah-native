@@ -6,7 +6,10 @@ extension PluginRegistry {
       PluginManifest(
         host: "macquarie.com.au", pathPrefix: "/io", jsResource: "macquarie.com.au/parser",
         displayName: "Macquarie",
-        emptyHint: "Open one of your accounts to see transactions before importing.")
+        emptyHint: "Open one of your accounts to see transactions before importing."),
+      PluginManifest(
+        host: "hsbc.com.au", pathPrefix: "/gpib", jsResource: "hsbc.com.au/parser",
+        displayName: "HSBC", emptyHint: "Open the credit card transactions list before importing."),
     ]
   }
 }

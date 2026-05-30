@@ -6,6 +6,13 @@
       "file": "macquarie.com.au/parser.js",
       "displayName": "Macquarie",
       "emptyHint": "Open one of your accounts to see transactions before importing."
+    },
+    {
+      "host": "hsbc.com.au",
+      "pathPrefix": "/gpib",
+      "file": "hsbc.com.au/parser.js",
+      "displayName": "HSBC",
+      "emptyHint": "Open the credit card transactions list before importing."
     }
   ]
 }
