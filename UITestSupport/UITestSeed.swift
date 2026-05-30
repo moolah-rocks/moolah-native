@@ -97,6 +97,18 @@ public enum UITestSeed: String, CaseIterable, Sendable {
   /// - compatible: `compatibleProfileId`, label="Today", dataFormatVersion=0
   case incompatibleProfile
 
+  /// A CloudKit-backed AUD profile (same shape as `tradeBaseline`) PLUS
+  /// a fixture `ImportPayload` JSON pre-written into the fallback inbox
+  /// directory pointed at by `MOOLAH_UI_TEST_INBOX_DIR`. Drives the
+  /// inbox → review handoff XCUITest: the pending-imports banner reads
+  /// the seeded file at first paint and reports `"1 pending import from
+  /// chase.com"`; tapping Review forwards the payload through the
+  /// existing `DeepLinkCoordinator` → `ImportStore.startWebReview` seam.
+  ///
+  /// See `UITestFixtures.PendingWebImportOneChaseInbox` for the
+  /// deterministic payload contents (UUID, host, rows).
+  case pendingWebImportOneChaseInbox = "pending-web-import-one-chase-inbox"
+
   /// A CloudKit-backed AUD profile with two bank accounts ("Everyday",
   /// "Savings") and four imported single-account transactions forming
   /// two transfer pairs:

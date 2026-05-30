@@ -61,6 +61,28 @@ public enum UITestIdentifiers {
   // The `TransferDetection` namespace lives in
   // `UITestIdentifiers+TransferDetection.swift`.
 
+  // MARK: - PendingImportsBanner
+
+  public enum PendingImportsBanner {
+    /// Banner copy text ("`N pending imports …`"). Present only when
+    /// the inbox is non-empty (the view body returns `EmptyView`
+    /// otherwise), so its existence doubles as the "non-empty inbox"
+    /// sentinel a driver waits on. A driver reads `.value` rather than
+    /// `.label` from a SwiftUI `Text` with an
+    /// `.accessibilityIdentifier(_:)` set, mirroring
+    /// `SyncFooterScreen.text(of:)`.
+    ///
+    /// Identifier is per-element (not on the HStack container) so the
+    /// SwiftUI accessibility tree exposes a single owner for the
+    /// identifier — placing it on the parent flattens it onto every
+    /// descendant and collides with the Review button's identifier.
+    public static let label = "pendingImportsBanner.label"
+    /// `Review` button. Tapping forwards the newest payload through
+    /// `DeepLinkCoordinator.handle(.importInbox(id:))` → the active
+    /// session's `ImportStore.startWebReview`.
+    public static let reviewButton = "pendingImportsBanner.review"
+  }
+
   // MARK: - Detail
 
   public enum Detail {

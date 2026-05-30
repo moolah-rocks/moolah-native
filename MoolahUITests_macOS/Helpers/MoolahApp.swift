@@ -11,6 +11,13 @@ import XCTest
 final class MoolahApp {
   let application: XCUIApplication
   let seed: UITestSeed
+  /// On-disk directory the app's fallback inbox is rooted at for this
+  /// launch — mirrored from the `UITestEnvironment.inboxDirectory`
+  /// `launchEnvironment` value so drivers can poll the same path the
+  /// app reads / writes (the test process does not inherit
+  /// `launchEnvironment`, hence the explicit hand-off). Drivers that
+  /// don't touch the inbox simply ignore it.
+  let inboxDirectory: URL
   /// Back-reference set by `MoolahUITestCase.launch(seed:)` so drivers can
   /// request an immediate failure snapshot via
   /// `app.testCase?.captureFailureSnapshot(reason:)` before calling
@@ -26,19 +33,39 @@ final class MoolahApp {
   /// Always pair with `MoolahApp` returned to a local — never store on the
   /// test class. The application is terminated automatically by
   /// `MoolahUITestCase.tearDown`.
+  ///
+  /// Always exports `UITestEnvironment.inboxDirectory` to a per-launch
+  /// temp directory so seeds that pre-write inbox files (e.g.
+  /// `.pendingWebImportOneChaseInbox`) and the app's fallback inbox
+  /// agree on the same on-disk path. Seeds that never read the inbox
+  /// simply inherit an empty directory and ignore it.
   static func launch(seed: UITestSeed) -> MoolahApp {
     let application = XCUIApplication()
     application.launchArguments = ["--ui-testing"]
-    application.launchEnvironment = ["UI_TESTING_SEED": seed.rawValue]
+    // Use the shared `/private/tmp` rather than `FileManager.default
+    // .temporaryDirectory`, which resolves into the xctrunner's
+    // sandboxed Container path. The AUT (`rocks.moolah.app`,
+    // unsandboxed in Debug-Tests) cannot read from another app's
+    // container even without its own sandbox — TCC blocks access. A
+    // path under `/private/tmp` is world-accessible and both
+    // processes can read/write it.
+    let inboxDirectory = URL(fileURLWithPath: "/private/tmp")
+      .appendingPathComponent("moolah-ui-test-inbox-\(UUID().uuidString)")
+    application.launchEnvironment = [
+      "UI_TESTING_SEED": seed.rawValue,
+      UITestEnvironment.inboxDirectory: inboxDirectory.path,
+    ]
     application.launch()
-    let app = MoolahApp(application: application, seed: seed)
+    let app = MoolahApp(
+      application: application, seed: seed, inboxDirectory: inboxDirectory)
     app.expectMainWindowVisible()
     return app
   }
 
-  init(application: XCUIApplication, seed: UITestSeed) {
+  init(application: XCUIApplication, seed: UITestSeed, inboxDirectory: URL) {
     self.application = application
     self.seed = seed
+    self.inboxDirectory = inboxDirectory
   }
 
   // MARK: - Screen drivers
@@ -96,6 +123,14 @@ final class MoolahApp {
   /// build's `DataFormatVersion.current`.
   var incompatibleProfile: IncompatibleProfileScreen {
     IncompatibleProfileScreen(app: self)
+  }
+
+  /// In-window banner that surfaces unconsumed inbox payloads from the
+  /// Safari import extension (`PendingImportsBanner`). Available on
+  /// every main-window launch — renders to `EmptyView` when the inbox
+  /// is empty.
+  var pendingImportsBanner: PendingImportsBannerScreen {
+    PendingImportsBannerScreen(app: self)
   }
 
   // MARK: - Single element resolver

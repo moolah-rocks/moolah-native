@@ -318,4 +318,43 @@ public enum UITestFixtures {
     public static let parserIdentifier = "ui-test-seed"
     public static let sourceFilename = "transfer-detection-seed.csv"
   }
+
+  /// Fixtures for the `.pendingWebImportOneChaseInbox` seed.
+  ///
+  /// The seed reuses the `tradeBaseline` profile (so the
+  /// `DeepLinkCoordinator` has a live `ImportStore` to forward the
+  /// payload into) and additionally writes a deterministic Chase-shaped
+  /// `ImportPayload` into the fallback inbox directory pointed at by
+  /// `MOOLAH_UI_TEST_INBOX_DIR`. The banner reads that file at first
+  /// paint and reports `"1 pending import from chase.com"`.
+  public enum PendingWebImportOneChaseInbox {
+    public static let payloadId = uuidLiteral("D0D0D000-0000-0000-0000-000000000001")
+    public static let sourceHost = "chase.com"
+    public static let sourceURL = "https://chase.com/statements/checking"
+    public static let accountHint = "Total Checking …4242"
+    public static let currencyHint = "USD"
+    /// 2026-04-15 00:00:00 UTC — the fixed `capturedAt` so the
+    /// `seed.txt` failure artefact is diffable.
+    public static let capturedAt = Date(timeIntervalSince1970: 1_776_211_200)
+    /// Banner copy the driver asserts on. Mirrors `PendingImportsBanner`'s
+    /// `"1 pending import from \(host)"` literal — kept here so the
+    /// expectation is co-located with the rest of the seed fixture
+    /// metadata that gets surfaced into the `seed.txt` artefact.
+    public static let expectedBannerText = "1 pending import from \(sourceHost)"
+  }
+}
+
+/// Environment-variable names the app and UI-test target both read.
+///
+/// Compiled into both targets so the launch wiring (`MoolahApp.launch`)
+/// and the consumers (e.g. the fallback inbox in `MoolahApp+Setup`) cannot
+/// disagree on the key.
+public enum UITestEnvironment {
+  /// Directory the app's `PendingImportsBannerFallback` inbox is rooted
+  /// at when `InboxWriter.shared()` is unavailable (the `--ui-testing`
+  /// case). Both the seed hydrator (which writes the fixture payload)
+  /// and the app's launch wiring (which constructs the `InboxWriter`)
+  /// read this value, so the seed's writes and the banner's reads land
+  /// on the same on-disk directory.
+  public static let inboxDirectory = "MOOLAH_UI_TEST_INBOX_DIR"
 }

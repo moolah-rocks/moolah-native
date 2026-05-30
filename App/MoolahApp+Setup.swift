@@ -133,7 +133,8 @@ extension MoolahApp {
       .cryptoCatalogPreloaded,
       .tradeReady,
       .incompatibleProfile,
-      .transferDetectionBaseline:
+      .transferDetectionBaseline,
+      .pendingWebImportOneChaseInbox:
       break
     case .welcomeDownloading:
       // Override iCloudAvailability to `.available` so the WelcomeStateResolver
@@ -202,24 +203,50 @@ extension MoolahApp {
   /// drains through the coordinator so a "Review Later" tap shares the
   /// same code path as a `moolah://` URL arriving from the extension.
   ///
-  /// `InboxWriter.shared()` returns `nil` when the App Group entitlement
-  /// is unavailable (e.g. under `--ui-testing`). In that case the model
-  /// is rooted at a per-launch temp directory so it permanently reports
-  /// `.none` instead of crashing.
+  /// Inbox resolution precedence:
+  ///   1. `UITestEnvironment.inboxDirectory` env var — set by
+  ///      `MoolahApp.launch(seed:)` in UI tests; takes precedence so the
+  ///      seed's pre-written fixtures and the banner's reads agree
+  ///      regardless of whether the test host happens to resolve a
+  ///      Group Container path.
+  ///   2. `InboxWriter.shared()` — the App Group container in production
+  ///      Release builds.
+  ///   3. `PendingImportsBannerFallback.inbox()` — an ephemeral
+  ///      per-launch directory that is always empty, so the model
+  ///      reports `.none` instead of crashing in Debug builds with no
+  ///      App Group entitlement and no UI-test override.
   static func makeDeepLinkAndBannerModel(
     sessionManager: SessionManager
   ) -> (DeepLinkCoordinator, PendingImportsBannerModel) {
+    let inbox = resolveInboxWriter()
     let coordinator = DeepLinkCoordinator(
       importStoreProvider: { [sessionManager] in
         sessionManager.sessions.values.first?.importStore
-      })
-    let inbox = InboxWriter.shared() ?? PendingImportsBannerFallback.inbox()
+      },
+      inboxProvider: { inbox })
     let bannerModel = PendingImportsBannerModel(
       writer: inbox,
       onTap: { destination in
         Task { @MainActor in await coordinator.handle(destination) }
       })
     return (coordinator, bannerModel)
+  }
+
+  /// Implements the precedence list documented on
+  /// `makeDeepLinkAndBannerModel(sessionManager:)`. The same writer
+  /// instance is passed to both the banner (read path) and the
+  /// deep-link coordinator (drain path) so they cannot disagree on the
+  /// inbox root — a Release-config quirk on macOS resolves a Group
+  /// Container path even without the entitlement, so the override has
+  /// to win over `InboxWriter.shared()` rather than only filling in
+  /// when shared returns nil.
+  private static func resolveInboxWriter() -> InboxWriter {
+    if let override = ProcessInfo.processInfo.environment[UITestEnvironment.inboxDirectory],
+      !override.isEmpty
+    {
+      return InboxWriter(rootDirectory: URL(fileURLWithPath: override))
+    }
+    return InboxWriter.shared() ?? PendingImportsBannerFallback.inbox()
   }
 
   /// Configure the automation service locator. On macOS this also sets up
