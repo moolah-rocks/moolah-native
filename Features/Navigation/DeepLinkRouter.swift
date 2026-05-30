@@ -3,7 +3,7 @@ import Foundation
 /// Destinations parsed from a `moolah://` URL. Each case maps one-to-one onto
 /// a host segment of the URL; payload values are validated by the parser so
 /// downstream code can assume the data is well-formed.
-public enum DeepLinkDestination: Equatable, Sendable {
+enum DeepLinkDestination: Equatable, Sendable {
   /// `moolah://import?inbox=<uuid>` — the Safari import extension has
   /// written a payload to the App Group inbox and is asking the main app
   /// to consume it.
@@ -17,10 +17,10 @@ public enum DeepLinkDestination: Equatable, Sendable {
 ///
 /// Add a new route by adding a case to `DeepLinkDestination` and a `case`
 /// arm to `parse(_:)`.
-public enum DeepLinkRouter {
-  public static let scheme = "moolah"
+enum DeepLinkRouter {
+  static let scheme = "moolah"
 
-  public static func parse(_ url: URL) -> DeepLinkDestination? {
+  static func parse(_ url: URL) -> DeepLinkDestination? {
     guard url.scheme == scheme else { return nil }
     switch url.host {
     case "import":

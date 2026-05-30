@@ -127,36 +127,7 @@ final class ImportStore {
     let sessionId = UUID()
     do {
       let result = try await runPipeline(data: data, source: source, sessionId: sessionId)
-      if case let .imported(_, imported, skipped) = result {
-        recentSessions.insert(
-          ImportSessionSummary(
-            id: sessionId,
-            importedCount: imported.count,
-            skippedAsDuplicate: skipped,
-            importedAt: Date(),
-            filename: source.filename),
-          at: 0)
-        await refreshBadge()
-        // Detection runs inside the `isImporting == true` window
-        // deliberately, exactly as the badge refresh above does: a
-        // concurrent second `ingest` is rejected by the `isImporting`
-        // guard, so the persisted set here is the only batch in flight.
-        // The coordinator owns all detection logic; this is the single
-        // orchestration call. Skipped when nothing was persisted —
-        // there is no batch to scan.
-        if let earliest = imported.min(by: { $0.date < $1.date }) {
-          let windowLowerBound = earliest.date
-            .addingTimeInterval(-FuzzyTransferDetector.windowSeconds)
-          await transferDetection.runDetection(
-            newlyImported: imported,
-            participatingAccountIds: Set(
-              imported.compactMap { $0.transferDetectionValueLeg?.accountId }),
-            windowLowerBound: windowLowerBound)
-        }
-      }
-      if case .needsSetup = result {
-        await reloadStagingLists()
-      }
+      await applyPipelineResult(result, sessionId: sessionId, source: source)
       return result
     } catch let error as IngestError {
       let pendingId = await stageFailed(error: error, source: source, data: data)
@@ -169,6 +140,43 @@ final class ImportStore {
       lastError = error.localizedDescription
       await reloadStagingLists()
       return .failed(message: error.localizedDescription + " (staged as \(pendingId))")
+    }
+  }
+
+  /// Shared post-pipeline machinery used by both `ingest(data:source:)`
+  /// and `startWebReview(payload:)`. Records a session summary, refreshes
+  /// the sidebar badge, runs cross-account transfer detection over the
+  /// fresh batch, and reloads staging lists if the pipeline routed the
+  /// run into Needs Setup.
+  ///
+  /// Detection runs inside the `isImporting == true` window deliberately:
+  /// a concurrent second ingest is rejected by the `isImporting` guard,
+  /// so the persisted set here is the only batch in flight.
+  private func applyPipelineResult(
+    _ result: ImportSessionResult, sessionId: UUID, source: ImportSource
+  ) async {
+    if case let .imported(_, imported, skipped) = result {
+      recentSessions.insert(
+        ImportSessionSummary(
+          id: sessionId,
+          importedCount: imported.count,
+          skippedAsDuplicate: skipped,
+          importedAt: Date(),
+          filename: source.filename),
+        at: 0)
+      await refreshBadge()
+      if let earliest = imported.min(by: { $0.date < $1.date }) {
+        let windowLowerBound = earliest.date
+          .addingTimeInterval(-FuzzyTransferDetector.windowSeconds)
+        await transferDetection.runDetection(
+          newlyImported: imported,
+          participatingAccountIds: Set(
+            imported.compactMap { $0.transferDetectionValueLeg?.accountId }),
+          windowLowerBound: windowLowerBound)
+      }
+    }
+    if case .needsSetup = result {
+      await reloadStagingLists()
     }
   }
 
@@ -191,29 +199,7 @@ final class ImportStore {
     do {
       let result = try await runWebPipeline(
         payload: payload, source: source, sessionId: sessionId)
-      if case let .imported(_, imported, skipped) = result {
-        recentSessions.insert(
-          ImportSessionSummary(
-            id: sessionId,
-            importedCount: imported.count,
-            skippedAsDuplicate: skipped,
-            importedAt: Date(),
-            filename: source.filename),
-          at: 0)
-        await refreshBadge()
-        if let earliest = imported.min(by: { $0.date < $1.date }) {
-          let windowLowerBound = earliest.date
-            .addingTimeInterval(-FuzzyTransferDetector.windowSeconds)
-          await transferDetection.runDetection(
-            newlyImported: imported,
-            participatingAccountIds: Set(
-              imported.compactMap { $0.transferDetectionValueLeg?.accountId }),
-            windowLowerBound: windowLowerBound)
-        }
-      }
-      if case .needsSetup = result {
-        await reloadStagingLists()
-      }
+      await applyPipelineResult(result, sessionId: sessionId, source: source)
       return result
     } catch let error as IngestError {
       let data = (try? Self.payloadStagingBytes(payload)) ?? Data()
