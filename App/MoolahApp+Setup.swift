@@ -224,10 +224,16 @@ extension MoolahApp {
         sessionManager.sessions.values.first?.importStore
       },
       inboxProvider: { inbox })
+    // The closure is `@MainActor`-isolated (matching the model's
+    // `onTap` parameter), but `coordinator.handle` is `async`, so a
+    // `Task` hop is still required to start it from the synchronous
+    // `reviewTapped()` call site. Marking the closure `@MainActor` keeps
+    // the `coordinator` capture on-actor so we don't need a separate
+    // `@MainActor in` annotation inside.
     let bannerModel = PendingImportsBannerModel(
       writer: inbox,
       onTap: { destination in
-        Task { @MainActor in await coordinator.handle(destination) }
+        Task { await coordinator.handle(destination) }
       })
     return (coordinator, bannerModel)
   }
