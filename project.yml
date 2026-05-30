@@ -219,7 +219,12 @@ targets:
         PRODUCT_NAME: ImportExtension
         PRODUCT_MODULE_NAME: ImportExtension
         INFOPLIST_FILE: MoolahImportExtension_iOS/Generated/Info.plist
-        SKIP_INSTALL: NO
+        # SKIP_INSTALL must be YES on an embedded app-extension target so
+        # the extension is only copied into the parent app's archive
+        # (`Plugins/`) and is not also installed as a top-level archive
+        # product. A NO value emits a second extension product into the
+        # archive that App Store Connect rejects on upload.
+        SKIP_INSTALL: YES
       configs:
         Release:
           # Entitlements are Release-only — Debug builds the extension
@@ -253,12 +258,18 @@ targets:
         PRODUCT_NAME: ImportExtension
         PRODUCT_MODULE_NAME: ImportExtension
         INFOPLIST_FILE: MoolahImportExtension_macOS/Generated/Info.plist
-        SKIP_INSTALL: NO
+        # See MoolahImportExtension_iOS.settings.base for SKIP_INSTALL rationale.
+        SKIP_INSTALL: YES
       configs:
         Release:
           # Release-only entitlements — see MoolahImportExtension_iOS for
           # the rationale.
           CODE_SIGN_ENTITLEMENTS: MoolahImportExtension_macOS/Entitlements.entitlements
+          # The hardened runtime is required on every macOS executable
+          # the App Store accepts — extensions included. Mirrors the
+          # `Moolah_macOS.Release` setting above; without it the embedded
+          # extension binary fails App Store validation.
+          ENABLE_HARDENED_RUNTIME: YES
 
   MoolahTests_iOS:
     type: bundle.unit-test

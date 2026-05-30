@@ -30,6 +30,36 @@ public struct ImportPayload: Sendable {
 
 extension ImportPayload: Equatable {}
 
+extension ImportPayload {
+  /// Returns a copy of the payload with `sourceURL`'s query string and
+  /// fragment removed. Bank URLs sometimes encode short-lived session
+  /// tokens in the query string; stripping them before the payload
+  /// crosses the App Group boundary avoids unnecessarily retaining
+  /// sensitive bearer-style data on disk.
+  ///
+  /// The returned `sourceURL` is the original URL's scheme + host + path.
+  /// A malformed URL or one missing a scheme is returned unchanged so
+  /// the caller never sees an empty string where it expected a host.
+  public func strippingSourceURLQueryAndFragment() -> ImportPayload {
+    guard
+      var components = URLComponents(string: sourceURL),
+      components.scheme != nil
+    else { return self }
+    components.queryItems = nil
+    components.query = nil
+    components.fragment = nil
+    guard let stripped = components.url?.absoluteString else { return self }
+    return ImportPayload(
+      schemaVersion: schemaVersion,
+      sourceHost: sourceHost,
+      sourceURL: stripped,
+      capturedAt: capturedAt,
+      accountHint: accountHint,
+      currencyHint: currencyHint,
+      rows: rows)
+  }
+}
+
 extension ImportPayload: Codable {
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
