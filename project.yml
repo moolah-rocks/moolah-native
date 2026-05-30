@@ -74,6 +74,8 @@ packages:
     # Package.resolved isn't tracked; pinning here is the substitute.
     # Bump deliberately when we want to take a new release.
     exactVersion: 7.10.0
+  ImportExtensionKit:
+    path: Modules/ImportExtensionKit
 
 targets:
   Moolah_iOS:
@@ -96,6 +98,7 @@ targets:
     dependencies:
       - sdk: AppIntents.framework
       - package: GRDB
+      - package: ImportExtensionKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: rocks.moolah.app
@@ -155,6 +158,7 @@ targets:
     dependencies:
       - sdk: AppIntents.framework
       - package: GRDB
+      - package: ImportExtensionKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: rocks.moolah.app
@@ -198,6 +202,7 @@ targets:
     dependencies:
       - target: Moolah_iOS
       - package: GRDB
+      - package: ImportExtensionKit
 
   MoolahTests_macOS:
     type: bundle.unit-test
@@ -217,6 +222,7 @@ targets:
     dependencies:
       - target: Moolah_macOS
       - package: GRDB
+      - package: ImportExtensionKit
 
   MoolahBenchmarks_macOS:
     type: bundle.unit-test
