@@ -36,9 +36,13 @@ platform :ios do
       is_key_content_base64: true
     )
 
+    # The action extension target ships embedded in the main app. Apple
+    # requires it to have its own bundle ID, its own App ID registration,
+    # and its own provisioning profile. Listing both identifiers here
+    # syncs both profiles in one call.
     match(
       type: "appstore",
-      app_identifier: "rocks.moolah.app",
+      app_identifier: ["rocks.moolah.app", "rocks.moolah.app.importextension"],
       api_key: api_key,
       readonly: is_ci
     )
@@ -158,9 +162,12 @@ platform :mac do
       is_key_content_base64: true
     )
 
+    # Same reasoning as the iOS `certificates` lane: the embedded action
+    # extension needs its own Developer ID profile for notarised direct
+    # distribution.
     match(
       type: "developer_id",
-      app_identifier: "rocks.moolah.app",
+      app_identifier: ["rocks.moolah.app", "rocks.moolah.app.importextension"],
       platform: "macos",
       api_key: api_key,
       readonly: is_ci
