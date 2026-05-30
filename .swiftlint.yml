@@ -19,6 +19,7 @@ excluded:
   # the main app's lint contract.
   - tools/CKDBSchemaGen
   - tools/HelpGen
+  - tools/PluginManifestGen
   # Third-party vendored source (MIT). Style is upstream's, not ours;
   # local modifications are flagged with `// moolah:` comments.
   # See Vendored/OutlineView/NOTICE.md.
