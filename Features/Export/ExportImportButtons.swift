@@ -78,7 +78,7 @@
           containerManager: containerManager,
           syncCoordinator: syncCoordinator
         )
-        openWindow(value: newProfileId)
+        ProfileWindowLocator.openOrActivate(newProfileId, openWindow: openWindow)
       } catch {
         await present(NSAlert(error: error))
       }

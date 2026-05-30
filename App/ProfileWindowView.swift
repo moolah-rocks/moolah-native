@@ -18,22 +18,53 @@
     @State private var sessionResult: SessionOpenResult?
 
     /// Resolve the profile to display: the window's profileID if it matches a
-    /// known profile, otherwise the active profile. Falls back to the single
-    /// profile only when exactly one exists — with 2+ profiles and nothing
-    /// selected, `WelcomeView` shows its picker (state 5) instead of
-    /// silently opening one of them.
+    /// known profile, otherwise the active profile, otherwise the single
+    /// profile when exactly one exists.
+    ///
+    /// The two fallback branches (`activeProfileID`, `profiles.count == 1`)
+    /// only fire when this window has no value binding — i.e. a nil-binding
+    /// window restored from prior SwiftUI scene state, or one opened
+    /// without a value. If another NSWindow is already tagged with the
+    /// candidate profile's identifier, the fallback returns `nil` so the
+    /// nil-binding window doesn't shadow its sibling. The body's WelcomeView
+    /// branch then dismisses the redundant window via `nilBindingIsRedundant`.
+    /// Without this guard the same profile would render in two windows
+    /// after every launch.
     private var resolvedProfile: Profile? {
       if let profileID,
         let profile = profileStore.profiles.first(where: { $0.id == profileID })
       {
         return profile
       }
+      let fallback = fallbackProfile()
+      if let fallback,
+        ProfileWindowLocator.existingWindow(for: fallback.id, in: NSApp.windows) != nil
+      {
+        return nil
+      }
+      return fallback
+    }
+
+    /// Pure fallback resolution split out so `resolvedProfile` applies
+    /// the duplicate-window guard uniformly to both branches.
+    private func fallbackProfile() -> Profile? {
       if let activeID = profileStore.activeProfileID,
         let profile = profileStore.profiles.first(where: { $0.id == activeID })
       {
         return profile
       }
       return profileStore.profiles.count == 1 ? profileStore.profiles.first : nil
+    }
+
+    /// `true` when this nil-binding window has no profile to show *and*
+    /// another window already presents a profile-bound view — the
+    /// classic duplicate-after-state-restoration shape. Drives `dismiss()`
+    /// in the WelcomeView branch of `body` so the redundant window goes
+    /// away instead of lingering on a Welcome screen beside the real one.
+    private var nilBindingIsRedundant: Bool {
+      profileID == nil
+        && !profileStore.profiles.isEmpty
+        && ProfileWindowLocator.anyProfileWindowPresent(in: NSApp.windows)
     }
 
     var body: some View {
@@ -51,16 +82,34 @@
               )
               dismiss()
             }
+        } else if nilBindingIsRedundant {
+          // State restoration brought back a nil-binding window beside a
+          // value-bound one for the same profile (the "two windows for
+          // one profile" shape). Drop the redundant window — the user
+          // keeps the explicit profile-bound window.
+          Color.clear
+            .onAppear {
+              logger.info(
+                "Dismissing redundant nil-binding window — profile-bound window already on screen"
+              )
+              dismiss()
+            }
         } else {
           // No specific profile requested AND no active profile. Covers
           // both the empty first-run case (`!hasProfiles` → hero state 1)
           // and the multi-profile-no-selection case (2+ profiles, none
           // picked → picker state 5). `WelcomeView`'s state machine
           // picks the right branch.
+          //
+          // On first-profile creation, dismiss *this* nil-binding window
+          // after opening the profile-bound one. Otherwise the original
+          // Welcome window stays on screen and `resolvedProfile` falls
+          // back to the new single profile, producing the duplicate.
           WelcomeView()
             .onChange(of: profileStore.profiles) { _, newProfiles in
               if newProfiles.count == 1, let first = newProfiles.first {
-                openWindow(value: first.id)
+                ProfileWindowLocator.openOrActivate(first.id, openWindow: openWindow)
+                dismiss()
               }
             }
         }
@@ -139,13 +188,35 @@
     /// Stamps the hosting `NSWindow.identifier` with a per-profile identifier
     /// so `ProfileWindowLocator` can find and focus the window when
     /// AppleScript or an App Intent opens a profile that is already on
-    /// screen. Also maximises the window and opts out of per-window state
-    /// restoration under UI testing — see the inline comment for the
-    /// motivating layout race.
+    /// screen. Also enforces the one-window-per-profile invariant by
+    /// closing this window when another window is already tagged for the
+    /// resolved profile, and maximises the window under UI testing.
     @ViewBuilder private var tagHostingWindow: some View {
       if let profile = resolvedProfile {
         WindowAccessor { window in
-          window.identifier = ProfileWindowLocator.identifier(for: profile.id)
+          let identifier = ProfileWindowLocator.identifier(for: profile.id)
+          // Load-bearing duplicate-window guard. Catches every dup
+          // regardless of how it was created: SwiftUI scene-state
+          // restoration of a stale window from a prior version, a
+          // racing `openWindow(value:)` that slipped past
+          // `ProfileWindowLocator.openOrActivate`, even Cmd-N if AppKit
+          // ever auto-opens a nil-bound window. The losing window
+          // closes via the next runloop turn — closing from inside
+          // `viewDidMoveToWindow` would tear down our own host view
+          // mid-callback.
+          if let existing = ProfileWindowLocator.duplicateWindow(
+            for: profile.id, currentWindow: window, in: NSApp.windows)
+          {
+            logger.warning(
+              "Closing duplicate window for profileID=\(profile.id, privacy: .public)"
+            )
+            existing.makeKeyAndOrderFront(nil)
+            Task { @MainActor in
+              window.close()
+            }
+            return
+          }
+          window.identifier = identifier
           // CI runs on a 1024×768 macos-26 display. The Brokerage-view
           // inspector then renders ~217pt tall — not enough to fit the
           // trade-mode form, so `Received` falls below the visible scroll

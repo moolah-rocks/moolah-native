@@ -89,7 +89,7 @@ struct ProfileFormView: View {
 
     if await profileStore.validateAndAddProfile(profile) {
       #if os(macOS)
-        openWindow(value: profile.id)
+        ProfileWindowLocator.openOrActivate(profile.id, openWindow: openWindow)
       #else
         profileStore.setActiveProfile(profile.id)
       #endif
