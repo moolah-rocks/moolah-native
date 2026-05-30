@@ -10,6 +10,11 @@ extension PluginRegistry {
       PluginManifest(
         host: "hsbc.com.au", pathPrefix: "/gpib", jsResource: "hsbc.com.au/parser",
         displayName: "HSBC", emptyHint: "Open the credit card transactions list before importing."),
+      PluginManifest(
+        host: "commbank.com.au", pathPrefix: "/retail/netbank",
+        jsResource: "commbank.com.au/parser",
+        displayName: "CommBank",
+        emptyHint: "Open one of your accounts to see transactions before importing."),
     ]
   }
 }
