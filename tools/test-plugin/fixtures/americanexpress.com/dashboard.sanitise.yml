@@ -1,0 +1,78 @@
+# Sanitise config for the Amex dashboard's recent-activity widget.
+
+source: "~/Downloads/Moolah Sites/global.americanexpress.com.html"
+seed: 17
+synthetic_url: "https://global.americanexpress.com/dashboard"
+
+# Classes the parser depends on. Note the obfuscated `_dataRow_<hash>`
+# pattern — the parser tolerates the suffix, so we keep them via the
+# hash-allowlist (any class starting with `_dataRow_`).
+keep_classes:
+  - "body-bold"
+  - "flex-item-grow"
+  - "text-align-right"
+  - "color-status-text-neutral"
+  - "color-status-text-success"
+  - "margin-1-r"
+
+# Merchant text lives in any <a> inside the page. The strip_selectors
+# below remove all chrome (nav/header/footer/buttons) so the only
+# surviving anchors are the per-row description links.
+merchant_selectors:
+  - "a"
+
+amount_selectors:
+  - "p.body-bold"
+
+# Date cells are bare <td>s with no class. The first cell of every
+# transaction row contains "DD Mon" text — keyed by ancestor row, not
+# by class. The parser handles year inference; sanitiser leaves the
+# date text alone (the baseline pass synthesises any leaked digits).
+date_selectors: []
+
+account_hint_selectors: []
+
+strip_selectors:
+  - "head"
+  - "script"
+  - "style"
+  - "noscript"
+  - "svg"
+  - "img"
+  - "iframe"
+  - "header"
+  - "nav"
+  - "footer"
+  - "button"
+  - "input"
+  - "label"
+  - "select"
+  - "option"
+  - "form"
+  - "dialog"
+  - "[role=tooltip]"
+  - "[role=dialog]"
+  - "[role=banner]"
+  - "[role=menubar]"
+  - "[role=menu]"
+  - "[role=menuitem]"
+  - "[role=alert]"
+  - "[role=alertdialog]"
+  - "[role=navigation]"
+  - "[role=region]"
+  - "[role=complementary]"
+  - "[role=contentinfo]"
+  - "[role=search]"
+  - "[role=tablist]"
+  - "[role=tab]"
+  - "[role=tabpanel]"
+  - "[role=status]"
+  - "[role=log]"
+  - "[role=marquee]"
+  - "[role=timer]"
+  - "[aria-modal=true]"
+
+keep_attributes:
+  - "data-module-name"
+  - "role"
+  - "scope"

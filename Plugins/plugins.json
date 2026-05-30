@@ -20,6 +20,20 @@
       "file": "commbank.com.au/parser.js",
       "displayName": "CommBank",
       "emptyHint": "Open one of your accounts to see transactions before importing."
+    },
+    {
+      "host": "americanexpress.com",
+      "pathPrefix": "/dashboard",
+      "file": "americanexpress.com/parser.js",
+      "displayName": "Amex",
+      "emptyHint": "This page should show recent transactions. Try refreshing."
+    },
+    {
+      "host": "americanexpress.com",
+      "pathPrefix": "/activity",
+      "file": "americanexpress.com/parser.js",
+      "displayName": "Amex",
+      "emptyHint": "No transactions visible. Try clearing the date filter."
     }
   ]
 }
