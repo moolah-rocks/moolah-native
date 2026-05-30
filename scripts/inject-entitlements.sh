@@ -56,6 +56,10 @@ cat > "$ENTITLEMENTS_FILE" <<'PLIST'
     </array>
     <key>com.apple.developer.icloud-container-environment</key>
     <string>$(CLOUDKIT_ENVIRONMENT)</string>
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.rocks.moolah.shared</string>
+    </array>
 </dict>
 </plist>
 PLIST
