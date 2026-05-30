@@ -41,4 +41,14 @@ struct ImportConfirmationViewModelTests {
       payload: samplePayload(host: "x.com"), registry: registry)
     #expect(viewModel.state == .success(rows: 24, displayName: "x.com"))
   }
+
+  @Test("update(state:) mutates state in place so observers re-render")
+  func updateStateMutatesInPlace() {
+    let registry = PluginRegistry(manifests: [])
+    let viewModel = ImportConfirmationViewModel(
+      payload: samplePayload(host: "x.com"), registry: registry)
+    #expect(viewModel.state == .success(rows: 24, displayName: "x.com"))
+    viewModel.update(state: .writeFailed)
+    #expect(viewModel.state == .writeFailed)
+  }
 }
