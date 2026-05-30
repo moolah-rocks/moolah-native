@@ -3,6 +3,7 @@
 // multiple lines in a way the multiline_arguments rule disagrees with.
 
 import CloudKit
+import ImportExtensionKit
 import OSLog
 import SwiftUI
 
@@ -42,6 +43,14 @@ struct MoolahApp: App {
   /// up whichever session is currently open (production runs only have
   /// one active session at a time; on macOS the first one is canonical).
   @State var deepLinkCoordinator = DeepLinkCoordinator()
+  /// Surfaces unconsumed App Group inbox files (the "Review Later"
+  /// workflow) in the main window. App-scope so a single banner state
+  /// is shared by every window observing the inbox; the model resolves
+  /// the inbox writer once at launch — `InboxWriter.shared()` returns
+  /// `nil` when the App Group entitlement is unavailable (e.g. under
+  /// `--ui-testing`), in which case the model is rooted at an ephemeral
+  /// temp directory so it permanently reports `.none`.
+  @State var pendingImportsBannerModel: PendingImportsBannerModel
 
   #if os(macOS)
     @NSApplicationDelegateAdaptor(ScriptingBridge.self) var scriptingBridge
@@ -129,16 +138,14 @@ struct MoolahApp: App {
     #endif
     _sessionManager = State(initialValue: sessionManager)
 
-    // Wire the deep-link coordinator to resolve the active session's
-    // `ImportStore` at call time. Capturing `sessionManager` keeps the
-    // lookup live across profile switches: a `moolah://` URL arriving
-    // mid-session always lands on the currently active store, not a
-    // stale snapshot taken at app launch.
-    _deepLinkCoordinator = State(
-      initialValue: DeepLinkCoordinator(
-        importStoreProvider: { [sessionManager] in
-          sessionManager.sessions.values.first?.importStore
-        }))
+    // Wire the deep-link coordinator + banner model as a pair. The
+    // coordinator resolves the active session's `ImportStore` at call
+    // time, and the banner taps drain through it. See
+    // `makeDeepLinkAndBannerModel` for the rationale.
+    let (deepLink, bannerModel) = Self.makeDeepLinkAndBannerModel(
+      sessionManager: sessionManager)
+    _deepLinkCoordinator = State(initialValue: deepLink)
+    _pendingImportsBannerModel = State(initialValue: bannerModel)
   }
 
   var body: some Scene {
@@ -152,6 +159,7 @@ struct MoolahApp: App {
           .environment(containerManager)
           .environment(syncCoordinator)
           .environment(deepLinkCoordinator)
+          .environment(pendingImportsBannerModel)
           .environment(\.pendingNavigation, $pendingNavigation)
           .onOpenURL { url in handleURL(url) }
           .task {
@@ -267,6 +275,7 @@ struct MoolahApp: App {
           .environment(containerManager)
           .environment(syncCoordinator)
           .environment(deepLinkCoordinator)
+          .environment(pendingImportsBannerModel)
           .environment(\.pendingNavigation, $pendingNavigation)
           .onOpenURL { url in handleURL(url) }
       }

@@ -35,6 +35,7 @@ struct ContentView: View {
   @Environment(\.pendingNavigation) private var pendingNavigationBinding
   @Environment(\.scenePhase) private var scenePhase
   @Environment(ImportStore.self) private var importStore
+  @Environment(PendingImportsBannerModel.self) private var pendingImportsBannerModel
   @State private var showCreateEarmarkSheet = false
   @State private var showImportCSVPicker = false
   @State private var importError: String?
@@ -78,7 +79,19 @@ struct ContentView: View {
     .navigationSplitViewStyle(.balanced)
     .environment(\.spamInstruments, session.cryptoTokenStore?.spamInstruments ?? [])
     .safeAreaInset(edge: .top, spacing: 0) {
-      SyncStatusBanner()
+      VStack(spacing: 0) {
+        PendingImportsBanner(model: pendingImportsBannerModel)
+        SyncStatusBanner()
+      }
+    }
+    .task { await pendingImportsBannerModel.refresh() }
+    .onChange(of: scenePhase) { _, newPhase in
+      // Re-scan the inbox on foreground entry so a "Review Later"
+      // payload captured by the extension while the main window was
+      // backgrounded surfaces as soon as the user returns.
+      if newPhase == .active {
+        Task { await pendingImportsBannerModel.refresh() }
+      }
     }
     .focusedSceneValue(\.newEarmarkAction) {
       showCreateEarmarkSheet = true

@@ -5,6 +5,7 @@
 import CloudKit
 import Foundation
 import GRDB
+import ImportExtensionKit
 import OSLog
 import SwiftUI
 
@@ -194,6 +195,31 @@ extension MoolahApp {
       coordinator?.evictCachedState(for: profileID)
     }
     return sessionManager
+  }
+
+  /// Build the deep-link coordinator and the pending-imports banner model
+  /// as a pair. Both watch the App Group inbox; the banner's tap closure
+  /// drains through the coordinator so a "Review Later" tap shares the
+  /// same code path as a `moolah://` URL arriving from the extension.
+  ///
+  /// `InboxWriter.shared()` returns `nil` when the App Group entitlement
+  /// is unavailable (e.g. under `--ui-testing`). In that case the model
+  /// is rooted at a per-launch temp directory so it permanently reports
+  /// `.none` instead of crashing.
+  static func makeDeepLinkAndBannerModel(
+    sessionManager: SessionManager
+  ) -> (DeepLinkCoordinator, PendingImportsBannerModel) {
+    let coordinator = DeepLinkCoordinator(
+      importStoreProvider: { [sessionManager] in
+        sessionManager.sessions.values.first?.importStore
+      })
+    let inbox = InboxWriter.shared() ?? PendingImportsBannerFallback.inbox()
+    let bannerModel = PendingImportsBannerModel(
+      writer: inbox,
+      onTap: { destination in
+        Task { @MainActor in await coordinator.handle(destination) }
+      })
+    return (coordinator, bannerModel)
   }
 
   /// Configure the automation service locator. On macOS this also sets up
