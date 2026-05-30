@@ -233,12 +233,15 @@ generate:
 
     # ---- plugin-manifest-gen ----
     # Regenerate the BundledPlugins Swift table and the per-platform
-    # Info.plist activation fragments from Plugins/plugins.json. Unlike the
-    # CKDB output, these files are committed (predictable PR diffs); the
-    # stamp avoids re-running `swift run` when nothing changed.
+    # MoolahImportExtension Info.plist files from Plugins/plugins.json. The
+    # generator emits a complete Info.plist (CFBundle keys + NSExtension dict
+    # + activation rule predicate) so the extension targets can point at it
+    # directly as INFOPLIST_FILE — no merge step is needed. Unlike the CKDB
+    # output, these files are committed (predictable PR diffs); the stamp
+    # avoids re-running `swift run` when nothing changed.
     PLUGIN_SWIFT="Modules/ImportExtensionKit/Sources/ImportExtensionKit/Generated/PluginRegistry+Bundled.swift"
-    PLUGIN_IOS_PLIST="MoolahImportExtension_iOS/Generated/Info.plist.activation.plist"
-    PLUGIN_MAC_PLIST="MoolahImportExtension_macOS/Generated/Info.plist.activation.plist"
+    PLUGIN_IOS_PLIST="MoolahImportExtension_iOS/Generated/Info.plist"
+    PLUGIN_MAC_PLIST="MoolahImportExtension_macOS/Generated/Info.plist"
     needs_plugin_gen=0
     if [ ! -f "$PLUGINS_STAMP" ]; then
         needs_plugin_gen=1

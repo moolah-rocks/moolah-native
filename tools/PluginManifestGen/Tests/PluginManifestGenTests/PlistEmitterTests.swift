@@ -8,7 +8,7 @@ struct PlistEmitterTests {
   @Test("empty manifest emits a predicate that never activates")
   func empty() {
     let xml = PlistEmitter.emit(manifests: [])
-    #expect(xml.contains("FALSEPREDICATE") || xml.contains(".@count > 0"))
+    #expect(xml.contains("FALSEPREDICATE"))
   }
 
   @Test("one manifest emits the dotted-suffix host clause")
@@ -29,5 +29,30 @@ struct PlistEmitterTests {
     #expect(xml.contains("a.com"))
     #expect(xml.contains("b.com"))
     #expect(xml.contains(" OR "))
+  }
+
+  @Test("emits the action extension point identifier and principal class")
+  func extensionPointAndPrincipal() {
+    let xml = PlistEmitter.emit(manifests: [])
+    #expect(xml.contains("<key>NSExtensionPointIdentifier</key>"))
+    #expect(xml.contains("<string>com.apple.ui-services</string>"))
+    #expect(xml.contains("<key>NSExtensionPrincipalClass</key>"))
+    #expect(xml.contains("<string>$(PRODUCT_MODULE_NAME).ImportExtensionPrincipal</string>"))
+  }
+
+  @Test("emits CFBundle keys with build setting substitutions")
+  func cfBundleKeys() {
+    let xml = PlistEmitter.emit(manifests: [])
+    #expect(xml.contains("<key>CFBundleIdentifier</key>"))
+    #expect(xml.contains("<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>"))
+    #expect(xml.contains("<key>CFBundleDisplayName</key>"))
+    #expect(xml.contains("<string>Import to Moolah</string>"))
+  }
+
+  @Test("emits the JavaScript preprocessing file key")
+  func javaScriptPreprocessingFile() {
+    let xml = PlistEmitter.emit(manifests: [])
+    #expect(xml.contains("<key>NSExtensionJavaScriptPreprocessingFile</key>"))
+    #expect(xml.contains("<string>extension-entry</string>"))
   }
 }
