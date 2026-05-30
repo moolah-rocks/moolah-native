@@ -98,13 +98,24 @@ extension MoolahApp {
 
   // MARK: - URL Handling
 
-  /// CSV files opened via Finder "Open With Moolah" or dropped on the Dock
-  /// icon arrive here as `file://` URLs. Post a notification — the active
-  /// profile's `ContentView` is subscribed and will route it through
-  /// `ImportStore.ingest` (matcher auto-routes, unknown files land in
-  /// Needs Setup) exactly like a drag-and-drop.
+  /// Routes inbound URLs to the right subsystem:
+  ///
+  /// - `file://*.csv` — CSV files opened via Finder "Open With Moolah" or
+  ///   dropped on the Dock icon. Posted as a notification; the active
+  ///   profile's `ContentView` is subscribed and routes it through
+  ///   `ImportStore.ingest` (matcher auto-routes, unknown files land in
+  ///   Needs Setup) exactly like a drag-and-drop.
+  /// - `moolah://…` — deep links from the Safari import extension (and any
+  ///   future internal use). Parsed by `DeepLinkRouter` and forwarded to
+  ///   `DeepLinkCoordinator`; unparseable URLs are silently dropped.
   func handleURL(_ url: URL) {
-    guard url.isFileURL, url.pathExtension.lowercased() == "csv" else { return }
-    NotificationCenter.default.post(name: .openCSVFile, object: url)
+    if url.isFileURL {
+      guard url.pathExtension.lowercased() == "csv" else { return }
+      NotificationCenter.default.post(name: .openCSVFile, object: url)
+      return
+    }
+    if let destination = DeepLinkRouter.parse(url) {
+      deepLinkCoordinator.handle(destination)
+    }
   }
 }
