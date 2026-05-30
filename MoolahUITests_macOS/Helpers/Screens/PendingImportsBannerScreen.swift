@@ -1,3 +1,4 @@
+import ImportExtensionKit
 import XCTest
 
 /// Driver for the in-window `PendingImportsBanner` that surfaces
@@ -28,19 +29,17 @@ struct PendingImportsBannerScreen {
     return element.value as? String ?? ""
   }
 
-  /// Waits for the banner label to appear and returns it. Fails the
-  /// test (and records the failure in the trace) if it does not exist
-  /// within `timeout` seconds. The label is the visible-banner sentinel:
-  /// when the inbox is empty the body resolves to `EmptyView` and no
-  /// label element is in the tree.
-  @discardableResult
-  func expectVisible(timeout: TimeInterval = 5) -> XCUIElement {
-    let label = app.element(for: UITestIdentifiers.PendingImportsBanner.label)
-    if !label.waitForExistence(timeout: timeout) {
-      Trace.recordFailure("pending-imports banner did not appear")
-      XCTFail("Pending imports banner did not appear within \(timeout)s")
-    }
-    return label
+  /// Waits for the banner label to appear. Fails the test (and records
+  /// the failure in the trace) if it does not exist within `timeout`
+  /// seconds. The label is the visible-banner sentinel: when the inbox
+  /// is empty the body resolves to `EmptyView` and no label element is
+  /// in the tree.
+  ///
+  /// Returns `Void` — element resolution is internal to the driver per
+  /// UI_TEST_GUIDE §2. The internal helper `resolveLabel` is the single
+  /// element-resolution seam shared with `expectLabel`.
+  func expectVisible(timeout: TimeInterval = 5) {
+    _ = resolveLabel(timeout: timeout)
   }
 
   /// Asserts that the banner copy equals `expected`. Waits for the
@@ -49,12 +48,24 @@ struct PendingImportsBannerScreen {
   /// absent from the tree).
   func expectLabel(_ expected: String, timeout: TimeInterval = 5) {
     Trace.record(#function, detail: "label=\(expected)")
-    let label = expectVisible(timeout: timeout)
+    let label = resolveLabel(timeout: timeout)
     let actual = text(of: label)
     if actual != expected {
       Trace.recordFailure("label '\(actual)' != '\(expected)'")
       XCTFail("Expected pending-imports banner label '\(expected)'; got '\(actual)'")
     }
+  }
+
+  /// Internal element resolver shared by `expectVisible` and
+  /// `expectLabel`. Fails the test (and records the failure in the
+  /// trace) if the label does not exist within `timeout` seconds.
+  private func resolveLabel(timeout: TimeInterval) -> XCUIElement {
+    let label = app.element(for: UITestIdentifiers.PendingImportsBanner.label)
+    if !label.waitForExistence(timeout: timeout) {
+      Trace.recordFailure("pending-imports banner did not appear")
+      XCTFail("Pending imports banner did not appear within \(timeout)s")
+    }
+    return label
   }
 
   // MARK: - Actions
@@ -89,12 +100,11 @@ struct PendingImportsBannerScreen {
   /// `ImportStore.startWebReview`, then deletes the file regardless of
   /// import outcome (the staging store owns recovery from there), so
   /// file disappearance is the cleanest signal that the seam fired.
+  /// `InboxWriter.inboxFileURL(for:in:)` is shared with production so
+  /// the driver and the writer cannot disagree on the layout.
   private func waitForInboxDrain() -> Bool {
     let payloadId = UITestFixtures.PendingWebImportOneChaseInbox.payloadId
-    let url =
-      app.inboxDirectory
-      .appendingPathComponent("Inbox")
-      .appendingPathComponent("\(payloadId.uuidString).json")
+    let url = InboxWriter.inboxFileURL(for: payloadId, in: app.inboxDirectory)
     let predicate = NSPredicate { _, _ in
       !FileManager.default.fileExists(atPath: url.path)
     }

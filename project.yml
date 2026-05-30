@@ -345,6 +345,9 @@ targets:
         TEST_TARGET_NAME: Moolah_macOS
     dependencies:
       - target: Moolah_macOS
+      # Drivers compute on-disk paths via InboxWriter.inboxFileURL(for:in:)
+      # so the "Inbox" path component isn't duplicated as a literal.
+      - package: ImportExtensionKit
 
 schemes:
   Moolah:
