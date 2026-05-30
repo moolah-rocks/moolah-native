@@ -162,6 +162,9 @@ targets:
       - sdk: AppIntents.framework
       - package: GRDB
       - package: ImportExtensionKit
+      - target: MoolahImportExtension_macOS
+        embed: true
+        codeSignOnCopy: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: rocks.moolah.app
@@ -204,6 +207,27 @@ targets:
         PRODUCT_MODULE_NAME: ImportExtension
         INFOPLIST_FILE: MoolahImportExtension_iOS/Generated/Info.plist
         CODE_SIGN_ENTITLEMENTS: MoolahImportExtension_iOS/Entitlements.entitlements
+        SKIP_INSTALL: NO
+      configs:
+        Debug-Tests:
+          # Tests never sign anything — match the app target's stance so the
+          # extension doesn't drag in entitlements during `just test`.
+          CODE_SIGN_ENTITLEMENTS: ""
+
+  MoolahImportExtension_macOS:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: MoolahImportExtension_macOS
+    dependencies:
+      - package: ImportExtensionKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: rocks.moolah.app.importextension
+        PRODUCT_NAME: ImportExtension
+        PRODUCT_MODULE_NAME: ImportExtension
+        INFOPLIST_FILE: MoolahImportExtension_macOS/Generated/Info.plist
+        CODE_SIGN_ENTITLEMENTS: MoolahImportExtension_macOS/Entitlements.entitlements
         SKIP_INSTALL: NO
       configs:
         Debug-Tests:
