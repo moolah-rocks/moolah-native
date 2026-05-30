@@ -80,24 +80,32 @@ struct ImportConfirmationView: View {
   #Preview("success") {
     ImportConfirmationView(
       viewModel: ImportConfirmationViewModel(state: .success(rows: 12, displayName: "Chase")),
-      onCancel: {}, onReviewLater: {}, onOpenMoolah: {})
+      onCancel: {},
+      onReviewLater: {},
+      onOpenMoolah: {})
   }
 
   #Preview("emptyResult") {
     ImportConfirmationView(
       viewModel: ImportConfirmationViewModel(state: .emptyResult(displayName: "Chase")),
-      onCancel: {}, onReviewLater: {}, onOpenMoolah: {})
+      onCancel: {},
+      onReviewLater: {},
+      onOpenMoolah: {})
   }
 
   #Preview("schemaMismatch") {
     ImportConfirmationView(
       viewModel: ImportConfirmationViewModel(state: .schemaMismatch),
-      onCancel: {}, onReviewLater: {}, onOpenMoolah: {})
+      onCancel: {},
+      onReviewLater: {},
+      onOpenMoolah: {})
   }
 
   #Preview("writeFailed") {
     ImportConfirmationView(
       viewModel: ImportConfirmationViewModel(state: .writeFailed),
-      onCancel: {}, onReviewLater: {}, onOpenMoolah: {})
+      onCancel: {},
+      onReviewLater: {},
+      onOpenMoolah: {})
   }
 #endif
