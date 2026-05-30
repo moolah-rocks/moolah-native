@@ -27,47 +27,28 @@ enum UITestSeedHydrator {
     into manager: ProfileContainerManager
   ) throws -> Profile? {
     switch seed {
-    case .tradeBaseline:
+    case .tradeBaseline,
+      .sidebarFooterUpToDate,
+      .sidebarFooterReceiving,
+      .sidebarFooterSending,
+      .cryptoCatalogPreloaded:
+      // All these seeds reuse the `tradeBaseline` fixture as their
+      // base profile and exercise an orthogonal surface (sidebar
+      // footer, crypto picker, etc) layered on top of it. Folding
+      // them into a single case keeps the dispatch cyclomatically
+      // simple even as new "trade-baseline + X" seeds are added.
       return try hydrateTradeBaseline(into: manager)
-    case .welcomeEmpty:
+    case .welcomeEmpty, .welcomeDownloading:
+      // No profile is created: the launcher opens the window with
+      // nil bindings so `ProfileWindowView` routes to `WelcomeView`.
+      // For `welcomeDownloading`, `applySeedProgressFixtures` drives
+      // `SyncProgress` separately.
       return nil
-    case .welcomeSingleCloudProfile:
-      try hydrateWelcomeProfile(
-        id: UITestWelcomeFixtures.householdProfileId,
-        label: UITestWelcomeFixtures.householdProfileLabel,
-        into: manager
-      )
+    case .welcomeSingleCloudProfile, .welcomeMultipleCloudProfiles:
+      try hydrateWelcomeProfiles(for: seed, into: manager)
       // Return nil so `uiTestingProfileId` stays unset and the normal
       // auto-activation flow in `ProfileStore.loadCloudProfiles` can fire.
       return nil
-    case .welcomeMultipleCloudProfiles:
-      try hydrateWelcomeProfile(
-        id: UITestWelcomeFixtures.householdProfileId,
-        label: UITestWelcomeFixtures.householdProfileLabel,
-        into: manager
-      )
-      try hydrateWelcomeProfile(
-        id: UITestWelcomeFixtures.sideBusinessProfileId,
-        label: UITestWelcomeFixtures.sideBusinessProfileLabel,
-        into: manager
-      )
-      return nil
-    case .welcomeDownloading:
-      // No profile is created: the launcher opens the window with a nil
-      // binding so `ProfileWindowView` routes to `WelcomeView`. The
-      // `applySeedProgressFixtures` call in `MoolahApp.init` drives
-      // `SyncProgress` into the downloading state for the test to verify.
-      return nil
-    case .sidebarFooterUpToDate, .sidebarFooterReceiving, .sidebarFooterSending:
-      // These seeds exercise the sidebar footer; the profile itself is the
-      // same minimal fixture used by tradeBaseline.
-      return try hydrateTradeBaseline(into: manager)
-    case .cryptoCatalogPreloaded:
-      // The crypto picker test only needs a CloudKit-backed profile (so
-      // `CryptoTokenStore` is built and the Crypto Settings tab renders);
-      // accounts/transactions are unused. Reuse `tradeBaseline` rather than
-      // hand-rolling a near-identical fixture.
-      return try hydrateTradeBaseline(into: manager)
     case .tradeReady:
       return try hydrateTradeReady(into: manager)
     case .incompatibleProfile:
@@ -76,8 +57,42 @@ enum UITestSeedHydrator {
       return nil
     case .transferDetectionBaseline:
       return try hydrateTransferDetectionBaseline(into: manager)
+    case .pendingWebImportOneChaseInbox:
+      let profile = try hydrateTradeBaseline(into: manager)
+      try seedPendingWebImportInbox()
+      return profile
     }
   }
+
+  /// Dispatches the welcome-profile-picker seeds. Hydrates one or two
+  /// `Profile` records into the index depending on the seed; either way
+  /// the caller returns `nil` so the auto-activation flow fires
+  /// (single) or the picker renders (multiple). Factored out so the
+  /// top-level `hydrate(_:into:)` switch stays under SwiftLint's
+  /// cyclomatic-complexity threshold as new seeds are added.
+  private static func hydrateWelcomeProfiles(
+    for seed: UITestSeed, into manager: ProfileContainerManager
+  ) throws {
+    try hydrateWelcomeProfile(
+      id: UITestWelcomeFixtures.householdProfileId,
+      label: UITestWelcomeFixtures.householdProfileLabel,
+      into: manager
+    )
+    if seed == .welcomeMultipleCloudProfiles {
+      try hydrateWelcomeProfile(
+        id: UITestWelcomeFixtures.sideBusinessProfileId,
+        label: UITestWelcomeFixtures.sideBusinessProfileLabel,
+        into: manager
+      )
+    }
+  }
+
+  // The `.pendingWebImportOneChaseInbox` seed's inbox-fixture write
+  // (`seedPendingWebImportInbox`) lives in
+  // `UITestSeedHydrator+PendingWebImport.swift` to keep this enum body
+  // under SwiftLint's `type_body_length` threshold as new seeds are
+  // added — mirrors the `+TradeReady`, `+TransferDetection`, `+Upserts`
+  // split.
 
   /// Seeds two profiles in the index — one compatible (v0) and one
   /// incompatible (`DataFormatVersion.current + 1`). The second profile

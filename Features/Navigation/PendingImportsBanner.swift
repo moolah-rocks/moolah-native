@@ -30,15 +30,17 @@ public struct PendingImportsBanner: View {
 
   private func banner(text: String) -> some View {
     HStack {
-      Text(text).font(.callout)
+      Text(text)
+        .font(.callout)
+        .accessibilityIdentifier(UITestIdentifiers.PendingImportsBanner.label)
       Spacer()
       Button("Review", action: model.reviewTapped)
         .buttonStyle(.borderedProminent)
+        .accessibilityIdentifier(UITestIdentifiers.PendingImportsBanner.reviewButton)
     }
     .padding(.horizontal)
     .padding(.vertical, 8)
     .background(.thinMaterial)
     .task { await model.refresh() }
-    .accessibilityIdentifier("pendingImportsBanner")
   }
 }
