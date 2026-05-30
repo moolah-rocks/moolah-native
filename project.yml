@@ -198,6 +198,10 @@ targets:
     platform: iOS
     sources:
       - path: MoolahImportExtension_iOS
+      # Shared SwiftUI confirmation view consumed by both extension
+      # targets; lives outside the platform-specific source roots so it
+      # has to be pulled in explicitly.
+      - path: MoolahImportExtension_Shared/ImportConfirmationView.swift
       # The generated JS bundle is the single
       # NSExtensionJavaScriptPreprocessingFile Safari loads — pull it into
       # the .appex resources phase. xcodegen treats non-source files
@@ -230,6 +234,8 @@ targets:
     platform: macOS
     sources:
       - path: MoolahImportExtension_macOS
+      # Shared SwiftUI confirmation view — see MoolahImportExtension_iOS.
+      - path: MoolahImportExtension_Shared/ImportConfirmationView.swift
       # See MoolahImportExtension_iOS for the rationale on bundling the
       # generated JS as a target resource.
       - path: MoolahImportExtension_Shared/Generated/extension-entry.bundle.js
