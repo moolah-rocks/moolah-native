@@ -35,6 +35,12 @@ struct MoolahApp: App {
   // subsystem/category.
   let logger = Logger(subsystem: "com.moolah.app", category: "BackgroundSync")
   @State var pendingNavigation: PendingNavigation?
+  /// App-scope sink for `moolah://` deep links parsed by `DeepLinkRouter`.
+  /// One instance per app so every window observes the same pending
+  /// destination. Task 6 of the share-import-extension plan wires this in
+  /// as a thin placeholder; Task 7 replaces `handle(_:)` with the real
+  /// inbox-drain into `ImportStore.startWebReview(payload:)`.
+  @State var deepLinkCoordinator = DeepLinkCoordinator()
 
   #if os(macOS)
     @NSApplicationDelegateAdaptor(ScriptingBridge.self) var scriptingBridge
@@ -133,6 +139,7 @@ struct MoolahApp: App {
           .environment(sessionManager)
           .environment(containerManager)
           .environment(syncCoordinator)
+          .environment(deepLinkCoordinator)
           .environment(\.pendingNavigation, $pendingNavigation)
           .onOpenURL { url in handleURL(url) }
           .task {
@@ -247,6 +254,7 @@ struct MoolahApp: App {
           .environment(sessionManager)
           .environment(containerManager)
           .environment(syncCoordinator)
+          .environment(deepLinkCoordinator)
           .environment(\.pendingNavigation, $pendingNavigation)
           .onOpenURL { url in handleURL(url) }
       }
