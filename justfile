@@ -201,6 +201,7 @@ generate:
 
     STAMP_DIR=".build/stamps"
     SCHEMA_STAMP="$STAMP_DIR/ckdb-schema-gen.stamp"
+    PLUGINS_STAMP="$STAMP_DIR/plugin-manifest-gen.stamp"
     mkdir -p "$STAMP_DIR"
 
     # ---- help-gen ----
@@ -228,6 +229,40 @@ generate:
             --input CloudKit/schema.ckdb \
             --output Backends/CloudKit/Sync/Generated
         touch "$SCHEMA_STAMP"
+    fi
+
+    # ---- plugin-manifest-gen ----
+    # Regenerate the BundledPlugins Swift table and the per-platform
+    # Info.plist activation fragments from Plugins/plugins.json. Unlike the
+    # CKDB output, these files are committed (predictable PR diffs); the
+    # stamp avoids re-running `swift run` when nothing changed.
+    PLUGIN_SWIFT="Modules/ImportExtensionKit/Sources/ImportExtensionKit/Generated/PluginRegistry+Bundled.swift"
+    PLUGIN_IOS_PLIST="MoolahImportExtension_iOS/Generated/Info.plist.activation.plist"
+    PLUGIN_MAC_PLIST="MoolahImportExtension_macOS/Generated/Info.plist.activation.plist"
+    needs_plugin_gen=0
+    if [ ! -f "$PLUGINS_STAMP" ]; then
+        needs_plugin_gen=1
+    elif [ ! -f "$PLUGIN_SWIFT" ] || [ ! -f "$PLUGIN_IOS_PLIST" ] \
+        || [ ! -f "$PLUGIN_MAC_PLIST" ]; then
+        needs_plugin_gen=1
+    elif [ "Plugins/plugins.json" -nt "$PLUGINS_STAMP" ]; then
+        needs_plugin_gen=1
+    elif find tools/PluginManifestGen/Sources -type f -name '*.swift' \
+        -newer "$PLUGINS_STAMP" 2>/dev/null | grep -q .; then
+        needs_plugin_gen=1
+    fi
+
+    if [ "$needs_plugin_gen" -eq 1 ]; then
+        mkdir -p \
+            "$(dirname "$PLUGIN_SWIFT")" \
+            "$(dirname "$PLUGIN_IOS_PLIST")" \
+            "$(dirname "$PLUGIN_MAC_PLIST")"
+        swift run --package-path tools/PluginManifestGen PluginManifestGen \
+            Plugins/plugins.json \
+            "$PLUGIN_SWIFT" \
+            "$PLUGIN_IOS_PLIST" \
+            "$PLUGIN_MAC_PLIST"
+        touch "$PLUGINS_STAMP"
     fi
 
     # Provide default
