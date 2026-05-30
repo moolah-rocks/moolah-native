@@ -74,9 +74,7 @@ public enum ImportPayloadDecodingError: Error, Equatable {
 }
 
 extension JSONDecoder {
-  // Configured once during initialisation; Foundation documents JSONDecoder.decode
-  // as thread-safe after configuration, so sharing a single instance is safe.
-  nonisolated(unsafe) public static let importPayload: JSONDecoder = {
+  public static let importPayload: JSONDecoder = {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     return decoder
@@ -84,9 +82,7 @@ extension JSONDecoder {
 }
 
 extension JSONEncoder {
-  // Configured once during initialisation; Foundation documents JSONEncoder.encode
-  // as thread-safe after configuration, so sharing a single instance is safe.
-  nonisolated(unsafe) public static let importPayload: JSONEncoder = {
+  public static let importPayload: JSONEncoder = {
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
     encoder.outputFormatting = [.sortedKeys]
