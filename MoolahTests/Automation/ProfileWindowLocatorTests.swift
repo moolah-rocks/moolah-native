@@ -158,5 +158,39 @@
       settings.identifier = NSUserInterfaceItemIdentifier("settings")
       #expect(ProfileWindowLocator.anyProfileWindowPresent(in: [about, settings]) == false)
     }
+
+    // MARK: - anyOtherProfileWindowPresent
+
+    @Test("anyOtherProfileWindowPresent excludes the supplied window")
+    func presenceExcludesSelf() {
+      let mine = NSWindow()
+      mine.identifier = ProfileWindowLocator.identifier(for: UUID())
+      #expect(
+        ProfileWindowLocator.anyOtherProfileWindowPresent(
+          excluding: mine, in: [mine]) == false
+      )
+    }
+
+    @Test("anyOtherProfileWindowPresent finds a sibling profile window")
+    func presenceFindsSibling() {
+      let mine = NSWindow()
+      mine.identifier = ProfileWindowLocator.identifier(for: UUID())
+      let sibling = NSWindow()
+      sibling.identifier = ProfileWindowLocator.identifier(for: UUID())
+      #expect(
+        ProfileWindowLocator.anyOtherProfileWindowPresent(
+          excluding: mine, in: [mine, sibling]) == true
+      )
+    }
+
+    @Test("anyOtherProfileWindowPresent with no exclusion matches anyProfileWindowPresent")
+    func presenceWithoutExclusionParity() {
+      let tagged = NSWindow()
+      tagged.identifier = ProfileWindowLocator.identifier(for: UUID())
+      #expect(
+        ProfileWindowLocator.anyOtherProfileWindowPresent(excluding: nil, in: [tagged])
+          == ProfileWindowLocator.anyProfileWindowPresent(in: [tagged])
+      )
+    }
   }
 #endif

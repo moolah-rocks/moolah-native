@@ -17,6 +17,14 @@
 
     @State private var sessionResult: SessionOpenResult?
 
+    /// The `NSWindow` this view is hosted in, captured by `tagHostingWindow`
+    /// via `WindowAccessor`. Used by `resolvedProfile` and
+    /// `nilBindingIsRedundant` to exclude self when scanning `NSApp.windows`
+    /// for sibling profile windows — without this, once `tagHostingWindow`
+    /// stamps our identifier the checks would find *us*, decide we're a
+    /// duplicate of ourselves, and dismiss the live window.
+    @State private var hostingWindow: NSWindow?
+
     /// Resolve the profile to display: the window's profileID if it matches a
     /// known profile, otherwise the active profile, otherwise the single
     /// profile when exactly one exists.
@@ -38,7 +46,8 @@
       }
       let fallback = fallbackProfile()
       if let fallback,
-        ProfileWindowLocator.existingWindow(for: fallback.id, in: NSApp.windows) != nil
+        let owner = ProfileWindowLocator.existingWindow(for: fallback.id, in: NSApp.windows),
+        owner !== hostingWindow
       {
         return nil
       }
@@ -61,10 +70,13 @@
     /// classic duplicate-after-state-restoration shape. Drives `dismiss()`
     /// in the WelcomeView branch of `body` so the redundant window goes
     /// away instead of lingering on a Welcome screen beside the real one.
+    /// Excludes `hostingWindow` so a window that has tagged itself does
+    /// not count itself as a sibling.
     private var nilBindingIsRedundant: Bool {
       profileID == nil
         && !profileStore.profiles.isEmpty
-        && ProfileWindowLocator.anyProfileWindowPresent(in: NSApp.windows)
+        && ProfileWindowLocator.anyOtherProfileWindowPresent(
+          excluding: hostingWindow, in: NSApp.windows)
     }
 
     var body: some View {
@@ -194,6 +206,14 @@
     @ViewBuilder private var tagHostingWindow: some View {
       if let profile = resolvedProfile {
         WindowAccessor { window in
+          // Capture the hosting window so `resolvedProfile` and
+          // `nilBindingIsRedundant` can exclude self when scanning
+          // siblings. Without this they would later find this window's
+          // own identifier and dismiss the live window as a "duplicate
+          // of itself."
+          if hostingWindow !== window {
+            hostingWindow = window
+          }
           let identifier = ProfileWindowLocator.identifier(for: profile.id)
           // Load-bearing duplicate-window guard. Catches every dup
           // regardless of how it was created: SwiftUI scene-state
