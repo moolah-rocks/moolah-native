@@ -47,7 +47,7 @@
       Menu("Open Profile") {
         ForEach(profileStore.profiles) { profile in
           Button(profile.label) {
-            openWindow(value: profile.id)
+            ProfileWindowLocator.openOrActivate(profile.id, openWindow: openWindow)
           }
         }
 
