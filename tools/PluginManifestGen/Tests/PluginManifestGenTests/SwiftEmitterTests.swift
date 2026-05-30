@@ -21,6 +21,17 @@ struct SwiftEmitterTests {
     #expect(out.contains(#"pathPrefix: "/web/auth""#))
     #expect(out.contains(#"jsResource: "chase.com/parser""#))  // .js stripped
     #expect(out.contains(#"displayName: "Chase""#))
+    // emptyHint defaults to nil and is emitted as `nil`.
+    #expect(out.contains("emptyHint: nil"))
+  }
+
+  @Test("manifest with emptyHint emits it as a string literal")
+  func emptyHintLiteral() {
+    let m = Manifest(
+      host: "chase.com", pathPrefix: "/web/auth", file: "chase.com/parser.js",
+      displayName: "Chase", emptyHint: "Try a different page.")
+    let out = SwiftEmitter.emit(manifests: [m])
+    #expect(out.contains(#"emptyHint: "Try a different page.""#))
   }
 
   @Test("host with quotes is rejected at generation time")

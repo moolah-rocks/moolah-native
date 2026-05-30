@@ -1,0 +1,85 @@
+# Sanitise config for the Macquarie transaction-list fixture.
+#
+# Source HTML lives only on the contributor's local machine — the
+# committed fixture (`recent.html`) is a regeneration with all real
+# payee / amount / account data replaced by deterministic synthetic
+# data. To regenerate, extract the saved webarchive to the path below
+# and run:
+#
+#     python3 tools/test-plugin/sanitise.py \
+#         tools/test-plugin/fixtures/macquarie.com.au/recent.sanitise.yml
+
+source: "~/Downloads/Moolah Sites/online.macquarie.com.au.html"
+seed: 42
+synthetic_url: "https://online.macquarie.com.au/io/"
+
+# Classes the parser depends on — these survive the CSS-in-JS hash sweep.
+keep_classes:
+  - "mq-table-basic"
+  - "mq-table-basic__body-row"
+  - "mq-table-basic__body-cell"
+  - "txn-list-component"
+  - "txn-list-component__description"
+  - "txn-list-component__fading-overflow"
+  - "txn-list-component__additional-description"
+  - "balance"
+  - "minus"
+  - "scheduled-payments-list"
+
+# Selectors whose text content gets replaced from the fake-merchant list.
+merchant_selectors:
+  - ".txn-list-component__fading-overflow"
+
+# Selectors whose text content is replaced with a synthetic amount.
+# `.balance` matches the running-balance cell; treating it as an amount
+# means baseline redaction (which would force every amount-shaped number
+# to "0.00") doesn't run there.
+amount_selectors:
+  - "span.minus"
+  - ".balance"
+
+# Selectors whose text content is re-stamped to a synthetic date.
+date_selectors: []
+
+# Account-hint selectors get a synthetic last-4 / card-ending substitution.
+account_hint_selectors: []
+
+# Selectors whose entire subtree is stripped (scheduled payments
+# section, sub-text rows that would leak transfer references / BSBs,
+# avatar initials that leak real payee initials, account banner that
+# leaks card numbers).
+strip_selectors:
+  - "pb-scheduled-transaction-list"
+  - ".txn-list-component__additional-description"
+  - "pb-account-banner"
+  - "pb-initials"
+  - "mq-avatar"
+  - "pb-transaction-logo"
+  - "pb-transaction-meta-info"
+  - "header"
+  - "nav"
+  - "footer"
+  - ".mq-padding-s-horizontal"
+  - "pb-whats-new"
+  - "pb-side-nav"
+  - "pb-sticky-noticebar"
+  - "pb-terms-acceptance"
+  - "pb-cobrowse-bar"
+  - "pb-pref-migration"
+  - "pb-main-header"
+  - "pb-notifications-alert-drawer"
+  - "pb-lazyload-bell-icon-alert"
+  - "pb-transaction-filters"
+  - "pb-transaction-tag-list"
+  - "pb-transaction-tag"
+  - "mq-header"
+  - "mq-svg-icon"
+  - "mq-icon-button"
+  - "router-outlet"
+  - "title"
+  - "input"
+  - "button"
+
+# Attributes worth keeping (in addition to the always-safe set).
+keep_attributes:
+  - "data-testid"

@@ -80,8 +80,17 @@ no-swiftdata:
 # added automatically. Pass a fully-qualified TestTarget/Class form to pin a
 # filter to one platform's target.
 # Run the test suite on iOS Simulator and macOS in parallel (optional FILTERS).
-test *FILTERS: generate
+test *FILTERS: generate plugin-test
     bash scripts/test.sh all {{ FILTERS }}
+
+# Run the import-extension plugin parser tests (Node + jsdom). Loads each
+# Plugins/<host>/parser.js against its sanitised fixture and asserts the
+# emitted ImportPayload matches the per-fixture expected.json. Run as part
+# of `just test`; runnable standalone for iterating on plugin code without
+# the Swift toolchain.
+plugin-test:
+    @cd tools/test-plugin && npm install --silent --no-audit --no-fund
+    node tools/test-plugin/run.js
 
 # Run tests on macOS only. See `test` for FILTERS syntax.
 test-mac *FILTERS: generate

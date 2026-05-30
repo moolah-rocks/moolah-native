@@ -43,6 +43,9 @@ vendor/bundle
 # Agent temp files (test output, etc.)
 .agent-tmp/
 
+# tools/test-plugin npm install output (jsdom). Lockfile is committed.
+tools/test-plugin/node_modules/
+
 
 # macOS
 .DS_Store

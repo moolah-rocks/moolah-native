@@ -1,0 +1,16 @@
+{
+  "name": "moolah-test-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fixture-based unit-test harness for Moolah Safari Action Extension plugins (Plugins/<host>/parser.js). Loads each plugin into a jsdom window and asserts its ImportPayload output matches the per-fixture expected.json.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node run.js"
+  },
+  "dependencies": {
+    "jsdom": "^25.0.0"
+  }
+}
