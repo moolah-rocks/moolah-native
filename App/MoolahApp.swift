@@ -37,9 +37,10 @@ struct MoolahApp: App {
   @State var pendingNavigation: PendingNavigation?
   /// App-scope sink for `moolah://` deep links parsed by `DeepLinkRouter`.
   /// One instance per app so every window observes the same pending
-  /// destination. Task 6 of the share-import-extension plan wires this in
-  /// as a thin placeholder; Task 7 replaces `handle(_:)` with the real
-  /// inbox-drain into `ImportStore.startWebReview(payload:)`.
+  /// destination. The `importStoreProvider` is wired in `init` to resolve
+  /// the active profile's `ImportStore` at call time so a deep link picks
+  /// up whichever session is currently open (production runs only have
+  /// one active session at a time; on macOS the first one is canonical).
   @State var deepLinkCoordinator = DeepLinkCoordinator()
 
   #if os(macOS)
@@ -127,6 +128,17 @@ struct MoolahApp: App {
       backupManager = StoreBackupManager()
     #endif
     _sessionManager = State(initialValue: sessionManager)
+
+    // Wire the deep-link coordinator to resolve the active session's
+    // `ImportStore` at call time. Capturing `sessionManager` keeps the
+    // lookup live across profile switches: a `moolah://` URL arriving
+    // mid-session always lands on the currently active store, not a
+    // stale snapshot taken at app launch.
+    _deepLinkCoordinator = State(
+      initialValue: DeepLinkCoordinator(
+        importStoreProvider: { [sessionManager] in
+          sessionManager.sessions.values.first?.importStore
+        }))
   }
 
   var body: some Scene {

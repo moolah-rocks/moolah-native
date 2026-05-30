@@ -1,4 +1,5 @@
 import Foundation
+import ImportExtensionKit
 import OSLog
 import Observation
 import os
@@ -164,6 +165,65 @@ final class ImportStore {
       return .failed(message: error.message + " (staged as \(pendingId))")
     } catch {
       let ingest = IngestError.other(error.localizedDescription)
+      let pendingId = await stageFailed(error: ingest, source: source, data: data)
+      lastError = error.localizedDescription
+      await reloadStagingLists()
+      return .failed(message: error.localizedDescription + " (staged as \(pendingId))")
+    }
+  }
+
+  /// Drain an `ImportPayload` (from the Safari web-import extension)
+  /// through the same review pipeline `ingest(data:source:)` uses. The
+  /// payload's rows are translated into the existing `ParsedTransaction`
+  /// shape and routed through profile matching, dedup, rules, and
+  /// persistence with no review-state duplication; the only thing
+  /// distinguishing a web import from a CSV import inside the pipeline is
+  /// the `ImportSource.web(host:accountHint:)` tag. Never throws: every
+  /// failure path lands in the staging store.
+  @discardableResult
+  func startWebReview(payload: ImportPayload) async -> ImportSessionResult {
+    isImporting = true
+    defer { isImporting = false }
+    lastError = nil
+    let sessionId = UUID()
+    let source = ImportSource.web(
+      host: payload.sourceHost, accountHint: payload.accountHint)
+    do {
+      let result = try await runWebPipeline(
+        payload: payload, source: source, sessionId: sessionId)
+      if case let .imported(_, imported, skipped) = result {
+        recentSessions.insert(
+          ImportSessionSummary(
+            id: sessionId,
+            importedCount: imported.count,
+            skippedAsDuplicate: skipped,
+            importedAt: Date(),
+            filename: source.filename),
+          at: 0)
+        await refreshBadge()
+        if let earliest = imported.min(by: { $0.date < $1.date }) {
+          let windowLowerBound = earliest.date
+            .addingTimeInterval(-FuzzyTransferDetector.windowSeconds)
+          await transferDetection.runDetection(
+            newlyImported: imported,
+            participatingAccountIds: Set(
+              imported.compactMap { $0.transferDetectionValueLeg?.accountId }),
+            windowLowerBound: windowLowerBound)
+        }
+      }
+      if case .needsSetup = result {
+        await reloadStagingLists()
+      }
+      return result
+    } catch let error as IngestError {
+      let data = (try? Self.payloadStagingBytes(payload)) ?? Data()
+      let pendingId = await stageFailed(error: error, source: source, data: data)
+      lastError = error.message
+      await reloadStagingLists()
+      return .failed(message: error.message + " (staged as \(pendingId))")
+    } catch {
+      let ingest = IngestError.other(error.localizedDescription)
+      let data = (try? Self.payloadStagingBytes(payload)) ?? Data()
       let pendingId = await stageFailed(error: ingest, source: source, data: data)
       lastError = error.localizedDescription
       await reloadStagingLists()
