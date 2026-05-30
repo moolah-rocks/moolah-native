@@ -49,6 +49,11 @@ class MoolahUITestCase: XCTestCase {
       let succeeded = (testRun?.failureCount ?? 0) == 0
       collectFailureArtefacts(for: app, succeeded: succeeded)
       app.application.terminate()
+      // Best-effort cleanup of the per-launch inbox directory. Use try?
+      // so a missing-or-already-removed directory doesn't mask a real
+      // test failure. The directory lives under `/private/tmp` so a
+      // miss here is a minor leak, not a correctness problem.
+      try? FileManager.default.removeItem(at: app.inboxDirectory)
     }
     lastApp = nil
     try await super.tearDown()

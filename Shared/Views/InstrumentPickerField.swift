@@ -88,7 +88,7 @@ struct InstrumentPickerField: View {
         return .handled
       }
     #endif
-    .accessibilityIdentifier("instrumentPicker.field.\(selection.id)")
+    .accessibilityIdentifier(UITestIdentifiers.InstrumentPicker.field(selection.id))
     .accessibilityLabel(Text("\(String(localized: label)): \(selection.pickerLabel)"))
     .accessibilityHint(Text("Activate to choose a different \(String(localized: label))"))
   }

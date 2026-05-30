@@ -25,7 +25,7 @@ struct InstrumentPickerSheetCore: View {
       macOSContent
     #else
       navigationStack
-        .accessibilityIdentifier("instrumentPicker.sheet")
+        .accessibilityIdentifier(UITestIdentifiers.InstrumentPicker.sheet)
     #endif
   }
 
@@ -77,7 +77,7 @@ struct InstrumentPickerSheetCore: View {
         // the title text exists iff the popover is open. Replaces the
         // previous Cancel-button-as-sentinel approach (Cancel removed in
         // line with macOS popover convention — popovers auto-dismiss).
-        .accessibilityIdentifier("instrumentPicker.sheet")
+        .accessibilityIdentifier(UITestIdentifiers.InstrumentPicker.sheet)
     }
 
     private var macOSSearchField: some View {
@@ -109,7 +109,7 @@ struct InstrumentPickerSheetCore: View {
       )
       .textFieldStyle(.plain)
       .focused($focusedField, equals: .search)
-      .accessibilityIdentifier("instrumentPicker.searchField")
+      .accessibilityIdentifier(UITestIdentifiers.InstrumentPicker.searchField)
       .onSubmit { commitHighlightedOrFirst() }
       .onKeyPress(.downArrow) {
         moveHighlight(by: 1)
@@ -271,7 +271,7 @@ struct InstrumentPickerSheetCore: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .accessibilityIdentifier("instrumentPicker.row.\(result.instrument.id)")
+    .accessibilityIdentifier(UITestIdentifiers.InstrumentPicker.row(result.instrument.id))
     .accessibilityLabel(
       Text(
         result.isRegistered
