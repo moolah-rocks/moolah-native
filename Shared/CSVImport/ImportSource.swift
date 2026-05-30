@@ -28,6 +28,13 @@ enum ImportSource: Sendable {
   /// the user completes setup.
   case reingestFromSetup(filename: String, sourceURL: URL?)
 
+  /// A payload from the Safari web-import extension. `host` is the site the
+  /// scrape came from (e.g. `"chase.com"`) and routes profile matching;
+  /// `accountHint` is whatever the per-site plugin captured (e.g. the last
+  /// four digits of an account number) and is surfaced in the review UI so
+  /// the user can pick the right Moolah account on first use.
+  case web(host: String, accountHint: String?)
+
   /// User-visible filename or paste label for diagnostics and the
   /// `ImportOrigin.sourceFilename` field.
   var filename: String? {
@@ -40,6 +47,8 @@ enum ImportSource: Sendable {
       return label
     case .reingestFromSetup(let filename, _):
       return filename
+    case .web(let host, _):
+      return host
     }
   }
 
@@ -59,7 +68,7 @@ enum ImportSource: Sendable {
       return url
     case .reingestFromSetup(_, let url):
       return url
-    case .paste:
+    case .paste, .web:
       return nil
     }
   }

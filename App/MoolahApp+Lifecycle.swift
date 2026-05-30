@@ -115,7 +115,12 @@ extension MoolahApp {
       return
     }
     if let destination = DeepLinkRouter.parse(url) {
-      deepLinkCoordinator.handle(destination)
+      // `DeepLinkCoordinator.handle` is async because it drains the App
+      // Group inbox and feeds the payload through the import pipeline.
+      // `onOpenURL` is synchronous, so dispatch the work onto a Task and
+      // let the coordinator update its `@Observable` state from the main
+      // actor when it finishes.
+      Task { await deepLinkCoordinator.handle(destination) }
     }
   }
 }
