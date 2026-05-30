@@ -1,0 +1,66 @@
+# Sanitise config for the CommBank account-detail fixture.
+#
+# CommBank Netbank — deposit account transactions list. Real source HTML
+# stays on the contributor's local machine.
+
+source: "~/Downloads/Moolah Sites/www.commbank.com.au.html"
+seed: 73
+synthetic_url: "https://www.commbank.com.au/retail/netbank/accounts/"
+
+# Classes the parser depends on — these survive the CSS-in-JS-hash sweep.
+keep_classes:
+  - "transaction-item"
+  - "transaction-item__date"
+  - "transaction-item__description"
+  - "transaction-item__amounts"
+  - "transaction-item__amounts__debit"
+  - "transaction-item__amounts__debit__text"
+  - "transaction-item__amounts__credit"
+  - "transaction-item__amounts__credit__text"
+  - "transaction-item__amounts__balance"
+  - "transaction-item__amounts__balance__text"
+  - "honeycomb-currency"
+  - "sr-print-only"
+
+merchant_selectors:
+  - ".transaction-item__description"
+
+# CommBank renders amounts inside nested spans
+# (`__debit__text` > `honeycomb-currency`); target the outer wrappers
+# so synthesised values land on every text leaf inside them.
+amount_selectors:
+  - ".transaction-item__amounts__debit__text"
+  - ".transaction-item__amounts__credit__text"
+  - ".transaction-item__amounts__balance"
+
+# Replace dates ("Sat 25 Apr 2026").
+date_selectors:
+  - ".transaction-item__date"
+
+account_hint_selectors: []
+
+# Strip the noisy chrome but leave row content intact. Do NOT strip
+# `button` as a tag — CommBank wraps the description inside a
+# `.transaction-item__btn-details` button. Do NOT strip
+# `.sr-print-only` — the date cell carries that class. Do strip
+# `.sr-only` (audio-only duplicates of the visible description).
+strip_selectors:
+  - "head"
+  - "script"
+  - "style"
+  - "noscript"
+  - "svg"
+  - "img"
+  - "iframe"
+  - "header"
+  - "nav"
+  - "footer"
+  - ".sr-only"
+  - ".sticky-header-overlap"
+  - ".transactions-table__title"
+
+keep_attributes:
+  - "data-testid"
+  - "role"
+  - "scope"
+  - "aria-hidden"
