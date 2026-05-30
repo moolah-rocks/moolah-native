@@ -37,15 +37,22 @@ struct FullConversionServiceCachingTests {
     registrations: [CryptoRegistration] = []
   ) throws -> Bundle {
     let database = try ProfileIndexDatabase.openInMemory()
+    // Pin to UTC — `futureDatesShareTodaysCacheEntry` and the cache-key
+    // assertions below assume the cap resolves "yesterday" against the
+    // same UTC calendar the fixtures use to derive their date keys.
+    let utc = try #require(TimeZone(identifier: "UTC"))
     let cryptoService = CryptoPriceService(
       clients: [FixedCryptoPriceClient(prices: cryptoPrices)],
-      database: database
+      database: database,
+      timeZone: utc
     )
     let exchangeService = ExchangeRateService(
       client: FixedRateClient(rates: exchangeRates),
-      database: database
+      database: database,
+      timeZone: utc
     )
-    let stockService = StockPriceService(client: FixedStockPriceClient(), database: database)
+    let stockService = StockPriceService(
+      client: FixedStockPriceClient(), database: database, timeZone: utc)
     let service = FullConversionService(
       exchangeRates: exchangeService,
       stockPrices: stockService,

@@ -14,9 +14,10 @@ import GRDB
 // (cache-hits never re-fetched). Once a row was poisoned, every
 // subsequent read returned a stale tick — most visibly as VGS.AX
 // reporting an intraday print after the session settled. The fix in
-// `Shared/PriceCacheCap.swift` caps every request at yesterday-UTC and
-// re-fetches the latest cached date on every forward extension, but
-// the rule only governs *future* writes. Any pre-fix poisoned row sits
+// `Shared/PriceCacheCap.swift` caps every request at the prior
+// local-calendar day and re-fetches the latest cached date on every
+// forward extension, but the rule only governs *future* writes. Any
+// pre-fix poisoned row sits
 // in the cache as actual-yesterday once today rolls over, and there's
 // no way for the service to tell a finalised close from a frozen
 // intraday tick. Wiping the lot is the cheapest way to guarantee a

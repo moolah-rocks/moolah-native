@@ -17,9 +17,14 @@ struct InstrumentConversionServiceStockTests {
   ) throws -> FullConversionService {
     let database = try ProfileIndexDatabase.openInMemory()
     let stockClient = FixedStockPriceClient(responses: stockPrices)
-    let stockService = StockPriceService(client: stockClient, database: database)
+    // Pin to UTC — `dateString(today)` builds fixture labels in UTC, so
+    // the cap must resolve "yesterday" in UTC for the lookup to hit.
+    let utc = try #require(TimeZone(identifier: "UTC"))
+    let stockService = StockPriceService(
+      client: stockClient, database: database, timeZone: utc)
     let rateClient = FixedRateClient(rates: exchangeRates)
-    let rateService = ExchangeRateService(client: rateClient, database: database)
+    let rateService = ExchangeRateService(
+      client: rateClient, database: database, timeZone: utc)
     return FullConversionService(
       exchangeRates: rateService,
       stockPrices: stockService
@@ -141,9 +146,12 @@ struct InstrumentConversionServiceStockTests {
     let today = Date()
     let database = try ProfileIndexDatabase.openInMemory()
     let stockClient = FixedStockPriceClient(shouldFail: true)
-    let stockService = StockPriceService(client: stockClient, database: database)
+    let utc = try #require(TimeZone(identifier: "UTC"))
+    let stockService = StockPriceService(
+      client: stockClient, database: database, timeZone: utc)
     let rateClient = FixedRateClient(rates: [:])
-    let rateService = ExchangeRateService(client: rateClient, database: database)
+    let rateService = ExchangeRateService(
+      client: rateClient, database: database, timeZone: utc)
     let service = FullConversionService(
       exchangeRates: rateService,
       stockPrices: stockService

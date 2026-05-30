@@ -56,9 +56,12 @@ struct CloudKitAnalysisTestBackend: BackendProvider, @unchecked Sendable {
     } else {
       let rateClient = FixedRateClient()
       // The rate cache lives on the registry's profile-index DB;
-      // there are no per-profile rate-cache tables.
+      // there are no per-profile rate-cache tables. Pin to UTC so the
+      // cap matches fixture date keys built with UTC formatters
+      // regardless of the host machine's local zone.
+      let utc = TimeZone(identifier: "UTC") ?? .current
       let exchangeRates = ExchangeRateService(
-        client: rateClient, database: registry.database)
+        client: rateClient, database: registry.database, timeZone: utc)
       conversion = FiatConversionService(exchangeRates: exchangeRates)
     }
     let backend = CloudKitBackend(

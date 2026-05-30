@@ -74,8 +74,12 @@ enum TestBackend {
     // exactly as production shares one profile-index DB across the
     // shared registry and `sharedMarketData`.
     let marketDataDatabase = registry.database
+    // Pin to UTC so tests that build fixture date keys with UTC
+    // formatters (e.g. `Date().iso8601DateOnlyString`) line up with the
+    // cap's "yesterday" regardless of the host machine's local zone.
+    let utc = TimeZone(identifier: "UTC") ?? .current
     let exchangeRateService = ExchangeRateService(
-      client: rateClient, database: marketDataDatabase)
+      client: rateClient, database: marketDataDatabase, timeZone: utc)
     let conversionService = FiatConversionService(
       exchangeRates: exchangeRateService,
       database: marketDataDatabase)

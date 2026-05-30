@@ -25,17 +25,23 @@ actor StockPriceService {
   private let dateFormatter: ISO8601DateFormatter
   /// Injected clock so tests can pin "today" deterministically.
   private let now: @Sendable () -> Date
+  /// Injected zone used by `cappedToYesterday` to compute "yesterday".
+  /// Production defaults to `TimeZone.current`; tests asserting on a
+  /// specific `YYYY-MM-DD` label pin to `UTC`.
+  private let timeZone: TimeZone
   private let logger = Logger(
     subsystem: "com.moolah.app", category: "StockPriceService")
 
   init(
     client: StockPriceClient,
     database: any DatabaseWriter,
-    now: @Sendable @escaping () -> Date = { Date() }
+    now: @Sendable @escaping () -> Date = { Date() },
+    timeZone: TimeZone = .current
   ) {
     self.client = client
     self.database = database
     self.now = now
+    self.timeZone = timeZone
     self.dateFormatter = ISO8601DateFormatter()
     self.dateFormatter.formatOptions = [.withFullDate]
   }
@@ -192,9 +198,9 @@ actor StockPriceService {
   }
 
   /// See `Shared/PriceCacheCap.swift` for the rationale on capping
-  /// requests at yesterday-UTC.
+  /// requests at the prior local-calendar day.
   private func cappedDate(_ date: Date) -> Date {
-    cappedToYesterday(date, now: now)
+    cappedToYesterday(date, now: now, timeZone: timeZone)
   }
 
   private func lookupPrice(ticker: String, dateString: String) -> Decimal? {

@@ -6,9 +6,10 @@ import GRDB
 // MARK: - ExchangeRateService prefetch
 
 // `prefetchLatest`: best-effort warm-up of the latest rates for a base instrument; called
-// on app start / profile open. Targets yesterday-UTC rather than today
-// (see `Shared/PriceCacheCap.swift`) and overlaps the existing latest
-// cached date by one day so a stale value gets re-validated.
+// on app start / profile open. Targets the prior local-calendar day
+// rather than today (see `Shared/PriceCacheCap.swift`) and overlaps the
+// existing latest cached date by one day so a stale value gets
+// re-validated.
 
 extension ExchangeRateService {
   func prefetchLatest(base: Instrument) async {
@@ -25,7 +26,7 @@ extension ExchangeRateService {
     }
 
     let calendar = Calendar(identifier: .gregorian)
-    let target = cappedToYesterday(now(), now: now)
+    let target = cappedToYesterday(now(), now: now, timeZone: timeZone)
     let targetString = dateFormatter.string(from: target)
 
     if let cache = caches[code], cache.latestDate >= targetString {
