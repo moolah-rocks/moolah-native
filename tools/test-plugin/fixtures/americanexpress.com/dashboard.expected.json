@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "sourceHost": "global.americanexpress.com",
+  "sourceURL": "https://global.americanexpress.com/dashboard",
+  "capturedAt": "2026-05-30T08:00:00.000Z",
+  "accountHint": null,
+  "currencyHint": "AUD",
+  "rows": [
+    {
+      "date": "2026-05-30",
+      "amount": "-33.15",
+      "description": "MERCHANT FOXTROT",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-29",
+      "amount": "5.40",
+      "description": "MERCHANT GOLF",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-28",
+      "amount": "-75.50",
+      "description": "MERCHANT HOTEL",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-28",
+      "amount": "-9.99",
+      "description": "MERCHANT INDIA",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-27",
+      "amount": "-88.30",
+      "description": "MERCHANT JULIET",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-26",
+      "amount": "-9.99",
+      "description": "MERCHANT KILO",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-26",
+      "amount": "-130.00",
+      "description": "MERCHANT LIMA",
+      "balance": null,
+      "reference": null
+    }
+  ]
+}
