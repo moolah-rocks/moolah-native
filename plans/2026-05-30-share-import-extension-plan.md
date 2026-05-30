@@ -803,6 +803,8 @@ extension InboxWriter {
 }
 ```
 
+**Platform quirk worth knowing (relevant in Task 15):** the macOS unit-test host is NOT sandboxed, so `containerURL(forSecurityApplicationGroupIdentifier:)` returns a non-nil URL under `~/Library/Group Containers/<id>/` even when the App Group is bogus. On iOS Simulator it correctly returns nil. The "container missing" test in this task is therefore platform-gated to `#if os(iOS)`. For Task 15's runtime sanity check in the extension principal, validate writability rather than URL resolution on macOS.
+
 - [ ] **Step 4: Wire the App Group entitlement on the main app**
 
 Update `project.yml` per the existing entitlements pattern. The two main-app targets gain `com.apple.security.application-groups = [group.rocks.moolah.shared]`. Verify by running:
