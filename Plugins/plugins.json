@@ -13,6 +13,13 @@
       "file": "hsbc.com.au/parser.js",
       "displayName": "HSBC",
       "emptyHint": "Open the credit card transactions list before importing."
+    },
+    {
+      "host": "commbank.com.au",
+      "pathPrefix": "/retail/netbank",
+      "file": "commbank.com.au/parser.js",
+      "displayName": "CommBank",
+      "emptyHint": "Open one of your accounts to see transactions before importing."
     }
   ]
 }
