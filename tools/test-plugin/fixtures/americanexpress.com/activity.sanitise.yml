@@ -1,0 +1,78 @@
+# Sanitise config for the Amex full account-activity page.
+
+source: "~/Downloads/Moolah Sites/global.americanexpress.com.activity.html"
+seed: 53
+synthetic_url: "https://global.americanexpress.com/activity/recent"
+
+# Same `_dataRow_` pattern as the dashboard (different hash suffix).
+keep_classes:
+  - "body-bold"
+  - "flex-item-grow"
+  - "text-align-right"
+  - "color-status-text-neutral"
+  - "color-status-text-success"
+  - "text-nowrap"
+  - "font-weight-regular"
+  - "pad-1-r"
+  - "pad-0"
+
+merchant_selectors:
+  - "a"
+
+amount_selectors:
+  - "p.body-bold"
+
+date_selectors: []
+
+account_hint_selectors: []
+
+strip_selectors:
+  - "head"
+  - "script"
+  - "style"
+  - "noscript"
+  - "svg"
+  - "img"
+  - "iframe"
+  - "header"
+  - "nav"
+  - "footer"
+  - "button"
+  - "input"
+  - "label"
+  - "select"
+  - "option"
+  - "form"
+  - "dialog"
+  - "[role=tooltip]"
+  - "[role=dialog]"
+  - "[role=banner]"
+  - "[role=menubar]"
+  - "[role=menu]"
+  - "[role=menuitem]"
+  - "[role=alert]"
+  - "[role=alertdialog]"
+  - "[role=navigation]"
+  - "[role=region]"
+  - "[role=complementary]"
+  - "[role=contentinfo]"
+  - "[role=search]"
+  - "[role=tablist]"
+  - "[role=tab]"
+  - "[role=tabpanel]"
+  - "[role=status]"
+  - "[role=log]"
+  - "[role=marquee]"
+  - "[role=timer]"
+  - "[aria-modal=true]"
+  # Amex-specific containers that hold cardholder / balance / filter
+  # information not in the transactions table itself.
+  - "[data-module-name=axp-activity-vitals]"
+  - "[data-module-name=axp-activity-balance]"
+  - "[data-module-name=axp-activity-feed-header-filters]"
+  - "[data-module-name=axp-activity-feed-header]"
+
+keep_attributes:
+  - "data-module-name"
+  - "role"
+  - "scope"

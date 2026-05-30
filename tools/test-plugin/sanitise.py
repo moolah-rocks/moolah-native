@@ -241,10 +241,18 @@ def _matches_selector(node: Node, selector: str) -> bool:
             classes.append(m.group(1))
             s = s[m.end():]
         elif s.startswith("["):
-            m = re.match(r"\[([A-Za-z0-9_-]+)(?:=\"?([^\"\\]]*)\"?)?\]", s)
+            # Two forms: [attr] (presence) and [attr=value] (equality).
+            # Value may be unquoted, or wrapped in matching " or '.
+            m = re.match(r'\[([A-Za-z0-9_-]+)(?:=([^\]]*))?\]', s)
             if not m:
                 return False
-            attrs.append((m.group(1), m.group(2)))
+            raw_value = m.group(2)
+            value: str | None = None
+            if raw_value is not None:
+                value = raw_value
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                    value = value[1:-1]
+            attrs.append((m.group(1), value))
             s = s[m.end():]
         else:
             m = re.match(r"[A-Za-z][A-Za-z0-9-]*", s)
@@ -386,19 +394,19 @@ def clean_attrs(node: Node, keep_attributes: set[str]) -> None:
             drop.append(key)
             continue
         if lk in SAFE_ATTRS:
+            node.attrs[key] = _redact_attr_value(value)
             continue
         if lk in keep_attributes:
+            node.attrs[key] = _redact_attr_value(value)
             continue
         if lk.startswith("data-"):
-            # Keep data-testid (used by some parsers) but redact opaque values
-            if lk == "data-testid":
-                continue
-            # Drop other data-* with token-shaped values
             if TOKEN_VALUE_RE.match(value or ""):
                 drop.append(key)
                 continue
+            node.attrs[key] = _redact_attr_value(value)
             continue
         if lk.startswith("aria-"):
+            node.attrs[key] = _redact_attr_value(value)
             continue
         if lk.startswith("on"):
             drop.append(key)
@@ -406,10 +414,18 @@ def clean_attrs(node: Node, keep_attributes: set[str]) -> None:
         if lk in {"href", "src", "action", "formaction"}:
             node.attrs[key] = "#"
             continue
-        # Default: drop unknown attributes (defensive)
         drop.append(key)
     for key in drop:
         node.attrs.pop(key, None)
+
+
+def _redact_attr_value(value: str) -> str:
+    """Strip long-digit runs from attribute values so IDs / opaque
+    references don't leak through `aria-controls`, `aria-labelledby`,
+    `data-testid`, etc."""
+    if not value:
+        return value
+    return LONG_DIGIT_RE.sub("0000", value)
 
 
 def transform(

@@ -15,6 +15,15 @@ extension PluginRegistry {
         jsResource: "commbank.com.au/parser",
         displayName: "CommBank",
         emptyHint: "Open one of your accounts to see transactions before importing."),
+      PluginManifest(
+        host: "americanexpress.com", pathPrefix: "/dashboard",
+        jsResource: "americanexpress.com/parser",
+        displayName: "Amex", emptyHint: "This page should show recent transactions. Try refreshing."
+      ),
+      PluginManifest(
+        host: "americanexpress.com", pathPrefix: "/activity",
+        jsResource: "americanexpress.com/parser",
+        displayName: "Amex", emptyHint: "No transactions visible. Try clearing the date filter."),
     ]
   }
 }

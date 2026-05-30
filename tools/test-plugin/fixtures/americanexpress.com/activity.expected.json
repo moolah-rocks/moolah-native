@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "sourceHost": "global.americanexpress.com",
+  "sourceURL": "https://global.americanexpress.com/activity/recent",
+  "capturedAt": "2026-05-30T08:00:00.000Z",
+  "accountHint": null,
+  "currencyHint": "AUD",
+  "rows": [
+    {
+      "date": "2026-05-30",
+      "amount": "-18.95",
+      "description": "MERCHANT ALPHA",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-29",
+      "amount": "3.99",
+      "description": "MERCHANT BRAVO",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-28",
+      "amount": "-199.00",
+      "description": "MERCHANT CHARLIE",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-28",
+      "amount": "-42.85",
+      "description": "MERCHANT DELTA",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-27",
+      "amount": "-250.00",
+      "description": "MERCHANT ECHO",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-26",
+      "amount": "-33.15",
+      "description": "MERCHANT FOXTROT",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-26",
+      "amount": "-14.00",
+      "description": "MERCHANT GOLF",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-24",
+      "amount": "-250.00",
+      "description": "MERCHANT HOTEL",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-23",
+      "amount": "-199.00",
+      "description": "MERCHANT INDIA",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-23",
+      "amount": "-14.00",
+      "description": "MERCHANT JULIET",
+      "balance": null,
+      "reference": null
+    },
+    {
+      "date": "2026-05-23",
+      "amount": "-33.15",
+      "description": "MERCHANT KILO",
+      "balance": null,
+      "reference": null
+    }
+  ]
+}
