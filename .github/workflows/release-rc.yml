@@ -109,7 +109,7 @@ jobs:
           ref: ${{ inputs.tag || github.ref_name }}
 
       - name: Install tools
-        run: brew install xcodegen just
+        run: bash scripts/install-ci-tools.sh xcodegen
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@e65c17d16e57e481586a6a5a0282698790062f92 # v1.300.0
