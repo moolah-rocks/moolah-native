@@ -321,7 +321,10 @@ final class CryptoTokenStore {
   func saveApiKey(_ key: String) {
     do {
       try apiKeyStore.saveString(key)
+      self.error = nil
     } catch {
+      logger.error(
+        "CoinGecko API key save failed: \(error.localizedDescription, privacy: .public)")
       self.error = "Failed to save API key: \(error.localizedDescription)"
     }
   }
@@ -335,9 +338,10 @@ final class CryptoTokenStore {
   // The Alchemy key drives the wallet auto-import.
   // `ProfileSession.resolveAlchemyApiKey()` reads from the same
   // `(service, account)` keychain entry, so a write here is picked up
-  // by the next sync cycle without further plumbing. Privacy: never
-  // logged. Failures surface via the store's `error` string only —
-  // the underlying `OSStatus` never appears in `os.Logger`.
+  // by the next sync cycle without further plumbing. The key value
+  // itself is never logged; failure paths log only the wrapping
+  // `error.localizedDescription` (which carries the underlying
+  // `OSStatus` via `KeychainError`).
 
   /// `true` when an Alchemy API key is configured in the synced
   /// Keychain. Read on every UI render to drive the status badge —
@@ -357,7 +361,10 @@ final class CryptoTokenStore {
   func saveAlchemyApiKey(_ key: String) {
     do {
       try alchemyKeyStore.saveString(key)
+      self.error = nil
     } catch {
+      logger.error(
+        "Alchemy API key save failed: \(error.localizedDescription, privacy: .public)")
       self.error = "Failed to save Alchemy API key: \(error.localizedDescription)"
     }
   }

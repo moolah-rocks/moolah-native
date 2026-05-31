@@ -21,5 +21,10 @@
   <true/>
   <key>com.apple.security.application-groups</key>
   <array><string>group.rocks.moolah.shared</string></array>
+  <!-- Required on macOS for SecItem* with kSecAttrSynchronizable=true.
+       See scripts/inject-entitlements.sh for the equivalent block on
+       Debug builds and the rationale. -->
+  <key>keychain-access-groups</key>
+  <array><string>$(AppIdentifierPrefix)rocks.moolah.app</string></array>
 </dict>
 </plist>

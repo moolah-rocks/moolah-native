@@ -60,6 +60,19 @@ cat > "$ENTITLEMENTS_FILE" <<'PLIST'
     <array>
         <string>group.rocks.moolah.shared</string>
     </array>
+    <key>keychain-access-groups</key>
+    <array>
+        <!--
+          Required on macOS for SecItemAdd / SecItemCopyMatching with
+          kSecAttrSynchronizable=true (iCloud Keychain). iOS derives a
+          default access group from the bundle id; macOS does not.
+          $(AppIdentifierPrefix) is expanded by codesign from the
+          signing identity / provisioning profile. Without this entry,
+          every keychain op on a synchronizable item fails with
+          errSecMissingEntitlement (-34018).
+        -->
+        <string>$(AppIdentifierPrefix)rocks.moolah.app</string>
+    </array>
 </dict>
 </plist>
 PLIST
