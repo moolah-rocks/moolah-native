@@ -88,10 +88,17 @@ struct CryptoSettingsView: View {
         alchemyStatusBadge
       }
     } footer: {
-      Text(
-        "Required to auto-import on-chain transactions for crypto wallet accounts. "
-          + "A free Alchemy key is sufficient for personal use."
-      )
+      VStack(alignment: .leading, spacing: 6) {
+        if let error = store.error {
+          Text(error)
+            .foregroundStyle(.red)
+            .textSelection(.enabled)
+        }
+        Text(
+          "Required to auto-import on-chain transactions for crypto wallet accounts. "
+            + "A free Alchemy key is sufficient for personal use."
+        )
+      }
     }
   }
 

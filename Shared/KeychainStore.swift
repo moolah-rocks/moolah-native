@@ -1,10 +1,33 @@
 import Foundation
+import OSLog
 import Security
 
-enum KeychainError: Error {
+enum KeychainError: LocalizedError {
   case saveFailed(OSStatus)
   case readFailed(OSStatus)
+
+  /// Human-readable description that includes the underlying `OSStatus`
+  /// and Apple's localised string for it. The raw status code surfaces
+  /// even when `SecCopyErrorMessageString` returns nil (some codes have
+  /// no human string on macOS).
+  var errorDescription: String? {
+    switch self {
+    case .saveFailed(let status):
+      return "Keychain save failed (OSStatus \(status): \(Self.message(for: status)))"
+    case .readFailed(let status):
+      return "Keychain read failed (OSStatus \(status): \(Self.message(for: status)))"
+    }
+  }
+
+  private static func message(for status: OSStatus) -> String {
+    if let message = SecCopyErrorMessageString(status, nil) {
+      return message as String
+    }
+    return "no description"
+  }
 }
+
+private let keychainLogger = Logger(subsystem: "com.moolah.app", category: "KeychainStore")
 
 /// Generic Keychain wrapper supporting Data and String values, with optional iCloud sync.
 ///
@@ -24,13 +47,28 @@ struct KeychainStore: Sendable {
 
   func saveData(_ data: Data) throws {
     let query = baseQuery()
-    SecItemDelete(query as CFDictionary)
+    let deleteStatus = SecItemDelete(query as CFDictionary)
+    keychainLogger.info(
+      """
+      saveData: service=\(self.service, privacy: .public) \
+      account=\(self.account, privacy: .public) \
+      synchronizable=\(self.synchronizable, privacy: .public) \
+      deleteStatus=\(deleteStatus, privacy: .public)
+      """
+    )
 
     var addQuery = query
     addQuery[kSecValueData as String] = data
     addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
 
     let status = SecItemAdd(addQuery as CFDictionary, nil)
+    keychainLogger.info(
+      """
+      saveData: service=\(self.service, privacy: .public) \
+      account=\(self.account, privacy: .public) \
+      addStatus=\(status, privacy: .public)
+      """
+    )
     guard status == errSecSuccess else {
       throw KeychainError.saveFailed(status)
     }
@@ -43,6 +81,14 @@ struct KeychainStore: Sendable {
 
     var result: AnyObject?
     let status = SecItemCopyMatching(query as CFDictionary, &result)
+    keychainLogger.info(
+      """
+      restoreData: service=\(self.service, privacy: .public) \
+      account=\(self.account, privacy: .public) \
+      synchronizable=\(self.synchronizable, privacy: .public) \
+      copyStatus=\(status, privacy: .public)
+      """
+    )
 
     switch status {
     case errSecSuccess:
