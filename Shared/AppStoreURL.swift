@@ -8,5 +8,5 @@ enum AppStoreURL {
   // error, not a runtime condition. Force-unwrap is the idiomatic shape
   // for this case; any typo lands on the first call site in development.
   static let update = URL(
-    string: "https://github.com/moolah-rocks/moolah-native/releases/latest")!  // swiftlint:disable:this force_unwrapping
+    string: "https://github.com/moolah-rocks/moolah-native/releases/latest")!
 }
