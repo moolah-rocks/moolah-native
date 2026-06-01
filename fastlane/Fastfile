@@ -77,6 +77,11 @@ platform :ios do
     )
 
     bake_profile("IOS_PROVISIONING_PROFILE", ENV["sigh_rocks.moolah.app_appstore_profile-name"])
+    # The embedded action extension is a separate signing target with its
+    # own App Store profile — bake its name into the env var that
+    # MoolahImportExtension_iOS.Release reads. Both vars are set before this
+    # `just generate` runs, so both specifiers land in one regeneration.
+    bake_profile("IOS_EXT_PROVISIONING_PROFILE", ENV["sigh_rocks.moolah.app.importextension_appstore_profile-name"])
 
     build_app(
       scheme: "Moolah-iOS",
@@ -113,6 +118,11 @@ platform :ios do
     # project.yml's hard-coded "1") is the persistent source of truth for
     # the next build number.
     bake_profile("IOS_PROVISIONING_PROFILE", ENV["sigh_rocks.moolah.app_appstore_profile-name"])
+    # The embedded action extension is a separate signing target with its
+    # own App Store profile — bake its name into the env var that
+    # MoolahImportExtension_iOS.Release reads. Both vars are set before this
+    # `just generate` runs, so both specifiers land in one regeneration.
+    bake_profile("IOS_EXT_PROVISIONING_PROFILE", ENV["sigh_rocks.moolah.app.importextension_appstore_profile-name"])
 
     increment_build_number(
       build_number: latest_testflight_build_number(api_key: api_key) + 1
@@ -240,6 +250,11 @@ platform :mac do
     # iOS appstore uses `sigh_<bundle>_appstore_profile-name` (no platform suffix)
     # because iOS is fastlane's default platform.
     bake_profile("MAC_PROVISIONING_PROFILE", ENV["sigh_rocks.moolah.app_developer_id_macos_profile-name"])
+    # The embedded action extension is a separate signing target with its
+    # own Developer ID profile — bake its name into the env var that
+    # MoolahImportExtension_macOS.Release reads. Both vars are set before
+    # this `just generate` runs, so both specifiers land in one regeneration.
+    bake_profile("MAC_EXT_PROVISIONING_PROFILE", ENV["sigh_rocks.moolah.app.importextension_developer_id_macos_profile-name"])
 
     # Same ordering rule as the iOS `beta` lane (see comment there): anything that
     # mutates the pbxproj must come AFTER the last `just generate` (the one inside

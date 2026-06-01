@@ -238,6 +238,18 @@ targets:
           # produces an .appex but it has no App Group and the share
           # sheet entry never appears.
           CODE_SIGN_ENTITLEMENTS: MoolahImportExtension_iOS/Entitlements.entitlements
+          # Manual distribution signing, scoped to this target — mirrors
+          # Moolah_iOS.configs.Release. The embedded .appex has its own
+          # bundle id (rocks.moolah.app.importextension), which the parent
+          # app's App Store profile does not cover, so it needs a separate
+          # profile specifier. PROVISIONING_PROFILE_SPECIFIER is
+          # xcodegen-substituted from $IOS_EXT_PROVISIONING_PROFILE, which
+          # the iOS fastlane lanes set from `match`'s output before
+          # re-running `just generate`. An unset env var is harmless: local
+          # Debug builds ignore this Release block.
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Distribution
+          PROVISIONING_PROFILE_SPECIFIER: ${IOS_EXT_PROVISIONING_PROFILE}
 
   MoolahImportExtension_macOS:
     type: app-extension
@@ -272,6 +284,17 @@ targets:
           # `Moolah_macOS.Release` setting above; without it the embedded
           # extension binary fails App Store validation.
           ENABLE_HARDENED_RUNTIME: YES
+          # Manual Developer ID signing, scoped to this target — mirrors
+          # Moolah_macOS.configs.Release. The embedded .appex needs its own
+          # Developer ID profile (its bundle id differs from the parent
+          # app's). PROVISIONING_PROFILE_SPECIFIER is xcodegen-substituted
+          # from $MAC_EXT_PROVISIONING_PROFILE, which the mac `zip` lane
+          # sets from `match`'s output before re-running `just generate`.
+          # An unset env var is harmless: local Debug builds ignore this
+          # Release block.
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Developer ID Application
+          PROVISIONING_PROFILE_SPECIFIER: ${MAC_EXT_PROVISIONING_PROFILE}
 
   MoolahTests_iOS:
     type: bundle.unit-test
