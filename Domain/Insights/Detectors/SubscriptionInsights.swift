@@ -83,7 +83,9 @@ enum SubscriptionInsights {
   /// monthly cost — likely overlapping services (design §A-3). Emits one
   /// insight per category cluster.
   static func duplicates(
-    _ subscriptions: [DetectedSubscription], categories: Categories, context: InsightContext,
+    _ subscriptions: [DetectedSubscription],
+    categories: Categories,
+    context: InsightContext,
     priceProximity: Double = 0.4
   ) -> [Insight] {
     let expenseStreams = subscriptions.filter { !$0.isIncome && $0.categoryId != nil }
@@ -101,7 +103,8 @@ enum SubscriptionInsights {
       guard clustered.count >= 2 else { continue }
       let names = clustered.map(\.displayPayee).sorted()
       let total = clustered.reduce(Decimal(0)) { $0 + $1.monthlyCostMagnitude }
-      let categoryName = categories.by(id: categoryId).map { categories.path(for: $0) } ?? "this category"
+      let categoryName =
+        categories.by(id: categoryId).map { categories.path(for: $0) } ?? "this category"
       insights.append(
         Insight(
           id: "\(InsightKind.duplicateSubscription.rawValue):\(categoryId.uuidString)",

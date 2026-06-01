@@ -49,7 +49,8 @@ enum InvestmentInsights {
       framing: .neutral,
       actionability: .review,
       surprise: min(toDouble(share), 1),
-      monetaryImpact: InstrumentAmount(quantity: top.currentValue, instrument: context.reportingCurrency),
+      monetaryImpact: InstrumentAmount(
+        quantity: top.currentValue, instrument: context.reportingCurrency),
       facts: [
         InsightFact("Holding", top.instrument.displayLabel),
         InsightFact("Value", context.formatted(top.currentValue)),
@@ -62,7 +63,8 @@ enum InvestmentInsights {
   private static func performers(
     _ profitLoss: [InstrumentProfitLoss], minimumReturn: Decimal, context: InsightContext
   ) -> [Insight] {
-    let ranked = profitLoss
+    let ranked =
+      profitLoss
       .filter { $0.totalInvested > 0 && $0.currentValue > 0 }
       .sorted { $0.returnPercentage > $1.returnPercentage }
     guard ranked.count >= 2 else { return [] }
@@ -95,7 +97,8 @@ enum InvestmentInsights {
       framing: isTop ? .positive : .negative,
       actionability: isTop ? .informational : .review,
       surprise: min(toDouble(abs(position.returnPercentage)) / 100, 1),
-      monetaryImpact: InstrumentAmount(quantity: position.totalGain, instrument: context.reportingCurrency),
+      monetaryImpact: InstrumentAmount(
+        quantity: position.totalGain, instrument: context.reportingCurrency),
       facts: [
         InsightFact("Holding", label),
         InsightFact("Return", returnText),
@@ -122,7 +125,8 @@ enum InvestmentInsights {
     let offset = min(realized, -unrealizedLoss)
     let names = lossPositions.map(\.instrument.displayLabel).sorted().joined(separator: ", ")
     return Insight(
-      id: "\(InsightKind.capitalGainsHarvest.rawValue):\(context.calendar.component(.year, from: context.now))",
+      id:
+        "\(InsightKind.capitalGainsHarvest.rawValue):\(context.calendar.component(.year, from: context.now))",
       kind: .capitalGainsHarvest,
       title: "Possible tax-loss offset",
       detail:

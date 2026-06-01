@@ -61,7 +61,8 @@ struct SpendAndTrendInsightTests {
     let dining = Category(name: "Dining")
     let months = ["202509", "202510", "202511", "202512", "202601", "202602", "202603", "202604"]
     let breakdown = months.enumerated().map { index, month in
-      InsightTestSupport.breakdownRow(Decimal(100 + index * 30), categoryId: dining.id, month: month)
+      InsightTestSupport.breakdownRow(
+        Decimal(100 + index * 30), categoryId: dining.id, month: month)
     }
     let insights = CategoryTrendInsight.detect(
       breakdown: breakdown, categories: Categories(from: [dining]), context: context)

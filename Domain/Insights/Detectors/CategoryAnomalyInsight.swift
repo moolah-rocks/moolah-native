@@ -23,16 +23,27 @@ enum CategoryAnomalyInsight {
     let series = CategorySpendSeries.build(
       from: breakdown, reportingCurrency: context.reportingCurrency)
 
+    let bounds = Bounds(zScore: threshold, overspendFraction: minimumOverspendFraction)
     var insights: [Insight] = []
     for (categoryId, points) in series where points.count >= minimumMonths {
-      guard let insight = evaluate(
-        categoryId: categoryId, points: points, categories: categories,
-        context: context, threshold: threshold,
-        minimumOverspendFraction: minimumOverspendFraction)
+      guard
+        let insight = evaluate(
+          categoryId: categoryId,
+          points: points,
+          categories: categories,
+          context: context,
+          bounds: bounds)
       else { continue }
       insights.append(insight)
     }
     return insights
+  }
+
+  /// The two gate values an anomaly must clear, bundled to keep `evaluate`
+  /// within the parameter-count budget.
+  private struct Bounds {
+    let zScore: Double
+    let overspendFraction: Double
   }
 
   private static func evaluate(
@@ -40,8 +51,7 @@ enum CategoryAnomalyInsight {
     points: [MonthlySpendPoint],
     categories: Categories,
     context: InsightContext,
-    threshold: Double,
-    minimumOverspendFraction: Double
+    bounds: Bounds
   ) -> Insight? {
     let magnitudes = points.map(\.magnitude)
     let decomposition = SeasonalDecomposition.decompose(magnitudes, period: 12)
@@ -51,20 +61,23 @@ enum CategoryAnomalyInsight {
     let latestRemainder = remainder[remainder.count - 1]
     let priorRemainders = Array(remainder.dropLast())
     let zScore = DescriptiveStatistics.robustZScore(of: latestRemainder, in: priorRemainders)
-    guard zScore >= threshold, latestRemainder > 0 else { return nil }
+    guard zScore >= bounds.zScore, latestRemainder > 0 else { return nil }
 
-    let expected = decomposition.trend[remainder.count - 1]
+    let expected =
+      decomposition.trend[remainder.count - 1]
       + decomposition.seasonal[remainder.count - 1]
     guard expected > 0 else { return nil }
     let overspendFraction = latestRemainder / expected
-    guard overspendFraction >= minimumOverspendFraction else { return nil }
+    guard overspendFraction >= bounds.overspendFraction else { return nil }
 
-    let resolved = categoryId == CategorySpendSeries.uncategorizedKey
+    let resolved =
+      categoryId == CategorySpendSeries.uncategorizedKey
       ? nil : categories.by(id: categoryId)
     let categoryName = resolved.map { categories.path(for: $0) } ?? "Uncategorized"
 
     return Insight(
-      id: "\(InsightKind.categorySpendingAnomaly.rawValue):\(categoryId.uuidString):\(latest.month)",
+      id:
+        "\(InsightKind.categorySpendingAnomaly.rawValue):\(categoryId.uuidString):\(latest.month)",
       kind: .categorySpendingAnomaly,
       title: "\(categoryName) up this month",
       detail:

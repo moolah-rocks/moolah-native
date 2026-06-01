@@ -105,7 +105,9 @@ struct FinanceInsightTests {
 
   @Test
   func idleCashAlert() throws {
-    let balances = [DailyBalance(date: InsightTestSupport.now, balance: InsightTestSupport.amount(20000))]
+    let balances = [
+      DailyBalance(date: InsightTestSupport.now, balance: InsightTestSupport.amount(20000))
+    ]
     let monthly = ["202603", "202604", "202605"].map {
       InsightTestSupport.monthly(month: $0, income: 4000, expense: 2000)
     }
@@ -118,7 +120,9 @@ struct FinanceInsightTests {
 
   @Test
   func runwayWarnsWhenBurning() throws {
-    let balances = [DailyBalance(date: InsightTestSupport.now, balance: InsightTestSupport.amount(10000))]
+    let balances = [
+      DailyBalance(date: InsightTestSupport.now, balance: InsightTestSupport.amount(10000))
+    ]
     let monthly = ["202603", "202604", "202605"].map {
       InsightTestSupport.monthly(month: $0, income: 1000, expense: 3000)
     }
@@ -132,7 +136,8 @@ struct FinanceInsightTests {
   func feeSpendSumsAnnualFees() throws {
     let transactions = [
       InsightTestSupport.expense(35, payee: "Bank", daysAgo: 10, categoryPath: "Banking:Fees"),
-      InsightTestSupport.expense(15, payee: "Bank", daysAgo: 100, categoryPath: "Banking:Account Fee"),
+      InsightTestSupport.expense(
+        15, payee: "Bank", daysAgo: 100, categoryPath: "Banking:Account Fee"),
       InsightTestSupport.expense(200, payee: "Rent", daysAgo: 5, categoryPath: "Housing:Rent"),
     ]
     let insights = SavingsOpportunityInsights.feeSpend(transactions: transactions, context: context)

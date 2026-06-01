@@ -5,11 +5,6 @@ import Foundation
 struct PValue<Tag: Hashable & Sendable>: Sendable, Hashable {
   let tag: Tag
   let pValue: Double
-
-  init(tag: Tag, pValue: Double) {
-    self.tag = tag
-    self.pValue = pValue
-  }
 }
 
 /// Benjamini-Hochberg false-discovery-rate control. The design (§C-10)

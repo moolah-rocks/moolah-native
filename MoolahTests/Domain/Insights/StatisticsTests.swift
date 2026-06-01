@@ -41,8 +41,8 @@ struct StatisticsTests {
   func coefficientOfVariation() {
     #expect(DescriptiveStatistics.coefficientOfVariation([10, 10, 10]) == 0)
     #expect(DescriptiveStatistics.coefficientOfVariation([0, 0, 0]) == nil)
-    let cv = DescriptiveStatistics.coefficientOfVariation([8, 12, 10, 9, 11])
-    #expect((cv ?? 0) > 0)
+    let variation = DescriptiveStatistics.coefficientOfVariation([8, 12, 10, 9, 11])
+    #expect((variation ?? 0) > 0)
   }
 
   @Test

@@ -29,7 +29,8 @@ enum DescriptiveStatistics {
   static func standardDeviation(_ values: [Double]) -> Double {
     guard values.count > 1 else { return 0 }
     let average = mean(values)
-    let variance = values.reduce(0) { $0 + ($1 - average) * ($1 - average) }
+    let variance =
+      values.reduce(0) { $0 + ($1 - average) * ($1 - average) }
       / Double(values.count)
     return variance.squareRoot()
   }

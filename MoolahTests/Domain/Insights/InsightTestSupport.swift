@@ -78,7 +78,9 @@ enum InsightTestSupport {
   }
 
   /// A negative (expense-shaped) breakdown row.
-  static func breakdownRow(_ magnitude: Decimal, categoryId: UUID?, month: String) -> ExpenseBreakdown {
+  static func breakdownRow(_ magnitude: Decimal, categoryId: UUID?, month: String)
+    -> ExpenseBreakdown
+  {
     ExpenseBreakdown(categoryId: categoryId, month: month, totalExpenses: amount(-magnitude))
   }
 

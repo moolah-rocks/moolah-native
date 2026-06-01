@@ -20,9 +20,11 @@ enum EarmarkBudgetInsights {
       else { continue }
 
       if projection.fraction > 1 + overspendTolerance {
-        insights.append(overspend(earmark, budget: budget, projection: projection, context: context))
+        insights.append(
+          overspend(earmark, budget: budget, projection: projection, context: context))
       } else if projection.fraction < 1 - underspendTolerance, projection.elapsedFraction >= 0.5 {
-        insights.append(underspend(earmark, budget: budget, projection: projection, context: context))
+        insights.append(
+          underspend(earmark, budget: budget, projection: projection, context: context))
       }
     }
     return insights
@@ -48,7 +50,8 @@ enum EarmarkBudgetInsights {
     spent: InstrumentAmount, budget: InstrumentAmount, window: Window, context: InsightContext
   ) -> Projection? {
     let calendar = context.calendar
-    let totalDays = max(calendar.dateComponents([.day], from: window.start, to: window.end).day ?? 0, 1)
+    let totalDays = max(
+      calendar.dateComponents([.day], from: window.start, to: window.end).day ?? 0, 1)
     let elapsedRaw = calendar.dateComponents([.day], from: window.start, to: context.now).day ?? 0
     let elapsedDays = min(max(elapsedRaw, 0), totalDays)
     guard elapsedDays > 0, elapsedDays < totalDays else { return nil }
@@ -61,14 +64,19 @@ enum EarmarkBudgetInsights {
     guard budgetMagnitude > 0 else { return nil }
     let projected = spentMagnitude / elapsedFraction
     return Projection(
-      spentMagnitude: spentMagnitude, projected: projected, budgetMagnitude: budgetMagnitude,
-      fraction: projected / budgetMagnitude, elapsedFraction: elapsedFraction)
+      spentMagnitude: spentMagnitude,
+      projected: projected,
+      budgetMagnitude: budgetMagnitude,
+      fraction: projected / budgetMagnitude,
+      elapsedFraction: elapsedFraction)
   }
 
   // MARK: - Insight construction
 
   private static func overspend(
-    _ earmark: EarmarkSnapshot, budget: InstrumentAmount, projection: Projection,
+    _ earmark: EarmarkSnapshot,
+    budget: InstrumentAmount,
+    projection: Projection,
     context: InsightContext
   ) -> Insight {
     let overBy = Decimal(projection.projected - projection.budgetMagnitude)
@@ -90,7 +98,9 @@ enum EarmarkBudgetInsights {
   }
 
   private static func underspend(
-    _ earmark: EarmarkSnapshot, budget: InstrumentAmount, projection: Projection,
+    _ earmark: EarmarkSnapshot,
+    budget: InstrumentAmount,
+    projection: Projection,
     context: InsightContext
   ) -> Insight {
     let roomToSpare = Decimal(projection.budgetMagnitude - projection.projected)
@@ -105,7 +115,8 @@ enum EarmarkBudgetInsights {
       framing: .positive,
       actionability: .informational,
       surprise: min(1 - projection.fraction, 1),
-      monetaryImpact: InstrumentAmount(quantity: roomToSpare, instrument: context.reportingCurrency),
+      monetaryImpact: InstrumentAmount(
+        quantity: roomToSpare, instrument: context.reportingCurrency),
       facts: projectionFacts(budget: budget, projection: projection, context: context),
       references: InsightReferences(earmarkIds: [earmark.id]))
   }
@@ -117,7 +128,9 @@ enum EarmarkBudgetInsights {
       InsightFact("Budget", context.formatted(budget)),
       InsightFact("Spent so far", context.formatted(Decimal(projection.spentMagnitude))),
       InsightFact("Projected", context.formatted(Decimal(projection.projected))),
-      InsightFact("Window elapsed", projection.elapsedFraction.formatted(.percent.precision(.fractionLength(0)))),
+      InsightFact(
+        "Window elapsed",
+        projection.elapsedFraction.formatted(.percent.precision(.fractionLength(0)))),
     ]
   }
 

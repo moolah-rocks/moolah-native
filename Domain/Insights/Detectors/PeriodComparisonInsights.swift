@@ -12,7 +12,8 @@ enum PeriodComparisonInsights {
   ) -> [Insight] {
     let currentBucket = FinancialMonth.key(
       for: context.now, monthEnd: context.financialMonthEnd)
-    let complete = monthly
+    let complete =
+      monthly
       .filter { $0.month < currentBucket }
       .sorted { $0.month < $1.month }
     guard complete.count >= 2 else { return [] }
@@ -21,7 +22,9 @@ enum PeriodComparisonInsights {
     if let monthOverMonth = compare(
       latest: complete[complete.count - 1],
       baseline: complete[complete.count - 2],
-      kind: .monthOverMonthDelta, label: "last month", context: context, threshold: threshold)
+      label: "last month",
+      context: context,
+      threshold: threshold)
     {
       insights.append(monthOverMonth)
     }
@@ -34,7 +37,6 @@ enum PeriodComparisonInsights {
   private static func compare(
     latest: MonthlyIncomeExpense,
     baseline: MonthlyIncomeExpense,
-    kind: InsightKind,
     label: String,
     context: InsightContext,
     threshold: Double
@@ -49,8 +51,8 @@ enum PeriodComparisonInsights {
     let deltaAmount = Decimal(-(latestSpend - baselineSpend))
     let monthDate = CategorySpendSeries.monthDate(latest.month) ?? latest.end
     return Insight(
-      id: "\(kind.rawValue):\(latest.month)",
-      kind: kind,
+      id: "\(InsightKind.monthOverMonthDelta.rawValue):\(latest.month)",
+      kind: .monthOverMonthDelta,
       title: increased ? "Spending up vs \(label)" : "Spending down vs \(label)",
       detail:
         "You spent \(context.formatted(Decimal(-latestSpend))) — "

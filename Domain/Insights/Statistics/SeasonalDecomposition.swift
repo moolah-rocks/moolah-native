@@ -34,7 +34,8 @@ enum SeasonalDecomposition {
     let trend = movingAverageTrend(values, window: max(period, 2))
 
     let useSeasonal = period > 1 && count >= 2 * period
-    let seasonal = useSeasonal
+    let seasonal =
+      useSeasonal
       ? seasonalComponent(values, trend: trend, period: period)
       : [Double](repeating: 0, count: count)
 

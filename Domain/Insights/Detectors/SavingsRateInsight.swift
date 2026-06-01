@@ -11,7 +11,8 @@ enum SavingsRateInsight {
   ) -> [Insight] {
     let complete = InsightAggregates.completeMonths(monthly, context: context)
     let rates: [Double] = complete.compactMap { month in
-      let income = Double(truncating: InsightAggregates.incomeMagnitude(month.totalIncome) as NSDecimalNumber)
+      let income = Double(
+        truncating: InsightAggregates.incomeMagnitude(month.totalIncome) as NSDecimalNumber)
       guard income > 0 else { return nil }
       let net = Double(truncating: month.totalProfit.quantity as NSDecimalNumber)
       return net / income
@@ -43,7 +44,8 @@ enum SavingsRateInsight {
           InsightFact("Current savings rate", percent(latest)),
           InsightFact("Direction", rising ? "Rising" : "Falling"),
           InsightFact("Months analysed", "\(rates.count)"),
-          InsightFact("Trend p-value", result.pValue.formatted(.number.precision(.fractionLength(3)))),
+          InsightFact(
+            "Trend p-value", result.pValue.formatted(.number.precision(.fractionLength(3)))),
         ],
         references: InsightReferences(instrumentIds: [context.reportingCurrency.id]))
     ]

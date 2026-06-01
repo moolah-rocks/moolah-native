@@ -39,8 +39,9 @@ enum CategorySpendSeries {
   }
 
   /// Sentinel category id used to key uncategorized spend.
-  static let uncategorizedKey = UUID(
-    uuidString: "00000000-0000-0000-0000-0000000000FF") ?? UUID()
+  static let uncategorizedKey =
+    UUID(
+      uuidString: "00000000-0000-0000-0000-0000000000FF") ?? UUID()
 
   private static func series(from rows: [ExpenseBreakdown]) -> [MonthlySpendPoint] {
     var magnitudeByMonth: [String: Double] = [:]

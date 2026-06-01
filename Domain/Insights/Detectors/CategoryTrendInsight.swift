@@ -42,8 +42,11 @@ enum CategoryTrendInsight {
     return significant.compactMap { hypothesis in
       guard let entry = results[hypothesis.tag] else { return nil }
       return makeInsight(
-        categoryId: hypothesis.tag, result: entry.result, points: entry.points,
-        categories: categories, context: context)
+        categoryId: hypothesis.tag,
+        result: entry.result,
+        points: entry.points,
+        categories: categories,
+        context: context)
     }
   }
 
@@ -57,7 +60,8 @@ enum CategoryTrendInsight {
     guard result.statistic != 0, let latest = points.last else { return nil }
     let months = points.count
     let totalChange = result.sensSlope * Double(months - 1)
-    let resolved = categoryId == CategorySpendSeries.uncategorizedKey
+    let resolved =
+      categoryId == CategorySpendSeries.uncategorizedKey
       ? nil : categories.by(id: categoryId)
     let categoryName = resolved.map { categories.path(for: $0) } ?? "Uncategorized"
     let rising = result.isIncreasing
@@ -85,7 +89,8 @@ enum CategoryTrendInsight {
         InsightFact("Direction", rising ? "Rising" : "Falling"),
         InsightFact("Per month", perMonth),
         InsightFact("Over \(months) months", context.formatted(Decimal(-abs(totalChange)))),
-        InsightFact("Trend p-value", result.pValue.formatted(.number.precision(.fractionLength(3)))),
+        InsightFact(
+          "Trend p-value", result.pValue.formatted(.number.precision(.fractionLength(3)))),
       ],
       references: InsightReferences(
         categoryIds: resolved.map { [$0.id] } ?? [],
