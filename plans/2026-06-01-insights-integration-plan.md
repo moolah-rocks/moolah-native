@@ -29,26 +29,82 @@ Foundation Models is strictly additive on top.
 
 ## Phase A — Input-assembly layer (the async seam) — **critical path**
 
-The one thing the engine can't do itself. New `Features/Insights/` code that,
-given the loaded stores + `BackendProvider`, builds an `InsightInput`:
+The one thing the engine can't do itself. New `Features/Insights/` (or
+`Backends/GRDB`) code that, given the loaded stores + `BackendProvider`, builds
+an `InsightInput`.
 
-- `transactions` ← `TransactionRepository.fetchAll` → flatten each leg through
-  `InstrumentConversionService` → `InsightTransaction.records(from:categories:convert:)`.
-  Track the dropped-leg count for a future "data incomplete" signal.
+### Do **not** build the "load every transaction" version
+
+The naive shape — `transactions ← TransactionRepository.fetchAll` → flatten every
+leg → `InsightTransaction.records(...)` — is O(all history) in memory **and** runs
+an FX conversion per leg on every refresh. Unacceptable for users with years of
+data. It is also unnecessary: most detectors don't read raw transactions at all,
+and those that do need only a bounded window or a cheap aggregate.
+
+**Who reads raw rows:** only the merchant / anomaly / subscription / habit
+detectors. Everything else already consumes pre-aggregated inputs (below) — leave
+those as-is. The raw-row consumers decompose cleanly:
+
+| Detector | True data need |
+|---|---|
+| Subscription detection, lapsed-merchant | per-payee cadence — ~13 months, projected columns only |
+| Large-tx anomaly, new-merchant, unusual-day, windfall | recent candidates (≤30 d) **+ a baseline distribution that can be aggregated** |
+| Fee-spend, unbudgeted-category, group-concentration | windowed `SUM` by category / account → pure SQL |
+
+### Target: an SQL-backed `InsightDataSource`
+
+Add repository queries that return **pre-aggregated summaries**, mirroring
+`GRDBAnalysisRepository` (SQL `GROUP BY` + per-`(day, instrument)` conversion):
+
+- per-day spend totals (`GROUP BY DATE(date)`) → unusual-day, weekend-skew;
+- per-category windowed `SUM` → fee, unbudgeted, group-concentration;
+- per-payee `(count, first_seen, last_seen, sum)` → new-merchant, lapsed-merchant,
+  subscription pre-filter;
+- per-category amount **samples** for the MAD baseline → large-tx anomaly;
+- a **bounded recent-candidate window** of projected rows (date, payee, signed
+  amount, category_id, account_id, instrument) for detectors that must cite a
+  specific `transactionId`.
+
+Memory becomes O(payees + categories + days + recent window) — independent of
+total transaction count. The still-aggregate inputs stay as today:
+
 - `monthly` / `expenseBreakdown` / `dailyBalances` ← `AnalysisStore`.
 - `earmarks` ← join `EarmarkStore.earmarks` with its converted balance / saved /
   spent dictionaries into `EarmarkSnapshot`; `budgetedCategoryIds` from line items.
 - `profitLoss` / `capitalGains` ← `ReportingStore`.
 - `accountGroups` + `accountGroupMembership` ← `AccountGroupStore` + `AccountStore`.
-- `uncategorizedTransactionCount` ← `Transaction.needsReview` count;
+- `uncategorizedTransactionCount` ← `Transaction.needsReview` (a `COUNT`, not rows);
   `pendingTransferCount` / `oldestPendingTransferDate` ← `TransferSuggestionRepository`.
 
-Runs **off-main** per `guides/CONCURRENCY_GUIDE.md`. Unit-tested against
-`TestBackend` with realistic seeded data — this is where detector thresholds get
-validated beyond the unit fixtures.
+### Two more cost levers
 
-**Exit criteria:** `InsightInputBuilder` produces a correct `InsightInput` from a
-seeded `TestBackend`; conversion-failure path covered.
+- **Conversion**: convert at the `(day, instrument)` bucket like
+  `GRDBAnalysisRepository.convertedQuantity` — collapses thousands of calls to a
+  handful, same-instrument short-circuits, single-currency profiles pay ~nothing.
+  Never convert per leg.
+- **Recompute cadence** (see Phase H): detectors are deterministic given inputs;
+  compute on data-change ticks (the existing `ValueObservation` / rate-tick
+  streams) and cache `[ScoredInsight]` rather than rebuilding on every open.
+  Design the data source to support this.
+
+### Implication for the detector input model
+
+Some detectors that currently scan `[InsightTransaction]` (`SpendHabitInsights`,
+`SavingsOpportunityInsights.feeSpend`, `AccountGroupInsights`,
+`BudgetCoverageInsights`) will instead take pre-aggregated summary inputs. The
+pure/synchronous detector contract is unchanged — only the *shape* handed in
+changes. The recent-window detectors keep a small row slice so they can reference
+a specific transaction.
+
+Runs **off-main** per `guides/CONCURRENCY_GUIDE.md`; query plans pinned per
+`guides/DATABASE_CODE_GUIDE.md`. Unit-tested against `TestBackend` with realistic
+seeded data — this is where detector thresholds get validated beyond unit fixtures.
+
+**Exit criteria:** `InsightDataSource` produces correct summaries + a bounded
+recent window from a seeded `TestBackend`; **memory does not scale with total
+transaction count** (covered by a test/benchmark on a large seed); conversion runs
+per `(day, instrument)` not per leg; conversion-failure path covered (Rule 11 —
+drop the leg, never guess; preserve sign).
 
 ## Phase B — `@MainActor InsightStore`
 
@@ -115,17 +171,17 @@ input-model extension, not new infrastructure.
 
 ## Recommended first PR
 
-Phases **A–C** as a thin vertical slice: builder → `InsightStore` → dashboard
-panel with template narration and in-memory dismissals. That puts real insights in
-front of a user end to end. Persistence (D), LLM polish (E), and the assistant (F)
-layer on top without rework.
+Phases **A–C** as a thin vertical slice: `InsightDataSource` → `InsightStore` →
+dashboard panel with template narration and in-memory dismissals. That puts real
+insights in front of a user end to end. Persistence (D), LLM polish (E), and the
+assistant (F) layer on top without rework.
 
 ## Dependency order
 
 ```
-A (input builder) ─┬─> B (store) ──> C (dashboard)  ← first user-visible PR
-                   │                    └─> D (persist dismissals)
-                   └─> G (extra detectors, parallel feed)
+A (InsightDataSource) ─┬─> B (store) ──> C (dashboard)  ← first user-visible PR
+                       │                    └─> D (persist dismissals)
+                       └─> G (extra detectors, parallel feed)
 B ──> E (FM narration) ──> F (assistant)
 H (perf / tuning / settings / help) spans C onward
 ```
