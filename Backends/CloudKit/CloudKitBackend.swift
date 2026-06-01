@@ -10,6 +10,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let transferSuggestions: any TransferSuggestionRepository
   let earmarks: any EarmarkRepository
   let analysis: any AnalysisRepository
+  let insightDataSource: any InsightDataSource
   let investments: any InvestmentRepository
   let conversionService: any InstrumentConversionService
   let csvImportProfiles: any CSVImportProfileRepository
@@ -136,6 +137,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.transferSuggestions = repos.transferSuggestions
     self.earmarks = repos.earmarks
     self.analysis = repos.analysis
+    self.insightDataSource = repos.insightDataSource
     self.investments = repos.investments
     self.csvImportProfiles = repos.csvImportProfiles
     self.importRules = repos.importRules
@@ -158,6 +160,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     let investments: GRDBInvestmentRepository
     let transactionLegs: GRDBTransactionLegRepository
     let analysis: GRDBAnalysisRepository
+    let insightDataSource: GRDBInsightDataSource
     let csvImportProfiles: GRDBCSVImportProfileRepository
     let importRules: GRDBImportRuleRepository
   }
@@ -208,6 +211,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
         onRecordChanged: hooks.onTransactionLegChanged,
         onRecordDeleted: hooks.onTransactionLegDeleted),
       analysis: resolving.analysis,
+      insightDataSource: resolving.insightDataSource,
       csvImportProfiles: GRDBCSVImportProfileRepository(
         database: database,
         onRecordChanged: hooks.onCSVImportProfileChanged,
@@ -229,6 +233,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     let earmarks: GRDBEarmarkRepository
     let investments: GRDBInvestmentRepository
     let analysis: GRDBAnalysisRepository
+    let insightDataSource: GRDBInsightDataSource
   }
 
   /// The read-side instrument resolver and the write-side registrar,
@@ -277,6 +282,11 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
         onRecordChanged: hooks.onInvestmentChanged,
         onRecordDeleted: hooks.onInvestmentDeleted),
       analysis: GRDBAnalysisRepository(
+        database: database,
+        instrument: instrument,
+        conversionService: conversionService,
+        instrumentResolver: resolver),
+      insightDataSource: GRDBInsightDataSource(
         database: database,
         instrument: instrument,
         conversionService: conversionService,
