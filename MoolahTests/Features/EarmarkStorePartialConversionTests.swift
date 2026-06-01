@@ -7,6 +7,19 @@ import Testing
 @MainActor
 struct EarmarkStorePartialConversionTests {
 
+  /// Timeout for the first-emission convergence waits in this suite.
+  ///
+  /// Deliberately more generous than the helper's 2s default: unlike the
+  /// other store tests (which drive emissions via an explicit action such
+  /// as `applyDelta`), these waits race the store's init-spawned
+  /// observation task through a GRDB `observeAll()` emission *and* N async
+  /// per-earmark conversion calls. On a loaded CI runner that first
+  /// emission can land just past 2s — a timing artefact, not a regression
+  /// (see issue #1025). `waitForNextEmission` polls the predicate every
+  /// 20ms, so the fast path still returns the instant state settles; the
+  /// larger cap only buys headroom for a slow runner.
+  private static let convergenceTimeout: Duration = .seconds(10)
+
   /// When one earmark's positions can't be converted to its own instrument,
   /// other earmarks whose conversions succeed still appear in
   /// `convertedBalances`. The aggregate `convertedTotalBalance` stays nil
@@ -63,7 +76,8 @@ struct EarmarkStorePartialConversionTests {
     // balance is populated is sufficient to assert convergence.
     try await store.waitForNextEmission(
       matching: { $0.convertedBalance(for: healthyEarmark.id)?.quantity == 300 },
-      description: "healthy earmark balance settled"
+      description: "healthy earmark balance settled",
+      timeout: Self.convergenceTimeout
     )
 
     #expect(store.convertedBalance(for: healthyEarmark.id)?.quantity == 300)
@@ -115,7 +129,8 @@ struct EarmarkStorePartialConversionTests {
     // background.
     try await store.waitForNextEmission(
       matching: { $0.convertedBalance(for: audEarmark.id)?.quantity == 400 },
-      description: "AUD earmark balance settled"
+      description: "AUD earmark balance settled",
+      timeout: Self.convergenceTimeout
     )
 
     // Aggregate cannot be computed (EUR → AUD fails). Per-earmark balances
