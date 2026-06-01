@@ -33,7 +33,9 @@ struct InsightEngine: Sendable {
     insights += cashFlowInsights(input)
     insights += budgetInsights(input)
     insights += investmentInsights(input)
-    insights += IncomeInsights.detect(incomeStreams: incomeStreams, context: context)
+    insights += incomeInsights(input, incomeStreams: incomeStreams)
+    insights += habitInsights(input)
+    insights += structuralInsights(input)
     return insights
   }
 
@@ -125,6 +127,36 @@ struct InsightEngine: Sendable {
     insights += NetWorthInsights.detect(dailyBalances: input.dailyBalances, context: input.context)
     insights += InvestmentInsights.detect(
       profitLoss: input.profitLoss, capitalGains: input.capitalGains, context: input.context)
+    return insights
+  }
+
+  private func incomeInsights(
+    _ input: InsightInput, incomeStreams: [DetectedSubscription]
+  ) -> [Insight] {
+    let context = input.context
+    var insights: [Insight] = []
+    insights += IncomeInsights.detect(incomeStreams: incomeStreams, context: context)
+    insights += IncomeExtraInsights.windfall(transactions: input.transactions, context: context)
+    insights += IncomeExtraInsights.payRateChange(incomeStreams: incomeStreams, context: context)
+    return insights
+  }
+
+  private func habitInsights(_ input: InsightInput) -> [Insight] {
+    let context = input.context
+    var insights: [Insight] = []
+    insights += SpendHabitInsights.lapsedMerchant(
+      transactions: input.transactions, context: context)
+    insights += SpendHabitInsights.weekendSkew(transactions: input.transactions, context: context)
+    return insights
+  }
+
+  /// Account-structure and data-quality insights (post-design-doc features).
+  private func structuralInsights(_ input: InsightInput) -> [Insight] {
+    var insights: [Insight] = []
+    insights += AccountGroupInsights.groupSpendConcentration(input)
+    insights += BudgetCoverageInsights.unbudgetedCategory(input)
+    insights += DataQualityInsights.uncategorizedBacklog(input)
+    insights += DataQualityInsights.unreconciledTransfers(input)
     return insights
   }
 }

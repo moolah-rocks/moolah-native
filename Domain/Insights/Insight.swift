@@ -117,6 +117,7 @@ struct InsightReferences: Sendable, Hashable {
   var accountIds: [UUID]
   var categoryIds: [UUID]
   var earmarkIds: [UUID]
+  var groupIds: [UUID]
   var instrumentIds: [String]
   var transactionIds: [UUID]
 
@@ -124,12 +125,14 @@ struct InsightReferences: Sendable, Hashable {
     accountIds: [UUID] = [],
     categoryIds: [UUID] = [],
     earmarkIds: [UUID] = [],
+    groupIds: [UUID] = [],
     instrumentIds: [String] = [],
     transactionIds: [UUID] = []
   ) {
     self.accountIds = accountIds
     self.categoryIds = categoryIds
     self.earmarkIds = earmarkIds
+    self.groupIds = groupIds
     self.instrumentIds = instrumentIds
     self.transactionIds = transactionIds
   }

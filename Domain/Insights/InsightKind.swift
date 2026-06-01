@@ -54,6 +54,20 @@ enum InsightKind: String, Sendable, Hashable, CaseIterable {
   case paycheckTimingPattern
   case incomeStabilityScore
   case missingPaycheckAlert
+  case windfallIncome
+  case payRateChange
+
+  // K. Account structure (post-design-doc: account groups)
+  case groupSpendConcentration
+
+  // L. Data quality (post-design-doc: import provenance, transfer detection)
+  case uncategorizedBacklog
+  case unreconciledTransfers
+
+  // M. Merchant & budget coverage
+  case lapsedMerchant
+  case weekendSpendSkew
+  case unbudgetedCategory
 }
 
 extension InsightKind {
@@ -61,26 +75,32 @@ extension InsightKind {
   var category: InsightCategory {
     switch self {
     case .newRecurringDetected, .subscriptionPriceHike, .duplicateSubscription,
-      .subscriptionCancellationCandidate, .subscriptionOverspend:
+      .subscriptionCancellationCandidate, .subscriptionOverspend, .lapsedMerchant:
       return .subscriptions
     case .largeTransactionAnomaly, .newMerchantAlert, .unusualDaySpend,
       .categorySpendingAnomaly:
       return .anomalies
     case .categoryTrendRising, .categoryTrendFalling, .monthOverMonthDelta,
-      .categoryMixShift:
+      .categoryMixShift, .weekendSpendSkew:
       return .trends
     case .upcomingBillWarning, .projectedMonthEndBalance, .savingsRateTrend,
       .runwayEstimate:
       return .cashFlow
-    case .earmarkBurndownProjection, .earmarkUnderspend, .savingsGoalETA:
+    case .earmarkBurndownProjection, .earmarkUnderspend, .savingsGoalETA,
+      .unbudgetedCategory:
       return .budgets
     case .idleCashAlert, .feeSpend:
       return .savings
     case .netWorthMilestone, .investmentConcentrationRisk, .topPerformer,
       .bottomPerformer, .capitalGainsHarvest:
       return .investments
-    case .paycheckTimingPattern, .incomeStabilityScore, .missingPaycheckAlert:
+    case .paycheckTimingPattern, .incomeStabilityScore, .missingPaycheckAlert,
+      .windfallIncome, .payRateChange:
       return .income
+    case .groupSpendConcentration:
+      return .accounts
+    case .uncategorizedBacklog, .unreconciledTransfers:
+      return .dataQuality
     }
   }
 }
@@ -97,4 +117,6 @@ enum InsightCategory: String, Sendable, Hashable, CaseIterable {
   case savings
   case investments
   case income
+  case accounts
+  case dataQuality
 }
