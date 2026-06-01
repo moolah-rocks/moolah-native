@@ -1,15 +1,22 @@
 #!/usr/bin/env bash
 # Prepares the build tree for local CloudKit development.
 #
-# 1. Writes .build/Moolah.entitlements with the full sandbox + CloudKit keys.
-#    The icloud-container-identifiers list contains ONLY the test container —
-#    a locally-signed binary cannot claim the production container. See
-#    issue #495.
+# 1. Writes .build/Moolah.entitlements with the full sandbox + CloudKit keys
+#    (host app). The icloud-container-identifiers list contains ONLY the test
+#    container — a locally-signed binary cannot claim the production container.
+#    See issue #495.
 # 2. Produces project-entitlements.yml — a copy of project.yml that augments
-#    each app target's existing Debug block with CODE_SIGN_ENTITLEMENTS
-#    pointing at .build/Moolah.entitlements and the CLOUDKIT_ENABLED
-#    compilation condition. (project.yml already carries a Debug block for
-#    CLOUDKIT_ENVIRONMENT.)
+#    each Debug build with CODE_SIGN_ENTITLEMENTS:
+#      - Host apps (Moolah_iOS/_macOS): point at .build/Moolah.entitlements
+#        and add the CLOUDKIT_ENABLED compilation condition. (project.yml
+#        already carries a Debug block for CLOUDKIT_ENVIRONMENT.)
+#      - Share extensions (MoolahImportExtension_iOS/_macOS): point at the
+#        target's own Entitlements.entitlements (sandbox + App Group only).
+#        Without this, the Debug-built .appex has no App Group entitlement,
+#        macOS's pluginkit refuses to register it, and the share-sheet item
+#        never appears. The extension entitlement doesn't declare iCloud or
+#        change any storage path — host-app iCloud container and the
+#        on-disk DB location are unaffected.
 #
 # Only Debug is touched: the only locally-signed CloudKit-enabled build is
 # `just build-mac` / `just run-mac` (Debug). Release builds are produced by
@@ -85,24 +92,23 @@ with open("project.yml") as f:
 
 entitlements_path = os.environ["ENTITLEMENTS_FILE"]
 
+# Host app targets already carry a Debug: block (CLOUDKIT_ENVIRONMENT).
+# Insert CODE_SIGN_ENTITLEMENTS + the CLOUDKIT_ENABLED compilation
+# condition at the top of it. Inserting a second Debug: sibling would
+# make xcodegen's YAML loader keep only the last occurrence and silently
+# drop these keys.
 for target in ("Moolah_iOS", "Moolah_macOS"):
     target_header = f"  {target}:\n    type: application\n"
     target_start = content.find(target_header)
     if target_start == -1:
         raise SystemExit(f"inject-entitlements: could not find target {target}")
 
-    configs_marker = "      configs:\n"
-    configs_pos = content.find(configs_marker, target_start)
+    configs_pos = content.find("      configs:\n", target_start)
     if configs_pos == -1:
         raise SystemExit(
             f"inject-entitlements: could not find configs: block for {target}"
         )
 
-    # Insert CODE_SIGN_ENTITLEMENTS and the CLOUDKIT_ENABLED compilation
-    # condition at the top of the existing Debug: block. project.yml already
-    # carries a Debug: block (for CLOUDKIT_ENVIRONMENT: Development);
-    # inserting a second Debug: sibling would make xcodegen's YAML loader
-    # keep only the last occurrence and silently drop these keys.
     debug_header = "        Debug:\n"
     debug_pos = content.find(debug_header, configs_pos)
     if debug_pos == -1:
@@ -116,11 +122,38 @@ for target in ("Moolah_iOS", "Moolah_macOS"):
     )
     content = content[:debug_insert_at] + debug_injection + content[debug_insert_at:]
 
-# Sanity check — both app targets now carry a Debug-scoped entitlement block.
+# Share-extension targets have no Debug: block in project.yml — their
+# entitlement is Release-only there. Insert a fresh Debug: block at the
+# top of `configs:` that points at the target's own entitlements file
+# (sandbox + group.rocks.moolah.shared). Without an App Group at signing
+# time the Debug .appex won't be registered by macOS pluginkit. The
+# entitlement does not include iCloud or any storage-path override, so
+# the host app's iCloud container and on-disk DB location are unchanged.
+for target in ("MoolahImportExtension_iOS", "MoolahImportExtension_macOS"):
+    target_header = f"  {target}:\n    type: app-extension\n"
+    target_start = content.find(target_header)
+    if target_start == -1:
+        raise SystemExit(f"inject-entitlements: could not find target {target}")
+
+    configs_marker = "      configs:\n"
+    configs_pos = content.find(configs_marker, target_start)
+    if configs_pos == -1:
+        raise SystemExit(
+            f"inject-entitlements: could not find configs: block for {target}"
+        )
+
+    insert_at = configs_pos + len(configs_marker)
+    debug_block = (
+        "        Debug:\n"
+        f"          CODE_SIGN_ENTITLEMENTS: {target}/Entitlements.entitlements\n"
+    )
+    content = content[:insert_at] + debug_block + content[insert_at:]
+
+# Sanity check — all four targets now carry a Debug-scoped entitlement block.
 debug_marker = "        Debug:\n          CODE_SIGN_ENTITLEMENTS:"
-if content.count(debug_marker) != 2:
+if content.count(debug_marker) != 4:
     raise SystemExit(
-        "inject-entitlements: expected 2 Debug entitlement blocks, "
+        "inject-entitlements: expected 4 Debug entitlement blocks, "
         f"found {content.count(debug_marker)}"
     )
 
