@@ -18,7 +18,9 @@ enum SavingsGoalInsight {
   }
 
   private static func evaluate(
-    earmark: EarmarkSnapshot, goal: InstrumentAmount, saved: InstrumentAmount,
+    earmark: EarmarkSnapshot,
+    goal: InstrumentAmount,
+    saved: InstrumentAmount,
     context: InsightContext
   ) -> Insight? {
     if saved.quantity >= goal.quantity {
@@ -29,13 +31,15 @@ enum SavingsGoalInsight {
     else {
       return progressOnly(earmark, goal: goal, saved: saved, progress: progress, context: context)
     }
-    return eta(earmark, goal: goal, saved: saved, progress: progress, date: etaDate, context: context)
+    return eta(earmark, goal: goal, saved: saved, date: etaDate, context: context)
   }
 
   /// Project the completion date from the contribution rate since the goal
   /// started. `nil` when there's no start date or no positive accrual.
   private static func projectedCompletion(
-    _ earmark: EarmarkSnapshot, goal: InstrumentAmount, saved: InstrumentAmount,
+    _ earmark: EarmarkSnapshot,
+    goal: InstrumentAmount,
+    saved: InstrumentAmount,
     context: InsightContext
   ) -> Date? {
     guard let start = earmark.savingsStartDate else { return nil }
@@ -51,7 +55,9 @@ enum SavingsGoalInsight {
   // MARK: - Insight construction
 
   private static func reached(
-    _ earmark: EarmarkSnapshot, goal: InstrumentAmount, saved: InstrumentAmount,
+    _ earmark: EarmarkSnapshot,
+    goal: InstrumentAmount,
+    saved: InstrumentAmount,
     context: InsightContext
   ) -> Insight {
     Insight(
@@ -72,9 +78,13 @@ enum SavingsGoalInsight {
   }
 
   private static func eta(
-    _ earmark: EarmarkSnapshot, goal: InstrumentAmount, saved: InstrumentAmount,
-    progress: Double, date: Date, context: InsightContext
+    _ earmark: EarmarkSnapshot,
+    goal: InstrumentAmount,
+    saved: InstrumentAmount,
+    date: Date,
+    context: InsightContext
   ) -> Insight {
+    let progress = ratio(saved.quantity, goal.quantity)
     let etaText = date.formatted(.dateTime.month(.abbreviated).year())
     return Insight(
       id: "\(InsightKind.savingsGoalETA.rawValue):eta:\(earmark.id.uuidString)",
@@ -98,8 +108,11 @@ enum SavingsGoalInsight {
   }
 
   private static func progressOnly(
-    _ earmark: EarmarkSnapshot, goal: InstrumentAmount, saved: InstrumentAmount,
-    progress: Double, context: InsightContext
+    _ earmark: EarmarkSnapshot,
+    goal: InstrumentAmount,
+    saved: InstrumentAmount,
+    progress: Double,
+    context: InsightContext
   ) -> Insight? {
     // Only celebrate meaningful progress; an untouched goal isn't news.
     guard progress >= 0.5 else { return nil }

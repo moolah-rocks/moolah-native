@@ -64,7 +64,9 @@ enum IncomeInsights {
     _ stream: DetectedSubscription, context: InsightContext
   ) -> Insight? {
     guard stream.amounts.count >= 3 else { return nil }
-    let magnitudes = stream.amounts.map { Double(truncating: ($0 < 0 ? -$0 : $0) as NSDecimalNumber) }
+    let magnitudes = stream.amounts.map {
+      Double(truncating: ($0 < 0 ? -$0 : $0) as NSDecimalNumber)
+    }
     guard let variation = DescriptiveStatistics.coefficientOfVariation(magnitudes) else {
       return nil
     }
@@ -89,7 +91,8 @@ enum IncomeInsights {
       monetaryImpact: nil,
       facts: [
         InsightFact("Source", stream.displayPayee),
-        InsightFact("Stability", "\((score * 100).formatted(.number.precision(.fractionLength(0))))/100"),
+        InsightFact(
+          "Stability", "\((score * 100).formatted(.number.precision(.fractionLength(0))))/100"),
         InsightFact("Variation", percent(variation)),
       ],
       references: InsightReferences(

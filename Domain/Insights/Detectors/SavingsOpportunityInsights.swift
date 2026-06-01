@@ -30,7 +30,8 @@ enum SavingsOpportunityInsights {
     let categoryIds = Array(Set(fees.compactMap(\.categoryId)))
     return [
       Insight(
-        id: "\(InsightKind.feeSpend.rawValue):\(FinancialMonth.key(for: context.now, monthEnd: context.financialMonthEnd))",
+        id:
+          "\(InsightKind.feeSpend.rawValue):\(FinancialMonth.key(for: context.now, monthEnd: context.financialMonthEnd))",
         kind: .feeSpend,
         title: "You paid \(context.formatted(Decimal(-toDouble(total)))) in fees",
         detail:
@@ -66,7 +67,8 @@ enum SavingsOpportunityInsights {
 
     return [
       Insight(
-        id: "\(InsightKind.subscriptionOverspend.rawValue):\(FinancialMonth.key(for: context.now, monthEnd: context.financialMonthEnd))",
+        id:
+          "\(InsightKind.subscriptionOverspend.rawValue):\(FinancialMonth.key(for: context.now, monthEnd: context.financialMonthEnd))",
         kind: .subscriptionOverspend,
         title: "Subscriptions are \(percent(share)) of income",
         detail:
@@ -77,7 +79,8 @@ enum SavingsOpportunityInsights {
         framing: .negative,
         actionability: .review,
         surprise: min(share, 1),
-        monetaryImpact: InstrumentAmount(quantity: -monthlyTotal, instrument: context.reportingCurrency),
+        monetaryImpact: InstrumentAmount(
+          quantity: -monthlyTotal, instrument: context.reportingCurrency),
         facts: [
           InsightFact("Monthly subscriptions", context.formatted(monthlyTotal)),
           InsightFact("Share of income", percent(share)),

@@ -17,16 +17,23 @@ enum CashFlowForecastInsights {
     buffer: InstrumentAmount? = nil
   ) -> [Insight] {
     let bufferQuantity = buffer?.quantity ?? 0
-    let forecast = dailyBalances
-      .filter { $0.isForecast && context.daysUntil($0.date) >= 0 && context.daysUntil($0.date) <= horizonDays }
+    let forecast =
+      dailyBalances
+      .filter {
+        $0.isForecast && context.daysUntil($0.date) >= 0
+          && context.daysUntil($0.date) <= horizonDays
+      }
       .sorted { $0.date < $1.date }
     guard let trough = forecast.min(by: { $0.balance.quantity < $1.balance.quantity }) else {
       return []
     }
     guard trough.balance.quantity < bufferQuantity else { return [] }
 
-    let culprit = scheduledBills
-      .filter { context.daysUntil($0.date) >= 0 && $0.date <= trough.date && $0.amount.quantity < 0 }
+    let culprit =
+      scheduledBills
+      .filter {
+        context.daysUntil($0.date) >= 0 && $0.date <= trough.date && $0.amount.quantity < 0
+      }
       .min { $0.amount.quantity < $1.amount.quantity }
     let shortfall = bufferQuantity - trough.balance.quantity
     let dateText = trough.date.formatted(.dateTime.month(.abbreviated).day())

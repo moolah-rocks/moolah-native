@@ -121,12 +121,4 @@ struct ScheduledBill: Sendable, Identifiable, Hashable {
   /// Signed reporting-currency amount — negative for a bill (outflow).
   let amount: InstrumentAmount
   let accountId: UUID?
-
-  init(id: UUID, date: Date, payee: String?, amount: InstrumentAmount, accountId: UUID?) {
-    self.id = id
-    self.date = date
-    self.payee = payee
-    self.amount = amount
-    self.accountId = accountId
-  }
 }

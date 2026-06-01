@@ -22,8 +22,6 @@ enum SubscriptionDetector {
     /// Maximum coefficient of variation of the inter-arrival gaps. Rejects
     /// streams whose timing is too erratic to be a subscription.
     var maximumIntervalVariation: Double = 0.35
-
-    init() {}
   }
 
   /// Detect subscription streams among `transactions`. Pass `incomeStreams:
@@ -44,8 +42,11 @@ enum SubscriptionDetector {
     for (payee, records) in groups where !payee.isEmpty {
       guard
         let subscription = evaluate(
-          payee: payee, records: records, incomeStreams: incomeStreams,
-          parameters: parameters, calendar: calendar)
+          payee: payee,
+          records: records,
+          incomeStreams: incomeStreams,
+          parameters: parameters,
+          calendar: calendar)
       else { continue }
       detected.append(subscription)
     }

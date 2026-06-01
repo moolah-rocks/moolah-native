@@ -25,8 +25,6 @@ struct InsightRanker: Sendable {
     var recency: Double = 0.8
     var interest: Double = 0.7
     var fatigue: Double = 1.5
-
-    init() {}
   }
 
   /// Categories / earmarks the user has pinned — boosts their insights.
@@ -63,11 +61,13 @@ struct InsightRanker: Sendable {
     dismissals: [InsightKind: Int] = [:],
     interests: DeclaredInterests = DeclaredInterests()
   ) -> Double {
-    let magnitude = insight.monetaryImpact
+    let magnitude =
+      insight.monetaryImpact
       .map { abs(Double(truncating: $0.quantity as NSDecimalNumber)) } ?? 0
     let magnitudeTerm = log(magnitude + 1)
 
-    let ageDays = max(0, Double(calendar.dateComponents([.day], from: insight.date, to: now).day ?? 0))
+    let ageDays = max(
+      0, Double(calendar.dateComponents([.day], from: insight.date, to: now).day ?? 0))
     let recencyTerm = exp(-ageDays / recencyHalfLife)
 
     let interestTerm = matchesInterest(insight, interests: interests) ? 1.0 : 0.0
@@ -95,8 +95,12 @@ struct InsightRanker: Sendable {
     guaranteePositive: Bool = true
   ) -> [ScoredInsight] {
     let deduped = deduplicate(insights)
-    let scored = deduped
-      .map { ScoredInsight(insight: $0, score: score($0, now: now, dismissals: dismissals, interests: interests)) }
+    let scored =
+      deduped
+      .map {
+        ScoredInsight(
+          insight: $0, score: score($0, now: now, dismissals: dismissals, interests: interests))
+      }
       .sorted { $0.score > $1.score }
 
     guard displayCap > 0 else { return [] }
@@ -121,7 +125,9 @@ struct InsightRanker: Sendable {
     return result
   }
 
-  private func ensurePositive(in top: [ScoredInsight], from scored: [ScoredInsight]) -> [ScoredInsight] {
+  private func ensurePositive(in top: [ScoredInsight], from scored: [ScoredInsight])
+    -> [ScoredInsight]
+  {
     guard !top.contains(where: { $0.insight.framing == .positive }) else { return top }
     guard let bestPositive = scored.first(where: { $0.insight.framing == .positive }),
       !top.contains(where: { $0.id == bestPositive.id }),

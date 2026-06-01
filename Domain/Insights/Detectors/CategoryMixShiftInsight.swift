@@ -35,7 +35,8 @@ enum CategoryMixShiftInsight {
       }
     }
 
-    return shifts
+    return
+      shifts
       .sorted { abs($0.shift) > abs($1.shift) }
       .prefix(maximumResults)
       .map { makeInsight($0, recentMonth: recentMonth, categories: categories, context: context) }
@@ -74,7 +75,8 @@ enum CategoryMixShiftInsight {
     categories: Categories,
     context: InsightContext
   ) -> Insight {
-    let resolved = shift.categoryId == CategorySpendSeries.uncategorizedKey
+    let resolved =
+      shift.categoryId == CategorySpendSeries.uncategorizedKey
       ? nil : categories.by(id: shift.categoryId)
     let categoryName = resolved.map { categories.path(for: $0) } ?? "Uncategorized"
     let grew = shift.shift > 0

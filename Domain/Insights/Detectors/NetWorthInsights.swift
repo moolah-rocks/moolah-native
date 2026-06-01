@@ -13,7 +13,8 @@ enum NetWorthInsights {
     guard let latest = actual.last else { return [] }
     let current = latest.netWorth.quantity
 
-    let baseline = actual.last { context.daysSince($0.date) >= lookbackDays }?.netWorth.quantity
+    let baseline =
+      actual.last { context.daysSince($0.date) >= lookbackDays }?.netWorth.quantity
       ?? actual.first?.netWorth.quantity
     guard let baseline, current > baseline, current > 0 else { return [] }
 
