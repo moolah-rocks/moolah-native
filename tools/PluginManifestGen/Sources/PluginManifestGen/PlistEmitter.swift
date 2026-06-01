@@ -5,8 +5,16 @@ public enum PlistEmitter {
   /// extension. The static CFBundle/NSExtension keys live alongside the generated
   /// `NSExtensionActivationRule`, so the file produced here is the extension's
   /// `INFOPLIST_FILE` directly — no merge step is needed.
-  public static func emit(manifests: [Manifest]) -> String {
-    let predicate = activationRule(manifests: manifests)
+  ///
+  /// The activation rule is the dict-form `NSExtensionActivationSupportsWebPageWithMaxCount`
+  /// rather than a `SUBQUERY`-based URL predicate. The URL predicate shape was rejected
+  /// at parse time by Safari (no log line, just silently dropped from activation
+  /// candidates) and the extension never appeared in the share sheet on either
+  /// platform. Per-host filtering happens instead in `extension-entry.js` /
+  /// `MoolahDispatch.run`: an unsupported host short-circuits to
+  /// `{ error: "no-plugin", host }`, which the principal renders as the
+  /// `schemaMismatch` state.
+  public static func emit() -> String {
     return """
       <?xml version="1.0" encoding="UTF-8"?>
       <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -35,7 +43,10 @@ public enum PlistEmitter {
           <key>NSExtensionAttributes</key>
           <dict>
             <key>NSExtensionActivationRule</key>
-            <string>\(predicate)</string>
+            <dict>
+              <key>NSExtensionActivationSupportsWebPageWithMaxCount</key>
+              <integer>1</integer>
+            </dict>
             <key>NSExtensionJavaScriptPreprocessingFile</key>
             <string>extension-entry.bundle</string>
           </dict>
@@ -46,26 +57,6 @@ public enum PlistEmitter {
         </dict>
       </dict>
       </plist>
-      """
-  }
-
-  /// Emits just the `NSExtensionActivationRule` predicate string. Surfaced for
-  /// tests that want to inspect the predicate without parsing the surrounding
-  /// plist.
-  static func activationRule(manifests: [Manifest]) -> String {
-    if manifests.isEmpty {
-      return "FALSEPREDICATE"
-    }
-    let clauses = manifests.map { m in
-      #"(($att.URL.host == "\#(m.host)" OR $att.URL.host ENDSWITH ".\#(m.host)") AND $att.URL.path BEGINSWITH "\#(m.pathPrefix)")"#
-    }.joined(separator: " OR ")
-    return """
-      SUBQUERY(extensionItems, $item,
-        SUBQUERY($item.attachments, $att,
-          ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url"
-          AND (\(clauses))
-        ).@count > 0
-      ).@count > 0
       """
   }
 }

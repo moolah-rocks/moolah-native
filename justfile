@@ -132,6 +132,14 @@ build-mac: generate
         # and need a provisioning profile registered for the extension's
         # bundle id (rocks.moolah.app.importextension).
         args+=(CODE_SIGNING_ALLOWED=NO ENABLE_HARDENED_RUNTIME=NO)
+    else
+        # Let Xcode contact the developer portal to mint / refresh
+        # provisioning profiles on demand. Required the first time
+        # `ENABLE_ENTITLEMENTS=1` injects the extension's App Group
+        # entitlement and no profile yet exists for
+        # rocks.moolah.app.importextension; without the flag,
+        # Automatic signing fails with "no profiles found".
+        args+=(-allowProvisioningUpdates)
     fi
     xcodebuild build "${args[@]}"
 
@@ -151,6 +159,9 @@ run-mac *args: generate
     build=(-scheme Moolah-macOS -destination 'platform=macOS' -derivedDataPath .build)
     if [ -z "${DEVELOPMENT_TEAM:-}" ]; then
         build+=(CODE_SIGN_IDENTITY="-" ENABLE_HARDENED_RUNTIME=NO)
+    else
+        # See `build-mac` for the rationale on -allowProvisioningUpdates.
+        build+=(-allowProvisioningUpdates)
     fi
     xcodebuild build "${build[@]}"
     if [ -n "{{args}}" ]; then

@@ -227,14 +227,16 @@ targets:
         SKIP_INSTALL: YES
       configs:
         Release:
-          # Entitlements are Release-only — Debug builds the extension
-          # without the App Group capability so local builds don't need
-          # a Mac App Development provisioning profile (mirrors the main
-          # app target's pattern, see Moolah_macOS.configs.Release).
-          # Local Debug runs of the extension can't access the App Group
-          # inbox; rely on TestFlight builds for end-to-end testing of
-          # the import flow, or extend scripts/inject-entitlements.sh
-          # to inject extension entitlements at local build time.
+          # Plain `just generate` leaves Debug entitlement-free so local
+          # builds don't need a Mac App Development provisioning profile
+          # (mirrors the main app target's pattern, see
+          # Moolah_macOS.configs.Release). `ENABLE_ENTITLEMENTS=1 just
+          # generate` opts in: scripts/inject-entitlements.sh injects a
+          # Debug: block that points at this same entitlements file, so
+          # the .appex is signed with the App Group and macOS pluginkit
+          # registers it. Without that flag, the Debug build still
+          # produces an .appex but it has no App Group and the share
+          # sheet entry never appears.
           CODE_SIGN_ENTITLEMENTS: MoolahImportExtension_iOS/Entitlements.entitlements
 
   MoolahImportExtension_macOS:

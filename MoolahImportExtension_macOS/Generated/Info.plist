@@ -25,12 +25,10 @@
     <key>NSExtensionAttributes</key>
     <dict>
       <key>NSExtensionActivationRule</key>
-      <string>SUBQUERY(extensionItems, $item,
-  SUBQUERY($item.attachments, $att,
-    ANY $att.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url"
-    AND ((($att.URL.host == "macquarie.com.au" OR $att.URL.host ENDSWITH ".macquarie.com.au") AND $att.URL.path BEGINSWITH "/io") OR (($att.URL.host == "hsbc.com.au" OR $att.URL.host ENDSWITH ".hsbc.com.au") AND $att.URL.path BEGINSWITH "/gpib") OR (($att.URL.host == "commbank.com.au" OR $att.URL.host ENDSWITH ".commbank.com.au") AND $att.URL.path BEGINSWITH "/retail/netbank") OR (($att.URL.host == "americanexpress.com" OR $att.URL.host ENDSWITH ".americanexpress.com") AND $att.URL.path BEGINSWITH "/dashboard") OR (($att.URL.host == "americanexpress.com" OR $att.URL.host ENDSWITH ".americanexpress.com") AND $att.URL.path BEGINSWITH "/activity"))
-  ).@count > 0
-).@count > 0</string>
+      <dict>
+        <key>NSExtensionActivationSupportsWebPageWithMaxCount</key>
+        <integer>1</integer>
+      </dict>
       <key>NSExtensionJavaScriptPreprocessingFile</key>
       <string>extension-entry.bundle</string>
     </dict>
