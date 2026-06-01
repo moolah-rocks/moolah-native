@@ -1,5 +1,21 @@
 DEFINE SCHEMA
 
+    RECORD TYPE AccountGroupRecord (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        bucket          STRING QUERYABLE SEARCHABLE SORTABLE,
+        instrumentId    STRING QUERYABLE SEARCHABLE SORTABLE,
+        name            STRING QUERYABLE SEARCHABLE SORTABLE,
+        position        INT64 QUERYABLE SORTABLE,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
     RECORD TYPE AccountRecord (
         "___createTime"  TIMESTAMP,
         "___createdBy"   REFERENCE,
@@ -9,6 +25,7 @@ DEFINE SCHEMA
         "___recordID"    REFERENCE QUERYABLE,
         chainId          INT64 QUERYABLE SORTABLE,
         exchangeProvider STRING QUERYABLE SEARCHABLE SORTABLE,
+        groupId          STRING QUERYABLE SEARCHABLE SORTABLE,
         instrumentId     STRING QUERYABLE SEARCHABLE SORTABLE,
         isHidden         INT64 QUERYABLE SORTABLE,
         name             STRING QUERYABLE SEARCHABLE SORTABLE,
