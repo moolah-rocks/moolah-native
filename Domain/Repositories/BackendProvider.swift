@@ -11,6 +11,10 @@ protocol BackendProvider: Sendable {
   var transferSuggestions: any TransferSuggestionRepository { get }
   var earmarks: any EarmarkRepository { get }
   var analysis: any AnalysisRepository { get }
+  /// SQL-backed assembler of the pre-aggregated insight summaries + bounded
+  /// recent-candidate window the deterministic `InsightEngine` consumes.
+  /// Built from the same per-profile database as `analysis`.
+  var insightDataSource: any InsightDataSource { get }
   var investments: any InvestmentRepository { get }
   var conversionService: any InstrumentConversionService { get }
   var csvImportProfiles: any CSVImportProfileRepository { get }
