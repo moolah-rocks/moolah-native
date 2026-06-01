@@ -1,5 +1,19 @@
 # New Personalized-Insight Ideas — moolah-native (beyond Insight Catalog items 1–34)
 
+> **Implementation status (updated):** the following were implemented in
+> `Domain/Insights/` with tests in `MoolahTests/Domain/Insights/AdditionalInsightTests.swift`:
+> **C-1** uncategorized backlog, **B-1** unreconciled transfers
+> (`DataQualityInsights`); **A-1** group spend concentration
+> (`AccountGroupInsights`); **E-3** windfall income, **E-2** pay-rate change
+> (`IncomeExtraInsights`); **F-1** lapsed merchant, **E-4** weekend-spend skew
+> (`SpendHabitInsights`); **F-2** unbudgeted-category spotlight
+> (`BudgetCoverageInsights`). `InsightReferences` gained `groupIds`; `InsightInput`
+> gained the account-group, budgeted-category, and data-quality-count fields these
+> need. The remaining ideas (B-2/B-3 transfer-stream analysis, C-2/C-3/C-4 import
+> reconciliation, D-1…D-5 crypto/multi-instrument, E-1/E-5) are not yet built —
+> several need a parallel transfer-leg / native-instrument feed alongside
+> `InsightTransaction`.
+>
 > **Editor's note (added when saving):** this report was produced by a survey
 > agent against the codebase as of 2026-06-01, as the second half of the
 > insights-core task. One correction to its "cross-cutting prerequisite":

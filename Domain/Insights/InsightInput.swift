@@ -87,6 +87,25 @@ struct InsightInput: Sendable {
 
   let categories: Categories
 
+  /// Account groups the user has defined (`AccountGroupStore`), and the
+  /// `accountId → groupId` membership map. Drives group-level insights.
+  let accountGroups: [InsightAccountGroup]
+  let accountGroupMembership: [UUID: UUID]
+
+  /// Category ids that have a budget line item in some earmark
+  /// (`EarmarkStore`). Lets the budget-coverage detector spot a big
+  /// un-budgeted category.
+  let budgetedCategoryIds: Set<UUID>
+
+  /// Count of posted transactions whose every leg is uncategorized
+  /// (`Transaction.needsReview`). Drives the categorize-backlog nudge.
+  let uncategorizedTransactionCount: Int
+
+  /// Count of outstanding transfer suggestions awaiting merge
+  /// (`TransferSuggestionRepository`), with the oldest suggestion's date.
+  let pendingTransferCount: Int
+  let oldestPendingTransferDate: Date?
+
   init(
     context: InsightContext,
     transactions: [InsightTransaction] = [],
@@ -97,7 +116,13 @@ struct InsightInput: Sendable {
     earmarks: [EarmarkSnapshot] = [],
     profitLoss: [InstrumentProfitLoss] = [],
     capitalGains: [CapitalGainEvent] = [],
-    categories: Categories = Categories(from: [])
+    categories: Categories = Categories(from: []),
+    accountGroups: [InsightAccountGroup] = [],
+    accountGroupMembership: [UUID: UUID] = [:],
+    budgetedCategoryIds: Set<UUID> = [],
+    uncategorizedTransactionCount: Int = 0,
+    pendingTransferCount: Int = 0,
+    oldestPendingTransferDate: Date? = nil
   ) {
     self.context = context
     self.transactions = transactions
@@ -109,6 +134,12 @@ struct InsightInput: Sendable {
     self.profitLoss = profitLoss
     self.capitalGains = capitalGains
     self.categories = categories
+    self.accountGroups = accountGroups
+    self.accountGroupMembership = accountGroupMembership
+    self.budgetedCategoryIds = budgetedCategoryIds
+    self.uncategorizedTransactionCount = uncategorizedTransactionCount
+    self.pendingTransferCount = pendingTransferCount
+    self.oldestPendingTransferDate = oldestPendingTransferDate
   }
 }
 
@@ -121,4 +152,12 @@ struct ScheduledBill: Sendable, Identifiable, Hashable {
   /// Signed reporting-currency amount — negative for a bill (outflow).
   let amount: InstrumentAmount
   let accountId: UUID?
+}
+
+/// Minimal projection of an `AccountGroup` for insight narration —
+/// just the id and display name. The wiring layer builds these from
+/// `AccountGroupStore` alongside the `accountId → groupId` membership map.
+struct InsightAccountGroup: Sendable, Identifiable, Hashable {
+  let id: UUID
+  let name: String
 }
