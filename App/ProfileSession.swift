@@ -251,7 +251,8 @@ final class ProfileSession: Identifiable {
       sources: insightSources,
       backend: backend,
       profile: profile,
-      instrumentChanges: backend.instrumentChangeObserver)
+      instrumentChanges: backend.instrumentChangeObserver,
+      fixtureInsights: Self.uiTestingInsightFixtures())
     let cryptoWiring = Self.makeCryptoSyncWiring(
       backend: backend,
       registry: instrumentRegistry,

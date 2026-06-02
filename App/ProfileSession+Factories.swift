@@ -222,6 +222,18 @@ extension ProfileSession {
     return UITestSeedCryptoOverrides.overrides(for: seed)
   }
 
+  /// Returns fixture insights for the active UI-test seed, or `nil` for
+  /// production launches. Mirrors `uiTestingCryptoOverrides()`. Not `private`
+  /// because `finishInit` (in `ProfileSession.swift`) is the caller.
+  @MainActor
+  static func uiTestingInsightFixtures() -> InsightFixtures? {
+    guard CommandLine.arguments.contains("--ui-testing") else { return nil }
+    guard let raw = ProcessInfo.processInfo.environment["UI_TESTING_SEED"],
+      let seed = UITestSeed(rawValue: raw)
+    else { return nil }
+    return UITestSeedInsightOverrides.fixtures(for: seed)
+  }
+
   /// Builds the per-profile CoinGecko catalog and kicks off a background
   /// `refreshIfStale()` so the SQLite snapshot is brought up to date once per
   /// session without blocking init. Returns `(nil, nil)` (and logs) when the
