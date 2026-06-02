@@ -81,8 +81,8 @@ struct InsightStoreTests {
 
   // MARK: - dismiss
 
-  @Test("dismiss re-ranks in place without rebuilding and downranks the kind")
-  func dismissDownranksKind() async throws {
+  @Test
+  func dismissRemovesInsightFromPublishedList() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     try await seedUncategorizedBacklog(backend, count: 12)
     let store = makeStore(backend)
@@ -93,18 +93,29 @@ struct InsightStoreTests {
     let loadedAtBeforeDismiss = store.lastLoadedAt
 
     store.dismiss(target)
-    let afterFirst = try #require(
-      store.insights.first { $0.insight.kind == .uncategorizedBacklog })
-    // Fatigue penalty lowers the score; re-rank happened in place (no rebuild,
-    // so `lastLoadedAt` is untouched).
-    #expect(afterFirst.score < target.score)
-    #expect(store.lastLoadedAt == loadedAtBeforeDismiss)
 
-    store.dismiss(afterFirst)
-    let afterSecond = try #require(
+    // The dismissed insight is gone immediately — and it was an in-place
+    // re-rank, not a rebuild, so `lastLoadedAt` is untouched.
+    #expect(!store.insights.contains { $0.id == target.id })
+    #expect(store.lastLoadedAt == loadedAtBeforeDismiss)
+  }
+
+  @Test
+  func dismissedInsightStaysHiddenAcrossRefresh() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    try await seedUncategorizedBacklog(backend, count: 12)
+    let store = makeStore(backend)
+    await store.refresh()
+    let target = try #require(
       store.insights.first { $0.insight.kind == .uncategorizedBacklog })
-    // A second dismiss further suppresses it.
-    #expect(afterSecond.score < afterFirst.score)
+
+    store.dismiss(target)
+    store.overrideLastLoadedAtForTesting(nil)  // force the next refresh to rebuild
+    await store.refresh()
+
+    // A full rebuild re-detects the backlog, but the session dismissal keeps
+    // it hidden until relaunch (Phase D persists this across launches).
+    #expect(!store.insights.contains { $0.id == target.id })
   }
 
   // MARK: - refreshIfStale

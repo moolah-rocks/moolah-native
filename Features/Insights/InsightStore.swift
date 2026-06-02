@@ -71,6 +71,12 @@ final class InsightStore {
   /// dismissal telemetry is a future PR.
   private var dismissals: [InsightKind: Int] = [:]
 
+  /// Ids dismissed in this session. Filtered out of every published list so a
+  /// dismissed insight stays gone until relaunch. Distinct from `dismissals`,
+  /// which counts dismissals *per kind* to drive the ranker's fatigue penalty;
+  /// Phase D persists both across launches.
+  private var dismissedIds: Set<String> = []
+
   /// The most recently-built `InsightInput`. Cached so `dismiss(_:)` re-ranks
   /// without rebuilding off the main actor.
   private var lastInput: InsightInput?
@@ -138,7 +144,7 @@ final class InsightStore {
       let (input, scored) = try await compute(
         snapshot: snapshot, context: context, dismissals: dismissals)
       lastInput = input
-      insights = scored
+      insights = visible(scored)
       lastLoadedAt = Date()
     } catch is CancellationError {
       // Surface refresh superseded / view torn down — never surface; a
@@ -170,14 +176,24 @@ final class InsightStore {
 
   // MARK: - Dismissal
 
-  /// Records a dismissal for the insight's kind and re-ranks the cached input
-  /// in place — no rebuild. The ranker's fatigue penalty downranks (and
-  /// eventually drops) the kind as its dismissal count rises.
+  /// Removes the insight from the published list immediately and records a
+  /// per-kind dismissal so the ranker's fatigue penalty downranks the kind for
+  /// the rest of the session. Re-ranks the cached input in place (no rebuild)
+  /// so any surviving insights reflect the new fatigue; falls back to filtering
+  /// the current list when no input is cached.
   func dismiss(_ insight: ScoredInsight) {
+    dismissedIds.insert(insight.id)
     dismissals[insight.insight.kind, default: 0] += 1
     if let lastInput {
-      insights = engine.generate(lastInput, dismissals: dismissals)
+      insights = visible(engine.generate(lastInput, dismissals: dismissals))
+    } else {
+      insights = visible(insights)
     }
+  }
+
+  /// Drops session-dismissed ids from a ranked list before publishing.
+  private func visible(_ scored: [ScoredInsight]) -> [ScoredInsight] {
+    scored.filter { !dismissedIds.contains($0.id) }
   }
 
   // MARK: - Compute (off-main)
