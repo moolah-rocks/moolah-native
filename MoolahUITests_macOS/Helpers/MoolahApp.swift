@@ -84,6 +84,10 @@ final class MoolahApp {
   /// merge / dismiss actions.
   var recentlyAdded: RecentlyAddedScreen { RecentlyAddedScreen(app: self) }
 
+  /// "For You" insights panel (`ForYouCard`): the first card in the
+  /// Analysis detail leaf. Row expand / dismiss / deep-link actions.
+  var forYou: ForYouScreen { ForYouScreen(app: self) }
+
   /// Right column or sheet showing a single transaction's editable detail.
   var transactionDetail: TransactionDetailScreen { TransactionDetailScreen(app: self) }
 
