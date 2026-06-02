@@ -81,6 +81,7 @@ actor CancellablePagingTransactionRepository: TransactionRepository {
   }
   func legExists(accountId: UUID, externalId: String) async throws -> Bool { false }
   func distinctLegInstrumentIds() async throws -> Set<String> { [] }
+  func countNeedsReview() async throws -> Int { 0 }
 }
 
 /// A simple one-shot gate that suspends waiters until `open()` is called.
