@@ -216,6 +216,8 @@ extension MoolahUITestCase {
       appendTransferDetectionFixtures(into: &lines)
     case .pendingWebImportOneChaseInbox:
       appendPendingWebImportFixtures(into: &lines)
+    case .insightsForYouBaseline:
+      appendInsightsForYouFixtures(into: &lines)
     }
   }
 
