@@ -43,16 +43,16 @@ struct AdditionalInsightTests {
     let accountB = UUID()
     let groupA = InsightAccountGroup(id: UUID(), name: "Daily Spending")
     let groupB = InsightAccountGroup(id: UUID(), name: "Bills")
-    var transactions: [InsightTransaction] = []
+    var legs: [InsightTransaction] = []
     for index in 0..<8 {
-      transactions.append(
+      legs.append(
         InsightTestSupport.expense(100, payee: "Shop", daysAgo: index + 1, accountId: accountA))
     }
-    transactions.append(
+    legs.append(
       InsightTestSupport.expense(50, payee: "Utility", daysAgo: 2, accountId: accountB))
     let input = InsightInput(
       context: context,
-      transactions: transactions,
+      accountSpend: InsightTestSupport.accountSpend(from: legs),
       accountGroups: [groupA, groupB],
       accountGroupMembership: [accountA: groupA.id, accountB: groupB.id])
     let insight = try #require(AccountGroupInsights.groupSpendConcentration(input).first)
@@ -65,29 +65,26 @@ struct AdditionalInsightTests {
   @Test
   func windfallFlagsLargeDeposit() throws {
     // Slightly varying paychecks (realistic) so the MAD is non-zero.
-    let payAmounts: [Decimal] = [3000, 3050, 2980, 3020, 3000, 2990, 3010, 3030]
-    var transactions: [InsightTransaction] = []
-    for (index, amount) in payAmounts.enumerated() {
-      transactions.append(
-        InsightTestSupport.income(amount, payee: "Payroll", daysAgo: index * 14 + 40))
-    }
-    transactions.append(InsightTestSupport.income(12000, payee: "Bonus", daysAgo: 3))
+    let incomeSamples: [Decimal] = [3000, 3050, 2980, 3020, 3000, 2990, 3010, 3030]
+    let bonus = InsightTestSupport.income(12000, payee: "Bonus", daysAgo: 3)
     let insight = try #require(
-      IncomeExtraInsights.windfall(transactions: transactions, context: context).first)
+      IncomeExtraInsights.windfall(
+        recentCandidates: [bonus], incomeSamples: incomeSamples, context: context
+      ).first)
     #expect(insight.kind == .windfallIncome)
     #expect(insight.framing == .positive)
   }
 
   @Test
   func payRiseDetected() throws {
-    let transactions = [
+    let legs = [
       InsightTestSupport.income(3000, payee: "ACME", daysAgo: 42),
       InsightTestSupport.income(3000, payee: "ACME", daysAgo: 28),
       InsightTestSupport.income(3000, payee: "ACME", daysAgo: 14),
       InsightTestSupport.income(3300, payee: "ACME", daysAgo: 0),
     ]
     let streams = SubscriptionDetector.detect(
-      in: transactions, incomeStreams: true, calendar: calendar)
+      payees: InsightTestSupport.payees(from: legs), incomeStreams: true, calendar: calendar)
     let insight = try #require(
       IncomeExtraInsights.payRateChange(incomeStreams: streams, context: context).first)
     #expect(insight.kind == .payRateChange)
@@ -98,29 +95,33 @@ struct AdditionalInsightTests {
 
   @Test
   func lapsedMerchantSurfacesStoppedRegular() throws {
-    var transactions: [InsightTransaction] = []
+    var legs: [InsightTransaction] = []
     // Five monthly charges, the most recent 130 days ago (lapsed).
     for index in 0..<5 {
-      transactions.append(
+      legs.append(
         InsightTestSupport.expense(40, payee: "OldGym", daysAgo: 130 + index * 30))
     }
     let insight = try #require(
-      SpendHabitInsights.lapsedMerchant(transactions: transactions, context: context).first)
+      SpendHabitInsights.lapsedMerchant(
+        payees: InsightTestSupport.payees(from: legs), context: context
+      ).first)
     #expect(insight.kind == .lapsedMerchant)
   }
 
   @Test
   func weekendSkewDetected() throws {
-    var transactions: [InsightTransaction] = []
+    var legs: [InsightTransaction] = []
     for daysAgo in 1...42 {
       let date = InsightTestSupport.daysAgo(daysAgo)
       let weekday = calendar.component(.weekday, from: date)
       let magnitude: Decimal = (weekday == 1 || weekday == 7) ? 120 : 20
-      transactions.append(
+      legs.append(
         InsightTestSupport.expense(magnitude, payee: "Spend", daysAgo: daysAgo))
     }
     let insight = try #require(
-      SpendHabitInsights.weekendSkew(transactions: transactions, context: context).first)
+      SpendHabitInsights.weekendSkew(
+        dailyTotals: InsightTestSupport.dailyTotals(from: legs), context: context
+      ).first)
     #expect(insight.kind == .weekendSpendSkew)
   }
 
@@ -130,15 +131,17 @@ struct AdditionalInsightTests {
   func unbudgetedCategorySpotlight() throws {
     let budgeted = UUID()
     let unbudgeted = UUID()
-    var transactions: [InsightTransaction] = []
-    transactions.append(
+    var legs: [InsightTransaction] = []
+    legs.append(
       InsightTestSupport.expense(50, payee: "A", daysAgo: 5, categoryId: budgeted))
     for index in 0..<5 {
-      transactions.append(
+      legs.append(
         InsightTestSupport.expense(200, payee: "B", daysAgo: index + 1, categoryId: unbudgeted))
     }
     let input = InsightInput(
-      context: context, transactions: transactions, budgetedCategoryIds: [budgeted])
+      context: context,
+      unbudgetedCategorySpend: InsightTestSupport.categorySpend(from: legs),
+      budgetedCategoryIds: [budgeted])
     let insight = try #require(BudgetCoverageInsights.unbudgetedCategory(input).first)
     #expect(insight.kind == .unbudgetedCategory)
     #expect(insight.references.categoryIds == [unbudgeted])
@@ -147,10 +150,12 @@ struct AdditionalInsightTests {
   @Test
   func unbudgetedCategoryQuietWithoutBudgets() {
     let category = UUID()
-    let transactions = [
+    let legs = [
       InsightTestSupport.expense(200, payee: "B", daysAgo: 1, categoryId: category)
     ]
-    let input = InsightInput(context: context, transactions: transactions)
+    let input = InsightInput(
+      context: context,
+      unbudgetedCategorySpend: InsightTestSupport.categorySpend(from: legs))
     #expect(BudgetCoverageInsights.unbudgetedCategory(input).isEmpty)
   }
 }

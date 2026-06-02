@@ -13,13 +13,12 @@ enum BudgetCoverageInsights {
     let context = input.context
 
     var spendByCategory: [UUID: Double] = [:]
-    for transaction in input.transactions where transaction.isExpense {
-      let age = context.daysSince(transaction.date)
-      guard age >= 0, age <= windowDays, let categoryId = transaction.categoryId,
+    for summary in input.unbudgetedCategorySpend {
+      guard let categoryId = summary.categoryId,
         !input.budgetedCategoryIds.contains(categoryId)
       else { continue }
-      spendByCategory[categoryId, default: 0] +=
-        Double(truncating: transaction.spendMagnitude as NSDecimalNumber)
+      let magnitude = summary.total.quantity < 0 ? -summary.total.quantity : 0
+      spendByCategory[categoryId, default: 0] += Double(truncating: magnitude as NSDecimalNumber)
     }
     guard let top = spendByCategory.max(by: { $0.value < $1.value }), top.value > 0 else {
       return []

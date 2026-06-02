@@ -56,6 +56,94 @@ extension GRDBInsightDataSource {
     return try await foldSamples(rows, instruments: instruments, context: context)
   }
 
+  func incomeSamples(
+    windowDays: Int,
+    maxCount: Int,
+    context: InsightContext
+  ) async throws -> [Decimal] {
+    let after = cutoff(windowDays: windowDays, context: context)
+    let instruments = try await resolveInstruments()
+    let cap = max(1, maxCount)
+    let rows = try await profileDatabase.read { database -> [SampleRow] in
+      // `:after` / `:cap` are bound parameters; the SQL is a compile-time
+      // string literal — safe per `guides/DATABASE_CODE_GUIDE.md` §4. The
+      // `ROW_NUMBER()` window caps the global income sample set in SQL.
+      let sql = """
+        SELECT day, instrument_id, quantity
+        FROM (
+          SELECT DATE(t.date)       AS day,
+                 leg.instrument_id  AS instrument_id,
+                 leg.quantity       AS quantity,
+                 ROW_NUMBER() OVER (
+                   ORDER BY t.date DESC, leg.transaction_id DESC
+                 ) AS rn
+          FROM transaction_leg leg
+          JOIN "transaction"    t ON leg.transaction_id = t.id
+          WHERE t.recur_period IS NULL
+            AND leg.type = 'income'
+            AND (:after IS NULL OR t.date >= :after)
+        )
+        WHERE rn <= :cap
+        ORDER BY rn ASC
+        """
+      let arguments: StatementArguments = ["after": after, "cap": cap]
+      return try Row.fetchAll(database, sql: sql, arguments: arguments)
+        .compactMap(Self.decodeIncomeSampleRow(_:))
+    }
+    return try await foldIncomeSamples(rows, instruments: instruments, context: context)
+  }
+
+  private static func decodeIncomeSampleRow(_ row: Row) -> SampleRow? {
+    guard let day: String = row["day"],
+      let instrumentId: String = row["instrument_id"]
+    else { return nil }
+    return SampleRow(
+      categoryId: nil,
+      day: day,
+      instrumentId: instrumentId,
+      qty: row["quantity"] ?? 0)
+  }
+
+  /// Convert each sampled income leg on its own day and collect positive
+  /// magnitudes, preserving the SQL's most-recent-first order. Rows are
+  /// dropped (creating gaps in coverage) when conversion fails (Rule 11)
+  /// or when the converted quantity is non-positive (income refunds).
+  /// Callers must not assume contiguous date coverage.
+  private func foldIncomeSamples(
+    _ rows: [SampleRow],
+    instruments: [String: Instrument],
+    context: InsightContext
+  ) async throws -> [Decimal] {
+    var magnitudes: [Decimal] = []
+    for row in rows {
+      guard let day = GRDBAnalysisRepository.parseDayString(row.day) else {
+        log.error("incomeSamples: unparseable day '\(row.day, privacy: .public)'")
+        continue
+      }
+      let source = instrument(forId: row.instrumentId, in: instruments)
+      do {
+        let amount = try await GRDBAnalysisRepository.convertedQuantity(
+          storageValue: row.qty,
+          instrument: source,
+          to: profileInstrument,
+          on: day,
+          conversionService: converter)
+        guard amount.quantity > 0 else { continue }
+        magnitudes.append(amount.quantity)
+      } catch let cancel as CancellationError {
+        throw cancel
+      } catch {
+        log.warning(
+          """
+          incomeSamples: dropping sample day=\(row.day, privacy: .public) \
+          instrument=\(row.instrumentId, privacy: .public) — conversion failed: \
+          \(error.localizedDescription, privacy: .public)
+          """)
+      }
+    }
+    return magnitudes
+  }
+
   private static func decodeSampleRow(_ row: Row) -> SampleRow? {
     guard let day: String = row["day"],
       let instrumentId: String = row["instrument_id"]

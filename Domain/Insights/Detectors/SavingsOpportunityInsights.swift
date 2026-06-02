@@ -11,21 +11,18 @@ enum SavingsOpportunityInsights {
     "fee", "charge", "interest", "atm", "overdraft", "surcharge", "penalty",
   ]
 
-  /// Total spend in fee-like categories over the trailing year (22).
+  /// Total spend in fee-like categories over the trailing year (22). The
+  /// 365-day window is baked into `feeCategorySpend` by the builder; `total`
+  /// is signed (negative for real spend) and never re-negated here.
   static func feeSpend(
-    transactions: [InsightTransaction],
-    context: InsightContext,
-    lookbackDays: Int = 365
+    feeCategorySpend: [CategorySpendSummary],
+    context: InsightContext
   ) -> [Insight] {
-    let fees = transactions.filter { transaction in
-      transaction.isExpense
-        && context.daysSince(transaction.date) >= 0
-        && context.daysSince(transaction.date) <= lookbackDays
-        && isFeeCategory(transaction.categoryPath)
-    }
+    let fees = feeCategorySpend.filter { isFeeCategory($0.categoryPath) }
     guard !fees.isEmpty else { return [] }
-    let total = fees.reduce(Decimal(0)) { $0 + $1.spendMagnitude }
-    guard total > 0 else { return [] }
+    let total = fees.reduce(context.zero) { $0 + $1.total }
+    guard total.quantity < 0 else { return [] }
+    let legCount = fees.reduce(0) { $0 + $1.legCount }
 
     let categoryIds = Array(Set(fees.compactMap(\.categoryId)))
     return [
@@ -33,18 +30,18 @@ enum SavingsOpportunityInsights {
         id:
           "\(InsightKind.feeSpend.rawValue):\(FinancialMonth.key(for: context.now, monthEnd: context.financialMonthEnd))",
         kind: .feeSpend,
-        title: "You paid \(context.formatted(Decimal(-toDouble(total)))) in fees",
+        title: "You paid \(context.formatted(total)) in fees",
         detail:
-          "Over the past year you've paid about \(context.formatted(Decimal(-toDouble(total)))) "
-          + "in fees and charges across \(fees.count) transactions. Many of these are avoidable.",
+          "Over the past year you've paid about \(context.formatted(total)) "
+          + "in fees and charges across \(legCount) transactions. Many of these are avoidable.",
         date: context.now,
         framing: .negative,
         actionability: .review,
         surprise: 0.5,
-        monetaryImpact: InstrumentAmount(quantity: -total, instrument: context.reportingCurrency),
+        monetaryImpact: total,
         facts: [
-          InsightFact("Annual fees", context.formatted(Decimal(-toDouble(total)))),
-          InsightFact("Transactions", "\(fees.count)"),
+          InsightFact("Annual fees", context.formatted(total)),
+          InsightFact("Transactions", "\(legCount)"),
         ],
         references: InsightReferences(
           categoryIds: categoryIds, instrumentIds: [context.reportingCurrency.id]))

@@ -8,31 +8,37 @@ import Foundation
 /// Sparse categories (too few samples for a stable per-category scale) fall
 /// back to the global spend distribution — a pragmatic stand-in for the
 /// design's "Bayesian shrinkage toward a global prior".
+///
+/// The per-category baseline (`categorySamples`) only covers categorised
+/// expense legs — the SQL that builds it filters `category_id IS NOT NULL`,
+/// so uncategorised spend is excluded from the baseline. This is an accepted
+/// approximation of the old full-history baseline that scanned every leg.
 enum LargeTransactionInsight {
   static func detect(
-    transactions: [InsightTransaction],
+    recentCandidates: [InsightTransaction],
+    categorySamples: [CategorySpendSamples],
     categories: Categories,
     context: InsightContext,
     windowDays: Int = 30,
     threshold: Double = 3.5,
     minimumCategorySamples: Int = 6
   ) -> [Insight] {
-    let expenses = transactions.filter(\.isExpense)
-    guard expenses.count >= minimumCategorySamples else { return [] }
+    let globalMagnitudes = categorySamples.flatMap(\.magnitudes).map(toDouble)
+    guard globalMagnitudes.count >= minimumCategorySamples else { return [] }
 
-    let globalMagnitudes = expenses.map(spendMagnitude)
-    let byCategory = Dictionary(grouping: expenses) { $0.categoryId }
+    let samplesByCategory = Dictionary(
+      categorySamples.map { ($0.categoryId, $0.magnitudes.map(toDouble)) },
+      uniquingKeysWith: { first, _ in first })
 
     var insights: [Insight] = []
-    for transaction in expenses {
-      guard context.daysSince(transaction.date) <= windowDays,
-        context.daysSince(transaction.date) >= 0
-      else { continue }
+    for transaction in recentCandidates.filter(\.isExpense) {
+      let age = context.daysSince(transaction.date)
+      guard age >= 0, age <= windowDays else { continue }
 
-      let categoryPeers = byCategory[transaction.categoryId] ?? []
+      let categoryPeers = samplesByCategory[transaction.categoryId] ?? []
       let population =
         categoryPeers.count >= minimumCategorySamples
-        ? categoryPeers.map(spendMagnitude)
+        ? categoryPeers
         : globalMagnitudes
       let value = spendMagnitude(transaction)
       let zScore = DescriptiveStatistics.robustZScore(of: value, in: population)
@@ -71,6 +77,10 @@ enum LargeTransactionInsight {
 
   private static func spendMagnitude(_ transaction: InsightTransaction) -> Double {
     Double(truncating: transaction.spendMagnitude as NSDecimalNumber)
+  }
+
+  private static func toDouble(_ value: Decimal) -> Double {
+    Double(truncating: value as NSDecimalNumber)
   }
 
   private static func payeeName(_ transaction: InsightTransaction) -> String {

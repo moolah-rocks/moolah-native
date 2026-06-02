@@ -134,13 +134,21 @@ struct FinanceInsightTests {
 
   @Test
   func feeSpendSumsAnnualFees() throws {
-    let transactions = [
-      InsightTestSupport.expense(35, payee: "Bank", daysAgo: 10, categoryPath: "Banking:Fees"),
-      InsightTestSupport.expense(
-        15, payee: "Bank", daysAgo: 100, categoryPath: "Banking:Account Fee"),
-      InsightTestSupport.expense(200, payee: "Rent", daysAgo: 5, categoryPath: "Housing:Rent"),
+    // Per-category 365-day spend rows (negative for spend); only the two
+    // fee-category rows should be summed, the rent row ignored.
+    let feeCategorySpend = [
+      CategorySpendSummary(
+        categoryId: UUID(), categoryPath: "Banking:Fees",
+        total: InsightTestSupport.amount(-35), legCount: 1),
+      CategorySpendSummary(
+        categoryId: UUID(), categoryPath: "Banking:Account Fee",
+        total: InsightTestSupport.amount(-15), legCount: 1),
+      CategorySpendSummary(
+        categoryId: UUID(), categoryPath: "Housing:Rent",
+        total: InsightTestSupport.amount(-200), legCount: 1),
     ]
-    let insights = SavingsOpportunityInsights.feeSpend(transactions: transactions, context: context)
+    let insights = SavingsOpportunityInsights.feeSpend(
+      feeCategorySpend: feeCategorySpend, context: context)
     let fees = try #require(insights.first)
     #expect(fees.kind == .feeSpend)
   }

@@ -85,6 +85,16 @@ protocol InsightDataSource: Sendable {
     context: InsightContext
   ) async throws -> [CategorySpendSamples]
 
+  /// A bounded, most-recent-first sample of income magnitudes (positive,
+  /// reporting currency) over the trailing `windowDays`, capped at
+  /// `maxCount`. The baseline distribution the windfall detector scores a
+  /// recent deposit against. `O(maxCount)`.
+  func incomeSamples(
+    windowDays: Int,
+    maxCount: Int,
+    context: InsightContext
+  ) async throws -> [Decimal]
+
   /// Bounded recent-candidate window of projected legs over the trailing
   /// `windowDays`, already in the reporting currency. `O(window)`.
   func recentCandidates(

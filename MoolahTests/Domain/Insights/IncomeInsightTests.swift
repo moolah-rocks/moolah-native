@@ -8,8 +8,9 @@ struct IncomeInsightTests {
   private let context = InsightTestSupport.context()
   private let calendar = InsightTestSupport.calendar
 
-  private func streams(_ transactions: [InsightTransaction]) -> [DetectedSubscription] {
-    SubscriptionDetector.detect(in: transactions, incomeStreams: true, calendar: calendar)
+  private func streams(_ legs: [InsightTransaction]) -> [DetectedSubscription] {
+    SubscriptionDetector.detect(
+      payees: InsightTestSupport.payees(from: legs), incomeStreams: true, calendar: calendar)
   }
 
   @Test

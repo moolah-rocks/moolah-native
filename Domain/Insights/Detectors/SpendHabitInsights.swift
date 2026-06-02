@@ -7,28 +7,29 @@ enum SpendHabitInsights {
   /// while — a broader cancellation signal than the subscription-cadence
   /// proxy. Surfaces the highest-spend lapsed merchant.
   static func lapsedMerchant(
-    transactions: [InsightTransaction],
+    payees: [PayeeSummary],
     context: InsightContext,
     minimumOccurrences: Int = 4,
     minimumSilentDays: Int = 90
   ) -> [Insight] {
-    let groups = Dictionary(grouping: transactions.filter(\.isExpense)) { $0.normalizedPayee }
     var best: Insight?
     var bestSpend = 0.0
-    for (payee, records) in groups where !payee.isEmpty && records.count >= minimumOccurrences {
-      let sorted = records.sorted { $0.date < $1.date }
-      guard let last = sorted.last else { continue }
-      let silentDays = context.daysSince(last.date)
-      let medianInterval = medianIntervalDays(of: sorted.map(\.date), calendar: context.calendar)
+    for payee in payees
+    where payee.isExpense && !payee.normalizedPayee.isEmpty
+      && payee.occurrenceCount >= minimumOccurrences
+    {
+      let silentDays = context.daysSince(payee.lastSeen)
+      let medianInterval = medianIntervalDays(
+        of: payee.occurrences.map(\.date), calendar: context.calendar)
       guard medianInterval > 0,
         Double(silentDays) > max(Double(minimumSilentDays), 3 * medianInterval)
       else { continue }
-      let totalSpend = sorted.reduce(0.0) {
-        $0 + Double(truncating: $1.spendMagnitude as NSDecimalNumber)
-      }
+      let windowedMagnitude =
+        payee.windowedTotal.quantity < 0 ? -payee.windowedTotal.quantity : 0
+      let totalSpend = Double(truncating: windowedMagnitude as NSDecimalNumber)
       if totalSpend > bestSpend {
         bestSpend = totalSpend
-        best = makeLapsedInsight(record: last, silentDays: silentDays, context: context)
+        best = makeLapsedInsight(payee: payee, silentDays: silentDays, context: context)
       }
     }
     return best.map { [$0] } ?? []
@@ -37,14 +38,14 @@ enum SpendHabitInsights {
   /// Weekend-vs-weekday spend skew (E-4): the ratio of average daily
   /// weekend spend to weekday spend, when stable and lopsided.
   static func weekendSkew(
-    transactions: [InsightTransaction],
+    dailyTotals dailySummaries: [DailySpendSummary],
     context: InsightContext,
     minimumDaysEachSide: Int = 8,
     minimumRatio: Double = 1.5
   ) -> [Insight] {
     var weekendTotals: [Double] = []
     var weekdayTotals: [Double] = []
-    let byDay = dailyTotals(of: transactions, context: context)
+    let byDay = dailyTotals(of: dailySummaries, context: context)
     for (day, total) in byDay {
       let weekday = context.calendar.component(.weekday, from: day)
       if weekday == 1 || weekday == 7 {
@@ -88,17 +89,18 @@ enum SpendHabitInsights {
   // MARK: - Helpers
 
   private static func makeLapsedInsight(
-    record: InsightTransaction, silentDays: Int, context: InsightContext
+    payee: PayeeSummary, silentDays: Int, context: InsightContext
   ) -> Insight {
-    let name = record.rawPayee ?? record.normalizedPayee
+    let name = payee.displayPayee
+    let last = payee.occurrences.last
     return Insight(
-      id: "\(InsightKind.lapsedMerchant.rawValue):\(record.normalizedPayee)",
+      id: "\(InsightKind.lapsedMerchant.rawValue):\(payee.normalizedPayee)",
       kind: .lapsedMerchant,
       title: "You've stopped paying \(name)",
       detail:
         "You used to pay \(name) regularly but haven't in \(silentDays) days. "
         + "If you've moved on, there's nothing to do — otherwise worth a check.",
-      date: record.date,
+      date: payee.lastSeen,
       framing: .neutral,
       actionability: .review,
       surprise: 0.35,
@@ -108,17 +110,17 @@ enum SpendHabitInsights {
         InsightFact("Days since last", "\(silentDays)"),
       ],
       references: InsightReferences(
-        accountIds: record.accountId.map { [$0] } ?? [],
-        categoryIds: record.categoryId.map { [$0] } ?? []))
+        accountIds: last?.accountId.map { [$0] } ?? [],
+        categoryIds: last?.categoryId.map { [$0] } ?? []))
   }
 
   private static func dailyTotals(
-    of transactions: [InsightTransaction], context: InsightContext
+    of dailySummaries: [DailySpendSummary], context: InsightContext
   ) -> [Date: Double] {
     var totals: [Date: Double] = [:]
-    for transaction in transactions where transaction.isExpense {
-      let day = context.calendar.startOfDay(for: transaction.date)
-      totals[day, default: 0] += Double(truncating: transaction.spendMagnitude as NSDecimalNumber)
+    for summary in dailySummaries {
+      let day = context.calendar.startOfDay(for: summary.day)
+      totals[day, default: 0] += Double(truncating: summary.spendMagnitude as NSDecimalNumber)
     }
     return totals
   }

@@ -34,15 +34,19 @@ struct PayeeNormalizerTests {
 struct SubscriptionDetectorTests {
   private let calendar = InsightTestSupport.calendar
 
+  private func payees(_ legs: [InsightTransaction]) -> [PayeeSummary] {
+    InsightTestSupport.payees(from: legs)
+  }
+
   @Test
   func detectsMonthlyStream() throws {
-    let transactions = [
+    let legs = [
       InsightTestSupport.expense(15.99, payee: "Netflix", daysAgo: 90),
       InsightTestSupport.expense(15.99, payee: "Netflix", daysAgo: 60),
       InsightTestSupport.expense(15.99, payee: "Netflix", daysAgo: 30),
       InsightTestSupport.expense(15.99, payee: "Netflix", daysAgo: 0),
     ]
-    let detected = SubscriptionDetector.detect(in: transactions, calendar: calendar)
+    let detected = SubscriptionDetector.detect(payees: payees(legs), calendar: calendar)
     let netflix = try #require(detected.first { $0.normalizedPayee == "netflix" })
     #expect(netflix.period == .monthly)
     #expect(netflix.occurrenceCount == 4)
@@ -51,36 +55,36 @@ struct SubscriptionDetectorTests {
 
   @Test
   func ignoresIrregularSpending() {
-    let transactions = [
+    let legs = [
       InsightTestSupport.expense(5, payee: "Corner Cafe", daysAgo: 51),
       InsightTestSupport.expense(25, payee: "Corner Cafe", daysAgo: 40),
       InsightTestSupport.expense(8, payee: "Corner Cafe", daysAgo: 9),
       InsightTestSupport.expense(31, payee: "Corner Cafe", daysAgo: 2),
     ]
-    let detected = SubscriptionDetector.detect(in: transactions, calendar: calendar)
+    let detected = SubscriptionDetector.detect(payees: payees(legs), calendar: calendar)
     #expect(detected.isEmpty)
   }
 
   @Test
   func detectsWeeklyCadence() throws {
-    let transactions = (0..<5).map { index in
+    let legs = (0..<5).map { index in
       InsightTestSupport.expense(12, payee: "Gym", daysAgo: index * 7)
     }
-    let detected = SubscriptionDetector.detect(in: transactions, calendar: calendar)
+    let detected = SubscriptionDetector.detect(payees: payees(legs), calendar: calendar)
     let gym = try #require(detected.first)
     #expect(gym.period == .weekly)
   }
 
   @Test
   func detectsIncomeStreamWhenRequested() throws {
-    let transactions = [
+    let legs = [
       InsightTestSupport.income(3000, payee: "ACME Payroll", daysAgo: 42),
       InsightTestSupport.income(3000, payee: "ACME Payroll", daysAgo: 28),
       InsightTestSupport.income(3000, payee: "ACME Payroll", daysAgo: 14),
       InsightTestSupport.income(3000, payee: "ACME Payroll", daysAgo: 0),
     ]
     let detected = SubscriptionDetector.detect(
-      in: transactions, incomeStreams: true, calendar: calendar)
+      payees: payees(legs), incomeStreams: true, calendar: calendar)
     let payroll = try #require(detected.first)
     #expect(payroll.isIncome)
     #expect(payroll.period == .fortnightly)
@@ -89,12 +93,12 @@ struct SubscriptionDetectorTests {
 
   @Test
   func expenseDetectionExcludesIncome() {
-    let transactions = [
+    let legs = [
       InsightTestSupport.income(3000, payee: "ACME Payroll", daysAgo: 28),
       InsightTestSupport.income(3000, payee: "ACME Payroll", daysAgo: 14),
       InsightTestSupport.income(3000, payee: "ACME Payroll", daysAgo: 0),
     ]
-    let detected = SubscriptionDetector.detect(in: transactions, calendar: calendar)
+    let detected = SubscriptionDetector.detect(payees: payees(legs), calendar: calendar)
     #expect(detected.isEmpty)
   }
 }

@@ -21,7 +21,8 @@ import OSLog
 final class GRDBInsightDataSource: InsightDataSource, @unchecked Sendable {
   // Cross-extension internals. Sibling files reach these `internal`
   // members rather than the `private` storage:
-  //   `+CategorySpend.swift` — categorySpend / accountSpend / categorySamples
+  //   `+CategorySpend.swift` — categorySpend / accountSpend
+  //   `+Samples.swift`       — categorySamples / incomeSamples
   //   `+Payees.swift`        — payeeSummaries + the normalize-and-fold
   //   `+RecentCandidates.swift` — recentCandidates + assemble
   // The day-parse and `(qty, instrument) → InstrumentAmount` conversion
