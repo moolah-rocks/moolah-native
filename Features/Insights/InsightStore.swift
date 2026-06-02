@@ -2,6 +2,14 @@ import Foundation
 import OSLog
 import Observation
 
+/// UI-testing seam payload: a non-optional fixture list wrapped so the store can
+/// pass and hold it as an `Optional` (nil = production / preview) without
+/// tripping SwiftLint's `discouraged_optional_collection` on a bare
+/// `[ScoredInsight]?` init parameter / stored property.
+struct InsightFixtures: Sendable {
+  let insights: [ScoredInsight]
+}
+
 /// The sibling feature stores `InsightStore` reads each refresh to gather the
 /// main-actor half of an `InsightInput` (the `InsightInputSnapshot`). Bundled
 /// into a single struct so `InsightStore.init` stays within SwiftLint's
@@ -35,14 +43,6 @@ struct InsightStoreSources {
 ///
 /// Detected insights are cached as `lastInput`, so `dismiss(_:)` re-ranks the
 /// already-built input instantly without rebuilding off the main actor.
-/// UI-testing seam payload: a non-optional fixture list wrapped so the store can
-/// pass and hold it as an `Optional` (nil = production / preview) without
-/// tripping SwiftLint's `discouraged_optional_collection` on a bare
-/// `[ScoredInsight]?` init parameter / stored property.
-struct InsightFixtures: Sendable {
-  let insights: [ScoredInsight]
-}
-
 @Observable
 @MainActor
 final class InsightStore {

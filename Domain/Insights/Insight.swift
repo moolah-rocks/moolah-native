@@ -111,6 +111,12 @@ struct InsightFact: Sendable, Hashable {
   }
 }
 
+extension InsightFact: Identifiable {
+  /// Labels are distinct within a single insight's `facts`, so the label is a
+  /// stable row identity for SwiftUI — preferable to positional `\.offset`.
+  var id: String { label }
+}
+
 /// Identifiers an insight relates to, so the UI can navigate to the source.
 /// Every field defaults empty; detectors populate only what applies.
 struct InsightReferences: Sendable, Hashable {

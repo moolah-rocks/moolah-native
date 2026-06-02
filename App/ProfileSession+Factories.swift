@@ -232,7 +232,8 @@ extension ProfileSession {
   /// `internal` (not `private`) because the caller, `finishInit`, lives in
   /// `ProfileSession.swift` — Swift's `private` does not cross file boundaries
   /// even within the same type. Mirrors `uiTestingCryptoOverrides()` except for
-  /// this access level.
+  /// this access level. `@MainActor` because `UITestSeedInsightOverrides` is a
+  /// `@MainActor` type, so calling its static methods requires that isolation.
   @MainActor
   static func uiTestingInsightFixtures() -> InsightFixtures? {
     guard let seed = currentUITestSeed() else { return nil }
