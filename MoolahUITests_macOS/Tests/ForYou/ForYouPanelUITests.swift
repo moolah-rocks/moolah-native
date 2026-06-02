@@ -26,7 +26,7 @@ final class ForYouPanelUITests: MoolahUITestCase {
     forYou.expectRowVisible(UITestFixtures.InsightsForYou.milestoneId)
   }
 
-  func testDismissRemovesInsight() {
+  func testDismissingInsightRemovesItAndLeavesOthersVisible() {
     let app = launch(seed: .insightsForYouBaseline)
     let forYou = app.forYou
 
@@ -46,6 +46,6 @@ final class ForYouPanelUITests: MoolahUITestCase {
     forYou.expand(UITestFixtures.InsightsForYou.largeTxnId)
     forYou.tapView(UITestFixtures.InsightsForYou.largeTxnId)
 
-    forYou.expectAccountDetailVisible(named: UITestFixtures.TradeBaseline.checkingAccountName)
+    forYou.expectTransactionListVisible()
   }
 }

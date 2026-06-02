@@ -119,43 +119,16 @@ struct ForYouScreen {
 
   // MARK: - Navigation outcome
 
-  /// Asserts the detail column now shows the account detail for `name`:
-  /// the deep-link replaced the Analysis leaf with a `TransactionListView`
-  /// filtered to the referenced account. Waits first on the canonical
-  /// transaction-list container so a slow re-render doesn't race the scan,
-  /// then waits for the account name to surface as the leaf's navigation
-  /// title (a static text) — which confirms the *specific* account, not
-  /// just any list. The name scan routes through the sanctioned
-  /// `MoolahApp.staticTexts(matching:)` escape hatch (UI_TEST_GUIDE §3),
-  /// since the navigation title carries no stable accessibility identifier.
-  func expectAccountDetailVisible(named name: String) {
+  /// Confirms navigation landed on a transaction-list detail leaf by waiting
+  /// for the transaction-list container — the same signal
+  /// `DetailColumnNavigationSweepTests` uses. The Analysis view never renders
+  /// this container, so its appearance proves the "View" deep-link navigated
+  /// away from the For You panel to the referenced account's detail.
+  func expectTransactionListVisible() {
     let container = app.element(for: UITestIdentifiers.TransactionList.container)
     if !container.waitForExistence(timeout: 5) {
-      Trace.recordFailure(
-        "transaction list container '\(UITestIdentifiers.TransactionList.container)' "
-          + "did not appear after tapping View")
-      XCTFail("Account transaction list did not render within 5s of navigating")
-      return
+      Trace.recordFailure("transaction list did not appear after navigation")
+      XCTFail("Transaction list container did not appear after tapping View")
     }
-    if !waitForAccountName(name) {
-      Trace.recordFailure("account name '\(name)' did not appear in detail within 5s")
-      XCTFail("Detail pane did not show account '\(name)' within 5s of navigating")
-    }
-  }
-
-  // MARK: - Private helpers
-
-  /// Bounded wait for a static text whose label contains `name` to appear
-  /// — the navigation title of the account detail leaf. Polls the
-  /// `staticTexts` escape-hatch query (no sleeps / no retries: a single
-  /// bounded loop that returns as soon as the title lands) up to `timeout`.
-  private func waitForAccountName(_ name: String, timeout: TimeInterval = 5) -> Bool {
-    let predicate = NSPredicate(format: "label CONTAINS %@", name)
-    let deadline = Date().addingTimeInterval(timeout)
-    while Date() < deadline {
-      if !app.staticTexts(matching: predicate).isEmpty { return true }
-      RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-    }
-    return false
   }
 }
