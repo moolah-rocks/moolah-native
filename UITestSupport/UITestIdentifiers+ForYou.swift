@@ -5,12 +5,12 @@ extension UITestIdentifiers {
   /// SwiftUI view (`ForYouCard`) and the `ForYouScreen` UI-test driver so they
   /// never drift. Per-insight identifiers embed the (stable) insight id.
   public enum ForYou {
-    public static let card = "for-you-card"
+    public static let card = "forYou.card"
 
-    public static func row(_ id: String) -> String { "for-you-row-\(id)" }
+    public static func row(_ id: String) -> String { "forYou.row.\(id)" }
 
-    public static func dismissButton(_ id: String) -> String { "for-you-dismiss-\(id)" }
+    public static func dismissButton(_ id: String) -> String { "forYou.dismiss.\(id)" }
 
-    public static func navigateButton(_ id: String) -> String { "for-you-view-\(id)" }
+    public static func viewButton(_ id: String) -> String { "forYou.view.\(id)" }
   }
 }
