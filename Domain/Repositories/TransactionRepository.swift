@@ -99,6 +99,10 @@ protocol TransactionRepository: Sendable {
   /// Used only by exchange-import resolution's rare registry-fallback
   /// tie-break; cheap (`SELECT DISTINCT`), not on a hot path.
   func distinctLegInstrumentIds() async throws -> Set<String>
+  /// Count of posted (non-scheduled) transactions whose every leg is
+  /// uncategorised (`Transaction.needsReview`). A SQL `COUNT` — never
+  /// materialises history. Drives the categorise-backlog insight nudge.
+  func countNeedsReview() async throws -> Int
 }
 
 extension TransactionRepository {

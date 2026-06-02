@@ -167,6 +167,18 @@ extension MoolahUITestCase {
     )
   }
 
+  func appendInsightsForYouFixtures(into lines: inout [String]) {
+    let fixtures = UITestFixtures.InsightsForYou.self
+    lines.append("# fixtures — tradeBaseline profile + three injected fixture insights")
+    lines.append("largeTxn.id/title    = \(fixtures.largeTxnId) / \(fixtures.largeTxnTitle)")
+    lines.append("priceHike.id/title   = \(fixtures.priceHikeId) / \(fixtures.priceHikeTitle)")
+    lines.append("milestone.id/title   = \(fixtures.milestoneId) / \(fixtures.milestoneTitle)")
+    lines.append(
+      "largeTxn references checking account "
+        + "\(UITestFixtures.TradeBaseline.checkingAccountId) "
+        + "(\(UITestFixtures.TradeBaseline.checkingAccountName)) → has 'View'")
+  }
+
   func appendPendingWebImportFixtures(into lines: inout [String]) {
     let fixtures = UITestFixtures.PendingWebImportOneChaseInbox.self
     lines.append("# fixtures — tradeBaseline profile + one pre-written inbox payload")

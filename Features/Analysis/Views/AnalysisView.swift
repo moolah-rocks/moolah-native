@@ -9,6 +9,12 @@ struct AnalysisView: View {
   @Environment(\.scenePhase) private var scenePhase
 
   @Bindable var store: AnalysisStore
+  /// Navigates the sidebar selection when a "For You" insight is opened.
+  /// Threaded from `ContentView` (which owns the selection) rather than read via
+  /// `@FocusedValue(\.sidebarSelection)`: this view also *writes* focused scene
+  /// values, and a focused-value reader here drove an infinite SwiftUI update
+  /// cycle (focus write → focus-dependent body invalidation → rewrite → …).
+  var onNavigate: (SidebarSelection) -> Void = { _ in }
   @State private var selectedUpcomingTransaction: Transaction?
 
   var body: some View {
@@ -76,6 +82,7 @@ struct AnalysisView: View {
       // `plans/2026-04-27-upcoming-card-cold-load-plan.md`.
       await transactionStore.load(filter: TransactionFilter(scheduled: .scheduledOnly))
       await store.loadAll()
+      await session.insightStore?.refreshIfStale(minimumInterval: 60)
     }
     .task {
       // Long-lived reactive subscription for the upcoming card. Runs
@@ -98,6 +105,7 @@ struct AnalysisView: View {
       // threshold to avoid disruptive reloads when the app has just been loaded.
       if oldPhase == .background && newPhase == .active {
         Task { await store.refreshIfStale(minimumInterval: 60) }
+        Task { await session.insightStore?.refreshIfStale(minimumInterval: 60) }
       }
     }
   }
@@ -130,6 +138,12 @@ struct AnalysisView: View {
   @ViewBuilder
   private func contentView(store: AnalysisStore) -> some View {
     VStack(spacing: 20) {
+      if let insightStore = session.insightStore, !insightStore.insights.isEmpty {
+        ForYouCard(
+          insights: insightStore.insights,
+          onDismiss: { insightStore.dismiss($0) },
+          onNavigate: onNavigate)
+      }
       NetWorthGraphCard(balances: store.dailyBalances)
       upcomingAndIncomeExpense(store: store)
       ExpenseBreakdownCard(

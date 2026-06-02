@@ -214,4 +214,8 @@ struct FailingTransactionRepository: TransactionRepository {
   func distinctLegInstrumentIds() async throws -> Set<String> {
     throw BackendError.networkUnavailable
   }
+
+  func countNeedsReview() async throws -> Int {
+    throw BackendError.networkUnavailable
+  }
 }

@@ -1,0 +1,256 @@
+import Foundation
+import Testing
+
+@testable import Moolah
+
+/// Tests for `InsightStore`: the off-main build + on-main publish pipeline,
+/// in-place re-rank on `dismiss(_:)`, and `refreshIfStale` staleness gating.
+///
+/// Sibling stores are constructed against a `CloudKitAnalysisTestBackend`
+/// (mirroring `ProfileSession.makeDomainStores`) with `instrumentChanges: nil`
+/// so no live registry observation runs during the test. The seed creates a
+/// backlog of uncategorized posted transactions, which deterministically fires
+/// the `uncategorizedBacklog` data-quality insight regardless of sibling-store
+/// priming.
+@MainActor
+@Suite("InsightStore")
+struct InsightStoreTests {
+  private let aud = Instrument.defaultTestInstrument
+
+  // MARK: - Harness
+
+  private func makeProfile() -> Profile {
+    Profile(label: "Test", currencyCode: "AUD", financialYearStartMonth: 7)
+  }
+
+  private func makeSources(_ backend: CloudKitAnalysisTestBackend) -> InsightStoreSources {
+    InsightStoreSources(
+      analysis: AnalysisStore(repository: backend.analysis),
+      earmark: EarmarkStore(
+        repository: backend.earmarks, conversionService: backend.conversionService,
+        targetInstrument: aud, instrumentChanges: nil),
+      reporting: ReportingStore(
+        transactionRepository: backend.transactions, analysisRepository: backend.analysis,
+        conversionService: backend.conversionService, profileCurrency: aud),
+      account: AccountStore(
+        repository: backend.accounts, conversionService: backend.conversionService,
+        targetInstrument: aud, instrumentChanges: nil),
+      accountGroup: AccountGroupStore(repository: backend.accountGroups),
+      category: CategoryStore(repository: backend.categories))
+  }
+
+  private func makeStore(_ backend: CloudKitAnalysisTestBackend) -> InsightStore {
+    InsightStore(
+      sources: makeSources(backend), backend: backend, profile: makeProfile(),
+      instrumentChanges: nil)
+  }
+
+  private func makeStore(
+    _ backend: CloudKitAnalysisTestBackend, fixtures: [ScoredInsight]
+  ) -> InsightStore {
+    InsightStore(
+      sources: makeSources(backend), backend: backend, profile: makeProfile(),
+      instrumentChanges: nil, fixtureInsights: InsightFixtures(insights: fixtures))
+  }
+
+  private func makeScoredInsight(id: String, score: Double) -> ScoredInsight {
+    ScoredInsight(
+      insight: Insight(
+        id: id, kind: .netWorthMilestone, title: id, detail: "",
+        date: Date(timeIntervalSince1970: 1_700_000_000),
+        framing: .neutral, actionability: .informational, surprise: 0),
+      score: score)
+  }
+
+  /// Seeds `count` posted, fully-uncategorized transactions so the
+  /// `uncategorizedBacklog` insight (threshold 10) fires deterministically.
+  private func seedUncategorizedBacklog(
+    _ backend: CloudKitAnalysisTestBackend, count: Int
+  ) async throws {
+    for index in 0..<count {
+      _ = try await backend.transactions.create(
+        Transaction(
+          date: try AnalysisTestHelpers.utcDate(year: 2026, month: 5, day: 1),
+          payee: "Merchant \(index)",
+          legs: [
+            TransactionLeg(
+              accountId: nil, instrument: aud, quantity: -10, type: .expense, categoryId: nil)
+          ]))
+    }
+  }
+
+  // MARK: - refresh
+
+  @Test("refresh builds and publishes insights")
+  func refreshPublishesInsights() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    try await seedUncategorizedBacklog(backend, count: 12)
+    let store = makeStore(backend)
+
+    await store.refresh()
+
+    #expect(!store.insights.isEmpty)
+    #expect(store.error == nil)
+    #expect(store.isLoading == false)
+    #expect(store.lastLoadedAt != nil)
+    #expect(store.insights.contains { $0.insight.kind == .uncategorizedBacklog })
+  }
+
+  @Test
+  func fixtureInsightsArePublishedAndDismissable() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    let fixtures = [
+      makeScoredInsight(id: "a", score: 3),
+      makeScoredInsight(id: "b", score: 2),
+    ]
+    let store = makeStore(backend, fixtures: fixtures)
+
+    await store.refresh()
+    #expect(store.insights.map(\.id) == ["a", "b"])
+
+    store.dismiss(try #require(store.insights.first))
+    #expect(store.insights.map(\.id) == ["b"])
+  }
+
+  // MARK: - dismiss
+
+  @Test
+  func dismissRemovesInsightFromPublishedList() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    try await seedUncategorizedBacklog(backend, count: 12)
+    let store = makeStore(backend)
+    await store.refresh()
+
+    let target = try #require(
+      store.insights.first { $0.insight.kind == .uncategorizedBacklog })
+    let loadedAtBeforeDismiss = store.lastLoadedAt
+
+    store.dismiss(target)
+
+    // The dismissed insight is gone immediately — and it was an in-place
+    // re-rank, not a rebuild, so `lastLoadedAt` is untouched.
+    #expect(!store.insights.contains { $0.id == target.id })
+    #expect(store.lastLoadedAt == loadedAtBeforeDismiss)
+  }
+
+  @Test
+  func dismissedInsightStaysHiddenAcrossRefresh() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    try await seedUncategorizedBacklog(backend, count: 12)
+    let store = makeStore(backend)
+    await store.refresh()
+    let target = try #require(
+      store.insights.first { $0.insight.kind == .uncategorizedBacklog })
+
+    store.dismiss(target)
+    store.overrideLastLoadedAtForTesting(nil)  // force the next refresh to rebuild
+    await store.refresh()
+
+    // A full rebuild re-detects the backlog, but the session dismissal keeps
+    // it hidden until relaunch (Phase D persists this across launches).
+    #expect(!store.insights.contains { $0.id == target.id })
+  }
+
+  // MARK: - refreshIfStale
+
+  @Test("refreshIfStale skips a rebuild within the interval")
+  func refreshIfStaleSkipsWithinInterval() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    try await seedUncategorizedBacklog(backend, count: 12)
+    let store = makeStore(backend)
+    await store.refresh()
+    let firstLoadedAt = try #require(store.lastLoadedAt)
+
+    // A very large interval means the recent load is still fresh — no rebuild.
+    await store.refreshIfStale(minimumInterval: 10_000)
+
+    #expect(store.lastLoadedAt == firstLoadedAt)
+  }
+
+  @Test("refreshIfStale rebuilds when stale")
+  func refreshIfStaleRebuildsWhenStale() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    try await seedUncategorizedBacklog(backend, count: 12)
+    let store = makeStore(backend)
+    await store.refresh()
+    let firstLoadedAt = try #require(store.lastLoadedAt)
+
+    // Rewind the clock so the store considers itself stale.
+    store.overrideLastLoadedAtForTesting(Date(timeIntervalSinceNow: -3600))
+    await store.refreshIfStale(minimumInterval: 60)
+
+    let secondLoadedAt = try #require(store.lastLoadedAt)
+    #expect(secondLoadedAt > firstLoadedAt)
+    #expect(!store.insights.isEmpty)
+  }
+
+  @Test("refreshIfStale always refreshes if nothing has been loaded yet")
+  func refreshIfStaleLoadsWhenNeverRefreshed() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    try await seedUncategorizedBacklog(backend, count: 12)
+    let store = makeStore(backend)
+
+    // No prior refresh — `lastLoadedAt` is nil, so a very large interval must
+    // not suppress the load.
+    await store.refreshIfStale(minimumInterval: 10_000)
+
+    #expect(store.lastLoadedAt != nil)
+    #expect(!store.insights.isEmpty)
+  }
+
+  // MARK: - Earmark instrument filtering
+
+  @Test("makeEarmarkSnapshots omits foreign-instrument earmarks")
+  func earmarkSnapshotsOmitsForeignInstrument() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+
+    // Seed an AUD earmark (reporting instrument) — must appear in snapshot.
+    let audEarmark = Earmark(
+      name: "AUD Savings",
+      instrument: .AUD,
+      savingsGoal: InstrumentAmount(quantity: 1000, instrument: .AUD))
+    _ = try await backend.earmarks.create(audEarmark)
+
+    // Seed a USD earmark (foreign instrument) — must be omitted from snapshot.
+    let usdEarmark = Earmark(
+      name: "USD Travel Fund",
+      instrument: .USD,
+      savingsGoal: InstrumentAmount(quantity: 500, instrument: .USD))
+    _ = try await backend.earmarks.create(usdEarmark)
+
+    let sources = makeSources(backend)
+    // Wait for the reactive EarmarkStore to observe both seeded earmarks before
+    // InsightStore.refresh() reads the snapshot — avoids a race where the
+    // snapshot sees an empty list.
+    try await sources.earmark.waitForNextEmission(
+      matching: {
+        $0.earmarks.by(id: audEarmark.id) != nil
+          && $0.earmarks.by(id: usdEarmark.id) != nil
+      },
+      description: "both earmarks observed")
+
+    // Seed uncategorized transactions so the engine runs and the `refresh()`
+    // pipeline exercises the full path.
+    try await seedUncategorizedBacklog(backend, count: 12)
+
+    let store = InsightStore(
+      sources: sources, backend: backend, profile: makeProfile(),
+      instrumentChanges: nil)
+    await store.refresh()
+
+    // Refresh must succeed without trapping on mismatched instruments.
+    #expect(store.error == nil)
+    #expect(store.isLoading == false)
+    // The uncategorized-backlog insight fires, proving the engine ran against
+    // the AUD earmark only (no USD-instrument trap in the snapshot).
+    #expect(store.insights.contains { $0.insight.kind == .uncategorizedBacklog })
+  }
+
+  // MARK: - Error path
+
+  // FIX 8 (SKIPPED): `InsightInputBuilder.build()` drops failed conversions per
+  // Rule 11 rather than throwing — so a conversion-service failure does not make
+  // `build()` throw or set `store.error`. The error path in `refresh()` is
+  // reached only by unexpected repository/DB failures, which `CloudKitAnalysisTestBackend`
+  // does not expose an injection point for. No fabricated test added here.
+}
