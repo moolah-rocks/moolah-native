@@ -123,8 +123,10 @@ private struct InsightRow: View {
         .font(.caption)
       }
       if let target {
+        // `.borderless` (not macOS-only `.link`) renders a tinted, tappable
+        // control on both platforms — matches the dismiss button's style.
         Button("View") { onNavigate(target) }
-          .buttonStyle(.link)
+          .buttonStyle(.borderless)
           .accessibilityLabel("View \(insight.title)")
           .accessibilityIdentifier(UITestIdentifiers.ForYou.viewButton(insight.id))
       }
