@@ -45,6 +45,23 @@ struct InsightStoreTests {
       instrumentChanges: nil)
   }
 
+  private func makeStore(
+    _ backend: CloudKitAnalysisTestBackend, fixtures: [ScoredInsight]
+  ) -> InsightStore {
+    InsightStore(
+      sources: makeSources(backend), backend: backend, profile: makeProfile(),
+      instrumentChanges: nil, fixtureInsights: InsightFixtures(insights: fixtures))
+  }
+
+  private func makeScoredInsight(id: String, score: Double) -> ScoredInsight {
+    ScoredInsight(
+      insight: Insight(
+        id: id, kind: .netWorthMilestone, title: id, detail: "",
+        date: Date(timeIntervalSince1970: 1_700_000_000),
+        framing: .neutral, actionability: .informational, surprise: 0),
+      score: score)
+  }
+
   /// Seeds `count` posted, fully-uncategorized transactions so the
   /// `uncategorizedBacklog` insight (threshold 10) fires deterministically.
   private func seedUncategorizedBacklog(
@@ -77,6 +94,22 @@ struct InsightStoreTests {
     #expect(store.isLoading == false)
     #expect(store.lastLoadedAt != nil)
     #expect(store.insights.contains { $0.insight.kind == .uncategorizedBacklog })
+  }
+
+  @Test
+  func fixtureInsightsArePublishedAndDismissable() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    let fixtures = [
+      makeScoredInsight(id: "a", score: 3),
+      makeScoredInsight(id: "b", score: 2),
+    ]
+    let store = makeStore(backend, fixtures: fixtures)
+
+    await store.refresh()
+    #expect(store.insights.map(\.id) == ["a", "b"])
+
+    store.dismiss(try #require(store.insights.first))
+    #expect(store.insights.map(\.id) == ["b"])
   }
 
   // MARK: - dismiss

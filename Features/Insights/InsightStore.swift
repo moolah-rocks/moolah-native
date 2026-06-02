@@ -35,6 +35,14 @@ struct InsightStoreSources {
 ///
 /// Detected insights are cached as `lastInput`, so `dismiss(_:)` re-ranks the
 /// already-built input instantly without rebuilding off the main actor.
+/// UI-testing seam payload: a non-optional fixture list wrapped so the store can
+/// pass and hold it as an `Optional` (nil = production / preview) without
+/// tripping SwiftLint's `discouraged_optional_collection` on a bare
+/// `[ScoredInsight]?` init parameter / stored property.
+struct InsightFixtures: Sendable {
+  let insights: [ScoredInsight]
+}
+
 @Observable
 @MainActor
 final class InsightStore {
@@ -61,6 +69,14 @@ final class InsightStore {
   /// Narrow seam onto the shared instrument registry's change stream. Nil in
   /// previews / legacy tests so no live observation runs.
   private let instrumentChanges: (any InstrumentChangeObserving)?
+
+  /// UI-testing seam: when non-nil, `refresh()` publishes these fixtures
+  /// instead of building an `InsightInput` and running the engine — so a
+  /// `MoolahUITests_macOS` seed can assert the surface deterministically
+  /// (mirrors the `transferDetectionBaseline` "write the result directly"
+  /// pattern). Nil in production and previews. `dismiss(_:)` still works via
+  /// `dismissedIds` because the fixture path leaves `lastInput` nil.
+  private let fixtureInsights: InsightFixtures?
 
   private let logger = Logger(subsystem: "com.moolah.app", category: "InsightStore")
 
@@ -92,13 +108,15 @@ final class InsightStore {
     sources: InsightStoreSources,
     backend: any BackendProvider,
     profile: Profile,
-    instrumentChanges: (any InstrumentChangeObserving)? = nil
+    instrumentChanges: (any InstrumentChangeObserving)? = nil,
+    fixtureInsights: InsightFixtures? = nil
   ) {
     self.sources = sources
     self.builder = InsightInputBuilder(backend: backend)
     self.engine = InsightEngine()
     self.reportingInstrument = profile.instrument
     self.instrumentChanges = instrumentChanges
+    self.fixtureInsights = fixtureInsights
 
     // Strong `self` capture mirrors `EarmarkStore`: the store is
     // `@MainActor`, the task already holds an implicit strong reference, and
@@ -134,6 +152,11 @@ final class InsightStore {
   /// error handling.
   func refresh() async {
     guard !isLoading else { return }
+    if let fixtureInsights {
+      insights = visible(fixtureInsights.insights)
+      lastLoadedAt = Date()
+      return
+    }
     let snapshot = makeSnapshot()
     let context = makeContext()
     isLoading = true
