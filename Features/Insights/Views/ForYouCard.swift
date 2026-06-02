@@ -112,7 +112,7 @@ private struct InsightRow: View {
           .font(.callout)
           .foregroundStyle(.secondary)
       }
-      ForEach(Array(insight.facts.enumerated()), id: \.offset) { _, fact in
+      ForEach(insight.facts) { fact in
         HStack {
           Text(fact.label)
             .foregroundStyle(.secondary)
