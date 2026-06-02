@@ -22,9 +22,9 @@ struct InsightEngine: Sendable {
     let context = input.context
     let calendar = context.calendar
     let expenseSubscriptions = SubscriptionDetector.detect(
-      in: input.transactions, incomeStreams: false, calendar: calendar)
+      payees: input.payees, incomeStreams: false, calendar: calendar)
     let incomeStreams = SubscriptionDetector.detect(
-      in: input.transactions, incomeStreams: true, calendar: calendar)
+      payees: input.payees, incomeStreams: true, calendar: calendar)
 
     var insights: [Insight] = []
     insights += subscriptionInsights(input, subscriptions: expenseSubscriptions)
@@ -78,13 +78,20 @@ struct InsightEngine: Sendable {
     let context = input.context
     var insights: [Insight] = []
     insights += LargeTransactionInsight.detect(
-      transactions: input.transactions, categories: input.categories, context: context)
-    insights += NewMerchantInsight.detect(transactions: input.transactions, context: context)
-    insights += UnusualDayInsight.detect(transactions: input.transactions, context: context)
+      recentCandidates: input.recentCandidates,
+      categorySamples: input.categorySamples,
+      categories: input.categories,
+      context: context)
+    insights += NewMerchantInsight.detect(
+      recentCandidates: input.recentCandidates,
+      payees: input.payees,
+      categorySamples: input.categorySamples,
+      context: context)
+    insights += UnusualDayInsight.detect(dailyTotals: input.dailyTotals, context: context)
     insights += CategoryAnomalyInsight.detect(
       breakdown: input.expenseBreakdown, categories: input.categories, context: context)
     insights += SavingsOpportunityInsights.feeSpend(
-      transactions: input.transactions, context: context)
+      feeCategorySpend: input.feeCategorySpend, context: context)
     return insights
   }
 
@@ -136,7 +143,10 @@ struct InsightEngine: Sendable {
     let context = input.context
     var insights: [Insight] = []
     insights += IncomeInsights.detect(incomeStreams: incomeStreams, context: context)
-    insights += IncomeExtraInsights.windfall(transactions: input.transactions, context: context)
+    insights += IncomeExtraInsights.windfall(
+      recentCandidates: input.recentCandidates,
+      incomeSamples: input.incomeSamples,
+      context: context)
     insights += IncomeExtraInsights.payRateChange(incomeStreams: incomeStreams, context: context)
     return insights
   }
@@ -144,9 +154,8 @@ struct InsightEngine: Sendable {
   private func habitInsights(_ input: InsightInput) -> [Insight] {
     let context = input.context
     var insights: [Insight] = []
-    insights += SpendHabitInsights.lapsedMerchant(
-      transactions: input.transactions, context: context)
-    insights += SpendHabitInsights.weekendSkew(transactions: input.transactions, context: context)
+    insights += SpendHabitInsights.lapsedMerchant(payees: input.payees, context: context)
+    insights += SpendHabitInsights.weekendSkew(dailyTotals: input.dailyTotals, context: context)
     return insights
   }
 

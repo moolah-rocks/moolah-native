@@ -129,6 +129,37 @@ struct InsightDataSourcePlanPinningTests {
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
   }
 
+  @Test("incomeSamples window-function projection avoids a leg table scan")
+  func incomeSamplesAvoidsScan() throws {
+    let database = try makeDatabase()
+    let detail = try planDetail(
+      database,
+      query: """
+        SELECT day, instrument_id, quantity
+        FROM (
+          SELECT DATE(t.date)       AS day,
+                 leg.instrument_id  AS instrument_id,
+                 leg.quantity       AS quantity,
+                 ROW_NUMBER() OVER (
+                   ORDER BY t.date DESC, leg.transaction_id DESC
+                 ) AS rn
+          FROM transaction_leg leg
+          JOIN "transaction"    t ON leg.transaction_id = t.id
+          WHERE t.recur_period IS NULL
+            AND leg.type = 'income'
+            AND (? IS NULL OR t.date >= ?)
+        )
+        WHERE rn <= ?
+        ORDER BY rn ASC
+        """,
+      arguments: [Date?.none, Date?.none, 200])
+    let usesLegIndex =
+      detail.contains("leg_analysis_by_type_account")
+      || detail.contains("leg_analysis_by_type_category")
+    #expect(usesLegIndex)
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
+  }
+
   @Test("recentCandidates projection avoids a leg table scan")
   func recentCandidatesAvoidsScan() throws {
     let database = try makeDatabase()

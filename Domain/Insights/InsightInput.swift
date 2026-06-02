@@ -58,9 +58,41 @@ struct EarmarkSnapshot: Sendable, Identifiable, Hashable {
 struct InsightInput: Sendable {
   let context: InsightContext
 
-  /// Posted (non-scheduled) income/expense records, all instruments folded
-  /// into the reporting currency. The workhorse input for spend detectors.
-  let transactions: [InsightTransaction]
+  /// Bounded recent-candidate window (≤30 days) of projected income/expense
+  /// legs, reporting currency. The only raw rows detectors that must cite a
+  /// specific `transactionId` (large-transaction, windfall, new-merchant)
+  /// receive — everything else reads the aggregates below.
+  let recentCandidates: [InsightTransaction]
+
+  /// All-history per-day spend totals, reporting currency. Drives the
+  /// unusual-day and weekend-skew detectors.
+  let dailyTotals: [DailySpendSummary]
+
+  /// Per-normalized-payee cadence and totals over the ~13-month payee
+  /// window. Drives subscription, lapsed-merchant, and new-merchant novelty
+  /// detection.
+  let payees: [PayeeSummary]
+
+  /// Per-category recent expense-magnitude samples, the MAD / percentile
+  /// baseline for large-transaction and new-merchant magnitude scoring.
+  let categorySamples: [CategorySpendSamples]
+
+  /// Capped income-magnitude samples, the robust-z baseline the windfall
+  /// detector scores recent deposits against. All values are positive
+  /// magnitudes.
+  let incomeSamples: [Decimal]
+
+  /// Per-category expense totals over the trailing 365 days. Drives the
+  /// fee-spend detector.
+  let feeCategorySpend: [CategorySpendSummary]
+
+  /// Per-category expense totals over the trailing 90 days. Drives the
+  /// unbudgeted-category detector.
+  let unbudgetedCategorySpend: [CategorySpendSummary]
+
+  /// Per-account expense totals over the trailing 30 days. Drives
+  /// group-spend-concentration once mapped through the membership map.
+  let accountSpend: [AccountSpendSummary]
 
   /// Per-financial-month income/expense aggregates (`AnalysisStore`).
   let monthly: [MonthlyIncomeExpense]
@@ -108,7 +140,14 @@ struct InsightInput: Sendable {
 
   init(
     context: InsightContext,
-    transactions: [InsightTransaction] = [],
+    recentCandidates: [InsightTransaction] = [],
+    dailyTotals: [DailySpendSummary] = [],
+    payees: [PayeeSummary] = [],
+    categorySamples: [CategorySpendSamples] = [],
+    incomeSamples: [Decimal] = [],
+    feeCategorySpend: [CategorySpendSummary] = [],
+    unbudgetedCategorySpend: [CategorySpendSummary] = [],
+    accountSpend: [AccountSpendSummary] = [],
     monthly: [MonthlyIncomeExpense] = [],
     expenseBreakdown: [ExpenseBreakdown] = [],
     dailyBalances: [DailyBalance] = [],
@@ -125,7 +164,14 @@ struct InsightInput: Sendable {
     oldestPendingTransferDate: Date? = nil
   ) {
     self.context = context
-    self.transactions = transactions
+    self.recentCandidates = recentCandidates
+    self.dailyTotals = dailyTotals
+    self.payees = payees
+    self.categorySamples = categorySamples
+    self.incomeSamples = incomeSamples
+    self.feeCategorySpend = feeCategorySpend
+    self.unbudgetedCategorySpend = unbudgetedCategorySpend
+    self.accountSpend = accountSpend
     self.monthly = monthly
     self.expenseBreakdown = expenseBreakdown
     self.dailyBalances = dailyBalances

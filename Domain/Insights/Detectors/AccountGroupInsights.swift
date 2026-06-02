@@ -16,13 +16,12 @@ enum AccountGroupInsights {
 
     var spendByGroup: [UUID: Double] = [:]
     var groupedTotal = 0.0
-    for transaction in input.transactions where transaction.isExpense {
-      let age = context.daysSince(transaction.date)
-      guard age >= 0, age <= windowDays,
-        let accountId = transaction.accountId,
+    for summary in input.accountSpend {
+      guard let accountId = summary.accountId,
         let groupId = input.accountGroupMembership[accountId]
       else { continue }
-      let magnitude = Double(truncating: transaction.spendMagnitude as NSDecimalNumber)
+      let magnitudeDecimal = summary.total.quantity < 0 ? -summary.total.quantity : 0
+      let magnitude = Double(truncating: magnitudeDecimal as NSDecimalNumber)
       spendByGroup[groupId, default: 0] += magnitude
       groupedTotal += magnitude
     }

@@ -11,20 +11,21 @@ struct SpendAndTrendInsightTests {
   @Test
   func largeTransactionAnomalyFlagsOutlier() throws {
     let dining = UUID()
-    var transactions: [InsightTransaction] = []
+    var baseline: [InsightTransaction] = []
     let normals: [Decimal] = [18, 19, 20, 21, 22, 19, 20, 21, 18]
     for (index, magnitude) in normals.enumerated() {
-      transactions.append(
+      baseline.append(
         InsightTestSupport.expense(
           magnitude, payee: "Cafe", daysAgo: index * 4 + 1, categoryId: dining,
           categoryPath: "Dining"))
     }
-    transactions.append(
-      InsightTestSupport.expense(
-        200, payee: "Steakhouse", daysAgo: 2, categoryId: dining, categoryPath: "Dining"))
+    let outlier = InsightTestSupport.expense(
+      200, payee: "Steakhouse", daysAgo: 2, categoryId: dining, categoryPath: "Dining")
 
     let insights = LargeTransactionInsight.detect(
-      transactions: transactions, categories: emptyCategories, context: context)
+      recentCandidates: [outlier],
+      categorySamples: InsightTestSupport.categorySamples(from: baseline + [outlier]),
+      categories: emptyCategories, context: context)
     let anomaly = try #require(insights.first { $0.kind == .largeTransactionAnomaly })
     #expect(anomaly.references.transactionIds.count == 1)
     #expect(anomaly.surprise > 0.9)
@@ -32,27 +33,46 @@ struct SpendAndTrendInsightTests {
 
   @Test
   func newMerchantAlertFiresForLargeFirstCharge() {
-    var transactions: [InsightTransaction] = []
+    // Categorised history establishes the top-decile magnitude baseline and
+    // the "Groceries" payee; the new "Fancy Restaurant" charge is novel.
+    let groceriesCategory = UUID()
+    var history: [InsightTransaction] = []
     for index in 0..<12 {
-      transactions.append(
-        InsightTestSupport.expense(Decimal(20 + index), payee: "Groceries", daysAgo: 20 + index))
+      history.append(
+        InsightTestSupport.expense(
+          Decimal(20 + index), payee: "Groceries", daysAgo: 20 + index,
+          categoryId: groceriesCategory, categoryPath: "Groceries"))
     }
-    transactions.append(
-      InsightTestSupport.expense(300, payee: "Fancy Restaurant", daysAgo: 2))
+    let newCharge = InsightTestSupport.expense(
+      300, payee: "Fancy Restaurant", daysAgo: 2, categoryId: groceriesCategory,
+      categoryPath: "Groceries")
 
-    let insights = NewMerchantInsight.detect(transactions: transactions, context: context)
+    let insights = NewMerchantInsight.detect(
+      recentCandidates: [newCharge],
+      payees: InsightTestSupport.payees(from: history),
+      categorySamples: InsightTestSupport.categorySamples(from: history + [newCharge]),
+      context: context)
     #expect(insights.contains { $0.kind == .newMerchantAlert })
   }
 
   @Test
   func newMerchantQuietForKnownPayee() {
-    var transactions: [InsightTransaction] = []
+    let groceriesCategory = UUID()
+    var history: [InsightTransaction] = []
     for index in 0..<12 {
-      transactions.append(
-        InsightTestSupport.expense(50, payee: "Groceries", daysAgo: 20 + index))
+      history.append(
+        InsightTestSupport.expense(
+          50, payee: "Groceries", daysAgo: 20 + index, categoryId: groceriesCategory,
+          categoryPath: "Groceries"))
     }
-    transactions.append(InsightTestSupport.expense(300, payee: "Groceries", daysAgo: 1))
-    let insights = NewMerchantInsight.detect(transactions: transactions, context: context)
+    let recent = InsightTestSupport.expense(
+      300, payee: "Groceries", daysAgo: 1, categoryId: groceriesCategory,
+      categoryPath: "Groceries")
+    let insights = NewMerchantInsight.detect(
+      recentCandidates: [recent],
+      payees: InsightTestSupport.payees(from: history),
+      categorySamples: InsightTestSupport.categorySamples(from: history + [recent]),
+      context: context)
     #expect(insights.isEmpty)
   }
 

@@ -11,7 +11,8 @@ import Testing
 /// per-category / per-account windowed sums, per-payee cadence, MAD-baseline
 /// samples, and the bounded recent-candidate window — plus the Rule 11
 /// conversion-drop path. Scaling (memory independence) lives in
-/// `GRDBInsightDataSourceScalingTests`; query-plan pinning in
+/// `GRDBInsightDataSourceScalingTests`; per-day conversion correctness in
+/// `GRDBInsightDataSourceConversionTests`; query-plan pinning in
 /// `InsightDataSourcePlanPinningTests`.
 @Suite("GRDBInsightDataSource summaries")
 struct GRDBInsightDataSourceTests {
@@ -60,29 +61,6 @@ struct GRDBInsightDataSourceTests {
     let second = try #require(totals.last)
     #expect(second.spendMagnitude == 30)
     #expect(second.incomeMagnitude == 0)
-  }
-
-  @Test("dailyTotals converts each day's foreign legs at that day's rate")
-  func dailyTotalsConvertsPerDay() async throws {
-    let dayOne = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 10)
-    let dayTwo = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 11)
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 10, hour: 0): ["USD": 1.5],
-        try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 11, hour: 0): ["USD": 2.0],
-      ])
-    let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
-    let usd = Instrument.fiat(code: "USD")
-    _ = try await backend.transactions.create(
-      Transaction(date: dayOne, payee: "A", legs: [leg(-100, type: .expense, instrument: usd)]))
-    _ = try await backend.transactions.create(
-      Transaction(date: dayTwo, payee: "B", legs: [leg(-100, type: .expense, instrument: usd)]))
-
-    let totals = try await backend.insightDataSource.dailyTotals(
-      context: context(now: try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)))
-
-    #expect(try #require(totals.first).spendMagnitude == 150)
-    #expect(try #require(totals.last).spendMagnitude == 200)
   }
 
   // MARK: - categorySpend / accountSpend
@@ -185,6 +163,91 @@ struct GRDBInsightDataSourceTests {
 
     let entry = try #require(samples.first { $0.categoryId == dining.id })
     #expect(entry.magnitudes == [99, 10])
+  }
+
+  // MARK: - incomeSamples
+
+  @Test("incomeSamples returns only income magnitudes, most-recent first")
+  func incomeSamplesOrderAndType() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
+    let older = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 1)
+    let newer = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 12)
+    _ = try await backend.transactions.create(
+      Transaction(date: older, payee: "Salary A", legs: [leg(500, type: .income, instrument: aud)]))
+    _ = try await backend.transactions.create(
+      Transaction(date: newer, payee: "Bonus", legs: [leg(1200, type: .income, instrument: aud)]))
+    // Expense leg must be excluded from income samples.
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: newer, payee: "Shop",
+        legs: [leg(-80, type: .expense, instrument: aud)]))
+
+    let samples = try await backend.insightDataSource.incomeSamples(
+      windowDays: 365, maxCount: 50, context: context(now: now))
+
+    // Only the two income legs; expense excluded; most-recent first.
+    #expect(samples == [1200, 500])
+    #expect(samples.allSatisfy { $0 > 0 })
+  }
+
+  @Test("incomeSamples respects maxCount cap")
+  func incomeSamplesMaxCount() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
+    for day in 1...5 {
+      let date = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: day)
+      _ = try await backend.transactions.create(
+        Transaction(
+          date: date, payee: "Income",
+          legs: [leg(Decimal(day * 100), type: .income, instrument: aud)]))
+    }
+
+    let samples = try await backend.insightDataSource.incomeSamples(
+      windowDays: 365, maxCount: 3, context: context(now: now))
+
+    #expect(samples.count == 3)
+  }
+
+  @Test("incomeSamples drops non-positive income amounts from the baseline")
+  func incomeSamplesDropsNonPositive() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
+    let day = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 10)
+    // Negative income (refund): must be dropped entirely, not appended as 0.
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: day, payee: "Refund",
+        legs: [leg(-50, type: .income, instrument: aud)]))
+    // Positive income: must be included.
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: day, payee: "Salary",
+        legs: [leg(3000, type: .income, instrument: aud)]))
+
+    let samples = try await backend.insightDataSource.incomeSamples(
+      windowDays: 365, maxCount: 50, context: context(now: now))
+
+    #expect(samples == [3000])
+    #expect(samples.allSatisfy { $0 > 0 })
+  }
+
+  @Test("incomeSamples excludes legs outside the windowDays cutoff")
+  func incomeSamplesWindowCutoff() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
+    let inWindow = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 1)
+    let outWindow = try AnalysisTestHelpers.utcDate(year: 2026, month: 1, day: 1)
+    _ = try await backend.transactions.create(
+      Transaction(date: inWindow, payee: "Recent", legs: [leg(300, type: .income, instrument: aud)])
+    )
+    _ = try await backend.transactions.create(
+      Transaction(date: outWindow, payee: "Old", legs: [leg(9999, type: .income, instrument: aud)]))
+
+    let samples = try await backend.insightDataSource.incomeSamples(
+      windowDays: 30, maxCount: 50, context: context(now: now))
+
+    #expect(samples == [300])
   }
 
   // MARK: - recentCandidates

@@ -8,6 +8,12 @@ import Foundation
 /// References: Plaid's recurring-stream approach and BBVA's weighted
 /// DBSCAN, simplified to a histogram-free median-gap test that's adequate
 /// for a single user's sparse history (design §A-1).
+///
+/// **Annual-subscription limitation:** the `payees` window spans only ~13
+/// months, so an annual subscription has at most two occurrences within it
+/// and can never reach `minimumOccurrences` (3). Annual subscriptions are
+/// therefore intentionally not detected — the window is deliberately kept
+/// short to bound the per-refresh cost, not widened to catch them.
 enum SubscriptionDetector {
   /// Tuning knobs, exposed so tests can tighten / loosen the gates without
   /// editing the detector.
@@ -24,26 +30,23 @@ enum SubscriptionDetector {
     var maximumIntervalVariation: Double = 0.35
   }
 
-  /// Detect subscription streams among `transactions`. Pass `incomeStreams:
+  /// Detect subscription streams among `payees`. Pass `incomeStreams:
   /// true` to detect recurring income (paychecks) instead of expenses —
-  /// the same algorithm runs over the opposite sign.
+  /// the same algorithm runs over the opposite sign. Each `PayeeSummary`
+  /// already carries the payee's projected occurrences in the cadence window.
   static func detect(
-    in transactions: [InsightTransaction],
+    payees: [PayeeSummary],
     incomeStreams: Bool = false,
     parameters: Parameters = Parameters(),
     calendar: Calendar
   ) -> [DetectedSubscription] {
-    let relevant = transactions.filter {
-      incomeStreams ? $0.isIncome : $0.isExpense
-    }
-    let groups = Dictionary(grouping: relevant) { $0.normalizedPayee }
+    let relevant = payees.filter { $0.isExpense == !incomeStreams }
 
     var detected: [DetectedSubscription] = []
-    for (payee, records) in groups where !payee.isEmpty {
+    for payee in relevant where !payee.normalizedPayee.isEmpty {
       guard
         let subscription = evaluate(
           payee: payee,
-          records: records,
           incomeStreams: incomeStreams,
           parameters: parameters,
           calendar: calendar)
@@ -53,18 +56,17 @@ enum SubscriptionDetector {
     return detected.sorted { $0.monthlyCostMagnitude > $1.monthlyCostMagnitude }
   }
 
-  /// Evaluate one payee's records against the cadence + amount gates.
+  /// Evaluate one payee's occurrences against the cadence + amount gates.
   private static func evaluate(
-    payee: String,
-    records: [InsightTransaction],
+    payee: PayeeSummary,
     incomeStreams: Bool,
     parameters: Parameters,
     calendar: Calendar
   ) -> DetectedSubscription? {
-    let sorted = records.sorted { $0.date < $1.date }
-    guard sorted.count >= parameters.minimumOccurrences else { return nil }
+    let occ = payee.occurrences.sorted { $0.date < $1.date }
+    guard occ.count >= parameters.minimumOccurrences else { return nil }
 
-    let intervals = consecutiveDayGaps(of: sorted.map(\.date), calendar: calendar)
+    let intervals = consecutiveDayGaps(of: occ.map(\.date), calendar: calendar)
     guard !intervals.isEmpty else { return nil }
     let medianInterval = DescriptiveStatistics.median(intervals)
     guard medianInterval > 0 else { return nil }
@@ -80,7 +82,7 @@ enum SubscriptionDetector {
         toIntervalDays: medianInterval, tolerance: parameters.periodTolerance)
     else { return nil }
 
-    let amounts = sorted.map(\.amount)
+    let amounts = occ.map(\.amount.quantity)
     let magnitudes = amounts.map { Double(truncating: ($0 < 0 ? -$0 : $0) as NSDecimalNumber) }
     if let amountCV = DescriptiveStatistics.coefficientOfVariation(magnitudes),
       amountCV > parameters.maximumAmountVariation
@@ -91,19 +93,18 @@ enum SubscriptionDetector {
     let medianMagnitude = DescriptiveStatistics.median(magnitudes)
     let medianAmount = Decimal(medianMagnitude * (incomeStreams ? 1.0 : -1.0))
     let maturedIndex = parameters.minimumOccurrences - 1
-    let dominantAccount = mostCommonAccount(in: sorted)
 
     return DetectedSubscription(
-      id: "\(incomeStreams ? "income" : "expense"):\(payee)",
-      normalizedPayee: payee,
-      displayPayee: sorted.last?.rawPayee ?? payee,
-      categoryId: mostCommonCategory(in: sorted),
-      accountId: dominantAccount,
+      id: "\(incomeStreams ? "income" : "expense"):\(payee.normalizedPayee)",
+      normalizedPayee: payee.normalizedPayee,
+      displayPayee: payee.displayPayee,
+      categoryId: mostCommonCategory(occ),
+      accountId: mostCommonAccount(occ),
       period: period,
-      occurrenceCount: sorted.count,
-      firstDate: sorted.first?.date ?? sorted[0].date,
-      lastDate: sorted.last?.date ?? sorted[0].date,
-      maturedDate: sorted[min(maturedIndex, sorted.count - 1)].date,
+      occurrenceCount: occ.count,
+      firstDate: payee.firstSeen,
+      lastDate: payee.lastSeen,
+      maturedDate: occ[min(maturedIndex, occ.count - 1)].date,
       medianIntervalDays: medianInterval,
       medianAmount: medianAmount,
       latestAmount: amounts.last ?? medianAmount,
@@ -122,16 +123,16 @@ enum SubscriptionDetector {
     return gaps
   }
 
-  private static func mostCommonCategory(in records: [InsightTransaction]) -> UUID? {
-    let categorized = records.compactMap(\.categoryId)
+  private static func mostCommonCategory(_ occurrences: [PayeeOccurrence]) -> UUID? {
+    let categorized = occurrences.compactMap(\.categoryId)
     guard !categorized.isEmpty else { return nil }
     return Dictionary(grouping: categorized, by: { $0 })
       .max { $0.value.count < $1.value.count }?
       .key
   }
 
-  private static func mostCommonAccount(in records: [InsightTransaction]) -> UUID? {
-    let accounts = records.compactMap(\.accountId)
+  private static func mostCommonAccount(_ occurrences: [PayeeOccurrence]) -> UUID? {
+    let accounts = occurrences.compactMap(\.accountId)
     guard !accounts.isEmpty else { return nil }
     return Dictionary(grouping: accounts, by: { $0 })
       .max { $0.value.count < $1.value.count }?

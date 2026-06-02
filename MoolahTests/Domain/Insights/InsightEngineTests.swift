@@ -6,19 +6,18 @@ import Testing
 @Suite("InsightEngine")
 struct InsightEngineTests {
   private let context = InsightTestSupport.context()
-  private let currency = InsightTestSupport.currency
 
   private func sampleInput() -> InsightInput {
-    var transactions: [InsightTransaction] = []
+    var legs: [InsightTransaction] = []
     // A monthly subscription with a price hike on the latest charge.
     let netflixAmounts: [Decimal] = [10, 10, 10, 12]
     for (index, magnitude) in netflixAmounts.enumerated() {
-      transactions.append(
+      legs.append(
         InsightTestSupport.expense(magnitude, payee: "Netflix", daysAgo: (3 - index) * 30))
     }
     // Recurring fortnightly income.
     for index in 0..<4 {
-      transactions.append(
+      legs.append(
         InsightTestSupport.income(2500, payee: "ACME Payroll", daysAgo: index * 14))
     }
 
@@ -37,7 +36,10 @@ struct InsightEngineTests {
 
     return InsightInput(
       context: context,
-      transactions: transactions,
+      recentCandidates: InsightTestSupport.recentCandidates(from: legs),
+      dailyTotals: InsightTestSupport.dailyTotals(from: legs),
+      payees: InsightTestSupport.payees(from: legs),
+      categorySamples: InsightTestSupport.categorySamples(from: legs),
       monthly: monthly,
       dailyBalances: balances,
       earmarks: [underspend],
@@ -64,40 +66,5 @@ struct InsightEngineTests {
   func emptyInputProducesNoInsights() {
     let input = InsightInput(context: context)
     #expect(InsightEngine().detectAll(input).isEmpty)
-  }
-
-  @Test
-  func recordsBuilderFlattensExpenseLegs() throws {
-    let dining = Category(name: "Dining")
-    let categories = Categories(from: [dining])
-    let transaction = Transaction(
-      date: InsightTestSupport.now,
-      payee: "Cafe",
-      legs: [
-        TransactionLeg(
-          accountId: UUID(), instrument: currency, quantity: -50, type: .expense,
-          categoryId: dining.id)
-      ])
-    let records = InsightTransaction.sameCurrencyRecords(
-      from: [transaction], categories: categories, reportingCurrency: currency)
-    let record = try #require(records.first)
-    #expect(records.count == 1)
-    #expect(record.amount == -50)
-    #expect(record.categoryPath == "Dining")
-    #expect(record.normalizedPayee == "cafe")
-  }
-
-  @Test
-  func recordsBuilderExcludesTransfers() {
-    let transaction = Transaction(
-      date: InsightTestSupport.now,
-      payee: "Move",
-      legs: [
-        TransactionLeg(accountId: UUID(), instrument: currency, quantity: -100, type: .transfer),
-        TransactionLeg(accountId: UUID(), instrument: currency, quantity: 100, type: .transfer),
-      ])
-    let records = InsightTransaction.sameCurrencyRecords(
-      from: [transaction], categories: Categories(from: []), reportingCurrency: currency)
-    #expect(records.isEmpty)
   }
 }

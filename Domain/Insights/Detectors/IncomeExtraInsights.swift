@@ -8,18 +8,18 @@ enum IncomeExtraInsights {
   /// robust-z outlier above the user's typical inflow. Positive framing —
   /// the income-side counterpart of the large-transaction anomaly.
   static func windfall(
-    transactions: [InsightTransaction],
+    recentCandidates: [InsightTransaction],
+    incomeSamples: [Decimal],
     context: InsightContext,
     windowDays: Int = 30,
     threshold: Double = 3.5
   ) -> [Insight] {
-    let income = transactions.filter(\.isIncome)
-    guard income.count >= 6 else { return [] }
-    let magnitudes = income.map { Double(truncating: $0.incomeMagnitude as NSDecimalNumber) }
+    guard incomeSamples.count >= 6 else { return [] }
+    let magnitudes = incomeSamples.map { Double(truncating: $0 as NSDecimalNumber) }
 
     var best: InsightTransaction?
     var bestScore = threshold
-    for transaction in income {
+    for transaction in recentCandidates.filter(\.isIncome) {
       let age = context.daysSince(transaction.date)
       guard age >= 0, age <= windowDays else { continue }
       let value = Double(truncating: transaction.incomeMagnitude as NSDecimalNumber)

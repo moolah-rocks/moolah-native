@@ -5,21 +5,20 @@ import Foundation
 /// daily totals ("you spent 3× your typical Sunday today").
 enum UnusualDayInsight {
   static func detect(
-    transactions: [InsightTransaction],
+    dailyTotals dailySummaries: [DailySpendSummary],
     context: InsightContext,
     windowDays: Int = 2,
     threshold: Double = 3,
     minimumRatio: Double = 2
   ) -> [Insight] {
-    let expenses = transactions.filter(\.isExpense)
-    guard expenses.count >= 14 else { return [] }
+    guard dailySummaries.count >= 14 else { return [] }
 
     // Daily spend magnitude per calendar day.
     var dailyTotals: [Date: Double] = [:]
-    for transaction in expenses {
-      let day = context.calendar.startOfDay(for: transaction.date)
+    for summary in dailySummaries {
+      let day = context.calendar.startOfDay(for: summary.day)
       dailyTotals[day, default: 0] += Double(
-        truncating: transaction.spendMagnitude as NSDecimalNumber)
+        truncating: summary.spendMagnitude as NSDecimalNumber)
     }
     guard !dailyTotals.isEmpty else { return [] }
 
