@@ -16,6 +16,10 @@ struct ForYouCard: View {
       Text("For You")
         .font(.title2)
         .fontWeight(.semibold)
+        // Identifier on the header leaf, NOT the card container: an
+        // `.accessibilityIdentifier` on the outer VStack propagates to every
+        // descendant element, clobbering each row/button's own identifier.
+        .accessibilityIdentifier(UITestIdentifiers.ForYou.card)
       VStack(spacing: 8) {
         ForEach(insights.prefix(maxVisible)) { scored in
           InsightRow(
@@ -28,7 +32,6 @@ struct ForYouCard: View {
     .padding()
     .background(.background)
     .clipShape(.rect(cornerRadius: 12))
-    .accessibilityIdentifier(UITestIdentifiers.ForYou.card)
   }
 }
 
