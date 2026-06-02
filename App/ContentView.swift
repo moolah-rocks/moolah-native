@@ -235,7 +235,7 @@ struct ContentView: View {
         earmarks: earmarkStore.earmarks,
         transactionStore: transactionStore)
     case .analysis:
-      AnalysisView(store: analysisStore)
+      AnalysisView(store: analysisStore, onNavigate: { selection = $0 })
     case nil:
       ContentUnavailableView(
         "Select an Account", systemImage: "sidebar.left",

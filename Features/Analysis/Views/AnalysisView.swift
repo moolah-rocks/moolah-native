@@ -7,9 +7,14 @@ struct AnalysisView: View {
   @Environment(TransactionStore.self) private var transactionStore
   @Environment(ProfileSession.self) private var session
   @Environment(\.scenePhase) private var scenePhase
-  @FocusedValue(\.sidebarSelection) private var sidebarSelection
 
   @Bindable var store: AnalysisStore
+  /// Navigates the sidebar selection when a "For You" insight is opened.
+  /// Threaded from `ContentView` (which owns the selection) rather than read via
+  /// `@FocusedValue(\.sidebarSelection)`: this view also *writes* focused scene
+  /// values, and a focused-value reader here drove an infinite SwiftUI update
+  /// cycle (focus write → focus-dependent body invalidation → rewrite → …).
+  var onNavigate: (SidebarSelection) -> Void = { _ in }
   @State private var selectedUpcomingTransaction: Transaction?
 
   var body: some View {
@@ -137,7 +142,7 @@ struct AnalysisView: View {
         ForYouCard(
           insights: insightStore.insights,
           onDismiss: { insightStore.dismiss($0) },
-          onNavigate: { sidebarSelection?.wrappedValue = $0 })
+          onNavigate: onNavigate)
       }
       NetWorthGraphCard(balances: store.dailyBalances)
       upcomingAndIncomeExpense(store: store)
