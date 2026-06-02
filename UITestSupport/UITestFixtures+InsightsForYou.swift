@@ -1,12 +1,12 @@
 import Foundation
 
 extension UITestFixtures {
-  /// Deterministic constants for the `.insightsForYouBaseline` seed. The
-  /// `[ScoredInsight]` values live in `App/UITestSeedInsightOverrides` (app
-  /// target only); these ids/titles are referenced by both that override and
-  /// `ForYouPanelUITests` so a rename can't desync them. The navigable row
-  /// references `UITestFixtures.TradeBaseline.checkingAccountId`, so tapping
-  /// "View" lands on that account's detail (asserted via its name).
+  /// Deterministic constants for the `.insightsForYouBaseline` seed. Shared
+  /// between the app target (which constructs the `ScoredInsight` values) and
+  /// the UI-test drivers (which assert on the rendered titles and identifiers),
+  /// so a rename can't desync the two sides. The navigable row references
+  /// `UITestFixtures.TradeBaseline.checkingAccountId`, so tapping "View" lands
+  /// on that account's detail (asserted via its name).
   public enum InsightsForYou {
     public static let largeTxnId = "for-you-large-txn"
     public static let largeTxnTitle = "Large purchase at the Apple Store"

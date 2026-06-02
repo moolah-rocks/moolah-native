@@ -206,6 +206,16 @@ extension ProfileSession {
     )
   }
 
+  /// The active UI-test seed, or `nil` for a production launch. Reads the same
+  /// argument + env var (`--ui-testing` / `UI_TESTING_SEED`) consumed by
+  /// `MoolahApp+Setup.uiTestingSeed(from:)`. Shared by every UI-testing
+  /// override helper so the gating logic lives in one place.
+  private static func currentUITestSeed() -> UITestSeed? {
+    guard CommandLine.arguments.contains("--ui-testing") else { return nil }
+    guard let raw = ProcessInfo.processInfo.environment["UI_TESTING_SEED"] else { return nil }
+    return UITestSeed(rawValue: raw)
+  }
+
   /// Returns the catalog/resolver overrides for the active UI test seed,
   /// or `nil` for production launches. Reads the same arguments and
   /// environment variable that `MoolahApp+Setup.uiTestingSeed(from:)`
@@ -215,22 +225,17 @@ extension ProfileSession {
   private static func uiTestingCryptoOverrides()
     -> (catalog: any CoinGeckoCatalog, resolutionClient: any TokenResolutionClient)?
   {
-    guard CommandLine.arguments.contains("--ui-testing") else { return nil }
-    guard let raw = ProcessInfo.processInfo.environment["UI_TESTING_SEED"],
-      let seed = UITestSeed(rawValue: raw)
-    else { return nil }
+    guard let seed = currentUITestSeed() else { return nil }
     return UITestSeedCryptoOverrides.overrides(for: seed)
   }
 
-  /// Returns fixture insights for the active UI-test seed, or `nil` for
-  /// production launches. Mirrors `uiTestingCryptoOverrides()`. Not `private`
-  /// because `finishInit` (in `ProfileSession.swift`) is the caller.
+  /// `internal` (not `private`) because the caller, `finishInit`, lives in
+  /// `ProfileSession.swift` — Swift's `private` does not cross file boundaries
+  /// even within the same type. Mirrors `uiTestingCryptoOverrides()` except for
+  /// this access level.
   @MainActor
   static func uiTestingInsightFixtures() -> InsightFixtures? {
-    guard CommandLine.arguments.contains("--ui-testing") else { return nil }
-    guard let raw = ProcessInfo.processInfo.environment["UI_TESTING_SEED"],
-      let seed = UITestSeed(rawValue: raw)
-    else { return nil }
+    guard let seed = currentUITestSeed() else { return nil }
     return UITestSeedInsightOverrides.fixtures(for: seed)
   }
 
