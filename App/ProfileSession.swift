@@ -38,6 +38,11 @@ final class ProfileSession: Identifiable {
   /// Local-only (per-device). Same `finishInit`-assigned pattern as
   /// `accountGroupStore`; functionally `let` from the consumer.
   private(set) var groupUIStateStore: GroupUIStateStore?
+  /// Same `finishInit`-assigned pattern as `accountGroupStore`: `InsightStore`
+  /// depends on `accountGroupStore` (also wired in `finishInit`), so it is
+  /// constructed there rather than in `makeDomainStores`. Functionally `let`
+  /// from the consumer's perspective.
+  private(set) var insightStore: InsightStore?
   let analysisStore: AnalysisStore
   let investmentStore: InvestmentStore
   let reportingStore: ReportingStore
@@ -232,6 +237,21 @@ final class ProfileSession: Identifiable {
     // / `cryptoTokenDiscovery` below.
     self.accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
     self.groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
+    // InsightStore is wired here (not in `makeDomainStores`) because it reads
+    // `accountGroupStore`, which is itself constructed in `finishInit` — by
+    // this point every `self.*Store` sibling it bundles already exists.
+    let insightSources = InsightStoreSources(
+      analysis: analysisStore,
+      earmark: earmarkStore,
+      reporting: reportingStore,
+      account: accountStore,
+      accountGroup: accountGroupStore,
+      category: categoryStore)
+    self.insightStore = InsightStore(
+      sources: insightSources,
+      backend: backend,
+      profile: profile,
+      instrumentChanges: backend.instrumentChangeObserver)
     let cryptoWiring = Self.makeCryptoSyncWiring(
       backend: backend,
       registry: instrumentRegistry,
