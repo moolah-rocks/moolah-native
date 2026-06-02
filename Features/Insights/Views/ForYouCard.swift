@@ -1,0 +1,202 @@
+import SwiftUI
+
+/// The "For You" dashboard panel: renders the top-ranked insights with a
+/// dismiss affordance and an optional deep-link. Pure presentational view —
+/// all state and logic live in `InsightStore`; this binds the published
+/// insights and dispatches the two closures. `AnalysisView` renders it only
+/// when there are insights, so this view assumes a non-empty list.
+struct ForYouCard: View {
+  let insights: [ScoredInsight]
+  var maxVisible: Int = 3
+  let onDismiss: (ScoredInsight) -> Void
+  let onNavigate: (SidebarSelection) -> Void
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("For You")
+        .font(.title2)
+        .fontWeight(.semibold)
+      VStack(spacing: 8) {
+        ForEach(insights.prefix(maxVisible)) { scored in
+          InsightRow(
+            scored: scored,
+            onDismiss: { onDismiss(scored) },
+            onNavigate: onNavigate)
+        }
+      }
+    }
+    .padding()
+    .background(.background)
+    .clipShape(.rect(cornerRadius: 12))
+    .accessibilityIdentifier(UITestIdentifiers.ForYou.card)
+  }
+}
+
+private struct InsightRow: View {
+  let scored: ScoredInsight
+  let onDismiss: () -> Void
+  let onNavigate: (SidebarSelection) -> Void
+
+  @State private var isExpanded = false
+
+  private var insight: Insight { scored.insight }
+  private var target: SidebarSelection? {
+    InsightNavigationTarget.sidebarSelection(for: insight.references)
+  }
+
+  var body: some View {
+    DisclosureGroup(isExpanded: $isExpanded) {
+      expandedContent
+    } label: {
+      header
+    }
+    .accessibilityIdentifier(UITestIdentifiers.ForYou.row(insight.id))
+  }
+
+  private var header: some View {
+    HStack(spacing: 8) {
+      Image(systemName: framingIcon)
+        .foregroundStyle(framingColor)
+        .accessibilityHidden(true)
+      Text(insight.title)
+        .font(.subheadline)
+        .fontWeight(.medium)
+      Spacer(minLength: 8)
+      if let impact = insight.monetaryImpact {
+        Text(impact.formatted)
+          .font(.subheadline)
+          .monospacedDigit()
+          .foregroundStyle(.secondary)
+      }
+      Button(action: onDismiss) {
+        Image(systemName: "xmark.circle.fill")
+      }
+      .buttonStyle(.borderless)
+      .foregroundStyle(.secondary)
+      .accessibilityLabel("Dismiss \(insight.title)")
+      .accessibilityIdentifier(UITestIdentifiers.ForYou.dismissButton(insight.id))
+    }
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(headerAccessibilityLabel)
+  }
+
+  @ViewBuilder private var expandedContent: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      if !insight.detail.isEmpty {
+        Text(insight.detail)
+          .font(.callout)
+          .foregroundStyle(.secondary)
+      }
+      ForEach(Array(insight.facts.enumerated()), id: \.offset) { _, fact in
+        HStack {
+          Text(fact.label)
+            .foregroundStyle(.secondary)
+          Spacer(minLength: 8)
+          Text(fact.value)
+            .monospacedDigit()
+        }
+        .font(.caption)
+      }
+      if let target {
+        Button("View") { onNavigate(target) }
+          .buttonStyle(.link)
+          .accessibilityLabel("View \(insight.title)")
+          .accessibilityIdentifier(UITestIdentifiers.ForYou.viewButton(insight.id))
+      }
+    }
+    .padding(.top, 4)
+  }
+
+  private var headerAccessibilityLabel: String {
+    var parts = [framingDescription, insight.title]
+    if let impact = insight.monetaryImpact {
+      parts.append(impact.formatted)
+    }
+    return parts.joined(separator: ", ")
+  }
+
+  private var framingColor: Color {
+    switch insight.framing {
+    case .positive: return .green
+    case .negative: return .orange
+    case .neutral: return .secondary
+    }
+  }
+
+  private var framingIcon: String {
+    switch insight.framing {
+    case .positive: return "checkmark.seal.fill"
+    case .negative: return "exclamationmark.triangle.fill"
+    case .neutral: return "info.circle.fill"
+    }
+  }
+
+  private var framingDescription: String {
+    switch insight.framing {
+    case .positive: return "Good news"
+    case .negative: return "Heads up"
+    case .neutral: return "Note"
+    }
+  }
+}
+
+#if DEBUG
+  extension [ScoredInsight] {
+    /// Preview/iteration fixtures covering each framing, with/without impact,
+    /// and with/without a navigation target.
+    static var forYouPreviewFixtures: [ScoredInsight] {
+      let now = Date(timeIntervalSince1970: 1_700_000_000)
+      let accountId = UUID()
+      return [
+        ScoredInsight(
+          insight: Insight(
+            id: "p-large",
+            kind: .largeTransactionAnomaly,
+            title: "Large purchase at the Apple Store",
+            detail: "This is well above your usual spending here.",
+            date: now,
+            framing: .negative,
+            actionability: .review,
+            surprise: 0.8,
+            monetaryImpact: InstrumentAmount(quantity: -2499, instrument: .AUD),
+            facts: [InsightFact("Amount", "−$2,499.00"), InsightFact("Typical", "$120.00")],
+            references: InsightReferences(accountIds: [accountId])),
+          score: 4.2),
+        ScoredInsight(
+          insight: Insight(
+            id: "p-netflix",
+            kind: .subscriptionPriceHike,
+            title: "Netflix raised its monthly price",
+            detail: "Up $3.00 from last month.",
+            date: now,
+            framing: .negative,
+            actionability: .act,
+            surprise: 0.5,
+            monetaryImpact: InstrumentAmount(quantity: -3, instrument: .AUD),
+            facts: [InsightFact("New price", "$22.99"), InsightFact("Was", "$19.99")]),
+          score: 3.1),
+        ScoredInsight(
+          insight: Insight(
+            id: "p-milestone",
+            kind: .netWorthMilestone,
+            title: "Net worth crossed $100k",
+            detail: "Nice work — a new high.",
+            date: now,
+            framing: .positive,
+            actionability: .informational,
+            surprise: 0.3),
+          score: 2.0),
+      ]
+    }
+  }
+
+  #Preview {
+    ForYouCard(
+      insights: .forYouPreviewFixtures,
+      onDismiss: { _ in },
+      onNavigate: { _ in }
+    )
+    .padding()
+    .frame(width: 420)
+  }
+#endif
