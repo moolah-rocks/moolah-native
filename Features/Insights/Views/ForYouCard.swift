@@ -45,39 +45,64 @@ private struct InsightRow: View {
   }
 
   var body: some View {
-    DisclosureGroup(isExpanded: $isExpanded) {
-      expandedContent
-    } label: {
-      header
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 8) {
+        expandToggle
+        dismissButton
+      }
+      if isExpanded {
+        expandedContent
+      }
     }
+  }
+
+  /// The header is itself the expand/collapse control. Keeping the dismiss
+  /// button a sibling (below) — not a child of this button — avoids the
+  /// macOS conflict where a control inside a disclosure label fights the
+  /// expand gesture, and keeps dismiss independently reachable by VoiceOver.
+  private var expandToggle: some View {
+    Button {
+      withAnimation(.snappy) { isExpanded.toggle() }
+    } label: {
+      HStack(spacing: 8) {
+        Image(systemName: framingIcon)
+          .foregroundStyle(framingColor)
+          .accessibilityHidden(true)
+        Text(insight.title)
+          .font(.subheadline)
+          .fontWeight(.medium)
+        Spacer(minLength: 8)
+        if let impact = insight.monetaryImpact {
+          Text(impact.formatted)
+            .font(.subheadline)
+            .monospacedDigit()
+            .foregroundStyle(impactColor(impact))
+        }
+        Image(systemName: "chevron.right")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .rotationEffect(.degrees(isExpanded ? 90 : 0))
+          .accessibilityHidden(true)
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(headerAccessibilityLabel)
+    .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
+    .accessibilityHint("Shows details")
     .accessibilityIdentifier(UITestIdentifiers.ForYou.row(insight.id))
   }
 
-  private var header: some View {
-    HStack(spacing: 8) {
-      Image(systemName: framingIcon)
-        .foregroundStyle(framingColor)
-        .accessibilityHidden(true)
-      Text(insight.title)
-        .font(.subheadline)
-        .fontWeight(.medium)
-      Spacer(minLength: 8)
-      if let impact = insight.monetaryImpact {
-        Text(impact.formatted)
-          .font(.subheadline)
-          .monospacedDigit()
-          .foregroundStyle(.secondary)
-      }
-      Button(action: onDismiss) {
-        Image(systemName: "xmark.circle.fill")
-      }
-      .buttonStyle(.borderless)
-      .foregroundStyle(.secondary)
-      .accessibilityLabel("Dismiss \(insight.title)")
-      .accessibilityIdentifier(UITestIdentifiers.ForYou.dismissButton(insight.id))
+  private var dismissButton: some View {
+    Button(action: onDismiss) {
+      Image(systemName: "xmark.circle.fill")
+        .contentShape(Rectangle())
     }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(headerAccessibilityLabel)
+    .buttonStyle(.borderless)
+    .foregroundStyle(.secondary)
+    .help("Dismiss this insight")
+    .accessibilityLabel("Dismiss \(insight.title)")
+    .accessibilityIdentifier(UITestIdentifiers.ForYou.dismissButton(insight.id))
   }
 
   @ViewBuilder private var expandedContent: some View {
@@ -113,6 +138,12 @@ private struct InsightRow: View {
       parts.append(impact.formatted)
     }
     return parts.joined(separator: ", ")
+  }
+
+  private func impactColor(_ impact: InstrumentAmount) -> Color {
+    if impact.isPositive { return .green }
+    if impact.isNegative { return .red }
+    return .secondary
   }
 
   private var framingColor: Color {
