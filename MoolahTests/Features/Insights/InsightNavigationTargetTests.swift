@@ -35,11 +35,24 @@ struct InsightNavigationTargetTests {
   }
 
   @Test
-  func priorityIsAccountThenEarmarkThenGroupThenCategories() {
+  func accountPriorityBeatsAllOthers() {
     let refs = InsightReferences(
       accountIds: [accountId], categoryIds: [categoryId],
       earmarkIds: [earmarkId], groupIds: [groupId])
     #expect(InsightNavigationTarget.sidebarSelection(for: refs) == .account(accountId))
+  }
+
+  @Test
+  func earmarkPriorityBeatsGroupAndCategories() {
+    let refs = InsightReferences(
+      categoryIds: [categoryId], earmarkIds: [earmarkId], groupIds: [groupId])
+    #expect(InsightNavigationTarget.sidebarSelection(for: refs) == .earmark(earmarkId))
+  }
+
+  @Test
+  func groupPriorityBeatsCategories() {
+    let refs = InsightReferences(categoryIds: [categoryId], groupIds: [groupId])
+    #expect(InsightNavigationTarget.sidebarSelection(for: refs) == .group(groupId))
   }
 
   @Test
