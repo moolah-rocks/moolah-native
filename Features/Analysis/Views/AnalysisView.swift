@@ -7,6 +7,7 @@ struct AnalysisView: View {
   @Environment(TransactionStore.self) private var transactionStore
   @Environment(ProfileSession.self) private var session
   @Environment(\.scenePhase) private var scenePhase
+  @FocusedValue(\.sidebarSelection) private var sidebarSelection
 
   @Bindable var store: AnalysisStore
   @State private var selectedUpcomingTransaction: Transaction?
@@ -76,6 +77,7 @@ struct AnalysisView: View {
       // `plans/2026-04-27-upcoming-card-cold-load-plan.md`.
       await transactionStore.load(filter: TransactionFilter(scheduled: .scheduledOnly))
       await store.loadAll()
+      await session.insightStore?.refreshIfStale(minimumInterval: 60)
     }
     .task {
       // Long-lived reactive subscription for the upcoming card. Runs
@@ -98,6 +100,7 @@ struct AnalysisView: View {
       // threshold to avoid disruptive reloads when the app has just been loaded.
       if oldPhase == .background && newPhase == .active {
         Task { await store.refreshIfStale(minimumInterval: 60) }
+        Task { await session.insightStore?.refreshIfStale(minimumInterval: 60) }
       }
     }
   }
@@ -130,6 +133,12 @@ struct AnalysisView: View {
   @ViewBuilder
   private func contentView(store: AnalysisStore) -> some View {
     VStack(spacing: 20) {
+      if let insightStore = session.insightStore, !insightStore.insights.isEmpty {
+        ForYouCard(
+          insights: insightStore.insights,
+          onDismiss: { insightStore.dismiss($0) },
+          onNavigate: { sidebarSelection?.wrappedValue = $0 })
+      }
       NetWorthGraphCard(balances: store.dailyBalances)
       upcomingAndIncomeExpense(store: store)
       ExpenseBreakdownCard(
