@@ -129,8 +129,9 @@ struct InsightInput: Sendable {
   /// un-budgeted category.
   let budgetedCategoryIds: Set<UUID>
 
-  /// Count of posted transactions whose every leg is uncategorized
-  /// (`Transaction.needsReview`). Drives the categorize-backlog nudge.
+  /// Count of posted transactions whose every leg is uncategorized (posted
+  /// meaning `recur_period IS NULL`; does not include scheduled templates).
+  /// Drives the categorize-backlog nudge.
   let uncategorizedTransactionCount: Int
 
   /// Count of outstanding transfer suggestions awaiting merge

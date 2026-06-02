@@ -19,6 +19,10 @@ struct InsightDataWindow: Sendable {
   /// MAD-baseline sample window and per-category cap.
   var sampleDays: Int
   var maxSamplesPerCategory: Int
+  /// Per-category unbudgeted-spend window (90 days).
+  var unbudgetedSpendDays: Int
+  /// Cap on the income-magnitude sample list (windfall baseline).
+  var maxIncomeSamples: Int
 
   init(
     recentCandidateDays: Int = 30,
@@ -26,7 +30,9 @@ struct InsightDataWindow: Sendable {
     accountSpendDays: Int = 30,
     payeeCadenceDays: Int = 395,
     sampleDays: Int = 365,
-    maxSamplesPerCategory: Int = 200
+    maxSamplesPerCategory: Int = 200,
+    unbudgetedSpendDays: Int = 90,
+    maxIncomeSamples: Int = 200
   ) {
     self.recentCandidateDays = recentCandidateDays
     self.categorySpendDays = categorySpendDays
@@ -34,6 +40,8 @@ struct InsightDataWindow: Sendable {
     self.payeeCadenceDays = payeeCadenceDays
     self.sampleDays = sampleDays
     self.maxSamplesPerCategory = maxSamplesPerCategory
+    self.unbudgetedSpendDays = unbudgetedSpendDays
+    self.maxIncomeSamples = maxIncomeSamples
   }
 }
 
@@ -44,8 +52,7 @@ struct InsightDataWindow: Sendable {
 /// converts the result to `context.reportingCurrency` on each row's own
 /// `(day, instrument)` bucket — the same shape as `AnalysisRepository`.
 /// Memory stays `O(payees + categories + days + window)`, independent of
-/// total transaction count. See
-/// `plans/2026-06-01-insights-integration-plan.md` §"Phase A".
+/// total transaction count.
 ///
 /// A leg whose conversion fails is dropped, never guessed
 /// (`guides/INSTRUMENT_CONVERSION_GUIDE.md` Rule 11); the projection

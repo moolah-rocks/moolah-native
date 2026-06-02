@@ -86,4 +86,8 @@ actor RecordingTransactionRepository: TransactionRepository {
   func distinctLegInstrumentIds() async throws -> Set<String> {
     try await wrapped.distinctLegInstrumentIds()
   }
+
+  func countNeedsReview() async throws -> Int {
+    try await wrapped.countNeedsReview()
+  }
 }

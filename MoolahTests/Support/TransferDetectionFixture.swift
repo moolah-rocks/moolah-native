@@ -98,6 +98,10 @@ struct ReplaceFailingTransactionRepository: TransactionRepository {
   func distinctLegInstrumentIds() async throws -> Set<String> {
     try await wrapped.distinctLegInstrumentIds()
   }
+
+  func countNeedsReview() async throws -> Int {
+    try await wrapped.countNeedsReview()
+  }
 }
 
 /// Forwards every call to a wrapped repository, but suspends inside
@@ -169,6 +173,10 @@ actor GatedReplaceTransactionRepository: TransactionRepository {
   }
   nonisolated func distinctLegInstrumentIds() async throws -> Set<String> {
     try await wrapped.distinctLegInstrumentIds()
+  }
+
+  nonisolated func countNeedsReview() async throws -> Int {
+    try await wrapped.countNeedsReview()
   }
 }
 
@@ -243,5 +251,9 @@ actor GatedFetchAllTransactionRepository: TransactionRepository {
   }
   nonisolated func distinctLegInstrumentIds() async throws -> Set<String> {
     try await wrapped.distinctLegInstrumentIds()
+  }
+
+  nonisolated func countNeedsReview() async throws -> Int {
+    try await wrapped.countNeedsReview()
   }
 }
