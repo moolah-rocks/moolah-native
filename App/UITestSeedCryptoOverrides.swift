@@ -41,7 +41,8 @@ enum UITestSeedCryptoOverrides {
       .tradeReady,
       .incompatibleProfile,
       .transferDetectionBaseline,
-      .pendingWebImportOneChaseInbox:
+      .pendingWebImportOneChaseInbox,
+      .insightsForYouBaseline:
       return nil
     }
   }

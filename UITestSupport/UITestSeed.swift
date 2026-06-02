@@ -130,6 +130,14 @@ public enum UITestSeed: String, CaseIterable, Sendable {
   /// a relaunch simply re-reads persisted state. See
   /// `UITestFixtures.TransferDetection` for the full fixture table.
   case transferDetectionBaseline
+
+  /// Reuses the `tradeBaseline` profile (so the app boots into the sidebar +
+  /// Analysis view with a real "Checking" account) and installs three fixture
+  /// `ScoredInsight`s via `UITestSeedInsightOverrides`, bypassing the
+  /// statistical detectors. Drives `ForYouPanelUITests`: the For You card
+  /// renders the fixtures, dismiss removes one, and the navigable row deep-links
+  /// to the checking account. See `UITestFixtures.InsightsForYou`.
+  case insightsForYouBaseline = "insights-for-you-baseline"
 }
 
 /// Fixtures for the first-run Welcome seeds. Defined here so both the
