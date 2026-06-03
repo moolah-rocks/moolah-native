@@ -32,6 +32,7 @@ extension FoundationModelsNarrator: InsightNarrating {
   nonisolated func narrate(_ request: NarrationRequest) -> AsyncThrowingStream<String, any Error> {
     let built = NarrationPromptBuilder.build(request)
     let allFacts = request.allFacts
+    let groundingTitle = request.groundingTitle
     let generationOptions = options
 
     return AsyncThrowingStream { continuation in
@@ -60,7 +61,10 @@ extension FoundationModelsNarrator: InsightNarrating {
 
           // Verify that every number in the completed narration can be
           // traced back to a fact supplied by the caller.
-          guard NumericProvenanceGuard.isGrounded(latestSnapshot, facts: allFacts) else {
+          guard
+            NumericProvenanceGuard.isGrounded(
+              latestSnapshot, title: groundingTitle, facts: allFacts)
+          else {
             continuation.finish(throwing: NarrationError.fellBack)
             return
           }

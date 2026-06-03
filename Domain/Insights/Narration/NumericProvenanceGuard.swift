@@ -27,19 +27,28 @@ import Foundation
 /// The guard errs toward rejection on ambiguity.
 enum NumericProvenanceGuard {
   /// Returns `true` iff every numeric token extracted from `generated` appears
-  /// verbatim in the normalised pool of all `facts` values.
+  /// verbatim in the normalised pool of grounded numbers.
+  ///
+  /// The grounded pool is the normalised numeric tokens of `title` plus the
+  /// normalised value of every fact. The redesigned headline replaces the
+  /// detector title, so a figure that lives only in the title (e.g. a
+  /// net-worth milestone) is legitimately grounded; the title is trusted
+  /// detector output, exactly like a fact value.
   ///
   /// A `true` result means narration passed; `false` means at least one number
-  /// could not be traced to the supplied facts — the caller must fall back.
-  static func isGrounded(_ generated: String, facts: [InsightFact]) -> Bool {
+  /// could not be traced to the title or supplied facts — the caller must fall
+  /// back.
+  static func isGrounded(_ generated: String, title: String, facts: [InsightFact]) -> Bool {
     let tokens = numericTokens(in: generated)
     guard !tokens.isEmpty else { return true }
 
+    let titlePool = numericTokens(in: title).map { normalise($0) }
     let factPool = facts.map { normalise($0.value) }
+    let groundedPool = titlePool + factPool
 
     for token in tokens {
       let normToken = normalise(token)
-      guard factPool.contains(where: { $0 == normToken }) else {
+      guard groundedPool.contains(where: { $0 == normToken }) else {
         return false
       }
     }

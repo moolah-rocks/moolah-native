@@ -16,4 +16,14 @@ enum NarrationRequest: Sendable, Hashable {
       return facts
     }
   }
+
+  /// The detector title, surfaced for the provenance guard's grounding set.
+  /// The redesigned headline replaces the title, so a figure present only in
+  /// the title (not the facts) must still be treated as grounded.
+  var groundingTitle: String {
+    switch self {
+    case .singleInsight(let title, _):
+      return title
+    }
+  }
 }
