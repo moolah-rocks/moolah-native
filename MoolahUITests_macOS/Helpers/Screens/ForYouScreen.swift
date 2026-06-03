@@ -161,19 +161,23 @@ struct ForYouScreen {
   /// verbatim. Narration streams (`.streaming("")` → partial → `.done(text)`),
   /// so a bare read can observe the empty initial frame; this predicate-waits
   /// on the final content — the correct post-condition for an async stream.
+  ///
+  /// SwiftUI exposes the narration prose through the element's `value` (it
+  /// surfaces as a text view), not its `label`, so the predicate matches
+  /// either field.
   func expectNarrationText(_ id: String, equals expected: String) {
     Trace.record(#function, detail: "id=\(id)")
     let narrationIdentifier = UITestIdentifiers.ForYou.narrationText(id)
     let narrationElement = app.element(for: narrationIdentifier)
-    let predicate = NSPredicate(format: "label == %@", expected)
+    let predicate = NSPredicate(format: "value == %@ OR label == %@", expected, expected)
     let expectation = XCTNSPredicateExpectation(predicate: predicate, object: narrationElement)
     if XCTWaiter().wait(for: [expectation], timeout: 10) != .completed {
+      let seen = (narrationElement.value as? String) ?? narrationElement.label
       Trace.recordFailure(
-        "forYou narration text '\(id)' never rendered the expected output; last='\(narrationElement.label)'"
-      )
+        "forYou narration text '\(id)' never rendered the expected output; last='\(seen)'")
       XCTFail(
         "For You narration text for '\(id)' did not render the scripted output within 10s "
-          + "(last seen: '\(narrationElement.label)')")
+          + "(last seen: '\(seen)')")
     }
   }
 
