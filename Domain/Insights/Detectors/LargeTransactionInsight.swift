@@ -65,7 +65,6 @@ enum LargeTransactionInsight {
             InsightFact("Amount", context.formatted(transaction.amount)),
             InsightFact("Category", categoryName),
             InsightFact("Typical for category", context.formatted(Decimal(-typical))),
-            InsightFact("Robust z-score", zScore.formatted(.number.precision(.fractionLength(1)))),
           ],
           references: InsightReferences(
             accountIds: transaction.accountId.map { [$0] } ?? [],

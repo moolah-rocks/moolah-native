@@ -95,7 +95,6 @@ enum CategoryAnomalyInsight {
         InsightFact("This month", context.formatted(Decimal(-latest.magnitude))),
         InsightFact("Expected", context.formatted(Decimal(-expected))),
         InsightFact("Over by", percent(overspendFraction)),
-        InsightFact("Robust z-score", zScore.formatted(.number.precision(.fractionLength(1)))),
       ],
       references: InsightReferences(
         categoryIds: resolved.map { [$0.id] } ?? [],
