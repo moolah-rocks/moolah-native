@@ -7,6 +7,10 @@ import Foundation
 // this record, unchanged regardless of the local Swift type's name.
 
 extension InsightDismissalRow: CloudKitRecordConvertible {
+  /// Builds a *fresh* record with no cached change tag. Upload callers must go
+  /// through `ProfileDataSyncHandler.buildCKRecord(from:encodedSystemFields:)`
+  /// to merge this row's cached system fields — that is the change-tag contract
+  /// CloudKit needs to avoid spurious server-record-changed conflicts.
   func toCKRecord(in zoneID: CKRecordZone.ID) -> CKRecord {
     let recordID = CKRecord.ID(
       recordType: Self.recordType, uuid: id, zoneID: zoneID)

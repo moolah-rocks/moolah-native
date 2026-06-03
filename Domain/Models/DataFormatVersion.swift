@@ -22,6 +22,11 @@
 ///      the "deprecated field is suddenly invisible" race.
 ///
 /// History (newest first):
+/// - 6: insight dismissals. Adds the synced `InsightDismissalRecord` type
+///      (one tally per `InsightKind`). Older builds don't know the record
+///      type and would silently discard downloaded dismissal records, losing
+///      fatigue state cross-device; the bump fences older builds off from
+///      profiles written by v6+.
 /// - (no bump) 2026-05-17: `WalletSyncError` gained a `provider` field and
 ///   changed from a bare enum to a struct. `WalletSyncState` is per-device
 ///   and never synced cross-device; legacy rows decode via a bare-enum
@@ -72,5 +77,5 @@
 /// cloud without a `dataFormatVersion` field reads as `0` and is
 /// trivially compatible with any v1+ build.
 enum DataFormatVersion {
-  static let current: Int = 5
+  static let current: Int = 6
 }

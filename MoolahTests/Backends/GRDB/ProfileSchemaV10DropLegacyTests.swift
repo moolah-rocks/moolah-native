@@ -74,6 +74,9 @@ struct ProfileSchemaV10DropLegacyTests {
     // v15 sidebar expand / collapse state (local-only; cascades from
     // `account_group` on delete)
     "account_group_ui",
+    // v16 insight dismissals (synced per-kind fatigue tally; UNIQUE
+    // constraints yield only auto-indexes, so no named index is added)
+    "insight_dismissal",
     "grdb_migrations",
   ]
 
