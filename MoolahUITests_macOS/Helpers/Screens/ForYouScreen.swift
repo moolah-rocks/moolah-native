@@ -3,11 +3,11 @@ import XCTest
 /// Driver for the "For You" insights panel (`ForYouCard`), the first card in
 /// the Analysis detail leaf. Returned from `MoolahApp.forYou`.
 ///
-/// Each insight renders as a collapsible row keyed by its (stable) insight
-/// id: the row header is the expand/collapse control
-/// (`UITestIdentifiers.ForYou.row(_:)`), with a sibling dismiss button
-/// (`.dismissButton(_:)`). Expanding a row that has a navigation target
-/// reveals a "View" deep-link button (`.viewButton(_:)`).
+/// Each insight renders as a single headline row keyed by its (stable) insight
+/// id (`UITestIdentifiers.ForYou.row(_:)`): a headline line
+/// (`.headline(_:)`), a "Show less" control (`.showLess(_:)`), and — when the
+/// insight has a navigation target — an always-visible "View" deep-link button
+/// (`.viewButton(_:)`).
 ///
 /// Every action method records a trace breadcrumb and waits on a real
 /// post-condition; expectation methods are read-only and do not record a
@@ -55,16 +55,16 @@ struct ForYouScreen {
 
   // MARK: - Actions
 
-  /// Taps the dismiss button for the insight row `id`, then waits for that
-  /// row to unmount — the dismissal removes the insight from the published
-  /// list, so the row's disappearance is the post-condition.
-  func dismiss(_ id: String) {
+  /// Taps the "Show less" control for the insight row `id`, then waits for that
+  /// row to unmount — "Show less" removes the insight from the published batch,
+  /// so the row's disappearance is the post-condition.
+  func showLess(_ id: String) {
     Trace.record(#function, detail: "id=\(id)")
-    let dismissIdentifier = UITestIdentifiers.ForYou.dismissButton(id)
-    let button = app.element(for: dismissIdentifier)
+    let showLessIdentifier = UITestIdentifiers.ForYou.showLess(id)
+    let button = app.element(for: showLessIdentifier)
     if !button.waitForExistence(timeout: 5) {
-      Trace.recordFailure("forYou dismiss button '\(dismissIdentifier)' did not appear")
-      XCTFail("For You dismiss button for '\(id)' did not appear within 5s")
+      Trace.recordFailure("forYou show-less control '\(showLessIdentifier)' did not appear")
+      XCTFail("For You 'Show less' control for '\(id)' did not appear within 5s")
       return
     }
     button.click()
@@ -72,39 +72,15 @@ struct ForYouScreen {
     let row = app.element(for: UITestIdentifiers.ForYou.row(id))
     if !row.waitForNonExistence(timeout: 5) {
       Trace.recordFailure(
-        "forYou row '\(UITestIdentifiers.ForYou.row(id))' still present 5s after dismiss")
-      XCTFail("For You row for '\(id)' did not unmount within 5s of dismiss")
+        "forYou row '\(UITestIdentifiers.ForYou.row(id))' still present 5s after show-less")
+      XCTFail("For You row for '\(id)' did not unmount within 5s of 'Show less'")
     }
   }
 
-  /// Taps the insight row `id` to expand it, then waits for its "View"
-  /// deep-link button to appear — the expanded-state post-condition. Use
-  /// only on insights that carry a navigation target (the "View" button is
-  /// rendered only then).
-  func expand(_ id: String) {
-    Trace.record(#function, detail: "id=\(id)")
-    let rowIdentifier = UITestIdentifiers.ForYou.row(id)
-    let row = app.element(for: rowIdentifier)
-    if !row.waitForExistence(timeout: 5) {
-      Trace.recordFailure("forYou row '\(rowIdentifier)' did not appear")
-      XCTFail("For You row for '\(id)' did not appear within 5s")
-      return
-    }
-    row.click()
-
-    let viewIdentifier = UITestIdentifiers.ForYou.viewButton(id)
-    let viewButton = app.element(for: viewIdentifier)
-    if !viewButton.waitForExistence(timeout: 5) {
-      Trace.recordFailure(
-        "forYou view button '\(viewIdentifier)' did not appear after expanding")
-      XCTFail("For You 'View' button for '\(id)' did not appear within 5s of expanding")
-    }
-  }
-
-  /// Taps the "View" deep-link button for the (expanded) insight row `id`.
-  /// Post-condition assertions are the caller's responsibility — the
-  /// navigation outcome is scenario-specific (which leaf the insight
-  /// references).
+  /// Taps the "View" deep-link button for the insight row `id`. The button is
+  /// always visible (no expansion needed). Post-condition assertions are the
+  /// caller's responsibility — the navigation outcome is scenario-specific
+  /// (which leaf the insight references).
   func tapView(_ id: String) {
     Trace.record(#function, detail: "id=\(id)")
     let viewIdentifier = UITestIdentifiers.ForYou.viewButton(id)
@@ -117,66 +93,27 @@ struct ForYouScreen {
     viewButton.click()
   }
 
-  /// Taps the "Why?" narration button for the (expanded) insight row `id`,
-  /// then waits for the narration text element to appear — the post-condition
-  /// that confirms the narration state transitioned out of `.idle`. The row
-  /// must already be expanded (call `expand(id:)` first) and the model must
-  /// be available (seed must inject `FixedModelAvailability(.available)`).
-  func tapWhy(_ id: String) {
-    Trace.record(#function, detail: "id=\(id)")
-    let whyIdentifier = UITestIdentifiers.ForYou.whyButton(id)
-    let whyButton = app.element(for: whyIdentifier)
-    if !whyButton.waitForExistence(timeout: 5) {
-      Trace.recordFailure("forYou why button '\(whyIdentifier)' did not appear")
-      XCTFail("For You 'Why?' button for '\(id)' did not appear within 5s")
-      return
-    }
-    whyButton.click()
+  // MARK: - Headline
 
-    let narrationIdentifier = UITestIdentifiers.ForYou.narrationText(id)
-    let narrationElement = app.element(for: narrationIdentifier)
-    if !narrationElement.waitForExistence(timeout: 10) {
-      Trace.recordFailure(
-        "forYou narration text '\(narrationIdentifier)' did not appear after tapping Why?")
-      XCTFail("For You narration text for '\(id)' did not appear within 10s of tapping Why?")
-    }
-  }
-
-  /// Reads the label of the narration text element for insight row `id`.
-  /// The element must already exist (call `tapWhy(id:)` first to ensure
-  /// the narration state has transitioned). Returns an empty string and
-  /// fails the test if the element is not found.
-  func narrationText(_ id: String) -> String {
-    let narrationIdentifier = UITestIdentifiers.ForYou.narrationText(id)
-    let narrationElement = app.element(for: narrationIdentifier)
-    if !narrationElement.waitForExistence(timeout: 10) {
-      Trace.recordFailure("forYou narration text '\(narrationIdentifier)' did not appear")
-      XCTFail("For You narration text for '\(id)' did not appear within 10s")
-      return ""
-    }
-    return narrationElement.label
-  }
-
-  /// Waits for the narration text element for `id` to render `expected`
-  /// verbatim. Narration streams (`.streaming("")` → partial → `.done(text)`),
-  /// so a bare read can observe the empty initial frame; this predicate-waits
-  /// on the final content — the correct post-condition for an async stream.
+  /// Waits for the headline element for `id` to render `expected` verbatim.
+  /// Headlines are generated eagerly and the whole batch is held until ready,
+  /// so the row only mounts once its final headline is resolved; this
+  /// predicate-waits on the content as the robust post-condition.
   ///
-  /// SwiftUI exposes the narration prose through the element's `value` (it
-  /// surfaces as a text view), not its `label`, so the predicate matches
-  /// either field.
-  func expectNarrationText(_ id: String, equals expected: String) {
+  /// SwiftUI exposes prose `Text` through the element's `value` (not its
+  /// `label`), so the predicate matches either field.
+  func expectHeadline(_ id: String, equals expected: String) {
     Trace.record(#function, detail: "id=\(id)")
-    let narrationIdentifier = UITestIdentifiers.ForYou.narrationText(id)
-    let narrationElement = app.element(for: narrationIdentifier)
+    let headlineIdentifier = UITestIdentifiers.ForYou.headline(id)
+    let headlineElement = app.element(for: headlineIdentifier)
     let predicate = NSPredicate(format: "value == %@ OR label == %@", expected, expected)
-    let expectation = XCTNSPredicateExpectation(predicate: predicate, object: narrationElement)
+    let expectation = XCTNSPredicateExpectation(predicate: predicate, object: headlineElement)
     if XCTWaiter().wait(for: [expectation], timeout: 10) != .completed {
-      let seen = (narrationElement.value as? String) ?? narrationElement.label
+      let seen = (headlineElement.value as? String) ?? headlineElement.label
       Trace.recordFailure(
-        "forYou narration text '\(id)' never rendered the expected output; last='\(seen)'")
+        "forYou headline '\(id)' never rendered the expected output; last='\(seen)'")
       XCTFail(
-        "For You narration text for '\(id)' did not render the scripted output within 10s "
+        "For You headline for '\(id)' did not render the expected output within 10s "
           + "(last seen: '\(seen)')")
     }
   }

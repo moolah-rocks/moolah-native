@@ -26,13 +26,16 @@ final class ForYouPanelUITests: MoolahUITestCase {
     forYou.expectRowVisible(UITestFixtures.InsightsForYou.milestoneId)
   }
 
-  func testDismissingInsightRemovesItAndLeavesOthersVisible() {
+  func testShowLessRemovesInsightWithoutBackfill() {
     let app = launch(seed: .insightsForYouBaseline)
     let forYou = app.forYou
 
     forYou.expectCardVisible()
-    forYou.dismiss(UITestFixtures.InsightsForYou.largeTxnId)
+    forYou.showLess(UITestFixtures.InsightsForYou.largeTxnId)
 
+    // No backfill: the dismissed row is gone; the others stay put (and no
+    // next-ranked insight is promoted into the gap — the seed has exactly
+    // three fixtures, all visible).
     forYou.expectRowRemoved(UITestFixtures.InsightsForYou.largeTxnId)
     forYou.expectRowVisible(UITestFixtures.InsightsForYou.priceHikeId)
     forYou.expectRowVisible(UITestFixtures.InsightsForYou.milestoneId)
@@ -43,7 +46,7 @@ final class ForYouPanelUITests: MoolahUITestCase {
     let forYou = app.forYou
 
     forYou.expectCardVisible()
-    forYou.expand(UITestFixtures.InsightsForYou.largeTxnId)
+    // The "View" deep-link is always visible (no expansion step).
     forYou.tapView(UITestFixtures.InsightsForYou.largeTxnId)
 
     forYou.expectTransactionListVisible()
