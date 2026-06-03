@@ -69,4 +69,16 @@ struct NarrationPromptBuilderTests {
     let req = NarrationRequest.singleInsight(title: "T", facts: facts)
     #expect(req.allFacts == facts)
   }
+
+  @Test
+  func headlinePromptAsksForSelfSufficientSentence() {
+    let req = NarrationRequest.singleInsight(
+      title: "Net worth crossed $100k",
+      facts: [InsightFact("Now", "$101,200")])
+    let built = NarrationPromptBuilder.build(req)
+    #expect(built.prompt.contains("Net worth crossed $100k"))
+    #expect(built.prompt.contains("$101,200"))
+    #expect(built.instructions.localizedCaseInsensitiveContains("do not invent"))
+    #expect(built.instructions.localizedCaseInsensitiveContains("on its own"))
+  }
 }

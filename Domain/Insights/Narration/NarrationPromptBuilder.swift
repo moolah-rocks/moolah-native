@@ -9,7 +9,7 @@ import Foundation
 /// - Omit statistical/technical facts (z-scores, p-values, counts, direction labels).
 /// - Write plain, warm, non-judgemental prose (brand voice: confident, permission-giving).
 /// - Use contractions where natural; avoid corporate vocabulary.
-/// - Per-insight: one to two sentences. Weekly recap: exactly two sentences.
+/// - Per-insight: one sentence (shown as the headline). Weekly recap: exactly two sentences.
 enum NarrationPromptBuilder {
   /// Builds the `(instructions, prompt)` pair for the given request.
   ///
@@ -29,10 +29,9 @@ enum NarrationPromptBuilder {
 
 extension NarrationPromptBuilder {
   private static let singleInsightInstructions = """
-    You are a personal finance assistant for moolah.rocks. Your role is to narrate \
-    a single financial insight in plain, warm, non-judgemental prose — the kind of \
-    tone that says "here's what's happening with your money" without lecturing or \
-    worrying the reader.
+    You are a personal finance assistant for moolah.rocks. Write a single sentence \
+    that states this insight on its own — it will be shown as the headline, with no \
+    other text beside it. Begin with the substance, not a label or preamble.
 
     Rules you must follow:
     • Use ONLY the figures provided verbatim in the prompt. Do not invent, recompute, \
@@ -46,7 +45,7 @@ extension NarrationPromptBuilder {
     • Use contractions where they sound natural: "you've", "it's", "that's".
     • Match the insight's tone. If it's good news, let a little warmth show — one beat, \
     not a speech. Never scold: avoid "overspent", "wasted", "should".
-    • Write one to two sentences. No bullet points, no headers.
+    • Write one sentence. No bullet points, no headers.
     • Address the user as "you" or "your".
     """
 
@@ -60,7 +59,7 @@ extension NarrationPromptBuilder {
         lines.append("  \(fact.label): \(fact.value)")
       }
     }
-    lines.append("\nNarrate this insight in one to two sentences.")
+    lines.append("\nWrite one sentence as the headline for this insight.")
     return lines.joined(separator: "\n")
   }
 }
