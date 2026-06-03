@@ -27,6 +27,10 @@ extension ProfileDataSyncHandler {
       (CategoryRow.recordType, grdbRepositories.categories.clearAllSystemFieldsSync),
       (AccountRow.recordType, grdbRepositories.accounts.clearAllSystemFieldsSync),
       (AccountGroupRow.recordType, grdbRepositories.accountGroups.clearAllSystemFieldsSync),
+      (
+        InsightDismissalRow.recordType,
+        grdbRepositories.insightDismissals.clearAllSystemFieldsSync
+      ),
       (EarmarkRow.recordType, grdbRepositories.earmarks.clearAllSystemFieldsSync),
       (
         EarmarkBudgetItemRow.recordType,
@@ -242,6 +246,8 @@ extension ProfileDataSyncHandler {
       return { try repos.transferSuggestions.setEncodedSystemFieldsBatchSync($0) }
     case AccountGroupRow.recordType:
       return { try repos.accountGroups.setEncodedSystemFieldsBatchSync($0) }
+    case InsightDismissalRow.recordType:
+      return { try repos.insightDismissals.setEncodedSystemFieldsBatchSync($0) }
     default:
       return nil
     }

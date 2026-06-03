@@ -72,6 +72,7 @@ extension ProfileDataSyncHandler {
     // path deliberately does not enumerate them.
     collectCategoryIds(source: source, into: &recordIDs)
     collectAccountGroupIds(source: source, into: &recordIDs)
+    collectInsightDismissalIds(source: source, into: &recordIDs)
     collectAccountIds(source: source, into: &recordIDs)
     collectEarmarkIds(source: source, into: &recordIDs)
     collectEarmarkBudgetItemIds(source: source, into: &recordIDs)
@@ -121,6 +122,20 @@ extension ProfileDataSyncHandler {
       }
     }
     collectAllGRDBUUIDs(ids: ids, recordType: AccountGroupRow.recordType, into: &recordIDs)
+  }
+
+  private func collectInsightDismissalIds(
+    source: GRDBIdSource, into recordIDs: inout [CKRecord.ID]
+  ) {
+    let repo = grdbRepositories.insightDismissals
+    let ids: () throws -> [UUID] = {
+      switch source {
+      case .all: return try repo.allRowIdsSync()
+      case .unsynced: return try repo.unsyncedRowIdsSync()
+      }
+    }
+    collectAllGRDBUUIDs(
+      ids: ids, recordType: InsightDismissalRow.recordType, into: &recordIDs)
   }
 
   private func collectEarmarkIds(
@@ -237,17 +252,45 @@ extension ProfileDataSyncHandler {
     // Failures are logged but never propagated; partial wipe is preferable
     // to leaving local data in an inconsistent state.
     var clearedAll = true
-    let wipes: [(String, () throws -> Void)] = [
-      // No per-profile `instrument` wipe. Instrument data is owned by
-      // the shared, iCloud-account-scoped profile-index registry, and a
-      // single-profile purge (sign-out / account-switch / zone purge)
-      // must NOT wipe instruments shared by every other profile. There
-      // is no per-profile `instrument` table, so a `deleteAllSync`
-      // against it would throw `no such table`.
+    for (recordType, wipe) in grdbWipes {
+      do {
+        try wipe()
+      } catch {
+        clearedAll = false
+        logger.error(
+          """
+          Failed to delete \(recordType, privacy: .public) from GRDB for profile \
+          \(self.profileId, privacy: .public): \
+          \(error.localizedDescription, privacy: .public)
+          """)
+      }
+    }
+    if clearedAll {
+      logger.info("Deleted all local data for profile \(self.profileId)")
+    }
+    // Always return all types so the caller fans out the change
+    // notification even on partial failure.
+    return Set(RecordTypeRegistry.allTypes.keys)
+  }
+
+  /// Per-record-type GRDB wipe closures consulted by `deleteLocalData()`.
+  ///
+  /// No per-profile `instrument` wipe. Instrument data is owned by the
+  /// shared, iCloud-account-scoped profile-index registry, and a
+  /// single-profile purge (sign-out / account-switch / zone purge) must
+  /// NOT wipe instruments shared by every other profile. There is no
+  /// per-profile `instrument` table, so a `deleteAllSync` against it
+  /// would throw `no such table`.
+  private var grdbWipes: [(String, () throws -> Void)] {
+    [
       (CategoryRow.recordType, { try self.grdbRepositories.categories.deleteAllSync() }),
       (
         AccountGroupRow.recordType,
         { try self.grdbRepositories.accountGroups.deleteAllSync() }
+      ),
+      (
+        InsightDismissalRow.recordType,
+        { try self.grdbRepositories.insightDismissals.deleteAllSync() }
       ),
       (AccountRow.recordType, { try self.grdbRepositories.accounts.deleteAllSync() }),
       (EarmarkRow.recordType, { try self.grdbRepositories.earmarks.deleteAllSync() }),
@@ -274,25 +317,6 @@ extension ProfileDataSyncHandler {
         { try self.grdbRepositories.transferSuggestions.deleteAllSync() }
       ),
     ]
-    for (recordType, wipe) in wipes {
-      do {
-        try wipe()
-      } catch {
-        clearedAll = false
-        logger.error(
-          """
-          Failed to delete \(recordType, privacy: .public) from GRDB for profile \
-          \(self.profileId, privacy: .public): \
-          \(error.localizedDescription, privacy: .public)
-          """)
-      }
-    }
-    if clearedAll {
-      logger.info("Deleted all local data for profile \(self.profileId)")
-    }
-    // Always return all types so the caller fans out the change
-    // notification even on partial failure.
-    return Set(RecordTypeRegistry.allTypes.keys)
   }
 
   // MARK: - Private Helpers

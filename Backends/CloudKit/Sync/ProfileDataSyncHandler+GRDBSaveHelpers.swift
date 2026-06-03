@@ -143,6 +143,24 @@ extension ProfileDataSyncHandler {
     }
   }
 
+  nonisolated func applyBatchSaveInsightDismissal(
+    ckRecords: [CKRecord], systemFields: [String: Data], in database: Database
+  ) throws {
+    let context = GRDBBatchSaveContext(
+      ckRecords: ckRecords,
+      systemFields: systemFields,
+      site: "applyGRDBBatchSave[InsightDismissal]")
+    let rows = mapRows(
+      context: context,
+      fieldValues: InsightDismissalRow.fieldValues(from:),
+      idKey: { $0.id.uuidString },
+      stamp: stampSystemFields)
+    try writeRemote(site: context.site) {
+      try grdbRepositories.insightDismissals.applyRemoteChangesSync(
+        saved: rows, deleted: [], in: database)
+    }
+  }
+
   nonisolated func applyBatchSaveEarmark(
     ckRecords: [CKRecord], systemFields: [String: Data], in database: Database
   ) throws {
