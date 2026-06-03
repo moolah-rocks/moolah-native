@@ -138,15 +138,11 @@ struct AnalysisView: View {
   @ViewBuilder
   private func contentView(store: AnalysisStore) -> some View {
     VStack(spacing: 20) {
-      if let insightStore = session.insightStore, !insightStore.insights.isEmpty {
+      if let insightStore = session.insightStore, !insightStore.items.isEmpty {
         ForYouCard(
-          insights: insightStore.insights,
-          availability: insightStore.currentAvailability,
-          narration: insightStore.narration,
-          onDismiss: { insight in Task { await insightStore.dismiss(insight) } },
-          onNavigate: onNavigate,
-          onNarrate: { insightStore.narrate($0) },
-          onCancelNarrate: { insightStore.cancelNarration($0.id) })
+          items: insightStore.items,
+          onDismiss: { item in Task { await insightStore.dismiss(item.scored) } },
+          onNavigate: onNavigate)
       }
       NetWorthGraphCard(balances: store.dailyBalances)
       upcomingAndIncomeExpense(store: store)

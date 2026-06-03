@@ -3,11 +3,12 @@ import Testing
 
 @testable import Moolah
 
-/// Tests for `InsightStore`'s narration cache: availability gating,
-/// streaming → done lifecycle, fallback to template, and cancellation
-/// (issue #1042).
+/// Tests for `InsightStore`'s eager, batch-generated headlines: the visible
+/// batch is published as `items` only once *every* member's headline resolves;
+/// availability gating; per-insight fallback to the detector title on a
+/// throwing narrator; and the session headline cache (issue #1042).
 @MainActor
-@Suite("InsightStore narration")
+@Suite("InsightStore headlines")
 struct InsightStoreNarrationTests {
 
   // MARK: - Harness
@@ -32,7 +33,8 @@ struct InsightStoreNarrationTests {
 
   private func makeStore(
     availability: ModelAvailability,
-    narrator: any InsightNarrating
+    narrator: any InsightNarrating,
+    fixtures: [ScoredInsight]
   ) throws -> InsightStore {
     let backend = try CloudKitAnalysisTestBackend()
     let aud = Instrument.defaultTestInstrument
@@ -56,100 +58,107 @@ struct InsightStoreNarrationTests {
       instrumentChanges: nil,
       availability: FixedModelAvailability(value: availability),
       narrator: narrator,
-      fixtureInsights: InsightFixtures(insights: [makeScoredInsight(id: "test-insight")]))
+      fixtureInsights: InsightFixtures(insights: fixtures))
   }
 
-  // MARK: - narrate: available + scripted narrator
+  // MARK: - whole-batch publish
 
-  @Test("narrate streams then caches as done")
-  func narrateStreamsThenCaches() async throws {
+  @Test("items published only when the whole batch resolves")
+  func itemsPublishedOnlyWhenWholeBatchResolves() async throws {
     let store = try makeStore(
       availability: .available,
-      narrator: ScriptedNarrator(snapshots: ["Din", "Dining is up."]))
+      narrator: ScriptedNarrator(snapshots: ["Din", "Dining is up."]),
+      fixtures: [makeScoredInsight(id: "a"), makeScoredInsight(id: "b")])
+
     await store.refresh()
-    let insight = try #require(store.insights.first)
 
-    store.narrate(insight)
-    await store.narrationTasks[insight.id]?.value
-
-    #expect(store.narration[insight.id] == .done("Dining is up."))
+    #expect(store.items.map(\.id) == ["a", "b"])
+    #expect(store.items.allSatisfy { $0.headline == "Dining is up." })
   }
 
-  @Test("second narrate call is a no-op when already done")
-  func narrateSecondCallIsNoop() async throws {
+  // MARK: - per-insight fallback to title
+
+  @Test("a throwing narrator falls every headline back to the detector title")
+  func guardFailureFallsBackToTitle() async throws {
+    let fixtures = [makeScoredInsight(id: "a"), makeScoredInsight(id: "b")]
     let store = try makeStore(
       availability: .available,
-      narrator: ScriptedNarrator(snapshots: ["First result."]))
+      narrator: ThrowingNarrator(),
+      fixtures: fixtures)
+
     await store.refresh()
-    let insight = try #require(store.insights.first)
 
-    store.narrate(insight)
-    await store.narrationTasks[insight.id]?.value
-    #expect(store.narration[insight.id] == .done("First result."))
-
-    // Second call with a different narrator result should NOT replace the cache.
-    store.narrate(insight)
-    #expect(store.narration[insight.id] == .done("First result."))
-  }
-
-  // MARK: - narrate: fallback on error
-
-  @Test("throwing narrator falls back to template text")
-  func guardFailureFallsBackToTemplate() async throws {
-    let store = try makeStore(
-      availability: .available,
-      narrator: ThrowingNarrator())
-    await store.refresh()
-    let insight = try #require(store.insights.first)
-
-    store.narrate(insight)
-    await store.narrationTasks[insight.id]?.value
-
-    if case .fellBackToTemplate(let text) = store.narration[insight.id] {
-      #expect(!text.isEmpty)
-      // Template output is the title for a singleInsight request.
-      #expect(text == insight.insight.title)
-    } else {
-      Issue.record(
-        "expected .fellBackToTemplate, got \(String(describing: store.narration[insight.id]))")
+    // The batch is still published — fallback is per-insight, never an empty card.
+    #expect(store.items.map(\.id) == ["a", "b"])
+    for item in store.items {
+      #expect(item.headline == item.scored.insight.title)
     }
   }
 
-  // MARK: - narrate: unavailable model
+  // MARK: - availability off
 
-  @Test("narrate is a no-op when model is unavailable")
-  func narrateIsNoopWhenUnavailable() async throws {
+  @Test("model unavailable uses the detector title without calling the narrator")
+  func availabilityOffUsesTitle() async throws {
+    let narrator = CountingNarrator(snapshot: "Should not appear.")
     let store = try makeStore(
       availability: .unavailable(.deviceNotEligible),
-      narrator: ScriptedNarrator(snapshots: ["Should not appear."]))
+      narrator: narrator,
+      fixtures: [makeScoredInsight(id: "a")])
+
     await store.refresh()
-    let insight = try #require(store.insights.first)
 
-    store.narrate(insight)
-
-    // The narration dict must remain empty (no entry at all) when unavailable.
-    #expect(store.narration[insight.id] == nil)
+    let item = try #require(store.items.first)
+    #expect(item.headline == item.scored.insight.title)
+    #expect(narrator.callCount == 0)
   }
 
-  // MARK: - cancelNarration
+  // MARK: - session cache
 
-  @Test("cancelNarration after completion is a no-op — preserves cached result")
-  func cancelNarrationAfterCompletionIsNoop() async throws {
+  @Test("a cache hit skips regeneration across two refreshes")
+  func cacheHitSkipsRegeneration() async throws {
+    let narrator = CountingNarrator(snapshot: "Cached headline.")
     let store = try makeStore(
       availability: .available,
-      narrator: ScriptedNarrator(snapshots: ["Done."]))
+      narrator: narrator,
+      fixtures: [makeScoredInsight(id: "a"), makeScoredInsight(id: "b")])
+
     await store.refresh()
-    let insight = try #require(store.insights.first)
+    #expect(store.items.allSatisfy { $0.headline == "Cached headline." })
 
-    store.narrate(insight)
-    await store.narrationTasks[insight.id]?.value
-    #expect(store.narration[insight.id] == .done("Done."))
+    store.overrideLastLoadedAtForTesting(nil)
+    await store.refresh()
 
-    // cancelNarration is a no-op once the task has completed: the task dict
-    // entry is already removed by the defer, so the guard exits early and
-    // the cached .done result is preserved.
-    store.cancelNarration(insight.id)
+    // Two ids, resolved once each — the second refresh is fully cache-served.
+    #expect(narrator.callCount == 2)
+  }
+}
 
-    #expect(store.narration[insight.id] == .done("Done."))
+/// A narrator that emits a single fixed snapshot and counts how many times it
+/// is asked to narrate — so a test can prove the session headline cache avoids
+/// re-running the narrator for an already-resolved insight.
+private final class CountingNarrator: InsightNarrating, @unchecked Sendable {
+  private let snapshot: String
+  private let lock = NSLock()
+  private var count = 0
+
+  init(snapshot: String) {
+    self.snapshot = snapshot
+  }
+
+  var callCount: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return count
+  }
+
+  nonisolated func narrate(_ request: NarrationRequest) -> AsyncThrowingStream<String, any Error> {
+    lock.lock()
+    count += 1
+    lock.unlock()
+    let snapshot = self.snapshot
+    return AsyncThrowingStream { continuation in
+      continuation.yield(snapshot)
+      continuation.finish()
+    }
   }
 }

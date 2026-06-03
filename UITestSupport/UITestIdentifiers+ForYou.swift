@@ -9,14 +9,14 @@ extension UITestIdentifiers {
 
     public static func row(_ id: String) -> String { "foryou.row.\(id)" }
 
-    public static func dismissButton(_ id: String) -> String { "foryou.dismiss.\(id)" }
+    /// Identifier on the "Show less" control that dismisses an insight row and
+    /// bumps its per-kind fatigue penalty.
+    public static func showLess(_ id: String) -> String { "foryou.showless.\(id)" }
 
     public static func viewButton(_ id: String) -> String { "foryou.view.\(id)" }
 
-    /// Identifier on the "Why?" button that initiates narration for an insight.
-    public static func whyButton(_ id: String) -> String { "foryou.why.\(id)" }
-
-    /// Identifier on the narration `Text` view (streaming partial or final).
-    public static func narrationText(_ id: String) -> String { "foryou.narration.\(id)" }
+    /// Identifier on the single headline `Text` view for an insight row (the
+    /// resolved AI line, or the detector title fallback).
+    public static func headline(_ id: String) -> String { "foryou.headline.\(id)" }
   }
 }

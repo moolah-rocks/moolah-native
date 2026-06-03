@@ -89,11 +89,11 @@ struct InsightStoreTests {
 
     await store.refresh()
 
-    #expect(!store.insights.isEmpty)
+    #expect(!store.items.isEmpty)
     #expect(store.error == nil)
     #expect(store.isLoading == false)
     #expect(store.lastLoadedAt != nil)
-    #expect(store.insights.contains { $0.insight.kind == .uncategorizedBacklog })
+    #expect(store.items.contains { $0.scored.insight.kind == .uncategorizedBacklog })
   }
 
   @Test
@@ -106,10 +106,11 @@ struct InsightStoreTests {
     let store = makeStore(backend, fixtures: fixtures)
 
     await store.refresh()
-    #expect(store.insights.map(\.id) == ["a", "b"])
+    #expect(store.items.map(\.id) == ["a", "b"])
 
-    await store.dismiss(try #require(store.insights.first))
-    #expect(store.insights.map(\.id) == ["b"])
+    await store.dismiss(try #require(store.items.first).scored)
+    // No backfill: the dropped row's gap closes; the batch shrinks to one.
+    #expect(store.items.map(\.id) == ["b"])
   }
 
   // MARK: - dismiss
@@ -122,14 +123,14 @@ struct InsightStoreTests {
     await store.refresh()
 
     let target = try #require(
-      store.insights.first { $0.insight.kind == .uncategorizedBacklog })
+      store.items.first { $0.scored.insight.kind == .uncategorizedBacklog })
     let loadedAtBeforeDismiss = store.lastLoadedAt
 
-    await store.dismiss(target)
+    await store.dismiss(target.scored)
 
-    // The dismissed insight is gone immediately — and it was an in-place
-    // re-rank, not a rebuild, so `lastLoadedAt` is untouched.
-    #expect(!store.insights.contains { $0.id == target.id })
+    // The dismissed row is gone from the published batch immediately — and the
+    // optimistic mutation is not a rebuild, so `lastLoadedAt` is untouched.
+    #expect(!store.items.contains { $0.id == target.id })
     #expect(store.lastLoadedAt == loadedAtBeforeDismiss)
   }
 
@@ -140,15 +141,15 @@ struct InsightStoreTests {
     let store = makeStore(backend)
     await store.refresh()
     let target = try #require(
-      store.insights.first { $0.insight.kind == .uncategorizedBacklog })
+      store.items.first { $0.scored.insight.kind == .uncategorizedBacklog })
 
-    await store.dismiss(target)
+    await store.dismiss(target.scored)
     store.overrideLastLoadedAtForTesting(nil)  // force the next refresh to rebuild
     await store.refresh()
 
     // A full rebuild re-detects the backlog, but the session dismissal keeps
     // it hidden until relaunch (Phase D persists this across launches).
-    #expect(!store.insights.contains { $0.id == target.id })
+    #expect(!store.items.contains { $0.id == target.id })
   }
 
   // MARK: - refreshIfStale
@@ -256,8 +257,8 @@ struct InsightStoreTests {
     await store.refresh()
 
     let target = try #require(
-      store.insights.first { $0.insight.kind == .uncategorizedBacklog })
-    await store.dismiss(target)
+      store.items.first { $0.scored.insight.kind == .uncategorizedBacklog })
+    await store.dismiss(target.scored)
 
     // The write-through fires in a detached `Task`; poll the repository until
     // the committed increment lands (no fixed sleep — bounded poll).

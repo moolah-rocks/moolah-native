@@ -59,5 +59,8 @@ struct CashFlowForecastInsightsTests {
     #expect(!insight.title.contains("225,460"))
     #expect(!insight.title.contains(".00"))
     #expect(!insight.facts.contains { $0.label == "Confidence band" })
+    // No impact badge: the rounded projection lives in the headline, so an
+    // exact to-the-cent impact amount would contradict it.
+    #expect(insight.monetaryImpact == nil)
   }
 }

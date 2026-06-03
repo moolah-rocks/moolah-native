@@ -1,19 +1,15 @@
 import SwiftUI
 
-/// The "For You" dashboard panel: renders the top-ranked insights with a
-/// dismiss affordance and an optional deep-link. Pure presentational view —
-/// all state and logic live in `InsightStore`; this binds the published
-/// insights and dispatches the closures. `AnalysisView` renders it only
-/// when there are insights, so this view assumes a non-empty list.
+/// The "For You" dashboard panel: renders the ready-to-show insight batch — each
+/// a single headline line with its signed impact, a "Show less" control, and an
+/// optional deep-link. Pure presentational view: the store resolves headlines,
+/// caps the batch, and holds the whole batch until ready; this binds the
+/// published `items` and dispatches the closures. `AnalysisView` renders it only
+/// when `items` is non-empty, so this view assumes a non-empty list.
 struct ForYouCard: View {
-  let insights: [ScoredInsight]
-  var maxVisible: Int = 3
-  let availability: ModelAvailability
-  let narration: [String: NarrationState]
-  let onDismiss: (ScoredInsight) -> Void
+  let items: [ForYouItem]
+  let onDismiss: (ForYouItem) -> Void
   let onNavigate: (SidebarSelection) -> Void
-  let onNarrate: (ScoredInsight) -> Void
-  let onCancelNarrate: (ScoredInsight) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -25,15 +21,11 @@ struct ForYouCard: View {
         // descendant element, clobbering each row/button's own identifier.
         .accessibilityIdentifier(UITestIdentifiers.ForYou.card)
       VStack(spacing: 8) {
-        ForEach(insights.prefix(maxVisible)) { scored in
+        ForEach(items) { item in
           InsightRow(
-            scored: scored,
-            availability: availability,
-            narrationState: narration[scored.id] ?? .idle,
-            onDismiss: { onDismiss(scored) },
-            onNavigate: onNavigate,
-            onNarrate: { onNarrate(scored) },
-            onCancelNarrate: { onCancelNarrate(scored) })
+            item: item,
+            onDismiss: { onDismiss(item) },
+            onNavigate: onNavigate)
         }
       }
     }
@@ -44,74 +36,59 @@ struct ForYouCard: View {
 }
 
 private struct InsightRow: View {
-  let scored: ScoredInsight
-  let availability: ModelAvailability
-  let narrationState: NarrationState
+  let item: ForYouItem
   let onDismiss: () -> Void
   let onNavigate: (SidebarSelection) -> Void
-  let onNarrate: () -> Void
-  let onCancelNarrate: () -> Void
 
-  @State private var isExpanded = false
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-  private var insight: Insight { scored.insight }
+  private var insight: Insight { item.scored.insight }
   private var target: SidebarSelection? {
     InsightNavigationTarget.sidebarSelection(for: insight.references)
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack(spacing: 8) {
-        expandToggle
-        dismissButton
-      }
-      if isExpanded {
-        expandedContent
-      }
-    }
-  }
-
-  /// The header is itself the expand/collapse control. Keeping the dismiss
-  /// button a sibling (below) — not a child of this button — avoids the
-  /// macOS conflict where a control inside a disclosure label fights the
-  /// expand gesture, and keeps dismiss independently reachable by VoiceOver.
-  private var expandToggle: some View {
-    Button {
-      withAnimation(reduceMotion ? nil : .snappy) { isExpanded.toggle() }
-    } label: {
-      HStack(spacing: 8) {
-        Image(systemName: framingIcon)
-          .foregroundStyle(framingColor)
-          .accessibilityHidden(true)
-        Text(insight.title)
+    HStack(spacing: 8) {
+      Image(systemName: framingIcon)
+        .foregroundStyle(framingColor)
+        .accessibilityHidden(true)
+      Text(item.headline)
+        .font(.subheadline)
+        .fontWeight(.medium)
+        // Wrap rather than truncate: an AI headline is a full sentence.
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier(UITestIdentifiers.ForYou.headline(item.id))
+      if let impact = insight.monetaryImpact {
+        Text(impact.formatted)
           .font(.subheadline)
-          .fontWeight(.medium)
-        Spacer(minLength: 8)
-        if let impact = insight.monetaryImpact {
-          Text(impact.formatted)
-            .font(.subheadline)
-            .monospacedDigit()
-            .foregroundStyle(impactColor(impact))
-        }
-        Image(systemName: "chevron.right")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .rotationEffect(.degrees(isExpanded ? 90 : 0))
+          .monospacedDigit()
+          .foregroundStyle(impactColor(impact))
           .accessibilityHidden(true)
       }
-      .contentShape(Rectangle())
+      showLessButton
+      if let target {
+        // `.borderless` (not macOS-only `.link`) renders a tinted, tappable
+        // control on both platforms — matches the dismiss button's style.
+        Button("View") { onNavigate(target) }
+          .buttonStyle(.borderless)
+          .accessibilityLabel("View \(item.headline)")
+          .accessibilityIdentifier(UITestIdentifiers.ForYou.viewButton(insight.id))
+      }
     }
-    .buttonStyle(.plain)
-    .accessibilityLabel(headerAccessibilityLabel)
-    .accessibilityValue(isExpanded ? "Expanded" : "Collapsed")
-    .accessibilityHint("Shows details")
+    // Grouped under the row identifier so a UI test can assert the row's
+    // presence/removal; children (headline Text, "Show less", "View") stay
+    // independently addressable for their own identifiers and as separate
+    // VoiceOver elements.
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel(rowAccessibilityLabel)
     .accessibilityIdentifier(UITestIdentifiers.ForYou.row(insight.id))
   }
 
-  private var dismissButton: some View {
+  /// "Show less" replaces the old dismiss ✕ — a thumbs-down that records a
+  /// per-kind fatigue bump rather than a generic dismissal.
+  private var showLessButton: some View {
     Button(action: onDismiss) {
-      Image(systemName: "xmark.circle.fill")
+      Label("Show less", systemImage: "hand.thumbsdown")
+        .labelStyle(.iconOnly)
         .contentShape(Rectangle())
     }
     .buttonStyle(.borderless)
@@ -119,87 +96,13 @@ private struct InsightRow: View {
     #if os(iOS)
       .frame(minWidth: 44, minHeight: 44)
     #endif
-    .help("Dismiss this insight")
-    .accessibilityLabel("Dismiss \(insight.title)")
-    .accessibilityIdentifier(UITestIdentifiers.ForYou.dismissButton(insight.id))
+    .help("Show fewer insights like this")
+    .accessibilityLabel("Show fewer insights like this: \(item.headline)")
+    .accessibilityIdentifier(UITestIdentifiers.ForYou.showLess(item.id))
   }
 
-  @ViewBuilder private var expandedContent: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      if availability.isUsable {
-        narrationAffordance
-      }
-      ForEach(insight.facts) { fact in
-        HStack {
-          Text(fact.label)
-            .foregroundStyle(.secondary)
-          Spacer(minLength: 8)
-          Text(fact.value)
-            .monospacedDigit()
-        }
-        .font(.caption)
-      }
-      if let target {
-        // `.borderless` (not macOS-only `.link`) renders a tinted, tappable
-        // control on both platforms — matches the dismiss button's style.
-        Button("View") { onNavigate(target) }
-          .buttonStyle(.borderless)
-          .accessibilityLabel("View \(insight.title)")
-          .accessibilityIdentifier(UITestIdentifiers.ForYou.viewButton(insight.id))
-      }
-    }
-    .padding(.top, 4)
-  }
-
-  /// Narration affordance rendered when `availability.isUsable`. Switches on
-  /// `narrationState` to show the "Why?" button, streaming partial text, or
-  /// the completed narration. `.fellBackToTemplate` is visually identical to
-  /// `.done` — the template fallback is invisible to the user by design.
-  @ViewBuilder private var narrationAffordance: some View {
-    if case .idle = narrationState {
-      Button("Why?") { onNarrate() }
-        .buttonStyle(.borderless)
-        .accessibilityLabel("Why? — explain \(insight.title)")
-        .accessibilityHint("Generates a plain-language explanation on your device")
-        .accessibilityIdentifier(UITestIdentifiers.ForYou.whyButton(insight.id))
-    } else {
-      // One stable text element across `.streaming` → `.done`: keeping the
-      // narration `Text` in the same structural position (rather than two
-      // separate switch arms) preserves its identity so its content updates
-      // in place — both for SwiftUI animation and so a UI test observing the
-      // element sees the label transition rather than a replaced element.
-      VStack(alignment: .leading, spacing: 4) {
-        Text(narrationText)
-          .font(.callout)
-          .foregroundStyle(.secondary)
-          .accessibilityAddTraits(.updatesFrequently)
-          .accessibilityIdentifier(UITestIdentifiers.ForYou.narrationText(insight.id))
-        if case .streaming = narrationState {
-          HStack(spacing: 8) {
-            ProgressView()
-              .controlSize(.small)
-              .accessibilityLabel("Generating explanation…")
-            Button("Cancel") { onCancelNarrate() }
-              .buttonStyle(.borderless)
-          }
-        }
-      }
-    }
-  }
-
-  /// The text to display for the current narration state. Empty while idle or
-  /// at the start of streaming; the partial or completed prose otherwise.
-  /// `.fellBackToTemplate` reads identically to `.done` — the template fallback
-  /// is invisible to the user by design.
-  private var narrationText: String {
-    switch narrationState {
-    case .idle: return ""
-    case .streaming(let text), .done(let text), .fellBackToTemplate(let text): return text
-    }
-  }
-
-  private var headerAccessibilityLabel: String {
-    var parts = [framingDescription, insight.title]
+  private var rowAccessibilityLabel: String {
+    var parts = [framingDescription, item.headline]
     if let impact = insight.monetaryImpact {
       parts.append(impact.formatted)
     }
@@ -238,85 +141,62 @@ private struct InsightRow: View {
 }
 
 #if DEBUG
-  extension [ScoredInsight] {
-    /// Preview/iteration fixtures covering each framing, with/without impact,
-    /// and with/without a navigation target.
-    static var forYouPreviewFixtures: [ScoredInsight] {
+  extension [ForYouItem] {
+    /// Preview/iteration fixtures covering each framing, an AI-style headline
+    /// vs a plain detector title, ±impact, and ±navigation target.
+    static var forYouPreviewFixtures: [ForYouItem] {
       let now = Date(timeIntervalSince1970: 1_700_000_000)
       let accountId = UUID()
       return [
-        ScoredInsight(
-          insight: Insight(
-            id: "p-large",
-            kind: .largeTransactionAnomaly,
-            title: "Large purchase at the Apple Store",
-            date: now,
-            framing: .negative,
-            actionability: .review,
-            surprise: 0.8,
-            monetaryImpact: InstrumentAmount(quantity: -2499, instrument: .AUD),
-            facts: [InsightFact("Amount", "−$2,499.00"), InsightFact("Typical", "$120.00")],
-            references: InsightReferences(accountIds: [accountId])),
-          score: 4.2),
-        ScoredInsight(
-          insight: Insight(
-            id: "p-netflix",
-            kind: .subscriptionPriceHike,
-            title: "Netflix raised its monthly price",
-            date: now,
-            framing: .negative,
-            actionability: .act,
-            surprise: 0.5,
-            monetaryImpact: InstrumentAmount(quantity: -3, instrument: .AUD),
-            facts: [InsightFact("New price", "$22.99"), InsightFact("Was", "$19.99")]),
-          score: 3.1),
-        ScoredInsight(
-          insight: Insight(
-            id: "p-milestone",
-            kind: .netWorthMilestone,
-            title: "Net worth crossed $100k",
-            date: now,
-            framing: .positive,
-            actionability: .informational,
-            surprise: 0.3),
-          score: 2.0),
+        ForYouItem(
+          scored: ScoredInsight(
+            insight: Insight(
+              id: "p-large",
+              kind: .largeTransactionAnomaly,
+              title: "Large purchase at the Apple Store",
+              date: now,
+              framing: .negative,
+              actionability: .review,
+              surprise: 0.8,
+              monetaryImpact: InstrumentAmount(quantity: -2499, instrument: .AUD),
+              references: InsightReferences(accountIds: [accountId])),
+            score: 4.2),
+          headline: "You spent $2,499 at the Apple Store, far above your usual $120."),
+        ForYouItem(
+          scored: ScoredInsight(
+            insight: Insight(
+              id: "p-netflix",
+              kind: .subscriptionPriceHike,
+              title: "Netflix raised its monthly price",
+              date: now,
+              framing: .negative,
+              actionability: .act,
+              surprise: 0.5,
+              monetaryImpact: InstrumentAmount(quantity: -3, instrument: .AUD)),
+            score: 3.1),
+          headline: "Netflix raised its monthly price from $19.99 to $22.99."),
+        ForYouItem(
+          scored: ScoredInsight(
+            insight: Insight(
+              id: "p-milestone",
+              kind: .netWorthMilestone,
+              title: "Net worth crossed $100k",
+              date: now,
+              framing: .positive,
+              actionability: .informational,
+              surprise: 0.3),
+            score: 2.0),
+          // Plain detector title (model unavailable / fell back).
+          headline: "Net worth crossed $100k"),
       ]
     }
   }
 
-  #Preview("Collapsed rows") {
+  #Preview("For You headlines") {
     ForYouCard(
-      insights: .forYouPreviewFixtures,
-      availability: .available,
-      narration: [
-        "p-large": .streaming("You spent a lot at the Apple Store…"),
-        "p-netflix": .done("Netflix raised its monthly price by $3.00, up from $19.99 to $22.99."),
-      ],
+      items: .forYouPreviewFixtures,
       onDismiss: { _ in },
-      onNavigate: { _ in },
-      onNarrate: { _ in },
-      onCancelNarrate: { _ in }
-    )
-    .padding()
-    .frame(width: 420)
-  }
-
-  /// Shows narration affordance states (streaming + done + fallback) in the
-  /// full card with all narration states wired so expanding any row reveals them.
-  #Preview("Expanded narration states") {
-    ForYouCard(
-      insights: .forYouPreviewFixtures,
-      availability: .available,
-      narration: [
-        "p-large": .streaming("You spent a lot at the Apple Store this month…"),
-        "p-netflix": .done(
-          "Netflix raised its monthly price by $3.00, up from $19.99 to $22.99."),
-        "p-milestone": .fellBackToTemplate("Net worth crossed $100k — a new high."),
-      ],
-      onDismiss: { _ in },
-      onNavigate: { _ in },
-      onNarrate: { _ in },
-      onCancelNarrate: { _ in }
+      onNavigate: { _ in }
     )
     .padding()
     .frame(width: 420)

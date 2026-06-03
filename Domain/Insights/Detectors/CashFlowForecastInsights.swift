@@ -105,8 +105,9 @@ enum CashFlowForecastInsights {
         framing: projected >= 0 ? .positive : .negative,
         actionability: .informational,
         surprise: 0.2,
-        monetaryImpact: InstrumentAmount(
-          quantity: projected, instrument: context.reportingCurrency),
+        // No `monetaryImpact`: the rounded projection is already in the headline
+        // ("around $225,000"). An exact `$225,460.22` impact badge would
+        // contradict the deliberately-rounded headline, so it is omitted.
         facts: [
           InsightFact("Projected balance", rounded)
         ],

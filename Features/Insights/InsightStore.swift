@@ -33,7 +33,25 @@ final class InsightStore {
 
   // MARK: - State
 
+  /// Internal ranked selection, kept for re-ranking on a fresh `refresh()`.
+  /// The card no longer reads this — it renders `items`. Each member's display
+  /// headline is resolved into `items` once the whole visible batch is ready.
   private(set) var insights: [ScoredInsight] = []
+
+  /// The ready-to-render For You batch: the visible ranked insights each paired
+  /// with a resolved headline (the on-device AI line, or the detector `title`
+  /// fallback). Published only once *every* member's headline has resolved —
+  /// the surface never shows a half-narrated batch. This is what `ForYouCard`
+  /// renders. Module-internal (not `private(set)`) so the batch-generation
+  /// helper in `InsightStore+Narration.swift` can publish it across the file
+  /// boundary — treat as read-only from every other call site.
+  var items: [ForYouItem] = []
+
+  /// The top-N cap on the visible For You batch. Lives in the store (not the
+  /// view) so the batch-generation pipeline knows exactly which insights to
+  /// resolve headlines for.
+  var maxVisible = 3
+
   private(set) var isLoading = false
   private(set) var error: Error?
 
@@ -73,21 +91,21 @@ final class InsightStore {
   /// file boundary — not intended as API for any other type.
   let narrator: any InsightNarrating
 
-  // MARK: - Narration state
+  // MARK: - Headline generation
 
-  /// Per-insight narration state, keyed by `ScoredInsight.id`. Published so
-  /// `ForYouCard` can render streaming partial text and the final result.
-  /// Entries are set to `.idle` on `cancelNarration(_:)` and absent until the
-  /// first `narrate(_:)` call for that insight. Module-internal (not private)
-  /// so `InsightStore+Narration.swift` can write to it across the file boundary
-  /// — treat as read-only from every other call site.
-  var narration: [String: NarrationState] = [:]
+  /// In-memory, session-lived cache of resolved headlines keyed by
+  /// `ScoredInsight.id`. A cache hit skips re-running the (expensive) narrator
+  /// for an insight already resolved this session. Module-internal so the
+  /// batch-generation helpers in `InsightStore+Narration.swift` can read/write
+  /// it across the file boundary; only ever mutated on the main actor.
+  var headlineCache: [String: String] = [:]
 
-  /// Live narration tasks keyed by insight id. Stored so they can be cancelled
-  /// individually (`cancelNarration`) or all at once on teardown (mirrors the
-  /// `instrumentChangeObservationTask` pattern). Module-internal for the same
-  /// cross-file reason as `narration`.
-  var narrationTasks: [String: Task<Void, Never>] = [:]
+  /// Monotonic batch token. Bumped at the start of every headline-generation
+  /// run; the run only publishes `items` if its captured token still matches
+  /// after all headlines resolve, so a newer `refresh()` cleanly supersedes an
+  /// in-flight older one (no half-applied batch). Module-internal for the same
+  /// cross-file reason as `headlineCache`.
+  var generation = 0
 
   /// UI-testing seam: when non-nil, `refresh()` publishes these fixtures
   /// instead of building an `InsightInput` and running the engine — so a
@@ -186,18 +204,16 @@ final class InsightStore {
     MainActor.assumeIsolated {
       instrumentChangeObservationTask?.cancel()
       dismissalObservationTask?.cancel()
-      for task in narrationTasks.values { task.cancel() }
-      narrationTasks.removeAll()
     }
   }
 
-  /// Tears down the observation tasks and any in-flight narration tasks.
-  /// Idempotent. Called from `ProfileSession.cleanupSync(coordinator:)`.
+  /// Tears down the observation tasks. Idempotent. Called from
+  /// `ProfileSession.cleanupSync(coordinator:)`. In-flight headline generation
+  /// is superseded by the `generation` token rather than tracked tasks, so
+  /// there is nothing to cancel here.
   func stopObserving() {
     instrumentChangeObservationTask?.cancel()
     dismissalObservationTask?.cancel()
-    for task in narrationTasks.values { task.cancel() }
-    narrationTasks.removeAll()
   }
 
   // MARK: - Refresh
@@ -208,7 +224,9 @@ final class InsightStore {
   func refresh() async {
     guard !isLoading else { return }
     if let fixtureInsights {
-      insights = visible(fixtureInsights.insights)
+      let ranked = visible(fixtureInsights.insights)
+      insights = ranked
+      await publishBatch(ranked)
       lastLoadedAt = Date()
       return
     }
@@ -222,7 +240,9 @@ final class InsightStore {
       let (input, scored) = try await compute(
         snapshot: snapshot, context: context, dismissals: dismissals)
       lastInput = input
-      insights = visible(scored)
+      let ranked = visible(scored)
+      insights = ranked
+      await publishBatch(ranked)
       lastLoadedAt = Date()
     } catch is CancellationError {
       // Surface refresh superseded / view torn down — never surface; a
@@ -254,26 +274,33 @@ final class InsightStore {
 
   // MARK: - Dismissal
 
-  /// Removes the insight from the published list immediately and records a
-  /// per-kind dismissal so the ranker's fatigue penalty downranks the kind for
-  /// the rest of the session. The optimistic mutation (hide the card, bump the
-  /// fatigue tally, re-rank) is applied synchronously before the first `await`
+  /// Removes the insight's row from the visible batch immediately ("Show less")
+  /// and records a per-kind dismissal so the ranker's fatigue penalty downranks
+  /// the kind on the *next* `refresh()`. The optimistic mutation (drop the row,
+  /// bump the fatigue tally) is applied synchronously before the first `await`
   /// so the UI updates instantly, then the per-kind count is written through to
   /// the repository.
   ///
-  /// The card stays hidden only if the persist succeeds: on failure the prior
-  /// `dismissedIds` / `dismissals[kind]` are restored and the list re-ranked,
-  /// re-showing the card. Rollback is required because `applyPersistedDismissals`
-  /// max-merges the per-kind count, so an un-reverted optimistic bump could
-  /// never be corrected by a later (lower) DB echo.
+  /// **No backfill:** the dropped row is *not* replaced by the next-ranked
+  /// insight this session — the gap simply closes. The fatigue bump reshapes
+  /// ranking only on the next refresh; the current batch shrinks.
+  ///
+  /// The row stays hidden only if the persist succeeds: on failure the prior
+  /// `items` / `dismissedIds` / `dismissals[kind]` are restored, re-showing the
+  /// row. Rollback is required because `applyPersistedDismissals` max-merges the
+  /// per-kind count, so an un-reverted optimistic bump could never be corrected
+  /// by a later (lower) DB echo.
   func dismiss(_ insight: ScoredInsight) async {
     let kind = insight.insight.kind
+    let priorItems = items
     let priorDismissedIds = dismissedIds
     let priorCount = dismissals[kind]
 
     dismissedIds.insert(insight.id)
     dismissals[kind, default: 0] += 1
-    rerank()
+    // No backfill: filter the row out of the current batch without promoting
+    // the next-ranked insight into the gap.
+    items = items.filter { $0.id != insight.id }
 
     do {
       // The atomic increment in the repository is the source of truth; the
@@ -284,22 +311,11 @@ final class InsightStore {
       // Roll back the optimistic mutation so the in-memory tally cannot drift
       // above the committed count (the max-merge in the observation apply would
       // otherwise pin the overstated value until a successful write or relaunch).
+      items = priorItems
       dismissedIds = priorDismissedIds
       dismissals[kind] = priorCount
-      rerank()
       logger.error("Failed to persist insight dismissal: \(error)")
       self.error = error
-    }
-  }
-
-  /// Re-ranks the cached input in place (no off-main rebuild) so the published
-  /// list reflects the current `dismissals` fatigue table and `dismissedIds`.
-  /// Falls back to filtering the current list when no input is cached.
-  private func rerank() {
-    if let lastInput {
-      insights = visible(engine.generate(lastInput, dismissals: dismissals))
-    } else {
-      insights = visible(insights)
     }
   }
 
@@ -325,8 +341,7 @@ final class InsightStore {
     return (input, scored)
   }
 
-  /// Reconciles the in-memory fatigue table from an authoritative DB emission
-  /// and re-ranks the cached input in place (no off-main rebuild).
+  /// Reconciles the in-memory fatigue table from an authoritative DB emission.
   ///
   /// Per-kind `max`-merge rather than a wholesale replace: a `dismiss(_:)`
   /// bumps `dismissals` optimistically and write-throughs asynchronously, so
@@ -336,6 +351,11 @@ final class InsightStore {
   /// kinds absent from the emission are dropped, so a remote zone wipe /
   /// `deleteAll` clears the table.
   ///
+  /// Deliberately does **not** touch the published `items`: the no-backfill
+  /// rule means a manually-dismissed row's gap must not be re-filled mid-session,
+  /// and a cross-device dismissal arriving here only needs to reshape *future*
+  /// ranking — the next `refresh()` rebuilds the batch with the updated fatigue.
+  ///
   /// internal (not `private`) so the `+Observation` extension's stream-
   /// draining child task can call it across files.
   func applyPersistedDismissals(_ tallies: [InsightDismissal]) {
@@ -344,7 +364,6 @@ final class InsightStore {
       dismissals[tally.kind] = max(dismissals[tally.kind, default: 0], tally.count)
     }
     dismissals = dismissals.filter { dbKinds.contains($0.key) }
-    rerank()
   }
 
   /// Logs and surfaces an error from the dismissal observation stream.
