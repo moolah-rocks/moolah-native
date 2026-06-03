@@ -2,61 +2,6 @@ import Foundation
 import OSLog
 import Observation
 
-// MARK: - RecapLastShownStoring
-
-/// Persistence seam for the per-profile "last time the weekly recap was shown"
-/// date. Keyed by profile id so each profile has independent once-per-week
-/// tracking (each profile has its own data set — issue #1042).
-///
-/// The production implementation persists to `UserDefaults.moolahShared`;
-/// tests inject `InMemoryRecapLastShownStore` so there are no shared-defaults
-/// side effects.
-protocol RecapLastShownStoring {
-  func lastShown(forProfile profileId: UUID) -> Date?
-  func setLastShown(_ date: Date, forProfile profileId: UUID)
-}
-
-// MARK: - UserDefaultsRecapLastShownStore
-
-/// `UserDefaults`-backed implementation of `RecapLastShownStoring`. Keys are
-/// scoped by profile id: `"weeklyRecapLastShown.<profileId>"` in the
-/// `moolahShared` suite so the date is shared between app and extensions and
-/// is CloudKit-environment-scoped (matching the rest of `moolahShared`).
-struct UserDefaultsRecapLastShownStore: RecapLastShownStoring {
-  func lastShown(forProfile profileId: UUID) -> Date? {
-    let key = Self.key(for: profileId)
-    return UserDefaults.moolahShared.object(forKey: key) as? Date
-  }
-
-  func setLastShown(_ date: Date, forProfile profileId: UUID) {
-    UserDefaults.moolahShared.set(date, forKey: Self.key(for: profileId))
-  }
-
-  private static func key(for profileId: UUID) -> String {
-    "weeklyRecapLastShown.\(profileId.uuidString.lowercased())"
-  }
-}
-
-// MARK: - RecapState
-
-/// The lifecycle of the weekly-recap narration card.
-///
-/// `.hidden` is the default and the state after `dismiss()`. `.preparing`
-/// renders a progress indicator while narration is in flight. `.ready` holds
-/// the final two-sentence prose (either FM-generated or the template fallback
-/// — the difference is invisible to the user).
-enum RecapState: Sendable, Equatable {
-  /// No recap to show. Either the opt-in is off, the model is unavailable,
-  /// the recap was already shown this ISO week, or `dismiss()` was called.
-  case hidden
-  /// Narration is in progress. Renders a progress indicator.
-  case preparing
-  /// Narration completed; the associated value is the two-sentence prose.
-  case ready(String)
-}
-
-// MARK: - WeeklyRecapStore
-
 /// Manages the opt-in once-per-ISO-week recap card shown at the top of the
 /// Analysis surface (issue #1042).
 ///
@@ -86,7 +31,7 @@ final class WeeklyRecapStore {
   private let availability: any ModelAvailabilityProviding
   private let lastShownStore: any RecapLastShownStoring
   /// Stable identity captured at init time for `lastShownStore` keying.
-  let profileId: UUID
+  private let profileId: UUID
   /// Returns whether the user has opted into the weekly recap. Injected so
   /// tests can supply a fixed value without touching shared `UserDefaults`.
   private let isOptedIn: @Sendable () -> Bool
@@ -95,6 +40,11 @@ final class WeeklyRecapStore {
   private let now: @Sendable () -> Date
 
   private let logger = Logger(subsystem: "com.moolah.app", category: "WeeklyRecapStore")
+
+  /// Re-entrancy guard: prevents overlapping `prepareIfDue()` invocations from
+  /// racing against each other (e.g. from both the priming `.task` and a
+  /// scene-active `.onChange` firing in quick succession).
+  private var isPreparing = false
 
   // MARK: - Init
 
@@ -134,7 +84,12 @@ final class WeeklyRecapStore {
   /// a crash during generation does not re-show the card. Sets
   /// `.preparing`, narrates the top ≤5 insights, then transitions to
   /// `.ready`. On any narrator error, falls back to `TemplateNarrator`.
+  ///
+  /// A second concurrent call while one is already in flight returns
+  /// immediately without modifying `recap` (re-entrancy guard).
   func prepareIfDue() async {
+    guard !isPreparing else { return }
+
     let currentNow = now()
 
     guard isOptedIn() else {
@@ -170,6 +125,9 @@ final class WeeklyRecapStore {
     // re-entry in the same week doesn't re-show the card.
     lastShownStore.setLastShown(currentNow, forProfile: profileId)
 
+    isPreparing = true
+    defer { isPreparing = false }
+
     recap = .preparing
 
     let items = topInsights.map { scored in
@@ -181,6 +139,8 @@ final class WeeklyRecapStore {
     let request = NarrationRequest.weeklyRecap(items: items)
 
     let text = await consumeNarration(request: request)
+
+    guard !Task.isCancelled else { return }
     recap = .ready(text)
   }
 
@@ -200,6 +160,7 @@ final class WeeklyRecapStore {
     var latest = ""
     do {
       for try await snapshot in narrator.narrate(request) {
+        guard !Task.isCancelled else { return latest }
         latest = snapshot
       }
       return latest
@@ -218,6 +179,7 @@ final class WeeklyRecapStore {
       }
     } catch {
       // TemplateNarrator never throws; belt-and-suspenders.
+      logger.error("WeeklyRecap template fallback unexpectedly threw: \(error)")
     }
     return result
   }
