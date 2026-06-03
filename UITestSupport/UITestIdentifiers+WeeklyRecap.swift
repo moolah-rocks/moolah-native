@@ -10,5 +10,8 @@ extension UITestIdentifiers {
 
     /// The dismiss button that hides the recap card.
     public static let dismiss = "weeklyRecap.dismiss"
+
+    /// The `Text` view rendering the narrated recap prose (`.ready` state).
+    public static let recapText = "weeklyRecap.recapText"
   }
 }

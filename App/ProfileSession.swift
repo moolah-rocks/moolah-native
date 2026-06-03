@@ -280,12 +280,12 @@ final class ProfileSession: Identifiable {
     // WeeklyRecapStore depends on insightStore (reads its insights) and uses
     // the same narrator/availability so its narration honours the same
     // kill-switch and runtime eligibility check. Constructed here, after
-    // insightStore is assigned.
-    self.weeklyRecapStore = WeeklyRecapStore(
+    // insightStore is assigned. UI-test overrides are applied inside
+    // `makeWeeklyRecapStore` so `finishInit` stays under its line budget.
+    self.weeklyRecapStore = Self.makeWeeklyRecapStore(
       insightStore: builtInsightStore,
       narrator: insightNarrator,
       availability: insightAvailability,
-      lastShownStore: UserDefaultsRecapLastShownStore(),
       profileId: profile.id)
     let cryptoWiring = Self.makeCryptoSyncWiring(
       backend: backend,

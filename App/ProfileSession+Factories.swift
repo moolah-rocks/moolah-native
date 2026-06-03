@@ -210,7 +210,7 @@ extension ProfileSession {
   /// argument + env var (`--ui-testing` / `UI_TESTING_SEED`) consumed by
   /// `MoolahApp+Setup.uiTestingSeed(from:)`. Shared by every UI-testing
   /// override helper so the gating logic lives in one place.
-  private static func currentUITestSeed() -> UITestSeed? {
+  static func currentUITestSeed() -> UITestSeed? {
     guard CommandLine.arguments.contains("--ui-testing") else { return nil }
     guard let raw = ProcessInfo.processInfo.environment["UI_TESTING_SEED"] else { return nil }
     return UITestSeed(rawValue: raw)
@@ -260,6 +260,7 @@ extension ProfileSession {
       guard let seed = currentUITestSeed() else { return nil }
       return UITestSeedInsightOverrides.narrator(for: seed)
     }
+
   #endif
 
   /// Builds the per-profile CoinGecko catalog and kicks off a background
