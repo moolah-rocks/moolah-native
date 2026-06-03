@@ -91,6 +91,19 @@ struct ForYouScreen {
       return
     }
     viewButton.click()
+
+    // Tapping "View" changes the sidebar selection, swapping the detail pane
+    // away from the Analysis/For You card — so the For You row unmounts. Wait
+    // on that disappearance as the post-condition (actions must not return
+    // before a known signal). Scenario-specific landing assertions
+    // (e.g. `expectTransactionListVisible()`) remain the caller's job.
+    let row = app.element(for: UITestIdentifiers.ForYou.row(id))
+    if !row.waitForNonExistence(timeout: 5) {
+      Trace.recordFailure(
+        "forYou row '\(UITestIdentifiers.ForYou.row(id))' still present 5s after tapView "
+          + "— navigation may not have fired")
+      XCTFail("For You row for '\(id)' did not leave the screen within 5s of tapping View")
+    }
   }
 
   // MARK: - Headline
@@ -100,13 +113,14 @@ struct ForYouScreen {
   /// so the row only mounts once its final headline is resolved; this
   /// predicate-waits on the content as the robust post-condition.
   ///
-  /// SwiftUI exposes prose `Text` through the element's `value` (not its
-  /// `label`), so the predicate matches either field.
+  /// The headline raw text is exposed in `.value` because the `Text` carries no
+  /// `.accessibilityLabel`/`.accessibilityValue` override (SwiftUI surfaces
+  /// prose `Text` through `value`, not `label`), so the predicate matches
+  /// `.value`.
   func expectHeadline(_ id: String, equals expected: String) {
-    Trace.record(#function, detail: "id=\(id)")
     let headlineIdentifier = UITestIdentifiers.ForYou.headline(id)
     let headlineElement = app.element(for: headlineIdentifier)
-    let predicate = NSPredicate(format: "value == %@ OR label == %@", expected, expected)
+    let predicate = NSPredicate(format: "value == %@", expected)
     let expectation = XCTNSPredicateExpectation(predicate: predicate, object: headlineElement)
     if XCTWaiter().wait(for: [expectation], timeout: 10) != .completed {
       let seen = (headlineElement.value as? String) ?? headlineElement.label

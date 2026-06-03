@@ -177,6 +177,7 @@ extension MoolahUITestCase {
       "largeTxn references checking account "
         + "\(UITestFixtures.TradeBaseline.checkingAccountId) "
         + "(\(UITestFixtures.TradeBaseline.checkingAccountName)) → has 'View'")
+    lines.append("scripted.narration = \(UITestFixtures.InsightsForYou.scriptedNarration)")
   }
 
   func appendPendingWebImportFixtures(into lines: inout [String]) {
