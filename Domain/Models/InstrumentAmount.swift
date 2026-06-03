@@ -30,6 +30,17 @@ struct InstrumentAmount: Codable, Sendable, Hashable, Comparable {
     }
   }
 
+  /// A deliberately imprecise rendering for "ballpark" figures (e.g. a month-end
+  /// forecast): rounds the magnitude to ~3 significant figures and drops the
+  /// fractional currency unit, so a wide-confidence projection reads as
+  /// "$225,000", not "$225,460.22". Sign is preserved (never abs()-ed).
+  /// Non-fiat instruments fall back to `formatted`.
+  var formattedApproximate: String {
+    guard case .fiatCurrency = instrument.kind else { return formatted }
+    let rounded = Self.roundedToSignificantFigures(quantity, figures: 3)
+    return rounded.formatted(.currency(code: instrument.id).precision(.fractionLength(0)))
+  }
+
   var formatNoSymbol: String {
     quantity.formatted(.number.precision(.fractionLength(instrument.decimals)))
   }
@@ -53,6 +64,20 @@ struct InstrumentAmount: Codable, Sendable, Hashable, Comparable {
       return "\(formatNoSymbolVariablePrecision) spam token"
     }
     return formatted
+  }
+
+  // MARK: - Rounding helpers
+
+  /// Rounds `value` to `figures` significant figures using NSDecimalRound.
+  /// Zero is returned unchanged. Preserves sign.
+  private static func roundedToSignificantFigures(_ value: Decimal, figures: Int) -> Decimal {
+    guard value != 0 else { return 0 }
+    let magnitude = abs((value as NSDecimalNumber).doubleValue)
+    let exponent = Int(floor(log10(magnitude))) - (figures - 1)
+    var result = Decimal()
+    var input = value
+    NSDecimalRound(&result, &input, -exponent, .plain)
+    return result
   }
 
   // MARK: - Storage (Int64 scaled by 10^8)
