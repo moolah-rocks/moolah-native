@@ -40,12 +40,47 @@ private struct InsightRow: View {
   let onDismiss: () -> Void
   let onNavigate: (SidebarSelection) -> Void
 
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
   private var insight: Insight { item.scored.insight }
   private var target: SidebarSelection? {
     InsightNavigationTarget.sidebarSelection(for: insight.references)
   }
 
   var body: some View {
+    // At accessibility type sizes the inline HStack (headline + impact +
+    // controls) collides, so reflow to a VStack: the headline gets its own
+    // line, then a row of impact and the controls. The non-accessibility
+    // layout keeps everything inline.
+    Group {
+      if dynamicTypeSize.isAccessibilitySize {
+        VStack(alignment: .leading, spacing: 6) {
+          headlineLine
+          HStack(spacing: 8) {
+            impactText
+            Spacer(minLength: 0)
+            showLessButton
+            viewButton
+          }
+        }
+      } else {
+        HStack(spacing: 8) {
+          headlineLine
+          impactText
+          showLessButton
+          viewButton
+        }
+      }
+    }
+    // Grouped under the row identifier so a UI test can assert the row's
+    // presence/removal; children (headline Text, "Show less", "View") stay
+    // independently addressable for their own identifiers and as separate
+    // VoiceOver elements.
+    .accessibilityElement(children: .contain)
+    .accessibilityIdentifier(UITestIdentifiers.ForYou.row(insight.id))
+  }
+
+  private var headlineLine: some View {
     HStack(spacing: 8) {
       Image(systemName: framingIcon)
         .foregroundStyle(framingColor)
@@ -56,57 +91,57 @@ private struct InsightRow: View {
         // Wrap rather than truncate: an AI headline is a full sentence.
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Fold the framing into the headline's own label so VoiceOver reads
+        // "Heads up: You spent…" as one element (the framing icon is hidden).
+        .accessibilityLabel("\(framingDescription): \(item.headline)")
         .accessibilityIdentifier(UITestIdentifiers.ForYou.headline(item.id))
-      if let impact = insight.monetaryImpact {
-        Text(impact.formatted)
-          .font(.subheadline)
-          .monospacedDigit()
-          .foregroundStyle(impactColor(impact))
-          .accessibilityHidden(true)
-      }
-      showLessButton
-      if let target {
-        // `.borderless` (not macOS-only `.link`) renders a tinted, tappable
-        // control on both platforms — matches the dismiss button's style.
-        Button("View") { onNavigate(target) }
-          .buttonStyle(.borderless)
-          .accessibilityLabel("View \(item.headline)")
-          .accessibilityIdentifier(UITestIdentifiers.ForYou.viewButton(insight.id))
-      }
     }
-    // Grouped under the row identifier so a UI test can assert the row's
-    // presence/removal; children (headline Text, "Show less", "View") stay
-    // independently addressable for their own identifiers and as separate
-    // VoiceOver elements.
-    .accessibilityElement(children: .contain)
-    .accessibilityLabel(rowAccessibilityLabel)
-    .accessibilityIdentifier(UITestIdentifiers.ForYou.row(insight.id))
+  }
+
+  @ViewBuilder private var impactText: some View {
+    if let impact = insight.monetaryImpact {
+      Text(impact.formatted)
+        .font(.subheadline)
+        .monospacedDigit()
+        .foregroundStyle(impactColor(impact))
+        .accessibilityLabel("Impact: \(impact.formatted)")
+    }
+  }
+
+  @ViewBuilder private var viewButton: some View {
+    if let target {
+      // `.borderless` (not macOS-only `.link`) renders a tinted, tappable
+      // control on both platforms — matches the dismiss button's style.
+      Button("View") { onNavigate(target) }
+        .buttonStyle(.borderless)
+        #if os(iOS)
+          .frame(minHeight: 44)
+        #endif
+        .accessibilityLabel("View \(item.headline)")
+        .accessibilityIdentifier(UITestIdentifiers.ForYou.viewButton(insight.id))
+    }
   }
 
   /// "Show less" replaces the old dismiss ✕ — a thumbs-down that records a
-  /// per-kind fatigue bump rather than a generic dismissal.
+  /// per-kind fatigue bump rather than a generic dismissal. The visible text
+  /// label keeps the intent ("show fewer like this") unmistakable.
   private var showLessButton: some View {
     Button(action: onDismiss) {
       Label("Show less", systemImage: "hand.thumbsdown")
-        .labelStyle(.iconOnly)
+        .font(.caption)
         .contentShape(Rectangle())
     }
     .buttonStyle(.borderless)
     .foregroundStyle(.secondary)
     #if os(iOS)
-      .frame(minWidth: 44, minHeight: 44)
+      .frame(minHeight: 44)
+    #endif
+    #if os(macOS)
+      .frame(minHeight: 20)
     #endif
     .help("Show fewer insights like this")
     .accessibilityLabel("Show fewer insights like this: \(item.headline)")
     .accessibilityIdentifier(UITestIdentifiers.ForYou.showLess(item.id))
-  }
-
-  private var rowAccessibilityLabel: String {
-    var parts = [framingDescription, item.headline]
-    if let impact = insight.monetaryImpact {
-      parts.append(impact.formatted)
-    }
-    return parts.joined(separator: ", ")
   }
 
   private func impactColor(_ impact: InstrumentAmount) -> Color {

@@ -1,4 +1,11 @@
 import Foundation
+import OSLog
+
+/// File-private logger for the `nonisolated static` narration helper, which
+/// can't read the store's instance `logger`. Matches `InsightStore.logger`'s
+/// subsystem/category so narration diagnostics land alongside the rest of the
+/// store's logs.
+private let narratorLogger = Logger(subsystem: "com.moolah.app", category: "InsightStore")
 
 // MARK: - Batch headline generation
 
@@ -45,41 +52,57 @@ extension InsightStore {
       }
     }
 
+    // Carries the title for each insight whose narration fell back, so the
+    // batch still publishes with the title but the cache is NOT written (a
+    // transient failure must not suppress narration for the rest of the
+    // session — the next `refresh()` retries generation).
+    var fellBackTitles: [String: String] = [:]
     if !toGenerate.isEmpty {
       let narrator = self.narrator
-      let generated = await withTaskGroup(of: (String, String).self) { group in
+      let generated = await withTaskGroup(of: (String, String?).self) { group in
         for scored in toGenerate {
           group.addTask {
             (scored.id, await Self.narratedHeadline(for: scored, narrator: narrator))
           }
         }
-        var map: [String: String] = [:]
+        var map: [String: String?] = [:]
         for await pair in group {
           map[pair.0] = pair.1
         }
         return map
       }
-      // Back on the main actor: fold the generated headlines into the cache and
-      // the result set.
-      for (id, headline) in generated {
-        headlineCache[id] = headline
-        resolved[id] = headline
+      // Back on the main actor: cache only genuine narrations; for fallbacks,
+      // use the title for display but don't cache it so a retry is possible.
+      for scored in toGenerate {
+        if let headline = generated[scored.id] ?? nil {
+          headlineCache[scored.id] = headline
+          resolved[scored.id] = headline
+        } else {
+          fellBackTitles[scored.id] = scored.insight.title
+        }
       }
     }
 
     // A newer refresh superseded this batch — discard, the newer run publishes.
     guard token == generation else { return }
-    items = batch.map { ForYouItem(scored: $0, headline: resolved[$0.id] ?? $0.insight.title) }
+    // Hold-until-ready: the whole batch publishes together, using the resolved
+    // headline, then the (uncached) fallback title, then the title as a guard.
+    items = batch.map { scored in
+      let headline = resolved[scored.id] ?? fellBackTitles[scored.id] ?? scored.insight.title
+      return ForYouItem(scored: scored, headline: headline)
+    }
   }
 
   /// Drives the narrator stream to completion and returns its final snapshot,
-  /// or the detector `title` if the stream throws (model error / provenance
-  /// guard rejection). `nonisolated static` so the fan-out task group's
-  /// children can call it off the main actor capturing only `Sendable` values.
+  /// or `nil` if the stream throws (model error / provenance guard rejection)
+  /// — the caller falls the display back to the detector `title` without
+  /// caching, so a transient failure does not permanently suppress narration.
+  /// `nonisolated static` so the fan-out task group's children can call it off
+  /// the main actor capturing only `Sendable` values.
   nonisolated private static func narratedHeadline(
     for scored: ScoredInsight,
     narrator: any InsightNarrating
-  ) async -> String {
+  ) async -> String? {
     let insight = scored.insight
     let request = NarrationRequest.singleInsight(title: insight.title, facts: insight.facts)
     var latest = insight.title
@@ -89,7 +112,10 @@ extension InsightStore {
       }
       return latest
     } catch {
-      return insight.title
+      narratorLogger.error(
+        "Narration failed for insight \(insight.id, privacy: .public); falling back to title: \(error)"
+      )
+      return nil
     }
   }
 }

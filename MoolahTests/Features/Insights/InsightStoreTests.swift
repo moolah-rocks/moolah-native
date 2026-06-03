@@ -182,7 +182,7 @@ struct InsightStoreTests {
 
     let secondLoadedAt = try #require(store.lastLoadedAt)
     #expect(secondLoadedAt > firstLoadedAt)
-    #expect(!store.insights.isEmpty)
+    #expect(!store.items.isEmpty)
   }
 
   @Test("refreshIfStale always refreshes if nothing has been loaded yet")
@@ -196,7 +196,7 @@ struct InsightStoreTests {
     await store.refreshIfStale(minimumInterval: 10_000)
 
     #expect(store.lastLoadedAt != nil)
-    #expect(!store.insights.isEmpty)
+    #expect(!store.items.isEmpty)
   }
 
   // MARK: - Earmark instrument filtering
