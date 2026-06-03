@@ -5,9 +5,11 @@
   // macOS HSplitView/TabView layout for `SettingsView`. Every member is view
   // composition over the main struct's shared state.
   extension SettingsView {
-    /// Current on-device model eligibility. Re-read on `.task` so a device
-    /// that finishes downloading Apple Intelligence while Settings is open
-    /// will show the Insights tab on next appear without relaunch.
+    /// Current on-device model eligibility. A synchronous computed read
+    /// re-evaluated on each view-update pass — no `.task` is involved.
+    /// Constructs its own `SystemLanguageModelAvailability()` because the
+    /// macOS Settings scene is a separate scene from `SessionRootView` and
+    /// has no access to a profile's `InsightStore`.
     @MainActor var modelAvailability: ModelAvailability {
       SystemLanguageModelAvailability().current()
     }
@@ -73,11 +75,6 @@
             }
           }
         }
-        if modelAvailability.isUsable {
-          Tab("Insights", systemImage: "sparkles") {
-            insightsTabContent
-          }
-        }
         // macOS Settings tabs host the Form / List directly — the window
         // already supplies chrome and a title, so wrapping in a second
         // `NavigationStack` would produce a duplicate navigation bar.
@@ -86,6 +83,11 @@
         }
         Tab("Rules", systemImage: "list.bullet.rectangle") {
           rulesTabContent
+        }
+        if modelAvailability.isUsable {
+          Tab("Insights", systemImage: "sparkles") {
+            insightsTabContent
+          }
         }
       }
       .frame(minWidth: 600, idealWidth: 700, minHeight: 400, idealHeight: 560)
@@ -146,7 +148,7 @@
       ContentUnavailableView {
         Label("No Profiles", systemImage: "person.crop.circle.badge.plus")
       } description: {
-        Text("Add a profile to connect to a Moolah server.")
+        Text("Add a profile to get started.")
       } actions: {
         Button("Add Profile") {
           showAddProfile = true
@@ -160,7 +162,6 @@
         InsightsSettingsSection()
       }
       .formStyle(.grouped)
-      .navigationTitle("Insights")
     }
 
     @ViewBuilder var importTabContent: some View {

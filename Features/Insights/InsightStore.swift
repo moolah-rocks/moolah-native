@@ -15,7 +15,7 @@ struct InsightFixtures: Sendable {
 /// up in previews, legacy tests, or any path that doesn't explicitly wire a
 /// real provider. Distinct from `FixedModelAvailability` (which is DEBUG-only)
 /// so this struct compiles in release builds where `#if DEBUG` is stripped.
-private struct NeverAvailableModelAvailability: ModelAvailabilityProviding {
+private struct NeverAvailableModelAvailability: ModelAvailabilityProviding, Sendable {
   @MainActor
   func current() -> ModelAvailability { .unavailable(.deviceNotEligible) }
 }
@@ -80,12 +80,14 @@ final class InsightStore {
   /// previews / legacy tests so no live observation runs.
   private let instrumentChanges: (any InstrumentChangeObserving)?
 
-  /// Current model eligibility for the on-device narration layer. Defaults to
+  /// Backing provider for on-device model eligibility. Defaults to
   /// `.unavailable(.deviceNotEligible)` (via `NeverAvailableModelAvailability`)
   /// when no provider is injected — previews/tests see nothing lit up by accident.
-  /// Consumed by E3 (`narrate(_:)`) to gate narration requests; stored here so
-  /// the view can read `availability.current()` to show/hide the "Why?" button.
-  let availability: any ModelAvailabilityProviding
+  private let availability: any ModelAvailabilityProviding
+
+  /// Current model eligibility, for the narration UI to gate on. Exposes the
+  /// value rather than the provider so callers don't reach into the seam.
+  var currentAvailability: ModelAvailability { availability.current() }
 
   /// UI-testing seam: when non-nil, `refresh()` publishes these fixtures
   /// instead of building an `InsightInput` and running the engine — so a
@@ -107,7 +109,7 @@ final class InsightStore {
   /// Ids dismissed in this session. Filtered out of every published list so a
   /// dismissed insight stays gone until relaunch. Distinct from `dismissals`,
   /// which counts dismissals *per kind* to drive the ranker's fatigue penalty;
-  /// Phase D persists both across launches.
+  /// persistence across launches is tracked in #1034.
   private var dismissedIds: Set<String> = []
 
   /// The most recently-built `InsightInput`. Cached so `dismiss(_:)` re-ranks
@@ -135,8 +137,7 @@ final class InsightStore {
     self.reportingInstrument = profile.instrument
     self.instrumentChanges = instrumentChanges
     // Default to ineligible when no provider is injected so no narration
-    // surface lights up in previews/tests by accident. Production wires
-    // `SystemLanguageModelAvailability()` from `ProfileSession.finishInit`.
+    // surface lights up in previews/tests by accident.
     self.availability = availability ?? NeverAvailableModelAvailability()
     self.fixtureInsights = fixtureInsights
 

@@ -10,7 +10,8 @@
 
     /// Current on-device model eligibility. Cheap synchronous read; re-checked
     /// on each view update so a `.modelNotReady → .available` flip is observed
-    /// without relaunch.
+    /// without relaunch. Constructs its own `SystemLanguageModelAvailability()`
+    /// because the settings sheet has no access to a profile's `InsightStore`.
     @MainActor var modelAvailability: ModelAvailability {
       SystemLanguageModelAvailability().current()
     }
