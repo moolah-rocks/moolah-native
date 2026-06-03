@@ -218,6 +218,8 @@ extension MoolahUITestCase {
       appendPendingWebImportFixtures(into: &lines)
     case .insightsForYouBaseline:
       appendInsightsForYouFixtures(into: &lines)
+    case .weeklyRecapBaseline:
+      appendWeeklyRecapFixtures(into: &lines)
     }
   }
 

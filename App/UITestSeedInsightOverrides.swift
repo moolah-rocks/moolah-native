@@ -10,7 +10,7 @@ import Foundation
 enum UITestSeedInsightOverrides {
   static func fixtures(for seed: UITestSeed) -> InsightFixtures? {
     switch seed {
-    case .insightsForYouBaseline:
+    case .insightsForYouBaseline, .weeklyRecapBaseline:
       return InsightFixtures(insights: insightsForYouBaselineInsights)
     case .tradeBaseline,
       .welcomeEmpty,
@@ -37,7 +37,7 @@ enum UITestSeedInsightOverrides {
     /// to `SystemLanguageModelAvailability` (the production path).
     static func availability(for seed: UITestSeed) -> FixedModelAvailability? {
       switch seed {
-      case .insightsForYouBaseline:
+      case .insightsForYouBaseline, .weeklyRecapBaseline:
         return FixedModelAvailability(value: .available)
       case .tradeBaseline,
         .welcomeEmpty,
@@ -67,6 +67,9 @@ enum UITestSeedInsightOverrides {
       case .insightsForYouBaseline:
         return ScriptedNarrator(
           snapshots: [UITestFixtures.InsightsForYou.scriptedNarration])
+      case .weeklyRecapBaseline:
+        return ScriptedNarrator(
+          snapshots: [UITestFixtures.InsightsForYou.scriptedRecap])
       case .tradeBaseline,
         .welcomeEmpty,
         .welcomeSingleCloudProfile,
@@ -81,6 +84,60 @@ enum UITestSeedInsightOverrides {
         .pendingWebImportOneChaseInbox,
         .transferDetectionBaseline:
         return nil
+      }
+    }
+
+    /// Returns an `InMemoryRecapLastShownStore` for seeds that need a
+    /// "never shown" initial state so the recap card is due immediately.
+    /// `.weeklyRecapBaseline` uses a fresh in-memory store so the last-shown
+    /// date is never set and `WeeklyRecapWindow.shouldShow` returns true. All
+    /// other seeds return `nil` — `ProfileSession.finishInit` then uses the
+    /// production `UserDefaultsRecapLastShownStore`.
+    static func recapLastShownStore(for seed: UITestSeed) -> InMemoryRecapLastShownStore? {
+      switch seed {
+      case .weeklyRecapBaseline:
+        return InMemoryRecapLastShownStore()
+      case .insightsForYouBaseline,
+        .tradeBaseline,
+        .welcomeEmpty,
+        .welcomeSingleCloudProfile,
+        .welcomeMultipleCloudProfiles,
+        .welcomeDownloading,
+        .sidebarFooterUpToDate,
+        .sidebarFooterReceiving,
+        .sidebarFooterSending,
+        .cryptoCatalogPreloaded,
+        .tradeReady,
+        .incompatibleProfile,
+        .pendingWebImportOneChaseInbox,
+        .transferDetectionBaseline:
+        return nil
+      }
+    }
+
+    /// Returns `true` for seeds that need the weekly recap opt-in forced on.
+    /// `.weeklyRecapBaseline` forces opt-in so the `WeeklyRecapStore` skips the
+    /// `UserDefaults` read and shows the recap unconditionally. All other seeds
+    /// return `false`, leaving the production `UserDefaults` read in place.
+    static func recapOptedIn(for seed: UITestSeed) -> Bool {
+      switch seed {
+      case .weeklyRecapBaseline:
+        return true
+      case .insightsForYouBaseline,
+        .tradeBaseline,
+        .welcomeEmpty,
+        .welcomeSingleCloudProfile,
+        .welcomeMultipleCloudProfiles,
+        .welcomeDownloading,
+        .sidebarFooterUpToDate,
+        .sidebarFooterReceiving,
+        .sidebarFooterSending,
+        .cryptoCatalogPreloaded,
+        .tradeReady,
+        .incompatibleProfile,
+        .pendingWebImportOneChaseInbox,
+        .transferDetectionBaseline:
+        return false
       }
     }
   #endif

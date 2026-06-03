@@ -32,3 +32,24 @@ extension UserDefaultsRecapLastShownStore: RecapLastShownStoring {
     UserDefaults.moolahShared.set(date, forKey: Self.key(for: profileId))
   }
 }
+
+#if DEBUG
+  /// In-memory implementation of `RecapLastShownStoring`. Used in UI-test
+  /// seeds to provide a "never shown" initial state without touching the
+  /// shared `UserDefaults.moolahShared` suite (which would persist across
+  /// test runs). `nonisolated(unsafe)` satisfies `Sendable` without actor
+  /// overhead; the UI-test app is single-threaded at the point of use.
+  final class InMemoryRecapLastShownStore: Sendable {
+    nonisolated(unsafe) private var storage: [UUID: Date] = [:]
+  }
+
+  extension InMemoryRecapLastShownStore: RecapLastShownStoring {
+    func lastShown(forProfile profileId: UUID) -> Date? {
+      storage[profileId]
+    }
+
+    func setLastShown(_ date: Date, forProfile profileId: UUID) {
+      storage[profileId] = date
+    }
+  }
+#endif

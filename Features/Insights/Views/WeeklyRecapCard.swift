@@ -64,6 +64,7 @@ struct WeeklyRecapCard: View {
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityAddTraits(.updatesFrequently)
+        .accessibilityIdentifier(UITestIdentifiers.WeeklyRecap.recapText)
     }
   }
 }
