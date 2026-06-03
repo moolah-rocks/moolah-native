@@ -140,7 +140,11 @@ final class WeeklyRecapStore {
 
     let text = await consumeNarration(request: request)
 
-    guard !Task.isCancelled else { return }
+    // Publish unconditionally. The recap is a one-shot and the store outlives
+    // the view's `.task` that called this, so even if that task was cancelled
+    // mid-narration the result must land — the shown-week is already recorded,
+    // so bailing on cancellation would strand the card at `.preparing` until
+    // next week.
     recap = .ready(text)
   }
 
@@ -159,8 +163,10 @@ final class WeeklyRecapStore {
   private func consumeNarration(request: NarrationRequest) async -> String {
     var latest = ""
     do {
+      // No mid-stream cancellation bail: the recap result must complete and be
+      // published even if the triggering view task is cancelled (see the note
+      // in `prepareIfDue`). Narration is a bounded one-shot.
       for try await snapshot in narrator.narrate(request) {
-        guard !Task.isCancelled else { return latest }
         latest = snapshot
       }
       return latest
