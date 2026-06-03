@@ -246,6 +246,84 @@ struct InsightStoreTests {
     #expect(store.insights.contains { $0.insight.kind == .uncategorizedBacklog })
   }
 
+  // MARK: - Persisted dismissals (observe + write-through)
+
+  @Test("dismiss write-throughs the per-kind count to the repository")
+  func dismissPersistsPerKindCount() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    try await seedUncategorizedBacklog(backend, count: 12)
+    let store = makeStore(backend)
+    await store.refresh()
+
+    let target = try #require(
+      store.insights.first { $0.insight.kind == .uncategorizedBacklog })
+    store.dismiss(target)
+
+    // The write-through fires in a detached `Task`; poll the repository until
+    // the committed increment lands (no fixed sleep — bounded poll).
+    try await waitUntil(timeout: .seconds(5)) {
+      let count =
+        (try? await backend.insightDismissals.fetchAll())?
+        .first { $0.kind == .uncategorizedBacklog }?.count
+      return count == 1
+    }
+  }
+
+  @Test("a pre-existing persisted dismissal downranks that kind on refresh")
+  func persistedDismissalsSeedFatigueOnRefresh() async throws {
+    // Baseline: a fresh store with no dismissals — capture the
+    // `.uncategorizedBacklog` score the ranker assigns with zero fatigue.
+    let baselineBackend = try CloudKitAnalysisTestBackend()
+    try await seedUncategorizedBacklog(baselineBackend, count: 12)
+    let baselineStore = makeStore(baselineBackend)
+    await baselineStore.refresh()
+    let baselineScore = try #require(
+      baselineStore.insights.first { $0.insight.kind == .uncategorizedBacklog }?.score)
+
+    // A store atop a backend whose repository already records one dismissal of
+    // `.uncategorizedBacklog`. The observation seeds the in-memory fatigue
+    // table asynchronously, so poll-refresh until the persisted count reaches
+    // the ranker and lowers the published score below the un-dismissed
+    // baseline (fatigue penalty is strictly subtractive — any drop proves the
+    // persisted count influenced the engine run).
+    let backend = try CloudKitAnalysisTestBackend()
+    try await seedUncategorizedBacklog(backend, count: 12)
+    _ = try await backend.insightDismissals.recordDismissal(of: .uncategorizedBacklog)
+    let store = makeStore(backend)
+
+    try await waitUntil(timeout: .seconds(5)) {
+      store.overrideLastLoadedAtForTesting(nil)  // force each poll to rebuild
+      await store.refresh()
+      guard
+        let score = store.insights.first(where: {
+          $0.insight.kind == .uncategorizedBacklog
+        })?.score
+      else { return false }
+      return score < baselineScore
+    }
+  }
+
+  // MARK: - Polling helper
+
+  /// Polls `condition` on the main actor until it returns true or the timeout
+  /// elapses, throwing `TimeoutError` otherwise. Used to wait on the async
+  /// write-through / observation seam without a fixed sleep.
+  private func waitUntil(
+    timeout: Duration,
+    pollEvery: Duration = .milliseconds(20),
+    _ condition: @MainActor () async -> Bool
+  ) async throws {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while ContinuousClock.now < deadline {
+      if await condition() { return }
+      try await Task.sleep(for: pollEvery)
+    }
+    if await condition() { return }
+    throw TimeoutError()
+  }
+
+  private struct TimeoutError: Error {}
+
   // MARK: - Error path
 
   // FIX 8 (SKIPPED): `InsightInputBuilder.build()` drops failed conversions per
