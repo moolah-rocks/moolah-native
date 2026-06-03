@@ -6,6 +6,9 @@ protocol BackendProvider: Sendable {
   var auth: any AuthProvider { get }
   var accounts: any AccountRepository { get }
   var accountGroups: any AccountGroupRepository { get }
+  /// Per-`InsightKind` dismissal tallies driving `InsightRanker`'s fatigue
+  /// penalty. Synced via CKSyncEngine so a dismissal propagates across devices.
+  var insightDismissals: any InsightDismissalRepository { get }
   var transactions: any TransactionRepository { get }
   var categories: any CategoryRepository { get }
   var transferSuggestions: any TransferSuggestionRepository { get }
