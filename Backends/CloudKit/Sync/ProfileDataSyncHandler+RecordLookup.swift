@@ -103,6 +103,10 @@ extension ProfileDataSyncHandler {
       return fetchAccountGroupRow(id: uuid).map { row in
         buildCKRecord(from: row, encodedSystemFields: row.encodedSystemFields)
       }
+    case InsightDismissalRow.recordType:
+      return fetchInsightDismissalRow(id: uuid).map { row in
+        buildCKRecord(from: row, encodedSystemFields: row.encodedSystemFields)
+      }
     case CSVImportProfileRow.recordType:
       return fetchCSVImportProfileRow(id: uuid).map { row in
         buildCKRecord(from: row, encodedSystemFields: row.encodedSystemFields)
@@ -196,6 +200,13 @@ extension ProfileDataSyncHandler {
         self.mapBuiltRows(
           self.fetchRowsBatch {
             try self.grdbRepositories.accountGroups.fetchRowsSync(ids: ids)
+          })
+      }
+    case InsightDismissalRow.recordType:
+      return {
+        self.mapBuiltRows(
+          self.fetchRowsBatch {
+            try self.grdbRepositories.insightDismissals.fetchRowsSync(ids: ids)
           })
       }
     case CSVImportProfileRow.recordType:
@@ -317,6 +328,10 @@ extension ProfileDataSyncHandler {
 
   private func fetchAccountGroupRow(id: UUID) -> AccountGroupRow? {
     fetchRowOrLog { try grdbRepositories.accountGroups.fetchRowSync(id: id) }
+  }
+
+  private func fetchInsightDismissalRow(id: UUID) -> InsightDismissalRow? {
+    fetchRowOrLog { try grdbRepositories.insightDismissals.fetchRowSync(id: id) }
   }
 
   private func fetchEarmarkRow(id: UUID) -> EarmarkRow? {
