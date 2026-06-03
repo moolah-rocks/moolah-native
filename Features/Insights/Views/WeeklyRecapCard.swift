@@ -13,9 +13,9 @@ struct WeeklyRecapCard: View {
   let onDismiss: () -> Void
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
+    VStack(alignment: .leading, spacing: 12) {
       HStack {
-        Text("Your week")
+        Text("Your week in review")
           .font(.title2)
           .fontWeight(.semibold)
           .accessibilityIdentifier(UITestIdentifiers.WeeklyRecap.card)
@@ -29,8 +29,9 @@ struct WeeklyRecapCard: View {
         #if os(iOS)
           .frame(minWidth: 44, minHeight: 44)
         #endif
-        .help("Dismiss weekly recap")
-        .accessibilityLabel("Dismiss weekly recap")
+        .help("Dismiss recap")
+        .accessibilityLabel("Dismiss recap")
+        .accessibilityHint("Won't reappear until next week")
         .accessibilityIdentifier(UITestIdentifiers.WeeklyRecap.dismiss)
       }
       recapContent
@@ -38,6 +39,8 @@ struct WeeklyRecapCard: View {
     .padding()
     .background(.background)
     .clipShape(.rect(cornerRadius: 12))
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel("Your week in review")
   }
 
   @ViewBuilder private var recapContent: some View {
@@ -48,15 +51,19 @@ struct WeeklyRecapCard: View {
       HStack(spacing: 8) {
         ProgressView()
           .controlSize(.small)
-        Text("Putting together your week…")
+          .accessibilityHidden(true)
+        Text("Writing your recap…")
           .font(.callout)
           .foregroundStyle(.secondary)
       }
+      .accessibilityElement(children: .combine)
+      .accessibilityLabel("Writing your weekly recap")
     case .ready(let text):
       Text(text)
         .font(.callout)
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
+        .accessibilityAddTraits(.updatesFrequently)
     }
   }
 }
@@ -69,9 +76,10 @@ struct WeeklyRecapCard: View {
   }
 
   #Preview("Ready") {
+    // Amounts are illustrative; real output uses the profile currency.
     WeeklyRecapCard(
       recap: .ready(
-        "This week your net worth crossed $100k and your dining spend stayed "
+        "This week your net worth crossed $100,000 and your dining spend stayed "
           + "within your usual range of $410."),
       onDismiss: {}
     )

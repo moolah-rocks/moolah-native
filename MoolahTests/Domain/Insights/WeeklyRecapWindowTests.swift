@@ -15,11 +15,11 @@ struct WeeklyRecapWindowTests {
 
   // UTC calendar anchors ISO week boundaries at UTC midnight, making
   // epoch-based fixed dates unambiguous across all test-runner timezones.
-  private var cal: Calendar {
+  private let cal: Calendar = {
     var calendar = Calendar(identifier: .iso8601)
     calendar.timeZone = TimeZone(abbreviation: "UTC") ?? .current
     return calendar
-  }
+  }()
 
   // ISO week reference dates (UTC noon, away from midnight boundary):
   //   2024-W01-Wed = 2024-01-03T12:00Z → epoch 1_704_283_200
