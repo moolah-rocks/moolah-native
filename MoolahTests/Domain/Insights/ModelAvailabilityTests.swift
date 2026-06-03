@@ -21,10 +21,9 @@ struct ModelAvailabilityTests {
   @Test
   @MainActor
   func fixedAvailabilityReturnsConfiguredValue() {
-    let fixed = FixedModelAvailability(value: .available)
-    #expect(fixed.current() == .available)
-
-    let fixed2 = FixedModelAvailability(value: .unavailable(.deviceNotEligible))
-    #expect(fixed2.current() == .unavailable(.deviceNotEligible))
+    #expect(FixedModelAvailability(value: .available).current() == .available)
+    #expect(
+      FixedModelAvailability(value: .unavailable(.deviceNotEligible)).current()
+        == .unavailable(.deviceNotEligible))
   }
 }

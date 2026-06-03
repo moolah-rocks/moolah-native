@@ -7,7 +7,7 @@ import FoundationModels
 /// Case names confirmed against the installed SDK (Xcode 26.4):
 /// `.available`, `.unavailable(.deviceNotEligible)`,
 /// `.unavailable(.appleIntelligenceNotEnabled)`, `.unavailable(.modelNotReady)`.
-struct SystemLanguageModelAvailability: ModelAvailabilityProviding {
+struct SystemLanguageModelAvailability: ModelAvailabilityProviding, Sendable {
   @MainActor
   func current() -> ModelAvailability {
     switch SystemLanguageModel.default.availability {

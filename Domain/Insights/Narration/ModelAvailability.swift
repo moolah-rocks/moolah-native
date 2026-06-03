@@ -21,7 +21,7 @@ enum ModelAvailability: Sendable, Hashable {
   }
 
   /// True only when narration may run.
-  var isUsable: Bool { if case .available = self { return true } else { return false } }
+  var isUsable: Bool { self == .available }
 
   /// True when re-checking later might flip to `.available`.
   var isTransient: Bool {
@@ -41,8 +41,12 @@ protocol ModelAvailabilityProviding: Sendable {
 }
 
 #if DEBUG
-  /// Test/preview double.
-  struct FixedModelAvailability: ModelAvailabilityProviding {
+  /// Test/preview double that returns a caller-supplied `ModelAvailability`
+  /// value. Unlike `NeverAvailableModelAvailability` (the production fallback,
+  /// always `.unavailable(.deviceNotEligible)`), this double lets tests and
+  /// previews supply **any** value — including `.available` — to exercise both
+  /// the eligible and ineligible branches without reaching for a real model.
+  struct FixedModelAvailability: ModelAvailabilityProviding, Sendable {
     let value: ModelAvailability
 
     @MainActor
