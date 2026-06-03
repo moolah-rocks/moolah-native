@@ -252,6 +252,7 @@ final class ProfileSession: Identifiable {
       backend: backend,
       profile: profile,
       instrumentChanges: backend.instrumentChangeObserver,
+      availability: SystemLanguageModelAvailability(),
       fixtureInsights: Self.uiTestingInsightFixtures())
     let cryptoWiring = Self.makeCryptoSyncWiring(
       backend: backend,

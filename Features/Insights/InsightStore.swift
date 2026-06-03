@@ -10,6 +10,16 @@ struct InsightFixtures: Sendable {
   let insights: [ScoredInsight]
 }
 
+/// Default availability provider used when no provider is injected — always
+/// returns `.unavailable(.deviceNotEligible)` so no narration surface lights
+/// up in previews, legacy tests, or any path that doesn't explicitly wire a
+/// real provider. Distinct from `FixedModelAvailability` (which is DEBUG-only)
+/// so this struct compiles in release builds where `#if DEBUG` is stripped.
+private struct NeverAvailableModelAvailability: ModelAvailabilityProviding {
+  @MainActor
+  func current() -> ModelAvailability { .unavailable(.deviceNotEligible) }
+}
+
 /// The sibling feature stores `InsightStore` reads each refresh to gather the
 /// main-actor half of an `InsightInput` (the `InsightInputSnapshot`). Bundled
 /// into a single struct so `InsightStore.init` stays within SwiftLint's
@@ -70,6 +80,13 @@ final class InsightStore {
   /// previews / legacy tests so no live observation runs.
   private let instrumentChanges: (any InstrumentChangeObserving)?
 
+  /// Current model eligibility for the on-device narration layer. Defaults to
+  /// `.unavailable(.deviceNotEligible)` (via `NeverAvailableModelAvailability`)
+  /// when no provider is injected — previews/tests see nothing lit up by accident.
+  /// Consumed by E3 (`narrate(_:)`) to gate narration requests; stored here so
+  /// the view can read `availability.current()` to show/hide the "Why?" button.
+  let availability: any ModelAvailabilityProviding
+
   /// UI-testing seam: when non-nil, `refresh()` publishes these fixtures
   /// instead of building an `InsightInput` and running the engine — so a
   /// `MoolahUITests_macOS` seed can assert the surface deterministically
@@ -109,6 +126,7 @@ final class InsightStore {
     backend: any BackendProvider,
     profile: Profile,
     instrumentChanges: (any InstrumentChangeObserving)? = nil,
+    availability: (any ModelAvailabilityProviding)? = nil,
     fixtureInsights: InsightFixtures? = nil
   ) {
     self.sources = sources
@@ -116,6 +134,10 @@ final class InsightStore {
     self.engine = InsightEngine()
     self.reportingInstrument = profile.instrument
     self.instrumentChanges = instrumentChanges
+    // Default to ineligible when no provider is injected so no narration
+    // surface lights up in previews/tests by accident. Production wires
+    // `SystemLanguageModelAvailability()` from `ProfileSession.finishInit`.
+    self.availability = availability ?? NeverAvailableModelAvailability()
     self.fixtureInsights = fixtureInsights
 
     // Strong `self` capture mirrors `EarmarkStore`: the store is

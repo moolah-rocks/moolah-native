@@ -6,6 +6,7 @@
 excluded:
   - .agent-tmp
   - .build
+  - .claude
   - .DerivedData-bench
   - .DerivedData-ios
   - .DerivedData-mac
