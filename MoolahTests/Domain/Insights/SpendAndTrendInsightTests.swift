@@ -123,6 +123,10 @@ struct SpendAndTrendInsightTests {
     }
     let insights = CategoryAnomalyInsight.detect(
       breakdown: breakdown, categories: Categories(from: [dining]), context: context)
-    #expect(insights.contains { $0.kind == .categorySpendingAnomaly })
+    let anomaly = try #require(insights.first { $0.kind == .categorySpendingAnomaly })
+    // The headline names the spike's month ("… in June") rather than the
+    // date-rotting "this month".
+    #expect(anomaly.title.contains("June"))
+    #expect(!anomaly.title.contains("this month"))
   }
 }

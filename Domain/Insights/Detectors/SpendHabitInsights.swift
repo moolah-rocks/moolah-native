@@ -92,7 +92,7 @@ enum SpendHabitInsights {
     return Insight(
       id: "\(InsightKind.lapsedMerchant.rawValue):\(payee.normalizedPayee)",
       kind: .lapsedMerchant,
-      title: "You've stopped paying \(name)",
+      title: "No recent payments to \(name)",
       date: payee.lastSeen,
       framing: .neutral,
       actionability: .review,

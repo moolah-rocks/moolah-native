@@ -63,7 +63,7 @@ enum SavingsGoalInsight {
     Insight(
       id: "\(InsightKind.savingsGoalETA.rawValue):reached:\(earmark.id.uuidString)",
       kind: .savingsGoalETA,
-      title: "\(earmark.name) goal reached 🎉",
+      title: "\(earmark.name) goal reached",
       date: context.now,
       framing: .positive,
       actionability: .informational,

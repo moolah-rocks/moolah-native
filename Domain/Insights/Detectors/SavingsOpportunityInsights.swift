@@ -30,7 +30,11 @@ enum SavingsOpportunityInsights {
         id:
           "\(InsightKind.feeSpend.rawValue):\(FinancialMonth.key(for: context.now, monthEnd: context.financialMonthEnd))",
         kind: .feeSpend,
-        title: "You paid \(context.formatted(total)) in fees",
+        // `total` is a known-negative expense; present its magnitude as a
+        // positive figure here for the headline only (sign is preserved
+        // everywhere else, including `monetaryImpact`).
+        title:
+          "You paid \(context.formatted(InstrumentAmount(quantity: -total.quantity, instrument: total.instrument))) in fees",
         date: context.now,
         framing: .negative,
         actionability: .review,

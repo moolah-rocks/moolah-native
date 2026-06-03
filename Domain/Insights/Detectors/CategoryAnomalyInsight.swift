@@ -74,12 +74,17 @@ enum CategoryAnomalyInsight {
       categoryId == CategorySpendSeries.uncategorizedKey
       ? nil : categories.by(id: categoryId)
     let categoryName = resolved.map { categories.path(for: $0) } ?? "Uncategorized"
+    // The anomaly fires on the latest available financial month, which may be
+    // the in-progress current month; naming it (e.g. "in June") avoids the
+    // date-rot of "this month". `latest.date` is the first-of-month UTC date
+    // from `CategorySpendSeries`, so format it against the same UTC calendar.
+    let monthName = latest.date.formatted(monthStyle(context))
 
     return Insight(
       id:
         "\(InsightKind.categorySpendingAnomaly.rawValue):\(categoryId.uuidString):\(latest.month)",
       kind: .categorySpendingAnomaly,
-      title: "\(categoryName) up \(percent(overspendFraction)) this month",
+      title: "\(categoryName) up \(percent(overspendFraction)) in \(monthName)",
       date: latest.date,
       framing: .negative,
       actionability: .review,
@@ -99,5 +104,12 @@ enum CategoryAnomalyInsight {
 
   private static func percent(_ fraction: Double) -> String {
     fraction.formatted(.percent.precision(.fractionLength(0)))
+  }
+
+  /// Wide month name pinned to the context calendar's time zone so a
+  /// first-of-month UTC date doesn't roll back a month when rendered.
+  private static func monthStyle(_ context: InsightContext) -> Date.FormatStyle {
+    Date.FormatStyle(calendar: context.calendar, timeZone: context.calendar.timeZone)
+      .month(.wide)
   }
 }
