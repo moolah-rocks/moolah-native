@@ -1,5 +1,3 @@
-// Backends/CloudKit/Sync/ProfileGRDBRepositories.swift
-
 import Foundation
 import GRDB
 

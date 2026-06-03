@@ -28,8 +28,6 @@ final class GRDBInsightDismissalRepository: InsightDismissalRepository, @uncheck
     self.onRecordDeleted = onRecordDeleted
   }
 
-  // MARK: - InsightDismissalRepository conformance
-
   func fetchAll() async throws -> [InsightDismissal] {
     try await database.read { database in
       try InsightDismissalRow
@@ -59,8 +57,8 @@ final class GRDBInsightDismissalRepository: InsightDismissalRepository, @uncheck
     return row.toDomain() ?? InsightDismissal(kind: kind, count: row.count)
   }
 
-  // MARK: - Sync entry points (synchronous, GRDB-queue-blocking)
-  // Called from the CKSyncEngine delegate executor off `@MainActor`. Never
+  // Sync entry points are synchronous and block the GRDB queue. They are
+  // called from the CKSyncEngine delegate executor off `@MainActor`. Never
   // call these from the main actor. See GRDBAccountGroupRepository for the
   // shared rationale.
 
