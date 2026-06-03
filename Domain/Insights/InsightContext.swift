@@ -60,4 +60,11 @@ struct InsightContext: Sendable {
   func formatted(_ amount: InstrumentAmount) -> String {
     amount.formatted
   }
+
+  /// Ballpark rendering of a reporting-currency quantity: rounds to ~3
+  /// significant figures and drops cents. Delegates to
+  /// `InstrumentAmount.formattedApproximate`.
+  func formattedApproximate(_ quantity: Decimal) -> String {
+    InstrumentAmount(quantity: quantity, instrument: reportingCurrency).formattedApproximate
+  }
 }
