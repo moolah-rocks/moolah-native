@@ -5,7 +5,7 @@ import Foundation
 /// (zero-hallucination seam, issue #1042).
 enum NarrationRequest: Sendable, Hashable {
   /// A single insight to narrate in one or two sentences.
-  case singleInsight(title: String, facts: [InsightFact])
+  case singleInsight(title: String, detail: String, facts: [InsightFact])
 
   /// A collection of insights to narrate as a brief two-sentence weekly recap.
   case weeklyRecap(items: [Item])
@@ -13,6 +13,7 @@ enum NarrationRequest: Sendable, Hashable {
   /// One entry in a weekly-recap narration request.
   struct Item: Sendable, Hashable {
     let title: String
+    let detail: String
     let facts: [InsightFact]
   }
 
@@ -21,7 +22,7 @@ enum NarrationRequest: Sendable, Hashable {
   /// supplied verbatim here — never invented by the model.
   var allFacts: [InsightFact] {
     switch self {
-    case .singleInsight(_, let facts):
+    case .singleInsight(_, _, let facts):
       return facts
     case .weeklyRecap(let items):
       return items.flatMap(\.facts)

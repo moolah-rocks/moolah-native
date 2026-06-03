@@ -1,4 +1,5 @@
 import FoundationModels
+import os
 
 /// Narrates insights using the on-device Foundation Models language model.
 /// Streams cumulative snapshots so the caller can display partial output while
@@ -8,37 +9,49 @@ import FoundationModels
 /// the stream finishes with `NarrationError.fellBack` so the caller can
 /// substitute the deterministic template output (issue #1042).
 ///
-/// API confirmed against the installed SDK (Xcode 26.4):
+/// Session API shape:
 /// - `LanguageModelSession(instructions:)` — per-request session with a system prompt.
 /// - `session.streamResponse(to: String, options: GenerationOptions)` — returns
 ///   `ResponseStream<String>`, an `AsyncSequence` of `Snapshot` values where
 ///   `snapshot.content` is a cumulative `String` (the entire response so far).
 /// - `GenerationOptions(sampling: .greedy)` — deterministic token selection.
-struct FoundationModelsNarrator: InsightNarrating, Sendable {
+struct FoundationModelsNarrator: InsightNarrating {
   /// Generation options passed to every `streamResponse` call.
   /// Greedy sampling produces the most deterministic output across runs,
   /// reducing the chance of the provenance guard flipping between calls.
-  var options: GenerationOptions = .init(sampling: .greedy)
+  let options: GenerationOptions
 
-  func narrate(_ request: NarrationRequest) -> AsyncThrowingStream<String, any Error> {
+  init(options: GenerationOptions = .init(sampling: .greedy)) {
+    self.options = options
+  }
+
+  nonisolated func narrate(_ request: NarrationRequest) -> AsyncThrowingStream<String, any Error> {
     let built = NarrationPromptBuilder.build(request)
     let allFacts = request.allFacts
     let generationOptions = options
 
     return AsyncThrowingStream { continuation in
-      let task = Task {
+      // Shed to a detached task so LanguageModelSession creation and the
+      // streamResponse loop run off the main actor.
+      let task = Task.detached(priority: .userInitiated) {
         do {
-          // Create a per-request session off the main actor.
-          // Sessions are not shared across requests; each call gets a fresh
-          // context window, which also bounds context-window-exceeded errors.
+          // Create a per-request session. Sessions are not shared across
+          // requests; each call gets a fresh context window, which also
+          // bounds context-window-exceeded errors.
           let session = LanguageModelSession(instructions: built.instructions)
           var latestSnapshot = ""
 
           for try await snapshot in session.streamResponse(
             to: built.prompt, options: generationOptions)
           {
+            if Task.isCancelled { break }
             latestSnapshot = snapshot.content
             continuation.yield(latestSnapshot)
+          }
+
+          guard !Task.isCancelled else {
+            continuation.finish(throwing: CancellationError())
+            return
           }
 
           // Verify that every number in the completed narration can be
@@ -50,8 +63,10 @@ struct FoundationModelsNarrator: InsightNarrating, Sendable {
 
           continuation.finish()
         } catch {
-          // Any generation error (guardrail trip, context-window exceeded,
-          // rate limit, etc.) triggers the fallback.
+          // Log the original error before mapping to the fallback signal
+          // so diagnostics are preserved for debugging.
+          let logger = Logger(subsystem: "com.moolah.app", category: "Narration")
+          logger.error("FoundationModelsNarrator: generation failed — \(error)")
           continuation.finish(throwing: NarrationError.fellBack)
         }
       }

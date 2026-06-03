@@ -13,15 +13,16 @@ import Foundation
 /// 1. Strip currency symbols (`$`, `€`, `£`, `¥`, `₹`, `₩`, `₿`) — they are
 ///    presentation wrappers, not part of the numeric identity.
 /// 2. Strip a leading ASCII `+` — positive is the default; `+12.5%` and `12.5%`
-///    are the same value. The Unicode minus `−` and ASCII `-` are always
-///    preserved so sign flips are detectable.
-/// 3. Strip thousands separators — a comma or period between digit groups
+///    are the same value.
+/// 3. Canonicalize the Unicode minus `−` (U+2212) to ASCII `-` (U+002D) so a
+///    model that outputs ASCII `-640.00` still matches a fact written `−640.00`
+///    (U+2212). Sign identity is preserved — a genuine sign flip (negative fact,
+///    positive generated text) still fails the guard.
+/// 4. Strip thousands separators — a comma or period between digit groups
 ///    (e.g. `1,200` → `1200`). A period before 1–2 trailing digits is kept
 ///    as the decimal separator.
-/// 4. Keep the negative sign and decimal separator intact. A model that flips
-///    `−640.00` to `640.00` produces a non-matching token, so the guard
-///    rejects it — consistent with the project rule that signs are never
-///    silently dropped or reversed.
+/// 5. Keep the negative sign and decimal separator intact. A model that drops
+///    the sign produces a non-matching token, so the guard rejects it.
 ///
 /// The guard errs toward rejection on ambiguity.
 enum NumericProvenanceGuard {
@@ -44,6 +45,7 @@ enum NumericProvenanceGuard {
     }
     return true
   }
+
 }
 
 extension NumericProvenanceGuard {
@@ -161,7 +163,7 @@ extension NumericProvenanceGuard {
   /// Normalises a raw numeric string (token or fact value) to a canonical form
   /// for equality comparison. See the type-level documentation for the full
   /// normalisation rules.
-  static func normalise(_ raw: String) -> String {
+  private static func normalise(_ raw: String) -> String {
     var working = raw
 
     // 1. Strip common currency symbols.
@@ -169,12 +171,17 @@ extension NumericProvenanceGuard {
     working = String(working.filter { !currencySymbols.contains($0) })
 
     // 2. Strip a leading ASCII `+` (positive is the default).
-    //    Never strip `−` (U+2212) or `-` (ASCII 0x2D) — those are negative.
     if working.hasPrefix("+") {
       working = String(working.dropFirst())
     }
 
-    // 3. Collapse thousands separators.
+    // 3. Canonicalize the Unicode minus sign (U+2212) to ASCII hyphen-minus
+    //    (U+002D). Detectors emit U+2212; LLMs emit ASCII. Unifying the
+    //    codepoint lets them compare equal while preserving sign identity —
+    //    a genuine sign flip still produces a mismatch after normalisation.
+    working = working.replacingOccurrences(of: "\u{2212}", with: "-")
+
+    // 4. Collapse thousands separators.
     return collapseThousandsSeparators(in: working)
   }
 
