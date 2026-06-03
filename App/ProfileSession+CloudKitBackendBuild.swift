@@ -99,6 +99,8 @@ extension ProfileSession {
       onAccountDeleted: hooks.deleted,
       onAccountGroupChanged: hooks.changed,
       onAccountGroupDeleted: hooks.deleted,
+      onInsightDismissalChanged: hooks.changed,
+      onInsightDismissalDeleted: hooks.deleted,
       onCategoryChanged: hooks.changed,
       onCategoryDeleted: hooks.deleted,
       onTransferSuggestionChanged: hooks.changed,

@@ -116,6 +116,7 @@ private struct TestAuthBackend: BackendProvider {
   let auth: any AuthProvider
   let accounts: any AccountRepository
   let accountGroups: any AccountGroupRepository
+  let insightDismissals: any InsightDismissalRepository
   let transactions: any TransactionRepository
   let categories: any CategoryRepository
   let transferSuggestions: any TransferSuggestionRepository
@@ -134,6 +135,7 @@ private struct TestAuthBackend: BackendProvider {
     self.auth = auth
     self.accounts = backend.accounts
     self.accountGroups = backend.accountGroups
+    self.insightDismissals = backend.insightDismissals
     self.transactions = backend.transactions
     self.categories = backend.categories
     self.transferSuggestions = backend.transferSuggestions

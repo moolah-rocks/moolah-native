@@ -13,6 +13,7 @@ struct CloudKitAnalysisTestBackend: BackendProvider, @unchecked Sendable {
   let auth: any AuthProvider
   let accounts: any AccountRepository
   let accountGroups: any AccountGroupRepository
+  let insightDismissals: any InsightDismissalRepository
   let transactions: any TransactionRepository
   let categories: any CategoryRepository
   let transferSuggestions: any TransferSuggestionRepository
@@ -75,6 +76,7 @@ struct CloudKitAnalysisTestBackend: BackendProvider, @unchecked Sendable {
     self.auth = backend.auth
     self.accounts = backend.accounts
     self.accountGroups = backend.accountGroups
+    self.insightDismissals = backend.insightDismissals
     self.transactions = backend.transactions
     self.categories = backend.categories
     self.transferSuggestions = backend.transferSuggestions
