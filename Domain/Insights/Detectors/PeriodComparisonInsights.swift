@@ -45,7 +45,8 @@ enum PeriodComparisonInsights {
     let baselineSpend = magnitude(baseline.totalExpense)
     guard baselineSpend > 0 else { return nil }
     let fraction = (latestSpend - baselineSpend) / baselineSpend
-    guard abs(fraction) >= threshold else { return nil }
+    let magnitude = abs(fraction)
+    guard magnitude >= threshold else { return nil }
 
     let increased = fraction > 0
     let deltaAmount = Decimal(-(latestSpend - baselineSpend))
@@ -54,18 +55,18 @@ enum PeriodComparisonInsights {
       id: "\(InsightKind.monthOverMonthDelta.rawValue):\(latest.month)",
       kind: .monthOverMonthDelta,
       title: increased
-        ? "Spending up \(percent(abs(fraction))) vs \(label)"
-        : "Spending down \(percent(abs(fraction))) vs \(label)",
+        ? "Spending up \(percent(magnitude)) vs \(label)"
+        : "Spending down \(percent(magnitude)) vs \(label)",
       date: monthDate,
       framing: increased ? .negative : .positive,
       actionability: .informational,
-      surprise: min(abs(fraction), 1),
+      surprise: min(magnitude, 1),
       monetaryImpact: InstrumentAmount(
         quantity: deltaAmount, instrument: context.reportingCurrency),
       facts: [
         InsightFact("This period", context.formatted(Decimal(-latestSpend))),
         InsightFact("Comparison", context.formatted(Decimal(-baselineSpend))),
-        InsightFact("Change", "\(increased ? "+" : "−")\(percent(abs(fraction)))"),
+        InsightFact("Change", "\(increased ? "+" : "−")\(percent(magnitude))"),
       ],
       references: InsightReferences(instrumentIds: [context.reportingCurrency.id]))
   }

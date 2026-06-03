@@ -39,7 +39,7 @@ enum DataQualityInsights {
       Insight(
         id: "\(InsightKind.unreconciledTransfers.rawValue):\(monthKey(context))",
         kind: .unreconciledTransfers,
-        title: "\(count) transfers waiting to be merged",
+        title: "\(count) transfers to review and merge",
         date: context.now,
         framing: .neutral,
         actionability: .act,

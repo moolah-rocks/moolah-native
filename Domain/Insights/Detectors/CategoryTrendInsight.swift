@@ -67,12 +67,14 @@ enum CategoryTrendInsight {
     let rising = result.isIncreasing
     let kind: InsightKind = rising ? .categoryTrendRising : .categoryTrendFalling
     let perMonth = context.formatted(Decimal(-abs(result.sensSlope)))
-    let direction = rising ? "rising" : "easing"
+    let title =
+      rising
+      ? "\(categoryName) spend rising" : "\(categoryName) spend is trending down"
 
     return Insight(
       id: "\(kind.rawValue):\(categoryId.uuidString)",
       kind: kind,
-      title: "\(categoryName) spend \(direction)",
+      title: title,
       date: latest.date,
       framing: rising ? .negative : .positive,
       actionability: .review,
