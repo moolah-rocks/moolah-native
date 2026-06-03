@@ -73,6 +73,9 @@ final class InsightStore {
   private let sources: InsightStoreSources
   private let builder: InsightInputBuilder
   private let engine: InsightEngine
+  /// Persisted per-`InsightKind` dismissal tallies. Observed to seed the
+  /// in-memory fatigue table and written through on each `dismiss(_:)`.
+  private let dismissalRepository: any InsightDismissalRepository
   /// The reporting currency every monetary input is reduced to.
   private let reportingInstrument: Instrument
 
@@ -101,15 +104,18 @@ final class InsightStore {
 
   // MARK: - Cached / mutable
 
-  /// In-memory dismissal counts per insight kind. Each `dismiss(_:)` bumps the
-  /// kind's count; the ranker's fatigue penalty downranks it. Not persisted —
-  /// dismissal telemetry is a future PR.
+  /// In-memory projection of the persisted per-kind dismissal counts
+  /// (`InsightDismissalRepository`). Seeded and kept current by
+  /// `observePersistedDismissals`; `dismiss(_:)` bumps it optimistically and
+  /// write-throughs to the repo. Drives the ranker's fatigue penalty.
   private var dismissals: [InsightKind: Int] = [:]
 
-  /// Ids dismissed in this session. Filtered out of every published list so a
-  /// dismissed insight stays gone until relaunch. Distinct from `dismissals`,
-  /// which counts dismissals *per kind* to drive the ranker's fatigue penalty;
-  /// persistence across launches is tracked in #1034.
+  /// Ids dismissed in this session. Filtered from every published list so a
+  /// dismissed card stays gone until relaunch. Deliberately session-only:
+  /// these ids reference specific insights that age out (e.g. a transaction
+  /// anomaly whose transaction leaves the window), so persisting them would
+  /// be unbounded and brittle. The *kind*-level fatigue (above) is what
+  /// persists and syncs.
   private var dismissedIds: Set<String> = []
 
   /// The most recently-built `InsightInput`. Cached so `dismiss(_:)` re-ranks
@@ -120,6 +126,12 @@ final class InsightStore {
   /// tick. Spawned from `init` when a registry seam is wired; torn down by
   /// `stopObserving()` / `deinit`.
   private var instrumentChangeObservationTask: Task<Void, Never>?
+
+  /// Observes persisted per-kind dismissal counts. Each emission reseeds
+  /// `dismissals` (initial load on launch, local write-through echo, and
+  /// remote sync) and re-ranks the cached input so the fatigue penalty stays
+  /// current. Torn down by `stopObserving()` / `deinit`.
+  private var dismissalObservationTask: Task<Void, Never>?
 
   // MARK: - Lifecycle
 
@@ -134,6 +146,7 @@ final class InsightStore {
     self.sources = sources
     self.builder = InsightInputBuilder(backend: backend)
     self.engine = InsightEngine()
+    self.dismissalRepository = backend.insightDismissals
     self.reportingInstrument = profile.instrument
     self.instrumentChanges = instrumentChanges
     // Default to ineligible when no provider is injected so no narration
@@ -150,6 +163,11 @@ final class InsightStore {
         await self.observeInstrumentRegistryChanges(changes)
       }
     }
+
+    let dismissalStream = dismissalRepository.observeAll()
+    dismissalObservationTask = Task { [self] in
+      await self.observePersistedDismissals(dismissalStream)
+    }
   }
 
   deinit {
@@ -159,13 +177,15 @@ final class InsightStore {
     // (`ProfileSession`), so the assumption holds.
     MainActor.assumeIsolated {
       instrumentChangeObservationTask?.cancel()
+      dismissalObservationTask?.cancel()
     }
   }
 
-  /// Tears down the instrument-change observation task. Idempotent. Called
-  /// from `ProfileSession.cleanupSync(coordinator:)`.
+  /// Tears down the observation tasks. Idempotent. Called from
+  /// `ProfileSession.cleanupSync(coordinator:)`.
   func stopObserving() {
     instrumentChangeObservationTask?.cancel()
+    dismissalObservationTask?.cancel()
   }
 
   // MARK: - Refresh
@@ -235,6 +255,21 @@ final class InsightStore {
     } else {
       insights = visible(insights)
     }
+    // Persist the dismissal. The atomic increment in the repository is the
+    // source of truth; the observation stream echoes the committed count back,
+    // reconciling the optimistic bump above (idempotent — same value).
+    let kind = insight.insight.kind
+    Task { [dismissalRepository] in
+      do {
+        _ = try await dismissalRepository.recordDismissal(of: kind)
+      } catch {
+        // Best-effort: a failed persist leaves the optimistic in-memory bump
+        // (this session still downranks); the next successful dismissal or a
+        // synced remote write reconciles. Logged, not surfaced — dismissal is
+        // not a user-blocking action.
+        logger.error("Failed to persist insight dismissal: \(error)")
+      }
+    }
   }
 
   /// Drops session-dismissed ids from a ranked list before publishing.
@@ -269,6 +304,21 @@ final class InsightStore {
       if Task.isCancelled { return }
       await refresh()
       if Task.isCancelled { return }
+    }
+  }
+
+  /// Consumes the persisted-dismissal stream. Each emission rebuilds the
+  /// in-memory fatigue table from the authoritative DB state and re-ranks the
+  /// cached input in place (no off-main rebuild) so any open surface reflects
+  /// the new fatigue immediately. Re-checks cancellation around the await.
+  private func observePersistedDismissals(_ stream: AsyncStream<[InsightDismissal]>) async {
+    for await tallies in stream {
+      if Task.isCancelled { return }
+      dismissals = Dictionary(
+        uniqueKeysWithValues: tallies.map { ($0.kind, $0.count) })
+      if let lastInput {
+        insights = visible(engine.generate(lastInput, dismissals: dismissals))
+      }
     }
   }
 
