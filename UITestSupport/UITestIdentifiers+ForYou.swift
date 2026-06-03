@@ -12,5 +12,11 @@ extension UITestIdentifiers {
     public static func dismissButton(_ id: String) -> String { "foryou.dismiss.\(id)" }
 
     public static func viewButton(_ id: String) -> String { "foryou.view.\(id)" }
+
+    /// Identifier on the "Why?" button that initiates narration for an insight.
+    public static func whyButton(_ id: String) -> String { "foryou.why.\(id)" }
+
+    /// Identifier on the narration `Text` view (streaming partial or final).
+    public static func narrationText(_ id: String) -> String { "foryou.narration.\(id)" }
   }
 }

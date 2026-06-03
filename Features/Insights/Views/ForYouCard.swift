@@ -3,13 +3,17 @@ import SwiftUI
 /// The "For You" dashboard panel: renders the top-ranked insights with a
 /// dismiss affordance and an optional deep-link. Pure presentational view —
 /// all state and logic live in `InsightStore`; this binds the published
-/// insights and dispatches the two closures. `AnalysisView` renders it only
+/// insights and dispatches the closures. `AnalysisView` renders it only
 /// when there are insights, so this view assumes a non-empty list.
 struct ForYouCard: View {
   let insights: [ScoredInsight]
   var maxVisible: Int = 3
+  let availability: ModelAvailability
+  let narration: [String: NarrationState]
   let onDismiss: (ScoredInsight) -> Void
   let onNavigate: (SidebarSelection) -> Void
+  let onNarrate: (ScoredInsight) -> Void
+  let onCancelNarrate: (ScoredInsight) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -24,8 +28,12 @@ struct ForYouCard: View {
         ForEach(insights.prefix(maxVisible)) { scored in
           InsightRow(
             scored: scored,
+            availability: availability,
+            narrationState: narration[scored.id] ?? .idle,
             onDismiss: { onDismiss(scored) },
-            onNavigate: onNavigate)
+            onNavigate: onNavigate,
+            onNarrate: { onNarrate(scored) },
+            onCancelNarrate: { onCancelNarrate(scored) })
         }
       }
     }
@@ -37,8 +45,12 @@ struct ForYouCard: View {
 
 private struct InsightRow: View {
   let scored: ScoredInsight
+  let availability: ModelAvailability
+  let narrationState: NarrationState
   let onDismiss: () -> Void
   let onNavigate: (SidebarSelection) -> Void
+  let onNarrate: () -> Void
+  let onCancelNarrate: () -> Void
 
   @State private var isExpanded = false
 
@@ -115,6 +127,9 @@ private struct InsightRow: View {
           .font(.callout)
           .foregroundStyle(.secondary)
       }
+      if availability.isUsable {
+        narrationAffordance
+      }
       ForEach(insight.facts) { fact in
         HStack {
           Text(fact.label)
@@ -135,6 +150,36 @@ private struct InsightRow: View {
       }
     }
     .padding(.top, 4)
+  }
+
+  /// Narration affordance rendered when `availability.isUsable`. Switches on
+  /// `narrationState` to show the "Why?" button, streaming partial text, or
+  /// the completed narration. `.fellBackToTemplate` is visually identical to
+  /// `.done` — the template fallback is invisible to the user by design.
+  @ViewBuilder private var narrationAffordance: some View {
+    switch narrationState {
+    case .idle:
+      Button("Why?") { onNarrate() }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Why? — explain \(insight.title)")
+        .accessibilityIdentifier(UITestIdentifiers.ForYou.whyButton(insight.id))
+    case .streaming(let partial):
+      VStack(alignment: .leading, spacing: 4) {
+        Text(partial)
+          .font(.callout)
+          .foregroundStyle(.secondary)
+          .accessibilityIdentifier(UITestIdentifiers.ForYou.narrationText(insight.id))
+        ProgressView()
+          .scaleEffect(0.6)
+          .frame(height: 16)
+          .accessibilityLabel("Generating explanation…")
+      }
+    case .done(let text), .fellBackToTemplate(let text):
+      Text(text)
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .accessibilityIdentifier(UITestIdentifiers.ForYou.narrationText(insight.id))
+    }
   }
 
   private var headerAccessibilityLabel: String {
@@ -229,8 +274,15 @@ private struct InsightRow: View {
   #Preview {
     ForYouCard(
       insights: .forYouPreviewFixtures,
+      availability: .available,
+      narration: [
+        "p-large": .streaming("You spent a lot at the Apple Store…"),
+        "p-netflix": .done("Netflix raised its monthly price by $3.00, up from $19.99 to $22.99."),
+      ],
       onDismiss: { _ in },
-      onNavigate: { _ in }
+      onNavigate: { _ in },
+      onNarrate: { _ in },
+      onCancelNarrate: { _ in }
     )
     .padding()
     .frame(width: 420)
