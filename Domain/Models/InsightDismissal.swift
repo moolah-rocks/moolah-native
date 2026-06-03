@@ -10,12 +10,7 @@ import Foundation
 /// identified by which kind it counts.
 struct InsightDismissal {
   let kind: InsightKind
-  var count: Int
-
-  init(kind: InsightKind, count: Int = 0) {
-    self.kind = kind
-    self.count = count
-  }
+  var count: Int = 0
 }
 
 extension InsightDismissal: Identifiable {
