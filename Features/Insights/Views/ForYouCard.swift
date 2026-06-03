@@ -126,11 +126,6 @@ private struct InsightRow: View {
 
   @ViewBuilder private var expandedContent: some View {
     VStack(alignment: .leading, spacing: 8) {
-      if !insight.detail.isEmpty {
-        Text(insight.detail)
-          .font(.callout)
-          .foregroundStyle(.secondary)
-      }
       if availability.isUsable {
         narrationAffordance
       }
@@ -255,7 +250,6 @@ private struct InsightRow: View {
             id: "p-large",
             kind: .largeTransactionAnomaly,
             title: "Large purchase at the Apple Store",
-            detail: "This is well above your usual spending here.",
             date: now,
             framing: .negative,
             actionability: .review,
@@ -269,7 +263,6 @@ private struct InsightRow: View {
             id: "p-netflix",
             kind: .subscriptionPriceHike,
             title: "Netflix raised its monthly price",
-            detail: "Up $3.00 from last month.",
             date: now,
             framing: .negative,
             actionability: .act,
@@ -282,7 +275,6 @@ private struct InsightRow: View {
             id: "p-milestone",
             kind: .netWorthMilestone,
             title: "Net worth crossed $100k",
-            detail: "Nice work — a new high.",
             date: now,
             framing: .positive,
             actionability: .informational,

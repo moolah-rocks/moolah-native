@@ -73,10 +73,6 @@ enum CategoryTrendInsight {
       id: "\(kind.rawValue):\(categoryId.uuidString)",
       kind: kind,
       title: "\(categoryName) spend \(direction)",
-      detail:
-        "\(categoryName) has been \(direction) for about \(months) months — "
-        + "roughly \(perMonth)/month, \(rising ? "up" : "down") "
-        + "\(context.formatted(Decimal(-abs(totalChange)))) over the period.",
       date: latest.date,
       framing: rising ? .negative : .positive,
       actionability: .review,

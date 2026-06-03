@@ -68,10 +68,6 @@ enum SpendHabitInsights {
         id: "\(InsightKind.weekendSpendSkew.rawValue):\(monthKey(context))",
         kind: .weekendSpendSkew,
         title: "Weekends are your big spend days",
-        detail:
-          "You spend about \(multiple(ratio))× as much per day on weekends "
-          + "(\(context.formatted(Decimal(-weekendMean)))) as on weekdays "
-          + "(\(context.formatted(Decimal(-weekdayMean)))).",
         date: context.now,
         framing: .neutral,
         actionability: .informational,
@@ -97,9 +93,6 @@ enum SpendHabitInsights {
       id: "\(InsightKind.lapsedMerchant.rawValue):\(payee.normalizedPayee)",
       kind: .lapsedMerchant,
       title: "You've stopped paying \(name)",
-      detail:
-        "You used to pay \(name) regularly but haven't in \(silentDays) days. "
-        + "If you've moved on, there's nothing to do — otherwise worth a check.",
       date: payee.lastSeen,
       framing: .neutral,
       actionability: .review,

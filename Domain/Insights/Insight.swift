@@ -6,7 +6,7 @@ import Foundation
 /// consumed by the ranker and the UI. It carries:
 /// - a stable `id` (used to de-duplicate across refreshes and to key the
 ///   fatigue table),
-/// - template-string narration (`title` / `detail`) that needs no LLM,
+/// - a self-sufficient `title` that needs no LLM,
 /// - the structured `facts` a Foundation Models layer would narrate from
 ///   *without inventing numbers* (every number the LLM may print is here),
 /// - the ranking signals (`surprise`, `monetaryImpact`, `actionability`,
@@ -20,7 +20,6 @@ struct Insight: Sendable, Identifiable, Hashable {
   let id: String
   let kind: InsightKind
   let title: String
-  let detail: String
   let date: Date
   let framing: InsightFraming
   let actionability: InsightActionability
@@ -46,7 +45,6 @@ struct Insight: Sendable, Identifiable, Hashable {
     id: String,
     kind: InsightKind,
     title: String,
-    detail: String,
     date: Date,
     framing: InsightFraming,
     actionability: InsightActionability,
@@ -58,7 +56,6 @@ struct Insight: Sendable, Identifiable, Hashable {
     self.id = id
     self.kind = kind
     self.title = title
-    self.detail = detail
     self.date = date
     self.framing = framing
     self.actionability = actionability

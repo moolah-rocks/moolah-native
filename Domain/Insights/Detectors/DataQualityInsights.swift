@@ -18,9 +18,6 @@ enum DataQualityInsights {
         id: "\(InsightKind.uncategorizedBacklog.rawValue):\(monthKey(context))",
         kind: .uncategorizedBacklog,
         title: "\(count) transactions need a category",
-        detail:
-          "Categorizing your \(count) uncategorized transactions will sharpen your "
-          + "spending breakdowns and the insights built on them.",
         date: context.now,
         framing: .neutral,
         actionability: .review,
@@ -38,20 +35,11 @@ enum DataQualityInsights {
     let count = input.pendingTransferCount
     guard count >= minimumCount else { return [] }
     let context = input.context
-    let agedText =
-      input.oldestPendingTransferDate.map { date -> String in
-        let days = context.daysSince(date)
-        return days > 0 ? " The oldest has been waiting \(days) days." : ""
-      } ?? ""
     return [
       Insight(
         id: "\(InsightKind.unreconciledTransfers.rawValue):\(monthKey(context))",
         kind: .unreconciledTransfers,
         title: "\(count) transfers waiting to be merged",
-        detail:
-          "You have \(count) likely transfers between your own accounts that aren't "
-          + "merged yet — until they are, they inflate your income and spending."
-          + agedText,
         date: context.now,
         framing: .neutral,
         actionability: .act,

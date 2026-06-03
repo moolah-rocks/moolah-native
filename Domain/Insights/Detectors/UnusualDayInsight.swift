@@ -73,9 +73,6 @@ enum UnusualDayInsight {
       id: "\(InsightKind.unusualDaySpend.rawValue):\(startOfDay)",
       kind: .unusualDaySpend,
       title: "Big spending \(weekdayName)",
-      detail:
-        "You spent \(context.formatted(Decimal(-total))) — about "
-        + "\(multiple)× a typical \(weekdayName) (\(context.formatted(Decimal(-typical)))).",
       date: day,
       framing: .neutral,
       actionability: .informational,

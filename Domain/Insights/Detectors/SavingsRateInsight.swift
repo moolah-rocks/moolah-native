@@ -32,9 +32,6 @@ enum SavingsRateInsight {
         id: "\(InsightKind.savingsRateTrend.rawValue):\(monthKey(context))",
         kind: .savingsRateTrend,
         title: rising ? "Your savings rate is climbing" : "Your savings rate is slipping",
-        detail:
-          "Over the last \(rates.count) months your savings rate has been "
-          + "\(rising ? "rising" : "falling") — currently about \(percent(latest)) of income.",
         date: context.now,
         framing: rising ? .positive : .negative,
         actionability: .review,

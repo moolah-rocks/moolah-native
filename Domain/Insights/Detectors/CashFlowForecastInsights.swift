@@ -54,9 +54,6 @@ enum CashFlowForecastInsights {
         id: "\(InsightKind.upcomingBillWarning.rawValue):\(trough.date.timeIntervalSince1970)",
         kind: .upcomingBillWarning,
         title: "Low balance coming up",
-        detail:
-          "Your balance is projected to fall to \(context.formatted(trough.balance)) "
-          + "around \(dateText)\(culprit?.payee.map { ", after \($0)" } ?? "").",
         date: context.now,
         framing: .negative,
         actionability: .act,
@@ -104,9 +101,6 @@ enum CashFlowForecastInsights {
         id: "\(InsightKind.projectedMonthEndBalance.rawValue):\(currentBucket)",
         kind: .projectedMonthEndBalance,
         title: "On track to end the month around \(rounded)",
-        detail:
-          "Based on your scheduled activity, you're projected to finish the month "
-          + "with about \(rounded) in available funds.",
         date: monthEndDay.date,
         framing: projected >= 0 ? .positive : .negative,
         actionability: .informational,

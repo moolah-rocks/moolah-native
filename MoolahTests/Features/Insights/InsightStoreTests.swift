@@ -56,7 +56,7 @@ struct InsightStoreTests {
   private func makeScoredInsight(id: String, score: Double) -> ScoredInsight {
     ScoredInsight(
       insight: Insight(
-        id: id, kind: .netWorthMilestone, title: id, detail: "",
+        id: id, kind: .netWorthMilestone, title: id,
         date: Date(timeIntervalSince1970: 1_700_000_000),
         framing: .neutral, actionability: .informational, surprise: 0),
       score: score)

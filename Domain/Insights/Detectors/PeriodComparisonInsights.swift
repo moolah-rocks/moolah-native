@@ -53,11 +53,9 @@ enum PeriodComparisonInsights {
     return Insight(
       id: "\(InsightKind.monthOverMonthDelta.rawValue):\(latest.month)",
       kind: .monthOverMonthDelta,
-      title: increased ? "Spending up vs \(label)" : "Spending down vs \(label)",
-      detail:
-        "You spent \(context.formatted(Decimal(-latestSpend))) — "
-        + "\(percent(abs(fraction))) \(increased ? "more" : "less") than \(label) "
-        + "(\(context.formatted(Decimal(-baselineSpend)))).",
+      title: increased
+        ? "Spending up \(percent(abs(fraction))) vs \(label)"
+        : "Spending down \(percent(abs(fraction))) vs \(label)",
       date: monthDate,
       framing: increased ? .negative : .positive,
       actionability: .informational,

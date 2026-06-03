@@ -17,7 +17,7 @@ struct InsightRankerTests {
     date: Date? = nil
   ) -> Insight {
     Insight(
-      id: id, kind: kind, title: id, detail: id, date: date ?? now, framing: framing,
+      id: id, kind: kind, title: id, date: date ?? now, framing: framing,
       actionability: actionability, surprise: surprise,
       monetaryImpact: impact.map { InsightTestSupport.amount($0) })
   }
@@ -72,10 +72,10 @@ struct InsightRankerTests {
     let categoryId = UUID()
     let ranker = InsightRanker()
     let plain = Insight(
-      id: "plain", kind: .categoryTrendRising, title: "", detail: "", date: now,
+      id: "plain", kind: .categoryTrendRising, title: "", date: now,
       framing: .neutral, actionability: .review, surprise: 0.5)
     let pinned = Insight(
-      id: "pinned", kind: .categoryTrendRising, title: "", detail: "", date: now,
+      id: "pinned", kind: .categoryTrendRising, title: "", date: now,
       framing: .neutral, actionability: .review, surprise: 0.5,
       references: InsightReferences(categoryIds: [categoryId]))
     let interests = InsightRanker.DeclaredInterests(categoryIds: [categoryId])

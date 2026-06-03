@@ -84,10 +84,7 @@ enum CategoryMixShiftInsight {
     return Insight(
       id: "\(InsightKind.categoryMixShift.rawValue):\(shift.categoryId.uuidString):\(recentMonth)",
       kind: .categoryMixShift,
-      title: "\(categoryName) is a \(grew ? "bigger" : "smaller") slice",
-      detail:
-        "\(categoryName) is now \(percent(shift.recentShare)) of your spending, "
-        + "\(grew ? "up" : "down") \(points(abs(shift.shift))) from the month before.",
+      title: "\(categoryName) is now \(percent(shift.recentShare)) of your spending",
       date: monthDate,
       framing: .neutral,
       actionability: .informational,

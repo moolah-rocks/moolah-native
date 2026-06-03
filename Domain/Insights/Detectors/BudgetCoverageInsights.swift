@@ -32,9 +32,6 @@ enum BudgetCoverageInsights {
         id: "\(InsightKind.unbudgetedCategory.rawValue):\(top.key.uuidString)",
         kind: .unbudgetedCategory,
         title: "\(categoryName) has no budget",
-        detail:
-          "You spent \(context.formatted(Decimal(-top.value))) on \(categoryName) in the last "
-          + "\(windowDays) days, but it isn't in any budget. Adding one would keep it in check.",
         date: context.now,
         framing: .neutral,
         actionability: .review,
