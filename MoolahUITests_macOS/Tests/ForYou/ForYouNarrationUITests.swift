@@ -27,12 +27,10 @@ final class ForYouNarrationUITests: MoolahUITestCase {
     // Tap "Why?" and wait for the narration text element to appear.
     forYou.tapWhy(UITestFixtures.InsightsForYou.largeTxnId)
 
-    // Assert the scripted narration string is rendered verbatim.
-    let rendered = forYou.narrationText(UITestFixtures.InsightsForYou.largeTxnId)
-    XCTAssertEqual(
-      rendered,
-      UITestFixtures.InsightsForYou.scriptedNarration,
-      "Narration text did not match the scripted narrator's output"
-    )
+    // Narration streams (`.streaming("")` → partial → `.done`), so predicate-wait
+    // on the final content rather than reading the (possibly empty) first frame.
+    forYou.expectNarrationText(
+      UITestFixtures.InsightsForYou.largeTxnId,
+      equals: UITestFixtures.InsightsForYou.scriptedNarration)
   }
 }

@@ -157,6 +157,26 @@ struct ForYouScreen {
     return narrationElement.label
   }
 
+  /// Waits for the narration text element for `id` to render `expected`
+  /// verbatim. Narration streams (`.streaming("")` → partial → `.done(text)`),
+  /// so a bare read can observe the empty initial frame; this predicate-waits
+  /// on the final content — the correct post-condition for an async stream.
+  func expectNarrationText(_ id: String, equals expected: String) {
+    Trace.record(#function, detail: "id=\(id)")
+    let narrationIdentifier = UITestIdentifiers.ForYou.narrationText(id)
+    let narrationElement = app.element(for: narrationIdentifier)
+    let predicate = NSPredicate(format: "label == %@", expected)
+    let expectation = XCTNSPredicateExpectation(predicate: predicate, object: narrationElement)
+    if XCTWaiter().wait(for: [expectation], timeout: 10) != .completed {
+      Trace.recordFailure(
+        "forYou narration text '\(id)' never rendered the expected output; last='\(narrationElement.label)'"
+      )
+      XCTFail(
+        "For You narration text for '\(id)' did not render the scripted output within 10s "
+          + "(last seen: '\(narrationElement.label)')")
+    }
+  }
+
   // MARK: - Navigation outcome
 
   /// Confirms navigation landed on a transaction-list detail leaf by waiting
