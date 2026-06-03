@@ -223,6 +223,45 @@ struct GRDBRepositoryHookRecordTypeTests {
     #expect(capture.deleted.first?.id == suggestion.id)
   }
 
+  // MARK: - GRDBInsightDismissalRepository
+
+  @Test
+  func insightDismissalFirstRecordEmitsRecordType() async throws {
+    let database = try ProfileDatabase.openInMemory()
+    let capture = HookCapture()
+    let repo = GRDBInsightDismissalRepository(
+      database: database,
+      onRecordChanged: { recordType, id in capture.appendChanged(recordType, id) },
+      onRecordDeleted: { recordType, id in capture.appendDeleted(recordType, id) })
+
+    _ = try await repo.recordDismissal(of: .subscriptionPriceHike)
+
+    let expectedId = InsightDismissalRow.id(for: .subscriptionPriceHike)
+    #expect(capture.changed.count == 1)
+    #expect(capture.changed.first?.recordType == InsightDismissalRow.recordType)
+    #expect(capture.changed.first?.id == expectedId)
+    #expect(capture.deleted.isEmpty)
+  }
+
+  @Test
+  func insightDismissalIncrementEmitsRecordType() async throws {
+    let database = try ProfileDatabase.openInMemory()
+    let capture = HookCapture()
+    let repo = GRDBInsightDismissalRepository(
+      database: database,
+      onRecordChanged: { recordType, id in capture.appendChanged(recordType, id) },
+      onRecordDeleted: { recordType, id in capture.appendDeleted(recordType, id) })
+
+    _ = try await repo.recordDismissal(of: .subscriptionPriceHike)
+    _ = try await repo.recordDismissal(of: .subscriptionPriceHike)
+
+    let expectedId = InsightDismissalRow.id(for: .subscriptionPriceHike)
+    let emits = capture.changed.filter { $0.id == expectedId }
+    #expect(emits.count == 2)
+    #expect(emits.allSatisfy { $0.recordType == InsightDismissalRow.recordType })
+    #expect(capture.deleted.isEmpty)
+  }
+
   // MARK: - Helpers
 
   private func makeSuggestion() -> TransferSuggestion {
