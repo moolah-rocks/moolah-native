@@ -88,14 +88,25 @@ enum CashFlowForecastInsights {
 
     let band = confidenceBand(dailyBalances: dailyBalances)
     let projected = monthEndDay.balance.quantity
+
+    let projectedMagnitude = abs(Double(truncating: projected as NSDecimalNumber))
+    let bandMagnitude = abs(Double(truncating: band as NSDecimalNumber))
+    // A projection whose 14-day noise band is at least half its own size carries
+    // no usable signal — suppress it rather than print a scary ±range.
+    guard projectedMagnitude == 0 || bandMagnitude < Self.maxBandFraction * projectedMagnitude
+    else {
+      return []
+    }
+
+    let rounded = context.formattedApproximate(projected)
     return [
       Insight(
         id: "\(InsightKind.projectedMonthEndBalance.rawValue):\(currentBucket)",
         kind: .projectedMonthEndBalance,
-        title: "On track to end the month around \(context.formatted(projected))",
+        title: "On track to end the month around \(rounded)",
         detail:
           "Based on your scheduled activity, you're projected to finish the month "
-          + "with about \(context.formatted(projected)) in available funds (±\(context.formatted(band))).",
+          + "with about \(rounded) in available funds.",
         date: monthEndDay.date,
         framing: projected >= 0 ? .positive : .negative,
         actionability: .informational,
@@ -103,12 +114,15 @@ enum CashFlowForecastInsights {
         monetaryImpact: InstrumentAmount(
           quantity: projected, instrument: context.reportingCurrency),
         facts: [
-          InsightFact("Projected balance", context.formatted(projected)),
-          InsightFact("Confidence band", "±\(context.formatted(band))"),
+          InsightFact("Projected balance", rounded)
         ],
         references: InsightReferences(instrumentIds: [context.reportingCurrency.id]))
     ]
   }
+
+  /// A projection whose noise band reaches this fraction of its own magnitude
+  /// is treated as signalless and suppressed.
+  private static let maxBandFraction = 0.5
 
   /// Standard deviation of day-over-day balance changes in the historical
   /// tail, used as a ± band. Falls back to zero when too little history.
