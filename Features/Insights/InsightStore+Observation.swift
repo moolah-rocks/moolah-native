@@ -36,12 +36,14 @@ extension InsightStore {
         for await tallies in stream {
           if Task.isCancelled { return }
           await self.applyPersistedDismissals(tallies)
+          if Task.isCancelled { return }
         }
       }
       group.addTask { [self] in
         for await error in errors {
           if Task.isCancelled { return }
           await self.surface(error: error)
+          if Task.isCancelled { return }
         }
       }
     }

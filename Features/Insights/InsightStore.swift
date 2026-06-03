@@ -33,9 +33,9 @@ final class InsightStore {
 
   // MARK: - State
 
-  /// Internal ranked selection, kept for re-ranking on a fresh `refresh()`.
-  /// The card no longer reads this — it renders `items`. Each member's display
-  /// headline is resolved into `items` once the whole visible batch is ready.
+  /// Internal ranked selection used for re-ranking on a fresh `refresh()`; the
+  /// card renders `items`. Each member's display headline is resolved into
+  /// `items` once the whole visible batch is ready.
   private(set) var insights: [ScoredInsight] = []
 
   /// The ready-to-render For You batch: the visible ranked insights each paired
@@ -80,8 +80,11 @@ final class InsightStore {
   /// when no provider is injected — previews/tests see nothing lit up by accident.
   private let availability: any ModelAvailabilityProviding
 
-  /// Current model eligibility, for the narration UI to gate on. Exposes the
-  /// value rather than the provider so callers don't reach into the seam.
+  /// Current model eligibility. `publishBatch` reads this to decide whether to
+  /// call the narrator or fall back to the detector title. Exposes the value
+  /// rather than the provider so callers don't reach into the seam.
+  /// Module-internal so `InsightStore+Narration.swift` can read it; read only
+  /// on the main actor.
   var currentAvailability: ModelAvailability { availability.current() }
 
   /// Narrator used to produce prose from a `NarrationRequest`. Defaults to
@@ -224,6 +227,10 @@ final class InsightStore {
   func refresh() async {
     guard !isLoading else { return }
     if let fixtureInsights {
+      // Set `isLoading` so the `guard` above governs the fixture path too —
+      // otherwise a re-entrant `refresh()` could run concurrently here.
+      isLoading = true
+      defer { isLoading = false }
       let ranked = visible(fixtureInsights.insights)
       insights = ranked
       await publishBatch(ranked)

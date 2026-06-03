@@ -61,10 +61,10 @@ struct InsightStoreNarrationTests {
       fixtureInsights: InsightFixtures(insights: fixtures))
   }
 
-  // MARK: - whole-batch publish
+  // MARK: - batch members carry their narrated headline
 
-  @Test("items published only when the whole batch resolves")
-  func itemsPublishedOnlyWhenWholeBatchResolves() async throws {
+  @Test("all batch members carry their narrated headline after refresh")
+  func allBatchMembersCarryNarratedHeadlineAfterRefresh() async throws {
     let store = try makeStore(
       availability: .available,
       narrator: ScriptedNarrator(snapshots: ["Din", "Dining is up."]),

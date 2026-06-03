@@ -10,9 +10,10 @@ import XCTest
 ///
 /// The whole batch is held until every headline resolves, so a visible row
 /// already carries its final headline. The test asserts the large-transaction
-/// row renders the scripted headline verbatim.
+/// row renders the scripted headline verbatim — inline headline rendering, not
+/// a separate narration affordance.
 @MainActor
-final class ForYouNarrationUITests: MoolahUITestCase {
+final class ForYouHeadlineUITests: MoolahUITestCase {
   func testRowRendersScriptedHeadline() {
     let app = launch(seed: .insightsForYouBaseline)
     let forYou = app.forYou
