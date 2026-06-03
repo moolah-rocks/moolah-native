@@ -240,6 +240,28 @@ extension ProfileSession {
     return UITestSeedInsightOverrides.fixtures(for: seed)
   }
 
+  #if DEBUG
+    /// Returns a `FixedModelAvailability` override for the active UI-test seed,
+    /// or `nil` for production launches (or seeds that don't need a fixed
+    /// availability). `@MainActor` because `UITestSeedInsightOverrides` is a
+    /// `@MainActor` type.
+    @MainActor
+    static func uiTestingInsightAvailability() -> FixedModelAvailability? {
+      guard let seed = currentUITestSeed() else { return nil }
+      return UITestSeedInsightOverrides.availability(for: seed)
+    }
+
+    /// Returns a `ScriptedNarrator` override for the active UI-test seed,
+    /// or `nil` for production launches (or seeds that don't need a scripted
+    /// narrator). `@MainActor` because `UITestSeedInsightOverrides` is a
+    /// `@MainActor` type.
+    @MainActor
+    static func uiTestingInsightNarrator() -> ScriptedNarrator? {
+      guard let seed = currentUITestSeed() else { return nil }
+      return UITestSeedInsightOverrides.narrator(for: seed)
+    }
+  #endif
+
   /// Builds the per-profile CoinGecko catalog and kicks off a background
   /// `refreshIfStale()` so the SQLite snapshot is brought up to date once per
   /// session without blocking init. Returns `(nil, nil)` (and logs) when the

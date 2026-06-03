@@ -247,13 +247,29 @@ final class ProfileSession: Identifiable {
       account: accountStore,
       accountGroup: accountGroupStore,
       category: categoryStore)
+    // UI-test seeds may inject a fixed availability and a scripted narrator so
+    // the narration path is exercised deterministically on CI hardware (no real
+    // model required). Production launches receive nil from both helpers and
+    // fall through to the live implementations. The `#if DEBUG` guard is safe
+    // here because UI-test host builds always compile as Debug.
+    #if DEBUG
+      let uiTestAvailability = Self.uiTestingInsightAvailability()
+      let uiTestNarrator = Self.uiTestingInsightNarrator()
+      let insightAvailability: any ModelAvailabilityProviding =
+        uiTestAvailability ?? SystemLanguageModelAvailability()
+      let insightNarrator: any InsightNarrating =
+        uiTestNarrator ?? Self.makeInsightNarrator()
+    #else
+      let insightAvailability: any ModelAvailabilityProviding = SystemLanguageModelAvailability()
+      let insightNarrator: any InsightNarrating = Self.makeInsightNarrator()
+    #endif
     self.insightStore = InsightStore(
       sources: insightSources,
       backend: backend,
       profile: profile,
       instrumentChanges: backend.instrumentChangeObserver,
-      availability: SystemLanguageModelAvailability(),
-      narrator: Self.makeInsightNarrator(),
+      availability: insightAvailability,
+      narrator: insightNarrator,
       fixtureInsights: Self.uiTestingInsightFixtures())
     let cryptoWiring = Self.makeCryptoSyncWiring(
       backend: backend,

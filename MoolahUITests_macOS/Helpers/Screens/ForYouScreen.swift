@@ -117,6 +117,46 @@ struct ForYouScreen {
     viewButton.click()
   }
 
+  /// Taps the "Why?" narration button for the (expanded) insight row `id`,
+  /// then waits for the narration text element to appear — the post-condition
+  /// that confirms the narration state transitioned out of `.idle`. The row
+  /// must already be expanded (call `expand(id:)` first) and the model must
+  /// be available (seed must inject `FixedModelAvailability(.available)`).
+  func tapWhy(_ id: String) {
+    Trace.record(#function, detail: "id=\(id)")
+    let whyIdentifier = UITestIdentifiers.ForYou.whyButton(id)
+    let whyButton = app.element(for: whyIdentifier)
+    if !whyButton.waitForExistence(timeout: 5) {
+      Trace.recordFailure("forYou why button '\(whyIdentifier)' did not appear")
+      XCTFail("For You 'Why?' button for '\(id)' did not appear within 5s")
+      return
+    }
+    whyButton.click()
+
+    let narrationIdentifier = UITestIdentifiers.ForYou.narrationText(id)
+    let narrationElement = app.element(for: narrationIdentifier)
+    if !narrationElement.waitForExistence(timeout: 10) {
+      Trace.recordFailure(
+        "forYou narration text '\(narrationIdentifier)' did not appear after tapping Why?")
+      XCTFail("For You narration text for '\(id)' did not appear within 10s of tapping Why?")
+    }
+  }
+
+  /// Reads the label of the narration text element for insight row `id`.
+  /// The element must already exist (call `tapWhy(id:)` first to ensure
+  /// the narration state has transitioned). Returns an empty string and
+  /// fails the test if the element is not found.
+  func narrationText(_ id: String) -> String {
+    let narrationIdentifier = UITestIdentifiers.ForYou.narrationText(id)
+    let narrationElement = app.element(for: narrationIdentifier)
+    if !narrationElement.waitForExistence(timeout: 10) {
+      Trace.recordFailure("forYou narration text '\(narrationIdentifier)' did not appear")
+      XCTFail("For You narration text for '\(id)' did not appear within 10s")
+      return ""
+    }
+    return narrationElement.label
+  }
+
   // MARK: - Navigation outcome
 
   /// Confirms navigation landed on a transaction-list detail leaf by waiting

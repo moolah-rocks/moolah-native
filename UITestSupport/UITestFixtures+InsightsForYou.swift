@@ -14,5 +14,12 @@ extension UITestFixtures {
     public static let priceHikeTitle = "Netflix raised its monthly price"
     public static let milestoneId = "for-you-milestone"
     public static let milestoneTitle = "Net worth crossed a milestone"
+
+    /// Fixed narration string emitted by `ScriptedNarrator` in the
+    /// `.insightsForYouBaseline` seed. Both the app-side override and the
+    /// UI-test assertion reference this constant so the two sides can never
+    /// drift.
+    public static let scriptedNarration =
+      "You made a large purchase at the Apple Store — $2,499 against your account."
   }
 }
