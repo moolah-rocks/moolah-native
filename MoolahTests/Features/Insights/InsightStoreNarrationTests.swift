@@ -70,7 +70,8 @@ struct InsightStoreNarrationTests {
     await store.refresh()
     let insight = try #require(store.insights.first)
 
-    await store.narrate(insight)
+    store.narrate(insight)
+    await store.narrationTasks[insight.id]?.value
 
     #expect(store.narration[insight.id] == .done("Dining is up."))
   }
@@ -83,11 +84,12 @@ struct InsightStoreNarrationTests {
     await store.refresh()
     let insight = try #require(store.insights.first)
 
-    await store.narrate(insight)
+    store.narrate(insight)
+    await store.narrationTasks[insight.id]?.value
     #expect(store.narration[insight.id] == .done("First result."))
 
     // Second call with a different narrator result should NOT replace the cache.
-    await store.narrate(insight)
+    store.narrate(insight)
     #expect(store.narration[insight.id] == .done("First result."))
   }
 
@@ -101,7 +103,8 @@ struct InsightStoreNarrationTests {
     await store.refresh()
     let insight = try #require(store.insights.first)
 
-    await store.narrate(insight)
+    store.narrate(insight)
+    await store.narrationTasks[insight.id]?.value
 
     if case .fellBackToTemplate(let text) = store.narration[insight.id] {
       #expect(!text.isEmpty)
@@ -123,7 +126,7 @@ struct InsightStoreNarrationTests {
     await store.refresh()
     let insight = try #require(store.insights.first)
 
-    await store.narrate(insight)
+    store.narrate(insight)
 
     // The narration dict must remain empty (no entry at all) when unavailable.
     #expect(store.narration[insight.id] == nil)
@@ -131,19 +134,23 @@ struct InsightStoreNarrationTests {
 
   // MARK: - cancelNarration
 
-  @Test("cancelNarration resets state to idle")
-  func cancelNarrationResetsToIdle() async throws {
+  @Test("cancelNarration after completion is a no-op — preserves cached result")
+  func cancelNarrationAfterCompletionIsNoop() async throws {
     let store = try makeStore(
       availability: .available,
       narrator: ScriptedNarrator(snapshots: ["Done."]))
     await store.refresh()
     let insight = try #require(store.insights.first)
 
-    await store.narrate(insight)
+    store.narrate(insight)
+    await store.narrationTasks[insight.id]?.value
     #expect(store.narration[insight.id] == .done("Done."))
 
+    // cancelNarration is a no-op once the task has completed: the task dict
+    // entry is already removed by the defer, so the guard exits early and
+    // the cached .done result is preserved.
     store.cancelNarration(insight.id)
 
-    #expect(store.narration[insight.id] == .idle)
+    #expect(store.narration[insight.id] == .done("Done."))
   }
 }

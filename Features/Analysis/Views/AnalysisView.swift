@@ -145,7 +145,7 @@ struct AnalysisView: View {
           narration: insightStore.narration,
           onDismiss: { insight in Task { await insightStore.dismiss(insight) } },
           onNavigate: onNavigate,
-          onNarrate: { scored in Task { await insightStore.narrate(scored) } },
+          onNarrate: { insightStore.narrate($0) },
           onCancelNarrate: { insightStore.cancelNarration($0.id) })
       }
       NetWorthGraphCard(balances: store.dailyBalances)

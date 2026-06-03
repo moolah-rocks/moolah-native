@@ -1,6 +1,8 @@
 import FoundationModels
 import os
 
+private let logger = Logger(subsystem: "com.moolah.app", category: "Narration")
+
 /// Narrates insights using the on-device Foundation Models language model.
 /// Streams cumulative snapshots so the caller can display partial output while
 /// generation is in progress. On completion, runs `NumericProvenanceGuard` to
@@ -15,7 +17,7 @@ import os
 ///   `ResponseStream<String>`, an `AsyncSequence` of `Snapshot` values where
 ///   `snapshot.content` is a cumulative `String` (the entire response so far).
 /// - `GenerationOptions(sampling: .greedy)` — deterministic token selection.
-struct FoundationModelsNarrator: InsightNarrating {
+struct FoundationModelsNarrator {
   /// Generation options passed to every `streamResponse` call.
   /// Greedy sampling produces the most deterministic output across runs,
   /// reducing the chance of the provenance guard flipping between calls.
@@ -24,16 +26,18 @@ struct FoundationModelsNarrator: InsightNarrating {
   init(options: GenerationOptions = .init(sampling: .greedy)) {
     self.options = options
   }
+}
 
+extension FoundationModelsNarrator: InsightNarrating {
   nonisolated func narrate(_ request: NarrationRequest) -> AsyncThrowingStream<String, any Error> {
     let built = NarrationPromptBuilder.build(request)
     let allFacts = request.allFacts
     let generationOptions = options
 
     return AsyncThrowingStream { continuation in
-      // Shed to a detached task so LanguageModelSession creation and the
-      // streamResponse loop run off the main actor.
-      let task = Task.detached(priority: .userInitiated) {
+      // Shed to a task with elevated priority; `narrate` is `nonisolated` so
+      // the task runs on the global executor, not the main actor.
+      let task = Task(priority: .userInitiated) {
         do {
           // Create a per-request session. Sessions are not shared across
           // requests; each call gets a fresh context window, which also
@@ -65,7 +69,6 @@ struct FoundationModelsNarrator: InsightNarrating {
         } catch {
           // Log the original error before mapping to the fallback signal
           // so diagnostics are preserved for debugging.
-          let logger = Logger(subsystem: "com.moolah.app", category: "Narration")
           logger.error("FoundationModelsNarrator: generation failed — \(error)")
           continuation.finish(throwing: NarrationError.fellBack)
         }

@@ -7,7 +7,7 @@ import Foundation
 /// `.fellBackToTemplate` is visually indistinguishable from `.done` in the UI
 /// — the degradation is invisible to the user by design (issue #1042).
 enum NarrationState: Sendable, Equatable {
-  /// No narration has been requested for this insight yet.
+  /// Narration has not started, or was cancelled.
   case idle
   /// Narration is in progress; the associated value is the partial text
   /// accumulated so far (may be empty at the very start of streaming).

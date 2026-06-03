@@ -44,14 +44,14 @@ final class InsightStore {
 
   // MARK: - Dependencies
 
-  private let sources: InsightStoreSources
+  let sources: InsightStoreSources
   private let builder: InsightInputBuilder
   private let engine: InsightEngine
   /// Persisted per-`InsightKind` dismissal tallies. Observed to seed the
   /// in-memory fatigue table and written through on each `dismiss(_:)`.
   private let dismissalRepository: any InsightDismissalRepository
   /// The reporting currency every monetary input is reduced to.
-  private let reportingInstrument: Instrument
+  let reportingInstrument: Instrument
 
   /// Narrow seam onto the shared instrument registry's change stream. Nil in
   /// previews / legacy tests so no live observation runs.
@@ -97,7 +97,7 @@ final class InsightStore {
   /// `dismissedIds` because the fixture path leaves `lastInput` nil.
   private let fixtureInsights: InsightFixtures?
 
-  private let logger = Logger(subsystem: "com.moolah.app", category: "InsightStore")
+  let logger = Logger(subsystem: "com.moolah.app", category: "InsightStore")
 
   // MARK: - Cached / mutable
 
@@ -354,73 +354,4 @@ final class InsightStore {
     self.error = error
   }
 
-}
-
-// MARK: - Snapshot / context assembly (main actor)
-
-extension InsightStore {
-  /// Gathers the main-actor half of `InsightInput` from the sibling stores.
-  private func makeSnapshot() -> InsightInputSnapshot {
-    InsightInputSnapshot(
-      monthly: sources.analysis.incomeAndExpense,
-      expenseBreakdown: sources.analysis.expenseBreakdown,
-      dailyBalances: sources.analysis.dailyBalances,
-      earmarks: makeEarmarkSnapshots(),
-      profitLoss: sources.reporting.profitLoss,
-      capitalGains: sources.reporting.capitalGainsResult?.events ?? [],
-      categories: sources.category.categories,
-      accountGroups: (sources.accountGroup?.groups ?? []).map {
-        InsightAccountGroup(id: $0.id, name: $0.name)
-      },
-      accountGroupMembership: makeAccountGroupMembership())
-  }
-
-  private func makeContext() -> InsightContext {
-    InsightContext(
-      now: Date(),
-      reportingCurrency: reportingInstrument,
-      financialMonthEnd: sources.analysis.monthEnd)
-  }
-
-  /// `accountId → groupId` map for every grouped account.
-  private func makeAccountGroupMembership() -> [UUID: UUID] {
-    var membership: [UUID: UUID] = [:]
-    for account in sources.account.accounts.ordered {
-      if let groupId = account.groupId {
-        membership[account.id] = groupId
-      }
-    }
-    return membership
-  }
-
-  /// Joins each same-reporting-currency `Earmark` with its converted balances
-  /// from `EarmarkStore`.
-  ///
-  /// Foreign-instrument earmarks are intentionally omitted (Rule 11 — never
-  /// mislabel native-instrument amounts as reporting currency): the dicts in
-  /// `EarmarkStore` are in each earmark's **own** instrument, not the reporting
-  /// instrument, so including them would mix instruments and risk a trap. This
-  /// is the deliberate, documented degradation until `EarmarkStore` exposes
-  /// per-earmark reporting-currency totals.
-  ///
-  /// Remaining deliberate degradation:
-  /// - `budget: nil` — the per-earmark budget total is not yet reduced to the
-  ///   reporting currency, so it is omitted rather than guessed.
-  private func makeEarmarkSnapshots() -> [EarmarkSnapshot] {
-    let zero = InstrumentAmount.zero(instrument: reportingInstrument)
-    return sources.earmark.earmarks.compactMap { earmark in
-      guard earmark.instrument == reportingInstrument else { return nil }
-      return EarmarkSnapshot(
-        id: earmark.id,
-        name: earmark.name,
-        balance: sources.earmark.convertedBalances[earmark.id] ?? zero,
-        spent: sources.earmark.convertedSpentAmounts[earmark.id],
-        budget: nil,
-        savingsGoal: earmark.savingsGoal,
-        saved: sources.earmark.convertedSavedAmounts[earmark.id],
-        savingsStartDate: earmark.savingsStartDate,
-        savingsEndDate: earmark.savingsEndDate,
-        isHidden: earmark.isHidden)
-    }
-  }
 }
