@@ -97,6 +97,7 @@ targets:
         basedOnDependencyAnalysis: false
     dependencies:
       - sdk: AppIntents.framework
+      - sdk: FoundationModels.framework
       - package: GRDB
       - package: ImportExtensionKit
       - target: MoolahImportExtension_iOS
@@ -160,6 +161,7 @@ targets:
         basedOnDependencyAnalysis: false
     dependencies:
       - sdk: AppIntents.framework
+      - sdk: FoundationModels.framework
       - package: GRDB
       - package: ImportExtensionKit
       - target: MoolahImportExtension_macOS
