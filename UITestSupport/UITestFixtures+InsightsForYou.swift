@@ -22,12 +22,5 @@ extension UITestFixtures {
     /// XCUITest label comparison can't trip on accessibility text normalisation.
     public static let scriptedNarration =
       "You made a large purchase at the Apple Store this week."
-
-    /// Fixed recap string emitted by `ScriptedNarrator` in the
-    /// `.weeklyRecapBaseline` seed. Both the app-side recap override and
-    /// the UI-test assertion reference this constant so the two sides can
-    /// never drift.
-    public static let scriptedRecap =
-      "This week you made a large Apple Store purchase and your net worth reached a new milestone."
   }
 }

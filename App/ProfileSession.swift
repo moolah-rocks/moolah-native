@@ -43,11 +43,6 @@ final class ProfileSession: Identifiable {
   /// constructed there rather than in `makeDomainStores`. Functionally `let`
   /// from the consumer's perspective.
   private(set) var insightStore: InsightStore?
-  /// Constructed in `finishInit` after `insightStore` (it depends on it).
-  /// Manages the once-per-ISO-week opt-in recap card. Nil when `insightStore`
-  /// is nil (degraded launch). Same `finishInit`-assigned pattern as
-  /// `insightStore`; functionally `let` from the consumer's perspective.
-  private(set) var weeklyRecapStore: WeeklyRecapStore?
   let analysisStore: AnalysisStore
   let investmentStore: InvestmentStore
   let reportingStore: ReportingStore
@@ -277,16 +272,6 @@ final class ProfileSession: Identifiable {
       narrator: insightNarrator,
       fixtureInsights: Self.uiTestingInsightFixtures())
     self.insightStore = builtInsightStore
-    // WeeklyRecapStore depends on insightStore (reads its insights) and uses
-    // the same narrator/availability so its narration honours the same
-    // kill-switch and runtime eligibility check. Constructed here, after
-    // insightStore is assigned. UI-test overrides are applied inside
-    // `makeWeeklyRecapStore` so `finishInit` stays under its line budget.
-    self.weeklyRecapStore = Self.makeWeeklyRecapStore(
-      insightStore: builtInsightStore,
-      narrator: insightNarrator,
-      availability: insightAvailability,
-      profileId: profile.id)
     let cryptoWiring = Self.makeCryptoSyncWiring(
       backend: backend,
       registry: instrumentRegistry,

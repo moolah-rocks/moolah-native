@@ -135,8 +135,7 @@ extension MoolahApp {
       .incompatibleProfile,
       .transferDetectionBaseline,
       .pendingWebImportOneChaseInbox,
-      .insightsForYouBaseline,
-      .weeklyRecapBaseline:
+      .insightsForYouBaseline:
       break
     case .welcomeDownloading:
       // Override iCloudAvailability to `.available` so the WelcomeStateResolver

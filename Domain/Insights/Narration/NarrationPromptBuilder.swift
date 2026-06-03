@@ -23,11 +23,6 @@ enum NarrationPromptBuilder {
         instructions: singleInsightInstructions,
         prompt: singleInsightPrompt(title: title, detail: detail, facts: facts)
       )
-    case let .weeklyRecap(items):
-      return (
-        instructions: recapInstructions,
-        prompt: recapPrompt(items: items)
-      )
     }
   }
 }
@@ -55,27 +50,6 @@ extension NarrationPromptBuilder {
     • Address the user as "you" or "your".
     """
 
-  private static let recapInstructions = """
-    You are a personal finance assistant for moolah.rocks. Your role is to narrate \
-    a brief weekly recap of the user's financial highlights in plain, warm, \
-    non-judgemental prose.
-
-    Rules you must follow:
-    • Use ONLY the figures provided verbatim in the prompt. Do not invent, recompute, \
-    round, or approximate any number. Every figure you write must appear exactly in \
-    the supplied facts.
-    • Do not quote fact labels verbatim. Weave the numbers into natural prose. Omit any \
-    statistical or technical fact — z-scores, p-values, counts of months, direction \
-    labels — those are evidence for you, not for the user.
-    • Avoid corporate vocabulary: do not use optimise, leverage, empower, take control, \
-    streamline, robust, or seamless. Use ordinary words instead.
-    • Use contractions where they sound natural: "you've", "it's", "that's".
-    • Match the insight's tone. If it's good news, let a little warmth show — one beat, \
-    not a speech. Never scold: avoid "overspent", "wasted", "should".
-    • Write exactly two sentences covering the listed insights together.
-    • Address the user as "you" or "your".
-    """
-
   private static func singleInsightPrompt(title: String, detail: String, facts: [InsightFact])
     -> String
   {
@@ -88,20 +62,6 @@ extension NarrationPromptBuilder {
       }
     }
     lines.append("\nNarrate this insight in one to two sentences.")
-    return lines.joined(separator: "\n")
-  }
-
-  private static func recapPrompt(items: [NarrationRequest.Item]) -> String {
-    let highlightWord = items.count == 1 ? "highlight" : "highlights"
-    var lines = ["Weekly recap — \(items.count) \(highlightWord) this week:"]
-    for (index, item) in items.enumerated() {
-      lines.append("\n\(index + 1). \(item.title)")
-      lines.append("   Draft: \(item.detail)")
-      for fact in item.facts {
-        lines.append("   \(fact.label): \(fact.value)")
-      }
-    }
-    lines.append("\nSummarise these highlights in exactly two sentences.")
     return lines.joined(separator: "\n")
   }
 }

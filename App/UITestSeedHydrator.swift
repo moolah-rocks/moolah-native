@@ -32,8 +32,7 @@ enum UITestSeedHydrator {
       .sidebarFooterReceiving,
       .sidebarFooterSending,
       .cryptoCatalogPreloaded,
-      .insightsForYouBaseline,
-      .weeklyRecapBaseline:
+      .insightsForYouBaseline:
       // All these seeds reuse the `tradeBaseline` fixture as their
       // base profile and exercise an orthogonal surface (sidebar
       // footer, crypto picker, etc) layered on top of it. Folding

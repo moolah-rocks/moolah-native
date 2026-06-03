@@ -47,41 +47,6 @@ struct NarrationPromptBuilderTests {
   }
 
   @Test
-  func recapPromptListsEachInsightAndAsksForTwoSentences() {
-    let req = NarrationRequest.weeklyRecap(items: [
-      .init(
-        title: "Net worth crossed $100k",
-        detail: "Your net worth hit $101,200.",
-        facts: [InsightFact("Now", "$101,200")]),
-      .init(
-        title: "Dining up",
-        detail: "Dining came in at $640.00.",
-        facts: [InsightFact("This month", "$640.00")]),
-    ])
-    let built = NarrationPromptBuilder.build(req)
-    #expect(built.prompt.contains("Net worth crossed $100k"))
-    #expect(built.prompt.contains("$640.00"))
-    #expect(built.instructions.localizedCaseInsensitiveContains("two sentences"))
-  }
-
-  @Test
-  func recapPromptContainsDraftForEachItem() {
-    let req = NarrationRequest.weeklyRecap(items: [
-      .init(
-        title: "Net worth crossed $100k",
-        detail: "Your net worth hit $101,200.",
-        facts: [InsightFact("Now", "$101,200")]),
-      .init(
-        title: "Dining up",
-        detail: "Dining came in at $640.00.",
-        facts: [InsightFact("This month", "$640.00")]),
-    ])
-    let built = NarrationPromptBuilder.build(req)
-    #expect(built.prompt.contains("Draft: Your net worth hit $101,200."))
-    #expect(built.prompt.contains("Draft: Dining came in at $640.00."))
-  }
-
-  @Test
   func instructionsForbidInventingNumbers() {
     let req = NarrationRequest.singleInsight(
       title: "Test",
@@ -112,42 +77,6 @@ struct NarrationPromptBuilderTests {
       facts: [InsightFact("Amount", "$100.00")])
     let built = NarrationPromptBuilder.build(req)
     #expect(built.instructions.contains("contractions") || built.instructions.contains("you've"))
-  }
-
-  @Test
-  func recapInstructionsMentionTwoSentenceRecap() {
-    let req = NarrationRequest.weeklyRecap(items: [
-      .init(title: "A", detail: "A detail.", facts: [])
-    ])
-    let built = NarrationPromptBuilder.build(req)
-    #expect(built.instructions.localizedCaseInsensitiveContains("two sentences"))
-  }
-
-  @Test
-  func recapPromptUsesCorrectHighlightWord() {
-    let singleItem = NarrationRequest.weeklyRecap(items: [
-      .init(title: "Net worth up", detail: "Up.", facts: [])
-    ])
-    let multiItem = NarrationRequest.weeklyRecap(items: [
-      .init(title: "Net worth up", detail: "Up.", facts: []),
-      .init(title: "Dining down", detail: "Down.", facts: []),
-    ])
-    let singleBuilt = NarrationPromptBuilder.build(singleItem)
-    let multiBuilt = NarrationPromptBuilder.build(multiItem)
-    #expect(singleBuilt.prompt.contains("1 highlight this week"))
-    #expect(multiBuilt.prompt.contains("2 highlights this week"))
-  }
-
-  @Test
-  func allFactsAggregatesAcrossRecapItems() {
-    let req = NarrationRequest.weeklyRecap(items: [
-      .init(title: "Item A", detail: "A.", facts: [InsightFact("Label A", "100")]),
-      .init(title: "Item B", detail: "B.", facts: [InsightFact("Label B", "200")]),
-    ])
-    let all = req.allFacts
-    #expect(all.count == 2)
-    #expect(all.contains(InsightFact("Label A", "100")))
-    #expect(all.contains(InsightFact("Label B", "200")))
   }
 
   @Test

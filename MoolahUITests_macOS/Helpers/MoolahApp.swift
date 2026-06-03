@@ -88,12 +88,6 @@ final class MoolahApp {
   /// Analysis detail leaf. Row expand / dismiss / deep-link actions.
   var forYou: ForYouScreen { ForYouScreen(app: self) }
 
-  /// Weekly recap card (`WeeklyRecapCard`): the opt-in once-per-week
-  /// narration banner rendered above the For You panel. Available when
-  /// `WeeklyRecapStore.recap` is `.ready` (seeded deterministically by
-  /// `.weeklyRecapBaseline`).
-  var weeklyRecap: WeeklyRecapScreen { WeeklyRecapScreen(app: self) }
-
   /// Right column or sheet showing a single transaction's editable detail.
   var transactionDetail: TransactionDetailScreen { TransactionDetailScreen(app: self) }
 

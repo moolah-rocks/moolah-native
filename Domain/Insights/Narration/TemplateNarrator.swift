@@ -26,21 +26,6 @@ extension TemplateNarrator {
     switch request {
     case let .singleInsight(title, detail, _):
       return detail.isEmpty ? title : detail
-    case let .weeklyRecap(items):
-      return composeRecap(items: items)
-    }
-  }
-
-  private func composeRecap(items: [NarrationRequest.Item]) -> String {
-    guard !items.isEmpty else { return "" }
-    switch items.count {
-    case 1:
-      return "This week: \(items[0].title)."
-    case 2:
-      return "This week: \(items[0].title) and \(items[1].title)."
-    default:
-      let allButLast = items.dropLast().map(\.title).joined(separator: ", ")
-      return "This week: \(allButLast), and \(items[items.count - 1].title)."
     }
   }
 }

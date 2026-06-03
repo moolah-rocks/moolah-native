@@ -138,16 +138,6 @@ public enum UITestSeed: String, CaseIterable, Sendable {
   /// renders the fixtures, dismiss removes one, and the navigable row deep-links
   /// to the checking account. See `UITestFixtures.InsightsForYou`.
   case insightsForYouBaseline = "insights-for-you-baseline"
-
-  /// Extends the `insightsForYouBaseline` setup with recap-specific
-  /// overrides: `FixedModelAvailability(.available)`, a `ScriptedNarrator`
-  /// emitting `UITestFixtures.InsightsForYou.scriptedRecap`, opt-in forced
-  /// on, and a fresh `InMemoryRecapLastShownStore` (never shown). Drives
-  /// `WeeklyRecapUITests`: the recap card renders above the For You panel,
-  /// the scripted text appears, and dismiss hides the card. Uses a
-  /// dedicated seed so the existing `insightsForYouBaseline` tests are
-  /// unaffected. See `UITestFixtures.InsightsForYou`.
-  case weeklyRecapBaseline = "weekly-recap-baseline"
 }
 
 /// Fixtures for the first-run Welcome seeds. Defined here so both the

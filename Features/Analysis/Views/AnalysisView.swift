@@ -83,8 +83,6 @@ struct AnalysisView: View {
       await transactionStore.load(filter: TransactionFilter(scheduled: .scheduledOnly))
       await store.loadAll()
       await session.insightStore?.refreshIfStale(minimumInterval: 60)
-      // Recap reads fresh insights, so it runs after the insight refresh above.
-      await session.weeklyRecapStore?.prepareIfDue()
     }
     .task {
       // Long-lived reactive subscription for the upcoming card. Runs
@@ -107,10 +105,7 @@ struct AnalysisView: View {
       // threshold to avoid disruptive reloads when the app has just been loaded.
       if oldPhase == .background && newPhase == .active {
         Task { await store.refreshIfStale(minimumInterval: 60) }
-        Task {
-          await session.insightStore?.refreshIfStale(minimumInterval: 60)
-          await session.weeklyRecapStore?.prepareIfDue()
-        }
+        Task { await session.insightStore?.refreshIfStale(minimumInterval: 60) }
       }
     }
   }
@@ -143,11 +138,6 @@ struct AnalysisView: View {
   @ViewBuilder
   private func contentView(store: AnalysisStore) -> some View {
     VStack(spacing: 20) {
-      if let recapStore = session.weeklyRecapStore, recapStore.recap != .hidden {
-        WeeklyRecapCard(
-          recap: recapStore.recap,
-          onDismiss: { recapStore.dismiss() })
-      }
       if let insightStore = session.insightStore, !insightStore.insights.isEmpty {
         ForYouCard(
           insights: insightStore.insights,
