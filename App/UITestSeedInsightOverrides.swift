@@ -29,6 +29,62 @@ enum UITestSeedInsightOverrides {
     }
   }
 
+  #if DEBUG
+    /// Returns a `FixedModelAvailability` for seeds that need deterministic
+    /// narration in UI tests. `.insightsForYouBaseline` forces `.available` so
+    /// the "Why?" button renders and the scripted narrator is exercised. All
+    /// other seeds return `nil` — `ProfileSession.finishInit` then falls through
+    /// to `SystemLanguageModelAvailability` (the production path).
+    static func availability(for seed: UITestSeed) -> FixedModelAvailability? {
+      switch seed {
+      case .insightsForYouBaseline:
+        return FixedModelAvailability(value: .available)
+      case .tradeBaseline,
+        .welcomeEmpty,
+        .welcomeSingleCloudProfile,
+        .welcomeMultipleCloudProfiles,
+        .welcomeDownloading,
+        .sidebarFooterUpToDate,
+        .sidebarFooterReceiving,
+        .sidebarFooterSending,
+        .cryptoCatalogPreloaded,
+        .tradeReady,
+        .incompatibleProfile,
+        .pendingWebImportOneChaseInbox,
+        .transferDetectionBaseline:
+        return nil
+      }
+    }
+
+    /// Returns a `ScriptedNarrator` for seeds that need deterministic narration
+    /// output in UI tests. `.insightsForYouBaseline` emits the shared
+    /// `UITestFixtures.InsightsForYou.scriptedNarration` constant so the test
+    /// can assert the exact rendered string without a real model. All other
+    /// seeds return `nil` — `ProfileSession.finishInit` then uses the narrator
+    /// selected by `makeInsightNarrator()`.
+    static func narrator(for seed: UITestSeed) -> ScriptedNarrator? {
+      switch seed {
+      case .insightsForYouBaseline:
+        return ScriptedNarrator(
+          snapshots: [UITestFixtures.InsightsForYou.scriptedNarration])
+      case .tradeBaseline,
+        .welcomeEmpty,
+        .welcomeSingleCloudProfile,
+        .welcomeMultipleCloudProfiles,
+        .welcomeDownloading,
+        .sidebarFooterUpToDate,
+        .sidebarFooterReceiving,
+        .sidebarFooterSending,
+        .cryptoCatalogPreloaded,
+        .tradeReady,
+        .incompatibleProfile,
+        .pendingWebImportOneChaseInbox,
+        .transferDetectionBaseline:
+        return nil
+      }
+    }
+  #endif
+
   private static var insightsForYouBaselineInsights: [ScoredInsight] {
     let fixtures = UITestFixtures.InsightsForYou.self
     let now = Date(timeIntervalSince1970: 1_700_000_000)
