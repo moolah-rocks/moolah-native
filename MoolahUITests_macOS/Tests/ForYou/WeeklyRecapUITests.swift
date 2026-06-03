@@ -23,14 +23,10 @@ final class WeeklyRecapUITests: MoolahUITestCase {
     let app = launch(seed: .weeklyRecapBaseline)
     let recap = app.weeklyRecap
 
-    // Wait for the recap card to appear and assert the scripted text.
+    // Wait for the recap card to appear and assert the scripted text. The
+    // prose surfaces through the element's `value`, so predicate-wait on it.
     recap.waitForCard()
-    let rendered = recap.recapText()
-    XCTAssertEqual(
-      rendered,
-      UITestFixtures.InsightsForYou.scriptedRecap,
-      "Recap text did not match the scripted narrator's output"
-    )
+    recap.expectRecapText(equals: UITestFixtures.InsightsForYou.scriptedRecap)
 
     // Dismiss the card and confirm it is gone.
     recap.dismiss()
