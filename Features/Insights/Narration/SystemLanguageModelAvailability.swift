@@ -8,7 +8,8 @@ import FoundationModels
 /// `.available`, `.unavailable(.deviceNotEligible)`,
 /// `.unavailable(.appleIntelligenceNotEnabled)`, `.unavailable(.modelNotReady)`.
 struct SystemLanguageModelAvailability: ModelAvailabilityProviding {
-  @MainActor func current() -> ModelAvailability {
+  @MainActor
+  func current() -> ModelAvailability {
     switch SystemLanguageModel.default.availability {
     case .available:
       return .available

@@ -75,11 +75,7 @@
         }
         if modelAvailability.isUsable {
           Tab("Insights", systemImage: "sparkles") {
-            Form {
-              InsightsSettingsSection()
-            }
-            .formStyle(.grouped)
-            .navigationTitle("Insights")
+            insightsTabContent
           }
         }
         // macOS Settings tabs host the Form / List directly — the window
@@ -157,6 +153,14 @@
         }
         .buttonStyle(.bordered)
       }
+    }
+
+    var insightsTabContent: some View {
+      Form {
+        InsightsSettingsSection()
+      }
+      .formStyle(.grouped)
+      .navigationTitle("Insights")
     }
 
     @ViewBuilder var importTabContent: some View {

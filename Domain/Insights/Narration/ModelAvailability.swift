@@ -36,13 +36,16 @@ enum ModelAvailability: Sendable, Hashable {
 protocol ModelAvailabilityProviding: Sendable {
   /// Current eligibility. Cheap to call; implementations may re-read each time
   /// so a transient `.modelNotReady → .available` flip is observed on refresh.
-  @MainActor func current() -> ModelAvailability
+  @MainActor
+  func current() -> ModelAvailability
 }
 
 #if DEBUG
   /// Test/preview double.
   struct FixedModelAvailability: ModelAvailabilityProviding {
     let value: ModelAvailability
-    @MainActor func current() -> ModelAvailability { value }
+
+    @MainActor
+    func current() -> ModelAvailability { value }
   }
 #endif

@@ -4,19 +4,23 @@ import Testing
 
 @Suite("ModelAvailability")
 struct ModelAvailabilityTests {
-  @Test func onlyAvailableIsUsable() {
+  @Test
+  func onlyAvailableIsUsable() {
     #expect(ModelAvailability.available.isUsable)
     #expect(!ModelAvailability.unavailable(.deviceNotEligible).isUsable)
     #expect(!ModelAvailability.unavailable(.appleIntelligenceNotEnabled).isUsable)
     #expect(!ModelAvailability.unavailable(.modelNotReady).isUsable)
   }
 
-  @Test func modelNotReadyIsTransient() {
+  @Test
+  func modelNotReadyIsTransient() {
     #expect(ModelAvailability.unavailable(.modelNotReady).isTransient)
     #expect(!ModelAvailability.unavailable(.deviceNotEligible).isTransient)
   }
 
-  @Test @MainActor func fixedAvailabilityReturnsConfiguredValue() {
+  @Test
+  @MainActor
+  func fixedAvailabilityReturnsConfiguredValue() {
     let fixed = FixedModelAvailability(value: .available)
     #expect(fixed.current() == .available)
 
