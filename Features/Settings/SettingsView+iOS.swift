@@ -8,11 +8,21 @@
 
     // MARK: - iOS: NavigationStack layout
 
+    /// Current on-device model eligibility. Cheap synchronous read; re-checked
+    /// on each view update so a `.modelNotReady → .available` flip is observed
+    /// without relaunch.
+    @MainActor var modelAvailability: ModelAvailability {
+      SystemLanguageModelAvailability().current()
+    }
+
     var iOSLayout: some View {
       List {
         profilesSection
         addImportProfileSection
         cryptoSection
+        if modelAvailability.isUsable {
+          InsightsSettingsSection()
+        }
         importSettingsSection
         helpSection
       }

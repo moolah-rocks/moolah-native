@@ -5,6 +5,12 @@
   // macOS HSplitView/TabView layout for `SettingsView`. Every member is view
   // composition over the main struct's shared state.
   extension SettingsView {
+    /// Current on-device model eligibility. Re-read on `.task` so a device
+    /// that finishes downloading Apple Intelligence while Settings is open
+    /// will show the Insights tab on next appear without relaunch.
+    @MainActor var modelAvailability: ModelAvailability {
+      SystemLanguageModelAvailability().current()
+    }
 
     // MARK: - macOS: HSplitView / TabView layout
 
@@ -65,6 +71,15 @@
               // the static fiat list and crypto search returns no results.
               .environment(session)
             }
+          }
+        }
+        if modelAvailability.isUsable {
+          Tab("Insights", systemImage: "sparkles") {
+            Form {
+              InsightsSettingsSection()
+            }
+            .formStyle(.grouped)
+            .navigationTitle("Insights")
           }
         }
         // macOS Settings tabs host the Form / List directly — the window
