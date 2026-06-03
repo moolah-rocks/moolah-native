@@ -161,33 +161,45 @@ private struct InsightRow: View {
   /// the completed narration. `.fellBackToTemplate` is visually identical to
   /// `.done` — the template fallback is invisible to the user by design.
   @ViewBuilder private var narrationAffordance: some View {
-    switch narrationState {
-    case .idle:
+    if case .idle = narrationState {
       Button("Why?") { onNarrate() }
         .buttonStyle(.borderless)
         .accessibilityLabel("Why? — explain \(insight.title)")
         .accessibilityHint("Generates a plain-language explanation on your device")
         .accessibilityIdentifier(UITestIdentifiers.ForYou.whyButton(insight.id))
-    case .streaming(let partial):
+    } else {
+      // One stable text element across `.streaming` → `.done`: keeping the
+      // narration `Text` in the same structural position (rather than two
+      // separate switch arms) preserves its identity so its content updates
+      // in place — both for SwiftUI animation and so a UI test observing the
+      // element sees the label transition rather than a replaced element.
       VStack(alignment: .leading, spacing: 4) {
-        Text(partial)
+        Text(narrationText)
           .font(.callout)
           .foregroundStyle(.secondary)
           .accessibilityAddTraits(.updatesFrequently)
           .accessibilityIdentifier(UITestIdentifiers.ForYou.narrationText(insight.id))
-        HStack(spacing: 8) {
-          ProgressView()
-            .controlSize(.small)
-            .accessibilityLabel("Generating explanation…")
-          Button("Cancel") { onCancelNarrate() }
-            .buttonStyle(.borderless)
+        if case .streaming = narrationState {
+          HStack(spacing: 8) {
+            ProgressView()
+              .controlSize(.small)
+              .accessibilityLabel("Generating explanation…")
+            Button("Cancel") { onCancelNarrate() }
+              .buttonStyle(.borderless)
+          }
         }
       }
-    case .done(let text), .fellBackToTemplate(let text):
-      Text(text)
-        .font(.callout)
-        .foregroundStyle(.secondary)
-        .accessibilityIdentifier(UITestIdentifiers.ForYou.narrationText(insight.id))
+    }
+  }
+
+  /// The text to display for the current narration state. Empty while idle or
+  /// at the start of streaming; the partial or completed prose otherwise.
+  /// `.fellBackToTemplate` reads identically to `.done` — the template fallback
+  /// is invisible to the user by design.
+  private var narrationText: String {
+    switch narrationState {
+    case .idle: return ""
+    case .streaming(let text), .done(let text), .fellBackToTemplate(let text): return text
     }
   }
 
