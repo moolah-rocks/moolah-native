@@ -45,6 +45,15 @@ struct NumericProvenanceGuardTests {
   }
 
   @Test
+  func passesWhenFactUsesUnicodeMinus_generatedUsesAsciiHyphen() {
+    // Detectors emit U+2212; LLMs typically emit ASCII U+002D. Both represent
+    // the same negative amount and must compare equal after normalisation.
+    let signed = [InsightFact("Change", "−$640.00")]  // U+2212
+    #expect(
+      NumericProvenanceGuard.isGrounded("Down -$640.00 this month.", facts: signed))  // ASCII -
+  }
+
+  @Test
   func passesWithEmptyGeneratedText() {
     #expect(NumericProvenanceGuard.isGrounded("", facts: facts))
   }
