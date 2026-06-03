@@ -7,16 +7,6 @@ enum NarrationRequest: Sendable, Hashable {
   /// A single insight to narrate in one or two sentences.
   case singleInsight(title: String, detail: String, facts: [InsightFact])
 
-  /// A collection of insights to narrate as a brief two-sentence weekly recap.
-  case weeklyRecap(items: [Item])
-
-  /// One entry in a weekly-recap narration request.
-  struct Item: Sendable, Hashable {
-    let title: String
-    let detail: String
-    let facts: [InsightFact]
-  }
-
   /// Every fact across the request, in presentation order. Used by the numeric
   /// provenance guard to verify that all numbers in the generated text were
   /// supplied verbatim here — never invented by the model.
@@ -24,8 +14,6 @@ enum NarrationRequest: Sendable, Hashable {
     switch self {
     case .singleInsight(_, _, let facts):
       return facts
-    case .weeklyRecap(let items):
-      return items.flatMap(\.facts)
     }
   }
 }

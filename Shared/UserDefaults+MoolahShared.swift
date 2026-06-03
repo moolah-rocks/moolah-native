@@ -20,10 +20,6 @@ extension UserDefaults {
   /// distinguish "absent" from "explicitly off".
   static let insightsNarrationEnabledKey = "insightsNarrationEnabled"
 
-  /// Opt-in key for the weekly recap narration card. Absent key is treated as
-  /// `false` (default off) — the user must explicitly enable the recap.
-  static let weeklyRecapEnabledKey = "weeklyRecapEnabled"
-
   // MARK: - Factory
 
   /// Factory used by `moolahShared`. Exposed so tests can verify the
