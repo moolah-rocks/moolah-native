@@ -66,6 +66,29 @@ final class InsightStore {
   /// value rather than the provider so callers don't reach into the seam.
   var currentAvailability: ModelAvailability { availability.current() }
 
+  /// Narrator used to produce prose from a `NarrationRequest`. Defaults to
+  /// `TemplateNarrator` (deterministic, no model) when no narrator is injected.
+  /// Production injects `FoundationModelsNarrator` via `ProfileSession.finishInit`.
+  /// Module-internal so `InsightStore+Narration.swift` can call it across the
+  /// file boundary — not intended as API for any other type.
+  let narrator: any InsightNarrating
+
+  // MARK: - Narration state
+
+  /// Per-insight narration state, keyed by `ScoredInsight.id`. Published so
+  /// `ForYouCard` can render streaming partial text and the final result.
+  /// Entries are set to `.idle` on `cancelNarration(_:)` and absent until the
+  /// first `narrate(_:)` call for that insight. Module-internal (not private)
+  /// so `InsightStore+Narration.swift` can write to it across the file boundary
+  /// — treat as read-only from every other call site.
+  var narration: [String: NarrationState] = [:]
+
+  /// Live narration tasks keyed by insight id. Stored so they can be cancelled
+  /// individually (`cancelNarration`) or all at once on teardown (mirrors the
+  /// `instrumentChangeObservationTask` pattern). Module-internal for the same
+  /// cross-file reason as `narration`.
+  var narrationTasks: [String: Task<Void, Never>] = [:]
+
   /// UI-testing seam: when non-nil, `refresh()` publishes these fixtures
   /// instead of building an `InsightInput` and running the engine — so a
   /// `MoolahUITests_macOS` seed can assert the surface deterministically
@@ -116,6 +139,7 @@ final class InsightStore {
     profile: Profile,
     instrumentChanges: (any InstrumentChangeObserving)? = nil,
     availability: (any ModelAvailabilityProviding)? = nil,
+    narrator: (any InsightNarrating)? = nil,
     fixtureInsights: InsightFixtures? = nil
   ) {
     self.sources = sources
@@ -127,6 +151,7 @@ final class InsightStore {
     // Default to ineligible when no provider is injected so no narration
     // surface lights up in previews/tests by accident.
     self.availability = availability ?? NeverAvailableModelAvailability()
+    self.narrator = narrator ?? TemplateNarrator()
     self.fixtureInsights = fixtureInsights
 
     // Strong `self` capture mirrors `EarmarkStore`: the store is
@@ -161,14 +186,18 @@ final class InsightStore {
     MainActor.assumeIsolated {
       instrumentChangeObservationTask?.cancel()
       dismissalObservationTask?.cancel()
+      for task in narrationTasks.values { task.cancel() }
+      narrationTasks.removeAll()
     }
   }
 
-  /// Tears down the observation tasks. Idempotent. Called from
-  /// `ProfileSession.cleanupSync(coordinator:)`.
+  /// Tears down the observation tasks and any in-flight narration tasks.
+  /// Idempotent. Called from `ProfileSession.cleanupSync(coordinator:)`.
   func stopObserving() {
     instrumentChangeObservationTask?.cancel()
     dismissalObservationTask?.cancel()
+    for task in narrationTasks.values { task.cancel() }
+    narrationTasks.removeAll()
   }
 
   // MARK: - Refresh
