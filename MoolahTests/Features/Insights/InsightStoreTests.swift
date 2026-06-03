@@ -108,7 +108,7 @@ struct InsightStoreTests {
     await store.refresh()
     #expect(store.insights.map(\.id) == ["a", "b"])
 
-    store.dismiss(try #require(store.insights.first))
+    await store.dismiss(try #require(store.insights.first))
     #expect(store.insights.map(\.id) == ["b"])
   }
 
@@ -125,7 +125,7 @@ struct InsightStoreTests {
       store.insights.first { $0.insight.kind == .uncategorizedBacklog })
     let loadedAtBeforeDismiss = store.lastLoadedAt
 
-    store.dismiss(target)
+    await store.dismiss(target)
 
     // The dismissed insight is gone immediately — and it was an in-place
     // re-rank, not a rebuild, so `lastLoadedAt` is untouched.
@@ -142,7 +142,7 @@ struct InsightStoreTests {
     let target = try #require(
       store.insights.first { $0.insight.kind == .uncategorizedBacklog })
 
-    store.dismiss(target)
+    await store.dismiss(target)
     store.overrideLastLoadedAtForTesting(nil)  // force the next refresh to rebuild
     await store.refresh()
 
@@ -257,7 +257,7 @@ struct InsightStoreTests {
 
     let target = try #require(
       store.insights.first { $0.insight.kind == .uncategorizedBacklog })
-    store.dismiss(target)
+    await store.dismiss(target)
 
     // The write-through fires in a detached `Task`; poll the repository until
     // the committed increment lands (no fixed sleep — bounded poll).

@@ -253,33 +253,50 @@ final class InsightStore {
 
   /// Removes the insight from the published list immediately and records a
   /// per-kind dismissal so the ranker's fatigue penalty downranks the kind for
-  /// the rest of the session. Re-ranks the cached input in place (no rebuild)
-  /// so any surviving insights reflect the new fatigue; falls back to filtering
-  /// the current list when no input is cached.
-  func dismiss(_ insight: ScoredInsight) {
+  /// the rest of the session. The optimistic mutation (hide the card, bump the
+  /// fatigue tally, re-rank) is applied synchronously before the first `await`
+  /// so the UI updates instantly, then the per-kind count is written through to
+  /// the repository.
+  ///
+  /// The card stays hidden only if the persist succeeds: on failure the prior
+  /// `dismissedIds` / `dismissals[kind]` are restored and the list re-ranked,
+  /// re-showing the card. Rollback is required because `applyPersistedDismissals`
+  /// max-merges the per-kind count, so an un-reverted optimistic bump could
+  /// never be corrected by a later (lower) DB echo.
+  func dismiss(_ insight: ScoredInsight) async {
+    let kind = insight.insight.kind
+    let priorDismissedIds = dismissedIds
+    let priorCount = dismissals[kind]
+
     dismissedIds.insert(insight.id)
-    dismissals[insight.insight.kind, default: 0] += 1
+    dismissals[kind, default: 0] += 1
+    rerank()
+
+    do {
+      // The atomic increment in the repository is the source of truth; the
+      // observation stream echoes the committed count back, reconciling the
+      // optimistic bump above (idempotent — same value).
+      _ = try await dismissalRepository.recordDismissal(of: kind)
+    } catch {
+      // Roll back the optimistic mutation so the in-memory tally cannot drift
+      // above the committed count (the max-merge in the observation apply would
+      // otherwise pin the overstated value until a successful write or relaunch).
+      dismissedIds = priorDismissedIds
+      dismissals[kind] = priorCount
+      rerank()
+      logger.error("Failed to persist insight dismissal: \(error)")
+      self.error = error
+    }
+  }
+
+  /// Re-ranks the cached input in place (no off-main rebuild) so the published
+  /// list reflects the current `dismissals` fatigue table and `dismissedIds`.
+  /// Falls back to filtering the current list when no input is cached.
+  private func rerank() {
     if let lastInput {
       insights = visible(engine.generate(lastInput, dismissals: dismissals))
     } else {
       insights = visible(insights)
-    }
-    // Persist the dismissal. The atomic increment in the repository is the
-    // source of truth; the observation stream echoes the committed count back,
-    // reconciling the optimistic bump above (idempotent — same value).
-    let kind = insight.insight.kind
-    // Explicit, self-free capture list: `logger` is a value type (safe to
-    // copy), so the write-through Task does not retain `self`.
-    Task { [dismissalRepository, logger] in
-      do {
-        _ = try await dismissalRepository.recordDismissal(of: kind)
-      } catch {
-        // Best-effort: a failed persist leaves the optimistic in-memory bump
-        // (this session still downranks); the next successful dismissal or a
-        // synced remote write reconciles. Logged, not surfaced — dismissal is
-        // not a user-blocking action.
-        logger.error("Failed to persist insight dismissal: \(error)")
-      }
     }
   }
 
@@ -324,9 +341,7 @@ final class InsightStore {
       dismissals[tally.kind] = max(dismissals[tally.kind, default: 0], tally.count)
     }
     dismissals = dismissals.filter { dbKinds.contains($0.key) }
-    if let lastInput {
-      insights = visible(engine.generate(lastInput, dismissals: dismissals))
-    }
+    rerank()
   }
 
   /// Logs and surfaces an error from the dismissal observation stream.
