@@ -79,6 +79,12 @@ import GRDB
 /// against `account_group(id)` reaps rows automatically when their
 /// parent group is deleted. See
 /// `ProfileSchema+AccountGroupUIState.swift`.
+/// `v16_insight_dismissals` — adds the synced `insight_dismissal` table:
+/// one row per `InsightKind` the user has dismissed, carrying a cumulative
+/// `count` that drives `InsightRanker`'s fatigue penalty. `kind` is
+/// `UNIQUE`; the primary key is a deterministic UUID derived from `kind`
+/// so the same kind resolves to the same record on every device. See
+/// `ProfileSchema+InsightDismissals.swift`.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -99,7 +105,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 15
+  static let version = 16
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -137,6 +143,8 @@ enum ProfileSchema {
       "v14_account_groups", migrate: addAccountGroups)
     migrator.registerMigration(
       "v15_account_group_ui_state", migrate: addAccountGroupUIState)
+    migrator.registerMigration(
+      "v16_insight_dismissals", migrate: addInsightDismissals)
 
     return migrator
   }
