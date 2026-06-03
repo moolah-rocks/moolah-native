@@ -127,7 +127,8 @@ final class InsightStore {
   /// `stopObserving()` / `deinit`.
   private var instrumentChangeObservationTask: Task<Void, Never>?
 
-  /// Observes persisted per-kind dismissal counts. Each emission reseeds
+  /// Observes persisted per-kind dismissal counts (tally stream + error
+  /// stream, drained in parallel). Each tally emission max-merges into
   /// `dismissals` (initial load on launch, local write-through echo, and
   /// remote sync) and re-ranks the cached input so the fatigue penalty stays
   /// current. Torn down by `stopObserving()` / `deinit`.
@@ -164,17 +165,25 @@ final class InsightStore {
       }
     }
 
+    // Capture BOTH streams locally (mirrors `EarmarkStore.observe()`): the
+    // region-based isolation checker can reason about the `Sendable` streams
+    // when they are captured outside the `addTask` closures.
     let dismissalStream = dismissalRepository.observeAll()
+    let dismissalErrors = dismissalRepository.observeErrors()
     dismissalObservationTask = Task { [self] in
-      await self.observePersistedDismissals(dismissalStream)
+      await self.observePersistedDismissals(dismissalStream, errors: dismissalErrors)
     }
   }
 
   deinit {
     // Safety net for tear-down paths that miss `cleanupSync`. Swift 6 makes
-    // `deinit` nonisolated; reading `@MainActor` state needs
-    // `MainActor.assumeIsolated`. The store is owned by main-actor code
-    // (`ProfileSession`), so the assumption holds.
+    // `deinit` nonisolated; reading `@MainActor`-isolated state requires
+    // `MainActor.assumeIsolated`. This is valid only because the store is
+    // owned by `@MainActor` code (`ProfileSession`), so the isolation
+    // assumption holds in practice. If ownership ever moves off `@MainActor`,
+    // convert this to a separate `cancel()` method invoked from a main-actor
+    // context instead. Cancels both strongly-held observation Tasks so they
+    // do not retain `self` (and their streams' GRDB connections) forever.
     MainActor.assumeIsolated {
       instrumentChangeObservationTask?.cancel()
       dismissalObservationTask?.cancel()
@@ -259,7 +268,9 @@ final class InsightStore {
     // source of truth; the observation stream echoes the committed count back,
     // reconciling the optimistic bump above (idempotent — same value).
     let kind = insight.insight.kind
-    Task { [dismissalRepository] in
+    // Explicit, self-free capture list: `logger` is a value type (safe to
+    // copy), so the write-through Task does not retain `self`.
+    Task { [dismissalRepository, logger] in
       do {
         _ = try await dismissalRepository.recordDismissal(of: kind)
       } catch {
@@ -294,32 +305,35 @@ final class InsightStore {
     return (input, scored)
   }
 
-  /// Consumes the shared instrument registry's change stream. Each tick
-  /// re-refreshes so conversion-dependent insights re-derive. `Task.isCancelled`
-  /// is re-checked before and after each suspension so a teardown racing a tick
-  /// exits before issuing a rebuild and promptly after a long in-flight refresh.
-  /// Mirrors `EarmarkStore`.
-  private func observeInstrumentRegistryChanges(_ changes: AsyncStream<Void>) async {
-    for await _ in changes {
-      if Task.isCancelled { return }
-      await refresh()
-      if Task.isCancelled { return }
+  /// Reconciles the in-memory fatigue table from an authoritative DB emission
+  /// and re-ranks the cached input in place (no off-main rebuild).
+  ///
+  /// Per-kind `max`-merge rather than a wholesale replace: a `dismiss(_:)`
+  /// bumps `dismissals` optimistically and write-throughs asynchronously, so
+  /// two dismisses of the same kind can race ahead of the first committed
+  /// echo. Taking the max means an in-flight optimistic bump is never
+  /// overwritten by a stale (lower) DB echo. Membership is still DB-authoritative:
+  /// kinds absent from the emission are dropped, so a remote zone wipe /
+  /// `deleteAll` clears the table.
+  ///
+  /// internal (not `private`) so the `+Observation` extension's stream-
+  /// draining child task can call it across files.
+  func applyPersistedDismissals(_ tallies: [InsightDismissal]) {
+    let dbKinds = Set(tallies.map(\.kind))
+    for tally in tallies {
+      dismissals[tally.kind] = max(dismissals[tally.kind, default: 0], tally.count)
+    }
+    dismissals = dismissals.filter { dbKinds.contains($0.key) }
+    if let lastInput {
+      insights = visible(engine.generate(lastInput, dismissals: dismissals))
     }
   }
 
-  /// Consumes the persisted-dismissal stream. Each emission rebuilds the
-  /// in-memory fatigue table from the authoritative DB state and re-ranks the
-  /// cached input in place (no off-main rebuild) so any open surface reflects
-  /// the new fatigue immediately. Re-checks cancellation around the await.
-  private func observePersistedDismissals(_ stream: AsyncStream<[InsightDismissal]>) async {
-    for await tallies in stream {
-      if Task.isCancelled { return }
-      dismissals = Dictionary(
-        uniqueKeysWithValues: tallies.map { ($0.kind, $0.count) })
-      if let lastInput {
-        insights = visible(engine.generate(lastInput, dismissals: dismissals))
-      }
-    }
+  /// Logs and surfaces an error from the dismissal observation stream.
+  /// internal (not `private`) so the `+Observation` extension can call it.
+  func surface(error: any Error) {
+    logger.error("Insight dismissal observation error: \(error)")
+    self.error = error
   }
 
 }
