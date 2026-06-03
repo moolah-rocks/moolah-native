@@ -18,8 +18,9 @@ extension UITestFixtures {
     /// Fixed narration string emitted by `ScriptedNarrator` in the
     /// `.insightsForYouBaseline` seed. Both the app-side override and the
     /// UI-test assertion reference this constant so the two sides can never
-    /// drift.
+    /// drift. Deliberately plain ASCII (no em-dash, currency, or digits) so the
+    /// XCUITest label comparison can't trip on accessibility text normalisation.
     public static let scriptedNarration =
-      "You made a large purchase at the Apple Store — $2,499 against your account."
+      "You made a large purchase at the Apple Store this week."
   }
 }
