@@ -43,9 +43,11 @@ struct WeeklyRecapScreen {
 
   // MARK: - Content
 
-  /// Reads the label of the recap prose `Text` element. Fails the test and
-  /// returns an empty string when the element is not found — the caller's
-  /// assertion will then report the mismatch clearly.
+  /// Reads the recap prose `Text` element. SwiftUI exposes the prose through
+  /// the element's `value` (it surfaces as a text view), not its `label`, so
+  /// this prefers `value` and falls back to `label`. Fails the test and returns
+  /// an empty string when the element is not found — the caller's assertion
+  /// will then report the mismatch clearly.
   func recapText() -> String {
     let textElement = app.element(for: UITestIdentifiers.WeeklyRecap.recapText)
     if !textElement.waitForExistence(timeout: 10) {
@@ -53,7 +55,24 @@ struct WeeklyRecapScreen {
       XCTFail("Weekly recap text element did not appear within 10s")
       return ""
     }
-    return textElement.label
+    let value = (textElement.value as? String) ?? ""
+    return value.isEmpty ? textElement.label : value
+  }
+
+  /// Waits for the recap prose element to render `expected` verbatim, matching
+  /// either `value` (where SwiftUI surfaces the prose) or `label`. Predicate-
+  /// waiting avoids reading the element a beat before its content is published.
+  func expectRecapText(equals expected: String) {
+    Trace.record(#function)
+    let textElement = app.element(for: UITestIdentifiers.WeeklyRecap.recapText)
+    let predicate = NSPredicate(format: "value == %@ OR label == %@", expected, expected)
+    let expectation = XCTNSPredicateExpectation(predicate: predicate, object: textElement)
+    if XCTWaiter().wait(for: [expectation], timeout: 10) != .completed {
+      let seen = (textElement.value as? String) ?? textElement.label
+      Trace.recordFailure("weeklyRecap.recapText never matched expected; last='\(seen)'")
+      XCTFail(
+        "Weekly recap text did not render the scripted output within 10s (last seen: '\(seen)')")
+    }
   }
 
   // MARK: - Actions
