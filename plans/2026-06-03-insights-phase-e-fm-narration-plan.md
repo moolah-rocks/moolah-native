@@ -1,5 +1,12 @@
 # Insights Phase E — Foundation Models narration polish (gated, additive)
 
+> **⚠️ PARTLY SUPERSEDED (2026-06-03).** E1–E4 shipped, then the user-facing
+> surfaces were reworked — see `plans/2026-06-03-insights-foryou-ai-headline-design.md`
+> and its plan. E1 availability infra and the E2 narrator stack are **reused**;
+> E3's on-tap "Why?" is replaced by an eager inline AI **headline** that
+> *replaces* the title; E4 (weekly recap) is **removed**. Read the new design for
+> authoritative scope.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add the first Foundation Models touchpoint to the app — a narration layer *on top of* the deterministic insights that already ship. Two user-visible surfaces: (1) a per-insight **"Why?"** explanation in the For You card (#32), and (2) an opt-in **weekly recap** narrative (#33). Plus the reusable **availability-gating + narrator infrastructure** every later FM feature (Phase F assistant) will build on. Strictly additive: on devices without Apple Intelligence, **nothing changes** beyond what Phase C already renders.
