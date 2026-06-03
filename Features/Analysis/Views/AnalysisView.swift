@@ -141,7 +141,7 @@ struct AnalysisView: View {
       if let insightStore = session.insightStore, !insightStore.insights.isEmpty {
         ForYouCard(
           insights: insightStore.insights,
-          onDismiss: { insightStore.dismiss($0) },
+          onDismiss: { insight in Task { await insightStore.dismiss(insight) } },
           onNavigate: onNavigate)
       }
       NetWorthGraphCard(balances: store.dailyBalances)
