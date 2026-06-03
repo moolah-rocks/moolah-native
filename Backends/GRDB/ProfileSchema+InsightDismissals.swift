@@ -22,6 +22,7 @@ extension ProfileSchema {
         CREATE TABLE insight_dismissal (
             id                     BLOB    NOT NULL PRIMARY KEY,
             record_name            TEXT    NOT NULL UNIQUE,
+            -- No CHECK: new InsightKinds from newer builds must upsert cleanly on older schemas.
             kind                   TEXT    NOT NULL UNIQUE,
             count                  INTEGER NOT NULL CHECK (count >= 0),
             encoded_system_fields  BLOB
