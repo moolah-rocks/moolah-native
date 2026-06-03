@@ -82,18 +82,20 @@ private struct InsightRow: View {
 
   private var headlineLine: some View {
     HStack(spacing: 8) {
+      // The framing icon carries the framing for VoiceOver ("Heads up"/"Good
+      // news"/"Note"), announced before the headline. Keeping the framing on
+      // the icon — rather than folding it into the headline's label — leaves
+      // the headline `Text` with no `.accessibilityLabel` override, so its raw
+      // content surfaces in `XCUIElement.value` for the UI test to match.
       Image(systemName: framingIcon)
         .foregroundStyle(framingColor)
-        .accessibilityHidden(true)
+        .accessibilityLabel(framingDescription)
       Text(item.headline)
         .font(.subheadline)
         .fontWeight(.medium)
         // Wrap rather than truncate: an AI headline is a full sentence.
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Fold the framing into the headline's own label so VoiceOver reads
-        // "Heads up: You spent…" as one element (the framing icon is hidden).
-        .accessibilityLabel("\(framingDescription): \(item.headline)")
         .accessibilityIdentifier(UITestIdentifiers.ForYou.headline(item.id))
     }
   }

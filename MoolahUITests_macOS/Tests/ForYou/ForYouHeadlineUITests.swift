@@ -4,7 +4,7 @@ import XCTest
 /// The `.insightsForYouBaseline` seed injects:
 ///
 ///   - Three deterministic fixture insights (same as `ForYouPanelUITests`).
-///   - `FixedModelAvailability(.available)` so headlines are generated.
+///   - `FixedModelAvailability(value: .available)` so headlines are generated.
 ///   - `ScriptedNarrator` that emits `UITestFixtures.InsightsForYou.scriptedNarration`
 ///     — a known constant — so no real language model is needed on CI hardware.
 ///
