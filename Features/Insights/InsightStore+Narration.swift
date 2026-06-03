@@ -23,7 +23,6 @@ extension InsightStore {
     let insight = scored.insight
     let request = NarrationRequest.singleInsight(
       title: insight.title,
-      detail: insight.detail,
       facts: insight.facts)
 
     narration[id] = .streaming("")

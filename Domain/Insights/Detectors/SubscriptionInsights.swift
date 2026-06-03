@@ -19,9 +19,6 @@ enum SubscriptionInsights {
         id: "\(InsightKind.newRecurringDetected.rawValue):\(subscription.id)",
         kind: .newRecurringDetected,
         title: "New \(subscription.period.displayName) subscription",
-        detail:
-          "\(subscription.displayPayee) looks like a recurring "
-          + "\(subscription.period.displayName) charge — about \(monthly)/month.",
         date: subscription.lastDate,
         framing: .neutral,
         actionability: .review,
@@ -59,10 +56,6 @@ enum SubscriptionInsights {
         id: "\(InsightKind.subscriptionPriceHike.rawValue):\(subscription.id)",
         kind: .subscriptionPriceHike,
         title: "\(subscription.displayPayee) went up",
-        detail:
-          "\(subscription.displayPayee) rose \(percent(increase)) — now "
-          + "\(context.formatted(subscription.latestAmount)) versus a usual "
-          + "\(context.formatted(Decimal(-priorMedian))).",
         date: subscription.lastDate,
         framing: .negative,
         actionability: .review,
@@ -110,9 +103,6 @@ enum SubscriptionInsights {
           id: "\(InsightKind.duplicateSubscription.rawValue):\(categoryId.uuidString)",
           kind: .duplicateSubscription,
           title: "Overlapping \(categoryName) subscriptions",
-          detail:
-            "You have \(clustered.count) similar \(categoryName) subscriptions "
-            + "(\(names.joined(separator: ", "))) costing about \(context.formatted(total))/month.",
           date: context.now,
           framing: .negative,
           actionability: .act,
@@ -145,10 +135,6 @@ enum SubscriptionInsights {
         id: "\(InsightKind.subscriptionCancellationCandidate.rawValue):\(subscription.id)",
         kind: .subscriptionCancellationCandidate,
         title: "Still paying for \(subscription.displayPayee)?",
-        detail:
-          "\(subscription.displayPayee) usually charges every "
-          + "\(Int(expectedGap.rounded())) days but hasn't in \(overdueDays). "
-          + "If you've stopped using it, it may be worth cancelling.",
         date: subscription.lastDate,
         framing: .neutral,
         actionability: .review,

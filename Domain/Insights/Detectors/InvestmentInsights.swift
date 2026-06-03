@@ -41,10 +41,7 @@ enum InvestmentInsights {
     return Insight(
       id: "\(InsightKind.investmentConcentrationRisk.rawValue):\(top.instrument.id)",
       kind: .investmentConcentrationRisk,
-      title: "\(top.instrument.displayLabel) is a big slice",
-      detail:
-        "\(top.instrument.displayLabel) makes up \(percent(share)) of your investments — "
-        + "a concentrated position worth keeping an eye on.",
+      title: "\(top.instrument.displayLabel) is \(percent(share)) of your investments",
       date: context.now,
       framing: .neutral,
       actionability: .review,
@@ -90,9 +87,6 @@ enum InvestmentInsights {
       id: "\(kind.rawValue):\(position.instrument.id)",
       kind: kind,
       title: isTop ? "\(label) is your top performer" : "\(label) is lagging",
-      detail:
-        "\(label) is \(isTop ? "up" : "down") \(returnText) on your investment "
-        + "(\(context.formatted(position.totalGain))).",
       date: context.now,
       framing: isTop ? .positive : .negative,
       actionability: isTop ? .informational : .review,
@@ -129,10 +123,6 @@ enum InvestmentInsights {
         "\(InsightKind.capitalGainsHarvest.rawValue):\(context.calendar.component(.year, from: context.now))",
       kind: .capitalGainsHarvest,
       title: "Possible tax-loss offset",
-      detail:
-        "You've realised \(context.formatted(realized)) in gains this period and hold "
-        + "unrealised losses (\(names)). Realising some could offset up to "
-        + "\(context.formatted(offset)) — worth reviewing with your tax situation.",
       date: context.now,
       framing: .neutral,
       actionability: .review,

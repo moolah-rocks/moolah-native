@@ -31,9 +31,6 @@ enum LiquidityInsights {
         id: "\(InsightKind.runwayEstimate.rawValue):\(monthKey(context))",
         kind: .runwayEstimate,
         title: short ? "About \(monthsText(months)) of runway" : "\(monthsText(months)) of runway",
-        detail:
-          "You're spending about \(context.formatted(burn))/month more than you earn. "
-          + "At that rate your \(context.formatted(liquid)) covers roughly \(monthsText(months)).",
         date: context.now,
         framing: short ? .negative : .neutral,
         actionability: short ? .act : .review,
@@ -72,10 +69,6 @@ enum LiquidityInsights {
         id: "\(InsightKind.idleCashAlert.rawValue):\(monthKey(context))",
         kind: .idleCashAlert,
         title: "Spare cash sitting idle",
-        detail:
-          "You're holding \(context.formatted(liquid)) — about "
-          + "\(context.formatted(excess)) more than the "
-          + "\(context.formatted(cushion)) buffer your spending needs. It could be working harder.",
         date: context.now,
         framing: .neutral,
         actionability: .act,

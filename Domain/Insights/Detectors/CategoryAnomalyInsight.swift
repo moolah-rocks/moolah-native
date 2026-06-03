@@ -79,11 +79,7 @@ enum CategoryAnomalyInsight {
       id:
         "\(InsightKind.categorySpendingAnomaly.rawValue):\(categoryId.uuidString):\(latest.month)",
       kind: .categorySpendingAnomaly,
-      title: "\(categoryName) up this month",
-      detail:
-        "\(categoryName) spend of \(context.formatted(Decimal(-latest.magnitude))) is "
-        + "\(percent(overspendFraction)) above the \(context.formatted(Decimal(-expected))) "
-        + "you'd typically expect this month.",
+      title: "\(categoryName) up \(percent(overspendFraction)) this month",
       date: latest.date,
       framing: .negative,
       actionability: .review,

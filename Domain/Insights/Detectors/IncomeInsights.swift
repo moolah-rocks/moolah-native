@@ -40,9 +40,6 @@ enum IncomeInsights {
       id: "\(InsightKind.paycheckTimingPattern.rawValue):\(stream.id)",
       kind: .paycheckTimingPattern,
       title: "Next pay around \(dateText)",
-      detail:
-        "Your \(stream.period.displayName) income from \(stream.displayPayee) "
-        + "(about \(context.formatted(stream.medianAmount))) is next expected around \(dateText).",
       date: context.now,
       framing: .neutral,
       actionability: .informational,
@@ -81,9 +78,6 @@ enum IncomeInsights {
       id: "\(InsightKind.incomeStabilityScore.rawValue):\(stream.id)",
       kind: .incomeStabilityScore,
       title: "Your income is \(descriptor)",
-      detail:
-        "Your \(stream.displayPayee) income varies by about \(percent(variation)) "
-        + "pay to pay — \(descriptor).",
       date: context.now,
       framing: score >= 0.6 ? .positive : .neutral,
       actionability: .informational,
@@ -111,9 +105,6 @@ enum IncomeInsights {
       id: "\(InsightKind.missingPaycheckAlert.rawValue):\(stream.id)",
       kind: .missingPaycheckAlert,
       title: "Expected pay hasn't arrived",
-      detail:
-        "Your \(stream.displayPayee) income (about \(context.formatted(stream.medianAmount))) "
-        + "was expected around \(expectedText) but hasn't shown up in \(overdue) days.",
       date: context.now,
       framing: .negative,
       actionability: .act,

@@ -37,9 +37,6 @@ enum IncomeExtraInsights {
         id: "\(InsightKind.windfallIncome.rawValue):\(windfall.id.uuidString)",
         kind: .windfallIncome,
         title: "Larger-than-usual deposit",
-        detail:
-          "\(context.formatted(windfall.amount)) from \(payee(windfall)) is well above your "
-          + "typical income of \(context.formatted(Decimal(typical))) — a bonus or one-off?",
         date: windfall.date,
         framing: .positive,
         actionability: .informational,
@@ -80,10 +77,6 @@ enum IncomeExtraInsights {
         id: "\(InsightKind.payRateChange.rawValue):\(stream.id)",
         kind: .payRateChange,
         title: increased ? "Your pay went up" : "Your pay dropped",
-        detail:
-          "Your \(stream.displayPayee) income changed by \(percent(abs(change))) — now about "
-          + "\(context.formatted(stream.latestAmount)) versus a usual "
-          + "\(context.formatted(Decimal(priorMedian))).",
         date: stream.lastDate,
         framing: increased ? .positive : .negative,
         actionability: .informational,

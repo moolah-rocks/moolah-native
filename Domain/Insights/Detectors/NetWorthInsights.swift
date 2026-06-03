@@ -28,9 +28,6 @@ enum NetWorthInsights {
         id: "\(InsightKind.netWorthMilestone.rawValue):\(decimalKey(crossed))",
         kind: .netWorthMilestone,
         title: "Net worth passed \(context.formatted(crossed))",
-        detail:
-          "Your net worth has crossed \(context.formatted(crossed)) — now about "
-          + "\(context.formatted(current)). Nice milestone.",
         date: latest.date,
         framing: .positive,
         actionability: .informational,

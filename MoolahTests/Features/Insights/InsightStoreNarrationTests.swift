@@ -22,7 +22,6 @@ struct InsightStoreNarrationTests {
         id: id,
         kind: .netWorthMilestone,
         title: "Net worth crossed $100k",
-        detail: "Nice work — a new high.",
         date: Date(timeIntervalSince1970: 1_700_000_000),
         framing: .positive,
         actionability: .informational,
@@ -108,8 +107,8 @@ struct InsightStoreNarrationTests {
 
     if case .fellBackToTemplate(let text) = store.narration[insight.id] {
       #expect(!text.isEmpty)
-      // Template output is the detail string for a singleInsight request.
-      #expect(text == insight.insight.detail)
+      // Template output is the title for a singleInsight request.
+      #expect(text == insight.insight.title)
     } else {
       Issue.record(
         "expected .fellBackToTemplate, got \(String(describing: store.narration[insight.id]))")

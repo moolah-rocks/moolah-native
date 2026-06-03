@@ -84,10 +84,6 @@ enum EarmarkBudgetInsights {
       id: "\(InsightKind.earmarkBurndownProjection.rawValue):\(earmark.id.uuidString)",
       kind: .earmarkBurndownProjection,
       title: "\(earmark.name) heading over budget",
-      detail:
-        "At your current pace you'll spend about \(context.formatted(Decimal(projection.projected))) "
-        + "against the \(context.formatted(budget)) \(earmark.name) budget — over by "
-        + "\(context.formatted(overBy)).",
       date: context.now,
       framing: .negative,
       actionability: .act,
@@ -108,9 +104,6 @@ enum EarmarkBudgetInsights {
       id: "\(InsightKind.earmarkUnderspend.rawValue):\(earmark.id.uuidString)",
       kind: .earmarkUnderspend,
       title: "Room to spare in \(earmark.name)",
-      detail:
-        "You're on track to come in about \(context.formatted(roomToSpare)) under your "
-        + "\(context.formatted(budget)) \(earmark.name) budget. Nicely paced.",
       date: context.now,
       framing: .positive,
       actionability: .informational,

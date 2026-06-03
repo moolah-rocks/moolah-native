@@ -57,9 +57,6 @@ enum NewMerchantInsight {
           id: "\(InsightKind.newMerchantAlert.rawValue):\(key)",
           kind: .newMerchantAlert,
           title: "First charge from \(payeeName(transaction))",
-          detail:
-            "\(context.formatted(transaction.amount)) at \(payeeName(transaction)) — a "
-            + "merchant you haven't paid before, and a sizable one.",
           date: transaction.date,
           framing: .neutral,
           actionability: .review,

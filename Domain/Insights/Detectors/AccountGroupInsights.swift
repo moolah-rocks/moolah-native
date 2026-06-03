@@ -38,10 +38,6 @@ enum AccountGroupInsights {
         id: "\(InsightKind.groupSpendConcentration.rawValue):\(group.id.uuidString)",
         kind: .groupSpendConcentration,
         title: "Most spending runs through \(group.name)",
-        detail:
-          "\(percent(share)) of your spending in the last \(windowDays) days "
-          + "(\(context.formatted(Decimal(-top.value)))) came from accounts in your "
-          + "\(group.name) group.",
         date: context.now,
         framing: .neutral,
         actionability: .informational,

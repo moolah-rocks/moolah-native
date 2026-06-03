@@ -51,10 +51,6 @@ enum LargeTransactionInsight {
           id: "\(InsightKind.largeTransactionAnomaly.rawValue):\(transaction.id.uuidString)",
           kind: .largeTransactionAnomaly,
           title: "Unusually large \(categoryName) charge",
-          detail:
-            "\(payeeName(transaction)) for \(context.formatted(transaction.amount)) is "
-            + "well above your typical \(categoryName) spend of "
-            + "\(context.formatted(Decimal(-typical))).",
           date: transaction.date,
           framing: .negative,
           actionability: .review,

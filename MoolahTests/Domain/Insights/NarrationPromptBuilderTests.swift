@@ -8,24 +8,12 @@ struct NarrationPromptBuilderTests {
   func perInsightPromptContainsOnlySuppliedFacts() {
     let req = NarrationRequest.singleInsight(
       title: "Dining is up this month",
-      detail: "Dining hit $640.00, above your $410.00 median.",
       facts: [InsightFact("This month", "$640.00"), InsightFact("6-mo median", "$410.00")])
     let built = NarrationPromptBuilder.build(req)
     #expect(built.prompt.contains("$640.00"))
     #expect(built.prompt.contains("6-mo median"))
     #expect(built.prompt.contains("Dining is up this month"))
     #expect(built.instructions.localizedCaseInsensitiveContains("do not invent"))
-  }
-
-  @Test
-  func perInsightPromptContainsDetailDraft() {
-    let detail = "Dining hit $640.00, above your usual $410.00."
-    let req = NarrationRequest.singleInsight(
-      title: "Dining is up this month",
-      detail: detail,
-      facts: [InsightFact("This month", "$640.00"), InsightFact("6-mo median", "$410.00")])
-    let built = NarrationPromptBuilder.build(req)
-    #expect(built.prompt.contains("Draft: \(detail)"))
   }
 
   @Test
@@ -37,7 +25,6 @@ struct NarrationPromptBuilderTests {
     ]
     let req = NarrationRequest.singleInsight(
       title: "Dining is up",
-      detail: "Dining is up $230.00 on last month.",
       facts: facts)
     let built = NarrationPromptBuilder.build(req)
     for fact in facts {
@@ -50,7 +37,6 @@ struct NarrationPromptBuilderTests {
   func instructionsForbidInventingNumbers() {
     let req = NarrationRequest.singleInsight(
       title: "Test",
-      detail: "Something happened.",
       facts: [InsightFact("Amount", "$100.00")])
     let built = NarrationPromptBuilder.build(req)
     #expect(built.instructions.localizedCaseInsensitiveContains("do not invent"))
@@ -61,7 +47,6 @@ struct NarrationPromptBuilderTests {
   func instructionsRequireOmittingStatisticalFacts() {
     let req = NarrationRequest.singleInsight(
       title: "Test",
-      detail: "Something happened.",
       facts: [InsightFact("Amount", "$100.00")])
     let built = NarrationPromptBuilder.build(req)
     #expect(
@@ -73,7 +58,6 @@ struct NarrationPromptBuilderTests {
   func instructionsEncourageContractions() {
     let req = NarrationRequest.singleInsight(
       title: "Test",
-      detail: "Something happened.",
       facts: [InsightFact("Amount", "$100.00")])
     let built = NarrationPromptBuilder.build(req)
     #expect(built.instructions.contains("contractions") || built.instructions.contains("you've"))
@@ -82,7 +66,7 @@ struct NarrationPromptBuilderTests {
   @Test
   func singleInsightAllFactsReturnsItsOwnFacts() {
     let facts = [InsightFact("Label", "42")]
-    let req = NarrationRequest.singleInsight(title: "T", detail: "D.", facts: facts)
+    let req = NarrationRequest.singleInsight(title: "T", facts: facts)
     #expect(req.allFacts == facts)
   }
 }

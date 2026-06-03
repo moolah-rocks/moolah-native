@@ -31,9 +31,6 @@ enum SavingsOpportunityInsights {
           "\(InsightKind.feeSpend.rawValue):\(FinancialMonth.key(for: context.now, monthEnd: context.financialMonthEnd))",
         kind: .feeSpend,
         title: "You paid \(context.formatted(total)) in fees",
-        detail:
-          "Over the past year you've paid about \(context.formatted(total)) "
-          + "in fees and charges across \(legCount) transactions. Many of these are avoidable.",
         date: context.now,
         framing: .negative,
         actionability: .review,
@@ -68,10 +65,6 @@ enum SavingsOpportunityInsights {
           "\(InsightKind.subscriptionOverspend.rawValue):\(FinancialMonth.key(for: context.now, monthEnd: context.financialMonthEnd))",
         kind: .subscriptionOverspend,
         title: "Subscriptions are \(percent(share)) of income",
-        detail:
-          "Your \(expenseStreams.count) subscriptions cost about "
-          + "\(context.formatted(monthlyTotal))/month — \(percent(share)) of your income. "
-          + "Trimming a few could free up real cash.",
         date: context.now,
         framing: .negative,
         actionability: .review,

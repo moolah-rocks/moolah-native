@@ -64,7 +64,6 @@ enum SavingsGoalInsight {
       id: "\(InsightKind.savingsGoalETA.rawValue):reached:\(earmark.id.uuidString)",
       kind: .savingsGoalETA,
       title: "\(earmark.name) goal reached 🎉",
-      detail: "You've hit your \(context.formatted(goal)) \(earmark.name) goal. Well done.",
       date: context.now,
       framing: .positive,
       actionability: .informational,
@@ -90,9 +89,6 @@ enum SavingsGoalInsight {
       id: "\(InsightKind.savingsGoalETA.rawValue):eta:\(earmark.id.uuidString)",
       kind: .savingsGoalETA,
       title: "\(earmark.name): on track for \(etaText)",
-      detail:
-        "You've saved \(context.formatted(saved)) of \(context.formatted(goal)) "
-        + "(\(percent(progress))). At your current pace you'll get there around \(etaText).",
       date: context.now,
       framing: .positive,
       actionability: .informational,
@@ -120,9 +116,6 @@ enum SavingsGoalInsight {
       id: "\(InsightKind.savingsGoalETA.rawValue):progress:\(earmark.id.uuidString)",
       kind: .savingsGoalETA,
       title: "\(earmark.name) is \(percent(progress)) of the way there",
-      detail:
-        "You've saved \(context.formatted(saved)) toward your "
-        + "\(context.formatted(goal)) \(earmark.name) goal.",
       date: context.now,
       framing: .positive,
       actionability: .informational,

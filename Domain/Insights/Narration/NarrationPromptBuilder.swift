@@ -18,10 +18,10 @@ enum NarrationPromptBuilder {
   /// to narrate).
   static func build(_ request: NarrationRequest) -> (instructions: String, prompt: String) {
     switch request {
-    case let .singleInsight(title, detail, facts):
+    case let .singleInsight(title, facts):
       return (
         instructions: singleInsightInstructions,
-        prompt: singleInsightPrompt(title: title, detail: detail, facts: facts)
+        prompt: singleInsightPrompt(title: title, facts: facts)
       )
     }
   }
@@ -50,11 +50,10 @@ extension NarrationPromptBuilder {
     • Address the user as "you" or "your".
     """
 
-  private static func singleInsightPrompt(title: String, detail: String, facts: [InsightFact])
+  private static func singleInsightPrompt(title: String, facts: [InsightFact])
     -> String
   {
     var lines = ["Insight: \(title)"]
-    lines.append("Draft: \(detail)")
     if !facts.isEmpty {
       lines.append("Facts (numbers only — do not repeat labels):")
       for fact in facts {
