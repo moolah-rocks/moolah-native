@@ -341,4 +341,33 @@ extension ProfileSession {
     )
   }
 
+  // MARK: - Insight narrator
+
+  /// Selects the narrator injected into `InsightStore` at launch.
+  ///
+  /// Precedence (both conditions must be true to use the real model):
+  /// 1. The `insightsNarrationEnabled` kill-switch in `UserDefaults.moolahShared`
+  ///    is on. An **absent** key is treated as `true` (the default is on), so
+  ///    first-launch users get the feature without an explicit opt-in write.
+  ///    `UserDefaults.bool(forKey:)` returns `false` for absent keys, so we
+  ///    check `object(forKey:) == nil` first to distinguish "absent" from "off".
+  /// 2. `SystemLanguageModelAvailability` reports `.available` at launch time.
+  ///    The store still gates individual narration calls on `currentAvailability`,
+  ///    so a runtime availability flip is honoured even if this check passed.
+  ///
+  /// When either condition fails, `TemplateNarrator` is used — the store will
+  /// not surface narration while the model is unavailable, but the kill-switch
+  /// must also be honoured at construction time so toggling the switch off and
+  /// relaunching truly stops FM narration.
+  @MainActor
+  static func makeInsightNarrator() -> any InsightNarrating {
+    let defaults = UserDefaults.moolahShared
+    let narrationKey = "insightsNarrationEnabled"
+    let killSwitchOn =
+      defaults.object(forKey: narrationKey) == nil ? true : defaults.bool(forKey: narrationKey)
+    guard killSwitchOn else { return TemplateNarrator() }
+    guard SystemLanguageModelAvailability().current().isUsable else { return TemplateNarrator() }
+    return FoundationModelsNarrator()
+  }
+
 }
