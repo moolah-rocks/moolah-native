@@ -13,6 +13,15 @@ extension UserDefaults {
   /// so concurrent access is sound.
   nonisolated(unsafe) static let moolahShared: UserDefaults = makeSharedSuite(for: .resolved())
 
+  // MARK: - Key constants
+
+  /// Kill-switch for the on-device narration feature. Absent key is treated as
+  /// `true` (default on) — check `object(forKey:) == nil` before reading to
+  /// distinguish "absent" from "explicitly off".
+  static let insightsNarrationEnabledKey = "insightsNarrationEnabled"
+
+  // MARK: - Factory
+
   /// Factory used by `moolahShared`. Exposed so tests can verify the
   /// suite-name format for both environments without process-level
   /// Info.plist swapping. Mirrors the `CloudKitEnvironment.resolve(from:)`

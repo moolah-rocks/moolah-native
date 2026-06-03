@@ -362,7 +362,7 @@ extension ProfileSession {
   @MainActor
   static func makeInsightNarrator() -> any InsightNarrating {
     let defaults = UserDefaults.moolahShared
-    let narrationKey = "insightsNarrationEnabled"
+    let narrationKey = UserDefaults.insightsNarrationEnabledKey
     let killSwitchOn =
       defaults.object(forKey: narrationKey) == nil ? true : defaults.bool(forKey: narrationKey)
     guard killSwitchOn else { return TemplateNarrator() }

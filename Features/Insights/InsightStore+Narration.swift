@@ -5,11 +5,11 @@ import Foundation
 extension InsightStore {
   /// Lazily narrates the given insight into prose. If the model is not usable,
   /// or if narration for this insight is already in progress or cached, this
-  /// is a no-op. Streams partial output through `narration[id]` so the view
-  /// can render progressive text; on completion, stores `.done`. On any error
-  /// (including `NarrationError.fellBack`) falls back to the template narrator
-  /// and stores `.fellBackToTemplate` (issue #1042).
-  func narrate(_ scored: ScoredInsight) async {
+  /// is a no-op. Immediately sets `.streaming("")` and spawns a background task;
+  /// the view observes `narration[id]` for progressive updates. On completion
+  /// stores `.done`; on any error (including `NarrationError.fellBack`) falls
+  /// back to the template narrator and stores `.fellBackToTemplate` (issue #1042).
+  func narrate(_ scored: ScoredInsight) {
     let id = scored.id
     guard currentAvailability.isUsable else { return }
     // Cache hit: streaming, done, or template fallback already exist.
@@ -28,17 +28,17 @@ extension InsightStore {
 
     narration[id] = .streaming("")
 
-    let task = Task { [weak self] in
-      guard let self else { return }
+    let task = Task { [self] in
       await consumeNarration(id: id, request: request)
     }
     narrationTasks[id] = task
-    await task.value
   }
 
   /// Cancels any in-flight narration task for `id` and resets its state to
-  /// `.idle`. Idempotent — safe to call when no task is running.
+  /// `.idle`. No-op when no task is in flight — does not wipe a cached
+  /// `.done` or `.fellBackToTemplate` result.
   func cancelNarration(_ id: String) {
+    guard narrationTasks[id] != nil else { return }
     narrationTasks[id]?.cancel()
     narrationTasks.removeValue(forKey: id)
     narration[id] = .idle
@@ -48,23 +48,34 @@ extension InsightStore {
   /// On clean completion stores `.done`; on any error computes the template
   /// fallback and stores `.fellBackToTemplate`.
   private func consumeNarration(id: String, request: NarrationRequest) async {
+    defer { narrationTasks.removeValue(forKey: id) }
     var latestSnapshot = ""
     do {
       for try await snapshot in narrator.narrate(request) {
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled else {
+          narration[id] = .idle
+          return
+        }
         latestSnapshot = snapshot
         narration[id] = .streaming(snapshot)
       }
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled else {
+        narration[id] = .idle
+        return
+      }
       narration[id] = .done(latestSnapshot)
     } catch {
-      guard !Task.isCancelled else { return }
+      guard !Task.isCancelled else {
+        narration[id] = .idle
+        return
+      }
+      // Log the original error before falling back so diagnostics are preserved.
+      logger.error("Narration failed for insight \(id): \(error)")
       // Any error (including NarrationError.fellBack) triggers the deterministic
       // template fallback so the user always sees something useful.
       let fallback = await templateFallback(for: request)
       narration[id] = .fellBackToTemplate(fallback)
     }
-    narrationTasks.removeValue(forKey: id)
   }
 
   /// Produces the template narrator's output for `request` by consuming its

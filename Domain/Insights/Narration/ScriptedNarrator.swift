@@ -5,11 +5,13 @@ import Foundation
   /// finishes cleanly. Used in unit tests and UI-test seeds so narration
   /// state transitions are deterministic without a real language model
   /// (issue #1042).
-  struct ScriptedNarrator: InsightNarrating {
+  struct ScriptedNarrator {
     /// Snapshots to emit in order. The last element is treated as the
     /// complete narration text (the stream finishes after emitting it).
     let snapshots: [String]
+  }
 
+  extension ScriptedNarrator: InsightNarrating {
     nonisolated func narrate(_ request: NarrationRequest) -> AsyncThrowingStream<String, any Error>
     {
       let snapshots = self.snapshots

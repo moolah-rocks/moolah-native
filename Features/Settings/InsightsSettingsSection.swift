@@ -10,7 +10,11 @@ import SwiftUI
 /// toggle is opt-in (default off); the narration master switch defaults on
 /// (only shown when the device is eligible).
 struct InsightsSettingsSection: View {
-  @AppStorage("insightsNarrationEnabled", store: .moolahShared) private var narrationEnabled = true
+  // `@AppStorage` requires a string literal, so the constant from
+  // `UserDefaults.insightsNarrationEnabledKey` is aliased here to satisfy
+  // swift-format's line-length limit without duplicating the raw string.
+  private static let narrationKey = UserDefaults.insightsNarrationEnabledKey
+  @AppStorage(narrationKey, store: .moolahShared) private var narrationEnabled = true
   @AppStorage("weeklyRecapEnabled", store: .moolahShared) private var recapEnabled = false
 
   var body: some View {

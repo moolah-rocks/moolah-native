@@ -53,6 +53,7 @@ private struct InsightRow: View {
   let onCancelNarrate: () -> Void
 
   @State private var isExpanded = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   private var insight: Insight { scored.insight }
   private var target: SidebarSelection? {
@@ -77,7 +78,7 @@ private struct InsightRow: View {
   /// expand gesture, and keeps dismiss independently reachable by VoiceOver.
   private var expandToggle: some View {
     Button {
-      withAnimation(.snappy) { isExpanded.toggle() }
+      withAnimation(reduceMotion ? nil : .snappy) { isExpanded.toggle() }
     } label: {
       HStack(spacing: 8) {
         Image(systemName: framingIcon)
@@ -115,6 +116,9 @@ private struct InsightRow: View {
     }
     .buttonStyle(.borderless)
     .foregroundStyle(.secondary)
+    #if os(iOS)
+      .frame(minWidth: 44, minHeight: 44)
+    #endif
     .help("Dismiss this insight")
     .accessibilityLabel("Dismiss \(insight.title)")
     .accessibilityIdentifier(UITestIdentifiers.ForYou.dismissButton(insight.id))
@@ -162,17 +166,22 @@ private struct InsightRow: View {
       Button("Why?") { onNarrate() }
         .buttonStyle(.borderless)
         .accessibilityLabel("Why? — explain \(insight.title)")
+        .accessibilityHint("Generates a plain-language explanation on your device")
         .accessibilityIdentifier(UITestIdentifiers.ForYou.whyButton(insight.id))
     case .streaming(let partial):
       VStack(alignment: .leading, spacing: 4) {
         Text(partial)
           .font(.callout)
           .foregroundStyle(.secondary)
+          .accessibilityAddTraits(.updatesFrequently)
           .accessibilityIdentifier(UITestIdentifiers.ForYou.narrationText(insight.id))
-        ProgressView()
-          .scaleEffect(0.6)
-          .frame(height: 16)
-          .accessibilityLabel("Generating explanation…")
+        HStack(spacing: 8) {
+          ProgressView()
+            .controlSize(.small)
+            .accessibilityLabel("Generating explanation…")
+          Button("Cancel") { onCancelNarrate() }
+            .buttonStyle(.borderless)
+        }
       }
     case .done(let text), .fellBackToTemplate(let text):
       Text(text)
@@ -271,13 +280,34 @@ private struct InsightRow: View {
     }
   }
 
-  #Preview {
+  #Preview("Collapsed rows") {
     ForYouCard(
       insights: .forYouPreviewFixtures,
       availability: .available,
       narration: [
         "p-large": .streaming("You spent a lot at the Apple Store…"),
         "p-netflix": .done("Netflix raised its monthly price by $3.00, up from $19.99 to $22.99."),
+      ],
+      onDismiss: { _ in },
+      onNavigate: { _ in },
+      onNarrate: { _ in },
+      onCancelNarrate: { _ in }
+    )
+    .padding()
+    .frame(width: 420)
+  }
+
+  /// Shows narration affordance states (streaming + done + fallback) in the
+  /// full card with all narration states wired so expanding any row reveals them.
+  #Preview("Expanded narration states") {
+    ForYouCard(
+      insights: .forYouPreviewFixtures,
+      availability: .available,
+      narration: [
+        "p-large": .streaming("You spent a lot at the Apple Store this month…"),
+        "p-netflix": .done(
+          "Netflix raised its monthly price by $3.00, up from $19.99 to $22.99."),
+        "p-milestone": .fellBackToTemplate("Net worth crossed $100k — a new high."),
       ],
       onDismiss: { _ in },
       onNavigate: { _ in },

@@ -9,7 +9,9 @@ import Foundation
 ///    generation call fails (provenance check rejected, model error, etc.).
 /// 2. **CI fake / test double** — injected in tests and previews so no real
 ///    model is required.
-struct TemplateNarrator: InsightNarrating {
+struct TemplateNarrator {}
+
+extension TemplateNarrator: InsightNarrating {
   nonisolated func narrate(_ request: NarrationRequest) -> AsyncThrowingStream<String, any Error> {
     let text = compose(request)
     return AsyncThrowingStream { continuation in
