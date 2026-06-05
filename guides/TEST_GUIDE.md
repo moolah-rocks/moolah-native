@@ -112,7 +112,7 @@ Production code paths and test code paths must be the same paths. The exceptions
 
 **Why.** The point of a test is to verify the production behaviour. Once the production code branches on "am I being tested?", the test no longer covers the production path — it covers the test-only path, and the production path becomes silently uncovered. Bugs hide in the gap. Worse: every future reader of the production code has to reason about the test branch, even though it never executes in production.
 
-The rule of thumb: if a reader of production code cannot tell whether a branch is dead in production, the branch is dead in production. Move the variation to the dependency-injection seam instead. `BackendProvider` exists for exactly this — `TestBackend` swaps in `CloudKitBackend` on an in-memory `ModelContainer`, which is the production code path with the disk taken away.
+The rule of thumb: if a reader of production code cannot tell whether a branch is dead in production, the branch is dead in production. Move the variation to the dependency-injection seam instead. `BackendProvider` exists for exactly this — `TestBackend` swaps in `CloudKitBackend` on an in-memory GRDB database, which is the production code path with the disk taken away.
 
 ---
 
@@ -169,7 +169,7 @@ This convention is also documented in `CLAUDE.md` and the Capturing Test Output 
 | `MoolahBenchmarks` | Performance benchmarks on macOS only | `TestBackend` |
 | `MoolahUITests_macOS` | XCUITest end-to-end tests on macOS only | App launched with `--ui-testing` + seeded `TestBackend` |
 
-Every test target uses `TestBackend` — the production `CloudKitBackend` initialised against an in-memory `ModelContainer`. No mocks at the repository layer. UI tests additionally seed the backend through fixed-UUID fixtures.
+Every test target uses `TestBackend` — the production `CloudKitBackend` initialised against an in-memory GRDB database. No mocks at the repository layer. UI tests additionally seed the backend through fixed-UUID fixtures.
 
 `just` targets are the only supported entry point:
 

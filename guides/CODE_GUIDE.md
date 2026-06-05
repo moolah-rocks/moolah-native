@@ -564,7 +564,7 @@ See `plans/2026-04-23-todo-reference-enforcement-design.md` for the full design.
 
 - **Ordering is automatic.** `swift-format`'s [`OrderedImports`](https://github.com/apple/swift-format/blob/main/Documentation/Configuration.md) rule handles grouping and sort order. Don't hand-edit import order.
 - **Purpose rule.** Imports announce architectural boundaries:
-  - `Domain/` files import **nothing** from `SwiftUI`, `SwiftData`, `URLSession`, or `Backends/`. The domain layer is pure.
+  - `Domain/` files import **nothing** from `SwiftUI`, `GRDB`, `URLSession`, or `Backends/`. The domain layer is pure.
   - `Features/` files **never** import backend-specific modules or reference `Remote*` / `CloudKit*` types directly — they go through `BackendProvider`.
 - **Unused imports get flagged.** SwiftLint's [`unused_import`](https://realm.github.io/SwiftLint/unused_import.html) rule catches this; prune stale imports on review.
 

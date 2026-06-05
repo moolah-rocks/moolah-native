@@ -18,9 +18,9 @@ The coordinator receives all `CKSyncEngine` delegate events and dispatches them 
 - `Backends/CloudKit/Sync/SyncCoordinator.swift` -- single CKSyncEngine owner; routes events by zone ID
 - `Backends/CloudKit/Sync/ProfileDataSyncHandler.swift` -- per-profile zone handler
 - `Backends/CloudKit/Sync/ProfileIndexSyncHandler.swift` -- profile index zone handler
-- `Backends/CloudKit/Sync/RecordMapping.swift` -- CKRecord <-> SwiftData bidirectional mapping
+- `Backends/GRDB/Records/*Row+Mapping.swift` and `Backends/GRDB/Sync/*Row+CloudKit.swift` -- CKRecord <-> GRDB row bidirectional mapping
 - `Backends/CloudKit/Sync/LegacyZoneCleanup.swift` -- one-time cleanup of old automatic sync zone
-- `Backends/CloudKit/Repositories/CloudKit*Repository.swift` -- repositories with sync closures
+- `Backends/GRDB/Repositories/GRDB*Repository.swift` -- repositories with sync closures
 
 **Key Sources:**
 - [WWDC23: Sync to iCloud with CKSyncEngine](https://developer.apple.com/videos/play/wwdc2023/10188/)
@@ -99,18 +99,21 @@ let inserted = notification.userInfo?[NSInsertedObjectsKey] as? Set<NSManagedObj
 **Rule:** Sync changes are queued explicitly from repository mutation methods via `onRecordChanged`/`onRecordDeleted` closures, not from save notifications. This ensures only user-initiated mutations trigger uploads. Derived-data writes, balance cache updates, and remote change application never trigger uploads because they don't go through the repository mutation path.
 
 ```swift
-// In a CloudKit repository mutation method:
+// In a GRDB repository mutation method:
 func create(_ account: Account) async throws -> Account {
-    // ... save to SwiftData ...
-    try context.save()
-    onRecordChanged(account.id)  // Explicitly queue for sync
+    try await database.write { db in
+        try AccountRow(domain: account).insert(db)
+    }
+    onRecordChanged(AccountRow.recordType, account.id)  // Explicitly queue for sync
     return account
 }
 
 // Derived-data updates do NOT call onRecordChanged:
-func recomputeAllBalances(records: [AccountRecord]) throws {
-    // ... update cachedBalance on records ...
-    try context.save()  // No sync queueing — cachedBalance is local-only
+func recomputeAllBalances() async throws {
+    try await database.write { db in
+        // ... update cachedBalance columns ...
+        // No sync queueing — cachedBalance is local-only.
+    }
 }
 ```
 
@@ -153,7 +156,7 @@ func ensureZoneExists() async {
 
 ### Rule 4b: Queue Existing Records on First Start
 
-**Bug found:** Migration imports data into a profile's ModelContainer BEFORE the ProfileSyncEngine is created. The repository sync closures are not wired during import, so none of the imported records are queued for upload.
+**Bug found:** Migration imports data into a profile's GRDB database BEFORE the ProfileSyncEngine is created. The repository sync closures are not wired during import, so none of the imported records are queued for upload.
 
 **Rule:** When a sync engine starts with no saved state (`loadStateSerialization()` returns nil), scan all existing records in the local store and queue them for upload. This also serves as a recovery mechanism for account sign-in, encrypted data reset, and sync state loss.
 
@@ -165,33 +168,6 @@ func start() {
     if !hasSavedState {
         queueAllExistingRecords()  // Scan and queue all local records
     }
-}
-```
-
-### Rule 4c: No Generics or KVC with SwiftData Models
-
-**Crashes found (twice):**
-1. `#Predicate` with generic type parameters crashes at runtime -- the keypath can't resolve to a concrete Core Data attribute.
-2. `value(forKey: "id")` (KVC) on `PersistentModel` triggers `doesNotRecognizeSelector` -- SwiftData models don't support arbitrary KVC.
-
-**Rule:** Always use concrete `FetchDescriptor<SpecificRecord>` types and access properties directly. Never use generic functions that pass SwiftData model types as type parameters to `#Predicate` or KVC.
-
-```swift
-// CORRECT: Concrete fetch per type
-if let records = try? context.fetch(FetchDescriptor<AccountRecord>()) {
-    for r in records { queuePendingSave(for: r.id) }
-}
-
-// WRONG: Generic function with KVC -- crashes at runtime
-func queueAll<T: PersistentModel>(_ type: T.Type) {
-    let records = try? context.fetch(FetchDescriptor<T>())
-    for r in records { (r as AnyObject).value(forKey: "id") }  // CRASH
-}
-
-// WRONG: Generic #Predicate -- crashes at runtime
-func fetch<T: PersistentModel>(id: UUID) -> T? {
-    let descriptor = FetchDescriptor<T>(predicate: #Predicate { $0.id == id })  // CRASH
-    return try? context.fetch(descriptor).first
 }
 ```
 
@@ -425,7 +401,7 @@ record["type"] = "expense" as CKRecordValue
 record["type"] = TransactionType.expense.rawValue as CKRecordValue
 ```
 
-This project already follows this pattern in `RecordMapping.swift`.
+This project already follows this pattern in the `*Row+Mapping.swift` extensions under `Backends/GRDB/Records/`.
 
 ### Rule 12: Deduplicate Record IDs in Batches
 
@@ -498,13 +474,14 @@ Phantom pending changes accumulate in `.syncstate` files and persist across laun
 
 ### CloudKitRecordConvertible Protocol
 
-All syncable SwiftData records conform to `CloudKitRecordConvertible`:
+All syncable GRDB row types conform to `CloudKitRecordConvertible`:
 
 ```swift
 protocol CloudKitRecordConvertible {
     static var recordType: String { get }
     func toCKRecord(in zoneID: CKRecordZone.ID) -> CKRecord
-    static func fieldValues(from ckRecord: CKRecord) -> Self
+    // Returns nil when the CKRecord carries no valid identifier for this type.
+    static func fieldValues(from ckRecord: CKRecord) -> Self?
 }
 ```
 
@@ -518,10 +495,10 @@ protocol CloudKitRecordConvertible {
 
 ### Adding a New Syncable Record Type
 
-1. Create the SwiftData `@Model` class.
-2. Add `CloudKitRecordConvertible` conformance in `RecordMapping.swift`.
+1. Create the GRDB row struct (a `Codable` `FetchableRecord`/`PersistableRecord`) and its table migration.
+2. Add `CloudKitRecordConvertible` conformance in a `Backends/GRDB/Records/<Entity>Row+Mapping.swift` (or `Backends/GRDB/Sync/<Entity>Row+CloudKit.swift`) extension.
 3. Add the record type to `RecordTypeRegistry.allTypes`.
-4. Add `onRecordChanged`/`onRecordDeleted` closure calls to every mutation method in the CloudKit repository.
+4. Add `onRecordChanged`/`onRecordDeleted` closure calls to every mutation method in the GRDB repository.
 5. Add upsert and fetch methods to `ProfileDataSyncHandler`.
 6. Add cases to `applyRemoteSave` and `applyRemoteDeletion` switch statements.
 7. Add the new record type to `queueAllExistingRecords()` in `ProfileDataSyncHandler`.
@@ -562,20 +539,21 @@ Test the sync layer separately from the persistence layer:
 
 | Layer | What to Test | How |
 |-------|-------------|-----|
-| SwiftData repositories | CRUD, filtering, sorting | `TestBackend` with in-memory SwiftData |
-| Record mapping | CKRecord <-> SwiftData conversion | Unit tests, no CloudKit |
+| GRDB repositories | CRUD, filtering, sorting | `TestBackend` with in-memory GRDB |
+| Record mapping | CKRecord <-> GRDB row conversion | Unit tests, no CloudKit |
 | Repository sync closures | Correct records queued on mutations | Mock closure that records calls |
 | Sync engine delegate | Event handling, error recovery | `automaticallySync: false` or protocol abstraction |
 
 ### Testing Record Mapping
 
 ```swift
-func testAccountRecordRoundTrip() {
-    let original = AccountRecord(id: UUID(), name: "Checking", type: "bank", ...)
+func testAccountRowRoundTrip() throws {
+    let original = AccountRow(
+        domain: Account(id: UUID(), name: "Checking", type: .bank, instrument: .AUD))
     let ckRecord = original.toCKRecord(in: testZoneID)
-    let restored = AccountRecord.fieldValues(from: ckRecord)
+    let restored = try #require(AccountRow.fieldValues(from: ckRecord))
+    #expect(restored.id == original.id)
     #expect(restored.name == original.name)
-    #expect(restored.type == original.type)
 }
 ```
 
@@ -655,7 +633,7 @@ All sync components use `os.Logger` with the `com.moolah.app` subsystem. Filter 
 | Duplicate records across devices | Record names not derived from stable UUIDs | Check `CKRecord.ID` construction (Rule 10) |
 | Sync works once then stops | State serialization not being saved, or records silently dropped | Check `.stateUpdate` handler; check `default` case re-queues (Rule 9) |
 | `.serverRecordChanged` on every upload | Not preserving CKRecord system fields | Check `toCKRecord` implementation (Rule 5) |
-| App jittery during bulk sync | `nextRecordZoneChangeBatch` runs on main actor | Move record lookup to background ModelContext (planned optimization) |
+| App jittery during bulk sync | `nextRecordZoneChangeBatch` runs on main actor | Move record lookup to a background GRDB read (planned optimization) |
 
 ### CloudKit Dashboard
 
@@ -818,9 +796,9 @@ the **test** container (`CLOUDKIT_CONTAINER_ID_TEST`).
 
 ### For Every New Syncable Record Type
 
-- [ ] Add `CloudKitRecordConvertible` conformance in `RecordMapping.swift`
+- [ ] Add `CloudKitRecordConvertible` conformance in a `Backends/GRDB/Records/<Entity>Row+Mapping.swift` (or `Backends/GRDB/Sync/<Entity>Row+CloudKit.swift`) extension
 - [ ] Add to `RecordTypeRegistry.allTypes`
-- [ ] Add `onRecordChanged`/`onRecordDeleted` calls to every mutation method in the CloudKit repository
+- [ ] Add `onRecordChanged`/`onRecordDeleted` calls to every mutation method in the GRDB repository
 - [ ] Add upsert/fetch methods to `ProfileDataSyncHandler`
 - [ ] Add cases to `applyRemoteSave` and `applyRemoteDeletion`
 - [ ] Add the record type to `queueAllExistingRecords()` in `ProfileDataSyncHandler`

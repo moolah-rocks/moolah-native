@@ -76,7 +76,7 @@ struct Transaction: Identifiable, Codable, Sendable, Hashable {
 
 **Rules:**
 - Domain models must never contain reference types, closures, or mutable shared state
-- Domain models must never import SwiftUI, SwiftData, or backend modules
+- Domain models must never import SwiftUI, GRDB, or backend modules
 - If a model needs computed properties for display, add them as extensions in the appropriate layer
 
 ### Repository Protocols: `Sendable`
@@ -109,15 +109,15 @@ struct RemoteAccountRepository: AccountRepository, Sendable {
 }
 ```
 
-### TestBackend: CloudKitBackend with In-Memory SwiftData
+### TestBackend: CloudKitBackend with In-Memory GRDB
 
-Tests and previews use `CloudKitBackend` backed by an in-memory `ModelContainer` (via `TestBackend.create()` in tests and `PreviewBackend.create()` in previews). This runs the same production code path but with no persistent storage or CloudKit sync. The `CloudKitBackend` uses `@unchecked Sendable` because its repositories store a shared `ModelContainer` reference. This is acceptable because all repository methods use `@MainActor` isolation for SwiftData access.
+Tests and previews use `CloudKitBackend` backed by an in-memory GRDB database (via `TestBackend.create()` in tests and `PreviewBackend.create()` in previews). This runs the same production code path but with no persistent storage or CloudKit sync. The `CloudKitBackend` uses `@unchecked Sendable` because it stores a shared `database: any DatabaseWriter` (the GRDB queue) plus immutable repository references. This is acceptable because the `DatabaseWriter` is itself `Sendable` and the queue's serial executor mediates concurrent access (see Carve-out 3 for the repositories it owns).
 
 ### False Positives to Avoid
 
 `@unchecked Sendable` is a sharp knife — every use waives a compiler check, so each occurrence must be justified in writing on the type itself and listed here. The carve-outs below are the only places `@unchecked Sendable` is allowed in this codebase. Anything outside this list must be a real `Sendable` (value type, immutable `final class`, or `actor`).
 
-**Carve-out 1 — `CloudKitBackend` and its SwiftData-backed repositories.** Repositories under `Backends/CloudKit/Repositories/` store a shared `ModelContainer` reference but only read/write SwiftData on `@MainActor`. The container reference itself never mutates after init. Justification documented above.
+**Carve-out 1 — `CloudKitBackend`.** `Backends/CloudKit/CloudKitBackend.swift` is a `final class` declared `@unchecked Sendable` because every stored property is a `let` — the injected repository references plus the shared `database: any DatabaseWriter` (itself `Sendable` per GRDB's protocol guarantee). None mutate after init. The GRDB repositories it owns are covered by Carve-out 3.
 
 **Carve-out 2 — `SyncCoordinator.PreparedEngine` (one-way ownership transfer).** `Backends/CloudKit/Sync/SyncCoordinator.swift` defines `PreparedEngine` as a `struct` with `@unchecked Sendable` so a `CKSyncEngine` (which CloudKit does not declare `Sendable`) can be constructed on a background `Task` and handed to `@MainActor` via the task's return value. The constraint is **one-way ownership transfer only — no concurrent readers**: the background task constructs the engine, returns the struct, and never touches it again; the receiving `MainActor` then owns the engine for the rest of its life. The `Task.value` happens-before edge is what makes the transfer safe; the `@unchecked` only waives Swift's structural check that `CKSyncEngine` conforms to `Sendable`. Anything that would let two threads observe the same `PreparedEngine.engine` concurrently invalidates this carve-out — keep the struct internal to the prepare/complete-start handoff.
 
@@ -639,7 +639,7 @@ final class AccountStoreTests: XCTestCase {
 
 ### Use `TestBackend`, Not Mocks
 
-Tests use `TestBackend` which creates a `CloudKitBackend` backed by an in-memory `ModelContainer`. This is fast (no I/O), deterministic (no network), and tests real production code paths (not mocked interfaces).
+Tests use `TestBackend` which creates a `CloudKitBackend` backed by an in-memory GRDB database. This is fast (no I/O), deterministic (no network), and tests real production code paths (not mocked interfaces).
 
 ### Remote Backend Tests Use URLProtocol Stubs
 

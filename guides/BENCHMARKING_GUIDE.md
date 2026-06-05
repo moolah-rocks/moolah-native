@@ -33,7 +33,7 @@ rm .agent-tmp/benchmark-output.txt
 
 **Always pipe output to a file** in `.agent-tmp/` so you can inspect results without re-running. Benchmarks take minutes — don't waste time re-running just to re-read output.
 
-Benchmarks run on macOS only (no simulator overhead). They use in-memory SwiftData via `TestBackend`, so they measure computation and SwiftData query cost — not disk I/O.
+Benchmarks run on macOS only (no simulator overhead). They use an in-memory GRDB database via `TestBackend`, so they measure computation and SQLite query cost — not disk I/O.
 
 ## When to Write a Benchmark
 
@@ -58,22 +58,22 @@ Each benchmark class focuses on one operation group. Data is seeded once in `set
 ```swift
 final class TransactionFetchBenchmarks: XCTestCase {
   private var backend: CloudKitBackend!
-  private var container: ModelContainer!
+  private var database: DatabaseQueue!
 
   override func setUpWithError() throws {
     let result = try TestBackend.create()
     backend = result.backend
-    container = result.container
-    BenchmarkFixtures.seedTransactions_1x(in: container)
+    database = result.database
+    BenchmarkFixtures.seed(scale: .oneX, in: database)
   }
 
   override func tearDownWithError() throws {
     backend = nil
-    container = nil
+    database = nil
   }
 
   func testFetchByAccount_1x() {
-    let repo = backend.transactionRepository
+    let repo = backend.transactions
     let filter = TransactionFilter(accountId: BenchmarkFixtures.heavyAccountId)
 
     let options = XCTMeasureOptions()
@@ -109,11 +109,10 @@ Examples:
 
 2. **Use 10 iterations** (`options.iterationCount = 10`). XCTest's default of 5 is too few for noisy operations.
 
-3. **Reset ModelContext between iterations** when benchmarking fetch operations. SwiftData's change tracker accumulates objects, making later iterations slower:
+3. **No per-iteration store reset is needed for fetch benchmarks.** GRDB decodes a fresh value-type row on every fetch and keeps no cross-fetch identity map or change tracker, so later iterations don't drift the way SwiftData's accumulated objects did. Reuse the same in-memory database from `TestBackend.create()` across iterations:
 
    ```swift
    measure(metrics: metrics, options: options) {
-     container.mainContext.reset()
      _ = try! awaitSync { try await repo.fetch(filter: filter, page: 0, pageSize: 50) }
    }
    ```
@@ -195,7 +194,7 @@ This appears in Instruments and is invaluable for correlating timing with batch 
 ### What NOT to Signpost
 
 - Single-record CRUD (the overhead would dominate the measurement)
-- Pure domain model operations (no I/O, no SwiftData)
+- Pure domain model operations (no I/O, no database access)
 - Anything in the Domain layer (signposts belong in Backends and Sync only)
 
 ## Interpreting Results
@@ -232,11 +231,11 @@ Always compare 1x vs 2x results for the same operation:
 
 - **Linear scaling** (2x data = ~2x time): expected for operations that scan all records. Acceptable.
 - **Sub-linear scaling** (2x data = < 2x time): good — indicates effective indexing or early-exit.
-- **Super-linear scaling** (2x data = > 2.5x time): problem — indicates O(n^2) behavior, excessive allocation, or SwiftData query plan degradation. Investigate.
+- **Super-linear scaling** (2x data = > 2.5x time): problem — indicates O(n^2) behavior, excessive allocation, or SQLite query plan degradation. Investigate.
 
 ### Common Patterns to Watch For
 
-**"First iteration is 10x slower"** — SwiftData schema initialization or SQLite page cache warmup. If this only affects the first call after app launch, it may be acceptable. If it happens after every context reset, it's a problem.
+**"First iteration is 10x slower"** — GRDB connection / migration setup or SQLite page cache warmup. If this only affects the first call after app launch, it may be acceptable. If it recurs on every iteration, it's a problem.
 
 **"Memory grows linearly with dataset"** — Expected for operations that load all records (e.g., batch upsert fetches all existing records). A problem if memory doesn't drop after the operation completes (retained references).
 
