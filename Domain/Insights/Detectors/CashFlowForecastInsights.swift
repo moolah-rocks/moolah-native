@@ -63,7 +63,9 @@ enum CashFlowForecastInsights {
         facts: facts,
         references: InsightReferences(
           accountIds: culprit?.accountId.map { [$0] } ?? [],
-          instrumentIds: [context.reportingCurrency.id]))
+          instrumentIds: [context.reportingCurrency.id]),
+        chart: InsightChartBuilders.balanceForecast(
+          dailyBalances, reportingCurrency: context.reportingCurrency, highlight: trough.date))
     ]
   }
 
@@ -111,7 +113,9 @@ enum CashFlowForecastInsights {
         facts: [
           InsightFact("Projected balance", rounded)
         ],
-        references: InsightReferences(instrumentIds: [context.reportingCurrency.id]))
+        references: InsightReferences(instrumentIds: [context.reportingCurrency.id]),
+        chart: InsightChartBuilders.balanceForecast(
+          dailyBalances, reportingCurrency: context.reportingCurrency, highlight: monthEndDay.date))
     ]
   }
 

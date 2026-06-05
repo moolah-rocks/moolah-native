@@ -85,4 +85,41 @@ struct InsightChartBuildersTests {
       InsightChartBuilders.categorySpend(
         points: points, reportingCurrency: currency, highlightMonth: "202606") == nil)
   }
+
+  private func balance(
+    _ day: Int, total: Decimal, forecast: Bool
+  ) -> DailyBalance {
+    let amount = InstrumentAmount(quantity: total, instrument: currency)
+    let zero = InstrumentAmount.zero(instrument: currency)
+    return DailyBalance(
+      date: InsightTestSupport.date(2026, 6, day),
+      balance: amount,
+      earmarked: zero,
+      availableFunds: amount,
+      investments: zero,
+      investmentValue: nil,
+      netWorth: amount,
+      bestFit: nil,
+      isForecast: forecast)
+  }
+
+  @Test
+  func balanceForecastSplitsActualAndProjected() throws {
+    let balances = [
+      balance(1, total: 1000, forecast: false),
+      balance(2, total: 900, forecast: false),
+      balance(3, total: 400, forecast: true),
+      balance(4, total: 700, forecast: true),
+    ]
+    let chart = try #require(
+      InsightChartBuilders.balanceForecast(
+        balances, reportingCurrency: currency, highlight: InsightTestSupport.date(2026, 6, 3)))
+
+    #expect(chart.kind == .line)
+    #expect(chart.unit == .currency(currency))
+    #expect(chart.xAxis == .daily)
+    #expect(chart.series.contains { $0.role == .primary })
+    #expect(chart.series.contains { $0.role == .projected })
+    #expect(chart.highlight?.value == 400)
+  }
 }
