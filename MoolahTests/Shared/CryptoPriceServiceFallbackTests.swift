@@ -34,11 +34,15 @@ struct CryptoPriceServiceFallbackTests {
   ) throws -> CryptoPriceService {
     let database = try ProfileIndexDatabase.openInMemory()
     let client = FixedCryptoPriceClient(prices: ["1:native": tokenPrices], shouldFail: false)
+    // Pin to UTC so the cap's "yesterday" boundary is computed against the
+    // same calendar the `YYYY-MM-DD` fixtures use, regardless of host zone.
+    let utc = try #require(TimeZone(identifier: "UTC"))
     return CryptoPriceService(
       clients: [client],
       database: database,
       resolutionClient: nil,
-      now: now)
+      now: now,
+      timeZone: utc)
   }
 
   /// `exact` returns that day's price; an in-range gap (a date with no row,

@@ -16,8 +16,11 @@ struct ExchangeRateServiceFallbackTests {
   ) throws -> ExchangeRateService {
     let client = FixedRateClient(rates: rates)
     let database = try ProfileIndexDatabase.openInMemory()
+    // Pin to UTC so the cap's "yesterday" boundary is computed against the
+    // same calendar the `YYYY-MM-DD` fixtures use, regardless of host zone.
+    let utc = try #require(TimeZone(identifier: "UTC"))
     return ExchangeRateService(
-      client: client, database: database, now: { self.date("2024-02-01") })
+      client: client, database: database, now: { self.date("2024-02-01") }, timeZone: utc)
   }
 
   private func date(_ string: String) -> Date {
@@ -70,8 +73,9 @@ struct ExchangeRateServiceFallbackTests {
         "2024-01-17": ["AUD": dec("1.52")],
       ]))
     let database = try ProfileIndexDatabase.openInMemory()
+    let utc = try #require(TimeZone(identifier: "UTC"))
     let service = ExchangeRateService(
-      client: client, database: database, now: { self.date("2024-02-01") })
+      client: client, database: database, now: { self.date("2024-02-01") }, timeZone: utc)
 
     // Prime so the cached range brackets the hole: 2024-01-15 (cold
     // surrounding fetch) then 2024-01-17 (forward extension). 2024-01-16

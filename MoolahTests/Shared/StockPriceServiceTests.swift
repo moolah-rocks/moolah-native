@@ -15,7 +15,11 @@ struct StockPriceServiceTests {
   ) throws -> StockPriceService {
     let client = FixedStockPriceClient(responses: responses, shouldFail: shouldFail)
     let resolved = try database ?? ProfileIndexDatabase.openInMemory()
-    return StockPriceService(client: client, database: resolved, now: now)
+    // Pin to UTC so the `YYYY-MM-DD` labels in the fixtures below match the
+    // cap's "yesterday" output regardless of the host machine's local zone.
+    // (Mirrors `CryptoPriceServiceCapTests` / `ExchangeRateServiceCapTests`.)
+    let utc = try #require(TimeZone(identifier: "UTC"))
+    return StockPriceService(client: client, database: resolved, now: now, timeZone: utc)
   }
 
   private func date(_ string: String) -> Date {
