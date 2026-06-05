@@ -20,8 +20,7 @@ enum PeriodComparisonInsights {
 
     var insights: [Insight] = []
     if let monthOverMonth = compare(
-      latest: complete[complete.count - 1],
-      baseline: complete[complete.count - 2],
+      completeMonths: complete,
       label: "last month",
       context: context,
       threshold: threshold)
@@ -31,22 +30,29 @@ enum PeriodComparisonInsights {
     return insights
   }
 
-  /// Compare two months' total spend magnitude and emit a delta insight when
-  /// the change clears `threshold`. Spend magnitude is `-(totalExpense)`
-  /// because expense aggregates are stored negative.
+  /// Compare the latest two complete months' total spend magnitude and emit a
+  /// delta insight when the change clears `threshold`. Spend magnitude is
+  /// `-(totalExpense)` because expense aggregates are stored negative.
+  /// `completeMonths` (ascending, ≥2) is both the comparison source — its last
+  /// two entries — and the full series the companion bar chart plots, with the
+  /// latest month highlighted.
   private static func compare(
-    latest: MonthlyIncomeExpense,
-    baseline: MonthlyIncomeExpense,
+    completeMonths: [MonthlyIncomeExpense],
     label: String,
     context: InsightContext,
     threshold: Double
   ) -> Insight? {
+    // Defensive: the caller already enforces ≥2 complete months; kept so this
+    // private helper is sound on its own.
+    guard completeMonths.count >= 2 else { return nil }
+    let latest = completeMonths[completeMonths.count - 1]
+    let baseline = completeMonths[completeMonths.count - 2]
     let latestSpend = magnitude(latest.totalExpense)
     let baselineSpend = magnitude(baseline.totalExpense)
     guard baselineSpend > 0 else { return nil }
     let fraction = (latestSpend - baselineSpend) / baselineSpend
-    let magnitude = abs(fraction)
-    guard magnitude >= threshold else { return nil }
+    let changeMagnitude = abs(fraction)
+    guard changeMagnitude >= threshold else { return nil }
 
     let increased = fraction > 0
     let deltaAmount = Decimal(-(latestSpend - baselineSpend))
@@ -55,20 +61,24 @@ enum PeriodComparisonInsights {
       id: "\(InsightKind.monthOverMonthDelta.rawValue):\(latest.month)",
       kind: .monthOverMonthDelta,
       title: increased
-        ? "Spending up \(percent(magnitude)) vs \(label)"
-        : "Spending down \(percent(magnitude)) vs \(label)",
+        ? "Spending up \(percent(changeMagnitude)) vs \(label)"
+        : "Spending down \(percent(changeMagnitude)) vs \(label)",
       date: monthDate,
       framing: increased ? .negative : .positive,
       actionability: .informational,
-      surprise: min(magnitude, 1),
+      surprise: min(changeMagnitude, 1),
       monetaryImpact: InstrumentAmount(
         quantity: deltaAmount, instrument: context.reportingCurrency),
       facts: [
         InsightFact("This period", context.formatted(Decimal(-latestSpend))),
         InsightFact("Comparison", context.formatted(Decimal(-baselineSpend))),
-        InsightFact("Change", "\(increased ? "+" : "−")\(percent(magnitude))"),
+        InsightFact("Change", "\(increased ? "+" : "−")\(percent(changeMagnitude))"),
       ],
-      references: InsightReferences(instrumentIds: [context.reportingCurrency.id]))
+      references: InsightReferences(instrumentIds: [context.reportingCurrency.id]),
+      chart: InsightChartBuilders.monthlySpend(
+        monthly: completeMonths,
+        reportingCurrency: context.reportingCurrency,
+        highlightMonth: latest.month))
   }
 
   private static func magnitude(_ amount: InstrumentAmount) -> Double {

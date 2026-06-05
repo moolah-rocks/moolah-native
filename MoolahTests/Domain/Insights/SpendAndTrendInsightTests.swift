@@ -102,6 +102,26 @@ struct SpendAndTrendInsightTests {
   }
 
   @Test
+  func monthOverMonthAttachesSpendChart() throws {
+    let monthly = [
+      InsightTestSupport.monthly(month: "202603", income: 5000, expense: 1800),
+      InsightTestSupport.monthly(month: "202604", income: 5000, expense: 2000),
+      InsightTestSupport.monthly(month: "202605", income: 5000, expense: 2600),
+    ]
+    let insights = PeriodComparisonInsights.detect(monthly: monthly, context: context)
+    let delta = try #require(insights.first { $0.kind == .monthOverMonthDelta })
+    let chart = try #require(delta.chart)
+    #expect(chart.kind == .bar)
+    #expect(chart.unit == .currency(InsightTestSupport.currency))
+    #expect(chart.xAxis == .monthly)
+    // The chart spans every complete month, not just the two compared.
+    #expect(chart.series.first?.points.count == 3)
+    // Highlight marks the latest complete month (202605 = $2,600 spend).
+    #expect(chart.highlight?.value == 2600)
+    #expect(chart.highlight?.date == InsightTestSupport.date(2026, 5, 1))
+  }
+
+  @Test
   func monthOverMonthExcludesInProgressMonth() {
     // Only the current (in-progress) bucket plus one complete month — not
     // enough complete months to compare.
