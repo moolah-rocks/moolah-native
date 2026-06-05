@@ -53,6 +53,31 @@ struct ForYouScreen {
     }
   }
 
+  /// Asserts the inline companion-chart Button for the insight row `id` is
+  /// present. Only rows whose insight carries a chart render this control, so
+  /// its presence is the sentinel a subsequent `tapChart(_:)` relies on.
+  func expectChartVisible(_ id: String) {
+    let identifier = UITestIdentifiers.ForYou.chart(id)
+    let chart = app.element(for: identifier)
+    if !chart.waitForExistence(timeout: 5) {
+      Trace.recordFailure("forYou chart button '\(identifier)' did not appear")
+      XCTFail("For You chart button for '\(id)' did not appear within 5s")
+    }
+  }
+
+  /// Asserts the expanded chart in the zoom detail sheet is on screen — the
+  /// post-condition `tapChart(_:)` already waited on, exposed as a standalone
+  /// expectation so a test can name the outcome explicitly.
+  func expectChartDetailVisible() {
+    let detail = app.element(for: UITestIdentifiers.ForYou.chartDetail)
+    if !detail.waitForExistence(timeout: 5) {
+      Trace.recordFailure(
+        "forYou chart detail '\(UITestIdentifiers.ForYou.chartDetail)' "
+          + "did not appear")
+      XCTFail("Insight chart detail sheet did not appear within 5s")
+    }
+  }
+
   // MARK: - Actions
 
   /// Taps the "Show less" control for the insight row `id`, then waits for that
@@ -103,6 +128,31 @@ struct ForYouScreen {
         "forYou row '\(UITestIdentifiers.ForYou.row(id))' still present 5s after tapView "
           + "— navigation may not have fired")
       XCTFail("For You row for '\(id)' did not leave the screen within 5s of tapping View")
+    }
+  }
+
+  /// Taps the inline companion-chart Button for the insight row `id`, then
+  /// waits for the zoom detail sheet's expanded chart to appear. Tapping the
+  /// chart presents `InsightChartDetailSheet`, whose expanded chart carries
+  /// `UITestIdentifiers.ForYou.chartDetail` — its appearance is the
+  /// post-condition this action returns on.
+  func tapChart(_ id: String) {
+    Trace.record(#function, detail: "id=\(id)")
+    let chartIdentifier = UITestIdentifiers.ForYou.chart(id)
+    let chartButton = app.element(for: chartIdentifier)
+    if !chartButton.waitForExistence(timeout: 5) {
+      Trace.recordFailure("forYou chart button '\(chartIdentifier)' did not appear")
+      XCTFail("For You chart button for '\(id)' did not appear within 5s")
+      return
+    }
+    chartButton.click()
+
+    let detail = app.element(for: UITestIdentifiers.ForYou.chartDetail)
+    if !detail.waitForExistence(timeout: 5) {
+      Trace.recordFailure(
+        "forYou chart detail '\(UITestIdentifiers.ForYou.chartDetail)' did not appear "
+          + "5s after tapping the chart — sheet may not have presented")
+      XCTFail("Insight chart detail sheet did not appear within 5s of tapping the chart")
     }
   }
 
