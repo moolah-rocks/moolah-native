@@ -168,6 +168,9 @@ struct SpendAndTrendInsightTests {
     // The reported bug: an $80k annual superannuation payment, identical to last
     // year's, in an otherwise-empty category. Median is 0 → not an overspend.
     let superannuation = Category(name: "Superannuation")
+    // The two rows gap-fill (CategorySpendSeries) into a 13-month series — 11
+    // interior zeros — so it clears `minimumMonths` and reaches Gate A, where
+    // the zero median suppresses it.
     let breakdown = [
       InsightTestSupport.breakdownRow(80_000, categoryId: superannuation.id, month: "202506"),
       InsightTestSupport.breakdownRow(80_000, categoryId: superannuation.id, month: "202606"),
