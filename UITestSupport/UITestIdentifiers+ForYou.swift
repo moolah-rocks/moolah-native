@@ -18,5 +18,9 @@ extension UITestIdentifiers {
     /// Identifier on the single headline `Text` view for an insight row (the
     /// resolved AI line, or the detector title fallback).
     public static func headline(_ id: String) -> String { "foryou.headline.\(id)" }
+
+    public static func chart(_ id: String) -> String { "foryou.chart.\(id)" }
+
+    public static let chartDetail = "foryou.chartdetail"
   }
 }
