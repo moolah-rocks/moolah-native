@@ -77,7 +77,11 @@ struct InsightChart: Sendable, Hashable {
 
   struct Point: Sendable, Hashable {
     let date: Date
-    let value: Decimal         // in the chart's stated `unit`; reporting currency for `.currency`
+    let value: Double          // in the chart's stated `unit`; reporting-currency amount for
+                               // `.currency`, a 0...1 fraction for `.percent`, a tally for `.count`.
+                               // `Double` matches the Swift Charts mark y-value idiom; currency
+                               // labels reconstruct `InstrumentAmount(quantity: Decimal(value), …)`
+                               // exactly as `NetWorthGraphCard` does.
   }
 }
 ```
