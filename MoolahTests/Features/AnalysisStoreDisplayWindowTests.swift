@@ -31,6 +31,68 @@ struct AnalysisStoreDisplayWindowTests {
   }
 }
 
+@Suite("AnalysisStore — display clipping")
+struct AnalysisStoreClipTests {
+  // 2026-06-15 anchor so month maths is deterministic.
+  private let now = {
+    var components = DateComponents()
+    components.year = 2026
+    components.month = 6
+    components.day = 15
+    return Calendar.current.date(from: components) ?? Date()
+  }()
+
+  private func breakdown(_ month: String) -> ExpenseBreakdown {
+    ExpenseBreakdown(
+      categoryId: UUID(), month: month,
+      totalExpenses: InstrumentAmount(quantity: -100, instrument: .defaultTestInstrument))
+  }
+
+  private func cal(monthsFromNow: Int) -> Date {
+    Calendar.current.date(byAdding: .month, value: monthsFromNow, to: now) ?? now
+  }
+
+  @Test("breakdown clips to the display window, keeping recent months")
+  func clipsBreakdown() {
+    let rows = ["202506", "202507", "202601", "202606"].map(breakdown)
+    // 3-month display window from 2026-06 keeps 202603..202606 → only 202606.
+    let clipped = AnalysisStore.clipBreakdown(rows, historyMonths: 3, now: now)
+    #expect(clipped.map(\.month) == ["202606"])
+  }
+
+  @Test("breakdown All (0) returns everything")
+  func clipsBreakdownAll() {
+    let rows = ["202506", "202606"].map(breakdown)
+    #expect(AnalysisStore.clipBreakdown(rows, historyMonths: 0, now: now).count == 2)
+  }
+
+  @Test("balances clip by date but always keep forecast rows")
+  func clipsBalancesKeepingForecast() {
+    let old = DailyBalance(
+      date: cal(monthsFromNow: -10),
+      balance: InstrumentAmount(quantity: 1, instrument: .defaultTestInstrument))
+    let recent = DailyBalance(
+      date: cal(monthsFromNow: -1),
+      balance: InstrumentAmount(quantity: 2, instrument: .defaultTestInstrument))
+    let forecast = DailyBalance(
+      date: cal(monthsFromNow: 2),
+      balance: InstrumentAmount(quantity: 3, instrument: .defaultTestInstrument),
+      earmarked: .zero(instrument: .defaultTestInstrument),
+      availableFunds: InstrumentAmount(quantity: 3, instrument: .defaultTestInstrument),
+      investments: .zero(instrument: .defaultTestInstrument),
+      investmentValue: nil,
+      netWorth: InstrumentAmount(quantity: 3, instrument: .defaultTestInstrument),
+      bestFit: nil,
+      isForecast: true)
+    let clipped = AnalysisStore.clipBalances(
+      [old, recent, forecast], historyMonths: 3, now: now)
+    // `old` (10 months back) drops; `recent` stays; `forecast` always stays.
+    #expect(clipped.contains { $0.balance.quantity == 2 })
+    #expect(clipped.contains { $0.balance.quantity == 3 })
+    #expect(!clipped.contains { $0.balance.quantity == 1 })
+  }
+}
+
 @Suite("AnalysisStore — load cache gate")
 @MainActor
 struct AnalysisStoreCacheGateTests {

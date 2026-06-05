@@ -144,10 +144,10 @@ struct AnalysisView: View {
           onDismiss: { item in Task { await insightStore.dismiss(item.scored) } },
           onNavigate: onNavigate)
       }
-      NetWorthGraphCard(balances: store.dailyBalances)
+      NetWorthGraphCard(balances: store.displayedDailyBalances)
       upcomingAndIncomeExpense(store: store)
       ExpenseBreakdownCard(
-        breakdown: store.expenseBreakdown,
+        breakdown: store.displayedExpenseBreakdown,
         categories: categoryStore.categories
       )
       CategoriesOverTimeCard(
@@ -170,7 +170,7 @@ struct AnalysisView: View {
           transactionStore: transactionStore,
           selectedTransaction: $selectedUpcomingTransaction
         )
-        IncomeExpenseTableCard(data: store.incomeAndExpense)
+        IncomeExpenseTableCard(data: store.displayedIncomeAndExpense)
       }
     #else
       UpcomingTransactionsCard(
@@ -180,7 +180,7 @@ struct AnalysisView: View {
         transactionStore: transactionStore,
         selectedTransaction: $selectedUpcomingTransaction
       )
-      IncomeExpenseTableCard(data: store.incomeAndExpense)
+      IncomeExpenseTableCard(data: store.displayedIncomeAndExpense)
     #endif
   }
 }

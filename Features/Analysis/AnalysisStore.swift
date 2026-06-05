@@ -201,7 +201,7 @@ final class AnalysisStore {
 
   /// Transforms expense breakdown into chart-ready data grouped by root-level category and month.
   func categoriesOverTime(categories: Categories) -> [CategoryOverTimeEntry] {
-    Self.buildCategoriesOverTime(from: expenseBreakdown, categories: categories)
+    Self.buildCategoriesOverTime(from: displayedExpenseBreakdown, categories: categories)
   }
 
   /// Pure function for testability: transforms expense breakdown into chart-ready grouped data.
