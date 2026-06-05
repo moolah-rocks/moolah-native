@@ -19,6 +19,7 @@ struct AnalysisView: View {
 
   var body: some View {
     ScrollView {
+      // Load-state check on the full array — not a display-window question.
       if store.isLoading && store.dailyBalances.isEmpty {
         ProgressView("Loading analysis...")
           .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -153,6 +154,8 @@ struct AnalysisView: View {
       CategoriesOverTimeCard(
         entries: store.categoriesOverTime(categories: categoryStore.categories),
         categories: categoryStore.categories,
+        // Instrument is uniform across the profile; read the full (unclipped) array so
+        // a narrow display window with no rows in range doesn't fall back to .AUD.
         instrument: store.dailyBalances.first?.balance.instrument ?? .AUD,
         showActualValues: $store.showActualValues
       )

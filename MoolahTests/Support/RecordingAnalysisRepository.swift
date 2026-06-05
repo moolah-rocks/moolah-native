@@ -10,6 +10,11 @@ import Foundation
 actor RecordingAnalysisRepository: AnalysisRepository {
   private(set) var loadCount = 0
   private(set) var lastAfter: Date?
+  private let breakdown: [ExpenseBreakdown]
+
+  init(breakdown: [ExpenseBreakdown] = []) {
+    self.breakdown = breakdown
+  }
 
   func fetchDailyBalances(after: Date?, forecastUntil: Date?) async throws -> [DailyBalance] {
     loadCount += 1
@@ -21,7 +26,9 @@ actor RecordingAnalysisRepository: AnalysisRepository {
     ]
   }
 
-  func fetchExpenseBreakdown(monthEnd: Int, after: Date?) async throws -> [ExpenseBreakdown] { [] }
+  func fetchExpenseBreakdown(
+    monthEnd: Int, after: Date?
+  ) async throws -> [ExpenseBreakdown] { breakdown }
 
   func fetchIncomeAndExpense(
     monthEnd: Int, after: Date?

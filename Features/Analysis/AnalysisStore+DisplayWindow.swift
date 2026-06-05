@@ -36,7 +36,8 @@ extension AnalysisStore {
     return rows.filter { $0.month >= startMonth }
   }
 
-  /// Clips income/expense rows to the display window (string compare on `YYYYMM`).
+  /// Clips income/expense rows to the display window (string compare on `YYYYMM`,
+  /// mirrors `clipBreakdown`).
   nonisolated static func clipIncomeExpense(
     _ rows: [MonthlyIncomeExpense], historyMonths: Int, now: Date
   ) -> [MonthlyIncomeExpense] {
@@ -47,6 +48,12 @@ extension AnalysisStore {
 
   /// Clips daily balances to the display window. Forecast rows (future-dated)
   /// are always kept so the net-worth chart still draws its forecast tail.
+  ///
+  /// Deliberate asymmetry with `clipBreakdown` / `clipIncomeExpense`: those clip
+  /// on a whole-month `YYYYMM` boundary, whereas balances clip on the exact day.
+  /// At a window edge the dense daily chart starts mid-month while the monthly
+  /// aggregates show the whole boundary month — acceptable, since the two
+  /// surfaces have different visual granularity.
   nonisolated static func clipBalances(
     _ balances: [DailyBalance], historyMonths: Int, now: Date
   ) -> [DailyBalance] {

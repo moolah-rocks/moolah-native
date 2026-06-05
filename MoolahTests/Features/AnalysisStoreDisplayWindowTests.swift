@@ -66,6 +66,23 @@ struct AnalysisStoreClipTests {
     #expect(AnalysisStore.clipBreakdown(rows, historyMonths: 0, now: now).count == 2)
   }
 
+  @Test("income/expense clips to the display window")
+  func clipsIncomeExpense() {
+    let rows = ["202506", "202606"].map {
+      InsightTestSupport.monthly(month: $0, income: 0, expense: 0)
+    }
+    let clipped = AnalysisStore.clipIncomeExpense(rows, historyMonths: 3, now: now)
+    #expect(clipped.map(\.month) == ["202606"])
+  }
+
+  @Test("income/expense All (0) returns everything")
+  func clipsIncomeExpenseAll() {
+    let rows = ["202506", "202606"].map {
+      InsightTestSupport.monthly(month: $0, income: 0, expense: 0)
+    }
+    #expect(AnalysisStore.clipIncomeExpense(rows, historyMonths: 0, now: now).count == 2)
+  }
+
   @Test("balances clip by date but always keep forecast rows")
   func clipsBalancesKeepingForecast() {
     let old = DailyBalance(
@@ -90,6 +107,17 @@ struct AnalysisStoreClipTests {
     #expect(clipped.contains { $0.balance.quantity == 2 })
     #expect(clipped.contains { $0.balance.quantity == 3 })
     #expect(!clipped.contains { $0.balance.quantity == 1 })
+  }
+
+  @Test("balances All (0) returns everything including old rows")
+  func clipsBalancesAll() {
+    let old = DailyBalance(
+      date: cal(monthsFromNow: -40),
+      balance: InstrumentAmount(quantity: 1, instrument: .defaultTestInstrument))
+    let recent = DailyBalance(
+      date: cal(monthsFromNow: -1),
+      balance: InstrumentAmount(quantity: 2, instrument: .defaultTestInstrument))
+    #expect(AnalysisStore.clipBalances([old, recent], historyMonths: 0, now: now).count == 2)
   }
 }
 
@@ -145,5 +173,28 @@ struct AnalysisStoreCacheGateTests {
     await store.loadAll()
     #expect(await repo.lastAfter == nil)
     #expect(await repo.loadCount == 1)
+  }
+
+  @Test("displayed projection clips the loaded data by historyMonths, not forecastMonths")
+  func displayedProjectionUsesHistoryMonths() async throws {
+    // Year-2000 and year-2999 rows so the clip outcome is independent of wall-clock.
+    let repo = RecordingAnalysisRepository(breakdown: [
+      ExpenseBreakdown(
+        categoryId: UUID(), month: "200001",
+        totalExpenses: InstrumentAmount(quantity: -100, instrument: .defaultTestInstrument)),
+      ExpenseBreakdown(
+        categoryId: UUID(), month: "299912",
+        totalExpenses: InstrumentAmount(quantity: -100, instrument: .defaultTestInstrument)),
+    ])
+    let store = AnalysisStore(repository: repo, defaults: try makeDefaults())
+    store.historyMonths = 0  // All
+    await store.loadAll()
+    // All keeps both rows — if `displayed*` wrongly used forecastMonths (1) it would
+    // drop the year-2000 row.
+    #expect(store.displayedExpenseBreakdown.count == 2)
+    // Narrowing re-clips from the cached data with no reload — the year-2000 row drops.
+    store.historyMonths = 12
+    #expect(store.displayedExpenseBreakdown.map(\.month) == ["299912"])
+    #expect(await repo.loadCount == 1)  // no refetch on narrowing
   }
 }
