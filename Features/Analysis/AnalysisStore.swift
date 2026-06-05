@@ -14,11 +14,15 @@ final class AnalysisStore {
   private(set) var isLoading = false
   private(set) var error: Error?
 
-  /// Cached analysis parameters — detect if cache is still valid for current filters
-  private var cachedHistoryMonths: Int?
+  /// The effective *load* window (months) of the currently cached data —
+  /// `max(historyMonths, insightHistoryFloorMonths)`, or `Int.max` for "All".
+  /// Keyed on the load window (not the display filter) so narrowing the UI
+  /// window re-clips from cache instead of refetching; only a request that
+  /// reaches further back than the cache triggers a new load.
+  private var cachedLoadMonths: Int?
   private var cachedForecastMonths: Int?
   private var hasCachedData: Bool {
-    cachedHistoryMonths != nil && !dailyBalances.isEmpty
+    cachedLoadMonths != nil && !dailyBalances.isEmpty
   }
 
   /// Timestamp of the last successful `loadAll()`. Used by `refreshIfStale` to
@@ -80,23 +84,33 @@ final class AnalysisStore {
     monthEnd = Calendar.current.component(.day, from: Date())
     error = nil
 
-    // If filters changed, clear cache — stale data with wrong filters is confusing
-    let filtersChanged =
-      historyMonths != cachedHistoryMonths
-      || forecastMonths != cachedForecastMonths
+    // Load the larger of the user's display window and the insight floor.
+    let requestedLoadMonths = Self.effectiveLoadMonths(
+      historyMonths: historyMonths, floorMonths: Self.insightHistoryFloorMonths)
 
-    // Show loading only if we have no cached data or filters changed
-    if !hasCachedData || filtersChanged {
-      isLoading = true
-      if filtersChanged {
-        dailyBalances = []
-        expenseBreakdown = []
-        incomeAndExpense = []
-      }
+    // Refetch only when the request reaches further back than the cache, the
+    // forecast window changed, or nothing is loaded yet. Narrowing the display
+    // filter needs no fetch — `displayed*` re-clips the cached data.
+    let needsLoad =
+      !hasCachedData
+      || forecastMonths != cachedForecastMonths
+      || requestedLoadMonths > (cachedLoadMonths ?? 0)
+    guard needsLoad else { return }
+
+    isLoading = true
+    let growing = requestedLoadMonths > (cachedLoadMonths ?? 0)
+    if growing {
+      // Dropping stale narrower data so the spinner shows while we widen.
+      dailyBalances = []
+      expenseBreakdown = []
+      incomeAndExpense = []
     }
 
     do {
-      let after = afterDate(monthsAgo: historyMonths)
+      let after: Date? =
+        historyMonths == 0
+        ? nil
+        : afterDate(monthsAgo: max(historyMonths, Self.insightHistoryFloorMonths))
       let forecastUntil = forecastDate(monthsAhead: forecastMonths)
 
       let data = try await repository.loadAll(
@@ -111,7 +125,7 @@ final class AnalysisStore {
       expenseBreakdown = data.expenseBreakdown
       incomeAndExpense = data.incomeAndExpense.sorted { $0.month > $1.month }
 
-      cachedHistoryMonths = historyMonths
+      cachedLoadMonths = requestedLoadMonths
       cachedForecastMonths = forecastMonths
       lastLoadedAt = Date()
     } catch is CancellationError {
