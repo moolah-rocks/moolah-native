@@ -54,6 +54,10 @@ enum CategoryAnomalyInsight {
     bounds: Bounds
   ) -> Insight? {
     let magnitudes = points.map(\.magnitude)
+    // Gate A — regularity. An overspend is only meaningful against an established
+    // baseline. A category with spend in <= half its months (median 0) is a lump
+    // (one-off purchase) or a rare periodic payment, not an overspend.
+    guard DescriptiveStatistics.median(magnitudes) > 0 else { return nil }
     let decomposition = SeasonalDecomposition.decompose(magnitudes, period: 12)
     let remainder = decomposition.remainder
     guard let latest = points.last, remainder.count == points.count else { return nil }

@@ -148,6 +148,36 @@ struct SpendAndTrendInsightTests {
   }
 
   @Test
+  func categoryAnomalySuppressesOneOffLump() {
+    // A category with a thin trickle then a huge one-off (house deposit). The
+    // series is long enough to clear `minimumMonths`, but its median is 0, so
+    // there is no regular baseline to "overspend" against.
+    let home = Category(name: "Home")
+    let magnitudes: [Decimal] = [100, 0, 0, 0, 0, 500_000]
+    let months = ["202501", "202502", "202503", "202504", "202505", "202506"]
+    let breakdown = zip(months, magnitudes).map { month, magnitude in
+      InsightTestSupport.breakdownRow(magnitude, categoryId: home.id, month: month)
+    }
+    let insights = CategoryAnomalyInsight.detect(
+      breakdown: breakdown, categories: Categories(from: [home]), context: context)
+    #expect(!insights.contains { $0.kind == .categorySpendingAnomaly })
+  }
+
+  @Test
+  func categoryAnomalySuppressesAnnualRecurringPayment() {
+    // The reported bug: an $80k annual superannuation payment, identical to last
+    // year's, in an otherwise-empty category. Median is 0 → not an overspend.
+    let superannuation = Category(name: "Superannuation")
+    let breakdown = [
+      InsightTestSupport.breakdownRow(80_000, categoryId: superannuation.id, month: "202506"),
+      InsightTestSupport.breakdownRow(80_000, categoryId: superannuation.id, month: "202606"),
+    ]
+    let insights = CategoryAnomalyInsight.detect(
+      breakdown: breakdown, categories: Categories(from: [superannuation]), context: context)
+    #expect(!insights.contains { $0.kind == .categorySpendingAnomaly })
+  }
+
+  @Test
   func categoryTrendAttachesChart() throws {
     let dining = Category(name: "Dining")
     let magnitudes: [Decimal] = [100, 140, 180, 220, 260, 300]
