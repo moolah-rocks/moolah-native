@@ -84,9 +84,22 @@ struct DetectedSubscription: Sendable, Identifiable, Hashable {
   let medianIntervalDays: Double
   let medianAmount: Decimal
   let latestAmount: Decimal
-  /// Chronological signed amounts, for price-hike comparison and narration.
-  let amounts: [Decimal]
+  /// Chronological charges, each a signed amount paired with the day it landed.
+  /// One array keeps the amount and its date inseparable — a companion chart
+  /// plots each charge at its date, and the detectors read the amounts for
+  /// price-hike / pay-rate comparison.
+  let occurrences: [Occurrence]
   let isIncome: Bool
+
+  /// One charge in a recurring stream: a signed amount and the day it landed.
+  struct Occurrence: Sendable, Hashable {
+    let date: Date
+    /// Signed, reporting currency (income positive, expense negative).
+    let amount: Decimal
+  }
+
+  /// Chronological signed amounts, for price-hike comparison and narration.
+  var amounts: [Decimal] { occurrences.map(\.amount) }
 
   /// Monthly-equivalent magnitude (always positive), for cost roll-ups.
   var monthlyCostMagnitude: Decimal {
@@ -98,5 +111,16 @@ struct DetectedSubscription: Sendable, Identifiable, Hashable {
   func nextExpectedDate(calendar: Calendar) -> Date? {
     calendar.date(
       byAdding: .day, value: Int(medianIntervalDays.rounded()), to: lastDate)
+  }
+
+  /// A companion charge-magnitude chart for this stream, so each detector can
+  /// attach one without re-deriving the stream's sign (`isIncome`) or the
+  /// sparse-data guard. `nil` when too sparse to plot.
+  func chargeChart(reportingCurrency: Instrument) -> InsightChart? {
+    InsightChartBuilders.recurringCharges(
+      dates: occurrences.map(\.date),
+      amounts: occurrences.map(\.amount),
+      reportingCurrency: reportingCurrency,
+      isIncome: isIncome)
   }
 }

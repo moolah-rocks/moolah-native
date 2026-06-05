@@ -89,7 +89,8 @@ enum IncomeExtraInsights {
           InsightFact("Previous", context.formatted(Decimal(priorMedian))),
           InsightFact("Change", "\(increased ? "+" : "−")\(percent(abs(change)))"),
         ],
-        references: InsightReferences(accountIds: stream.accountId.map { [$0] } ?? []))
+        references: InsightReferences(accountIds: stream.accountId.map { [$0] } ?? []),
+        chart: stream.chargeChart(reportingCurrency: context.reportingCurrency))
     ]
   }
 

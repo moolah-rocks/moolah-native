@@ -53,7 +53,8 @@ enum IncomeInsights {
         InsightFact("Next expected", dateText),
       ],
       references: InsightReferences(
-        accountIds: stream.accountId.map { [$0] } ?? []))
+        accountIds: stream.accountId.map { [$0] } ?? []),
+      chart: stream.chargeChart(reportingCurrency: context.reportingCurrency))
   }
 
   /// Income stability score (29): lower amount variation → higher score.
@@ -90,7 +91,8 @@ enum IncomeInsights {
         InsightFact("Variation", percent(variation)),
       ],
       references: InsightReferences(
-        accountIds: stream.accountId.map { [$0] } ?? []))
+        accountIds: stream.accountId.map { [$0] } ?? []),
+      chart: stream.chargeChart(reportingCurrency: context.reportingCurrency))
   }
 
   /// Missing-paycheck alert (30): expected pay overdue past the grace window.

@@ -68,7 +68,8 @@ enum SubscriptionInsights {
           InsightFact("Increase", percent(increase)),
           InsightFact("Extra per month", context.formatted(monthlyDelta)),
         ],
-        references: references(for: subscription))
+        references: references(for: subscription),
+        chart: subscription.chargeChart(reportingCurrency: context.reportingCurrency))
     }
   }
 

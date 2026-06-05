@@ -89,6 +89,12 @@ struct AdditionalInsightTests {
       IncomeExtraInsights.payRateChange(incomeStreams: streams, context: context).first)
     #expect(insight.kind == .payRateChange)
     #expect(insight.framing == .positive)
+    let chart = try #require(insight.chart)
+    #expect(chart.kind == .line)
+    #expect(chart.unit == .currency(InsightTestSupport.currency))
+    #expect(chart.series.first?.points.count == 4)
+    // The latest (raised) paycheck is highlighted at its positive amount.
+    #expect(chart.highlight?.value == 3300)
   }
 
   // MARK: - Spend habits

@@ -95,6 +95,36 @@ enum InsightChartBuilders {
       xAxis: .daily)
   }
 
+  /// A recurring stream's charge (or income) magnitude over its occurrence
+  /// dates, as a line with the latest occurrence highlighted — the trend a
+  /// price-hike, pay-rate-change, paycheck-timing, or income-stability insight
+  /// is built from. The chart plots positive magnitudes (signed `amounts` are
+  /// negative for an expense stream) so a rising charge reads as a rising line.
+  /// The caller passes `dates` and `amounts` parallel and chronological (the
+  /// detector builds both from one sorted occurrence list); the length guard is
+  /// defensive and returns `nil` rather than mis-pairing if they disagree.
+  static func recurringCharges(
+    dates: [Date],
+    amounts: [Decimal],
+    reportingCurrency: Instrument,
+    isIncome: Bool
+  ) -> InsightChart? {
+    guard dates.count == amounts.count, dates.count >= minimumPoints else { return nil }
+    let points = zip(dates, amounts).map { date, amount -> InsightChart.Point in
+      let signed = Double(truncating: amount as NSDecimalNumber)
+      return InsightChart.Point(date: date, value: max(isIncome ? signed : -signed, 0))
+    }
+    return InsightChart(
+      kind: .line,
+      unit: .currency(reportingCurrency),
+      series: [
+        InsightChart.Series(
+          id: "charges", label: isIncome ? "Income" : "Charge", role: .primary, points: points)
+      ],
+      highlight: points.last,
+      xAxis: .daily)
+  }
+
   /// Monthly savings rate as a percentage line, highlighting the latest month.
   static func savingsRate(points: [InsightChart.Point]) -> InsightChart? {
     guard points.count >= minimumPoints else { return nil }
