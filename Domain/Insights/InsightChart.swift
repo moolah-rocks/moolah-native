@@ -45,6 +45,8 @@ struct InsightChart: Sendable, Hashable {
     let value: Double
   }
 
+  /// A named sequence of `Point`s with a visual role. `id` is a stable
+  /// detector-assigned key for SwiftUI diffing.
   struct Series: Sendable, Hashable, Identifiable {
     let id: String
     let label: String
