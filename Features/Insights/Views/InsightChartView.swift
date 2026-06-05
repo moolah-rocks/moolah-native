@@ -39,7 +39,10 @@ struct InsightChartView: View {
   private var baseChart: some View {
     Chart {
       ForEach(chart.series) { series in
-        ForEach(series.points, id: \.date) { point in
+        // Positional identity: two points in a series can share a date (e.g. a
+        // burndown's current/start landing on the same day), so `\.date` is not
+        // a unique key.
+        ForEach(Array(series.points.enumerated()), id: \.offset) { _, point in
           marks(for: point, in: series)
         }
       }
