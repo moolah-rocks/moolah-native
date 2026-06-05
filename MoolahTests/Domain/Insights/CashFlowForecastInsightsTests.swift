@@ -62,5 +62,7 @@ struct CashFlowForecastInsightsTests {
     // No impact badge: the rounded projection lives in the headline, so an
     // exact to-the-cent impact amount would contradict it.
     #expect(insight.monetaryImpact == nil)
+    #expect(insight.chart != nil)
+    #expect(insight.chart?.series.contains { $0.role == .projected } == true)
   }
 }
