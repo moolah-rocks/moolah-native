@@ -87,17 +87,22 @@ final class AnalysisStore {
     // Load the larger of the user's display window and the insight floor.
     let requestedLoadMonths = Self.effectiveLoadMonths(
       historyMonths: historyMonths, floorMonths: Self.insightHistoryFloorMonths)
+    // Capture the forecast window before any suspension so the cache stamp agrees
+    // with the data we actually fetch, even if the user changes it mid-load.
+    let requestedForecastMonths = forecastMonths
 
     // Refetch only when the request reaches further back than the cache, the
     // forecast window changed, or nothing is loaded yet. Narrowing the display
     // filter needs no fetch — `displayed*` re-clips the cached data.
     let needsLoad =
       !hasCachedData
-      || forecastMonths != cachedForecastMonths
+      || requestedForecastMonths != cachedForecastMonths
       || requestedLoadMonths > (cachedLoadMonths ?? 0)
     guard needsLoad else { return }
 
     isLoading = true
+    defer { isLoading = false }
+
     let growing = requestedLoadMonths > (cachedLoadMonths ?? 0)
     if growing {
       // Dropping stale narrower data so the spinner shows while we widen.
@@ -108,10 +113,8 @@ final class AnalysisStore {
 
     do {
       let after: Date? =
-        historyMonths == 0
-        ? nil
-        : afterDate(monthsAgo: max(historyMonths, Self.insightHistoryFloorMonths))
-      let forecastUntil = forecastDate(monthsAhead: forecastMonths)
+        historyMonths == 0 ? nil : afterDate(monthsAgo: requestedLoadMonths)
+      let forecastUntil = forecastDate(monthsAhead: requestedForecastMonths)
 
       let data = try await repository.loadAll(
         historyAfter: after,
@@ -126,24 +129,16 @@ final class AnalysisStore {
       incomeAndExpense = data.incomeAndExpense.sorted { $0.month > $1.month }
 
       cachedLoadMonths = requestedLoadMonths
-      cachedForecastMonths = forecastMonths
+      cachedForecastMonths = requestedForecastMonths
       lastLoadedAt = Date()
     } catch is CancellationError {
-      // View teardown / supersession — `AnalysisView`'s `.task` modifier
-      // is routinely cancelled during cold-launch state restoration and
-      // when navigating between sidebar items. The repository awaits
-      // rethrow `CancellationError` per their documented contract;
-      // surfacing it would render "Swift.CancellationError error 1" in
-      // the view, which sticks because the store outlives the view.
-      // A re-mount issues its own `loadAll()`.
-      isLoading = false
+      // View teardown / supersession — see AnalysisView's `.task`. A re-mount
+      // issues its own `loadAll()`. `defer` resets `isLoading`.
       return
     } catch {
       logger.error("Failed to load analysis data: \(error)")
       self.error = error
     }
-
-    isLoading = false
   }
 
   /// Reloads analysis data only if it has been at least `minimumInterval` seconds since
