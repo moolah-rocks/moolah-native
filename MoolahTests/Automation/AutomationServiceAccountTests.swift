@@ -58,19 +58,17 @@ struct AutomationServiceAccountTests {
 
   @Test("resolveAccount finds account by name case-insensitively")
   func resolveAccountByNameCaseInsensitive() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, _) = try await makeServiceWithSession()
     _ = try await service.createAccount(
       profileIdentifier: "Test",
       name: "My Savings",
       type: .bank
     )
 
-    try await session.accountStore.waitForNextEmission(
-      matching: { $0.accounts.contains { $0.name == "My Savings" } },
-      description: "new account observable"
-    )
-
-    let resolved = try service.resolveAccount(named: "my savings", profileIdentifier: "Test")
+    // `resolveAccount` reads the authoritative repository snapshot, so it
+    // sees the committed account without waiting on the reactive store.
+    let resolved = try await service.resolveAccount(
+      named: "my savings", profileIdentifier: "Test")
     #expect(resolved.name == "My Savings")
   }
 
@@ -78,26 +76,22 @@ struct AutomationServiceAccountTests {
   func resolveAccountNotFoundThrows() async throws {
     let (service, _) = try await makeServiceWithSession()
 
-    #expect(throws: AutomationError.self) {
-      try service.resolveAccount(named: "NonExistent", profileIdentifier: "Test")
+    await #expect(throws: AutomationError.self) {
+      try await service.resolveAccount(named: "NonExistent", profileIdentifier: "Test")
     }
   }
 
   @Test("resolveAccount finds account by UUID")
   func resolveAccountByUUID() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, _) = try await makeServiceWithSession()
     let created = try await service.createAccount(
       profileIdentifier: "Test",
       name: "Checking",
       type: .bank
     )
 
-    try await session.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: created.id) != nil },
-      description: "new account observable"
-    )
-
-    let resolved = try service.resolveAccount(id: created.id, profileIdentifier: "Test")
+    // Authoritative repository read — no need to wait on the reactive store.
+    let resolved = try await service.resolveAccount(id: created.id, profileIdentifier: "Test")
     #expect(resolved.name == "Checking")
   }
 

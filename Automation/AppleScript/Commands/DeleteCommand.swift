@@ -84,9 +84,9 @@
     ) async throws {
       let account: Account
       if let name = target.name {
-        account = try service.resolveAccount(named: name, profileIdentifier: profileName)
+        account = try await service.resolveAccount(named: name, profileIdentifier: profileName)
       } else if let objectID = target.id, let uuid = UUID(uuidString: objectID) {
-        account = try service.resolveAccount(id: uuid, profileIdentifier: profileName)
+        account = try await service.resolveAccount(id: uuid, profileIdentifier: profileName)
       } else {
         throw AutomationError.accountNotFound("unknown")
       }

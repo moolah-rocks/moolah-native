@@ -33,17 +33,15 @@ struct AutomationServiceTransactionTests {
 
   @Test("createTransaction creates a single-leg transaction")
   func createSingleLegTransaction() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, _) = try await makeServiceWithSession()
 
-    // Create an account first
+    // Create an account first. `createTransaction` resolves the account
+    // from the authoritative repository snapshot, so there's no need to
+    // wait on the reactive `accountStore` before referencing it.
     _ = try await service.createAccount(
       profileIdentifier: "Test",
       name: "Checking",
       type: .bank
-    )
-    try await session.accountStore.waitForNextEmission(
-      matching: { $0.accounts.contains { $0.name == "Checking" } },
-      description: "new account observable"
     )
 
     let transaction = try await service.createTransaction(
@@ -70,16 +68,12 @@ struct AutomationServiceTransactionTests {
 
   @Test("listTransactions returns created transactions")
   func listTransactions() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, _) = try await makeServiceWithSession()
 
     _ = try await service.createAccount(
       profileIdentifier: "Test",
       name: "Checking",
       type: .bank
-    )
-    try await session.accountStore.waitForNextEmission(
-      matching: { $0.accounts.contains { $0.name == "Checking" } },
-      description: "new account observable"
     )
 
     _ = try await service.createTransaction(
@@ -103,16 +97,12 @@ struct AutomationServiceTransactionTests {
 
   @Test("createTransaction with positive amount creates income")
   func createIncomeTransaction() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, _) = try await makeServiceWithSession()
 
     _ = try await service.createAccount(
       profileIdentifier: "Test",
       name: "Checking",
       type: .bank
-    )
-    try await session.accountStore.waitForNextEmission(
-      matching: { $0.accounts.contains { $0.name == "Checking" } },
-      description: "new account observable"
     )
 
     let transaction = try await service.createTransaction(

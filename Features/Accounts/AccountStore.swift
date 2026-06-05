@@ -68,6 +68,22 @@ final class AccountStore {
   private let instrumentChanges: (any InstrumentChangeObserving)?
   private var instrumentChangeObservationTask: Task<Void, Never>?
 
+  /// Monotonic counter over authoritative `observeAll()` snapshots. The
+  /// instrument-registry refresh path captures it before its `fetchAll()`
+  /// and drops a stale refetch that raced a fresher snapshot — see
+  /// `applyInstrumentRegistryRefresh` for the full rationale. `private(set)`
+  /// (only `bumpSnapshotGeneration()` writes it) + `@ObservationIgnored`
+  /// (a pure guard counter no view reads).
+  @ObservationIgnored private(set) var snapshotGeneration: UInt64 = 0
+
+  /// The single increment path for `snapshotGeneration`. Internal so the
+  /// authoritative apply shim in the sibling `+Observation` file can call
+  /// it; combined with the property's `private(set)`, every other site is
+  /// barred from mutating the guard counter at compile time.
+  func bumpSnapshotGeneration() {
+    snapshotGeneration &+= 1
+  }
+
   /// Background retry loop spawned by `recomputeConvertedTotals()` when
   /// a conversion pass reports any failure. Cancelled when a subsequent
   /// pass succeeds; otherwise continues until success or the store is

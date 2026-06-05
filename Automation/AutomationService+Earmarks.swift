@@ -173,7 +173,8 @@ extension AutomationService {
     value: Decimal
   ) async throws {
     let session = try resolveSession(for: profileIdentifier)
-    let account = try resolveAccount(named: accountName, profileIdentifier: profileIdentifier)
+    let account = try await resolveAccount(
+      named: accountName, profileIdentifier: profileIdentifier)
 
     guard account.type == .investment else {
       throw AutomationError.invalidParameter(
@@ -188,7 +189,8 @@ extension AutomationService {
   /// Returns positions for a given investment account.
   func getPositions(profileIdentifier: String, accountName: String) async throws -> [Position] {
     let session = try resolveSession(for: profileIdentifier)
-    let account = try resolveAccount(named: accountName, profileIdentifier: profileIdentifier)
+    let account = try await resolveAccount(
+      named: accountName, profileIdentifier: profileIdentifier)
     await session.investmentStore.loadPositions(accountId: account.id)
     return session.investmentStore.positions
   }
