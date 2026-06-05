@@ -77,6 +77,24 @@ enum InsightTestSupport {
     InstrumentAmount(quantity: quantity, instrument: currency)
   }
 
+  /// A `DailyBalance` offset from `now`: positive `offsetDays` is in the past,
+  /// negative is the forecast tail in the future. `total` sets both
+  /// current-funds balance and net worth; `forecast` flags a projected day.
+  static func balance(offsetDays days: Int, total: Decimal, forecast: Bool) -> DailyBalance {
+    let value = amount(total)
+    let zero = amount(0)
+    return DailyBalance(
+      date: daysAgo(days),
+      balance: value,
+      earmarked: zero,
+      availableFunds: value,
+      investments: zero,
+      investmentValue: nil,
+      netWorth: value,
+      bestFit: nil,
+      isForecast: forecast)
+  }
+
   // MARK: - Aggregate builders
 
   /// `InsightInput.recentCandidates` slice: legs within `windowDays` of `now`.
