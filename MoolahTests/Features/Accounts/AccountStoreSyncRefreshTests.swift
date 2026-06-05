@@ -229,6 +229,81 @@ struct AccountStoreSyncRefreshTests {
     )
   }
 
+  @Test("stale instrument-registry refresh does not clobber a fresher accounts snapshot")
+  func staleRegistryRefreshIsDropped() async throws {
+    // Regression for the `AutomationServiceAccountTests` flake: the
+    // instrument-registry refresh path runs `repository.fetchAll()`
+    // unordered with respect to `observeAll()`. A `fetchAll()` that read
+    // the database before a concurrent write committed returns a stale
+    // (here: empty) row set; without the generation guard, applying it
+    // after a fresher authoritative snapshot would clobber `accounts`
+    // back to the pre-write state. The guard must drop the stale apply.
+    let (backend, _) = try TestBackend.create()
+    let store = AccountStore(
+      repository: backend.accounts,
+      conversionService: FixedConversionService(),
+      targetInstrument: .defaultTestInstrument
+    )
+    let first = try await backend.accounts.create(
+      Account(name: "First", type: .bank, instrument: .defaultTestInstrument),
+      openingBalance: nil
+    )
+    try await store.waitForNextEmission(
+      matching: { $0.accounts.by(id: first.id) != nil },
+      description: "first account visible"
+    )
+
+    // The registry path captures the generation BEFORE its fetch.
+    let observedGeneration = store.snapshotGeneration
+
+    // An authoritative `observeAll()` snapshot lands while the (simulated)
+    // stale fetch is still in flight, bumping the generation.
+    let second = try await backend.accounts.create(
+      Account(name: "Second", type: .bank, instrument: .defaultTestInstrument),
+      openingBalance: nil
+    )
+    try await store.waitForNextEmission(
+      matching: { $0.accounts.by(id: second.id) != nil },
+      description: "second account visible"
+    )
+
+    // The stale, empty refetch resolves last. It must be dropped, not
+    // applied — both accounts survive.
+    await store.applyInstrumentRegistryRefresh([], observedGeneration: observedGeneration)
+    #expect(store.accounts.by(id: first.id) != nil)
+    #expect(store.accounts.by(id: second.id) != nil)
+  }
+
+  @Test("up-to-date instrument-registry refresh applies")
+  func currentRegistryRefreshApplies() async throws {
+    // Companion to `staleRegistryRefreshIsDropped`: when no authoritative
+    // snapshot has landed since the fetch was issued, the refresh applies
+    // (this is the live-instrument-metadata refresh the path exists for).
+    let (backend, _) = try TestBackend.create()
+    let store = AccountStore(
+      repository: backend.accounts,
+      conversionService: FixedConversionService(),
+      targetInstrument: .defaultTestInstrument
+    )
+    let account = try await backend.accounts.create(
+      Account(name: "Original", type: .bank, instrument: .defaultTestInstrument),
+      openingBalance: nil
+    )
+    try await store.waitForNextEmission(
+      matching: { $0.accounts.by(id: account.id) != nil },
+      description: "account visible"
+    )
+
+    // Capture the current generation and apply a refresh tagged with it —
+    // simulating a fetch that observed the latest snapshot. A renamed copy
+    // proves the refresh was applied rather than dropped.
+    let observedGeneration = store.snapshotGeneration
+    var renamed = account
+    renamed.name = "Renamed"
+    await store.applyInstrumentRegistryRefresh([renamed], observedGeneration: observedGeneration)
+    #expect(store.accounts.by(id: account.id)?.name == "Renamed")
+  }
+
   @Test("GRDB wipes during sign-out reach the store before stopObserving cancels it")
   func signOutTeardownOrdering() async throws {
     let (backend, database) = try TestBackend.create()

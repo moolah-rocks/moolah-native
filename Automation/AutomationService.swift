@@ -48,104 +48,6 @@ final class AutomationService {
     sessionManager.openProfiles.map(\.profile)
   }
 
-  // MARK: - Account Operations
-
-  /// Returns all accounts for the given profile.
-  func listAccounts(profileIdentifier: String) throws -> [Account] {
-    let session = try resolveSession(for: profileIdentifier)
-    return Array(session.accountStore.accounts)
-  }
-
-  /// Resolves an account by name (case-insensitive) within a profile.
-  func resolveAccount(named name: String, profileIdentifier: String) throws -> Account {
-    let session = try resolveSession(for: profileIdentifier)
-    let lowered = name.lowercased()
-    guard
-      let account = session.accountStore.accounts.first(where: { $0.name.lowercased() == lowered })
-    else {
-      throw AutomationError.accountNotFound(name)
-    }
-    return account
-  }
-
-  /// Resolves an account by UUID within a profile.
-  func resolveAccount(id: UUID, profileIdentifier: String) throws -> Account {
-    let session = try resolveSession(for: profileIdentifier)
-    guard let account = session.accountStore.accounts.by(id: id) else {
-      throw AutomationError.accountNotFound(id.uuidString)
-    }
-    return account
-  }
-
-  /// Returns the net worth (current + investment totals) for the given profile,
-  /// converted into the profile's instrument.
-  func getNetWorth(profileIdentifier: String) async throws -> InstrumentAmount {
-    let session = try resolveSession(for: profileIdentifier)
-    do {
-      return try await session.accountStore.computeConvertedNetWorth(
-        in: session.profile.instrument)
-    } catch {
-      throw AutomationError.operationFailed(
-        "Failed to compute net worth: \(error.localizedDescription)")
-    }
-  }
-
-  /// Creates a new account in the given profile.
-  func createAccount(
-    profileIdentifier: String,
-    name: String,
-    type: AccountType,
-    isHidden: Bool = false
-  ) async throws -> Account {
-    let session = try resolveSession(for: profileIdentifier)
-    let instrument = session.profile.instrument
-    let account = Account(
-      id: UUID(),
-      name: name,
-      type: type,
-      instrument: instrument,
-      position: session.accountStore.accounts.count,
-      isHidden: isHidden
-    )
-    do {
-      return try await session.accountStore.create(account)
-    } catch {
-      throw AutomationError.operationFailed(
-        "Failed to create account: \(error.localizedDescription)")
-    }
-  }
-
-  /// Updates an existing account's name and/or hidden status.
-  func updateAccount(
-    profileIdentifier: String,
-    accountId: UUID,
-    changes: AccountChanges
-  ) async throws -> Account {
-    let session = try resolveSession(for: profileIdentifier)
-    guard var account = session.accountStore.accounts.by(id: accountId) else {
-      throw AutomationError.accountNotFound(accountId.uuidString)
-    }
-    if let name = changes.name { account.name = name }
-    if case .setTo(let hidden) = changes.hidden { account.isHidden = hidden }
-    do {
-      return try await session.accountStore.update(account)
-    } catch {
-      throw AutomationError.operationFailed(
-        "Failed to update account: \(error.localizedDescription)")
-    }
-  }
-
-  /// Deletes an account by UUID.
-  func deleteAccount(profileIdentifier: String, accountId: UUID) async throws {
-    let session = try resolveSession(for: profileIdentifier)
-    do {
-      try await session.accountStore.delete(id: accountId)
-    } catch {
-      throw AutomationError.operationFailed(
-        "Failed to delete account: \(error.localizedDescription)")
-    }
-  }
-
   // MARK: - Transaction Operations
 
   /// Describes a single leg of a transaction for creation.
@@ -167,7 +69,7 @@ final class AutomationService {
     let session = try resolveSession(for: profileIdentifier)
     let instrument = session.profile.instrument
 
-    let resolution = try resolveLegs(
+    let resolution = try await resolveLegs(
       legs, profileIdentifier: profileIdentifier, instrument: instrument)
     let finalLegs = normaliseTransferLegs(resolution.legs, accountIds: resolution.accountIds)
 
@@ -189,12 +91,15 @@ final class AutomationService {
 
   private func resolveLegs(
     _ legs: [LegSpec], profileIdentifier: String, instrument: Instrument
-  ) throws -> (legs: [TransactionLeg], accountIds: Set<UUID>) {
+  ) async throws -> (legs: [TransactionLeg], accountIds: Set<UUID>) {
+    // Fetch the authoritative account snapshot once and resolve every leg
+    // against it (see `resolveAccount(named:)` for why this is a
+    // repository read rather than a reactive-store read).
+    let accounts = try await fetchAccounts(profileIdentifier: profileIdentifier)
     var resolvedLegs: [TransactionLeg] = []
     var accountIds = Set<UUID>()
     for spec in legs {
-      let account = try resolveAccount(
-        named: spec.accountName, profileIdentifier: profileIdentifier)
+      let account = try Self.account(named: spec.accountName, in: accounts)
       accountIds.insert(account.id)
 
       let categoryId: UUID? =
@@ -247,7 +152,8 @@ final class AutomationService {
 
     var filter = TransactionFilter()
     if let accountName {
-      let account = try resolveAccount(named: accountName, profileIdentifier: profileIdentifier)
+      let account = try await resolveAccount(
+        named: accountName, profileIdentifier: profileIdentifier)
       filter.accountId = account.id
     }
     filter.scheduled = scheduled

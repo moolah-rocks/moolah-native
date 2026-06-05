@@ -99,13 +99,18 @@ extension AccountStore {
   /// teardown that races a tick exits before issuing a fetch. The
   /// task's lifetime is gated by `stopObserving()` / `deinit`, matching
   /// `observe()`.
+  ///
+  /// `snapshotGeneration` is captured *before* the `fetchAll()` so the
+  /// apply can be dropped if a fresher authoritative snapshot lands
+  /// while the fetch is in flight — see `applyInstrumentRegistryRefresh`.
   func observeInstrumentRegistryChanges(_ changes: AsyncStream<Void>) async {
     for await _ in changes {
-      if Task.isCancelled { return }
+      guard !Task.isCancelled else { return }
+      let observedGeneration = snapshotGeneration
       do {
         let fresh = try await repository.fetchAll()
-        if Task.isCancelled { return }
-        await applyAccountsSnapshot(fresh)
+        guard !Task.isCancelled else { return }
+        await applyInstrumentRegistryRefresh(fresh, observedGeneration: observedGeneration)
       } catch {
         surfaceObservationError(error)
       }
@@ -115,9 +120,34 @@ extension AccountStore {
   // MARK: - Entry-point shims
 
   /// Per-emission entry point invoked by the `accounts` subscription
-  /// driver above. Internal so the `addTask` body can call into
-  /// MainActor-isolated state across the file split.
-  func applyAccountsSnapshot(_ fresh: [Account]) async {
+  /// driver above. This is the **authoritative** snapshot source: it bumps
+  /// `snapshotGeneration` so a concurrent instrument-registry refetch can
+  /// detect that it raced a fresher snapshot.
+  private func applyAccountsSnapshot(_ fresh: [Account]) async {
+    bumpSnapshotGeneration()
+    await apply(accounts: fresh)
+  }
+
+  /// Applies an instrument-registry-triggered refetch, but only if no
+  /// authoritative `observeAll()` snapshot has landed since the fetch was
+  /// issued. The `fetchAll()` in `observeInstrumentRegistryChanges` runs
+  /// unordered with respect to `observeAll()`; if it read the database
+  /// before a concurrent write committed, its row set is stale. Applying
+  /// it after a fresher authoritative snapshot would clobber `accounts`
+  /// back to a pre-write state. The generation check and the assignment
+  /// inside `apply(accounts:)` run with no intervening suspension on the
+  /// main actor, so an authoritative snapshot cannot interleave between
+  /// the guard and the write — the only harmful ordering (stale refresh
+  /// applied *after* a fresh snapshot) is exactly the case the guard
+  /// drops. A refresh that lands *before* the next authoritative snapshot
+  /// is harmless: the authoritative apply overwrites it.
+  ///
+  /// Internal (not `private`) so the store's sync-refresh tests can drive
+  /// the guard path directly with a captured generation.
+  func applyInstrumentRegistryRefresh(
+    _ fresh: [Account], observedGeneration: UInt64
+  ) async {
+    guard snapshotGeneration == observedGeneration else { return }
     await apply(accounts: fresh)
   }
 

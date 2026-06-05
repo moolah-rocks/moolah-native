@@ -5,6 +5,9 @@ import Observation
 @Observable
 @MainActor
 final class EarmarkStore {
+
+  // MARK: - State
+
   private(set) var earmarks = Earmarks(from: [])
   private(set) var error: Error?
 
@@ -58,6 +61,20 @@ final class EarmarkStore {
   /// alongside `observationTask`.
   private var instrumentChangeObservationTask: Task<Void, Never>?
 
+  /// Monotonic counter over authoritative `observeAll()` snapshots. The
+  /// instrument-registry refresh path captures it before its `fetchAll()`
+  /// and drops a stale refetch that raced a fresher snapshot — see
+  /// `applyInstrumentRegistryRefresh` (mirrors `AccountStore`). `private(set)`
+  /// (only `bumpSnapshotGeneration()` writes it) + `@ObservationIgnored`
+  /// (a pure guard counter no view reads).
+  @ObservationIgnored private(set) var snapshotGeneration: UInt64 = 0
+
+  /// The single increment path for `snapshotGeneration` — internal so the
+  /// `+Observation` apply shim can reach it past the property's `private(set)`.
+  func bumpSnapshotGeneration() {
+    snapshotGeneration &+= 1
+  }
+
   /// Background retry loop spawned by `recomputeConvertedTotals()` when
   /// a conversion pass reports any failure. Cancelled when a subsequent
   /// pass succeeds; otherwise continues until success or the store is
@@ -73,6 +90,8 @@ final class EarmarkStore {
   /// `@testable import Moolah` exposes it to the test target.
   let testObservationTickStream: AsyncStream<Void>
   private let testObservationTickContinuation: AsyncStream<Void>.Continuation
+
+  // MARK: - Lifecycle
 
   init(
     repository: EarmarkRepository,
@@ -123,6 +142,8 @@ final class EarmarkStore {
       testObservationTickContinuation.finish()
     }
   }
+
+  // MARK: - Observation & State Updates
 
   /// Applies a fresh earmarks snapshot from `observeAll()`. Wrapped in
   /// the Layer 7 signpost interval so benchmarks and Instruments traces
