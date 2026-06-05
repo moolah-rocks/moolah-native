@@ -326,10 +326,7 @@ final class AnalysisStore {
   // MARK: - Date Utilities
 
   private static func parseMonth(_ month: String) -> Date {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yyyyMM"
-    formatter.timeZone = TimeZone(identifier: "UTC")
-    return formatter.date(from: month) ?? Date.distantPast
+    FinancialMonth.date(forKey: month) ?? Date.distantPast
   }
 
   private func afterDate(monthsAgo: Int) -> Date? {
@@ -343,19 +340,23 @@ final class AnalysisStore {
   }
 }
 
-struct CategoryOverTimePoint: Sendable, Identifiable {
+struct CategoryOverTimePoint: Sendable {
   let month: String
   let monthDate: Date
   let actualAmount: Decimal
   let percentage: Double
+}
 
+extension CategoryOverTimePoint: Identifiable {
   var id: String { month }
 }
 
-struct CategoryOverTimeEntry: Sendable, Identifiable {
+struct CategoryOverTimeEntry: Sendable {
   let categoryId: UUID?
   let points: [CategoryOverTimePoint]
   let totalAmount: Decimal
+}
 
+extension CategoryOverTimeEntry: Identifiable {
   var id: String { categoryId?.uuidString ?? "uncategorized" }
 }

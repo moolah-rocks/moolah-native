@@ -33,7 +33,9 @@ struct MonthlyCategorySpendChartTests {
     // April sums both fee categories (20 + 5); May has only feesA (30).
     #expect(chart.series.first?.points.first?.value == 25)
     #expect(chart.highlight?.value == 30)
-    #expect(chart.highlight?.date == InsightTestSupport.date(2026, 5, 1))
+    // The point date is the financial-month positioning token (noon UTC,
+    // zone-invariant), not a midnight instant — see FinancialMonth.date(forKey:).
+    #expect(chart.highlight?.date == FinancialMonth.date(forKey: "202605"))
   }
 
   @Test
