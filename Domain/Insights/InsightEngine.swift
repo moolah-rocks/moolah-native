@@ -91,7 +91,9 @@ struct InsightEngine: Sendable {
     insights += CategoryAnomalyInsight.detect(
       breakdown: input.expenseBreakdown, categories: input.categories, context: context)
     insights += SavingsOpportunityInsights.feeSpend(
-      feeCategorySpend: input.feeCategorySpend, context: context)
+      feeCategorySpend: input.feeCategorySpend,
+      expenseBreakdown: input.expenseBreakdown,
+      context: context)
     return insights
   }
 

@@ -171,6 +171,35 @@ enum InsightChartBuilders {
     return InsightChart.Point(date: date, value: max(-signed, 0))
   }
 
+  /// Combined monthly spend across a set of categories (e.g. every fee-like
+  /// category), as a bar chart with the latest month highlighted. Sums the
+  /// matching `expenseBreakdown` rows per financial month via
+  /// `CategorySpendSeries` (gap-filled, positive magnitudes); `nil` when no
+  /// rows match or fewer than two months remain. The caller names the series
+  /// (`seriesLabel`) — the builder is category-agnostic.
+  static func monthlyCategorySpend(
+    expenseBreakdown: [ExpenseBreakdown],
+    categoryIds: Set<UUID>,
+    reportingCurrency: Instrument,
+    seriesLabel: String
+  ) -> InsightChart? {
+    let rows = expenseBreakdown.filter { row in
+      row.categoryId.map(categoryIds.contains) ?? false
+    }
+    let points = CategorySpendSeries.total(from: rows)
+    guard points.count >= minimumPoints else { return nil }
+    let chartPoints = points.map { InsightChart.Point(date: $0.date, value: $0.magnitude) }
+    return InsightChart(
+      kind: .bar,
+      unit: .currency(reportingCurrency),
+      series: [
+        InsightChart.Series(
+          id: seriesLabel.lowercased(), label: seriesLabel, role: .primary, points: chartPoints)
+      ],
+      highlight: chartPoints.last,
+      xAxis: .monthly)
+  }
+
   /// A category's monthly spend (positive magnitudes), as a bar chart with the
   /// anomalous / latest financial month highlighted.
   static func categorySpend(
