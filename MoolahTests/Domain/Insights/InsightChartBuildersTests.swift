@@ -53,4 +53,33 @@ struct InsightChartBuildersTests {
       xAxis: .monthly)
     #expect(chart.unit == .currency(currency))
   }
+
+  @Test
+  func categorySpendChartHighlightsTheGivenMonth() throws {
+    let points = [
+      MonthlySpendPoint(month: "202604", date: InsightTestSupport.date(2026, 4, 1), magnitude: 100),
+      MonthlySpendPoint(month: "202605", date: InsightTestSupport.date(2026, 5, 1), magnitude: 110),
+      MonthlySpendPoint(month: "202606", date: InsightTestSupport.date(2026, 6, 1), magnitude: 400),
+    ]
+    let chart = try #require(
+      InsightChartBuilders.categorySpend(
+        points: points, reportingCurrency: currency, highlightMonth: "202606"))
+
+    #expect(chart.kind == .bar)
+    #expect(chart.unit == .currency(currency))
+    #expect(chart.xAxis == .monthly)
+    #expect(chart.series.count == 1)
+    #expect(chart.series.first?.points.count == 3)
+    #expect(chart.highlight?.value == 400)
+  }
+
+  @Test
+  func categorySpendChartIsNilBelowTwoPoints() {
+    let points = [
+      MonthlySpendPoint(month: "202606", date: InsightTestSupport.date(2026, 6, 1), magnitude: 400)
+    ]
+    #expect(
+      InsightChartBuilders.categorySpend(
+        points: points, reportingCurrency: currency, highlightMonth: "202606") == nil)
+  }
 }
