@@ -118,7 +118,9 @@ struct SpendAndTrendInsightTests {
     #expect(chart.series.first?.points.count == 3)
     // Highlight marks the latest complete month (202605 = $2,600 spend).
     #expect(chart.highlight?.value == 2600)
-    #expect(chart.highlight?.date == InsightTestSupport.date(2026, 5, 1))
+    // The point date is the financial-month positioning token (noon UTC,
+    // zone-invariant), not a midnight instant — see FinancialMonth.date(forKey:).
+    #expect(chart.highlight?.date == FinancialMonth.date(forKey: "202605"))
   }
 
   @Test

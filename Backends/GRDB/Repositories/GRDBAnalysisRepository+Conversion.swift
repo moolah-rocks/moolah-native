@@ -35,7 +35,7 @@ extension GRDBAnalysisRepository {
   private static let dayFormatter: SendableDayFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate, .withDashSeparatorInDate]
-    formatter.timeZone = FinancialMonth.utcTimeZone
+    formatter.timeZone = .utc
     return SendableDayFormatter(formatter)
   }()
 

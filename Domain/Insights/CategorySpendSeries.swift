@@ -6,7 +6,10 @@ import Foundation
 struct MonthlySpendPoint: Sendable, Hashable {
   /// Financial month bucket, `YYYYMM`.
   let month: String
-  /// First day of the bucket's calendar month (UTC midnight), for recency.
+  /// First day of the bucket's calendar month, as a zone-invariant
+  /// positioning token (noon UTC — see `FinancialMonth.date(forKey:)`), for
+  /// recency and ordering. Never compare it for equality against a midnight
+  /// `DATE(...)` instant.
   let date: Date
   /// Positive spend magnitude in the reporting currency.
   let magnitude: Double
@@ -69,16 +72,10 @@ enum CategorySpendSeries {
     return points
   }
 
-  /// `YYYYMM` → first-of-month UTC date.
+  /// `YYYYMM` → first-of-month chart-positioning token (noon UTC,
+  /// zone-invariant). See `FinancialMonth.date(forKey:)`.
   static func monthDate(_ month: String) -> Date? {
-    guard month.count == 6, let year = Int(month.prefix(4)),
-      let monthNumber = Int(month.suffix(2))
-    else { return nil }
-    var components = DateComponents()
-    components.year = year
-    components.month = monthNumber
-    components.day = 1
-    return InsightContext.defaultCalendar.date(from: components)
+    FinancialMonth.date(forKey: month)
   }
 
   /// Increment a `YYYYMM` bucket by one month, rolling the year over.

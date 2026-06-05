@@ -106,7 +106,9 @@ struct InsightChartBuildersTests {
     // Positive spend magnitudes, ascending by month.
     #expect(chart.series.first?.points.first?.value == 2000)
     #expect(chart.highlight?.value == 3500)
-    #expect(chart.highlight?.date == InsightTestSupport.date(2026, 6, 1))
+    // The point date is the financial-month positioning token (noon UTC,
+    // zone-invariant), not a midnight instant — see FinancialMonth.date(forKey:).
+    #expect(chart.highlight?.date == FinancialMonth.date(forKey: "202606"))
   }
 
   /// A net-refund month (positive `totalExpense`) clamps to a zero bar rather

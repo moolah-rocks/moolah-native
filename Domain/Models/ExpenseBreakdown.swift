@@ -18,11 +18,9 @@ struct ExpenseBreakdown: Sendable, Codable, Identifiable, Hashable {
 }
 
 extension ExpenseBreakdown {
-  /// Parse month string to Date (first day of calendar month)
+  /// The first day of this financial month as a chart-positioning token
+  /// (first day at noon UTC, zone-invariant). See `FinancialMonth.date(forKey:)`.
   var monthDate: Date? {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "yyyyMM"
-    formatter.timeZone = TimeZone(identifier: "UTC")
-    return formatter.date(from: month)
+    FinancialMonth.date(forKey: month)
   }
 }
