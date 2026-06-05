@@ -12,6 +12,7 @@ struct InsightChartView: View {
   let chart: InsightChart
   let tint: Color
   var style: Style = .inline
+  var accessibilityLabel: String = ""
 
   var body: some View {
     if style == .inline {
@@ -21,11 +22,17 @@ struct InsightChartView: View {
         .chartLegend(.hidden)
         .frame(height: 48)
         .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .dynamicTypeSize(.medium ... .accessibility1)
     } else {
       baseChart
         .chartXAxis { xAxisMarks }
         .chartYAxis { yAxisMarks }
-        .frame(height: 240)
+        .frame(minHeight: 200, idealHeight: 240)
+        .accessibilityLabel(
+          accessibilityLabel.isEmpty
+            ? chart.series.map(\.label).joined(separator: ", ")
+            : accessibilityLabel)
     }
   }
 
@@ -41,11 +48,11 @@ struct InsightChartView: View {
           x: .value("Date", highlight.date),
           y: .value("Value", highlight.value)
         )
-        .foregroundStyle(.red)
+        .foregroundStyle(tint)
         .symbolSize(style == .inline ? 18 : 60)
         if style == .expanded {
           RuleMark(x: .value("Date", highlight.date))
-            .foregroundStyle(.red.opacity(0.25))
+            .foregroundStyle(tint.opacity(0.25))
             .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
         }
       }
@@ -63,7 +70,7 @@ struct InsightChartView: View {
         y: .value("Value", point.value)
       )
       .foregroundStyle(color(for: series.role).opacity(series.role == .primary ? 1 : 0.5))
-    case .line, .area:
+    case .line:
       LineMark(
         x: .value("Date", point.date),
         y: .value("Value", point.value),
@@ -79,7 +86,7 @@ struct InsightChartView: View {
     switch role {
     case .primary: tint
     case .projected: tint.opacity(0.5)
-    case .baseline: .gray
+    case .baseline: .secondary
     }
   }
 
@@ -92,12 +99,16 @@ struct InsightChartView: View {
   }
 
   @AxisContentBuilder private var xAxisMarks: some AxisContent {
-    AxisMarks(values: .automatic(desiredCount: 5)) { _ in
+    AxisMarks(values: .automatic(desiredCount: 5)) { value in
       AxisGridLine()
       AxisTick()
-      switch chart.xAxis {
-      case .monthly: AxisValueLabel(format: .dateTime.month(.abbreviated))
-      case .daily: AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+      AxisValueLabel {
+        if let date = value.as(Date.self) {
+          switch chart.xAxis {
+          case .monthly: Text(date, format: .dateTime.month(.abbreviated)).monospacedDigit()
+          case .daily: Text(date, format: .dateTime.month(.abbreviated).day()).monospacedDigit()
+          }
+        }
       }
     }
   }
@@ -125,6 +136,10 @@ struct InsightChartView: View {
   }
 }
 
+private func previewMonth(_ offset: Int) -> Date {
+  Calendar.current.date(byAdding: .month, value: -5 + offset, to: Date()) ?? Date()
+}
+
 #Preview("Inline") {
   InsightChartView(
     chart: InsightChart(
@@ -136,19 +151,40 @@ struct InsightChartView: View {
           label: "Spend",
           role: .primary,
           points: (0..<6).map {
-            InsightChart.Point(
-              date: Date(timeIntervalSince1970: 1_700_000_000 + Double($0) * 2_600_000),
-              value: Double(100 + $0 * 40))
+            InsightChart.Point(date: previewMonth($0), value: Double(100 + $0 * 40))
           })
       ],
-      highlight: InsightChart.Point(
-        date: Date(timeIntervalSince1970: 1_700_000_000 + 5 * 2_600_000), value: 300),
+      highlight: InsightChart.Point(date: previewMonth(5), value: 300),
       xAxis: .monthly),
     tint: .orange,
     style: .inline
   )
   .padding()
   .frame(width: 220)
+}
+
+#Preview("Inline · Dark") {
+  InsightChartView(
+    chart: InsightChart(
+      kind: .bar,
+      unit: .currency(.AUD),
+      series: [
+        InsightChart.Series(
+          id: "spend",
+          label: "Spend",
+          role: .primary,
+          points: (0..<6).map {
+            InsightChart.Point(date: previewMonth($0), value: Double(100 + $0 * 40))
+          })
+      ],
+      highlight: InsightChart.Point(date: previewMonth(5), value: 300),
+      xAxis: .monthly),
+    tint: .orange,
+    style: .inline
+  )
+  .padding()
+  .frame(width: 220)
+  .preferredColorScheme(.dark)
 }
 
 #Preview("Expanded") {
@@ -162,9 +198,7 @@ struct InsightChartView: View {
           label: "Savings rate",
           role: .primary,
           points: (0..<6).map {
-            InsightChart.Point(
-              date: Date(timeIntervalSince1970: 1_700_000_000 + Double($0) * 2_600_000),
-              value: 0.1 + Double($0) * 0.02)
+            InsightChart.Point(date: previewMonth($0), value: 0.1 + Double($0) * 0.02)
           })
       ],
       highlight: nil,
