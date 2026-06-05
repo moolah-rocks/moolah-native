@@ -37,10 +37,14 @@ struct StockPriceServiceFallbackTests {
     let client = FixedStockPriceClient(
       responses: ["BHP.AX": StockPriceResponse(instrument: .AUD, prices: prices)]
     )
+    // Pin to UTC so the cap's "yesterday" boundary is computed against the
+    // same calendar the `YYYY-MM-DD` fixtures use, regardless of host zone.
+    let utc = try #require(TimeZone(identifier: "UTC"))
     return StockPriceService(
       client: client,
       database: database,
-      now: { Self.parse("2024-02-01") }
+      now: { Self.parse("2024-02-01") },
+      timeZone: utc
     )
   }
 

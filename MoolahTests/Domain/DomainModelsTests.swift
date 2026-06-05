@@ -113,7 +113,12 @@ struct DomainModelsTests {
 
     let monthDate = try #require(breakdown.monthDate)
 
-    let calendar = Calendar.current
+    // `monthDate` parses the YYYYMM label in UTC (a financial-month label
+    // must map to the same instant on every host), so read the components
+    // back through a UTC calendar — `Calendar.current` would shift the
+    // midnight-UTC instant into the prior month in any UTC-negative zone.
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
     let components = calendar.dateComponents([.year, .month], from: monthDate)
     #expect(components.year == 2026)
     #expect(components.month == 4)
