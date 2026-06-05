@@ -58,6 +58,43 @@ enum InsightChartBuilders {
       xAxis: .daily)
   }
 
+  /// Net worth over time (actual entries only), highlighting the latest
+  /// reading. Adds a grey best-fit baseline when every actual entry carries
+  /// one.
+  static func netWorthTrend(
+    _ balances: [DailyBalance],
+    reportingCurrency: Instrument
+  ) -> InsightChart? {
+    let actual = balances.filter { !$0.isForecast }.sorted { $0.date < $1.date }
+    guard actual.count >= minimumPoints else { return nil }
+
+    var series = [
+      InsightChart.Series(
+        id: "networth",
+        label: "Net worth",
+        role: .primary,
+        points: actual.map { InsightChart.Point(date: $0.date, value: $0.netWorth.doubleValue) })
+    ]
+    let fits = actual.compactMap(\.bestFit)
+    if fits.count == actual.count {
+      series.append(
+        InsightChart.Series(
+          id: "bestfit",
+          label: "Trend",
+          role: .baseline,
+          points: zip(actual, fits).map { balance, fit in
+            InsightChart.Point(date: balance.date, value: fit.doubleValue)
+          }))
+    }
+    let last = actual[actual.count - 1]
+    return InsightChart(
+      kind: .line,
+      unit: .currency(reportingCurrency),
+      series: series,
+      highlight: InsightChart.Point(date: last.date, value: last.netWorth.doubleValue),
+      xAxis: .daily)
+  }
+
   /// A category's monthly spend (positive magnitudes), as a bar chart with the
   /// anomalous / latest financial month highlighted.
   static func categorySpend(
