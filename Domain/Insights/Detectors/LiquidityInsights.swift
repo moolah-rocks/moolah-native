@@ -42,7 +42,8 @@ enum LiquidityInsights {
           InsightFact("Monthly burn", context.formatted(burn)),
           InsightFact("Runway", monthsText(months)),
         ],
-        references: InsightReferences(instrumentIds: [context.reportingCurrency.id]))
+        references: InsightReferences(instrumentIds: [context.reportingCurrency.id]),
+        chart: balanceChart(dailyBalances, context: context))
     ]
   }
 
@@ -80,8 +81,24 @@ enum LiquidityInsights {
           InsightFact("Suggested buffer", context.formatted(cushion)),
           InsightFact("Idle excess", context.formatted(excess)),
         ],
-        references: InsightReferences(instrumentIds: [context.reportingCurrency.id]))
+        references: InsightReferences(instrumentIds: [context.reportingCurrency.id]),
+        chart: balanceChart(dailyBalances, context: context))
     ]
+  }
+
+  /// Both liquidity insights tell a story about the same liquid-balance
+  /// series — runway is that line sloping down, idle cash is it sitting high —
+  /// so they share one chart, anchored at the latest actual reading the
+  /// runway/cushion maths is computed from. The fallback to `nil` (sparse
+  /// data) is deliberately silent: a missing companion graph is a smaller row,
+  /// not an error worth surfacing.
+  private static func balanceChart(
+    _ dailyBalances: [DailyBalance], context: InsightContext
+  ) -> InsightChart? {
+    InsightChartBuilders.balanceForecast(
+      dailyBalances,
+      reportingCurrency: context.reportingCurrency,
+      highlight: InsightAggregates.latestActual(dailyBalances)?.date)
   }
 
   private static func monthsText(_ months: Double) -> String {
