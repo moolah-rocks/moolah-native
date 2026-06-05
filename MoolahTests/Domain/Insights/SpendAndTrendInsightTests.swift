@@ -161,5 +161,6 @@ struct SpendAndTrendInsightTests {
       insights.first { $0.kind == .categoryTrendRising || $0.kind == .categoryTrendFalling })
     #expect(trend.chart != nil)
     #expect(trend.chart?.kind == .bar)
+    #expect(trend.chart?.highlight?.value == 300)
   }
 }
