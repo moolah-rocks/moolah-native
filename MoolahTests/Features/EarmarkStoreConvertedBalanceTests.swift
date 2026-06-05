@@ -38,8 +38,8 @@ struct EarmarkStoreConvertedBalanceTests {
       targetInstrument: .defaultTestInstrument)
 
     try await store.waitForNextEmission(
-      matching: { !$0.earmarks.ordered.isEmpty },
-      description: "seeded earmarks observed"
+      matching: { $0.convertedTotalBalance?.quantity == 500 },
+      description: "converted total balance computed"
     )
 
     #expect(store.convertedTotalBalance?.quantity == 500)
@@ -72,8 +72,8 @@ struct EarmarkStoreConvertedBalanceTests {
       targetInstrument: .defaultTestInstrument)
 
     try await store.waitForNextEmission(
-      matching: { !$0.earmarks.ordered.isEmpty },
-      description: "seeded earmarks observed"
+      matching: { $0.convertedTotalBalance?.quantity == 500 },
+      description: "converted balances computed"
     )
 
     // Individual balances should reflect true values
@@ -138,8 +138,8 @@ struct EarmarkStoreConvertedBalanceTests {
       targetInstrument: .defaultTestInstrument)
 
     try await store.waitForNextEmission(
-      matching: { !$0.earmarks.ordered.isEmpty },
-      description: "seeded earmarks observed"
+      matching: { $0.convertedBalance(for: earmarkId)?.quantity == 500 },
+      description: "converted balance computed"
     )
 
     #expect(store.convertedBalance(for: earmarkId)?.quantity == 500)
