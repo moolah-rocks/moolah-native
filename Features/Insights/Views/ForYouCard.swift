@@ -41,6 +41,7 @@ private struct InsightRow: View {
   let onNavigate: (SidebarSelection) -> Void
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @State private var isZoomed = false
 
   private var insight: Insight { item.scored.insight }
   private var target: SidebarSelection? {
@@ -54,6 +55,9 @@ private struct InsightRow: View {
     // layout keeps everything inline.
     Group {
       if dynamicTypeSize.isAccessibilitySize {
+        // At accessibility sizes the inline 200pt chart would crowd the
+        // already-stacked content, so the companion graph drops to the bottom
+        // of the vertical stack (full width) rather than sitting inline.
         VStack(alignment: .leading, spacing: 6) {
           headlineLine
           HStack(spacing: 8) {
@@ -62,6 +66,7 @@ private struct InsightRow: View {
             showLessButton
             viewButton
           }
+          chartButton
         }
       } else {
         HStack(spacing: 8) {
@@ -69,6 +74,7 @@ private struct InsightRow: View {
           impactText
           showLessButton
           viewButton
+          chartButton
         }
       }
     }
@@ -78,6 +84,30 @@ private struct InsightRow: View {
     // VoiceOver elements.
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier(UITestIdentifiers.ForYou.row(insight.id))
+    .sheet(isPresented: $isZoomed) {
+      InsightChartDetailSheet(
+        insight: insight,
+        headline: item.headline,
+        onNavigate: onNavigate,
+        onDismiss: onDismiss)
+    }
+  }
+
+  /// The trailing companion graph: a fixed ~200pt inline chart that zooms to
+  /// the detail sheet when tapped. Only present when the insight carries a
+  /// chart, so graph-less rows render exactly as before.
+  @ViewBuilder private var chartButton: some View {
+    if let chart = insight.chart {
+      Button {
+        isZoomed = true
+      } label: {
+        InsightChartView(chart: chart, tint: framingColor, style: .inline)
+          .frame(width: 200)
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier(UITestIdentifiers.ForYou.chart(insight.id))
+      .accessibilityLabel("Show \(item.headline) chart")
+    }
   }
 
   private var headlineLine: some View {
@@ -196,7 +226,24 @@ private struct InsightRow: View {
               actionability: .review,
               surprise: 0.8,
               monetaryImpact: InstrumentAmount(quantity: -2499, instrument: .AUD),
-              references: InsightReferences(accountIds: [accountId])),
+              references: InsightReferences(accountIds: [accountId]),
+              chart: InsightChart(
+                kind: .bar,
+                unit: .currency(.AUD),
+                series: [
+                  InsightChart.Series(
+                    id: "spend",
+                    label: "Spending",
+                    role: .primary,
+                    points: (0..<6).map { offset in
+                      InsightChart.Point(
+                        date: now.addingTimeInterval(Double(offset) * 86_400 * 30),
+                        value: offset == 5 ? 2499 : Double.random(in: 80...160))
+                    })
+                ],
+                highlight: InsightChart.Point(
+                  date: now.addingTimeInterval(5 * 86_400 * 30), value: 2499),
+                xAxis: .monthly)),
             score: 4.2),
           headline: "You spent $2,499 at the Apple Store, far above your usual $120."),
         ForYouItem(
