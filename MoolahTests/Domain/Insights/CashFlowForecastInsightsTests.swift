@@ -64,5 +64,6 @@ struct CashFlowForecastInsightsTests {
     #expect(insight.monetaryImpact == nil)
     #expect(insight.chart != nil)
     #expect(insight.chart?.series.contains { $0.role == .projected } == true)
+    #expect(insight.chart?.series.contains { $0.role == .primary } == true)
   }
 }

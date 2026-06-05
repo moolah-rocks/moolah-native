@@ -121,5 +121,12 @@ struct InsightChartBuildersTests {
     #expect(chart.series.contains { $0.role == .primary })
     #expect(chart.series.contains { $0.role == .projected })
     #expect(chart.highlight?.value == 400)
+
+    let actual = try #require(chart.series.first { $0.role == .primary })
+    #expect(actual.points.count == 2)
+    let projected = try #require(chart.series.first { $0.role == .projected })
+    // Bridge: last actual (day 2 = 900) prepended, then day 3 (400), day 4 (700).
+    #expect(projected.points.count == 3)
+    #expect(projected.points.first?.value == 900)
   }
 }
