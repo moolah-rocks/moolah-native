@@ -12,46 +12,28 @@ import Foundation
 /// their dependencies as parameters so this sibling-file extension
 /// doesn't reach into the main class's `private` storage.
 extension GRDBAnalysisRepository {
-  /// `Sendable` wrapper around an `ISO8601DateFormatter` so a single
-  /// shared instance can be hoisted to a `static let` without
-  /// `nonisolated(unsafe)` (forbidden in production by
-  /// `guides/CONCURRENCY_GUIDE.md` §8). `ISO8601DateFormatter` predates
-  /// Swift `Sendable` but is Apple-documented as thread-safe
-  /// ("ISO8601DateFormatter is thread safe."). The wrapper is `final`,
-  /// holds the formatter as a `let`, and exposes a read-only accessor —
-  /// nothing mutates post-init, so the `@unchecked Sendable` waiver
-  /// only bypasses Swift's structural check, not runtime safety.
-  private final class SendableDayFormatter: @unchecked Sendable {
-    let formatter: ISO8601DateFormatter
-
-    init(_ formatter: ISO8601DateFormatter) { self.formatter = formatter }
-  }
-
-  /// Reused day-string parser anchored to UTC so the resulting `Date`
-  /// round-trips through the conversion service's UTC-keyed ISO
-  /// formatter onto the same day string. Hoisted to a static let so
-  /// per-row aggregation doesn't pay the formatter allocator hit on
-  /// every iteration.
-  private static let dayFormatter: SendableDayFormatter = {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withFullDate, .withDashSeparatorInDate]
-    formatter.timeZone = .utc
-    return SendableDayFormatter(formatter)
-  }()
-
   /// Day-string parser used by every SQL-driven method that aggregates
   /// `(DATE(t.date), …)`.
   ///
   /// SQLite's `DATE()` extracts the UTC calendar date of the stored
-  /// timestamp (GRDB writes `Date` as UTC TEXT). The parser is anchored
-  /// to UTC so the resulting `Date` round-trips through the conversion
-  /// service's `ISO8601DateFormatter` (UTC-keyed) onto the same date
-  /// string — preserving the per-day rate-cache equivalence.
+  /// timestamp (GRDB writes `Date` as UTC TEXT), so the input is always a
+  /// `YYYY-MM-DD` day label. Parsing the components through `Calendar.utc`
+  /// yields the same UTC-midnight `Date` the conversion service's UTC-keyed
+  /// `ISO8601DateFormatter` would produce — preserving the per-day
+  /// rate-cache equivalence — without an `ISO8601DateFormatter` (a
+  /// reference type that would force an `@unchecked Sendable` wrapper to be
+  /// hoisted to a shared `static let`). Pure value arithmetic, so it is
+  /// trivially `Sendable` and allocates no formatter per row.
   ///
   /// Returns `nil` for malformed day strings; callers log and skip the
   /// row rather than silently swallowing.
   static func parseDayString(_ day: String) -> Date? {
-    dayFormatter.formatter.date(from: day)
+    let fields = day.split(separator: "-", omittingEmptySubsequences: false)
+    guard fields.count == 3,
+      let year = Int(fields[0]), let month = Int(fields[1]), let dayOfMonth = Int(fields[2])
+    else { return nil }
+    return Calendar.utc.date(
+      from: DateComponents(year: year, month: month, day: dayOfMonth))
   }
 
   /// Compute the financial-month key (`YYYYMM`) for `date`, respecting
