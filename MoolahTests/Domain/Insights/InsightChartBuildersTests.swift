@@ -159,4 +159,26 @@ struct InsightChartBuildersTests {
     #expect(projected.points.count == 3)
     #expect(projected.points.first?.value == 900)
   }
+
+  @Test
+  func earmarkBurndownProjectsBeyondBudget() throws {
+    let start = InsightTestSupport.date(2026, 6, 1)
+    let now = InsightTestSupport.date(2026, 6, 15)
+    let end = InsightTestSupport.date(2026, 6, 30)
+    let chart = try #require(
+      InsightChartBuilders.earmarkBurndown(
+        budget: 1000,
+        current: InsightChart.Point(date: now, value: 300),
+        projectedRemaining: -400,
+        window: DateInterval(start: start, end: end),
+        reportingCurrency: currency))
+
+    #expect(chart.kind == .line)
+    #expect(chart.unit == .currency(currency))
+    #expect(chart.series.contains { $0.role == .baseline })
+    #expect(chart.series.contains { $0.role == .primary })
+    #expect(chart.series.contains { $0.role == .projected })
+    let projected = try #require(chart.series.first { $0.role == .projected })
+    #expect(projected.points.last?.value == -400)  // budget(1000) - projected(1400)
+  }
 }
