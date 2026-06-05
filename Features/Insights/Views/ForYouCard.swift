@@ -50,31 +50,22 @@ private struct InsightRow: View {
   }
 
   var body: some View {
-    // At accessibility type sizes the inline HStack (headline + impact +
-    // controls) collides, so reflow to a VStack: the headline gets its own
-    // line, then a row of impact and the controls. The non-accessibility
-    // layout keeps everything inline.
+    // The panel is a two-column layout: the textual content (headline + impact +
+    // controls) forms a flexible left column that takes all remaining width, and
+    // the companion graph is a fixed-size sibling pinned to the right. Keeping the
+    // graph out of the text's HStack is what stops the fixed-width chart from
+    // overrunning the row and collapsing the headline into a sliver. At
+    // accessibility type sizes the inline graph would crowd the stacked content,
+    // so it drops to the bottom of the left column (full width) instead.
     Group {
       if dynamicTypeSize.isAccessibilitySize {
-        // At accessibility sizes the inline 200pt chart would crowd the
-        // already-stacked content, so the companion graph drops to the bottom
-        // of the vertical stack (full width) rather than sitting inline.
         VStack(alignment: .leading, spacing: 6) {
-          headlineLine
-          HStack(spacing: 8) {
-            impactText
-            Spacer(minLength: 0)
-            showLessButton
-            viewButton
-          }
+          textColumn
           chartButton
         }
       } else {
-        HStack(spacing: 8) {
-          headlineLine
-          impactText
-          showLessButton
-          viewButton
+        HStack(alignment: .center, spacing: 12) {
+          textColumn
           chartButton
         }
       }
@@ -94,16 +85,51 @@ private struct InsightRow: View {
     }
   }
 
-  /// The trailing companion graph: a fixed ~200pt inline chart that zooms to
-  /// the detail sheet when tapped. Only present when the insight carries a
-  /// chart, so graph-less rows render exactly as before.
+  // MARK: - Layout
+
+  /// Claims all the width the companion graph doesn't, so the headline wraps in
+  /// generous space. Without `maxWidth: .infinity` the fixed-width graph would
+  /// push this column down to a sliver — the bug this layout exists to fix.
+  private var textColumn: some View {
+    VStack(alignment: .leading, spacing: 6) {
+      headlineLine
+      impactAndControls
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  /// The impact amount and the controls. They share a single row when there's
+  /// room; in a tight column (narrow window) the controls drop below the amount
+  /// rather than squeezing it — `ViewThatFits` picks the first layout that fits.
+  private var impactAndControls: some View {
+    ViewThatFits(in: .horizontal) {
+      HStack(spacing: 8) {
+        impactText
+        Spacer(minLength: 8)
+        showLessButton
+        viewButton
+      }
+      VStack(alignment: .leading, spacing: 6) {
+        impactText
+        HStack(spacing: 8) {
+          showLessButton
+          viewButton
+          Spacer(minLength: 0)
+        }
+      }
+    }
+  }
+
+  /// The trailing companion graph: a fixed ~200×72 inline sparkline that zooms
+  /// to the detail sheet when tapped. Only present when the insight carries a
+  /// chart, so graph-less rows render as a plain left column with no graph.
   @ViewBuilder private var chartButton: some View {
     if let chart = insight.chart {
       Button {
         isZoomed = true
       } label: {
         InsightChartView(chart: chart, tint: framingColor, style: .inline)
-          .frame(width: horizontalSizeClass == .compact ? 120 : 200, height: 48)
+          .frame(width: horizontalSizeClass == .compact ? 120 : 200, height: 72)
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
@@ -134,11 +160,16 @@ private struct InsightRow: View {
     }
   }
 
+  // MARK: - Leaves and styling
+
   @ViewBuilder private var impactText: some View {
     if let impact = insight.monetaryImpact {
       Text(impact.formatted)
         .font(.subheadline)
         .monospacedDigit()
+        // A monetary amount is read as a whole — never break it mid-number.
+        .lineLimit(1)
+        .fixedSize()
         .foregroundStyle(impactColor(impact))
         .accessibilityLabel("Impact: \(impact.formatted)")
     }
@@ -150,6 +181,9 @@ private struct InsightRow: View {
       // control on both platforms — matches the dismiss button's style.
       Button("View") { onNavigate(target) }
         .buttonStyle(.borderless)
+        // Keep the label intact when the impact row is tight — it should wrap to
+        // a new line as a whole control, never break mid-word.
+        .fixedSize()
         #if os(iOS)
           .frame(minHeight: 44)
         #endif
@@ -168,6 +202,9 @@ private struct InsightRow: View {
         .contentShape(Rectangle())
     }
     .buttonStyle(.borderless)
+    // Keep the label intact when the impact row is tight — it should wrap to a
+    // new line as a whole control, never break mid-word ("Sho w less").
+    .fixedSize()
     .foregroundStyle(.secondary)
     #if os(iOS)
       .frame(minHeight: 44)

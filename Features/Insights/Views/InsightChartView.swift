@@ -20,7 +20,10 @@ struct InsightChartView: View {
         .chartXAxis(.hidden)
         .chartYAxis(.hidden)
         .chartLegend(.hidden)
-        .frame(height: 48)
+        .frame(height: 72)
+        // Inline sparkline: keep marks inside the declared frame so a mark at the
+        // plot edge can't bleed into the panel's text column beside it.
+        .clipped()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .dynamicTypeSize(.medium ... .accessibility1)
