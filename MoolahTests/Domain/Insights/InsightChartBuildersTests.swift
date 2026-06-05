@@ -30,4 +30,27 @@ struct InsightChartBuildersTests {
     #expect(insight.chart == chart)
     #expect(insight.chart?.series.first?.points.count == 2)
   }
+
+  @Test
+  func insightChartDefaultsToNil() {
+    let insight = Insight(
+      id: "y", kind: .savingsRateTrend, title: "t", date: InsightTestSupport.now,
+      framing: .positive, actionability: .review, surprise: 0.5)
+    #expect(insight.chart == nil)
+  }
+
+  @Test
+  func insightChartCarriesCurrencyUnit() {
+    let chart = InsightChart(
+      kind: .bar,
+      unit: .currency(currency),
+      series: [
+        InsightChart.Series(
+          id: "spend", label: "Spend", role: .primary,
+          points: [InsightChart.Point(date: InsightTestSupport.now, value: 12.5)])
+      ],
+      highlight: nil,
+      xAxis: .monthly)
+    #expect(chart.unit == .currency(currency))
+  }
 }
