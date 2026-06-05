@@ -69,8 +69,11 @@ struct InsightChartBuildersTests {
     #expect(chart.unit == .currency(currency))
     #expect(chart.xAxis == .monthly)
     #expect(chart.series.count == 1)
+    #expect(chart.series.first?.id == "spend")
+    #expect(chart.series.first?.role == .primary)
     #expect(chart.series.first?.points.count == 3)
     #expect(chart.highlight?.value == 400)
+    #expect(chart.highlight?.date == InsightTestSupport.date(2026, 6, 1))
   }
 
   @Test
