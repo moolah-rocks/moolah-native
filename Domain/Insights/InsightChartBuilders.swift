@@ -109,6 +109,38 @@ enum InsightChartBuilders {
       xAxis: .monthly)
   }
 
+  /// Total spend magnitude per financial month, as a bar chart with
+  /// `highlightMonth` (the latest complete month a month-over-month delta
+  /// compares) marked. Spend is the positive magnitude of `totalExpense`; a
+  /// net-refund month (positive total) clamps to a zero bar rather than
+  /// plotting a negative spend, matching `CategorySpendSeries`.
+  static func monthlySpend(
+    monthly: [MonthlyIncomeExpense],
+    reportingCurrency: Instrument,
+    highlightMonth: String
+  ) -> InsightChart? {
+    let ordered = monthly.sorted { $0.month < $1.month }
+    guard ordered.count >= minimumPoints else { return nil }
+
+    return InsightChart(
+      kind: .bar,
+      unit: .currency(reportingCurrency),
+      series: [
+        InsightChart.Series(
+          id: "spend", label: "Spend", role: .primary, points: ordered.map(point(from:)))
+      ],
+      highlight: ordered.first { $0.month == highlightMonth }.map(point(from:)),
+      xAxis: .monthly)
+  }
+
+  private static func point(from month: MonthlyIncomeExpense) -> InsightChart.Point {
+    let signed = Double(truncating: month.totalExpense.quantity as NSDecimalNumber)
+    // monthDate returns nil only for a malformed YYYYMM key; month.end is a safe
+    // fallback since both dates fall within the same calendar month.
+    let date = CategorySpendSeries.monthDate(month.month) ?? month.end
+    return InsightChart.Point(date: date, value: max(-signed, 0))
+  }
+
   /// A category's monthly spend (positive magnitudes), as a bar chart with the
   /// anomalous / latest financial month highlighted.
   static func categorySpend(
