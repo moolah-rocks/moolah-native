@@ -178,6 +178,9 @@ extension MoolahUITestCase {
         + "\(UITestFixtures.TradeBaseline.checkingAccountId) "
         + "(\(UITestFixtures.TradeBaseline.checkingAccountName)) → has 'View'")
     lines.append("scripted.narration = \(UITestFixtures.InsightsForYou.scriptedNarration)")
+    lines.append(
+      "largeTxn carries a 6-month bar chart (anomaly spike in the final month) "
+        + "→ has an inline chart Button that zooms to the detail sheet")
   }
 
   func appendPendingWebImportFixtures(into lines: inout [String]) {

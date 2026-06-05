@@ -100,7 +100,8 @@ enum UITestSeedInsightOverrides {
           surprise: 0.8,
           monetaryImpact: InstrumentAmount(quantity: -2499, instrument: .AUD),
           references: InsightReferences(
-            accountIds: [UITestFixtures.TradeBaseline.checkingAccountId])),
+            accountIds: [UITestFixtures.TradeBaseline.checkingAccountId]),
+          chart: largeTxnChart(anchoredAt: now)),
         score: 4.2),
       ScoredInsight(
         insight: Insight(
@@ -124,5 +125,28 @@ enum UITestSeedInsightOverrides {
           surprise: 0.3),
         score: 2.0),
     ]
+  }
+
+  /// A deterministic six-month bar chart attached to the `largeTxnId` fixture
+  /// insight so the `.insightsForYouBaseline` seed yields exactly one charted
+  /// row (the inline chart Button + the zoom-to-detail sheet). All points are
+  /// derived from the fixed `anchoredAt` date — no `Date()` — so the failure
+  /// artefacts stay diffable. The last month spikes to the anomaly value to
+  /// mirror what `CategoryAnomalyInsight` would produce; the highlight marks it.
+  private static func largeTxnChart(anchoredAt anchor: Date) -> InsightChart {
+    let monthlySpend: [Double] = [110, 95, 130, 105, 120, 2499]
+    let monthSeconds = 86_400.0 * 30
+    let points = monthlySpend.enumerated().map { offset, value in
+      InsightChart.Point(
+        date: anchor.addingTimeInterval(Double(offset) * monthSeconds), value: value)
+    }
+    return InsightChart(
+      kind: .bar,
+      unit: .currency(.AUD),
+      series: [
+        InsightChart.Series(id: "spend", label: "Spending", role: .primary, points: points)
+      ],
+      highlight: points.last,
+      xAxis: .monthly)
   }
 }
