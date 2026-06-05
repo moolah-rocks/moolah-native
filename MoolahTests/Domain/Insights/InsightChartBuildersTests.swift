@@ -87,7 +87,7 @@ struct InsightChartBuildersTests {
   }
 
   private func balance(
-    _ day: Int, total: Decimal, forecast: Bool
+    _ day: Int, total: Decimal, forecast: Bool, netWorth: Decimal? = nil
   ) -> DailyBalance {
     let amount = InstrumentAmount(quantity: total, instrument: currency)
     let zero = InstrumentAmount.zero(instrument: currency)
@@ -98,7 +98,7 @@ struct InsightChartBuildersTests {
       availableFunds: amount,
       investments: zero,
       investmentValue: nil,
-      netWorth: amount,
+      netWorth: InstrumentAmount(quantity: netWorth ?? total, instrument: currency),
       bestFit: nil,
       isForecast: forecast)
   }
@@ -108,13 +108,14 @@ struct InsightChartBuildersTests {
     let balances = [
       balance(1, total: 90_000, forecast: false),
       balance(15, total: 95_000, forecast: false),
-      balance(30, total: 101_000, forecast: false),
+      balance(30, total: 91_000, forecast: false, netWorth: 101_000),
     ]
     let chart = try #require(
       InsightChartBuilders.netWorthTrend(balances, reportingCurrency: currency))
     #expect(chart.kind == .line)
     #expect(chart.series.first?.role == .primary)
     #expect(chart.series.first?.points.count == 3)
+    #expect(chart.series.first?.points.last?.value == 101_000)
     #expect(chart.highlight?.value == 101_000)
   }
 

@@ -86,7 +86,7 @@ enum InsightChartBuilders {
             InsightChart.Point(date: balance.date, value: fit.doubleValue)
           }))
     }
-    let last = actual[actual.count - 1]
+    guard let last = actual.last else { return nil }
     return InsightChart(
       kind: .line,
       unit: .currency(reportingCurrency),
