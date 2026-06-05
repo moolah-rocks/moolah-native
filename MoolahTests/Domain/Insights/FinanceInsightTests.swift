@@ -101,6 +101,35 @@ struct FinanceInsightTests {
     #expect(insights.contains { $0.kind == .bottomPerformer })
   }
 
+  // MARK: - Savings rate
+
+  @Test
+  func savingsRateRisingAttachesPercentChart() throws {
+    // Constant income with month-over-month falling expenses ⇒ a strictly
+    // rising savings rate (0.40 → 0.80) across five complete months.
+    let months = zip(
+      ["202601", "202602", "202603", "202604", "202605"],
+      [Decimal(3000), 2500, 2000, 1500, 1000]
+    ).map { month, expense in
+      InsightTestSupport.monthly(month: month, income: 5000, expense: expense)
+    }
+    let insights = SavingsRateInsight.detect(monthly: months, context: context)
+    let trend = try #require(insights.first { $0.kind == .savingsRateTrend })
+    #expect(trend.framing == .positive)  // rising
+    #expect(trend.chart?.unit == .percent)
+    #expect(trend.chart?.series.first?.id == "rate")
+    #expect(trend.chart?.series.first?.points.isEmpty == false)
+  }
+
+  @Test
+  func savingsRateQuietWhenEveryMonthHasZeroIncome() {
+    // The `income > 0` guard drops every month, leaving no rates to test.
+    let months = ["202601", "202602", "202603", "202604", "202605"].map {
+      InsightTestSupport.monthly(month: $0, income: 0, expense: 1000)
+    }
+    #expect(SavingsRateInsight.detect(monthly: months, context: context).isEmpty)
+  }
+
   // MARK: - Liquidity
 
   @Test
