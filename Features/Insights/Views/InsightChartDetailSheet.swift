@@ -33,7 +33,13 @@ struct InsightChartDetailSheet: View {
     .padding(24)
     .dynamicTypeSize(.medium ... .accessibility3)
     #if os(macOS)
-      .frame(minWidth: 420, minHeight: 420)
+      // A floor, not a fixed height: the sheet grows to fit its content (so a
+      // tall chart or large Dynamic Type is never clipped — no scroll view
+      // needed). The floor only stops the sheet collapsing into a cramped
+      // panel. A charted insight needs room for the expanded graph; a
+      // chart-less one is just header + facts + actions, so a smaller floor
+      // avoids dead space below short content.
+      .frame(minWidth: 420, minHeight: insight.chart == nil ? 240 : 360)
     #endif
     #if os(iOS)
       .presentationDetents([.medium, .large])
@@ -100,6 +106,9 @@ struct InsightChartDetailSheet: View {
         } label: {
           Label("View", systemImage: "arrow.forward")
         }
+        // Both footer actions share the same borderless, tinted weight as the
+        // "Show less" sibling.
+        .buttonStyle(.borderless)
         .help("View \(headline)")
         .accessibilityLabel("View \(headline)")
       }
@@ -158,6 +167,9 @@ struct InsightChartDetailSheet: View {
           InsightFact("This month", "$742"),
           InsightFact("Expected", "$458"),
         ],
+        // A category-spending insight deep-links to the categories view, so the
+        // footer shows both "Show less" and "View".
+        references: InsightReferences(categoryIds: [UUID()]),
         chart: chart)
     }
 
@@ -173,6 +185,21 @@ struct InsightChartDetailSheet: View {
         surprise: 0.5,
         facts: [InsightFact("Net worth", "$101,000")])
     }
+
+    /// A chart-less insight that *does* deep-link, so the footer shows both
+    /// actions. Short enough to exercise the adaptive `minHeight` floor.
+    static var previewLargeCharge: Insight {
+      Insight(
+        id: "preview3",
+        kind: .largeTransactionAnomaly,
+        title: "Large charge",
+        date: Date(),
+        framing: .negative,
+        actionability: .review,
+        surprise: 0.7,
+        facts: [InsightFact("Amount", "$2,499"), InsightFact("Usual", "$120")],
+        references: InsightReferences(accountIds: [UUID()]))
+    }
   }
 
   #Preview("Negative · chart + facts") {
@@ -180,13 +207,25 @@ struct InsightChartDetailSheet: View {
       insight: .previewDiningAnomaly,
       headline: "Dining out is up 62% this month",
       onNavigate: { _ in },
-      onDismiss: {})
+      onDismiss: {}
+    )
+    // Size the canvas to a representative real-sheet height so the header and
+    // footer aren't clipped (the charted content is taller than the default).
+    .frame(width: 500, height: 560)
   }
 
   #Preview("Positive · no chart, no View button") {
     InsightChartDetailSheet(
       insight: .previewNetWorthMilestone,
       headline: "Net worth crossed $100k",
+      onNavigate: { _ in },
+      onDismiss: {})
+  }
+
+  #Preview("Negative · no chart, both actions") {
+    InsightChartDetailSheet(
+      insight: .previewLargeCharge,
+      headline: "You spent $2,499 at the Apple Store, far above your usual $120.",
       onNavigate: { _ in },
       onDismiss: {})
   }
