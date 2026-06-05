@@ -31,16 +31,23 @@ struct InsightChartDetailSheet: View {
       actions
     }
     .padding(24)
-    .frame(minWidth: 420, minHeight: 420)
+    .dynamicTypeSize(.medium ... .accessibility3)
+    #if os(macOS)
+      .frame(minWidth: 420, minHeight: 420)
+    #endif
+    #if os(iOS)
+      .presentationDetents([.medium, .large])
+    #endif
   }
 
   private var header: some View {
     HStack(alignment: .firstTextBaseline, spacing: 8) {
       Image(systemName: framingIcon)
         .foregroundStyle(framingColor)
-        .accessibilityHidden(true)
+        .accessibilityLabel(framingDescription)
       Text(headline)
         .font(.headline)
+        .accessibilityAddTraits(.isHeader)
       Spacer()
       Button {
         dismiss()
@@ -59,10 +66,13 @@ struct InsightChartDetailSheet: View {
         HStack {
           Text(fact.label).foregroundStyle(.secondary)
           Spacer()
+          // `.monospacedDigit()` aligns numeric fact values (the common case)
+          // and is harmless on the occasional text-only value.
           Text(fact.value).fontWeight(.semibold).monospacedDigit()
         }
         .font(.subheadline)
         .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
         Divider()
       }
     }
@@ -70,12 +80,17 @@ struct InsightChartDetailSheet: View {
 
   @ViewBuilder private var actions: some View {
     HStack(spacing: 12) {
-      Button(role: .destructive) {
+      Button {
         onDismiss()
         dismiss()
       } label: {
         Label("Show less", systemImage: "hand.thumbsdown")
+          .font(.caption)
       }
+      .buttonStyle(.borderless)
+      .foregroundStyle(.secondary)
+      .help("Show fewer insights like this")
+      .accessibilityLabel("Show fewer insights like this: \(headline)")
       Spacer()
       if let target {
         Button {
@@ -84,7 +99,8 @@ struct InsightChartDetailSheet: View {
         } label: {
           Label("View", systemImage: "arrow.forward")
         }
-        .keyboardShortcut(.defaultAction)
+        .help("View \(headline)")
+        .accessibilityLabel("View \(headline)")
       }
     }
   }
@@ -104,4 +120,73 @@ struct InsightChartDetailSheet: View {
     case .neutral: return "info.circle.fill"
     }
   }
+
+  private var framingDescription: String {
+    switch insight.framing {
+    case .positive: return "Good news"
+    case .negative: return "Heads up"
+    case .neutral: return "Note"
+    }
+  }
 }
+
+#if DEBUG
+  extension Insight {
+    /// A negative-framed insight with a bar chart and three facts, for previews.
+    static var previewDiningAnomaly: Insight {
+      let points = (0..<6).map { offset -> InsightChart.Point in
+        let date = Calendar.current.date(byAdding: .month, value: -5 + offset, to: Date()) ?? Date()
+        return InsightChart.Point(date: date, value: Double(100 + offset * 60))
+      }
+      let chart = InsightChart(
+        kind: .bar,
+        unit: .currency(.AUD),
+        series: [InsightChart.Series(id: "spend", label: "Spend", role: .primary, points: points)],
+        highlight: nil,
+        xAxis: .monthly)
+      return Insight(
+        id: "preview",
+        kind: .categorySpendingAnomaly,
+        title: "Dining up 62%",
+        date: Date(),
+        framing: .negative,
+        actionability: .review,
+        surprise: 0.8,
+        facts: [
+          InsightFact("Category", "Dining"),
+          InsightFact("This month", "$742"),
+          InsightFact("Expected", "$458"),
+        ],
+        chart: chart)
+    }
+
+    /// A positive-framed, chart-less insight with no references (so no "View").
+    static var previewNetWorthMilestone: Insight {
+      Insight(
+        id: "preview2",
+        kind: .netWorthMilestone,
+        title: "Net worth passed $100k",
+        date: Date(),
+        framing: .positive,
+        actionability: .informational,
+        surprise: 0.5,
+        facts: [InsightFact("Net worth", "$101,000")])
+    }
+  }
+
+  #Preview("Negative · chart + facts") {
+    InsightChartDetailSheet(
+      insight: .previewDiningAnomaly,
+      headline: "Dining out is up 62% this month",
+      onNavigate: { _ in },
+      onDismiss: {})
+  }
+
+  #Preview("Positive · no chart, no View button") {
+    InsightChartDetailSheet(
+      insight: .previewNetWorthMilestone,
+      headline: "Net worth crossed $100k",
+      onNavigate: { _ in },
+      onDismiss: {})
+  }
+#endif
