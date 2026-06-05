@@ -95,6 +95,20 @@ enum InsightChartBuilders {
       xAxis: .daily)
   }
 
+  /// Monthly savings rate as a percentage line, highlighting the latest month.
+  static func savingsRate(points: [InsightChart.Point]) -> InsightChart? {
+    guard points.count >= minimumPoints else { return nil }
+    let ordered = points.sorted { $0.date < $1.date }
+    return InsightChart(
+      kind: .line,
+      unit: .percent,
+      series: [
+        InsightChart.Series(id: "rate", label: "Savings rate", role: .primary, points: ordered)
+      ],
+      highlight: ordered.last,
+      xAxis: .monthly)
+  }
+
   /// A category's monthly spend (positive magnitudes), as a bar chart with the
   /// anomalous / latest financial month highlighted.
   static func categorySpend(

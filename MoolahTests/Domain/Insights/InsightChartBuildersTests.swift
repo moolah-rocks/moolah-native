@@ -120,6 +120,20 @@ struct InsightChartBuildersTests {
   }
 
   @Test
+  func savingsRateChartIsPercentUnit() throws {
+    let points = [
+      InsightChart.Point(date: InsightTestSupport.date(2026, 3, 31), value: 0.10),
+      InsightChart.Point(date: InsightTestSupport.date(2026, 4, 30), value: 0.15),
+      InsightChart.Point(date: InsightTestSupport.date(2026, 5, 31), value: 0.22),
+    ]
+    let chart = try #require(InsightChartBuilders.savingsRate(points: points))
+    #expect(chart.kind == .line)
+    #expect(chart.unit == .percent)
+    #expect(chart.xAxis == .monthly)
+    #expect(chart.highlight?.value == 0.22)
+  }
+
+  @Test
   func balanceForecastSplitsActualAndProjected() throws {
     let balances = [
       balance(1, total: 1000, forecast: false),
