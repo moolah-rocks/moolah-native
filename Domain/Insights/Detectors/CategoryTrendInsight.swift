@@ -92,6 +92,10 @@ enum CategoryTrendInsight {
       ],
       references: InsightReferences(
         categoryIds: resolved.map { [$0.id] } ?? [],
-        instrumentIds: [context.reportingCurrency.id]))
+        instrumentIds: [context.reportingCurrency.id]),
+      chart: InsightChartBuilders.categorySpend(
+        points: points,
+        reportingCurrency: context.reportingCurrency,
+        highlightMonth: latest.month))
   }
 }

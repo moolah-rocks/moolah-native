@@ -129,4 +129,37 @@ struct SpendAndTrendInsightTests {
     #expect(anomaly.title.contains("June"))
     #expect(!anomaly.title.contains("this month"))
   }
+
+  @Test
+  func categoryAnomalyAttachesHighlightedChart() throws {
+    let dining = Category(name: "Dining")
+    let magnitudes: [Decimal] = [100, 105, 98, 102, 100, 103, 99, 400]
+    let months = ["202511", "202512", "202601", "202602", "202603", "202604", "202605", "202606"]
+    let breakdown = zip(months, magnitudes).map { month, magnitude in
+      InsightTestSupport.breakdownRow(magnitude, categoryId: dining.id, month: month)
+    }
+    let insights = CategoryAnomalyInsight.detect(
+      breakdown: breakdown, categories: Categories(from: [dining]), context: context)
+    let anomaly = try #require(insights.first { $0.kind == .categorySpendingAnomaly })
+    let chart = try #require(anomaly.chart)
+    #expect(chart.kind == .bar)
+    #expect(chart.series.first?.points.count == 8)
+    #expect(chart.highlight?.value == 400)
+  }
+
+  @Test
+  func categoryTrendAttachesChart() throws {
+    let dining = Category(name: "Dining")
+    let magnitudes: [Decimal] = [100, 140, 180, 220, 260, 300]
+    let months = ["202601", "202602", "202603", "202604", "202605", "202606"]
+    let breakdown = zip(months, magnitudes).map { month, magnitude in
+      InsightTestSupport.breakdownRow(magnitude, categoryId: dining.id, month: month)
+    }
+    let insights = CategoryTrendInsight.detect(
+      breakdown: breakdown, categories: Categories(from: [dining]), context: context)
+    let trend = try #require(
+      insights.first { $0.kind == .categoryTrendRising || $0.kind == .categoryTrendFalling })
+    #expect(trend.chart != nil)
+    #expect(trend.chart?.kind == .bar)
+  }
 }
