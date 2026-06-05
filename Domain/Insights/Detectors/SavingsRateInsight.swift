@@ -10,13 +10,14 @@ enum SavingsRateInsight {
     minimumMonths: Int = 4
   ) -> [Insight] {
     let complete = InsightAggregates.completeMonths(monthly, context: context)
-    let rates: [Double] = complete.compactMap { month in
+    let points: [InsightChart.Point] = complete.compactMap { month in
       let income = Double(
         truncating: InsightAggregates.incomeMagnitude(month.totalIncome) as NSDecimalNumber)
       guard income > 0 else { return nil }
       let net = Double(truncating: month.totalProfit.quantity as NSDecimalNumber)
-      return net / income
+      return InsightChart.Point(date: month.end, value: net / income)
     }
+    let rates = points.map(\.value)
     guard rates.count >= minimumMonths, let result = MannKendall.test(rates),
       result.statistic != 0
     else { return [] }
@@ -44,7 +45,8 @@ enum SavingsRateInsight {
           InsightFact(
             "Trend p-value", result.pValue.formatted(.number.precision(.fractionLength(3)))),
         ],
-        references: InsightReferences(instrumentIds: [context.reportingCurrency.id]))
+        references: InsightReferences(instrumentIds: [context.reportingCurrency.id]),
+        chart: InsightChartBuilders.savingsRate(points: points))
     ]
   }
 
