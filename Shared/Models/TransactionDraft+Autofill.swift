@@ -32,12 +32,20 @@ extension TransactionDraft {
       }
     }
 
-    // Autofill copies content from a different transaction; legs save
-    // into *this* transaction so they need new ids — preserving the
-    // source's leg ids would PK-collide on the GRDB upsert against the
-    // source's own row. `clearingLegId()` owns the rebuild so a future
-    // `LegDraft` field addition can't silently drop its value here.
-    newDraft.legDrafts = newDraft.legDrafts.map { $0.clearingLegId() }
+    // Autofill copies content from a *different* transaction, but the legs
+    // save into *this* one. Each carried leg therefore takes a stable id of
+    // this transaction's own — never the source's, which would PK-collide
+    // with (and steal) the source's rows on the GRDB upsert. Ids come from
+    // this draft's existing legs, matched positionally: a new transaction
+    // always opens from a persisted placeholder that already owns one, so
+    // every debounced save upserts the same row rather than inserting a new
+    // one. Any extra leg a multi-leg source brings in gets a fresh id minted
+    // once here, so it too stays stable across saves (#872).
+    let ownLegIds = self.legDrafts.map(\.legId)
+    newDraft.legDrafts = newDraft.legDrafts.enumerated().map { index, leg in
+      let stableId = (index < ownLegIds.count ? ownLegIds[index] : nil) ?? UUID()
+      return leg.withLegId(stableId)
+    }
 
     // Preserve the viewed account. Skip custom mode: a complex match has no
     // single "viewed" leg, and adopting its structure means the user is
