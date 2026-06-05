@@ -104,6 +104,21 @@ struct InsightChartBuildersTests {
   }
 
   @Test
+  func netWorthTrendUsesNetWorthValues() throws {
+    let balances = [
+      balance(1, total: 90_000, forecast: false),
+      balance(15, total: 95_000, forecast: false),
+      balance(30, total: 101_000, forecast: false),
+    ]
+    let chart = try #require(
+      InsightChartBuilders.netWorthTrend(balances, reportingCurrency: currency))
+    #expect(chart.kind == .line)
+    #expect(chart.series.first?.role == .primary)
+    #expect(chart.series.first?.points.count == 3)
+    #expect(chart.highlight?.value == 101_000)
+  }
+
+  @Test
   func balanceForecastSplitsActualAndProjected() throws {
     let balances = [
       balance(1, total: 1000, forecast: false),

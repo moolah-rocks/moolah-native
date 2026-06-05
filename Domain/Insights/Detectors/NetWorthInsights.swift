@@ -38,7 +38,9 @@ enum NetWorthInsights {
           InsightFact("Milestone", context.formatted(crossed)),
           InsightFact("Was", context.formatted(baseline)),
         ],
-        references: InsightReferences(instrumentIds: [context.reportingCurrency.id]))
+        references: InsightReferences(instrumentIds: [context.reportingCurrency.id]),
+        chart: InsightChartBuilders.netWorthTrend(
+          dailyBalances, reportingCurrency: context.reportingCurrency))
     ]
   }
 
