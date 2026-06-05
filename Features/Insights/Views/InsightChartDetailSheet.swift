@@ -57,6 +57,7 @@ struct InsightChartDetailSheet: View {
       }
       .buttonStyle(.plain)
       .accessibilityLabel("Close")
+      .help("Close")
     }
   }
 

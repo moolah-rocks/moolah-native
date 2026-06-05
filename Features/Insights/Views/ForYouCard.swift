@@ -41,6 +41,7 @@ private struct InsightRow: View {
   let onNavigate: (SidebarSelection) -> Void
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+  @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @State private var isZoomed = false
 
   private var insight: Insight { item.scored.insight }
@@ -102,11 +103,14 @@ private struct InsightRow: View {
         isZoomed = true
       } label: {
         InsightChartView(chart: chart, tint: framingColor, style: .inline)
-          .frame(width: 200)
+          .frame(width: horizontalSizeClass == .compact ? 120 : 200, height: 48)
+          .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
       .accessibilityIdentifier(UITestIdentifiers.ForYou.chart(insight.id))
       .accessibilityLabel("Show \(item.headline) chart")
+      .accessibilityHint("Opens a larger chart view")
+      .help("Show \(item.headline) chart in detail")
     }
   }
 
