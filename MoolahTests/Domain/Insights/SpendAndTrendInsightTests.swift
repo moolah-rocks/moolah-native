@@ -181,6 +181,45 @@ struct SpendAndTrendInsightTests {
   }
 
   @Test
+  func categoryAnomalySuppressesDriftedRecurrence() {
+    // A regular ~$100/month category (passes Gate A) with a $600 spike that
+    // recurred ~12 months earlier, drifted by one month (June yr1 -> July yr2).
+    let utilities = Category(name: "Utilities")
+    var magnitudes = Array(repeating: Decimal(100), count: 14)
+    magnitudes[0] = 600  // 202506 (June, prior year)
+    magnitudes[13] = 600  // 202607 (July, this year) — the latest spike
+    let months = [
+      "202506", "202507", "202508", "202509", "202510", "202511", "202512",
+      "202601", "202602", "202603", "202604", "202605", "202606", "202607",
+    ]
+    let breakdown = zip(months, magnitudes).map { month, magnitude in
+      InsightTestSupport.breakdownRow(magnitude, categoryId: utilities.id, month: month)
+    }
+    let insights = CategoryAnomalyInsight.detect(
+      breakdown: breakdown, categories: Categories(from: [utilities]), context: context)
+    #expect(!insights.contains { $0.kind == .categorySpendingAnomaly })
+  }
+
+  @Test
+  func categoryAnomalySuppressesQuarterlyRecurrence() {
+    // A regular ~$100/month category with a $600 spike every 3 months. The
+    // latest spike matches the lag-3 occurrence, so it is a predictable bill.
+    let utilities = Category(name: "Water")
+    var magnitudes = Array(repeating: Decimal(100), count: 12)
+    for index in [2, 5, 8, 11] { magnitudes[index] = 600 }
+    let months = [
+      "202507", "202508", "202509", "202510", "202511", "202512",
+      "202601", "202602", "202603", "202604", "202605", "202606",
+    ]
+    let breakdown = zip(months, magnitudes).map { month, magnitude in
+      InsightTestSupport.breakdownRow(magnitude, categoryId: utilities.id, month: month)
+    }
+    let insights = CategoryAnomalyInsight.detect(
+      breakdown: breakdown, categories: Categories(from: [utilities]), context: context)
+    #expect(!insights.contains { $0.kind == .categorySpendingAnomaly })
+  }
+
+  @Test
   func categoryTrendAttachesChart() throws {
     let dining = Category(name: "Dining")
     let magnitudes: [Decimal] = [100, 140, 180, 220, 260, 300]

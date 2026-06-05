@@ -18,12 +18,18 @@ enum CategoryAnomalyInsight {
     context: InsightContext,
     minimumMonths: Int = 6,
     threshold: Double = 3,
-    minimumOverspendFraction: Double = 0.25
+    minimumOverspendFraction: Double = 0.25,
+    recurrenceLags: [Int] = [12, 6, 3],
+    recurrenceTolerance: Double = 0.6
   ) -> [Insight] {
     let series = CategorySpendSeries.build(
       from: breakdown, reportingCurrency: context.reportingCurrency)
 
-    let bounds = Bounds(zScore: threshold, overspendFraction: minimumOverspendFraction)
+    let gates = Gates(
+      zScore: threshold,
+      overspendFraction: minimumOverspendFraction,
+      recurrenceLags: recurrenceLags,
+      recurrenceTolerance: recurrenceTolerance)
     var insights: [Insight] = []
     for (categoryId, points) in series where points.count >= minimumMonths {
       guard
@@ -32,18 +38,24 @@ enum CategoryAnomalyInsight {
           points: points,
           categories: categories,
           context: context,
-          bounds: bounds)
+          gates: gates)
       else { continue }
       insights.append(insight)
     }
     return insights
   }
 
-  /// The two gate values an anomaly must clear, bundled to keep `evaluate`
-  /// within the parameter-count budget.
-  private struct Bounds {
+  /// The gate values an anomaly must clear, bundled to keep `evaluate` within
+  /// the parameter-count budget.
+  private struct Gates {
     let zScore: Double
     let overspendFraction: Double
+    /// Cadence lags (months) checked for a recurring spike: annual, semi-annual,
+    /// quarterly.
+    let recurrenceLags: [Int]
+    /// A prior spike at a cadence lag of at least this fraction of the latest
+    /// spike's magnitude counts as "recurring".
+    let recurrenceTolerance: Double
   }
 
   private static func evaluate(
@@ -51,7 +63,7 @@ enum CategoryAnomalyInsight {
     points: [MonthlySpendPoint],
     categories: Categories,
     context: InsightContext,
-    bounds: Bounds
+    gates: Gates
   ) -> Insight? {
     let magnitudes = points.map(\.magnitude)
     // Gate A — regularity. An overspend is only meaningful against an established
@@ -66,14 +78,24 @@ enum CategoryAnomalyInsight {
     let latestRemainder = remainder[remainder.count - 1]
     let priorRemainders = Array(remainder.dropLast())
     let zScore = DescriptiveStatistics.robustZScore(of: latestRemainder, in: priorRemainders)
-    guard zScore >= bounds.zScore, latestRemainder > 0 else { return nil }
+    guard zScore >= gates.zScore, latestRemainder > 0 else { return nil }
 
     let expected =
       decomposition.trend[remainder.count - 1]
       + decomposition.seasonal[remainder.count - 1]
     guard expected > 0 else { return nil }
     let overspendFraction = latestRemainder / expected
-    guard overspendFraction >= bounds.overspendFraction else { return nil }
+    guard overspendFraction >= gates.overspendFraction else { return nil }
+
+    // Gate B — recurrence. Suppress a spike that recurs at a fixed cadence
+    // (annual/semi-annual/quarterly), tolerating +/-1 month of date drift, so a
+    // predictable periodic bill does not nag every cycle.
+    guard
+      !isRecurringSpike(
+        magnitudes: magnitudes,
+        lags: gates.recurrenceLags,
+        tolerance: gates.recurrenceTolerance)
+    else { return nil }
 
     let resolved =
       categoryId == CategorySpendSeries.uncategorizedKey
@@ -113,6 +135,25 @@ enum CategoryAnomalyInsight {
 
   private static func percent(_ fraction: Double) -> String {
     fraction.formatted(.percent.precision(.fractionLength(0)))
+  }
+
+  /// True when the latest month's spike has a comparable spike (>= `tolerance`
+  /// of its magnitude) at one of the cadence `lags`, allowing +/-1 month of
+  /// date drift across month buckets.
+  private static func isRecurringSpike(
+    magnitudes: [Double], lags: [Int], tolerance: Double
+  ) -> Bool {
+    guard let latest = magnitudes.last, latest > 0 else { return false }
+    let latestIndex = magnitudes.count - 1
+    let floor = latest * tolerance
+    for lag in lags {
+      for offset in -1...1 {
+        let index = latestIndex - lag + offset
+        guard index >= 0, index < latestIndex else { continue }
+        if magnitudes[index] >= floor { return true }
+      }
+    }
+    return false
   }
 
   /// Wide month name pinned to the context calendar's time zone so a
