@@ -131,4 +131,48 @@ enum InsightChartBuilders {
       highlight: highlight,
       xAxis: .monthly)
   }
+
+  /// A projected budget burndown (remaining budget over the window). Earmark
+  /// snapshots carry no spend history, so this shows the ideal-burndown
+  /// baseline, the current remaining, and a dashed projection to the window
+  /// end — never faked historical data. `current` anchors both the primary
+  /// and projected series at today; `projectedRemaining` is
+  /// `budget - projectedSpend` and may go negative.
+  static func earmarkBurndown(
+    budget: Double,
+    current: InsightChart.Point,
+    projectedRemaining: Double,
+    window: DateInterval,
+    reportingCurrency: Instrument
+  ) -> InsightChart? {
+    guard budget > 0, window.start < window.end else { return nil }
+    return InsightChart(
+      kind: .line,
+      unit: .currency(reportingCurrency),
+      series: [
+        InsightChart.Series(
+          id: "ideal",
+          label: "Budget",
+          role: .baseline,
+          points: [
+            InsightChart.Point(date: window.start, value: budget),
+            InsightChart.Point(date: window.end, value: 0),
+          ]),
+        InsightChart.Series(
+          id: "actual",
+          label: "Remaining",
+          role: .primary,
+          points: [current]),
+        InsightChart.Series(
+          id: "projected",
+          label: "Projected",
+          role: .projected,
+          points: [
+            current,
+            InsightChart.Point(date: window.end, value: projectedRemaining),
+          ]),
+      ],
+      highlight: current,
+      xAxis: .daily)
+  }
 }

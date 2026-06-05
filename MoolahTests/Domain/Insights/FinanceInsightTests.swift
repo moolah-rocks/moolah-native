@@ -28,6 +28,7 @@ struct FinanceInsightTests {
     let insights = EarmarkBudgetInsights.detect(earmarks: [earmark], context: context)
     let overspend = try #require(insights.first { $0.kind == .earmarkBurndownProjection })
     #expect(overspend.actionability == .act)
+    #expect(overspend.chart?.series.contains { $0.role == .projected } == true)
   }
 
   @Test
