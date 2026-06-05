@@ -50,8 +50,8 @@ struct TransactionDraftLegIdTests {
     #expect(rebuilt.legs[1].id != leg.id)
   }
 
-  @Test("applyAutofill clears legId so saving does not collide with the source's leg rows")
-  func applyAutofillClearsLegIds() throws {
+  @Test("applyAutofill never carries the source's leg ids, so saving can't steal its rows")
+  func applyAutofillDoesNotReuseSourceLegIds() throws {
     let sourceLeg = TransactionLeg(
       accountId: UUID(),
       instrument: Instrument.defaultTestInstrument,
@@ -62,19 +62,126 @@ struct TransactionDraftLegIdTests {
       payee: "Coffee",
       legs: [sourceLeg])
 
-    // A fresh draft is a brand-new transaction in progress.
+    // A draft with no prior persistence has legId == nil, exercising the
+    // fresh-id fallback in autofill. In production a new transaction always
+    // opens from a persisted placeholder that already carries a non-nil
+    // legId (covered by `applyAutofillReusesOwnLegId`); this is the
+    // defensive case.
     var draft = TransactionDraft(accountId: nil, instrument: Instrument.defaultTestInstrument)
 
     draft.applyAutofill(
       from: source, categories: Categories(from: []), accounts: Accounts(from: []))
 
-    // The carried leg's content matches `source` but its id is regenerated
-    // at save time so it does not collide with `source.legs[0].id` in
-    // GRDB's primary key.
-    #expect(draft.legDrafts.allSatisfy { $0.legId == nil })
+    // The carried leg's content matches `source` but it gets an id of its
+    // own — never the source's — so the GRDB upsert can't collide with or
+    // steal `source.legs[0]`.
+    let carriedIds = Set(draft.legDrafts.compactMap(\.legId))
+    #expect(!carriedIds.contains(sourceLeg.id))
 
-    let savedNewId = UUID()
-    let saved = try #require(draft.toTransaction(id: savedNewId))
+    let saved = try #require(draft.toTransaction(id: UUID()))
     #expect(saved.legs.first?.id != sourceLeg.id)
+  }
+
+  @Test("applyAutofill reuses the draft's own leg id so repeated saves don't churn")
+  func applyAutofillReusesOwnLegId() throws {
+    // A new transaction always opens from a placeholder that was persisted
+    // up front, so its single leg already owns a stable id. Autofill must
+    // reuse that id rather than mint a fresh one on every debounced save —
+    // leg-id churn is what surfaces as a duplicate leg during sync apply
+    // (#872, https://github.com/moolah-rocks/moolah-native/issues/872).
+    let placeholderLeg = TransactionLeg(
+      accountId: UUID(),
+      instrument: Instrument.defaultTestInstrument,
+      quantity: .zero, type: .expense)
+    let placeholder = Transaction(date: Date(), payee: "", legs: [placeholderLeg])
+    var draft = TransactionDraft(from: placeholder)
+
+    let sourceLeg = TransactionLeg(
+      accountId: UUID(),
+      instrument: Instrument.defaultTestInstrument,
+      quantity: Decimal(-25), type: .expense,
+      categoryId: UUID())
+    let source = Transaction(
+      date: Date(timeIntervalSince1970: 0), payee: "Coffee", legs: [sourceLeg])
+
+    draft.applyAutofill(
+      from: source, categories: Categories(from: []), accounts: Accounts(from: []))
+
+    // Reuses this transaction's own leg id — not the source's.
+    #expect(draft.legDrafts.map(\.legId) == [placeholderLeg.id])
+    #expect(placeholderLeg.id != sourceLeg.id)
+
+    // So saving twice yields the same leg id: no per-keystroke leg swap.
+    let first = try #require(draft.toTransaction(id: placeholder.id))
+    let second = try #require(draft.toTransaction(id: placeholder.id))
+    #expect(first.legs.map(\.id) == [placeholderLeg.id])
+    #expect(second.legs.map(\.id) == first.legs.map(\.id))
+  }
+
+  @Test("applyAutofill gives extra legs from a multi-leg source stable ids")
+  func applyAutofillStabilisesExtraLegIds() throws {
+    let placeholderLeg = TransactionLeg(
+      accountId: UUID(),
+      instrument: Instrument.defaultTestInstrument,
+      quantity: .zero, type: .expense)
+    let placeholder = Transaction(date: Date(), payee: "", legs: [placeholderLeg])
+    var draft = TransactionDraft(from: placeholder)
+
+    let legA = TransactionLeg(
+      accountId: UUID(), instrument: Instrument.defaultTestInstrument,
+      quantity: Decimal(-25), type: .transfer)
+    let legB = TransactionLeg(
+      accountId: UUID(), instrument: Instrument.defaultTestInstrument,
+      quantity: Decimal(25), type: .transfer)
+    let source = Transaction(
+      date: Date(timeIntervalSince1970: 0), payee: "Rent", legs: [legA, legB])
+
+    draft.applyAutofill(
+      from: source, categories: Categories(from: []), accounts: Accounts(from: []))
+
+    // Every carried leg has a stable, non-nil id of its own …
+    #expect(draft.legDrafts.allSatisfy { $0.legId != nil })
+    // … the first reusing the placeholder's id, none reusing the source's.
+    #expect(draft.legDrafts.first?.legId == placeholderLeg.id)
+    let carriedIds = Set(draft.legDrafts.compactMap(\.legId))
+    #expect(carriedIds.isDisjoint(with: [legA.id, legB.id]))
+
+    // Saving twice is idempotent — identical leg ids, no churn.
+    let first = try #require(draft.toTransaction(id: placeholder.id))
+    let second = try #require(draft.toTransaction(id: placeholder.id))
+    #expect(first.legs.map(\.id) == second.legs.map(\.id))
+  }
+
+  @Test("changing the payee re-runs autofill and keeps the same stable leg id")
+  func applyAutofillTwiceKeepsSameLegId() throws {
+    // The user can pick one payee, then change their mind and pick another.
+    // The second autofill reads the already-stable id the first one pinned,
+    // so the leg id never drifts — no churn across repeated autofills.
+    let placeholderLeg = TransactionLeg(
+      accountId: UUID(),
+      instrument: Instrument.defaultTestInstrument,
+      quantity: .zero, type: .expense)
+    let placeholder = Transaction(date: Date(), payee: "", legs: [placeholderLeg])
+    var draft = TransactionDraft(from: placeholder)
+
+    let coffee = Transaction(
+      date: Date(timeIntervalSince1970: 0), payee: "Coffee",
+      legs: [
+        TransactionLeg(
+          accountId: UUID(), instrument: Instrument.defaultTestInstrument,
+          quantity: Decimal(-25), type: .expense)
+      ])
+    draft.applyAutofill(from: coffee, categories: Categories(from: []))
+    #expect(draft.legDrafts.map(\.legId) == [placeholderLeg.id])
+
+    let lunch = Transaction(
+      date: Date(timeIntervalSince1970: 0), payee: "Lunch",
+      legs: [
+        TransactionLeg(
+          accountId: UUID(), instrument: Instrument.defaultTestInstrument,
+          quantity: Decimal(-15), type: .expense)
+      ])
+    draft.applyAutofill(from: lunch, categories: Categories(from: []))
+    #expect(draft.legDrafts.map(\.legId) == [placeholderLeg.id])
   }
 }

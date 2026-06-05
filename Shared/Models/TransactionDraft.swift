@@ -96,14 +96,15 @@ struct TransactionDraft: Sendable, Equatable {
       accountId == nil && earmarkId != nil
     }
 
-    /// Returns a copy of this leg draft with `legId` cleared. Used by
-    /// `applyAutofill` to detach legs carried in from another
-    /// transaction so they save into a new `transaction_leg.id` and do
-    /// not PK-collide with the source. `legId` is `let`, so a new
-    /// value must be returned.
-    func clearingLegId() -> LegDraft {
+    /// Returns a copy of this leg draft carrying `legId` as its identity.
+    /// `legId` is `let`, so a new value must be returned. The id is required
+    /// (not optional) so a carried-in leg always saves into a concrete
+    /// `transaction_leg` row: autofill uses this to pin each leg to a stable
+    /// id, so repeated saves upsert the same row instead of churning a fresh
+    /// leg id each time.
+    func withLegId(_ legId: UUID) -> LegDraft {
       LegDraft(
-        legId: nil,
+        legId: legId,
         type: type,
         accountId: accountId,
         amountText: amountText,
