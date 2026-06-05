@@ -11,7 +11,9 @@ struct ExpenseBreakdown: Sendable, Codable, Identifiable, Hashable {
   /// Grouped by user's monthEnd preference (e.g., Jan 26 – Feb 25 = "202602")
   let month: String
 
-  /// Total expenses in cents (always positive, sum of transaction amounts)
+  /// Signed sum of the month's expense legs — negative for net spend (a
+  /// net-refund month can be positive), matching the project's sign
+  /// convention. Use `CategorySpendSeries` to derive positive spend magnitudes.
   let totalExpenses: InstrumentAmount
 }
 

@@ -219,8 +219,34 @@ struct FinanceInsightTests {
         total: InsightTestSupport.amount(-200), legCount: 1),
     ]
     let insights = SavingsOpportunityInsights.feeSpend(
-      feeCategorySpend: feeCategorySpend, context: context)
+      feeCategorySpend: feeCategorySpend, expenseBreakdown: [], context: context)
     let fees = try #require(insights.first)
     #expect(fees.kind == .feeSpend)
+    // No breakdown rows supplied, so the companion chart falls back to nil.
+    #expect(fees.chart == nil)
+  }
+
+  @Test
+  func feeSpendAttachesMonthlyChart() throws {
+    let feesId = UUID()
+    let feeCategorySpend = [
+      CategorySpendSummary(
+        categoryId: feesId, categoryPath: "Banking:Fees",
+        total: InsightTestSupport.amount(-50), legCount: 2)
+    ]
+    let breakdown = [
+      InsightTestSupport.breakdownRow(20, categoryId: feesId, month: "202604"),
+      InsightTestSupport.breakdownRow(30, categoryId: feesId, month: "202605"),
+    ]
+    let fees = try #require(
+      SavingsOpportunityInsights.feeSpend(
+        feeCategorySpend: feeCategorySpend, expenseBreakdown: breakdown, context: context
+      ).first)
+    let chart = try #require(fees.chart)
+    #expect(chart.kind == .bar)
+    #expect(chart.unit == .currency(InsightTestSupport.currency))
+    #expect(chart.series.first?.role == .primary)
+    #expect(chart.series.first?.points.count == 2)
+    #expect(chart.highlight?.value == 30)
   }
 }

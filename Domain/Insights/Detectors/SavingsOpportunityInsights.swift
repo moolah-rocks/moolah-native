@@ -16,6 +16,7 @@ enum SavingsOpportunityInsights {
   /// is signed (negative for real spend) and never re-negated here.
   static func feeSpend(
     feeCategorySpend: [CategorySpendSummary],
+    expenseBreakdown: [ExpenseBreakdown],
     context: InsightContext
   ) -> [Insight] {
     let fees = feeCategorySpend.filter { isFeeCategory($0.categoryPath) }
@@ -24,7 +25,7 @@ enum SavingsOpportunityInsights {
     guard total.quantity < 0 else { return [] }
     let legCount = fees.reduce(0) { $0 + $1.legCount }
 
-    let categoryIds = Array(Set(fees.compactMap(\.categoryId)))
+    let feeCategoryIds = Set(fees.compactMap(\.categoryId))
     return [
       Insight(
         id:
@@ -45,7 +46,12 @@ enum SavingsOpportunityInsights {
           InsightFact("Transactions", "\(legCount)"),
         ],
         references: InsightReferences(
-          categoryIds: categoryIds, instrumentIds: [context.reportingCurrency.id]))
+          categoryIds: Array(feeCategoryIds), instrumentIds: [context.reportingCurrency.id]),
+        chart: InsightChartBuilders.monthlyCategorySpend(
+          expenseBreakdown: expenseBreakdown,
+          categoryIds: feeCategoryIds,
+          reportingCurrency: context.reportingCurrency,
+          seriesLabel: "Fees"))
     ]
   }
 
