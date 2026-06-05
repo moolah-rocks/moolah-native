@@ -145,12 +145,12 @@ enum CategoryAnomalyInsight {
   ) -> Bool {
     guard let latest = magnitudes.last, latest > 0 else { return false }
     let latestIndex = magnitudes.count - 1
-    let floor = latest * tolerance
+    let minimumMagnitude = latest * tolerance
     for lag in lags {
       for offset in -1...1 {
         let index = latestIndex - lag + offset
         guard index >= 0, index < latestIndex else { continue }
-        if magnitudes[index] >= floor { return true }
+        if magnitudes[index] >= minimumMagnitude { return true }
       }
     }
     return false

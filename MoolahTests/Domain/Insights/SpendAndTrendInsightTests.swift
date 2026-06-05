@@ -222,21 +222,35 @@ struct SpendAndTrendInsightTests {
 
   @Test
   func categoryAnomalySuppressesQuarterlyRecurrence() {
-    // A regular ~$100/month category with a $600 spike every 3 months. The
-    // latest spike matches the lag-3 occurrence, so it is a predictable bill.
-    let utilities = Category(name: "Water")
+    // A regular ~$100/month category with a $600 spike one quarter (3 months)
+    // before the latest spike. The lag-3 arm of the recurrence guard suppresses
+    // it — and only lag-3: excluding 3 from the cadence set lets the very same
+    // spike fire, which also confirms the spike is a genuine z-outlier reaching
+    // Gate B (not quietly passing the z-gate).
+    let water = Category(name: "Water")
     var magnitudes = Array(repeating: Decimal(100), count: 12)
-    for index in [2, 5, 8, 11] { magnitudes[index] = 600 }
+    magnitudes[8] = 600  // one quarter before the latest spike
+    magnitudes[11] = 600  // latest spike
     let months = [
       "202507", "202508", "202509", "202510", "202511", "202512",
       "202601", "202602", "202603", "202604", "202605", "202606",
     ]
     let breakdown = zip(months, magnitudes).map { month, magnitude in
-      InsightTestSupport.breakdownRow(magnitude, categoryId: utilities.id, month: month)
+      InsightTestSupport.breakdownRow(magnitude, categoryId: water.id, month: month)
     }
-    let insights = CategoryAnomalyInsight.detect(
-      breakdown: breakdown, categories: Categories(from: [utilities]), context: context)
-    #expect(!insights.contains { $0.kind == .categorySpendingAnomaly })
+    let categories = Categories(from: [water])
+    // Suppressed with the default cadence set (which includes the quarterly lag).
+    #expect(
+      !CategoryAnomalyInsight.detect(
+        breakdown: breakdown, categories: categories, context: context
+      ).contains { $0.kind == .categorySpendingAnomaly })
+    // Excluding the quarterly lag lets the same spike through — proving it is the
+    // lag-3 arm doing the suppression, not lag-6/12.
+    #expect(
+      CategoryAnomalyInsight.detect(
+        breakdown: breakdown, categories: categories, context: context,
+        recurrenceLags: [12, 6]
+      ).contains { $0.kind == .categorySpendingAnomaly })
   }
 
   @Test
