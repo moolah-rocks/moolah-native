@@ -10,7 +10,6 @@ struct InsightChart: Sendable, Hashable {
   enum Kind: Sendable, Hashable {
     case line
     case bar
-    case area
   }
 
   /// The unit of the y values, driving axis/label formatting. `currency`
