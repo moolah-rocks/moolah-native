@@ -41,6 +41,11 @@ struct Insight: Sendable, Identifiable, Hashable {
   /// Deep-link handles for the UI.
   let references: InsightReferences
 
+  /// An optional companion graph visualising the detected behaviour. `nil`
+  /// when the detector has no chart for this kind or the data is too sparse;
+  /// such insights fall back to a graph-less row.
+  let chart: InsightChart?
+
   init(
     id: String,
     kind: InsightKind,
@@ -51,7 +56,8 @@ struct Insight: Sendable, Identifiable, Hashable {
     surprise: Double,
     monetaryImpact: InstrumentAmount? = nil,
     facts: [InsightFact] = [],
-    references: InsightReferences = InsightReferences()
+    references: InsightReferences = InsightReferences(),
+    chart: InsightChart? = nil
   ) {
     self.id = id
     self.kind = kind
@@ -63,6 +69,7 @@ struct Insight: Sendable, Identifiable, Hashable {
     self.monetaryImpact = monetaryImpact
     self.facts = facts
     self.references = references
+    self.chart = chart
   }
 }
 
