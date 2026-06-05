@@ -108,7 +108,9 @@ enum SubscriptionDetector {
       medianIntervalDays: medianInterval,
       medianAmount: medianAmount,
       latestAmount: amounts.last ?? medianAmount,
-      amounts: amounts,
+      occurrences: occ.map {
+        DetectedSubscription.Occurrence(date: $0.date, amount: $0.amount.quantity)
+      },
       isIncome: incomeStreams)
   }
 

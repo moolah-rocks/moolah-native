@@ -48,6 +48,24 @@ struct SubscriptionInsightsTests {
   }
 
   @Test
+  func priceHikeAttachesChargeChart() throws {
+    let transactions = [
+      InsightTestSupport.expense(10, payee: "CloudStore", daysAgo: 90),
+      InsightTestSupport.expense(10, payee: "CloudStore", daysAgo: 60),
+      InsightTestSupport.expense(10, payee: "CloudStore", daysAgo: 30),
+      InsightTestSupport.expense(12, payee: "CloudStore", daysAgo: 0),
+    ]
+    let hike = try #require(
+      SubscriptionInsights.priceHikes(detect(transactions), context: context).first)
+    let chart = try #require(hike.chart)
+    #expect(chart.kind == .line)
+    #expect(chart.unit == .currency(InsightTestSupport.currency))
+    #expect(chart.series.first?.points.count == 4)
+    // The latest (hiked) charge is highlighted, plotted as a positive magnitude.
+    #expect(chart.highlight?.value == 12)
+  }
+
+  @Test
   func priceHikeQuietWhenStable() {
     let transactions = (0..<4).map { index in
       InsightTestSupport.expense(10, payee: "CloudStore", daysAgo: index * 30)
