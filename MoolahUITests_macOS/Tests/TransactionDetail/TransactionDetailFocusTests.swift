@@ -36,11 +36,10 @@ final class TransactionDetailFocusTests: MoolahUITestCase {
     app.transactionDetail.payee.expectFocused()
 
     app.transactionList.createTransaction()
-    // The payee element identifier is shared between the two transactions,
-    // so `createTransaction()`'s existence wait can't tell the swapped-in
-    // new view from the still-mounted old one. Wait for the payee value to
-    // clear (the new placeholder has an empty payee) as the swap barrier
-    // before asserting where focus landed.
+    // Swap barrier: the new placeholder has an empty payee, so waiting for
+    // the value to clear proves the new view has replaced the old one
+    // before we assert focus (see `createTransaction()`'s panel-swap
+    // caveat — the shared payee identifier defeats its existence wait).
     app.transactionDetail.payee.expectValue("")
 
     app.transactionDetail.payee.expectFocused()
