@@ -101,11 +101,19 @@ struct TransferMergeBuilder: Sendable {
 }
 
 extension TransferMergeBuilder {
+  // `externalId` / `counterpartyAddress` are carried through both merge and
+  // split unchanged. For sync-owned legs (wallet / exchange imports),
+  // `externalId` is the dedup key the apply pass matches on
+  // `(accountId, externalId)`; omitting it causes the next sync to re-import
+  // the absorbed leg as a duplicate. Hand-entered legs carry `nil` for both
+  // fields — this is a no-op for them.
   private func transferLeg(from valueLeg: TransactionLeg) -> TransactionLeg {
     TransactionLeg(
       accountId: valueLeg.accountId,
       instrument: valueLeg.instrument,
       quantity: valueLeg.quantity,
+      externalId: valueLeg.externalId,
+      counterpartyAddress: valueLeg.counterpartyAddress,
       type: .transfer,
       categoryId: valueLeg.categoryId,
       earmarkId: valueLeg.earmarkId)
@@ -122,6 +130,8 @@ extension TransferMergeBuilder {
       accountId: valueLeg.accountId,
       instrument: valueLeg.instrument,
       quantity: valueLeg.quantity,
+      externalId: valueLeg.externalId,
+      counterpartyAddress: valueLeg.counterpartyAddress,
       type: type,
       categoryId: valueLeg.categoryId,
       earmarkId: valueLeg.earmarkId)
