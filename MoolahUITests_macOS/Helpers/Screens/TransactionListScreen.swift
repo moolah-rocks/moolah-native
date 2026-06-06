@@ -48,6 +48,14 @@ struct TransactionListScreen {
   /// payee field exists in the accessibility tree). The caller is
   /// responsible for focus assertions — this method does not assume the
   /// field has been auto-focused.
+  ///
+  /// **Panel-swap caveat:** when the inspector is already open showing an
+  /// existing transaction, the payee element exists before ⌘N fires, so
+  /// the existence wait below returns immediately and cannot distinguish
+  /// the still-mounted old view from the swapped-in new one. In that case
+  /// the caller must additionally wait on a value change only the new view
+  /// can produce (e.g. `transactionDetail.payee.expectValue("")`) before
+  /// asserting focus. See `testCreatingSecondTransactionFocusesPayee`.
   func createTransaction() {
     Trace.record(#function)
     app.pressKeyboardShortcut("n", modifiers: .command)

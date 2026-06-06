@@ -113,9 +113,25 @@ struct TransactionDetailView: View {
         // focus on the expected field. The list view cooperates by blurring
         // the `.searchable` toolbar field when the inspector opens, so the
         // responder chain's fallback doesn't steal our assignment.
+        //
+        // `defaultFocus` only re-fires when the inspector's focus scope
+        // *appears* — i.e. on a fresh present (opening the inspector from
+        // closed). When the inspector is already open and ⌘N swaps its
+        // content in place (`.id(selected.id)` changes), the scope does not
+        // re-appear, so only the assignment below claims focus — and at the
+        // moment the task first runs AppKit is still resigning the previous
+        // content's first responder, so a single assignment races that
+        // teardown and is dropped. Assign once, then re-assert on the next
+        // runloop turn (after the teardown settles) so focus reliably lands
+        // on the new transaction's field. On a fresh present the first
+        // assignment already wins and the re-assert is a harmless no-op.
         .defaultFocus($focusedField, isSimpleEarmarkOnly ? .amount : .payee)
         .task(id: transaction.id) {
-          focusedField = isSimpleEarmarkOnly ? .amount : .payee
+          let target: TransactionDetailFocus = isSimpleEarmarkOnly ? .amount : .payee
+          focusedField = target
+          await Task.yield()
+          guard !Task.isCancelled else { return }
+          focusedField = target
         }
       #endif
       .onChange(of: draft) { _, _ in debouncedSave() }

@@ -22,7 +22,7 @@ struct AutocompleteFieldDriver {
   /// auto-focused by the surrounding view (e.g. `defaultFocus(.payee)`
   /// does not always win the macOS first-responder).
   func tap() {
-    Trace.record(detail: "field=\(fieldIdentifier)")
+    Trace.record(#function, detail: "field=\(fieldIdentifier)")
     let field = app.element(for: fieldIdentifier)
     if !field.waitForExistence(timeout: 3) {
       Trace.recordFailure("field '\(fieldIdentifier)' did not appear for tap")
@@ -180,7 +180,12 @@ struct AutocompleteFieldDriver {
 
   // MARK: - Expectations (read-only)
 
-  /// Asserts the field currently holds keyboard focus.
+  /// Asserts the field currently holds keyboard focus. Polls for up to
+  /// 3 s — SwiftUI propagates `@FocusState` on a later runloop pass than
+  /// the field's value binding, so a field can exist (and even hold its
+  /// new value) a tick before focus lands. A single point-in-time read
+  /// would flake on a CI runner that processes that pass slower than
+  /// local hardware.
   func expectFocused() {
     let field = app.element(for: fieldIdentifier)
     if !field.waitForExistence(timeout: 3) {
@@ -188,11 +193,13 @@ struct AutocompleteFieldDriver {
       XCTFail("Autocomplete field '\(fieldIdentifier)' did not appear within 3s")
       return
     }
-    let hasFocus = (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false
-    if !hasFocus {
-      Trace.recordFailure("field '\(fieldIdentifier)' is not focused")
-      XCTFail("Autocomplete field '\(fieldIdentifier)' did not have keyboard focus")
+    let deadline = Date().addingTimeInterval(3)
+    while Date() < deadline {
+      if (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false { return }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     }
+    Trace.recordFailure("field '\(fieldIdentifier)' is not focused")
+    XCTFail("Autocomplete field '\(fieldIdentifier)' did not have keyboard focus")
   }
 
   /// Asserts the field's current value equals `expected`. Polls for up
