@@ -172,6 +172,27 @@ struct TransferMergeBuilderTests {
     #expect(feeLegs.contains { $0.id == feeB.id && $0.accountId == accountB && $0.quantity == -7 })
   }
 
+  @Test("merged transfer legs preserve each side's externalId and counterpartyAddress")
+  func mergedPreservesExternalIdAndCounterpartyAddress() throws {
+    let accountA = UUID()
+    let accountB = UUID()
+    let txA = fixture.cashTx(
+      date: baseDate, accountId: accountA, quantity: -500, type: .expense,
+      externalId: "coinstash:withdraw-1", counterpartyAddress: "0xsource")
+    let txB = fixture.cashTx(
+      date: baseDate, accountId: accountB, quantity: 500, type: .income,
+      externalId: "alchemy:deposit-1", counterpartyAddress: "0xdest")
+
+    let merged = try builder.merged(from: txA, txB)
+
+    let outgoing = try #require(merged.legs.first { $0.type == .transfer && $0.quantity < 0 })
+    let incoming = try #require(merged.legs.first { $0.type == .transfer && $0.quantity > 0 })
+    #expect(outgoing.externalId == "coinstash:withdraw-1")
+    #expect(outgoing.counterpartyAddress == "0xsource")
+    #expect(incoming.externalId == "alchemy:deposit-1")
+    #expect(incoming.counterpartyAddress == "0xdest")
+  }
+
   @Test("merge assigns a new id distinct from both input ids")
   func mergedAssignsNewId() throws {
     let accountA = UUID()

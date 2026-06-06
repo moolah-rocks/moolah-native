@@ -31,6 +31,8 @@ struct TransferMergeBuilderFixture {
     type: TransactionType,
     payee: String? = nil,
     notes: String? = nil,
+    externalId: String? = nil,
+    counterpartyAddress: String? = nil,
     importOrigin: TransactionImportOrigin? = nil,
     feeLegs: [TransactionLeg] = []
   ) -> Transaction {
@@ -44,6 +46,8 @@ struct TransferMergeBuilderFixture {
           accountId: accountId,
           instrument: instrument,
           quantity: quantity,
+          externalId: externalId,
+          counterpartyAddress: counterpartyAddress,
           type: type)
       ] + feeLegs,
       importOrigin: importOrigin)

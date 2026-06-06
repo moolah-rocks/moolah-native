@@ -78,6 +78,30 @@ struct TransferMergeBuilderSplitTests {
     #expect(inSplit.importOrigin?.singleOrigin == inOrigin)
   }
 
+  @Test("round-trip restores each value leg's externalId and counterpartyAddress")
+  func roundTripRestoresExternalIdAndCounterpartyAddress() throws {
+    let accountA = UUID()
+    let accountB = UUID()
+    let txA = fixture.cashTx(
+      date: baseDate, accountId: accountA, quantity: -500, type: .expense,
+      externalId: "coinstash:withdraw-1", counterpartyAddress: "0xsource",
+      importOrigin: .single(origin("withdrawal")))
+    let txB = fixture.cashTx(
+      date: baseDate, accountId: accountB, quantity: 500, type: .income,
+      externalId: "alchemy:deposit-1", counterpartyAddress: "0xdest",
+      importOrigin: .single(origin("deposit")))
+
+    let merged = try builder.merged(from: txA, txB)
+    let splits = try builder.split(merged)
+
+    let outLeg = try #require(splits.first { ($0.legs.first?.quantity ?? 0) < 0 }?.legs.first)
+    let inLeg = try #require(splits.first { ($0.legs.first?.quantity ?? 0) > 0 }?.legs.first)
+    #expect(outLeg.externalId == "coinstash:withdraw-1")
+    #expect(outLeg.counterpartyAddress == "0xsource")
+    #expect(inLeg.externalId == "alchemy:deposit-1")
+    #expect(inLeg.counterpartyAddress == "0xdest")
+  }
+
   @Test("round-trip returns each cross-instrument fee leg to its originating account split")
   func roundTripReattachesFeeLegsByAccount() throws {
     let accountA = UUID()
