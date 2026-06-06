@@ -6,33 +6,10 @@ import Testing
 @Suite("AutomationService Account Operations")
 @MainActor
 struct AutomationServiceAccountTests {
-  private struct OpenSessionFailed: Error {}
-
-  private func makeServiceWithSession() async throws -> (AutomationService, ProfileSession) {
-    let containerManager = try ProfileContainerManager.forTesting()
-    let sessionManager = SessionManager(
-      containerManager: containerManager,
-      profileIndexRepository: containerManager.profileIndexRepositoryForTesting)
-    let profile = Profile(
-      label: "Test",
-      currencyCode: "AUD",
-      financialYearStartMonth: 7
-    )
-    guard case .ready(let session) = await sessionManager.session(for: profile) else {
-      Issue.record("expected .ready")
-      throw OpenSessionFailed()
-    }
-    // AccountStore is reactive — wait for the first emission so any
-    // pre-seeded accounts are visible. For a fresh test session there
-    // are none, but the wait keeps the public API consistent.
-    try await session.accountStore.waitForFirstEmission()
-    let service = AutomationService(sessionManager: sessionManager)
-    return (service, session)
-  }
 
   @Test("createAccount creates and lists accounts")
   func createAndListAccounts() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, session) = try await AutomationTestSession.make()
 
     let account = try await service.createAccount(
       profileIdentifier: "Test",
@@ -58,7 +35,7 @@ struct AutomationServiceAccountTests {
 
   @Test("resolveAccount finds account by name case-insensitively")
   func resolveAccountByNameCaseInsensitive() async throws {
-    let (service, _) = try await makeServiceWithSession()
+    let (service, _) = try await AutomationTestSession.make()
     _ = try await service.createAccount(
       profileIdentifier: "Test",
       name: "My Savings",
@@ -74,7 +51,7 @@ struct AutomationServiceAccountTests {
 
   @Test("resolveAccount throws when not found")
   func resolveAccountNotFoundThrows() async throws {
-    let (service, _) = try await makeServiceWithSession()
+    let (service, _) = try await AutomationTestSession.make()
 
     await #expect(throws: AutomationError.self) {
       try await service.resolveAccount(named: "NonExistent", profileIdentifier: "Test")
@@ -83,7 +60,7 @@ struct AutomationServiceAccountTests {
 
   @Test("resolveAccount finds account by UUID")
   func resolveAccountByUUID() async throws {
-    let (service, _) = try await makeServiceWithSession()
+    let (service, _) = try await AutomationTestSession.make()
     let created = try await service.createAccount(
       profileIdentifier: "Test",
       name: "Checking",
@@ -97,7 +74,7 @@ struct AutomationServiceAccountTests {
 
   @Test("getNetWorth returns sum of current and investment accounts")
   func getNetWorth() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, session) = try await AutomationTestSession.make()
     let instrument = session.profile.instrument
 
     // Create a bank account with a balance
@@ -123,7 +100,7 @@ struct AutomationServiceAccountTests {
 
   @Test("updateAccount changes account name")
   func updateAccountName() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, session) = try await AutomationTestSession.make()
     let created = try await service.createAccount(
       profileIdentifier: "Test",
       name: "Old Name",
@@ -146,7 +123,7 @@ struct AutomationServiceAccountTests {
 
   @Test("deleteAccount soft-deletes (hides) the account")
   func deleteAccount() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, session) = try await AutomationTestSession.make()
     let created = try await service.createAccount(
       profileIdentifier: "Test",
       name: "ToDelete",

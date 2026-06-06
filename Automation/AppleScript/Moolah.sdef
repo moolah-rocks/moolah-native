@@ -160,14 +160,26 @@
 
     <!-- MARK: - Commands -->
 
-    <command name="create account" code="Moolcrac" description="Create a new account in a profile.">
+    <command name="create account" code="Moolcrac" description="Create a new account in a profile. For type 'crypto' supply 'wallet address' and 'chain'; for type 'exchange' supply 'provider' and 'token'.">
       <cocoa class="Moolah.CreateAccountCommand"/>
       <direct-parameter type="specifier" description="The profile to create the account in."/>
       <parameter name="name" code="Cnam" type="text" description="The name of the account.">
         <cocoa key="name"/>
       </parameter>
-      <parameter name="type" code="Ctyp" type="text" description="The account type (bank, cc, asset, investment).">
+      <parameter name="type" code="Ctyp" type="text" description="The account type (bank, cc, asset, investment, crypto, exchange).">
         <cocoa key="type"/>
+      </parameter>
+      <parameter name="wallet address" code="Cwal" type="text" optional="yes" description="The wallet address for a 'crypto' account.">
+        <cocoa key="walletAddress"/>
+      </parameter>
+      <parameter name="chain" code="Cchn" type="integer" optional="yes" description="The chain id for a 'crypto' account (EVM chain id, e.g. 1, 10, 8453).">
+        <cocoa key="chain"/>
+      </parameter>
+      <parameter name="provider" code="Cprv" type="text" optional="yes" description="The exchange provider for an 'exchange' account (coinstash).">
+        <cocoa key="provider"/>
+      </parameter>
+      <parameter name="token" code="Ctok" type="text" optional="yes" description="The read-only API token for an 'exchange' account.">
+        <cocoa key="token"/>
       </parameter>
       <result type="account" description="The created account."/>
     </command>
