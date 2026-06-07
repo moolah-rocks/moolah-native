@@ -236,6 +236,18 @@
       <result type="txn" description="The paid txn."/>
     </command>
 
+    <command name="merge txns" code="Moolmgtx" description="Merge two opposing single-account transactions into one cross-account transfer.">
+      <cocoa class="Moolah.MergeTransactionsCommand"/>
+      <direct-parameter type="specifier" description="The profile containing the transactions."/>
+      <parameter name="first" code="Cfst" type="text" description="The id of the first transaction to merge.">
+        <cocoa key="first"/>
+      </parameter>
+      <parameter name="second" code="Csnd" type="text" description="The id of the second transaction to merge.">
+        <cocoa key="second"/>
+      </parameter>
+      <result type="txn" description="The merged transfer txn."/>
+    </command>
+
     <command name="refresh" code="Moolrefr" description="Refresh all data for a profile.">
       <cocoa class="Moolah.RefreshCommand"/>
       <direct-parameter type="specifier" optional="yes" description="The profile to refresh."/>
