@@ -185,7 +185,12 @@ actor CryptoPriceService {
   ///   the next finalised close.
   /// - **Cache exists, requested date before `earliestDate`:** backward
   ///   extension from the requested date to the day before
-  ///   `earliestDate`.
+  ///   `earliestDate`. Guarded by `requestedDate <= fetchEnd` so that when
+  ///   the requested day is the one *immediately* before `earliestDate` —
+  ///   where `requestedDate` is a noon-anchored day token but `fetchEnd` is
+  ///   midnight of that same calendar day — the branch falls through to the
+  ///   single-day window instead of building an inverted (lower > upper)
+  ///   `ClosedRange`, which would trap.
   /// - **Cold cache (no entry for token):** 30-day surrounding window so
   ///   a first-ever request on a non-trading day can still fall back
   ///   to a recent prior price.
@@ -208,7 +213,8 @@ actor CryptoPriceService {
       }
       if dateString < cache.earliestDate,
         let earliestDate = dateFormatter.date(from: cache.earliestDate),
-        let fetchEnd = calendar.date(byAdding: .day, value: -1, to: earliestDate)
+        let fetchEnd = calendar.date(byAdding: .day, value: -1, to: earliestDate),
+        requestedDate <= fetchEnd
       {
         return requestedDate...fetchEnd
       }
@@ -242,8 +248,14 @@ actor CryptoPriceService {
     if let cache = caches[tokenId] {
       if rangeStart < cache.earliestDate,
         let earliestDate = dateFormatter.date(from: cache.earliestDate),
-        let fetchEnd = gregorian.date(byAdding: .day, value: -1, to: earliestDate)
+        let fetchEnd = gregorian.date(byAdding: .day, value: -1, to: earliestDate),
+        range.lowerBound <= fetchEnd
       {
+        // `fetchRange` builds `from...to` as a `ClosedRange` literal, so the
+        // same boundary-day inversion that traps `extensionWindow` (a
+        // noon-anchored `range.lowerBound` on the day immediately before
+        // `earliestDate`, where `fetchEnd` is midnight of that day) is
+        // guarded here too.
         try await fetchRange(
           instrument: instrument, mapping: mapping, from: range.lowerBound, to: fetchEnd)
       }
