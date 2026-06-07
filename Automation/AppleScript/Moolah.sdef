@@ -115,6 +115,12 @@
 
     <class name="leg" code="TLeg" description="A transaction leg." plural="legs">
       <cocoa class="Moolah.ScriptableLeg"/>
+      <property name="id" code="Mlid" type="text" access="r" description="The unique identifier of the leg.">
+        <cocoa key="legID"/>
+      </property>
+      <property name="external id" code="Mlex" type="text" access="r" description="The sync source's external id for this leg, or empty string for a manual leg.">
+        <cocoa key="externalID"/>
+      </property>
       <property name="account name" code="Mlan" type="text" access="r" description="The name of the account for this leg.">
         <cocoa key="accountName"/>
       </property>
@@ -258,6 +264,69 @@
         <cocoa key="second"/>
       </parameter>
       <result type="txn" description="The merged transfer txn."/>
+    </command>
+
+    <command name="add leg" code="Mooladdl" description="Append a leg to an existing txn. Other legs are re-saved unchanged, so a sync-owned leg's external id survives.">
+      <cocoa class="Moolah.AddLegCommand"/>
+      <direct-parameter type="specifier" description="The profile containing the txn."/>
+      <parameter name="to txn id" code="Ltid" type="text" description="The id of the txn to add a leg to.">
+        <cocoa key="txnId"/>
+      </parameter>
+      <parameter name="account" code="Lacc" type="text" description="The account name for the new leg.">
+        <cocoa key="account"/>
+      </parameter>
+      <parameter name="amount" code="Lamt" type="real" description="The signed quantity of the new leg.">
+        <cocoa key="amount"/>
+      </parameter>
+      <parameter name="type" code="Ltyp" type="text" description="The leg type (income, expense, transfer, trade).">
+        <cocoa key="type"/>
+      </parameter>
+      <parameter name="instrument" code="Lins" type="text" optional="yes" description="The instrument id (e.g. AUD, ASX:BHP, 1:native). Defaults to the profile's instrument.">
+        <cocoa key="instrument"/>
+      </parameter>
+      <parameter name="category" code="Lcat" type="text" optional="yes" description="The category name for the new leg.">
+        <cocoa key="category"/>
+      </parameter>
+      <parameter name="earmark" code="Lear" type="text" optional="yes" description="The earmark name for the new leg.">
+        <cocoa key="earmark"/>
+      </parameter>
+      <result type="txn" description="The updated txn."/>
+    </command>
+
+    <command name="update leg" code="Moolupdl" description="Edit one leg in place. Omitted fields are unchanged; the leg's id and external id are preserved.">
+      <cocoa class="Moolah.UpdateLegCommand"/>
+      <direct-parameter type="specifier" description="The profile containing the leg."/>
+      <parameter name="id" code="Llid" type="text" description="The id of the leg to update.">
+        <cocoa key="legId"/>
+      </parameter>
+      <parameter name="type" code="Ltyp" type="text" optional="yes" description="The new leg type (income, expense, transfer, trade).">
+        <cocoa key="type"/>
+      </parameter>
+      <parameter name="account" code="Lacc" type="text" optional="yes" description="The new account name for the leg.">
+        <cocoa key="account"/>
+      </parameter>
+      <parameter name="amount" code="Lamt" type="real" optional="yes" description="The new signed quantity of the leg.">
+        <cocoa key="amount"/>
+      </parameter>
+      <parameter name="instrument" code="Lins" type="text" optional="yes" description="The new instrument id (e.g. AUD, ASX:BHP, 1:native).">
+        <cocoa key="instrument"/>
+      </parameter>
+      <parameter name="category" code="Lcat" type="text" optional="yes" description="The new category name for the leg.">
+        <cocoa key="category"/>
+      </parameter>
+      <parameter name="earmark" code="Lear" type="text" optional="yes" description="The new earmark name for the leg.">
+        <cocoa key="earmark"/>
+      </parameter>
+      <result type="txn" description="The updated txn."/>
+    </command>
+
+    <command name="remove leg" code="Moolrmlg" description="Drop a leg from its txn. Throws rather than deleting a txn down to zero legs.">
+      <cocoa class="Moolah.RemoveLegCommand"/>
+      <direct-parameter type="specifier" description="The profile containing the leg."/>
+      <parameter name="id" code="Llid" type="text" description="The id of the leg to remove.">
+        <cocoa key="legId"/>
+      </parameter>
+      <result type="txn" description="The updated txn."/>
     </command>
 
     <command name="refresh" code="Moolrefr" description="Refresh all data for a profile.">

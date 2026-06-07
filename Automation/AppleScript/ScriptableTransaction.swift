@@ -95,6 +95,8 @@
   /// Data captured at construction time; all properties are nonisolated.
   @objc(ScriptableLeg)
   final class ScriptableLeg: NSObject, Sendable {
+    private let _legID: String
+    private let _externalID: String
     private let _accountName: String
     private let _amount: Double
     private let _categoryName: String
@@ -112,6 +114,8 @@
       categoryStore: CategoryStore,
       index: Int = 0
     ) {
+      _legID = leg.id.uuidString
+      _externalID = leg.externalId ?? ""
       _accountName = leg.accountId.flatMap { accountStore.accounts.by(id: $0)?.name } ?? ""
       _amount = leg.amount.doubleValue
       _categoryName = leg.categoryId.flatMap { categoryStore.categories.by(id: $0)?.name } ?? ""
@@ -122,6 +126,8 @@
       super.init()
     }
 
+    @objc var legID: String { _legID }
+    @objc var externalID: String { _externalID }
     @objc var accountName: String { _accountName }
     @objc var amount: Double { _amount }
     @objc var categoryName: String { _categoryName }
