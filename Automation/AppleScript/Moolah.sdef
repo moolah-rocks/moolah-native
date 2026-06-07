@@ -266,6 +266,15 @@
       <result type="txn" description="The merged transfer txn."/>
     </command>
 
+    <command name="clear investment values" code="Moolcliv" description="Delete every recorded investment value for an account, clearing its value-history snapshots (e.g. when retiring a manual investment account during a migration).">
+      <cocoa class="Moolah.ClearInvestmentValuesCommand"/>
+      <direct-parameter type="specifier" description="The profile containing the account."/>
+      <parameter name="account" code="Civa" type="text" description="The name of the account whose investment values to clear.">
+        <cocoa key="account"/>
+      </parameter>
+      <result type="integer" description="The number of investment values deleted."/>
+    </command>
+
     <command name="add leg" code="Mooladdl" description="Append a leg to an existing txn. Other legs are re-saved unchanged, so a sync-owned leg's external id survives.">
       <cocoa class="Moolah.AddLegCommand"/>
       <direct-parameter type="specifier" description="The profile containing the txn."/>
