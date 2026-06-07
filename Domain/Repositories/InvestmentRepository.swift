@@ -24,6 +24,16 @@ protocol InvestmentRepository: Sendable {
   ///   - date: The valuation date to remove
   func removeValue(accountId: UUID, date: Date) async throws
 
+  /// Remove every recorded investment value for an account, regardless of
+  /// date. Used to retire a manual investment account's value-history
+  /// snapshots in one shot (e.g. during a migration that replaces the
+  /// account) without leaving rows behind to double-count in the
+  /// investment-value graph. Each deleted row is enqueued for CloudKit
+  /// deletion, mirroring `removeValue(accountId:date:)` for a single row.
+  /// - Parameter accountId: The investment account whose values to clear.
+  /// - Returns: The number of value rows deleted.
+  func removeAllValues(accountId: UUID) async throws -> Int
+
   /// Fetch daily cumulative balances for an account, sorted by date ascending.
   /// Each entry represents the running total of transactions up to that date.
   /// - Parameters:

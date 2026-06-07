@@ -152,6 +152,29 @@ final class GRDBInvestmentRepository: InvestmentRepository, @unchecked Sendable 
     onRecordDeleted(InvestmentValueRow.recordType, deletedId)
   }
 
+  func removeAllValues(accountId: UUID) async throws -> Int {
+    // Collect the ids in the same transaction that deletes them so the
+    // CloudKit-deletion enqueue below covers exactly the rows removed.
+    // `removeValue` normalises to `startOfDay` and matches one row; this
+    // bulk path deletes every row for the account in one statement
+    // regardless of the stored time-of-day, so a per-date loop is wrong.
+    let deletedIds = try await database.write { database -> [UUID] in
+      let request =
+        InvestmentValueRow
+        .filter(InvestmentValueRow.Columns.accountId == accountId)
+      let ids =
+        try request
+        .select(InvestmentValueRow.Columns.id, as: UUID.self)
+        .fetchAll(database)
+      _ = try request.deleteAll(database)
+      return ids
+    }
+    for id in deletedIds {
+      onRecordDeleted(InvestmentValueRow.recordType, id)
+    }
+    return deletedIds.count
+  }
+
   func fetchDailyBalances(accountId: UUID) async throws -> [AccountDailyBalance] {
     let defaultInstrument = self.defaultInstrument
     // Resolve the instrument lookup table before opening the
