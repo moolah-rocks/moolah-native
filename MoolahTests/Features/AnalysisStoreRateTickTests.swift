@@ -34,18 +34,22 @@ struct AnalysisStoreRateTickTests {
     let store = AnalysisStore(
       repository: repository, conversionService: StubConversionService(),
       defaults: try makeDefaults())
-    async let first: Void = store.reloadForRateTick()
+    // Hold the first reload on the gated repository so the burst lands
+    // while it is unambiguously in flight.
+    let first = Task { @MainActor in await store.reloadForRateTick() }
     await repository.waitUntilFetchStarted()
-    // Three more ticks arrive while the first reload is in flight.
-    async let tick2: Void = store.reloadForRateTick()
-    async let tick3: Void = store.reloadForRateTick()
-    async let tick4: Void = store.reloadForRateTick()
+    // These three observe the in-flight reload and coalesce to a single
+    // pending re-run. Each returns synchronously (no suspension) because
+    // `reloadForRateTick` short-circuits on `rateTickReloadInFlight`,
+    // so awaiting them sequentially is deterministic.
+    await store.reloadForRateTick()
+    await store.reloadForRateTick()
+    await store.reloadForRateTick()
     await repository.releaseAll()
-    _ = await (first, tick2, tick3, tick4)
-    // 1 in-flight reload + at most 1 coalesced re-run.
+    await first.value
+    // Exactly one in-flight reload + one coalesced re-run.
     let count = await repository.loadAllCount
-    #expect(count <= 2)
-    #expect(count >= 1)
+    #expect(count == 2)
   }
 
   @Test("a rate-cache tick triggers a forced reload (initial tick ignored)")

@@ -54,14 +54,7 @@ struct AnalysisView: View {
     )
     .toolbar {
       if session.cryptoSyncStore?.priceWarmingInProgress == true {
-        ToolbarItem(placement: .automatic) {
-          HStack(spacing: 6) {
-            ProgressView().controlSize(.small)
-            Text("Updating prices").font(.caption).foregroundStyle(.secondary)
-          }
-          .accessibilityElement(children: .ignore)
-          .accessibilityLabel("Updating prices")
-        }
+        ToolbarItem(placement: .status) { priceWarmingIndicator }
       }
 
       ToolbarItem(placement: .primaryAction) {
@@ -120,6 +113,20 @@ struct AnalysisView: View {
         Task { await session.insightStore?.refreshIfStale(minimumInterval: 60) }
       }
     }
+  }
+
+  /// Non-interactive status indicator shown while the background crypto
+  /// price warmer is running. `.status` placement (HIG-canonical for a
+  /// status item) keeps it clear of the `.primaryAction` controls.
+  private var priceWarmingIndicator: some View {
+    HStack(spacing: 6) {
+      ProgressView().controlSize(.small)
+      Text("Updating prices").font(.caption).foregroundStyle(.secondary)
+    }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Updating prices")
+    .accessibilityValue("In progress")
+    .accessibilityAddTraits(.updatesFrequently)
   }
 
   private func createNewScheduledTransaction() {

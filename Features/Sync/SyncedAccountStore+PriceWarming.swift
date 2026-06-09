@@ -17,6 +17,9 @@ extension SyncedAccountStore {
     setPriceWarmingInProgress(true)
     priceWarmingTask = Task { [weak self] in
       await priceWarmer.warm(transactions: genuinelyNew, accountIds: accountIds)
+      // Only the live (non-superseded) task resets the flag; a task cancelled
+      // by a newer startPriceWarming leaves the flag set for its replacement.
+      guard !Task.isCancelled else { return }
       self?.setPriceWarmingInProgress(false)
     }
   }
