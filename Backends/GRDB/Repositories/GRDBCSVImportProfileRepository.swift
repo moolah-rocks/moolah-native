@@ -70,6 +70,7 @@ final class GRDBCSVImportProfileRepository: CSVImportProfileRepository, @uncheck
     let row = CSVImportProfileRow(domain: profile)
     try await database.write { database in
       try row.insert(database)
+      try markNeedsPushSync(id: profile.id, in: database)
     }
     onRecordChanged(CSVImportProfileRow.recordType, profile.id)
     return row.toDomain()
@@ -100,6 +101,7 @@ final class GRDBCSVImportProfileRepository: CSVImportProfileRepository, @uncheck
       existing.dateFormatRawValue = fresh.dateFormatRawValue
       existing.columnRoleRawValuesEncoded = fresh.columnRoleRawValuesEncoded
       try existing.update(database)
+      try markNeedsPushSync(id: profile.id, in: database)
       return existing
     }
     onRecordChanged(CSVImportProfileRow.recordType, profile.id)
@@ -180,6 +182,45 @@ final class GRDBCSVImportProfileRepository: CSVImportProfileRepository, @uncheck
             [CSVImportProfileRow.Columns.encodedSystemFields.set(to: data)])
       }
       return updatedCount
+    }
+  }
+
+  /// Sets `needs_push = 1` for `id` inside the caller's write transaction.
+  /// See `GRDBAccountRepository.markNeedsPushSync(id:in:)` (issue #1081).
+  func markNeedsPushSync(id: UUID, in database: Database) throws {
+    _ =
+      try CSVImportProfileRow
+      .filter(CSVImportProfileRow.Columns.id == id)
+      .updateAll(database, [CSVImportProfileRow.Columns.needsPush.set(to: true)])
+  }
+
+  /// Subset of `ids` whose row currently has `needs_push = 1`. See
+  /// `GRDBAccountRepository.dirtyIdsSync(from:in:)`.
+  func dirtyIdsSync(from ids: [UUID], in database: Database) throws -> Set<UUID> {
+    guard !ids.isEmpty else { return [] }
+    let idSet = Set(ids)
+    let rows =
+      try CSVImportProfileRow
+      .filter(idSet.contains(CSVImportProfileRow.Columns.id))
+      .filter(CSVImportProfileRow.Columns.needsPush == true)
+      .select(CSVImportProfileRow.Columns.id, as: UUID.self)
+      .fetchAll(database)
+    return Set(rows)
+  }
+
+  func dirtyIdsSync(from ids: [UUID]) throws -> Set<UUID> {
+    try database.read { database in try dirtyIdsSync(from: ids, in: database) }
+  }
+
+  /// Clears `needs_push` for the given ids in one transaction. Returns the
+  /// number of rows updated.
+  @discardableResult
+  func clearNeedsPushBatchSync(_ ids: [UUID]) throws -> Int {
+    guard !ids.isEmpty else { return 0 }
+    return try database.write { database in
+      try CSVImportProfileRow
+        .filter(Set(ids).contains(CSVImportProfileRow.Columns.id))
+        .updateAll(database, [CSVImportProfileRow.Columns.needsPush.set(to: false)])
     }
   }
 

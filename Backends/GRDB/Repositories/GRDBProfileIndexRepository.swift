@@ -54,7 +54,7 @@ final class GRDBProfileIndexRepository {
     var onRecordDeleted: @Sendable (UUID) -> Void
   }
 
-  private let database: any DatabaseWriter
+  let database: any DatabaseWriter
   private let hooks: OSAllocatedUnfairLock<HookState>
 
   init(
@@ -126,6 +126,7 @@ final class GRDBProfileIndexRepository {
         row.encodedSystemFields = existing.encodedSystemFields
       }
       try row.upsert(database)
+      try markNeedsPushSync(id: profile.id, in: database)
     }
     // Capture the closure under the lock, release, then invoke.
     // `OSAllocatedUnfairLock` is non-reentrant, so calling an arbitrary

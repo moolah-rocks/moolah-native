@@ -198,6 +198,7 @@ final class GRDBAccountRepository: AccountRepository, @unchecked Sendable {
       existing.valuationMode = account.valuationMode.rawValue
       existing.groupId = account.groupId
       try existing.update(database)
+      try markNeedsPushSync(id: account.id, in: database)
 
       let positions = try Self.computePositions(
         database: database, instruments: instruments, accountId: account.id)
@@ -261,6 +262,7 @@ final class GRDBAccountRepository: AccountRepository, @unchecked Sendable {
       }
       existing.isHidden = true
       try existing.update(database)
+      try markNeedsPushSync(id: id, in: database)
     }
     onRecordChanged(AccountRow.recordType, id)
   }

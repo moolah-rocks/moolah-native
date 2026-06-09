@@ -122,6 +122,7 @@ final class GRDBEarmarkRepository: EarmarkRepository, @unchecked Sendable {
     let row = EarmarkRow(domain: earmark)
     try await database.write { database in
       try row.insert(database)
+      try markNeedsPushSync(id: earmark.id, in: database)
     }
     onRecordChanged(EarmarkRow.recordType, earmark.id)
     return earmark
@@ -146,6 +147,7 @@ final class GRDBEarmarkRepository: EarmarkRepository, @unchecked Sendable {
       existing.savingsStartDate = earmark.savingsStartDate
       existing.savingsEndDate = earmark.savingsEndDate
       try existing.update(database)
+      try markNeedsPushSync(id: earmark.id, in: database)
     }
     onRecordChanged(EarmarkRow.recordType, earmark.id)
     return earmark
@@ -251,6 +253,7 @@ final class GRDBEarmarkRepository: EarmarkRepository, @unchecked Sendable {
       existing.amount = amount.storageValue
       existing.instrumentId = amount.instrument.id
       try existing.update(database)
+      try markBudgetItemNeedsPush(id: existing.id, in: database)
       return SetBudgetOutcome(changedId: existing.id, deletedId: nil)
     }
 
@@ -260,6 +263,7 @@ final class GRDBEarmarkRepository: EarmarkRepository, @unchecked Sendable {
       amount: amount)
     let row = EarmarkBudgetItemRow(domain: newItem, earmarkId: earmarkId)
     try row.insert(database)
+    try markBudgetItemNeedsPush(id: row.id, in: database)
     return SetBudgetOutcome(changedId: row.id, deletedId: nil)
   }
 

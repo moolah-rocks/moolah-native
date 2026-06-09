@@ -38,4 +38,44 @@ struct NeedsPushMutationTests {
       #expect((col["dflt_value"] as String?) == "0")
     }
   }
+
+  @Test("markNeedsPushSync sets the flag; dirtyIdsSync reports it; clear resets it")
+  func markReadClearRoundTrip() throws {
+    let database = try ProfileDatabase.openInMemory()
+    let registry = try SharedRegistryTestSupport.makeSharedRegistry()
+    let repo = GRDBAccountRepository(
+      database: database, instrumentResolver: registry, instrumentRegistrar: registry)
+    let id = UUID()
+    try database.write { database in
+      try ProfileDataSyncHandlerTestSupport.accountRow(id: id, name: "A").insert(database)
+    }
+
+    #expect(try repo.dirtyIdsSync(from: [id]).isEmpty)
+
+    try database.write { database in try repo.markNeedsPushSync(id: id, in: database) }
+    #expect(try repo.dirtyIdsSync(from: [id]) == [id])
+
+    _ = try repo.clearNeedsPushBatchSync([id])
+    #expect(try repo.dirtyIdsSync(from: [id]).isEmpty)
+  }
+
+  @Test("account create/update set needs_push")
+  func accountMutationsMarkDirty() async throws {
+    let database = try ProfileDatabase.openInMemory()
+    let registry = try SharedRegistryTestSupport.makeSharedRegistry()
+    let repo = GRDBAccountRepository(
+      database: database, instrumentResolver: registry, instrumentRegistrar: registry)
+    let account = Account(
+      id: UUID(), name: "Checking", type: .bank,
+      instrument: .defaultTestInstrument, position: 0)
+
+    _ = try await repo.create(account)
+    #expect(try repo.dirtyIdsSync(from: [account.id]) == [account.id])
+
+    _ = try repo.clearNeedsPushBatchSync([account.id])
+    var renamed = account
+    renamed.name = "Renamed"
+    _ = try await repo.update(renamed)
+    #expect(try repo.dirtyIdsSync(from: [account.id]) == [account.id])
+  }
 }

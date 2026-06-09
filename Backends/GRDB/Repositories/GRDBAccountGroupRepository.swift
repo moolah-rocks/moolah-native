@@ -57,6 +57,7 @@ final class GRDBAccountGroupRepository: AccountGroupRepository, @unchecked Senda
     let row = AccountGroupRow(domain: group)
     try await database.write { database in
       try row.insert(database)
+      try markNeedsPushSync(id: group.id, in: database)
     }
     onRecordChanged(AccountGroupRow.recordType, group.id)
     return group
@@ -78,6 +79,7 @@ final class GRDBAccountGroupRepository: AccountGroupRepository, @unchecked Senda
       existing.instrumentId = group.instrument.id
       existing.position = group.position
       try existing.update(database)
+      try markNeedsPushSync(id: group.id, in: database)
     }
     onRecordChanged(AccountGroupRow.recordType, group.id)
     return group

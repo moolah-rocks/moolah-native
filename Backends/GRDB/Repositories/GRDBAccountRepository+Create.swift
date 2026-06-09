@@ -29,6 +29,10 @@ extension GRDBAccountRepository {
   ) throws -> OpeningBalanceInserts {
     let accountRow = AccountRow(domain: account)
     try accountRow.insert(database)
+    // Mark the freshly-inserted row dirty in the same transaction so the
+    // apply path (issue #1081) never clobbers it before its first upload.
+    try AccountRow.filter(AccountRow.Columns.id == account.id)
+      .updateAll(database, [AccountRow.Columns.needsPush.set(to: true)])
 
     // No opening balance — only the account row was inserted.
     guard let openingBalance, !openingBalance.isZero else {
@@ -41,6 +45,12 @@ extension GRDBAccountRepository {
     try makeOpeningBalanceLegRow(
       id: legId, transactionId: txnId, account: account, openingBalance: openingBalance
     ).insert(database)
+    // Cross-table marks for the opening-balance transaction + leg (own by
+    // the transaction / leg repos) inside this same write transaction.
+    try TransactionRow.filter(TransactionRow.Columns.id == txnId)
+      .updateAll(database, [TransactionRow.Columns.needsPush.set(to: true)])
+    try TransactionLegRow.filter(TransactionLegRow.Columns.id == legId)
+      .updateAll(database, [TransactionLegRow.Columns.needsPush.set(to: true)])
     return OpeningBalanceInserts(transactionId: txnId, legId: legId)
   }
 
