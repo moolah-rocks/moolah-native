@@ -138,6 +138,11 @@ extension GRDBAnalysisRepository {
   ) async throws -> [MonthlyIncomeExpense] {
     var buckets: [String: MonthBucket] = [:]
     var firstConversionError: Error?
+    // Strict Rule 11 (#1077): a financial month with ANY transient
+    // (price-unavailable) skip is marked unavailable — even if other
+    // rows in the month converted — and a month whose rows ALL skipped
+    // still emits a zeroed placeholder bucket spanning the failing days.
+    var unavailable = UnavailableMonthTracker()
     for row in aggregation.rows {
       guard let day = Self.parseDayString(row.day) else {
         handlers.handleUnparseableDay(row.day)
@@ -163,8 +168,12 @@ extension GRDBAnalysisRepository {
           day: row.day, instrumentId: row.instrumentId)
         handlers.handleConversionFailure(error, context)
         // Issue #1075: transient price failures degrade per-row; only a
-        // structural failure preserves the loud rethrow.
-        if firstConversionError == nil, !ConversionFailureClassifier.isTransient(error) {
+        // structural failure preserves the loud rethrow. Strict Rule 11
+        // (#1077): a transient skip flags its month unavailable.
+        if ConversionFailureClassifier.isTransient(error) {
+          unavailable.record(
+            month: Self.financialMonth(for: day, monthEnd: monthEnd), day: day)
+        } else if firstConversionError == nil {
           firstConversionError = error
         }
         continue
@@ -182,7 +191,52 @@ extension GRDBAnalysisRepository {
       // failure.
       throw firstConversionError
     }
-    return Self.flattenIncomeAndExpenseBuckets(buckets)
+    Self.insertUnavailablePlaceholders(
+      into: &buckets, tracker: unavailable, profileInstrument: profileInstrument)
+    return Self.flattenIncomeAndExpenseBuckets(
+      buckets, incompleteMonths: unavailable.months)
+  }
+
+  /// Tracks, for strict Rule 11 (#1077), which financial months had ≥1
+  /// transient (price-unavailable) conversion skip and the span of the
+  /// failing-row days within each — so the assembler can mark every
+  /// emitted bucket for those months unavailable and synthesise a
+  /// placeholder bucket for any month whose rows ALL skipped.
+  private struct UnavailableMonthTracker {
+    private(set) var months: Set<String> = []
+    private(set) var dayRanges: [String: (start: Date, end: Date)] = [:]
+
+    mutating func record(month: String, day: Date) {
+      months.insert(month)
+      let existing = dayRanges[month]
+      dayRanges[month] = (
+        start: min(existing?.start ?? day, day),
+        end: max(existing?.end ?? day, day)
+      )
+    }
+  }
+
+  /// Emit a zeroed placeholder bucket for any month whose rows ALL
+  /// transient-skipped (no converted row created a bucket) so the month
+  /// still appears in the result — flagged unavailable downstream and
+  /// spanning its failing-row days. Months that already have a bucket
+  /// (at least one row converted) keep their converted totals; the
+  /// unavailable flag is applied separately at flatten time.
+  private static func insertUnavailablePlaceholders(
+    into buckets: inout [String: MonthBucket],
+    tracker: UnavailableMonthTracker,
+    profileInstrument: Instrument
+  ) {
+    for month in tracker.months where buckets[month] == nil {
+      let range = tracker.dayRanges[month]
+      var bucket = Self.makeEmptyMonthBucket(
+        day: range?.start ?? Date(), instrument: profileInstrument)
+      if let range {
+        bucket.start = range.start
+        bucket.end = range.end
+      }
+      buckets[month] = bucket
+    }
   }
 
   /// Converts each of the six per-row sums to the profile instrument
@@ -299,7 +353,8 @@ extension GRDBAnalysisRepository {
   /// already contributes to `income` or `expense` with the same
   /// conditions.
   private static func flattenIncomeAndExpenseBuckets(
-    _ buckets: [String: MonthBucket]
+    _ buckets: [String: MonthBucket],
+    incompleteMonths: Set<String>
   ) -> [MonthlyIncomeExpense] {
     var results: [MonthlyIncomeExpense] = []
     results.reserveCapacity(buckets.count)
@@ -314,7 +369,8 @@ extension GRDBAnalysisRepository {
           profit: bucket.income + bucket.expense,
           earmarkedIncome: bucket.earmarkedIncome,
           earmarkedExpense: bucket.earmarkedExpense,
-          earmarkedProfit: bucket.earmarkedProfit))
+          earmarkedProfit: bucket.earmarkedProfit,
+          hasUnavailableData: incompleteMonths.contains(month)))
     }
     return results.sorted { $0.month > $1.month }
   }
