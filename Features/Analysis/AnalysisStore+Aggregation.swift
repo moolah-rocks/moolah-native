@@ -20,6 +20,9 @@ extension AnalysisStore {
     var rootTotals: [UUID?: [String: Decimal]] = [:]
     var allMonths: Set<String> = []
 
+    // A month is unavailable if ANY of its source rows failed to price.
+    let unavailableMonths = Set(breakdown.filter(\.hasUnavailableData).map(\.month))
+
     // Negate totalExpenses (server returns negative for expenses) and clamp to zero,
     // matching the web app's categoryOverTimeData.js approach.
     for item in breakdown {
@@ -47,7 +50,8 @@ extension AnalysisStore {
           month: month,
           monthDate: parseMonth(month),
           actualAmount: amount,
-          percentage: percentage
+          percentage: percentage,
+          isUnavailable: unavailableMonths.contains(month)
         )
       }
       let totalAmount = months.values.reduce(Decimal(0), +)
