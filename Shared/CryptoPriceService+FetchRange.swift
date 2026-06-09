@@ -102,3 +102,122 @@ extension CryptoPriceService {
     }
   }
 }
+
+// MARK: - Background warming
+
+/// Outcome of a background `warmRange` pass over a token's price history.
+enum WarmOutcome: Equatable {
+  /// Every uncovered sub-range fetched (or there was nothing to do).
+  case filled
+  /// A provider is rate-limited; retry after this deadline.
+  case cooledDown(until: Date)
+  /// No provider could supply data and there is no cooldown to wait on.
+  case unavailable
+}
+
+extension CryptoPriceService {
+  /// Background-warm a token's prices over `range`, fetching only the
+  /// sub-ranges the in-memory/on-disk cache does not already cover.
+  /// Unlike `fetchRange`, surfaces a provider `RateLimitGateError.cooldown`
+  /// deadline (so a background warmer can sleep precisely) instead of
+  /// wrapping it into a `WalletSyncError`. Idempotent: an already-covered
+  /// range fetches nothing and returns `.filled`. See issue #1075.
+  func warmRange(
+    for instrument: Instrument,
+    mapping: CryptoProviderMapping,
+    in range: ClosedRange<Date>
+  ) async -> WarmOutcome {
+    let tokenId = instrument.id
+    if !hydratedTokenIds.contains(tokenId) {
+      try? await loadCache(tokenId: tokenId)
+    }
+    let subRanges = uncoveredSubRanges(tokenId: tokenId, range: range)
+    if subRanges.isEmpty { return .filled }
+
+    var soonestCooldown: Date?
+    var filledAny = false
+    for sub in subRanges {
+      switch await fetchSubRangeWarming(instrument: instrument, mapping: mapping, range: sub) {
+      case .filled:
+        filledAny = true
+      case .cooledDown(let until):
+        soonestCooldown = soonestCooldown.map { min($0, until) } ?? until
+      case .unavailable:
+        continue
+      }
+    }
+    if let soonestCooldown { return .cooledDown(until: soonestCooldown) }
+    return filledAny ? .filled : .unavailable
+  }
+
+  /// The sub-ranges of `range` not already covered by the token's cache.
+  /// Mirrors the backward/forward extension decision in
+  /// `prices(for:mapping:in:)` — including its boundary-day inversion
+  /// guards (`range.lowerBound <= backEnd` and `forwardStart <=
+  /// fetchUpperBound`) so a noon-anchored day token immediately adjacent
+  /// to a cache bound never builds an inverted `ClosedRange`.
+  private func uncoveredSubRanges(
+    tokenId: String, range: ClosedRange<Date>
+  ) -> [ClosedRange<Date>] {
+    let fetchUpperBound = cappedToYesterday(range.upperBound, now: now, timeZone: timeZone)
+    guard range.lowerBound <= fetchUpperBound else { return [] }
+    let rangeStart = dateFormatter.string(from: range.lowerBound)
+    let fetchEndString = dateFormatter.string(from: fetchUpperBound)
+    let gregorian = Calendar(identifier: .gregorian)
+    guard let cache = caches[tokenId] else {
+      return [range.lowerBound...fetchUpperBound]  // cold cache: whole range
+    }
+    var result: [ClosedRange<Date>] = []
+    if rangeStart < cache.earliestDate,
+      let earliest = dateFormatter.date(from: cache.earliestDate),
+      let backEnd = gregorian.date(byAdding: .day, value: -1, to: earliest),
+      range.lowerBound <= backEnd
+    {
+      result.append(range.lowerBound...backEnd)
+    }
+    if fetchEndString > cache.latestDate,
+      let forwardStart = dateFormatter.date(from: cache.latestDate),
+      forwardStart <= fetchUpperBound
+    {
+      result.append(forwardStart...fetchUpperBound)
+    }
+    return result
+  }
+
+  /// Runs the provider fallback chain for one sub-range, surfacing the
+  /// soonest cooldown deadline rather than wrapping it into a
+  /// `WalletSyncError` the way `fetchRange` does. Returns `.unavailable`
+  /// when every client returned empty / a non-cooldown failure.
+  private func fetchSubRangeWarming(
+    instrument: Instrument, mapping: CryptoProviderMapping, range: ClosedRange<Date>
+  ) async -> WarmOutcome {
+    let tokenId = instrument.id
+    let symbol = instrument.ticker ?? instrument.name
+    var soonestCooldown: Date?
+    for client in clients {
+      do {
+        let fetched = try await client.dailyPrices(for: mapping, in: range)
+        if !fetched.isEmpty {
+          let delta = mergeReturningDelta(tokenId: tokenId, symbol: symbol, newPrices: fetched)
+          if !delta.isEmpty {
+            try await persistDelta(tokenId: tokenId, deltaRecords: delta)
+          }
+          return .filled
+        }
+      } catch let cooldown as RateLimitGateError {
+        if case .cooldown(let until) = cooldown {
+          soonestCooldown = soonestCooldown.map { min($0, until) } ?? until
+        }
+        continue
+      } catch CryptoPriceError.noProviderMapping {
+        // Routing decision — this client has no symbol for the token
+        // (e.g. USDT on Binance). Skip silently, same as `fetchRange`.
+        continue
+      } catch {
+        continue
+      }
+    }
+    if let soonestCooldown { return .cooledDown(until: soonestCooldown) }
+    return .unavailable
+  }
+}
