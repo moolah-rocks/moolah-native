@@ -2,7 +2,13 @@ import CloudKit
 import Foundation
 
 /// Protocol for bidirectional conversion between record types and CKRecords.
-protocol CloudKitRecordConvertible {
+///
+/// `Sendable` so `RecordTypeRegistry.allTypes` — a dictionary of conformer
+/// metatypes held in an immutable global — is provably concurrency-safe
+/// without a `nonisolated(unsafe)` escape hatch. Every conformer is a GRDB
+/// row value type whose stored properties are all `Sendable`, so the bound
+/// is satisfied by the compiler-synthesised conformance.
+protocol CloudKitRecordConvertible: Sendable {
   static var recordType: String { get }
 
   /// Converts this record to a CKRecord in the given zone.
@@ -91,7 +97,7 @@ extension CKRecord {
 
 /// Maps CKRecord.recordType strings to the corresponding record types for dispatching.
 enum RecordTypeRegistry: Sendable {
-  nonisolated(unsafe) static let allTypes: [String: any CloudKitRecordConvertible.Type] = [
+  static let allTypes: [String: any CloudKitRecordConvertible.Type] = [
     // Every record type dispatches to its GRDB row type. The CloudKit
     // wire `recordType` strings are frozen contracts that the schema
     // depends on; do not rename them when refactoring the local Swift
