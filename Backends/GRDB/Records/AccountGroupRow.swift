@@ -19,6 +19,7 @@ struct AccountGroupRow {
     case instrumentId = "instrument_id"
     case position
     case encodedSystemFields = "encoded_system_fields"
+    case needsPush = "needs_push"
   }
 
   enum CodingKeys: String, CodingKey {

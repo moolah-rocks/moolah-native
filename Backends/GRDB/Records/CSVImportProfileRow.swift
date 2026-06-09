@@ -27,6 +27,7 @@ struct CSVImportProfileRow {
     case dateFormatRawValue = "date_format_raw_value"
     case columnRoleRawValuesEncoded = "column_role_raw_values_encoded"
     case encodedSystemFields = "encoded_system_fields"
+    case needsPush = "needs_push"
   }
 
   enum CodingKeys: String, CodingKey {

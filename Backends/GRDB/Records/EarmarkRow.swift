@@ -26,6 +26,7 @@ struct EarmarkRow {
     case savingsStartDate = "savings_start_date"
     case savingsEndDate = "savings_end_date"
     case encodedSystemFields = "encoded_system_fields"
+    case needsPush = "needs_push"
   }
 
   enum CodingKeys: String, CodingKey {

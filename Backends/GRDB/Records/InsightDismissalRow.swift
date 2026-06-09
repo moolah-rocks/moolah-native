@@ -14,6 +14,7 @@ struct InsightDismissalRow {
     case kind
     case count
     case encodedSystemFields = "encoded_system_fields"
+    case needsPush = "needs_push"
   }
 
   enum CodingKeys: String, CodingKey {

@@ -11,7 +11,7 @@ extension CategoryRow {
   /// shared pattern and issue #865 for the motivation.
   static var observableRegion: QueryInterfaceRequest<CategoryRow> {
     let columns: [any SQLSelectable] = Columns.allCases
-      .filter { $0 != .encodedSystemFields }
+      .filter { $0 != .encodedSystemFields && $0 != .needsPush }
       .map { $0 as any SQLSelectable }
     return select(columns)
   }

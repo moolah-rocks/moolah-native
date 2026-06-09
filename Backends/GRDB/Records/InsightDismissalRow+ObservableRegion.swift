@@ -9,7 +9,7 @@ extension InsightDismissalRow {
   /// See issue #865.
   static var observableRegion: QueryInterfaceRequest<InsightDismissalRow> {
     let columns: [any SQLSelectable] = Columns.allCases
-      .filter { $0 != .encodedSystemFields }
+      .filter { $0 != .encodedSystemFields && $0 != .needsPush }
       .map { $0 as any SQLSelectable }
     return select(columns)
   }

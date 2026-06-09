@@ -25,6 +25,7 @@ struct ProfileRow {
     case createdAt = "created_at"
     case encodedSystemFields = "encoded_system_fields"
     case dataFormatVersion = "data_format_version"
+    case needsPush = "needs_push"
   }
 
   enum CodingKeys: String, CodingKey {

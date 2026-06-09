@@ -14,6 +14,7 @@ struct TransferSuggestionRow {
     case transactionIdB = "transaction_id_b"
     case suggestedAt = "suggested_at"
     case encodedSystemFields = "encoded_system_fields"
+    case needsPush = "needs_push"
   }
 
   enum CodingKeys: String, CodingKey {
