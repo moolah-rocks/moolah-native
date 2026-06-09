@@ -90,9 +90,19 @@ struct IncomeExpenseTableCard: View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
         VStack(alignment: .leading, spacing: 2) {
-          Text(Self.monthLabel(for: item))
-            .font(.body)
-            .monospacedDigit()
+          HStack(spacing: 4) {
+            Text(Self.monthLabel(for: item))
+              .font(.body)
+              .monospacedDigit()
+            if item.hasUnavailableData {
+              // Visual hint that the row's prices are still loading. The row's
+              // combined a11y label already announces this, so hide it here.
+              Image(systemName: "clock")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            }
+          }
           Text(monthsAgoLabel(for: item))
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -140,6 +150,7 @@ struct IncomeExpenseTableCard: View {
   private var unavailableCell: some View {
     Text(verbatim: "—")
       .foregroundStyle(.secondary)
+      .monospacedDigit()
   }
 
   @ViewBuilder
@@ -166,23 +177,6 @@ struct IncomeExpenseTableCard: View {
   private func cumulativeSavingsValue(for item: MonthlyIncomeExpense) -> InstrumentAmount? {
     guard let index = data.firstIndex(where: { $0.id == item.id }) else { return nil }
     return Self.cumulativeSavingsColumn(in: data, includeEarmarks: includeEarmarks)[index]
-  }
-
-  /// Cumulative savings from the first row through the given item.
-  /// Data is sorted most-recent-first, so the first row's total equals its own
-  /// savings and each subsequent row adds to the running total.
-  nonisolated static func cumulativeSavings(
-    upTo item: MonthlyIncomeExpense,
-    in data: [MonthlyIncomeExpense],
-    includeEarmarks: Bool
-  ) -> InstrumentAmount {
-    guard let index = data.firstIndex(where: { $0.id == item.id }) else {
-      return .zero(instrument: data.first?.income.instrument ?? .AUD)
-    }
-    let zero = InstrumentAmount.zero(instrument: item.income.instrument)
-    return data[...index].reduce(zero) { total, month in
-      total + (includeEarmarks ? month.totalProfit : month.profit)
-    }
   }
 
   /// Running cumulative savings aligned 1:1 with `data` (most-recent-first).
@@ -227,9 +221,17 @@ struct IncomeExpenseTableCard: View {
     let income = includeEarmarks ? item.totalIncome : item.income
     let expense = includeEarmarks ? item.totalExpense : item.expense
     let profit = includeEarmarks ? item.totalProfit : item.profit
-    let total = Self.cumulativeSavings(upTo: item, in: data, includeEarmarks: includeEarmarks)
-    return
-      "\(month). Income \(income.formatted). Expense \(expense.formatted). Savings \(profit.formatted). Total savings \(total.formatted)."
+    let base =
+      "\(month). Income \(income.formatted). Expense \(expense.formatted). Savings \(profit.formatted)."
+    // The cumulative column is nil-from-the-first-unavailable-month, so an
+    // available row that follows an unavailable one has no real running total.
+    // Announce that rather than the misleading number a plain reduce would give.
+    let index = data.firstIndex { $0.id == item.id }
+    let column = Self.cumulativeSavingsColumn(in: data, includeEarmarks: includeEarmarks)
+    guard let index, let total = column[index] else {
+      return base + " Total savings unavailable."
+    }
+    return base + " Total savings \(total.formatted)."
   }
 
   nonisolated static func monthLabel(for item: MonthlyIncomeExpense) -> String {
@@ -276,7 +278,7 @@ private enum IncomeExpenseTableCardPreviewData {
   ]
 }
 
-#Preview {
+#Preview("Mixed — includes unavailable month") {
   IncomeExpenseTableCard(data: IncomeExpenseTableCardPreviewData.sample)
     .frame(width: 600, height: 500)
     .padding()

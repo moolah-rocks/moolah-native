@@ -67,8 +67,8 @@ struct IncomeExpenseUnavailableTests {
     #expect(column[2]?.quantity == Decimal(5000))  // + (4500 - 2000)
   }
 
-  @Test("column agrees with cumulativeSavings(upTo:) for all-available data")
-  func columnAgreesWithPerItemHelper() {
+  @Test("column equals a plain running total for all-available data")
+  func columnEqualsRunningTotal() {
     let data = [
       monthData(month: "202604", income: Decimal(5000), expense: Decimal(3000)),
       monthData(month: "202603", income: Decimal(4000), expense: Decimal(3500)),
@@ -78,10 +78,10 @@ struct IncomeExpenseUnavailableTests {
     let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
       in: data, includeEarmarks: false)
 
+    var running = Decimal(0)
     for (index, item) in data.enumerated() {
-      let perItem = IncomeExpenseTableCard.cumulativeSavings(
-        upTo: item, in: data, includeEarmarks: false)
-      #expect(column[index]?.quantity == perItem.quantity)
+      running += item.profit.quantity
+      #expect(column[index]?.quantity == running)
     }
   }
 

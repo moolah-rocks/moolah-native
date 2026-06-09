@@ -77,18 +77,60 @@ struct IncomeExpenseAccessibilityLabelTests {
   }
 
   @Test("total savings reflects cumulative position")
-  func totalSavingsIsCumulative() {
+  func totalSavingsIsCumulative() throws {
     let data = [
       monthData(month: "202402", income: Decimal(5000), expense: Decimal(3000)),
       monthData(month: "202401", income: Decimal(4000), expense: Decimal(3500)),
     ]
 
     // Row at index 1 should include cumulative total 2000 + 500 = 2500.
-    let cumulative = IncomeExpenseTableCard.cumulativeSavings(
-      upTo: data[1], in: data, includeEarmarks: false)
+    let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
+      in: data, includeEarmarks: false)
+    let cumulative = try #require(column[1])
     let label = IncomeExpenseTableCard.accessibilityLabel(
       for: data[1], in: data, includeEarmarks: false)
 
     #expect(label.contains(cumulative.formatted))
+  }
+
+  @Test("available row after an unavailable month announces total unavailable")
+  func availableRowAfterUnavailableAnnouncesUnavailableTotal() {
+    // Most-recent-first: available, unavailable, available. The trailing
+    // available row's cumulative depends on the unknown middle month, so its
+    // total must be announced as unavailable — never a (wrong) number.
+    let data = [
+      monthData(month: "202403", income: Decimal(5000), expense: Decimal(3000)),
+      unavailableMonth(month: "202402"),
+      monthData(month: "202401", income: Decimal(4000), expense: Decimal(3500)),
+    ]
+
+    let label = IncomeExpenseTableCard.accessibilityLabel(
+      for: data[2], in: data, includeEarmarks: false)
+
+    // Its own income/expense/savings are still announced...
+    #expect(label.contains("Income"))
+    #expect(label.contains(data[2].income.formatted))
+    #expect(label.contains(data[2].expense.formatted))
+    #expect(label.contains(data[2].profit.formatted))
+    // ...but the running total is unavailable, not a number.
+    #expect(label.contains("Total savings unavailable"))
+    #expect(!label.contains("Total savings \(data[2].profit.formatted)"))
+  }
+
+  private func unavailableMonth(
+    month: String,
+    start: Date = Date(timeIntervalSince1970: 1_704_067_200)
+  ) -> MonthlyIncomeExpense {
+    MonthlyIncomeExpense(
+      month: month,
+      start: start,
+      end: start,
+      income: amount(0),
+      expense: amount(0),
+      profit: amount(0),
+      earmarkedIncome: amount(0),
+      earmarkedExpense: amount(0),
+      earmarkedProfit: amount(0),
+      hasUnavailableData: true)
   }
 }
