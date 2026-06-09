@@ -136,6 +136,13 @@ extension GRDBAnalysisRepository {
   ) async throws -> [ExpenseBreakdown] {
     var buckets: [String: [UUID?: InstrumentAmount]] = [:]
     var firstConversionError: Error?
+    // Strict Rule 11 (#1077): a financial month with ANY transient
+    // (price-unavailable) skip is marked unavailable — even if other
+    // rows in the month converted — and a month whose rows ALL skipped
+    // still surfaces as a zeroed `categoryId: nil` placeholder. Unlike
+    // the income/expense aggregation, `ExpenseBreakdown` carries no
+    // start/end, so a plain month set suffices (no day-range tracking).
+    var incompleteMonths: Set<String> = []
     for row in aggregation.rows {
       guard let day = Self.parseDayString(row.day) else {
         handlers.handleUnparseableDay(row.day)
@@ -164,8 +171,11 @@ extension GRDBAnalysisRepository {
         // day not yet warmed — issue #1075) degrade per-row: skip this
         // row's contribution and render the rest. Only a *structural*
         // failure preserves the loud rethrow that signals a genuinely
-        // incomplete bucket.
-        if firstConversionError == nil, !ConversionFailureClassifier.isTransient(error) {
+        // incomplete bucket. Strict Rule 11 (#1077): a transient skip
+        // flags its month unavailable.
+        if ConversionFailureClassifier.isTransient(error) {
+          incompleteMonths.insert(Self.financialMonth(for: day, monthEnd: monthEnd))
+        } else if firstConversionError == nil {
           firstConversionError = error
         }
         continue
@@ -182,22 +192,45 @@ extension GRDBAnalysisRepository {
       // together — out of scope for this method's individual rewrite.
       throw firstConversionError
     }
-    return flattenExpenseBreakdownBuckets(buckets)
+    return flattenExpenseBreakdownBuckets(
+      buckets,
+      incompleteMonths: incompleteMonths,
+      profileInstrument: profileInstrument)
   }
 
   /// Emits one `ExpenseBreakdown` per non-empty `(month, category)` bucket
   /// and sorts months descending — the contract pinned by
   /// `AnalysisExpenseBreakdownTests.expenseBreakdownSortOrder`.
+  ///
+  /// Strict Rule 11 (#1077): every emitted row whose month is in
+  /// `incompleteMonths` is flagged `hasUnavailableData`, and any
+  /// incomplete month with no surviving `(month, *)` bucket (all rows
+  /// transient-skipped) gets a single zeroed `categoryId: nil`
+  /// placeholder so the month still appears rather than vanishing as
+  /// "no activity".
   private static func flattenExpenseBreakdownBuckets(
-    _ buckets: [String: [UUID?: InstrumentAmount]]
+    _ buckets: [String: [UUID?: InstrumentAmount]],
+    incompleteMonths: Set<String>,
+    profileInstrument: Instrument
   ) -> [ExpenseBreakdown] {
     var results: [ExpenseBreakdown] = []
     for (month, categories) in buckets {
       for (categoryId, total) in categories {
         results.append(
           ExpenseBreakdown(
-            categoryId: categoryId, month: month, totalExpenses: total))
+            categoryId: categoryId,
+            month: month,
+            totalExpenses: total,
+            hasUnavailableData: incompleteMonths.contains(month)))
       }
+    }
+    for month in incompleteMonths where (buckets[month]?.isEmpty ?? true) {
+      results.append(
+        ExpenseBreakdown(
+          categoryId: nil,
+          month: month,
+          totalExpenses: .zero(instrument: profileInstrument),
+          hasUnavailableData: true))
     }
     return results.sorted { $0.month > $1.month }
   }
