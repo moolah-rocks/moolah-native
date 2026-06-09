@@ -19,6 +19,38 @@ enum PerAccountBuildResult: Sendable {
 
 extension SyncedAccountStore {
 
+  // MARK: - Public sync triggers
+
+  /// Bootstraps observable state from persisted checkpoints. Call once
+  /// at app launch (e.g. from the root scene `.task`). Failure is
+  /// non-fatal — the next sync cycle still runs against an empty cache.
+  func loadInitialState() async {
+    await reloadStatePerAccount(failureLogPrefix: "Initial WalletSyncState load")
+  }
+
+  /// Sync any syncable account whose `lastSyncedAt` is older than
+  /// `staleThreshold` (24 h by default). Used by app-launch, scene-active,
+  /// and the hourly timer. A no-op when nothing is stale.
+  ///
+  /// Per-account error containment is preserved: failures inside the
+  /// build phase write `WalletSyncState.lastError` and don't abort other
+  /// accounts in the same cycle.
+  func syncStaleAccounts() async {
+    let stale = await accountsToSync(includeNonStale: false)
+    guard !stale.isEmpty else { return }
+    await syncAccounts(stale)
+  }
+
+  /// User-initiated sync of a specific account, regardless of staleness.
+  /// Skips when the account is already mid-sync (the existing in-flight
+  /// task wins; the user-initiated one collapses to a no-op rather than
+  /// queueing a duplicate write).
+  func syncAccount(_ account: Account) async {
+    guard source(for: account) != nil else { return }
+    guard !inProgressAccountIds.contains(account.id) else { return }
+    await syncAccounts([account])
+  }
+
   // MARK: - Stale filter
 
   /// Filters `accounts.fetchAll()` down to syncable accounts (any

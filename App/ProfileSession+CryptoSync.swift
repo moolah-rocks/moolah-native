@@ -90,12 +90,16 @@ extension ProfileSession {
     let transferDetection = TransferDetectionCoordinator(
       transactions: backend.transactions,
       suggestions: backend.transferSuggestions)
+    let priceWarmer = CryptoPriceWarmer(
+      priceService: cryptoPriceService,
+      registrations: { try await registry.allCryptoRegistrations() })
     let store = SyncedAccountStore(
       sources: [WalletSyncSource(engine: walletSyncEngine), coinstashSource],
       walletApplyEngine: walletApplyEngine,
       walletSyncState: backend.walletSyncState,
       accounts: backend.accounts,
-      transferDetection: transferDetection)
+      transferDetection: transferDetection,
+      priceWarmer: priceWarmer)
     return CryptoSyncWiring(store: store, discovery: discovery)
   }
 

@@ -108,6 +108,27 @@ final class SyncedAccountStore {
   /// `waitForPendingInitialSyncs()`.
   private(set) var initialSyncTasks: [UUID: Task<Void, Never>] = [:]
 
+  /// `true` while a background crypto-price warm kicked off by the most
+  /// recent sync's apply pass is in flight. Drives a subtle "Updating
+  /// prices" indicator in the Analysis UI (issue #1075). `private(set)`
+  /// so views can only observe; `startPriceWarming` (in `+Internals`)
+  /// owns the writes.
+  private(set) var priceWarmingInProgress = false
+
+  /// The throttle-aware background price warmer, injected by
+  /// `makeCryptoSyncWiring`. `nil` in degraded / preview wiring (and in
+  /// tests that don't exercise warming), in which case
+  /// `startPriceWarming` is a no-op. Module-internal (not `private`) so
+  /// the kick-off lives in `SyncedAccountStore+Internals.swift`.
+  let priceWarmer: (any PriceWarming)?
+
+  /// The in-flight warm task spawned after the latest apply pass. Tracked
+  /// per `guides/CONCURRENCY_GUIDE.md` §8 so `cancelTimer()` can tear it
+  /// down on profile teardown, and so a fresh sync supersedes a prior
+  /// warm rather than stacking. Module-internal so the `+Internals`
+  /// extension can swap it.
+  var priceWarmingTask: Task<Void, Never>?
+
   private static let logger = Logger(
     subsystem: "com.moolah.app", category: "SyncedAccountStore")
 
@@ -132,6 +153,10 @@ final class SyncedAccountStore {
   ///   - timerInterval: Hourly stale-check cadence. Default 1 hour.
   ///   - maxConcurrentBuilds: Cap on simultaneous per-account fetches in
   ///     the parallel build phase. Default 4.
+  ///   - priceWarmer: Throttle-aware background crypto-price warmer,
+  ///     kicked off after each apply pass over the genuinely-new
+  ///     transactions. `nil` (the default) disables warming — used by
+  ///     degraded / preview wiring and tests that don't exercise it.
   init(
     sources: [any AccountSyncSource],
     walletApplyEngine: WalletApplyEngine,
@@ -141,7 +166,8 @@ final class SyncedAccountStore {
     clock: @Sendable @escaping () -> Date = { Date() },
     staleThreshold: TimeInterval = 86_400,
     timerInterval: Duration = .seconds(3_600),
-    maxConcurrentBuilds: Int = 4
+    maxConcurrentBuilds: Int = 4,
+    priceWarmer: (any PriceWarming)? = nil
   ) {
     self.sources = sources
     self.walletApplyEngine = walletApplyEngine
@@ -152,6 +178,7 @@ final class SyncedAccountStore {
     self.staleThreshold = staleThreshold
     self.timerInterval = timerInterval
     self.maxConcurrentBuilds = max(1, maxConcurrentBuilds)
+    self.priceWarmer = priceWarmer
   }
 
   /// The first registered `AccountSyncSource` that claims `account`, or
@@ -164,36 +191,10 @@ final class SyncedAccountStore {
   }
 
   // MARK: - Public sync triggers
-
-  /// Bootstraps observable state from persisted checkpoints. Call once
-  /// at app launch (e.g. from the root scene `.task`). Failure is
-  /// non-fatal — the next sync cycle still runs against an empty cache.
-  func loadInitialState() async {
-    await reloadStatePerAccount(failureLogPrefix: "Initial WalletSyncState load")
-  }
-
-  /// Sync any syncable account whose `lastSyncedAt` is older than
-  /// `staleThreshold` (24 h by default). Used by app-launch, scene-active,
-  /// and the hourly timer. A no-op when nothing is stale.
-  ///
-  /// Per-account error containment is preserved: failures inside the
-  /// build phase write `WalletSyncState.lastError` and don't abort other
-  /// accounts in the same cycle.
-  func syncStaleAccounts() async {
-    let stale = await accountsToSync(includeNonStale: false)
-    guard !stale.isEmpty else { return }
-    await syncAccounts(stale)
-  }
-
-  /// User-initiated sync of a specific account, regardless of staleness.
-  /// Skips when the account is already mid-sync (the existing in-flight
-  /// task wins; the user-initiated one collapses to a no-op rather than
-  /// queueing a duplicate write).
-  func syncAccount(_ account: Account) async {
-    guard source(for: account) != nil else { return }
-    guard !inProgressAccountIds.contains(account.id) else { return }
-    await syncAccounts([account])
-  }
+  //
+  // `loadInitialState`, `syncStaleAccounts`, and `syncAccount` live in
+  // `SyncedAccountStore+Internals.swift` alongside the helpers they
+  // delegate to.
 
   /// Fire-and-forget kick-off of `syncAccount(_:)` for a newly created
   /// syncable account (crypto or exchange). Returns immediately so the
@@ -245,10 +246,10 @@ final class SyncedAccountStore {
   }
 
   /// Cancels and clears the hourly stale-check timer, any in-flight
-  /// scene-active sync, and any pending initial-sync tasks scheduled by
-  /// the create-account form. Safe to call when no task is running.
-  /// Exposed for `ProfileSession.cleanupSync` so no task outlives a
-  /// profile teardown.
+  /// scene-active sync, any pending initial-sync tasks scheduled by the
+  /// create-account form, and any in-flight background price-warm task.
+  /// Safe to call when no task is running. Exposed for
+  /// `ProfileSession.cleanupSync` so no task outlives a profile teardown.
   func cancelTimer() {
     timerTask?.cancel()
     timerTask = nil
@@ -256,6 +257,8 @@ final class SyncedAccountStore {
     sceneActiveSyncTask = nil
     for task in initialSyncTasks.values { task.cancel() }
     initialSyncTasks.removeAll()
+    priceWarmingTask?.cancel()
+    priceWarmingTask = nil
   }
 
   // MARK: - Sync algorithm (parallel build → sequential apply)
@@ -323,6 +326,11 @@ final class SyncedAccountStore {
     await runTransferDetection(
       genuinelyNew: genuinelyNew,
       participatingAccountIds: Set(inputs.map(\.id)))
+    // Kick off a background warm of the just-synced crypto tokens'
+    // historical prices so the Analysis dashboard fills in without
+    // blocking the sync pass (issue #1075). No-op when no warmer is
+    // wired or nothing genuinely-new landed.
+    startPriceWarming(genuinelyNew: genuinelyNew, accountIds: Set(inputs.map(\.id)))
   }
 
   // MARK: - Internal mutators
@@ -333,6 +341,14 @@ final class SyncedAccountStore {
   /// the shim is internal, not public.
   func setGlobalError(_ error: WalletSyncError?) {
     globalError = error
+  }
+
+  /// Setter shim so `startPriceWarming` (in the `+PriceWarming`
+  /// extension, a different file) can flip the observable
+  /// `priceWarmingInProgress` flag whose setter is `private` to this
+  /// file. See issue #1075.
+  func setPriceWarmingInProgress(_ inProgress: Bool) {
+    priceWarmingInProgress = inProgress
   }
 
   #if DEBUG
@@ -374,6 +390,8 @@ final class SyncedAccountStore {
     }
   }
 
-  // Implementation helpers (parallel build, apply pass, timer loop)
-  // live in `SyncedAccountStore+Internals.swift`.
+  /// The remaining implementation helpers (parallel build, apply pass,
+  /// timer loop) live in `SyncedAccountStore+Internals.swift`; the
+  /// background price-warm trigger lives in
+  /// `SyncedAccountStore+PriceWarming.swift`.
 }
