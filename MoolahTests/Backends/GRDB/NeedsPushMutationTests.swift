@@ -26,4 +26,16 @@ struct NeedsPushMutationTests {
       }
     }
   }
+
+  @Test("profile table has needs_push INTEGER NOT NULL DEFAULT 0")
+  func profileNeedsPushColumnPresent() throws {
+    let database = try ProfileIndexDatabase.openInMemory()
+    try database.read { db in
+      let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(profile)")
+      let needsPush = columns.first { ($0["name"] as String?) == "needs_push" }
+      let col = try #require(needsPush, "needs_push missing on profile")
+      #expect((col["notnull"] as Int?) == 1)
+      #expect((col["dflt_value"] as String?) == "0")
+    }
+  }
 }

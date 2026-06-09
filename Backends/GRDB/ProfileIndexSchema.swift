@@ -25,6 +25,9 @@ import GRDB
 ///   resolutions, and price-cache rows propagate across every profile on
 ///   the same iCloud account. See
 ///   `ProfileIndexSchema+SharedInstrumentRegistry.swift`.
+/// `v4_needs_push`                 — adds the local-only `needs_push`
+///   dirty flag to the `profile` table (mirrors the per-profile v17
+///   migration; issue #1081). See `ProfileIndexSchema+NeedsPush.swift`.
 ///
 /// Each migration body is registered here. Once shipped, migration IDs
 /// are frozen forever; splitting later is fine, merging post-ship is
@@ -38,7 +41,7 @@ enum ProfileIndexSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 3
+  static let version = 4
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -53,6 +56,7 @@ enum ProfileIndexSchema {
     migrator.registerMigration(
       "v3_shared_instrument_registry",
       migrate: createSharedInstrumentRegistryTables)
+    migrator.registerMigration("v4_needs_push", migrate: addNeedsPush)
 
     return migrator
   }
