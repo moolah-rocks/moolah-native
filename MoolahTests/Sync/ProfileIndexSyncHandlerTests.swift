@@ -138,6 +138,33 @@ struct ProfileIndexSyncHandlerTests {
     #expect(row == nil)
   }
 
+  // MARK: - needs_push Apply Guard (issue #1081)
+
+  @Test("a needs_push profile row's label survives a stale echo")
+  func dirtyProfileEchoPreservesRename() throws {
+    let (handler, repository) = try makeHandler()
+    let profileId = UUID()
+    let local = Profile(
+      id: profileId, label: "LOCAL RENAME", currencyCode: "AUD",
+      financialYearStartMonth: 7)
+    try repository.applyRemoteChangesSync(saved: [ProfileRow(domain: local)], deleted: [])
+    try repository.markNeedsPushSync(id: profileId)  // simulate a pending local edit
+
+    let staleEcho = CKRecord(
+      recordType: ProfileRow.recordType,
+      recordID: CKRecord.ID(
+        recordType: ProfileRow.recordType, uuid: profileId, zoneID: handler.zoneID))
+    staleEcho["label"] = "STALE OLD LABEL" as CKRecordValue
+    staleEcho["currencyCode"] = "AUD" as CKRecordValue
+    staleEcho["financialYearStartMonth"] = 7 as CKRecordValue
+    staleEcho["createdAt"] = Date() as CKRecordValue
+
+    _ = handler.applyRemoteChanges(saved: [staleEcho], deleted: [])
+
+    let row = try #require(try repository.fetchRowSync(id: profileId))
+    #expect(row.label == "LOCAL RENAME")
+  }
+
   @Test
   func applyRemoteChangesSkipsNonProfileRecordTypes() throws {
     let (handler, repository) = try makeHandler()

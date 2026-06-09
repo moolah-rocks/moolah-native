@@ -115,10 +115,13 @@ final class ProfileIndexSyncHandler: Sendable {
     let savedSplit = Self.partitionSaved(freshSaved, logger: logger)
     let deletedSplit = Self.partitionDeleted(deleted, logger: logger)
 
-    // Profiles first.
+    // Profiles first, guarded by `needs_push` inside ONE transaction
+    // (see `applyProfilesGuarded`).
     do {
-      try repository.applyRemoteChangesSync(
-        saved: savedSplit.profileRows, deleted: deletedSplit.profileIds)
+      try applyProfilesGuarded(
+        profileRows: savedSplit.profileRows,
+        deletedProfileIds: deletedSplit.profileIds,
+        freshSaved: freshSaved)
     } catch {
       logger.error("Failed to save remote profile changes: \(error, privacy: .public)")
       return .saveFailed(error.localizedDescription)
