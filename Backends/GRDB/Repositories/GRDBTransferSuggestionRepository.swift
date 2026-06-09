@@ -166,10 +166,15 @@ final class GRDBTransferSuggestionRepository: TransferSuggestionRepository,
   /// the sync handler.
   func fetchRowSync(id: UUID) throws -> TransferSuggestionRow? {
     try database.read { database in
-      try TransferSuggestionRow
-        .filter(TransferSuggestionRow.Columns.id == id)
-        .fetchOne(database)
+      try fetchRowSync(id: id, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `fetchRowSync(id:)` (issue #1081).
+  func fetchRowSync(id: UUID, in database: Database) throws -> TransferSuggestionRow? {
+    try TransferSuggestionRow
+      .filter(TransferSuggestionRow.Columns.id == id)
+      .fetchOne(database)
   }
 
   /// Batch lookup by ids — used by the batch-build phase of the sync
