@@ -4,6 +4,7 @@ import SwiftUI
 struct ExpenseBreakdownCard: View {
   let breakdown: [ExpenseBreakdown]
   let categories: Categories
+  var hasUnavailableData: Bool = false
 
   @State private var selectedCategoryId: UUID?
 
@@ -16,6 +17,9 @@ struct ExpenseBreakdownCard: View {
       if filteredBreakdown.isEmpty {
         emptyState
       } else {
+        if hasUnavailableData {
+          incompleteDataCaption
+        }
         ExpandableChart(title: "Expenses by Category") {
           pieChart
         }
@@ -26,6 +30,13 @@ struct ExpenseBreakdownCard: View {
     .padding()
     .background(.background)
     .clipShape(.rect(cornerRadius: 12))
+  }
+
+  private var incompleteDataCaption: some View {
+    Text("Some prices are still loading — totals may be incomplete")
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .accessibilityLabel("Some prices are still loading; totals may be incomplete")
   }
 
   private var emptyState: some View {
@@ -175,4 +186,32 @@ struct ExpenseBreakdownWithPercentage: Identifiable {
   ExpenseBreakdownCard(breakdown: breakdown, categories: Categories(from: categories))
     .frame(width: 400)
     .padding()
+}
+
+#Preview("Incomplete data") {
+  let categories = [
+    Category(id: UUID(), name: "Groceries"),
+    Category(id: UUID(), name: "Transport"),
+  ]
+
+  let breakdown = [
+    ExpenseBreakdown(
+      categoryId: categories[0].id,
+      month: "202604",
+      totalExpenses: InstrumentAmount(quantity: 450, instrument: .AUD)
+    ),
+    ExpenseBreakdown(
+      categoryId: categories[1].id,
+      month: "202604",
+      totalExpenses: InstrumentAmount(quantity: 250, instrument: .AUD)
+    ),
+  ]
+
+  ExpenseBreakdownCard(
+    breakdown: breakdown,
+    categories: Categories(from: categories),
+    hasUnavailableData: true
+  )
+  .frame(width: 400)
+  .padding()
 }

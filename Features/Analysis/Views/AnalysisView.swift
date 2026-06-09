@@ -167,7 +167,8 @@ struct AnalysisView: View {
       upcomingAndIncomeExpense(store: store)
       ExpenseBreakdownCard(
         breakdown: store.displayedExpenseBreakdown,
-        categories: categoryStore.categories
+        categories: categoryStore.categories,
+        hasUnavailableData: store.displayedExpenseHasUnavailableData
       )
       CategoriesOverTimeCard(
         entries: store.categoriesOverTime(categories: categoryStore.categories),
