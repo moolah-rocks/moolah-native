@@ -85,6 +85,11 @@ import GRDB
 /// `UNIQUE`; the primary key is a deterministic UUID derived from `kind`
 /// so the same kind resolves to the same record on every device. See
 /// `ProfileSchema+InsightDismissals.swift`.
+/// `v17_needs_push` — adds the local-only `needs_push` dirty flag to
+/// every syncable per-profile table so the fetched-changes apply path
+/// can refuse to clobber an in-flight local edit (issue #1081). The
+/// column never crosses the CloudKit wire. See
+/// `ProfileSchema+NeedsPush.swift`.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -105,7 +110,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 16
+  static let version = 17
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -145,6 +150,7 @@ enum ProfileSchema {
       "v15_account_group_ui_state", migrate: addAccountGroupUIState)
     migrator.registerMigration(
       "v16_insight_dismissals", migrate: addInsightDismissals)
+    migrator.registerMigration("v17_needs_push", migrate: addNeedsPush)
 
     return migrator
   }
