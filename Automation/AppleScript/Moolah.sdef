@@ -275,6 +275,36 @@
       <result type="integer" description="The number of investment values deleted."/>
     </command>
 
+    <command name="register instrument" code="Moolregi" description="Register (or update) a crypto token and its price-provider mapping so token-denominated legs can resolve and be valued. Needed before adding legs in a token the profile has not yet seen (e.g. reconstructing a non-synced venue's history in real tokens).">
+      <cocoa class="Moolah.RegisterInstrumentCommand"/>
+      <direct-parameter type="specifier" description="The profile to register the instrument in."/>
+      <parameter name="chain" code="Rgch" type="integer" description="The chain id that forms the instrument id (e.g. 1 Ethereum, 10 Optimism; any integer for a token on an unsynced chain).">
+        <cocoa key="chain"/>
+      </parameter>
+      <parameter name="contract" code="Rgco" type="text" optional="yes" description="The token contract address (lower-cased into the id). Omit for a chain-native token (id becomes 'chain:native').">
+        <cocoa key="contract"/>
+      </parameter>
+      <parameter name="symbol" code="Rgsy" type="text" description="The token's short symbol (e.g. STRK).">
+        <cocoa key="symbol"/>
+      </parameter>
+      <parameter name="name" code="Rgnm" type="text" description="The token's display name (e.g. Starknet).">
+        <cocoa key="name"/>
+      </parameter>
+      <parameter name="decimals" code="Rgde" type="integer" description="The token's decimal places (e.g. 18).">
+        <cocoa key="decimals"/>
+      </parameter>
+      <parameter name="coingecko" code="Rgcg" type="text" optional="yes" description="CoinGecko id price source (e.g. starknet).">
+        <cocoa key="coingecko"/>
+      </parameter>
+      <parameter name="cryptocompare" code="Rgcc" type="text" optional="yes" description="CryptoCompare symbol price source.">
+        <cocoa key="cryptocompare"/>
+      </parameter>
+      <parameter name="binance" code="Rgbi" type="text" optional="yes" description="Binance symbol price source.">
+        <cocoa key="binance"/>
+      </parameter>
+      <result type="text" description="The registered instrument id (chain:contract or chain:native)."/>
+    </command>
+
     <command name="add leg" code="Mooladdl" description="Append a leg to an existing txn. Other legs are re-saved unchanged, so a sync-owned leg's external id survives.">
       <cocoa class="Moolah.AddLegCommand"/>
       <direct-parameter type="specifier" description="The profile containing the txn."/>
