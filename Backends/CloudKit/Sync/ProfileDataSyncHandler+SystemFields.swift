@@ -130,7 +130,20 @@ extension ProfileDataSyncHandler {
   /// zone are straggler state (there is no per-profile `instrument`
   /// table) and are logged-and-skipped. Records with non-UUID
   /// recordNames are also skipped.
-  private func applySystemFieldsBatched(_ ckRecords: [CKRecord]) {
+  ///
+  /// `nonisolated` (and not `private`) so the off-main fetched-changes
+  /// apply path can reconcile stale echoes of locally-pending records
+  /// through it — updating only the cached change tag, never field
+  /// values. Touches only `nonisolated let` state (`logger`, `zoneID`,
+  /// `grdbRepositories`).
+  ///
+  /// - Precondition: Must not be called while a write transaction is
+  ///   open on `grdbRepositories.database`. Each per-type setter opens
+  ///   its own `database.write`; calling from inside an outer
+  ///   `database.write` on the same serial `DatabaseQueue` deadlocks.
+  ///   The fetched-changes caller invokes this only *after* its outer
+  ///   batch write commits.
+  nonisolated func applySystemFieldsBatched(_ ckRecords: [CKRecord]) {
     var updatesByType: [String: [(id: UUID, data: Data?)]] = [:]
     for ckRecord in ckRecords {
       if ckRecord.recordType == InstrumentRow.recordType {
@@ -189,7 +202,7 @@ extension ProfileDataSyncHandler {
   /// Dispatches one batch system-fields write through the GRDB repo
   /// for `recordType`. A miss on the dispatch table or a thrown error
   /// is logged at warning / error and the next type still runs.
-  private func runBatchedSystemFieldsUpdate(
+  nonisolated private func runBatchedSystemFieldsUpdate(
     recordType: String, updates: [(id: UUID, data: Data?)]
   ) {
     guard let setter = systemFieldsBatchSetter(for: recordType) else {
@@ -223,7 +236,7 @@ extension ProfileDataSyncHandler {
   /// reference data) and `domainSystemFieldsBatchSetter` (the
   /// financial-graph rows) so neither switch breaches the
   /// cyclomatic-complexity ceiling — same shape as `saveHandler`.
-  private func systemFieldsBatchSetter(
+  nonisolated private func systemFieldsBatchSetter(
     for recordType: String
   ) -> (([(id: UUID, data: Data?)]) throws -> Int)? {
     referenceSystemFieldsBatchSetter(for: recordType)
@@ -231,7 +244,7 @@ extension ProfileDataSyncHandler {
   }
 
   /// Reference-data side of the `systemFieldsBatchSetter` lookup.
-  private func referenceSystemFieldsBatchSetter(
+  nonisolated private func referenceSystemFieldsBatchSetter(
     for recordType: String
   ) -> (([(id: UUID, data: Data?)]) throws -> Int)? {
     let repos = grdbRepositories
@@ -254,7 +267,7 @@ extension ProfileDataSyncHandler {
   }
 
   /// Financial-graph side of the `systemFieldsBatchSetter` lookup.
-  private func domainSystemFieldsBatchSetter(
+  nonisolated private func domainSystemFieldsBatchSetter(
     for recordType: String
   ) -> (([(id: UUID, data: Data?)]) throws -> Int)? {
     let repos = grdbRepositories
