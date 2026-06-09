@@ -162,7 +162,9 @@ extension GRDBAnalysisRepository {
         let context = IncomeAndExpenseFailureContext(
           day: row.day, instrumentId: row.instrumentId)
         handlers.handleConversionFailure(error, context)
-        if firstConversionError == nil {
+        // Issue #1075: transient price failures degrade per-row; only a
+        // structural failure preserves the loud rethrow.
+        if firstConversionError == nil, !ConversionFailureClassifier.isTransient(error) {
           firstConversionError = error
         }
         continue
