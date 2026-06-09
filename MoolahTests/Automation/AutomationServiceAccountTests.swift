@@ -33,6 +33,25 @@ struct AutomationServiceAccountTests {
     #expect(accounts.first?.name == "Savings")
   }
 
+  @Test("createAccount defaults a new investment account to calculatedFromTrades")
+  func createInvestmentDefaultsToCalculated() async throws {
+    let (service, _) = try await AutomationTestSession.make()
+
+    // The migration reconstructs non-synced venues as manual investment
+    // accounts that must value from positions, not a recorded mark. A scripted
+    // `create account type "investment"` must therefore land in
+    // `.calculatedFromTrades` — `AccountStore.create` promotes the default
+    // `.recordedValue` for investment accounts, so no recordedValue account is
+    // creatable through this path.
+    let account = try await service.createAccount(
+      profileIdentifier: "Test",
+      name: "Manual Crypto",
+      type: .investment
+    )
+
+    #expect(account.valuationMode == .calculatedFromTrades)
+  }
+
   @Test("resolveAccount finds account by name case-insensitively")
   func resolveAccountByNameCaseInsensitive() async throws {
     let (service, _) = try await AutomationTestSession.make()
