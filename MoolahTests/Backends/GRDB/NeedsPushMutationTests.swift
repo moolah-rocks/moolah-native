@@ -15,10 +15,10 @@ struct NeedsPushMutationTests {
   @Test("every syncable table has needs_push INTEGER NOT NULL DEFAULT 0")
   func needsPushColumnPresent() throws {
     let database = try ProfileDatabase.openInMemory()
-    try database.read { db in
+    try database.read { database in
       for table in Self.tables {
         let unquoted = table.replacingOccurrences(of: "\"", with: "")
-        let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))")
+        let columns = try Row.fetchAll(database, sql: "PRAGMA table_info(\(table))")
         let needsPush = columns.first { ($0["name"] as String?) == "needs_push" }
         let col = try #require(needsPush, "needs_push missing on \(unquoted)")
         #expect((col["notnull"] as Int?) == 1)
@@ -30,8 +30,8 @@ struct NeedsPushMutationTests {
   @Test("profile table has needs_push INTEGER NOT NULL DEFAULT 0")
   func profileNeedsPushColumnPresent() throws {
     let database = try ProfileIndexDatabase.openInMemory()
-    try database.read { db in
-      let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(profile)")
+    try database.read { database in
+      let columns = try Row.fetchAll(database, sql: "PRAGMA table_info(profile)")
       let needsPush = columns.first { ($0["name"] as String?) == "needs_push" }
       let col = try #require(needsPush, "needs_push missing on profile")
       #expect((col["notnull"] as Int?) == 1)

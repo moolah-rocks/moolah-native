@@ -25,6 +25,7 @@ struct ImportRuleRow {
     case actionsJSON = "actions_json"
     case accountScope = "account_scope"
     case encodedSystemFields = "encoded_system_fields"
+    case needsPush = "needs_push"
   }
 
   enum CodingKeys: String, CodingKey {

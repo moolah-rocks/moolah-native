@@ -43,6 +43,7 @@ struct TransactionRow {
     case importOriginIncomingSourceFilename = "import_origin_incoming_source_filename"
     case importOriginIncomingParserIdentifier = "import_origin_incoming_parser_identifier"
     case encodedSystemFields = "encoded_system_fields"
+    case needsPush = "needs_push"
   }
 
   enum CodingKeys: String, CodingKey {

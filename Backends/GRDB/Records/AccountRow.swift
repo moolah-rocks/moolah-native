@@ -27,6 +27,12 @@ struct AccountRow {
     case chainId = "chain_id"
     case exchangeProvider = "exchange_provider"
     case groupId = "group_id"
+    /// Local-only dirty flag (issue #1081). Absent from `CodingKeys` so
+    /// it never crosses the wire and `upsert` leaves it untouched; set
+    /// via the query builder only. Excluded from `observableRegion` (see
+    /// `AccountRow+ObservableRegion.swift`) so the sync-bookkeeping write
+    /// that toggles it never re-fires UI observers (issue #865).
+    case needsPush = "needs_push"
   }
 
   enum CodingKeys: String, CodingKey {

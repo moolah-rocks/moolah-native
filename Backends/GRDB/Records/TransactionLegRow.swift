@@ -24,6 +24,7 @@ struct TransactionLegRow {
     case encodedSystemFields = "encoded_system_fields"
     case externalId = "external_id"
     case counterpartyAddress = "counterparty_address"
+    case needsPush = "needs_push"
   }
 
   enum CodingKeys: String, CodingKey {

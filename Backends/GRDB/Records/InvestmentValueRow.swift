@@ -20,6 +20,7 @@ struct InvestmentValueRow {
     case value
     case instrumentId = "instrument_id"
     case encodedSystemFields = "encoded_system_fields"
+    case needsPush = "needs_push"
   }
 
   enum CodingKeys: String, CodingKey {
