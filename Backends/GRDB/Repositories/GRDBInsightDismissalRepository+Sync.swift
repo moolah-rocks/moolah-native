@@ -76,9 +76,19 @@ extension GRDBInsightDismissalRepository {
   func clearNeedsPushBatchSync(_ ids: [UUID]) throws -> Int {
     guard !ids.isEmpty else { return 0 }
     return try database.write { database in
-      try InsightDismissalRow
-        .filter(Set(ids).contains(InsightDismissalRow.Columns.id))
-        .updateAll(database, [InsightDismissalRow.Columns.needsPush.set(to: false)])
+      try clearNeedsPushBatchSync(ids, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `clearNeedsPushBatchSync(_:)` — see
+  /// `GRDBAccountRepository` for the atomic compare-and-clear rationale
+  /// (issue #1081).
+  @discardableResult
+  func clearNeedsPushBatchSync(_ ids: [UUID], in database: Database) throws -> Int {
+    guard !ids.isEmpty else { return 0 }
+    return
+      try InsightDismissalRow
+      .filter(Set(ids).contains(InsightDismissalRow.Columns.id))
+      .updateAll(database, [InsightDismissalRow.Columns.needsPush.set(to: false)])
   }
 }

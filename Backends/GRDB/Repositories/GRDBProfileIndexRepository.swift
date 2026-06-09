@@ -54,6 +54,11 @@ final class GRDBProfileIndexRepository {
     var onRecordDeleted: @Sendable (UUID) -> Void
   }
 
+  /// Internal (not `private`) so `ProfileIndexSyncHandler+NeedsPush` can
+  /// open one `database.write` spanning the dirty check, the clean-row
+  /// upsert, and the dirty-row system-fields write in `applyProfilesGuarded`
+  /// — and the compare-and-clear in `clearNeedsPushForConfirmed` — keeping
+  /// each fully transactional with no echo race (issue #1081).
   let database: any DatabaseWriter
   private let hooks: OSAllocatedUnfairLock<HookState>
 

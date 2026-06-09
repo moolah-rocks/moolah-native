@@ -112,9 +112,26 @@ extension GRDBCategoryRepository {
   func clearNeedsPushBatchSync(_ ids: [UUID]) throws -> Int {
     guard !ids.isEmpty else { return 0 }
     return try database.write { database in
-      try CategoryRow
-        .filter(Set(ids).contains(CategoryRow.Columns.id))
-        .updateAll(database, [CategoryRow.Columns.needsPush.set(to: false)])
+      try clearNeedsPushBatchSync(ids, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `clearNeedsPushBatchSync(_:)` — see
+  /// `GRDBAccountRepository` for the atomic compare-and-clear rationale
+  /// (issue #1081).
+  @discardableResult
+  func clearNeedsPushBatchSync(_ ids: [UUID], in database: Database) throws -> Int {
+    guard !ids.isEmpty else { return 0 }
+    return
+      try CategoryRow
+      .filter(Set(ids).contains(CategoryRow.Columns.id))
+      .updateAll(database, [CategoryRow.Columns.needsPush.set(to: false)])
+  }
+
+  /// In-transaction counterpart to `fetchRowSync(id:)` (issue #1081).
+  func fetchRowSync(id: UUID, in database: Database) throws -> CategoryRow? {
+    try CategoryRow
+      .filter(CategoryRow.Columns.id == id)
+      .fetchOne(database)
   }
 }

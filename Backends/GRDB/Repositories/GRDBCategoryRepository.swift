@@ -346,11 +346,11 @@ final class GRDBCategoryRepository: CategoryRepository, @unchecked Sendable {
   /// the sync handler.
   func fetchRowSync(id: UUID) throws -> CategoryRow? {
     try database.read { database in
-      try CategoryRow
-        .filter(CategoryRow.Columns.id == id)
-        .fetchOne(database)
+      try fetchRowSync(id: id, in: database)
     }
   }
+
+  // `fetchRowSync(id:in:)` lives in `GRDBCategoryRepository+Sync.swift`.
 
   /// Batch lookup by ids — used by the batch-build phase of the sync
   /// handler.

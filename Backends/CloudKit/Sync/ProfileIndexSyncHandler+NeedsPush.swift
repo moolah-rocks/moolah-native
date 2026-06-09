@@ -48,30 +48,35 @@ extension ProfileIndexSyncHandler {
   /// local row still matches the uploaded version. If the row changed
   /// since the send (a newer edit), the flag stays set — CKSyncEngine
   /// has already re-queued that edit, and its own later ack clears the
-  /// flag. Race-free under GRDB's serial write queue: a wrongly-cleared
-  /// flag is re-set by the newer edit's own write (issue #1081).
-  /// Instrument-typed saved records are ignored (shared registry).
+  /// flag. Instrument-typed saved records are ignored (shared registry).
+  ///
+  /// **Atomicity (issue #1081).** The current-row read, the user-field
+  /// compare, and the conditional clear all share ONE
+  /// `repository.database.write` transaction, so no concurrent profile
+  /// rename can commit (and re-raise `needs_push`) between the compare and
+  /// the clear — the prior read-then-separate-write shape had a TOCTOU
+  /// window where such an interleaving could clear the flag over a newer
+  /// rename, losing its protection.
   func clearNeedsPushForConfirmed(_ savedRecords: [CKRecord]) {
-    var confirmed: [UUID] = []
-    for saved in savedRecords where saved.recordType == ProfileRow.recordType {
-      guard let profileId = saved.recordID.uuid else { continue }
-      do {
-        guard let current = try repository.fetchRowSync(id: profileId) else { continue }
-        if buildCKRecord(for: current).hasSameUserFields(as: saved) {
-          confirmed.append(profileId)
-        }
-      } catch {
-        logger.error(
-          "clearNeedsPushForConfirmed: failed to fetch profile row \(profileId, privacy: .public): \(error, privacy: .public)"
-        )
-      }
-    }
-    guard !confirmed.isEmpty else { return }
     do {
-      _ = try repository.clearNeedsPushBatchSync(confirmed)
+      try repository.database.write { database in
+        var confirmed: [UUID] = []
+        for saved in savedRecords where saved.recordType == ProfileRow.recordType {
+          guard let profileId = saved.recordID.uuid else { continue }
+          // Re-read the CURRENT row inside this transaction and compare.
+          guard let current = try self.repository.fetchRowSync(id: profileId, in: database)
+          else { continue }
+          if self.buildCKRecord(for: current).hasSameUserFields(as: saved) {
+            confirmed.append(profileId)
+          }
+        }
+        // Clear in the SAME transaction so no rename interleaves between
+        // the compare above and the clear below.
+        _ = try self.repository.clearNeedsPushBatchSync(confirmed, in: database)
+      }
     } catch {
       logger.error(
-        "clearNeedsPushForConfirmed: clear failed: \(error, privacy: .public)")
+        "clearNeedsPushForConfirmed: failed: \(error, privacy: .public)")
     }
   }
 }

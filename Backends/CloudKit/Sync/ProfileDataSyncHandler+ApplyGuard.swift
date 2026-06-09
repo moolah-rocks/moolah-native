@@ -88,6 +88,67 @@ extension ProfileDataSyncHandler {
     _ = try clear(ids)
   }
 
+  /// In-transaction counterpart to `clearNeedsPush(recordType:ids:)`.
+  /// Clears the flag **inside** the caller's active `database` so the
+  /// upload-ack path's compare and clear share one write transaction,
+  /// leaving no window for a concurrent edit to interleave between them
+  /// (issue #1081). Unknown record types are a no-op.
+  nonisolated func clearNeedsPush(
+    recordType: String, ids: [UUID], in database: Database
+  ) throws {
+    guard
+      let clear = referenceNeedsPushClearer(for: recordType, in: database)
+        ?? domainNeedsPushClearer(for: recordType, in: database)
+    else { return }
+    _ = try clear(ids)
+  }
+
+  /// Reference-data side of the in-transaction `clearNeedsPush` dispatch.
+  nonisolated private func referenceNeedsPushClearer(
+    for recordType: String, in database: Database
+  ) -> (([UUID]) throws -> Int)? {
+    let repos = grdbRepositories
+    switch recordType {
+    case CSVImportProfileRow.recordType:
+      return { try repos.csvImportProfiles.clearNeedsPushBatchSync($0, in: database) }
+    case ImportRuleRow.recordType:
+      return { try repos.importRules.clearNeedsPushBatchSync($0, in: database) }
+    case CategoryRow.recordType:
+      return { try repos.categories.clearNeedsPushBatchSync($0, in: database) }
+    case TransferSuggestionRow.recordType:
+      return { try repos.transferSuggestions.clearNeedsPushBatchSync($0, in: database) }
+    case AccountGroupRow.recordType:
+      return { try repos.accountGroups.clearNeedsPushBatchSync($0, in: database) }
+    case InsightDismissalRow.recordType:
+      return { try repos.insightDismissals.clearNeedsPushBatchSync($0, in: database) }
+    default:
+      return nil
+    }
+  }
+
+  /// Financial-graph side of the in-transaction `clearNeedsPush` dispatch.
+  nonisolated private func domainNeedsPushClearer(
+    for recordType: String, in database: Database
+  ) -> (([UUID]) throws -> Int)? {
+    let repos = grdbRepositories
+    switch recordType {
+    case AccountRow.recordType:
+      return { try repos.accounts.clearNeedsPushBatchSync($0, in: database) }
+    case EarmarkRow.recordType:
+      return { try repos.earmarks.clearNeedsPushBatchSync($0, in: database) }
+    case EarmarkBudgetItemRow.recordType:
+      return { try repos.earmarkBudgetItems.clearNeedsPushBatchSync($0, in: database) }
+    case InvestmentValueRow.recordType:
+      return { try repos.investmentValues.clearNeedsPushBatchSync($0, in: database) }
+    case TransactionRow.recordType:
+      return { try repos.transactions.clearNeedsPushBatchSync($0, in: database) }
+    case TransactionLegRow.recordType:
+      return { try repos.transactionLegs.clearNeedsPushBatchSync($0, in: database) }
+    default:
+      return nil
+    }
+  }
+
   /// Reference-data side of the `clearNeedsPush` dispatch.
   nonisolated private func referenceNeedsPushClearer(
     for recordType: String

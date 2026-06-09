@@ -312,11 +312,12 @@ final class GRDBInvestmentRepository: InvestmentRepository, @unchecked Sendable 
   func clearNeedsPushBatchSync(_ ids: [UUID]) throws -> Int {
     guard !ids.isEmpty else { return 0 }
     return try database.write { database in
-      try InvestmentValueRow
-        .filter(Set(ids).contains(InvestmentValueRow.Columns.id))
-        .updateAll(database, [InvestmentValueRow.Columns.needsPush.set(to: false)])
+      try clearNeedsPushBatchSync(ids, in: database)
     }
   }
+
+  // `clearNeedsPushBatchSync(_:in:)` and `fetchRowSync(id:in:)` live in
+  // `GRDBInvestmentRepository+Sync.swift`.
 
   /// Clears `encoded_system_fields` on every row. Used after an
   /// `encryptedDataReset`.
@@ -353,9 +354,7 @@ final class GRDBInvestmentRepository: InvestmentRepository, @unchecked Sendable 
   /// the sync handler.
   func fetchRowSync(id: UUID) throws -> InvestmentValueRow? {
     try database.read { database in
-      try InvestmentValueRow
-        .filter(InvestmentValueRow.Columns.id == id)
-        .fetchOne(database)
+      try fetchRowSync(id: id, in: database)
     }
   }
 

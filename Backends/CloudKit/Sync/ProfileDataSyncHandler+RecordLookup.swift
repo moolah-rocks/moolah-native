@@ -1,5 +1,6 @@
 @preconcurrency import CloudKit
 import Foundation
+import GRDB
 
 extension ProfileDataSyncHandler {
   // MARK: - Batch Record Lookup
@@ -77,6 +78,9 @@ extension ProfileDataSyncHandler {
   func currentCKRecord(recordType: String, id: UUID) -> CKRecord? {
     fetchAndBuild(recordType: recordType, uuid: id)
   }
+
+  // The in-transaction counterpart `currentCKRecord(recordType:id:in:)`
+  // lives in `ProfileDataSyncHandler+CurrentRecordInTransaction.swift`.
 
   // MARK: - Per-Type Dispatch
 

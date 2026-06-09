@@ -147,10 +147,20 @@ extension GRDBTransactionRepository {
   func clearNeedsPushBatchSync(_ ids: [UUID]) throws -> Int {
     guard !ids.isEmpty else { return 0 }
     return try database.write { database in
-      try TransactionRow
-        .filter(Set(ids).contains(TransactionRow.Columns.id))
-        .updateAll(database, [TransactionRow.Columns.needsPush.set(to: false)])
+      try clearNeedsPushBatchSync(ids, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `clearNeedsPushBatchSync(_:)` — see
+  /// `GRDBAccountRepository` for the atomic compare-and-clear rationale
+  /// (issue #1081).
+  @discardableResult
+  func clearNeedsPushBatchSync(_ ids: [UUID], in database: Database) throws -> Int {
+    guard !ids.isEmpty else { return 0 }
+    return
+      try TransactionRow
+      .filter(Set(ids).contains(TransactionRow.Columns.id))
+      .updateAll(database, [TransactionRow.Columns.needsPush.set(to: false)])
   }
 
   /// Clears `encoded_system_fields` on every row. Used after an
@@ -188,10 +198,15 @@ extension GRDBTransactionRepository {
   /// in the sync handler.
   func fetchRowSync(id: UUID) throws -> TransactionRow? {
     try database.read { database in
-      try TransactionRow
-        .filter(TransactionRow.Columns.id == id)
-        .fetchOne(database)
+      try fetchRowSync(id: id, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `fetchRowSync(id:)` (issue #1081).
+  func fetchRowSync(id: UUID, in database: Database) throws -> TransactionRow? {
+    try TransactionRow
+      .filter(TransactionRow.Columns.id == id)
+      .fetchOne(database)
   }
 
   /// Batch lookup by ids — used by the batch-build phase of the sync

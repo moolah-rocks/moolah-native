@@ -136,10 +136,23 @@ extension GRDBAccountRepository {
   func clearNeedsPushBatchSync(_ ids: [UUID]) throws -> Int {
     guard !ids.isEmpty else { return 0 }
     return try database.write { database in
-      try AccountRow
-        .filter(Set(ids).contains(AccountRow.Columns.id))
-        .updateAll(database, [AccountRow.Columns.needsPush.set(to: false)])
+      try clearNeedsPushBatchSync(ids, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `clearNeedsPushBatchSync(_:)`. Runs
+  /// against the caller's active `database` (no nested write) so the
+  /// upload-ack path can re-read the current row, compare it to the sent
+  /// record, and clear the flag all inside one transaction — leaving no
+  /// window for a concurrent edit to interleave between compare and clear
+  /// (issue #1081).
+  @discardableResult
+  func clearNeedsPushBatchSync(_ ids: [UUID], in database: Database) throws -> Int {
+    guard !ids.isEmpty else { return 0 }
+    return
+      try AccountRow
+      .filter(Set(ids).contains(AccountRow.Columns.id))
+      .updateAll(database, [AccountRow.Columns.needsPush.set(to: false)])
   }
 
   /// Clears `encoded_system_fields` on every row. Used after an
@@ -177,10 +190,17 @@ extension GRDBAccountRepository {
   /// the sync handler.
   func fetchRowSync(id: UUID) throws -> AccountRow? {
     try database.read { database in
-      try AccountRow
-        .filter(AccountRow.Columns.id == id)
-        .fetchOne(database)
+      try fetchRowSync(id: id, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `fetchRowSync(id:)`. Reads against the
+  /// caller's active `database` so the upload-ack path's compare-and-clear
+  /// shares one transaction (issue #1081).
+  func fetchRowSync(id: UUID, in database: Database) throws -> AccountRow? {
+    try AccountRow
+      .filter(AccountRow.Columns.id == id)
+      .fetchOne(database)
   }
 
   /// Batch lookup by ids — used by the batch-build phase of the sync
