@@ -17,10 +17,25 @@ extension ProfileDataSyncHandler {
   /// `ProfileIndexSyncHandler` on the profile-index zone and is logged
   /// and skipped if it reaches this path.
   /// Returns the set of changed record type strings.
+  /// `locallyPendingRecordNames` carries the record names that currently
+  /// have an un-uploaded local change queued in
+  /// `syncEngine.state.pendingRecordZoneChanges` (saves *and* deletes).
+  /// A fetched save for one of these is a stale server echo of an
+  /// earlier version — CloudKit re-delivers a device's own writes, and
+  /// on a single device that echo can arrive *after* the user has made a
+  /// newer local edit that hasn't uploaded yet. Applying its field
+  /// values would clobber the in-flight edit (the reported single-device
+  /// data-loss race). Such records are therefore excluded from the
+  /// field-value upsert and routed through a system-fields-only update:
+  /// the cached change tag advances (so the queued upload lands cleanly)
+  /// while the local field values — the newer edit — are preserved and
+  /// win on the next send. Records with no pending local change apply
+  /// normally (a genuine remote change, or a harmless no-op echo).
   nonisolated func applyRemoteChanges(
     saved: [CKRecord],
     deleted: [(CKRecord.ID, String)],
-    preExtractedSystemFields: [(String, Data)] = []
+    preExtractedSystemFields: [(String, Data)] = [],
+    locallyPendingRecordNames: Set<String> = []
   ) -> ApplyResult {
     let batchStart = ContinuousClock.now
     let signpostID = OSSignpostID(log: Signposts.sync)
@@ -33,8 +48,20 @@ extension ProfileDataSyncHandler {
 
     logIncomingBatch(saved: saved, deleted: deleted)
 
+    // Split off stale echoes of records with in-flight local edits so the
+    // field-value upsert can never overwrite a not-yet-uploaded change.
+    let (freshSaved, pendingEchoes) = Self.partitionPendingEchoes(
+      saved: saved, locallyPendingRecordNames: locallyPendingRecordNames)
+    if !pendingEchoes.isEmpty {
+      logger.info(
+        """
+        applyRemoteChanges: \(pendingEchoes.count) fetched save(s) match locally-pending \
+        records — applying system fields only, preserving in-flight local edits
+        """)
+    }
+
     let systemFields = Self.systemFieldsLookup(
-      saved: saved, preExtracted: preExtractedSystemFields)
+      saved: freshSaved, preExtracted: preExtractedSystemFields)
 
     // GRDB-routed batches throw on write failure so CKSyncEngine refetches
     // instead of advancing past a dropped record (silent data loss).
@@ -49,7 +76,7 @@ extension ProfileDataSyncHandler {
     // until the next observation tick landed.
     let upsertStart = ContinuousClock.now
     if let failure = runBatchApplyPhase(
-      saved: saved,
+      saved: freshSaved,
       systemFields: systemFields,
       deleted: deleted,
       signpostID: signpostID)
@@ -58,11 +85,49 @@ extension ProfileDataSyncHandler {
     }
     let upsertDuration = ContinuousClock.now - upsertStart
 
+    // System-fields-only update for the pending echoes runs *after* the
+    // outer write commits: the per-type setters open their own
+    // `database.write`, which cannot nest inside the batch transaction.
+    // A failure here is logged-and-continued inside
+    // `runBatchedSystemFieldsUpdate` rather than returned as
+    // `.saveFailed` — consistent with how system-fields failures are
+    // handled everywhere else. The only consequence is that the next
+    // upload of the pending edit carries a stale change tag and gets a
+    // recoverable `.serverRecordChanged` (handled by `SyncErrorRecovery`);
+    // the in-flight field values are never at risk.
+    if !pendingEchoes.isEmpty {
+      applySystemFieldsBatched(pendingEchoes)
+    }
+
     return reportSuccess(
-      saved: saved,
+      saved: freshSaved,
       deleted: deleted,
-      timing: BatchTiming(batchStart: batchStart, upsertDuration: upsertDuration),
+      timing: BatchTiming(
+        batchStart: batchStart,
+        upsertDuration: upsertDuration,
+        pendingEchoCount: pendingEchoes.count),
       signpostID: signpostID)
+  }
+
+  /// Partitions fetched saves into the records safe to upsert
+  /// (`fresh`) and the stale echoes of locally-pending records
+  /// (`pendingEchoes`) whose field values must not be overwritten.
+  /// The empty-set fast path keeps the common (no-pending) case
+  /// allocation-free.
+  nonisolated private static func partitionPendingEchoes(
+    saved: [CKRecord], locallyPendingRecordNames: Set<String>
+  ) -> (fresh: [CKRecord], pendingEchoes: [CKRecord]) {
+    guard !locallyPendingRecordNames.isEmpty else { return (saved, []) }
+    var fresh: [CKRecord] = []
+    var pendingEchoes: [CKRecord] = []
+    for record in saved {
+      if locallyPendingRecordNames.contains(record.recordID.recordName) {
+        pendingEchoes.append(record)
+      } else {
+        fresh.append(record)
+      }
+    }
+    return (fresh, pendingEchoes)
   }
 
   /// Bundles per-batch timing markers passed to `reportSuccess`. Both
@@ -71,6 +136,11 @@ extension ProfileDataSyncHandler {
   nonisolated struct BatchTiming {
     let batchStart: ContinuousClock.Instant
     let upsertDuration: Duration
+    /// Count of fetched saves routed to a system-fields-only update
+    /// because they echoed a locally-pending record. Logged alongside
+    /// the applied-save count so a duration line accounts for the whole
+    /// incoming batch, not just the rows whose field values changed.
+    let pendingEchoCount: Int
   }
 
   /// Runs `applyBatchSaves` and `applyBatchDeletions` inside a single
@@ -135,7 +205,8 @@ extension ProfileDataSyncHandler {
       batchStart: timing.batchStart,
       upsertDuration: timing.upsertDuration,
       saveCount: saved.count,
-      deleteCount: deleted.count)
+      deleteCount: deleted.count,
+      pendingEchoCount: timing.pendingEchoCount)
     let changedTypes = Set(saved.map(\.recordType) + deleted.map(\.1))
     // No `onInstrumentRemoteChange()` fan-out from the per-profile
     // path: every `InstrumentRecord` flows through the shared registry
@@ -257,15 +328,18 @@ extension ProfileDataSyncHandler {
     batchStart: ContinuousClock.Instant,
     upsertDuration: Duration,
     saveCount: Int,
-    deleteCount: Int
+    deleteCount: Int,
+    pendingEchoCount: Int
   ) {
     let batchMs = (ContinuousClock.now - batchStart).inMilliseconds
     guard batchMs > 100 else { return }
     let upsertMs = upsertDuration.inMilliseconds
+    let pendingSuffix =
+      pendingEchoCount > 0 ? ", \(pendingEchoCount) system-fields-only" : ""
     logger.info(
       """
       applyRemoteChanges took \(batchMs)ms \
-      (upsert: \(upsertMs)ms, \(saveCount) saves, \(deleteCount) deletes)
+      (upsert: \(upsertMs)ms, \(saveCount) saves, \(deleteCount) deletes\(pendingSuffix))
       """)
   }
 }

@@ -82,8 +82,37 @@ final class ProfileIndexSyncHandler: Sendable {
   /// vice versa), so a partial-success outcome — profiles applied,
   /// instruments failed — is a recoverable state the next sync cycle
   /// re-attempts via `unsyncedRowIdsSync()`.
-  func applyRemoteChanges(saved: [CKRecord], deleted: [CKRecord.ID]) -> ApplyResult {
-    let savedSplit = Self.partitionSaved(saved, logger: logger)
+  ///
+  /// `locallyPendingRecordNames` carries the record names that currently
+  /// have an un-uploaded local change queued for this zone (saves *and*
+  /// deletes). A fetched save for one of these is a stale server echo of
+  /// an earlier version — applying its field values would clobber the
+  /// not-yet-uploaded local edit (e.g. a profile rename, or an instrument
+  /// pricing-status change). Such records are excluded from the
+  /// field-value upsert and routed through a system-fields-only update
+  /// (`writeSystemFields`), so the cached change tag advances while the
+  /// local field values win on the next send. Mirrors the guard in
+  /// `ProfileDataSyncHandler.applyRemoteChanges` (SYNC_GUIDE §2,
+  /// cross-handler review rule).
+  func applyRemoteChanges(
+    saved: [CKRecord],
+    deleted: [CKRecord.ID],
+    locallyPendingRecordNames: Set<String> = []
+  ) -> ApplyResult {
+    let (freshSaved, pendingEchoes) = Self.partitionPendingEchoes(
+      saved: saved, locallyPendingRecordNames: locallyPendingRecordNames)
+    if !pendingEchoes.isEmpty {
+      logger.info(
+        """
+        applyRemoteChanges: \(pendingEchoes.count) fetched save(s) match locally-pending \
+        records — applying system fields only, preserving in-flight local edits
+        """)
+      for record in pendingEchoes {
+        writeSystemFields(for: record.recordID, to: record.encodedSystemFields)
+      }
+    }
+
+    let savedSplit = Self.partitionSaved(freshSaved, logger: logger)
     let deletedSplit = Self.partitionDeleted(deleted, logger: logger)
 
     // Profiles first.
@@ -122,6 +151,29 @@ final class ProfileIndexSyncHandler: Sendable {
       changedTypes.insert(InstrumentRow.recordType)
     }
     return .success(changedTypes: changedTypes)
+  }
+
+  /// Partitions fetched saves into the records safe to upsert
+  /// (`fresh`) and the stale echoes of locally-pending records
+  /// (`pendingEchoes`) whose field values must not be overwritten.
+  /// The empty-set fast path keeps the common (no-pending) case
+  /// allocation-free. Mirrors the same-named helper on
+  /// `ProfileDataSyncHandler` (the two handlers are maintained
+  /// separately per SYNC_GUIDE §2).
+  static func partitionPendingEchoes(
+    saved: [CKRecord], locallyPendingRecordNames: Set<String>
+  ) -> (fresh: [CKRecord], pendingEchoes: [CKRecord]) {
+    guard !locallyPendingRecordNames.isEmpty else { return (saved, []) }
+    var fresh: [CKRecord] = []
+    var pendingEchoes: [CKRecord] = []
+    for record in saved {
+      if locallyPendingRecordNames.contains(record.recordID.recordName) {
+        pendingEchoes.append(record)
+      } else {
+        fresh.append(record)
+      }
+    }
+    return (fresh, pendingEchoes)
   }
 
   // MARK: - Building CKRecords
@@ -167,81 +219,6 @@ final class ProfileIndexSyncHandler: Sendable {
       }
     }
     return instrumentRecordToSave(for: recordID)
-  }
-
-  // MARK: - Queue All Existing Records
-
-  /// Scans every `ProfileRow` and (when wired) every `InstrumentRow`
-  /// in the local store and returns their CKRecord.IDs. Called on
-  /// first start when there's no saved sync state, and from the
-  /// startup self-heal path that re-queues rows whose
-  /// `encoded_system_fields` is NULL.
-  ///
-  /// SYNC_GUIDE Rule 14 (queue dependency order): the two record
-  /// types in this zone have no inter-record dependencies — a
-  /// `ProfileRow` does not reference an `InstrumentRow` and vice
-  /// versa. The combined list is therefore returned in
-  /// profile-then-instrument order purely for log readability; the
-  /// merge queue and CKSyncEngine treat the order as immaterial.
-  func queueAllExistingRecords() -> [CKRecord.ID] {
-    let profileRecordIDs = collectProfileRecordIDs()
-    let instrumentRecordIDs = collectInstrumentRecordIDs()
-    let combined = profileRecordIDs + instrumentRecordIDs
-    if !combined.isEmpty {
-      logger.info(
-        "Collected \(profileRecordIDs.count) profile + \(instrumentRecordIDs.count) instrument records for upload"
-      )
-    }
-    return combined
-  }
-
-  private func collectProfileRecordIDs() -> [CKRecord.ID] {
-    do {
-      let ids = try repository.allRowIdsSync()
-      return ids.map { id in
-        CKRecord.ID(
-          recordType: ProfileRow.recordType, uuid: id, zoneID: zoneID)
-      }
-    } catch {
-      logger.error(
-        "queueAllExistingRecords: failed to fetch profile row ids: \(error, privacy: .public)"
-      )
-      return []
-    }
-  }
-
-  private func collectInstrumentRecordIDs() -> [CKRecord.ID] {
-    guard let instrumentRepository else { return [] }
-    do {
-      let ids = try instrumentRepository.allRowIdsSync()
-      return ids.map { id in
-        CKRecord.ID(recordName: id, zoneID: zoneID)
-      }
-    } catch {
-      logger.error(
-        "queueAllExistingRecords: failed to fetch instrument row ids: \(error, privacy: .public)"
-      )
-      return []
-    }
-  }
-
-  // MARK: - Local Data Deletion
-
-  /// Deletes all local profile-index data — `profile`, `instrument`,
-  /// and the six rate-cache tables — atomically. Called on account
-  /// sign-out, account switch, zone deletion, and zone purge.
-  ///
-  /// Atomicity rationale: a process kill mid-wipe would otherwise
-  /// leave price-cache rows that reference instruments now gone, or
-  /// profiles whose instruments survived. Sign-out semantics demand
-  /// "the DB is empty"; partial wipes are not safe.
-  func deleteLocalData() {
-    do {
-      try repository.deleteAllProfileIndexDataSync()
-      logger.info("Deleted all profile-index data")
-    } catch {
-      logger.error("Failed to delete profile-index data: \(error, privacy: .public)")
-    }
   }
 
   // MARK: - System Fields Management
