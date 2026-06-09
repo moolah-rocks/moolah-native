@@ -15,9 +15,10 @@ struct ProfileIndexSchemaV3Tests {
     try ProfileIndexDatabase.openInMemory()
   }
 
-  @Test("schema version reflects the v3 migration")
-  func versionIsThree() {
-    #expect(ProfileIndexSchema.version == 3)
+  @Test("schema version reflects the latest migration")
+  func versionIsLatest() {
+    // Bumped to 4 by `v4_needs_push` (issue #1081).
+    #expect(ProfileIndexSchema.version == 4)
   }
 
   @Test("v3 creates the instrument table plus all six rate-cache tables")
