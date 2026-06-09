@@ -32,6 +32,9 @@ struct CategoriesOverTimeCard: View {
       if entries.isEmpty {
         emptyState
       } else {
+        if Self.hasUnavailable(in: entries) {
+          incompleteDataCaption
+        }
         ExpandableChart(title: "Expenses Over Time") {
           chart
         }
@@ -41,6 +44,23 @@ struct CategoriesOverTimeCard: View {
     .padding()
     .background(.background)
     .clipShape(.rect(cornerRadius: 12))
+  }
+
+  /// True when any point in any entry is unavailable (prices still loading
+  /// for that month), so the window-aggregated totals may be incomplete.
+  /// See #1077. An explicitly-typed closure avoids ambiguity with GRDB's
+  /// `Cursor.contains` re-exported via `@testable import Moolah`.
+  nonisolated static func hasUnavailable(in entries: [CategoryOverTimeEntry]) -> Bool {
+    entries.contains { (entry: CategoryOverTimeEntry) in
+      entry.points.contains { (point: CategoryOverTimePoint) in point.isUnavailable }
+    }
+  }
+
+  private var incompleteDataCaption: some View {
+    Text("Some prices are still loading — totals may be incomplete")
+      .font(.caption)
+      .foregroundStyle(.secondary)
+      .accessibilityLabel("Some prices are still loading; totals may be incomplete")
   }
 
   private var emptyState: some View {
@@ -167,6 +187,41 @@ struct CategoriesOverTimeCard: View {
             byAdding: .month, value: -5 + month, to: Date()) ?? Date(),
           actualAmount: Decimal(Int.random(in: 100...500)),
           percentage: Double.random(in: 10...50)
+        )
+      },
+      totalAmount: Decimal(Int.random(in: 600...2000))
+    )
+  }
+
+  CategoriesOverTimeCard(
+    entries: entries,
+    categories: Categories(from: categories),
+    instrument: .AUD,
+    showActualValues: .constant(false)
+  )
+  .frame(width: 800)
+  .padding()
+}
+
+#Preview("Incomplete data") {
+  let categories = [
+    Category(id: UUID(), name: "Groceries"),
+    Category(id: UUID(), name: "Transport"),
+    Category(id: UUID(), name: "Entertainment"),
+  ]
+
+  let entries = categories.map { category in
+    CategoryOverTimeEntry(
+      categoryId: category.id,
+      points: (0..<6).map { month in
+        CategoryOverTimePoint(
+          month: "20260\(month + 1)",
+          monthDate: Calendar.current.date(
+            byAdding: .month, value: -5 + month, to: Date()) ?? Date(),
+          actualAmount: Decimal(Int.random(in: 100...500)),
+          percentage: Double.random(in: 10...50),
+          // Mark the most recent month unavailable so the caption shows.
+          isUnavailable: month == 5
         )
       },
       totalAmount: Decimal(Int.random(in: 600...2000))
