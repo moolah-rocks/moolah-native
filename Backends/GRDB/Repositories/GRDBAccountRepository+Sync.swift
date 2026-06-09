@@ -82,6 +82,25 @@ extension GRDBAccountRepository {
     }
   }
 
+  /// In-transaction counterpart to `setEncodedSystemFieldsBatchSync(_:)`.
+  /// Writes against the caller's active `database` (no nested write) so a
+  /// dirty echo's system-fields-only update shares the apply transaction
+  /// that read `needs_push` (issue #1081).
+  @discardableResult
+  func setEncodedSystemFieldsBatchSync(
+    _ updates: [(id: UUID, data: Data?)], in database: Database
+  ) throws -> Int {
+    guard !updates.isEmpty else { return 0 }
+    var updatedCount = 0
+    for (id, data) in updates {
+      updatedCount +=
+        try AccountRow
+        .filter(AccountRow.Columns.id == id)
+        .updateAll(database, [AccountRow.Columns.encodedSystemFields.set(to: data)])
+    }
+    return updatedCount
+  }
+
   /// Sets `needs_push = 1` for `id` inside the caller's write transaction.
   /// Called from every mutation so the apply path (issue #1081) can detect
   /// an in-flight local edit transactionally.
