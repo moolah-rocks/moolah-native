@@ -106,6 +106,50 @@ struct GRDBExpenseBreakdownAssembleTests {
     #expect(conversionService.calls == 3)
   }
 
+  @Test("transient conversion failures degrade per-row — no rethrow")
+  func transientFailuresDoNotRethrow() async throws {
+    let aggregation = makeAggregation()
+    let conversionService = ThrowingCountingConversionService { _ in
+      .failure(
+        WalletSyncError(provider: .binance, kind: .network(underlyingDescription: "cooldown")))
+    }
+    let failures = FailureLog()
+    let handlers = GRDBAnalysisRepository.ExpenseBreakdownHandlers(
+      handleUnparseableDay: { _ in },
+      handleConversionFailure: { _, _ in failures.append(0) })
+
+    let result = try await GRDBAnalysisRepository.assembleExpenseBreakdown(
+      aggregation: aggregation,
+      profileInstrument: .defaultTestInstrument,
+      conversionService: conversionService,
+      monthEnd: 25,
+      handlers: handlers)
+
+    // Every row was transient → all skipped, no throw, empty result.
+    #expect(result.isEmpty)
+    // Handler still fired for every failing row (diagnostics preserved).
+    #expect(!failures.snapshot().isEmpty)
+  }
+
+  @Test("structural conversion failures still rethrow")
+  func structuralFailuresRethrow() async throws {
+    let aggregation = makeAggregation()
+    let conversionService = ThrowingCountingConversionService { _ in
+      .failure(ConversionError.unsupportedConversion(from: "A", to: "B"))
+    }
+    let handlers = GRDBAnalysisRepository.ExpenseBreakdownHandlers(
+      handleUnparseableDay: { _ in }, handleConversionFailure: { _, _ in })
+
+    await #expect(throws: ConversionError.self) {
+      _ = try await GRDBAnalysisRepository.assembleExpenseBreakdown(
+        aggregation: aggregation,
+        profileInstrument: .defaultTestInstrument,
+        conversionService: conversionService,
+        monthEnd: 25,
+        handlers: handlers)
+    }
+  }
+
   @Test("CancellationError rethrown immediately without invoking handleConversionFailure")
   func cancellationErrorIsNotFoldedIntoConversionFailureLog() async throws {
     let aggregation = makeAggregation()

@@ -160,7 +160,12 @@ extension GRDBAnalysisRepository {
         let context = ConversionFailureContext(
           day: row.day, categoryId: row.categoryId, instrumentId: row.instrumentId)
         handlers.handleConversionFailure(error, context)
-        if firstConversionError == nil {
+        // Transient price-availability failures (a throttled provider, a
+        // day not yet warmed — issue #1075) degrade per-row: skip this
+        // row's contribution and render the rest. Only a *structural*
+        // failure preserves the loud rethrow that signals a genuinely
+        // incomplete bucket.
+        if firstConversionError == nil, !ConversionFailureClassifier.isTransient(error) {
           firstConversionError = error
         }
         continue
