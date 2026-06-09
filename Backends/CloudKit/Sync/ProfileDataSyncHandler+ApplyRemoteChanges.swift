@@ -230,25 +230,62 @@ extension ProfileDataSyncHandler {
   /// Throws when a GRDB-routed batch fails to write so the caller can
   /// return `.saveFailed(...)` and CKSyncEngine refetches instead of
   /// advancing past the dropped record (silent data loss).
+  ///
+  /// Within the transaction each per-type group is split by an
+  /// in-transaction `needs_push` read (issue #1081): rows flagged dirty
+  /// carry an in-flight local edit not yet confirmed uploaded, so their
+  /// field values are NOT overwritten — they receive a system-fields-only
+  /// update (advancing the change tag) in the same transaction via
+  /// `applySystemFieldsInTransaction`, while clean rows take the normal
+  /// `applyGRDBBatchSave` upsert. The dirty read, the clean upsert and the
+  /// dirty system-fields write all share this one `database` transaction,
+  /// so a fetched echo can never clobber a concurrent local edit.
   nonisolated func applyBatchSaves(
     _ records: [CKRecord], systemFields: [String: Data], in database: Database
   ) throws {
     let grouped = Dictionary(grouping: records, by: \.recordType)
     for (recordType, ckRecords) in grouped {
+      let ids = ckRecords.compactMap { $0.recordID.uuid }
+      let dirty = try dirtyIds(recordType: recordType, ids: ids, in: database)
+      let (clean, echoed) = Self.splitByDirtiness(ckRecords, dirty: dirty)
+
+      if !echoed.isEmpty {
+        try applySystemFieldsInTransaction(
+          recordType: recordType, ckRecords: echoed, in: database)
+      }
       if try applyGRDBBatchSave(
         recordType: recordType,
-        ckRecords: ckRecords,
+        ckRecords: clean,
         systemFields: systemFields,
         in: database)
       {
         continue
       }
-      if recordType != ProfileRow.recordType {
+      if recordType != ProfileRow.recordType && !clean.isEmpty {
         // The profile record type is handled by ProfileIndexSyncHandler.
         Self.batchLogger.warning(
           "applyBatchSaves: unknown record type '\(recordType)' — skipping")
       }
     }
+  }
+
+  /// Splits a per-type group into the clean records (safe to upsert) and
+  /// the dirty echoes (system-fields only). The empty-`dirty` fast path
+  /// keeps the common no-pending case allocation-free.
+  nonisolated private static func splitByDirtiness(
+    _ ckRecords: [CKRecord], dirty: Set<UUID>
+  ) -> (clean: [CKRecord], echoed: [CKRecord]) {
+    guard !dirty.isEmpty else { return (ckRecords, []) }
+    var clean: [CKRecord] = []
+    var echoed: [CKRecord] = []
+    for record in ckRecords {
+      if let uuid = record.recordID.uuid, dirty.contains(uuid) {
+        echoed.append(record)
+      } else {
+        clean.append(record)
+      }
+    }
+    return (clean, echoed)
   }
 
   /// Handles batch deletions. Groups by record type then routes through

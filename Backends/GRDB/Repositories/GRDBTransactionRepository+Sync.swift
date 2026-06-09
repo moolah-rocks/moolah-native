@@ -95,6 +95,25 @@ extension GRDBTransactionRepository {
     }
   }
 
+  /// In-transaction counterpart to `setEncodedSystemFieldsBatchSync(_:)`.
+  /// Writes against the caller's active `database` (no nested write) so a
+  /// dirty echo's system-fields-only update shares the apply transaction
+  /// that read `needs_push` (issue #1081).
+  @discardableResult
+  func setEncodedSystemFieldsBatchSync(
+    _ updates: [(id: UUID, data: Data?)], in database: Database
+  ) throws -> Int {
+    guard !updates.isEmpty else { return 0 }
+    var updatedCount = 0
+    for (id, data) in updates {
+      updatedCount +=
+        try TransactionRow
+        .filter(TransactionRow.Columns.id == id)
+        .updateAll(database, [TransactionRow.Columns.encodedSystemFields.set(to: data)])
+    }
+    return updatedCount
+  }
+
   /// Sets `needs_push = 1` for `id` inside the caller's write transaction.
   /// See `GRDBAccountRepository.markNeedsPushSync(id:in:)` (issue #1081).
   func markNeedsPushSync(id: UUID, in database: Database) throws {
