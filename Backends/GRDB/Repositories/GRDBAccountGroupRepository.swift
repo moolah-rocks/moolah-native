@@ -167,10 +167,15 @@ final class GRDBAccountGroupRepository: AccountGroupRepository, @unchecked Senda
   /// the sync handler.
   func fetchRowSync(id: UUID) throws -> AccountGroupRow? {
     try database.read { database in
-      try AccountGroupRow
-        .filter(AccountGroupRow.Columns.id == id)
-        .fetchOne(database)
+      try fetchRowSync(id: id, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `fetchRowSync(id:)` (issue #1081).
+  func fetchRowSync(id: UUID, in database: Database) throws -> AccountGroupRow? {
+    try AccountGroupRow
+      .filter(AccountGroupRow.Columns.id == id)
+      .fetchOne(database)
   }
 
   /// Batch lookup by ids — used by the batch-build phase of the sync
