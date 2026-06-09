@@ -106,3 +106,11 @@ actor CryptoPriceWarmer {
     return ranges
   }
 }
+
+/// Abstraction over `CryptoPriceWarmer` so `SyncedAccountStore` can be
+/// tested with a spy. See issue #1075.
+protocol PriceWarming: Sendable {
+  func warm(transactions: [Transaction], accountIds: Set<UUID>) async
+}
+
+extension CryptoPriceWarmer: PriceWarming {}
