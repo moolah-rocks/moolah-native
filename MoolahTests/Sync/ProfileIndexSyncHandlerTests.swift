@@ -165,6 +165,30 @@ struct ProfileIndexSyncHandlerTests {
     #expect(row.label == "LOCAL RENAME")
   }
 
+  // MARK: - needs_push Conditional Clear on Ack (issue #1081)
+
+  @Test("profile ack clears needs_push only when unchanged since send")
+  func profileAckConditionalClear() throws {
+    let (handler, repository) = try makeHandler()
+    let profileId = UUID()
+    let row = ProfileRow(
+      domain: Profile(
+        id: profileId, label: "Sent", currencyCode: "AUD", financialYearStartMonth: 7))
+    try repository.applyRemoteChangesSync(saved: [row], deleted: [])
+    try repository.markNeedsPushSync(id: profileId)
+    // The uploaded record is built from the persisted row (production
+    // builds it via `recordToSave` → `fetchRowSync`), so it carries the
+    // same SQLite-round-tripped `createdAt` the ack path re-reads.
+    let persisted = try #require(try repository.fetchRowSync(id: profileId))
+    let sent = handler.buildCKRecord(for: persisted)
+
+    _ = handler.handleSentRecordZoneChanges(
+      savedRecords: [sent], failedSaves: [], failedDeletes: [])
+
+    let dirty = try repository.dirtyIdsSync(from: [profileId])
+    #expect(dirty.isEmpty)  // unchanged → cleared
+  }
+
   @Test
   func applyRemoteChangesSkipsNonProfileRecordTypes() throws {
     let (handler, repository) = try makeHandler()

@@ -266,6 +266,7 @@ final class ProfileIndexSyncHandler: Sendable {
     failedDeletes: [(CKRecord.ID, CKError)]
   ) -> SyncErrorRecovery.ClassifiedFailures {
     persistSystemFields(for: savedRecords)
+    clearNeedsPushForConfirmed(savedRecords)
     let failures = SyncErrorRecovery.classify(
       failedSaves: failedSaves,
       failedDeletes: failedDeletes,
