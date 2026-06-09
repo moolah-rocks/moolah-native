@@ -53,6 +53,17 @@ struct AnalysisView: View {
       AnalysisRouteParams(history: store.historyMonths, forecast: store.forecastMonths)
     )
     .toolbar {
+      if session.cryptoSyncStore?.priceWarmingInProgress == true {
+        ToolbarItem(placement: .automatic) {
+          HStack(spacing: 6) {
+            ProgressView().controlSize(.small)
+            Text("Updating prices").font(.caption).foregroundStyle(.secondary)
+          }
+          .accessibilityElement(children: .ignore)
+          .accessibilityLabel("Updating prices")
+        }
+      }
+
       ToolbarItem(placement: .primaryAction) {
         Menu {
           Section("History") {
