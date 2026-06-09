@@ -157,10 +157,20 @@ final class GRDBTransactionLegRepository: @unchecked Sendable {
   func clearNeedsPushBatchSync(_ ids: [UUID]) throws -> Int {
     guard !ids.isEmpty else { return 0 }
     return try database.write { database in
-      try TransactionLegRow
-        .filter(Set(ids).contains(TransactionLegRow.Columns.id))
-        .updateAll(database, [TransactionLegRow.Columns.needsPush.set(to: false)])
+      try clearNeedsPushBatchSync(ids, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `clearNeedsPushBatchSync(_:)` — see
+  /// `GRDBAccountRepository` for the atomic compare-and-clear rationale
+  /// (issue #1081).
+  @discardableResult
+  func clearNeedsPushBatchSync(_ ids: [UUID], in database: Database) throws -> Int {
+    guard !ids.isEmpty else { return 0 }
+    return
+      try TransactionLegRow
+      .filter(Set(ids).contains(TransactionLegRow.Columns.id))
+      .updateAll(database, [TransactionLegRow.Columns.needsPush.set(to: false)])
   }
 
   /// Clears `encoded_system_fields` on every row. Used after an
@@ -198,10 +208,15 @@ final class GRDBTransactionLegRepository: @unchecked Sendable {
   /// in the sync handler.
   func fetchRowSync(id: UUID) throws -> TransactionLegRow? {
     try database.read { database in
-      try TransactionLegRow
-        .filter(TransactionLegRow.Columns.id == id)
-        .fetchOne(database)
+      try fetchRowSync(id: id, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `fetchRowSync(id:)` (issue #1081).
+  func fetchRowSync(id: UUID, in database: Database) throws -> TransactionLegRow? {
+    try TransactionLegRow
+      .filter(TransactionLegRow.Columns.id == id)
+      .fetchOne(database)
   }
 
   /// Batch lookup by ids — used by the batch-build phase of the sync

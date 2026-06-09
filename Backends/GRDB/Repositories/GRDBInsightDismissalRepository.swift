@@ -117,10 +117,15 @@ final class GRDBInsightDismissalRepository: InsightDismissalRepository, @uncheck
 
   func fetchRowSync(id: UUID) throws -> InsightDismissalRow? {
     try database.read { database in
-      try InsightDismissalRow
-        .filter(InsightDismissalRow.Columns.id == id)
-        .fetchOne(database)
+      try fetchRowSync(id: id, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `fetchRowSync(id:)` (issue #1081).
+  func fetchRowSync(id: UUID, in database: Database) throws -> InsightDismissalRow? {
+    try InsightDismissalRow
+      .filter(InsightDismissalRow.Columns.id == id)
+      .fetchOne(database)
   }
 
   func fetchRowsSync(ids: [UUID]) throws -> [InsightDismissalRow] {

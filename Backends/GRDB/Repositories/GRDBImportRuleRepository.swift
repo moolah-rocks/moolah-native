@@ -248,10 +248,20 @@ final class GRDBImportRuleRepository: ImportRuleRepository, @unchecked Sendable 
   func clearNeedsPushBatchSync(_ ids: [UUID]) throws -> Int {
     guard !ids.isEmpty else { return 0 }
     return try database.write { database in
-      try ImportRuleRow
-        .filter(Set(ids).contains(ImportRuleRow.Columns.id))
-        .updateAll(database, [ImportRuleRow.Columns.needsPush.set(to: false)])
+      try clearNeedsPushBatchSync(ids, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `clearNeedsPushBatchSync(_:)` — see
+  /// `GRDBAccountRepository` for the atomic compare-and-clear rationale
+  /// (issue #1081).
+  @discardableResult
+  func clearNeedsPushBatchSync(_ ids: [UUID], in database: Database) throws -> Int {
+    guard !ids.isEmpty else { return 0 }
+    return
+      try ImportRuleRow
+      .filter(Set(ids).contains(ImportRuleRow.Columns.id))
+      .updateAll(database, [ImportRuleRow.Columns.needsPush.set(to: false)])
   }
 
   func clearAllSystemFieldsSync() throws {
@@ -283,10 +293,15 @@ final class GRDBImportRuleRepository: ImportRuleRepository, @unchecked Sendable 
 
   func fetchRowSync(id: UUID) throws -> ImportRuleRow? {
     try database.read { database in
-      try ImportRuleRow
-        .filter(ImportRuleRow.Columns.id == id)
-        .fetchOne(database)
+      try fetchRowSync(id: id, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `fetchRowSync(id:)` (issue #1081).
+  func fetchRowSync(id: UUID, in database: Database) throws -> ImportRuleRow? {
+    try ImportRuleRow
+      .filter(ImportRuleRow.Columns.id == id)
+      .fetchOne(database)
   }
 
   func fetchRowsSync(ids: [UUID]) throws -> [ImportRuleRow] {

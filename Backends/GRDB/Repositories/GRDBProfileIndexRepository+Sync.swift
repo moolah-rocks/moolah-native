@@ -75,9 +75,30 @@ extension GRDBProfileIndexRepository {
   func clearNeedsPushBatchSync(_ ids: [UUID]) throws -> Int {
     guard !ids.isEmpty else { return 0 }
     return try database.write { database in
-      try ProfileRow
-        .filter(Set(ids).contains(ProfileRow.Columns.id))
-        .updateAll(database, [ProfileRow.Columns.needsPush.set(to: false)])
+      try clearNeedsPushBatchSync(ids, in: database)
     }
+  }
+
+  /// In-transaction counterpart to `clearNeedsPushBatchSync(_:)`. Runs
+  /// against the caller's active `database` so the upload-ack path can
+  /// re-read the profile row, compare it to the sent record, and clear the
+  /// flag all inside one transaction — no window for a concurrent rename
+  /// to interleave between compare and clear (issue #1081).
+  @discardableResult
+  func clearNeedsPushBatchSync(_ ids: [UUID], in database: Database) throws -> Int {
+    guard !ids.isEmpty else { return 0 }
+    return
+      try ProfileRow
+      .filter(Set(ids).contains(ProfileRow.Columns.id))
+      .updateAll(database, [ProfileRow.Columns.needsPush.set(to: false)])
+  }
+
+  /// In-transaction row lookup, mirroring the main repository's
+  /// `fetchRowSync(id:)` self-read. Reads against the caller's `database`
+  /// so the ack-clear compare-and-clear shares one transaction (#1081).
+  func fetchRowSync(id: UUID, in database: Database) throws -> ProfileRow? {
+    try ProfileRow
+      .filter(ProfileRow.Columns.id == id)
+      .fetchOne(database)
   }
 }

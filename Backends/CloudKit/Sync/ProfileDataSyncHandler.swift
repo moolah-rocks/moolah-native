@@ -61,7 +61,11 @@ final class ProfileDataSyncHandler {
   /// they are discarded and the record is uploaded as a fresh create
   /// in the handler's zone — defence-in-depth against cross-zone
   /// system-fields corruption.
-  func buildCKRecord<T: CloudKitRecordConvertible>(
+  /// `nonisolated` so the off-main fetched-changes apply path and the
+  /// in-transaction ack-clear compare (issue #1081) can build the upload
+  /// record without hopping to the main actor. Touches only the
+  /// `nonisolated let zoneID`.
+  nonisolated func buildCKRecord<T: CloudKitRecordConvertible>(
     from record: T, encodedSystemFields: Data?
   ) -> CKRecord {
     let freshRecord = record.toCKRecord(in: zoneID)
