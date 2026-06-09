@@ -6,15 +6,22 @@ struct CategoriesOverTimeCard: View {
   let categories: Categories
   let instrument: Instrument
   @Binding var showActualValues: Bool
+  var hasUnavailableData: Bool = false
 
   @State private var selectedDate: Date?
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(alignment: .leading, spacing: 8) {
-        Text("Expenses by Category Over Time")
-          .font(.title2)
-          .fontWeight(.semibold)
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Expenses by Category Over Time")
+            .font(.title2)
+            .fontWeight(.semibold)
+
+          if hasUnavailableData {
+            incompleteDataCaption
+          }
+        }
 
         Picker("Values", selection: $showActualValues) {
           Text("Percentage").tag(false)
@@ -32,9 +39,6 @@ struct CategoriesOverTimeCard: View {
       if entries.isEmpty {
         emptyState
       } else {
-        if Self.hasUnavailable(in: entries) {
-          incompleteDataCaption
-        }
         ExpandableChart(title: "Expenses Over Time") {
           chart
         }
@@ -46,18 +50,8 @@ struct CategoriesOverTimeCard: View {
     .clipShape(.rect(cornerRadius: 12))
   }
 
-  /// True when any point in any entry is unavailable (prices still loading
-  /// for that month), so the window-aggregated totals may be incomplete.
-  /// See #1077. An explicitly-typed closure avoids ambiguity with GRDB's
-  /// `Cursor.contains` re-exported via `@testable import Moolah`.
-  nonisolated static func hasUnavailable(in entries: [CategoryOverTimeEntry]) -> Bool {
-    entries.contains { (entry: CategoryOverTimeEntry) in
-      entry.points.contains { (point: CategoryOverTimePoint) in point.isUnavailable }
-    }
-  }
-
   private var incompleteDataCaption: some View {
-    Text("Some prices are still loading — totals may be incomplete")
+    Text("Some prices are still loading; totals may be incomplete")
       .font(.caption)
       .foregroundStyle(.secondary)
       .accessibilityLabel("Some prices are still loading; totals may be incomplete")
@@ -124,9 +118,14 @@ struct CategoriesOverTimeCard: View {
     }
     .chartXSelection(value: $selectedDate)
     .frame(height: 400)
-    .accessibilityLabel(
+    .accessibilityLabel(chartAccessibilityLabel)
+  }
+
+  private var chartAccessibilityLabel: String {
+    let base =
       "Stacked area chart showing expense categories over time in \(showActualValues ? "actual amounts" : "percentages")"
-    )
+    guard hasUnavailableData else { return base }
+    return base + ". Some months may be incomplete; prices still loading."
   }
 
   private var legend: some View {
@@ -219,9 +218,7 @@ struct CategoriesOverTimeCard: View {
           monthDate: Calendar.current.date(
             byAdding: .month, value: -5 + month, to: Date()) ?? Date(),
           actualAmount: Decimal(Int.random(in: 100...500)),
-          percentage: Double.random(in: 10...50),
-          // Mark the most recent month unavailable so the caption shows.
-          isUnavailable: month == 5
+          percentage: Double.random(in: 10...50)
         )
       },
       totalAmount: Decimal(Int.random(in: 600...2000))
@@ -232,7 +229,8 @@ struct CategoriesOverTimeCard: View {
     entries: entries,
     categories: Categories(from: categories),
     instrument: .AUD,
-    showActualValues: .constant(false)
+    showActualValues: .constant(false),
+    hasUnavailableData: true
   )
   .frame(width: 800)
   .padding()

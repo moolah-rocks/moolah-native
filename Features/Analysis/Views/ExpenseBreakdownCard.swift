@@ -10,16 +10,19 @@ struct ExpenseBreakdownCard: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("Expenses by Category")
-        .font(.title2)
-        .fontWeight(.semibold)
+      VStack(alignment: .leading, spacing: 4) {
+        Text("Expenses by Category")
+          .font(.title2)
+          .fontWeight(.semibold)
+
+        if hasUnavailableData {
+          incompleteDataCaption
+        }
+      }
 
       if filteredBreakdown.isEmpty {
         emptyState
       } else {
-        if hasUnavailableData {
-          incompleteDataCaption
-        }
         ExpandableChart(title: "Expenses by Category") {
           pieChart
         }
@@ -33,7 +36,7 @@ struct ExpenseBreakdownCard: View {
   }
 
   private var incompleteDataCaption: some View {
-    Text("Some prices are still loading — totals may be incomplete")
+    Text("Some prices are still loading; totals may be incomplete")
       .font(.caption)
       .foregroundStyle(.secondary)
       .accessibilityLabel("Some prices are still loading; totals may be incomplete")

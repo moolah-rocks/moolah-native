@@ -20,12 +20,13 @@ extension AnalysisStore {
     var rootTotals: [UUID?: [String: Decimal]] = [:]
     var allMonths: Set<String> = []
 
-    // A month is unavailable if ANY of its source rows failed to price.
-    let unavailableMonths = Set(breakdown.filter(\.hasUnavailableData).map(\.month))
-
     // Negate totalExpenses (server returns negative for expenses) and clamp to zero,
     // matching the web app's categoryOverTimeData.js approach.
     for item in breakdown {
+      // A row whose month couldn't be priced is a convertible subset of a mixed
+      // total — summing it into the projection would understate the chart, so
+      // exclude it. The window-level caption (driven by the store) signals it.
+      guard !item.hasUnavailableData else { continue }
       let rootId = rootCategoryId(for: item.categoryId, categories: categories)
       allMonths.insert(item.month)
       rootTotals[rootId, default: [:]][item.month, default: 0] += -item.totalExpenses.quantity
@@ -50,8 +51,7 @@ extension AnalysisStore {
           month: month,
           monthDate: parseMonth(month),
           actualAmount: amount,
-          percentage: percentage,
-          isUnavailable: unavailableMonths.contains(month)
+          percentage: percentage
         )
       }
       let totalAmount = months.values.reduce(Decimal(0), +)
@@ -87,6 +87,10 @@ extension AnalysisStore {
 
     var totals: [UUID?: Decimal] = [:]
     for item in breakdown {
+      // Skip rows whose month couldn't be priced: their surviving value is a
+      // convertible subset of a mixed total, so summing it would understate the
+      // pie. The window-level caption (driven by the store) signals it instead.
+      guard !item.hasUnavailableData else { continue }
       let targetId: UUID?
       if let selected = selectedCategoryId {
         guard

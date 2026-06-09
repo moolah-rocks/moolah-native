@@ -1,7 +1,7 @@
 import Foundation
 
 /// Aggregated income and expenses for one financial month.
-struct MonthlyIncomeExpense: Sendable, Codable, Identifiable, Hashable {
+struct MonthlyIncomeExpense: Sendable, Identifiable, Hashable {
   var id: String { month }
 
   /// Financial month in YYYYMM format (e.g., "202604")
@@ -21,7 +21,9 @@ struct MonthlyIncomeExpense: Sendable, Codable, Identifiable, Hashable {
   /// Total expenses (excluding earmarked expenses) in cents
   let expense: InstrumentAmount
 
-  /// Profit = income - expense (can be negative)
+  /// Profit = income + expense (can be negative). Expenses are stored as
+  /// negative values by the project's sign convention, so the profit is the
+  /// sum of the two signed amounts rather than a subtraction.
   let profit: InstrumentAmount
 
   // --- Earmarked income & expenses ---
@@ -38,21 +40,12 @@ struct MonthlyIncomeExpense: Sendable, Codable, Identifiable, Hashable {
   /// True when one or more rows in this month could not be priced due to a
   /// transient conversion error (e.g. crypto prices not yet warmed). The
   /// displayed totals may be understated; callers should surface this state.
-  var hasUnavailableData: Bool = false
+  let hasUnavailableData: Bool
 
-  private enum CodingKeys: String, CodingKey {
-    case month
-    case start
-    case end
-    case income
-    case expense
-    case profit
-    case earmarkedIncome
-    case earmarkedExpense
-    case earmarkedProfit
-    case hasUnavailableData
-  }
-
+  // A memberwise init is retained (not redundant): `hasUnavailableData` has no
+  // inline default — the default lives here — so the property stays a `let`
+  // that `init(from:)` can still decode (an inline default would suppress
+  // decoding). The default keeps every existing call site compiling.
   init(
     month: String,
     start: Date,
@@ -75,6 +68,21 @@ struct MonthlyIncomeExpense: Sendable, Codable, Identifiable, Hashable {
     self.earmarkedExpense = earmarkedExpense
     self.earmarkedProfit = earmarkedProfit
     self.hasUnavailableData = hasUnavailableData
+  }
+}
+
+extension MonthlyIncomeExpense: Codable {
+  private enum CodingKeys: String, CodingKey {
+    case month
+    case start
+    case end
+    case income
+    case expense
+    case profit
+    case earmarkedIncome
+    case earmarkedExpense
+    case earmarkedProfit
+    case hasUnavailableData
   }
 
   init(from decoder: any Decoder) throws {

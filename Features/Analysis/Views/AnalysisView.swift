@@ -176,7 +176,8 @@ struct AnalysisView: View {
         // Instrument is uniform across the profile; read the full (unclipped) array so
         // a narrow display window with no rows in range doesn't fall back to .AUD.
         instrument: store.dailyBalances.first?.balance.instrument ?? .AUD,
-        showActualValues: $store.showActualValues
+        showActualValues: $store.showActualValues,
+        hasUnavailableData: store.displayedExpenseHasUnavailableData
       )
     }
   }

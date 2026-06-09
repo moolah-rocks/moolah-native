@@ -1,7 +1,7 @@
 import Foundation
 
 /// Aggregated expenses for one category in one financial month.
-struct ExpenseBreakdown: Sendable, Codable, Identifiable, Hashable {
+struct ExpenseBreakdown: Sendable, Identifiable, Hashable {
   var id: String { "\(categoryId?.uuidString ?? "uncategorized")-\(month)" }
 
   /// The category (nil means uncategorized expenses)
@@ -19,15 +19,12 @@ struct ExpenseBreakdown: Sendable, Codable, Identifiable, Hashable {
   /// True when one or more rows in this month could not be priced due to a
   /// transient conversion error (e.g. crypto prices not yet warmed). The
   /// displayed totals may be understated; callers should surface this state.
-  var hasUnavailableData: Bool = false
+  let hasUnavailableData: Bool
 
-  private enum CodingKeys: String, CodingKey {
-    case categoryId
-    case month
-    case totalExpenses
-    case hasUnavailableData
-  }
-
+  // A memberwise init is retained (not redundant): `hasUnavailableData` has no
+  // inline default — the default lives here — so the property stays a `let`
+  // that `init(from:)` can still decode (an inline default would suppress
+  // decoding). The default keeps every existing call site compiling.
   init(
     categoryId: UUID?,
     month: String,
@@ -38,6 +35,15 @@ struct ExpenseBreakdown: Sendable, Codable, Identifiable, Hashable {
     self.month = month
     self.totalExpenses = totalExpenses
     self.hasUnavailableData = hasUnavailableData
+  }
+}
+
+extension ExpenseBreakdown: Codable {
+  private enum CodingKeys: String, CodingKey {
+    case categoryId
+    case month
+    case totalExpenses
+    case hasUnavailableData
   }
 
   init(from decoder: any Decoder) throws {

@@ -3,7 +3,7 @@ import Testing
 
 @testable import Moolah
 
-@Suite("IncomeExpenseTableCard — cumulativeSavings")
+@Suite("IncomeExpenseTableCard — cumulativeSavingsColumn")
 struct IncomeExpenseCumulativeSavingsTests {
 
   private let instrument: Instrument = .defaultTestInstrument
@@ -33,51 +33,54 @@ struct IncomeExpenseCumulativeSavingsTests {
   }
 
   @Test("first row total savings equals its own savings")
-  func firstRowEqualsOwnSavings() {
+  func firstRowEqualsOwnSavings() throws {
     let data = [
       monthData(month: "202604", income: Decimal(5000), expense: Decimal(3000)),
       monthData(month: "202603", income: Decimal(4000), expense: Decimal(3500)),
       monthData(month: "202602", income: Decimal(4500), expense: Decimal(2000)),
     ]
 
-    let result = IncomeExpenseTableCard.cumulativeSavings(
-      upTo: data[0], in: data, includeEarmarks: false)
+    let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
+      in: data, includeEarmarks: false)
 
-    #expect(result.quantity == Decimal(2000))  // 5000 - 3000
+    let first = try #require(column[0])
+    #expect(first.quantity == Decimal(2000))  // 5000 - 3000
   }
 
   @Test("second row accumulates first two rows")
-  func secondRowAccumulatesTwo() {
+  func secondRowAccumulatesTwo() throws {
     let data = [
       monthData(month: "202604", income: Decimal(5000), expense: Decimal(3000)),
       monthData(month: "202603", income: Decimal(4000), expense: Decimal(3500)),
       monthData(month: "202602", income: Decimal(4500), expense: Decimal(2000)),
     ]
 
-    let result = IncomeExpenseTableCard.cumulativeSavings(
-      upTo: data[1], in: data, includeEarmarks: false)
+    let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
+      in: data, includeEarmarks: false)
 
     // (5000 - 3000) + (4000 - 3500) = 2000 + 500 = 2500
-    #expect(result.quantity == Decimal(2500))
+    let second = try #require(column[1])
+    #expect(second.quantity == Decimal(2500))
   }
 
   @Test("last row is grand total of all savings")
-  func lastRowIsGrandTotal() {
+  func lastRowIsGrandTotal() throws {
     let data = [
       monthData(month: "202604", income: Decimal(5000), expense: Decimal(3000)),
       monthData(month: "202603", income: Decimal(4000), expense: Decimal(3500)),
       monthData(month: "202602", income: Decimal(4500), expense: Decimal(2000)),
     ]
 
-    let result = IncomeExpenseTableCard.cumulativeSavings(
-      upTo: data[2], in: data, includeEarmarks: false)
+    let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
+      in: data, includeEarmarks: false)
 
     // 2000 + 500 + 2500 = 5000
-    #expect(result.quantity == Decimal(5000))
+    let last = try #require(column[2])
+    #expect(last.quantity == Decimal(5000))
   }
 
   @Test("includeEarmarks uses totalProfit instead of profit")
-  func includeEarmarksUsesTotalProfit() {
+  func includeEarmarksUsesTotalProfit() throws {
     let data = [
       monthData(
         month: "202604", income: Decimal(5000), expense: Decimal(3000),
@@ -87,10 +90,10 @@ struct IncomeExpenseCumulativeSavingsTests {
         earmarkedIncome: Decimal(200), earmarkedExpense: Decimal(100)),
     ]
 
-    let withoutEarmarks = IncomeExpenseTableCard.cumulativeSavings(
-      upTo: data[1], in: data, includeEarmarks: false)
-    let withEarmarks = IncomeExpenseTableCard.cumulativeSavings(
-      upTo: data[1], in: data, includeEarmarks: true)
+    let withoutEarmarks = try #require(
+      IncomeExpenseTableCard.cumulativeSavingsColumn(in: data, includeEarmarks: false)[1])
+    let withEarmarks = try #require(
+      IncomeExpenseTableCard.cumulativeSavingsColumn(in: data, includeEarmarks: true)[1])
 
     // Without: (5000-3000) + (4000-3500) = 2500
     #expect(withoutEarmarks.quantity == Decimal(2500))
@@ -99,44 +102,31 @@ struct IncomeExpenseCumulativeSavingsTests {
   }
 
   @Test("single row total equals its own savings")
-  func singleRow() {
+  func singleRow() throws {
     let data = [
       monthData(month: "202604", income: Decimal(9000), expense: Decimal(8000))
     ]
 
-    let result = IncomeExpenseTableCard.cumulativeSavings(
-      upTo: data[0], in: data, includeEarmarks: false)
+    let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
+      in: data, includeEarmarks: false)
 
-    #expect(result.quantity == Decimal(1000))
+    let only = try #require(column[0])
+    #expect(only.quantity == Decimal(1000))
   }
 
   @Test("handles negative savings correctly")
-  func negativeSavings() {
+  func negativeSavings() throws {
     let data = [
       monthData(month: "202604", income: Decimal(2000), expense: Decimal(5000)),
       monthData(month: "202603", income: Decimal(3000), expense: Decimal(1000)),
     ]
 
-    let first = IncomeExpenseTableCard.cumulativeSavings(
-      upTo: data[0], in: data, includeEarmarks: false)
-    let second = IncomeExpenseTableCard.cumulativeSavings(
-      upTo: data[1], in: data, includeEarmarks: false)
+    let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
+      in: data, includeEarmarks: false)
 
+    let first = try #require(column[0])
+    let second = try #require(column[1])
     #expect(first.quantity == Decimal(-3000))  // 2000 - 5000
     #expect(second.quantity == Decimal(-1000))  // -3000 + 2000
-  }
-
-  @Test("unknown item returns zero")
-  func unknownItem() {
-    let data = [
-      monthData(month: "202604", income: Decimal(5000), expense: Decimal(3000))
-    ]
-    let unknown = monthData(
-      month: "202501", income: Decimal(1000), expense: Decimal(500))
-
-    let result = IncomeExpenseTableCard.cumulativeSavings(
-      upTo: unknown, in: data, includeEarmarks: false)
-
-    #expect(result.isZero)
   }
 }
