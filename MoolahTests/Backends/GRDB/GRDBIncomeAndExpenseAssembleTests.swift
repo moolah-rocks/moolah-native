@@ -144,8 +144,15 @@ struct GRDBIncomeAndExpenseAssembleTests {
       monthEnd: 25,
       handlers: handlers)
 
-    // Every row was transient → all skipped, no throw, empty result.
-    #expect(result.isEmpty)
+    // Every row was transient → none threw. Strict Rule 11 (#1077): the
+    // month all of whose rows transient-skipped now surfaces as a single
+    // zeroed placeholder bucket flagged unavailable (rather than the
+    // pre-#1077 empty result, which was indistinguishable from "no
+    // activity"). Detailed placeholder shape is pinned by
+    // `GRDBIncomeAndExpenseUnavailableTests`.
+    let month = try #require(result.first)
+    #expect(month.hasUnavailableData == true)
+    #expect(month.income == .zero(instrument: .defaultTestInstrument))
     // Handler still fired for every failing row (diagnostics preserved).
     #expect(!failures.snapshot().isEmpty)
   }
