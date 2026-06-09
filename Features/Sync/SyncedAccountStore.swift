@@ -111,7 +111,7 @@ final class SyncedAccountStore {
   /// `true` while a background crypto-price warm kicked off by the most
   /// recent sync's apply pass is in flight. Drives a subtle "Updating
   /// prices" indicator in the Analysis UI (issue #1075). `private(set)`
-  /// so views can only observe; `startPriceWarming` (in `+Internals`)
+  /// so views can only observe; `startPriceWarming` (in `+PriceWarming`)
   /// owns the writes.
   private(set) var priceWarmingInProgress = false
 
@@ -119,13 +119,13 @@ final class SyncedAccountStore {
   /// `makeCryptoSyncWiring`. `nil` in degraded / preview wiring (and in
   /// tests that don't exercise warming), in which case
   /// `startPriceWarming` is a no-op. Module-internal (not `private`) so
-  /// the kick-off lives in `SyncedAccountStore+Internals.swift`.
+  /// the kick-off lives in `SyncedAccountStore+PriceWarming.swift`.
   let priceWarmer: (any PriceWarming)?
 
   /// The in-flight warm task spawned after the latest apply pass. Tracked
   /// per `guides/CONCURRENCY_GUIDE.md` §8 so `cancelTimer()` can tear it
   /// down on profile teardown, and so a fresh sync supersedes a prior
-  /// warm rather than stacking. Module-internal so the `+Internals`
+  /// warm rather than stacking. Module-internal so the `+PriceWarming`
   /// extension can swap it.
   var priceWarmingTask: Task<Void, Never>?
 
