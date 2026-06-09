@@ -11,11 +11,14 @@ import Testing
 /// local edit that is still queued for upload, the stale echo must not
 /// clobber the in-flight local edit.
 ///
-/// The fix routes such records through a system-fields-only update — the
-/// echo updates the cached change tag but never overwrites field values
-/// for any record name that is locally pending. Records with no pending
-/// local change apply normally (genuine remote changes from another
-/// device, or harmless no-op echoes).
+/// The fix flags the locally-edited row `needs_push = 1` and reads that
+/// flag inside the apply write transaction (issue #1081): a dirty row's
+/// field values are preserved and it receives a system-fields-only update
+/// (the cached change tag advances so the queued upload lands cleanly),
+/// while clean rows apply normally (genuine remote changes from another
+/// device, or harmless no-op echoes). This suite exercises that
+/// transactional guard — the regression coverage migrated off the older
+/// main-actor pending-record snapshot.
 @Suite("Apply remote changes preserves in-flight local edits")
 struct ApplyRemoteChangesPendingGuardTests {
   private static let zoneID = CKRecordZone.ID(
@@ -30,11 +33,14 @@ struct ApplyRemoteChangesPendingGuardTests {
     }
     let id = UUID()
 
-    // Local state reflects the user's *newer* edit (edit #2), not yet uploaded.
+    // Local state reflects the user's *newer* edit (edit #2), not yet
+    // uploaded, flagged dirty as a mutation would.
     let localRow = ProfileDataSyncHandlerTestSupport.accountRow(
       id: id, name: "LOCAL EDIT 2", encodedSystemFields: nil)
     try await ProfileDataSyncHandlerTestSupport.seed(into: harness.database) { database in
       try localRow.insert(database)
+      try AccountRow.filter(AccountRow.Columns.id == id)
+        .updateAll(database, [AccountRow.Columns.needsPush.set(to: true)])
     }
 
     // Stale server echo carries edit #1's value.
@@ -43,10 +49,7 @@ struct ApplyRemoteChangesPendingGuardTests {
     ).toCKRecord(in: Self.zoneID)
     let echoSystemFields = staleEcho.encodedSystemFields
 
-    let result = harness.handler.applyRemoteChanges(
-      saved: [staleEcho],
-      deleted: [],
-      locallyPendingRecordNames: [AccountRow.recordName(for: id)])
+    let result = harness.handler.applyRemoteChanges(saved: [staleEcho], deleted: [])
 
     if case .saveFailed(let message) = result {
       Issue.record("Expected success, got .saveFailed(\(message))")
@@ -73,14 +76,14 @@ struct ApplyRemoteChangesPendingGuardTests {
       id: id, name: "OLD LOCAL", encodedSystemFields: nil)
     try await ProfileDataSyncHandlerTestSupport.seed(into: harness.database) { database in
       try localRow.insert(database)
+      // needs_push defaults to 0 (clean) — no local edit pending.
     }
 
     let remote = ProfileDataSyncHandlerTestSupport.accountRow(
       id: id, name: "GENUINE REMOTE CHANGE"
     ).toCKRecord(in: Self.zoneID)
 
-    let result = harness.handler.applyRemoteChanges(
-      saved: [remote], deleted: [], locallyPendingRecordNames: [])
+    let result = harness.handler.applyRemoteChanges(saved: [remote], deleted: [])
 
     if case .saveFailed(let message) = result {
       Issue.record("Expected success, got .saveFailed(\(message))")
@@ -107,16 +110,15 @@ struct ApplyRemoteChangesPendingGuardTests {
       id: id, date: date, payee: "LOCAL EDIT 2", encodedSystemFields: nil)
     try await ProfileDataSyncHandlerTestSupport.seed(into: harness.database) { database in
       try localRow.insert(database)
+      try TransactionRow.filter(TransactionRow.Columns.id == id)
+        .updateAll(database, [TransactionRow.Columns.needsPush.set(to: true)])
     }
 
     let staleEcho = ProfileDataSyncHandlerTestSupport.transactionRow(
       id: id, date: date, payee: "STALE SERVER EDIT 1"
     ).toCKRecord(in: Self.zoneID)
 
-    let result = harness.handler.applyRemoteChanges(
-      saved: [staleEcho],
-      deleted: [],
-      locallyPendingRecordNames: [TransactionRow.recordName(for: id)])
+    let result = harness.handler.applyRemoteChanges(saved: [staleEcho], deleted: [])
 
     if case .saveFailed(let message) = result {
       Issue.record("Expected success, got .saveFailed(\(message))")
@@ -143,6 +145,8 @@ struct ApplyRemoteChangesPendingGuardTests {
       encodedSystemFields: nil)
     try await ProfileDataSyncHandlerTestSupport.seed(into: harness.database) { database in
       try localRow.insert(database)
+      try TransactionLegRow.filter(TransactionLegRow.Columns.id == id)
+        .updateAll(database, [TransactionLegRow.Columns.needsPush.set(to: true)])
     }
 
     let staleEcho = ProfileDataSyncHandlerTestSupport.transactionLegRow(
@@ -150,10 +154,7 @@ struct ApplyRemoteChangesPendingGuardTests {
     ).toCKRecord(in: Self.zoneID)
     let echoSystemFields = staleEcho.encodedSystemFields
 
-    let result = harness.handler.applyRemoteChanges(
-      saved: [staleEcho],
-      deleted: [],
-      locallyPendingRecordNames: [TransactionLegRow.recordName(for: id)])
+    let result = harness.handler.applyRemoteChanges(saved: [staleEcho], deleted: [])
 
     if case .saveFailed(let message) = result {
       Issue.record("Expected success, got .saveFailed(\(message))")

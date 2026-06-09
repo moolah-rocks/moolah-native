@@ -83,36 +83,20 @@ final class ProfileIndexSyncHandler: Sendable {
   /// instruments failed — is a recoverable state the next sync cycle
   /// re-attempts via `unsyncedRowIdsSync()`.
   ///
-  /// `locallyPendingRecordNames` carries the record names that currently
-  /// have an un-uploaded local change queued for this zone (saves *and*
-  /// deletes). A fetched save for one of these is a stale server echo of
-  /// an earlier version — applying its field values would clobber the
-  /// not-yet-uploaded local edit (e.g. a profile rename, or an instrument
-  /// pricing-status change). Such records are excluded from the
-  /// field-value upsert and routed through a system-fields-only update
-  /// (`writeSystemFields`), so the cached change tag advances while the
-  /// local field values win on the next send. Mirrors the guard in
+  /// The single-device echo race (issue #1081) is guarded entirely inside
+  /// the apply write transaction by `applyProfilesGuarded`, which reads
+  /// each incoming profile row's `needs_push` flag and refuses to
+  /// overwrite the field values of any row carrying an un-uploaded local
+  /// edit (e.g. a profile rename). There is no main-actor pre-snapshot —
+  /// the transactional check is the sole guard. Mirrors the guard in
   /// `ProfileDataSyncHandler.applyRemoteChanges` (SYNC_GUIDE §2,
-  /// cross-handler review rule).
+  /// cross-handler review rule). Instrument rows live in the separate
+  /// shared-registry database and are out of scope for the profile guard.
   func applyRemoteChanges(
     saved: [CKRecord],
-    deleted: [CKRecord.ID],
-    locallyPendingRecordNames: Set<String> = []
+    deleted: [CKRecord.ID]
   ) -> ApplyResult {
-    let (freshSaved, pendingEchoes) = Self.partitionPendingEchoes(
-      saved: saved, locallyPendingRecordNames: locallyPendingRecordNames)
-    if !pendingEchoes.isEmpty {
-      logger.info(
-        """
-        applyRemoteChanges: \(pendingEchoes.count) fetched save(s) match locally-pending \
-        records — applying system fields only, preserving in-flight local edits
-        """)
-      for record in pendingEchoes {
-        writeSystemFields(for: record.recordID, to: record.encodedSystemFields)
-      }
-    }
-
-    let savedSplit = Self.partitionSaved(freshSaved, logger: logger)
+    let savedSplit = Self.partitionSaved(saved, logger: logger)
     let deletedSplit = Self.partitionDeleted(deleted, logger: logger)
 
     // Profiles first, guarded by `needs_push` inside ONE transaction
@@ -121,7 +105,7 @@ final class ProfileIndexSyncHandler: Sendable {
       try applyProfilesGuarded(
         profileRows: savedSplit.profileRows,
         deletedProfileIds: deletedSplit.profileIds,
-        freshSaved: freshSaved)
+        saved: saved)
     } catch {
       logger.error("Failed to save remote profile changes: \(error, privacy: .public)")
       return .saveFailed(error.localizedDescription)
@@ -154,29 +138,6 @@ final class ProfileIndexSyncHandler: Sendable {
       changedTypes.insert(InstrumentRow.recordType)
     }
     return .success(changedTypes: changedTypes)
-  }
-
-  /// Partitions fetched saves into the records safe to upsert
-  /// (`fresh`) and the stale echoes of locally-pending records
-  /// (`pendingEchoes`) whose field values must not be overwritten.
-  /// The empty-set fast path keeps the common (no-pending) case
-  /// allocation-free. Mirrors the same-named helper on
-  /// `ProfileDataSyncHandler` (the two handlers are maintained
-  /// separately per SYNC_GUIDE §2).
-  static func partitionPendingEchoes(
-    saved: [CKRecord], locallyPendingRecordNames: Set<String>
-  ) -> (fresh: [CKRecord], pendingEchoes: [CKRecord]) {
-    guard !locallyPendingRecordNames.isEmpty else { return (saved, []) }
-    var fresh: [CKRecord] = []
-    var pendingEchoes: [CKRecord] = []
-    for record in saved {
-      if locallyPendingRecordNames.contains(record.recordID.recordName) {
-        pendingEchoes.append(record)
-      } else {
-        fresh.append(record)
-      }
-    }
-    return (fresh, pendingEchoes)
   }
 
   // MARK: - Building CKRecords

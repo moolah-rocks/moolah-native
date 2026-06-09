@@ -18,13 +18,13 @@ extension ProfileIndexSyncHandler {
   /// only; a clean one upserts normally. The instrument leg is applied
   /// separately by the caller (separate shared-registry database).
   ///
-  /// `freshSaved` is the original `[CKRecord]` batch after the #1079
-  /// pending-echo partition; the dirty echoes' system-fields blob is
-  /// sourced from it so the cached change tag advances.
+  /// `saved` is the original fetched `[CKRecord]` batch; the dirty
+  /// echoes' system-fields blob is sourced from it so the cached change
+  /// tag advances even though their field values are not written.
   func applyProfilesGuarded(
     profileRows: [ProfileRow],
     deletedProfileIds: [UUID],
-    freshSaved: [CKRecord]
+    saved: [CKRecord]
   ) throws {
     try repository.database.write { database in
       let profileIds = profileRows.map(\.id)
@@ -32,7 +32,7 @@ extension ProfileIndexSyncHandler {
       let clean = profileRows.filter { !dirty.contains($0.id) }
       try repository.applyRemoteChangesSync(
         saved: clean, deleted: deletedProfileIds, in: database)
-      let echoes = freshSaved.compactMap { record -> (id: UUID, data: Data?)? in
+      let echoes = saved.compactMap { record -> (id: UUID, data: Data?)? in
         guard let uuid = record.recordID.uuid, dirty.contains(uuid),
           record.recordType == ProfileRow.recordType
         else { return nil }
