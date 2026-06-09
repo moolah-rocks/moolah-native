@@ -99,13 +99,8 @@ struct IncomeExpenseTableCard: View {
             .monospacedDigit()
         }
         .frame(minWidth: monthColumnMinWidth, alignment: .leading)
-        InstrumentAmountView(amount: income(for: item))
-          .frame(minWidth: amountColumnMinWidth, alignment: .trailing)
-        InstrumentAmountView(amount: expense(for: item))
-          .frame(minWidth: amountColumnMinWidth, alignment: .trailing)
-        InstrumentAmountView(amount: profit(for: item))
-          .frame(minWidth: amountColumnMinWidth, alignment: .trailing)
-        InstrumentAmountView(amount: cumulativeSavings(upTo: item))
+        amountColumns(for: item)
+        cumulativeCell(for: item)
           .frame(minWidth: totalColumnMinWidth, alignment: .trailing)
       }
       .padding(.horizontal, 12)
@@ -122,6 +117,40 @@ struct IncomeExpenseTableCard: View {
     }
   }
 
+  /// Income, expense, and savings columns. When the month's prices are still
+  /// loading every column shows the unavailable placeholder.
+  @ViewBuilder
+  private func amountColumns(for item: MonthlyIncomeExpense) -> some View {
+    if item.hasUnavailableData {
+      ForEach(0..<3, id: \.self) { _ in
+        unavailableCell.frame(minWidth: amountColumnMinWidth, alignment: .trailing)
+      }
+    } else {
+      InstrumentAmountView(amount: income(for: item))
+        .frame(minWidth: amountColumnMinWidth, alignment: .trailing)
+      InstrumentAmountView(amount: expense(for: item))
+        .frame(minWidth: amountColumnMinWidth, alignment: .trailing)
+      InstrumentAmountView(amount: profit(for: item))
+        .frame(minWidth: amountColumnMinWidth, alignment: .trailing)
+    }
+  }
+
+  /// Placeholder shown in an amount column when a month's prices are still
+  /// loading and the value can't be computed.
+  private var unavailableCell: some View {
+    Text(verbatim: "—")
+      .foregroundStyle(.secondary)
+  }
+
+  @ViewBuilder
+  private func cumulativeCell(for item: MonthlyIncomeExpense) -> some View {
+    if let cumulative = cumulativeSavingsValue(for: item) {
+      InstrumentAmountView(amount: cumulative)
+    } else {
+      unavailableCell
+    }
+  }
+
   private func income(for item: MonthlyIncomeExpense) -> InstrumentAmount {
     includeEarmarks ? item.totalIncome : item.income
   }
@@ -134,9 +163,9 @@ struct IncomeExpenseTableCard: View {
     includeEarmarks ? item.totalProfit : item.profit
   }
 
-  private func cumulativeSavings(upTo item: MonthlyIncomeExpense) -> InstrumentAmount {
-    Self.cumulativeSavings(
-      upTo: item, in: data, includeEarmarks: includeEarmarks)
+  private func cumulativeSavingsValue(for item: MonthlyIncomeExpense) -> InstrumentAmount? {
+    guard let index = data.firstIndex(where: { $0.id == item.id }) else { return nil }
+    return Self.cumulativeSavingsColumn(in: data, includeEarmarks: includeEarmarks)[index]
   }
 
   /// Cumulative savings from the first row through the given item.
@@ -156,6 +185,33 @@ struct IncomeExpenseTableCard: View {
     }
   }
 
+  /// Running cumulative savings aligned 1:1 with `data` (most-recent-first).
+  ///
+  /// Once a month has `hasUnavailableData == true`, the running total depends on
+  /// an unknown value, so that month's cumulative — and every later month's —
+  /// is `nil` (unavailable). Months before the first unavailable month keep
+  /// their real running total.
+  nonisolated static func cumulativeSavingsColumn(
+    in data: [MonthlyIncomeExpense],
+    includeEarmarks: Bool
+  ) -> [InstrumentAmount?] {
+    let instrument = data.first?.income.instrument ?? .AUD
+    var running = InstrumentAmount.zero(instrument: instrument)
+    var unavailableReached = false
+    var column: [InstrumentAmount?] = []
+    column.reserveCapacity(data.count)
+    for month in data {
+      if month.hasUnavailableData { unavailableReached = true }
+      if unavailableReached {
+        column.append(nil)
+      } else {
+        running += includeEarmarks ? month.totalProfit : month.profit
+        column.append(running)
+      }
+    }
+    return column
+  }
+
   /// Builds a single combined VoiceOver label for a data row, so VoiceOver reads
   /// the row as one element (`month: income, expense, savings, total savings`)
   /// rather than traversing each `InstrumentAmountView` independently.
@@ -165,6 +221,9 @@ struct IncomeExpenseTableCard: View {
     includeEarmarks: Bool
   ) -> String {
     let month = Self.monthLabel(for: item)
+    if item.hasUnavailableData {
+      return "\(month): data unavailable, prices still loading"
+    }
     let income = includeEarmarks ? item.totalIncome : item.income
     let expense = includeEarmarks ? item.totalExpense : item.expense
     let profit = includeEarmarks ? item.totalProfit : item.profit
@@ -185,33 +244,40 @@ struct IncomeExpenseTableCard: View {
   }
 }
 
-#Preview {
-  let data = [
-    MonthlyIncomeExpense(
-      month: "202604",
-      start: Date().addingTimeInterval(-86400 * 30),
-      end: Date(),
-      income: InstrumentAmount(quantity: 5000, instrument: .AUD),
-      expense: InstrumentAmount(quantity: 3000, instrument: .AUD),
-      profit: InstrumentAmount(quantity: 2000, instrument: .AUD),
-      earmarkedIncome: InstrumentAmount(quantity: 500, instrument: .AUD),
-      earmarkedExpense: InstrumentAmount(quantity: 200, instrument: .AUD),
-      earmarkedProfit: InstrumentAmount(quantity: 300, instrument: .AUD)
-    ),
-    MonthlyIncomeExpense(
-      month: "202603",
-      start: Date().addingTimeInterval(-86400 * 60),
-      end: Date().addingTimeInterval(-86400 * 31),
-      income: InstrumentAmount(quantity: 4800, instrument: .AUD),
-      expense: InstrumentAmount(quantity: 3200, instrument: .AUD),
-      profit: InstrumentAmount(quantity: 1600, instrument: .AUD),
-      earmarkedIncome: InstrumentAmount(quantity: 400, instrument: .AUD),
-      earmarkedExpense: InstrumentAmount(quantity: 250, instrument: .AUD),
-      earmarkedProfit: InstrumentAmount(quantity: 150, instrument: .AUD)
-    ),
-  ]
+private enum IncomeExpenseTableCardPreviewData {
+  private static func aud(_ value: Decimal) -> InstrumentAmount {
+    InstrumentAmount(quantity: value, instrument: .AUD)
+  }
 
-  IncomeExpenseTableCard(data: data)
+  private static func month(
+    _ key: String,
+    days: ClosedRange<Int>,
+    plain: (income: Decimal, expense: Decimal),
+    earmarked: (income: Decimal, expense: Decimal) = (0, 0),
+    hasUnavailableData: Bool = false
+  ) -> MonthlyIncomeExpense {
+    MonthlyIncomeExpense(
+      month: key,
+      start: Date().addingTimeInterval(-86400 * Double(days.upperBound)),
+      end: Date().addingTimeInterval(-86400 * Double(days.lowerBound)),
+      income: aud(plain.income),
+      expense: aud(plain.expense),
+      profit: aud(plain.income - plain.expense),
+      earmarkedIncome: aud(earmarked.income),
+      earmarkedExpense: aud(earmarked.expense),
+      earmarkedProfit: aud(earmarked.income - earmarked.expense),
+      hasUnavailableData: hasUnavailableData)
+  }
+
+  static let sample: [MonthlyIncomeExpense] = [
+    month("202604", days: 0...30, plain: (5000, 3000), earmarked: (500, 200)),
+    month("202603", days: 31...60, plain: (4800, 3200), earmarked: (400, 250)),
+    month("202602", days: 61...90, plain: (0, 0), hasUnavailableData: true),
+  ]
+}
+
+#Preview {
+  IncomeExpenseTableCard(data: IncomeExpenseTableCardPreviewData.sample)
     .frame(width: 600, height: 500)
     .padding()
 }
