@@ -6,16 +6,17 @@ import Testing
 
 @Suite("ProfileSchema v13 transfer suggestion")
 struct ProfileSchemaV13TransferSuggestionTests {
-  @Test("v13 creates the transfer_suggestion table with its six columns")
+  @Test("transfer_suggestion table has its six base columns plus needs_push")
   func createsTransferSuggestionTable() throws {
     let queue = try DatabaseQueue()
     try ProfileSchema.migrator.migrate(queue)
     try queue.read { database in
       let cols = try Set(database.columns(in: "transfer_suggestion").map(\.name))
+      // `needs_push` added by `v17_needs_push` (issue #1081).
       #expect(
         cols == [
           "id", "record_name", "transaction_id_a", "transaction_id_b",
-          "suggested_at", "encoded_system_fields",
+          "suggested_at", "encoded_system_fields", "needs_push",
         ])
     }
   }
