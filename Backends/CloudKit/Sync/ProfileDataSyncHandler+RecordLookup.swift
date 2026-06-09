@@ -65,6 +65,19 @@ extension ProfileDataSyncHandler {
     #endif
   }
 
+  // MARK: - Current Record for Ack Comparison
+
+  /// Builds the `CKRecord` for the current local row of `recordType` /
+  /// `id`, or `nil` if no such row exists or the type is unknown. Used by
+  /// the upload-ack path to compare the current row's user fields against
+  /// the version that was just confirmed saved: if they match, the local
+  /// edit is confirmed and `needs_push` can be cleared; if they differ, a
+  /// newer edit is pending and the flag stays set (issue #1081). Reuses
+  /// the same per-type `fetchAndBuild` dispatch as the upload path.
+  func currentCKRecord(recordType: String, id: UUID) -> CKRecord? {
+    fetchAndBuild(recordType: recordType, uuid: id)
+  }
+
   // MARK: - Per-Type Dispatch
 
   /// Single-record dispatcher. Returns nil for unknown recordType
