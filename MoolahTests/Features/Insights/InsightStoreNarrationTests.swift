@@ -39,7 +39,8 @@ struct InsightStoreNarrationTests {
     let backend = try CloudKitAnalysisTestBackend()
     let aud = Instrument.defaultTestInstrument
     let sources = InsightStoreSources(
-      analysis: AnalysisStore(repository: backend.analysis),
+      analysis: AnalysisStore(
+        repository: backend.analysis, conversionService: backend.conversionService),
       earmark: EarmarkStore(
         repository: backend.earmarks, conversionService: backend.conversionService,
         targetInstrument: aud, instrumentChanges: nil),

@@ -20,7 +20,8 @@ struct InsightStoreShowLessTests {
 
   private func makeSources(_ backend: any BackendProvider) -> InsightStoreSources {
     InsightStoreSources(
-      analysis: AnalysisStore(repository: backend.analysis),
+      analysis: AnalysisStore(
+        repository: backend.analysis, conversionService: backend.conversionService),
       earmark: EarmarkStore(
         repository: backend.earmarks, conversionService: backend.conversionService,
         targetInstrument: aud, instrumentChanges: nil),

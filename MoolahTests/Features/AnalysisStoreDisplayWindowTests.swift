@@ -134,7 +134,8 @@ struct AnalysisStoreCacheGateTests {
   @Test("narrowing the display filter does not refetch")
   func narrowingDoesNotRefetch() async throws {
     let repo = RecordingAnalysisRepository()
-    let store = AnalysisStore(repository: repo, defaults: try makeDefaults())
+    let store = AnalysisStore(
+      repository: repo, conversionService: StubConversionService(), defaults: try makeDefaults())
     store.historyMonths = 12
     await store.loadAll()
     store.historyMonths = 3
@@ -145,7 +146,8 @@ struct AnalysisStoreCacheGateTests {
   @Test("widening beyond the cache refetches")
   func wideningRefetches() async throws {
     let repo = RecordingAnalysisRepository()
-    let store = AnalysisStore(repository: repo, defaults: try makeDefaults())
+    let store = AnalysisStore(
+      repository: repo, conversionService: StubConversionService(), defaults: try makeDefaults())
     store.historyMonths = 12
     await store.loadAll()
     store.historyMonths = 60
@@ -156,7 +158,8 @@ struct AnalysisStoreCacheGateTests {
   @Test("a forecast-window change refetches")
   func forecastChangeRefetches() async throws {
     let repo = RecordingAnalysisRepository()
-    let store = AnalysisStore(repository: repo, defaults: try makeDefaults())
+    let store = AnalysisStore(
+      repository: repo, conversionService: StubConversionService(), defaults: try makeDefaults())
     store.historyMonths = 12
     store.forecastMonths = 1
     await store.loadAll()
@@ -168,7 +171,8 @@ struct AnalysisStoreCacheGateTests {
   @Test("All passes a nil history window to the repository")
   func allRequestsNilWindow() async throws {
     let repo = RecordingAnalysisRepository()
-    let store = AnalysisStore(repository: repo, defaults: try makeDefaults())
+    let store = AnalysisStore(
+      repository: repo, conversionService: StubConversionService(), defaults: try makeDefaults())
     store.historyMonths = 0
     await store.loadAll()
     #expect(await repo.lastAfter == nil)
@@ -186,7 +190,8 @@ struct AnalysisStoreCacheGateTests {
         categoryId: UUID(), month: "299912",
         totalExpenses: InstrumentAmount(quantity: -100, instrument: .defaultTestInstrument)),
     ])
-    let store = AnalysisStore(repository: repo, defaults: try makeDefaults())
+    let store = AnalysisStore(
+      repository: repo, conversionService: StubConversionService(), defaults: try makeDefaults())
     store.historyMonths = 0  // All
     await store.loadAll()
     // All keeps both rows — if `displayed*` wrongly used forecastMonths (1) it would

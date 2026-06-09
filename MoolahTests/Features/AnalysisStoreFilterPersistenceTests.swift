@@ -18,7 +18,8 @@ struct AnalysisStoreFilterPersistenceTests {
   func defaultValues() throws {
     let (backend, _) = try TestBackend.create()
     let store = AnalysisStore(
-      repository: backend.analysis, defaults: try makeDefaults())
+      repository: backend.analysis, conversionService: backend.conversionService,
+      defaults: try makeDefaults())
     #expect(store.historyMonths == 12)
     #expect(store.forecastMonths == 1)
   }
@@ -29,12 +30,14 @@ struct AnalysisStoreFilterPersistenceTests {
 
     let (backend1, _) = try TestBackend.create()
     let store1 = AnalysisStore(
-      repository: backend1.analysis, defaults: defaults)
+      repository: backend1.analysis, conversionService: backend1.conversionService,
+      defaults: defaults)
     store1.historyMonths = 6
 
     let (backend2, _) = try TestBackend.create()
     let store2 = AnalysisStore(
-      repository: backend2.analysis, defaults: defaults)
+      repository: backend2.analysis, conversionService: backend2.conversionService,
+      defaults: defaults)
     #expect(store2.historyMonths == 6)
   }
 
@@ -44,12 +47,14 @@ struct AnalysisStoreFilterPersistenceTests {
 
     let (backend1, _) = try TestBackend.create()
     let store1 = AnalysisStore(
-      repository: backend1.analysis, defaults: defaults)
+      repository: backend1.analysis, conversionService: backend1.conversionService,
+      defaults: defaults)
     store1.forecastMonths = 3
 
     let (backend2, _) = try TestBackend.create()
     let store2 = AnalysisStore(
-      repository: backend2.analysis, defaults: defaults)
+      repository: backend2.analysis, conversionService: backend2.conversionService,
+      defaults: defaults)
     #expect(store2.forecastMonths == 3)
   }
 
@@ -59,12 +64,14 @@ struct AnalysisStoreFilterPersistenceTests {
 
     let (backend1, _) = try TestBackend.create()
     let store1 = AnalysisStore(
-      repository: backend1.analysis, defaults: defaults)
+      repository: backend1.analysis, conversionService: backend1.conversionService,
+      defaults: defaults)
     store1.forecastMonths = 0
 
     let (backend2, _) = try TestBackend.create()
     let store2 = AnalysisStore(
-      repository: backend2.analysis, defaults: defaults)
+      repository: backend2.analysis, conversionService: backend2.conversionService,
+      defaults: defaults)
     #expect(store2.forecastMonths == 0)
   }
 }
@@ -84,7 +91,8 @@ struct AnalysisStoreRefreshIfStaleTests {
   func loadsWhenNoDataLoaded() async throws {
     let (backend, _) = try TestBackend.create()
     let store = AnalysisStore(
-      repository: backend.analysis, defaults: try makeDefaults())
+      repository: backend.analysis, conversionService: backend.conversionService,
+      defaults: try makeDefaults())
 
     #expect(store.lastLoadedAt == nil)
     await store.refreshIfStale(minimumInterval: 60)
@@ -95,7 +103,8 @@ struct AnalysisStoreRefreshIfStaleTests {
   func reloadsWhenStale() async throws {
     let (backend, _) = try TestBackend.create()
     let store = AnalysisStore(
-      repository: backend.analysis, defaults: try makeDefaults())
+      repository: backend.analysis, conversionService: backend.conversionService,
+      defaults: try makeDefaults())
 
     await store.loadAll()
     let firstLoad = store.lastLoadedAt
@@ -114,7 +123,8 @@ struct AnalysisStoreRefreshIfStaleTests {
   func skipsReloadWhenFresh() async throws {
     let (backend, _) = try TestBackend.create()
     let store = AnalysisStore(
-      repository: backend.analysis, defaults: try makeDefaults())
+      repository: backend.analysis, conversionService: backend.conversionService,
+      defaults: try makeDefaults())
 
     await store.loadAll()
     let firstLoad = store.lastLoadedAt
@@ -129,7 +139,8 @@ struct AnalysisStoreRefreshIfStaleTests {
   func loadAllUpdatesTimestampOnSuccess() async throws {
     let (backend, _) = try TestBackend.create()
     let store = AnalysisStore(
-      repository: backend.analysis, defaults: try makeDefaults())
+      repository: backend.analysis, conversionService: backend.conversionService,
+      defaults: try makeDefaults())
 
     #expect(store.lastLoadedAt == nil)
     await store.loadAll()

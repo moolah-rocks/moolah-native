@@ -51,19 +51,56 @@ final class AnalysisStore {
   // MARK: - Dependencies
 
   let repository: AnalysisRepository
+  // `conversionService` is deliberately not `private` so the sibling
+  // `AnalysisStore+Observation.swift` extension can subscribe to its
+  // `observeRates()` / `observeErrors()` streams (mirroring
+  // `AccountStore`). Treat it as private-by-convention from elsewhere.
+  let conversionService: any InstrumentConversionService
   private let defaults: UserDefaults
-  private let logger = Logger(subsystem: "com.moolah.app", category: "AnalysisStore")
+  let logger = Logger(subsystem: "com.moolah.app", category: "AnalysisStore")
+
+  // MARK: - Rate-tick reload coalescing
+
+  /// True while a `reloadForRateTick()`-driven `loadAll(force:)` is in
+  /// flight. Bursts of rate ticks that arrive during a reload coalesce
+  /// into exactly one trailing re-run (see `reloadForRateTick`).
+  /// Non-private so the sibling `+Observation.swift` extension's
+  /// `reloadForRateTick` can read/write them.
+  var rateTickReloadInFlight = false
+  var rateTickReloadPending = false
+
+  /// The single observation `Task` draining `conversionService.observeRates()`
+  /// / `observeErrors()`. Spawned from `init`, torn down by `stopObserving()`
+  /// (called from `ProfileSession.cleanupSync`) or `deinit` as a safety net.
+  /// Non-private so the `+Observation.swift` extension's `stopObserving()`
+  /// can cancel it.
+  var observationTask: Task<Void, Never>?
+
+  /// Test-only emission tick stream. Yields `()` after every
+  /// rate-tick-driven reload completes (see `+Observation`). Tests await
+  /// it to deterministically observe the post-tick reload without sleeps.
+  /// `internal` so `@testable import Moolah` exposes it; the production
+  /// app never reads it.
+  let testObservationTickStream: AsyncStream<Void>
+  // Non-private so the sibling `+Observation.swift` extension can yield
+  // ticks from the observation loop (see `signalObservationTickForTesting`).
+  let testObservationTickContinuation: AsyncStream<Void>.Continuation
 
   // MARK: - Lifecycle
 
   init(
     repository: AnalysisRepository,
+    conversionService: any InstrumentConversionService,
     defaults: UserDefaults = .moolahShared,
     monthEnd: Int = Calendar.current.component(.day, from: Date())
   ) {
     self.repository = repository
+    self.conversionService = conversionService
     self.defaults = defaults
     self.monthEnd = monthEnd
+    let pair = AsyncStream<Void>.makeStream()
+    self.testObservationTickStream = pair.stream
+    self.testObservationTickContinuation = pair.continuation
 
     // Restore last-used values (UserDefaults returns 0 for missing keys)
     let savedHistory = defaults.integer(forKey: "analysisHistoryMonths")
@@ -76,11 +113,27 @@ final class AnalysisStore {
     } else {
       self.forecastMonths = 1
     }
+
+    // Strong `self` capture is intentional (mirrors `AccountStore`): the
+    // store is `@MainActor`, the task already holds an implicit strong
+    // reference, and `stopObserving()` (via `cleanupSync`) is the sole
+    // lifetime gate.
+    observationTask = Task { await self.observe() }
+  }
+
+  deinit {
+    // Safety net for the case where `cleanupSync` is missed. Swift 6
+    // makes `deinit` nonisolated; the store is owned by main-actor code
+    // (`ProfileSession`), so the assumption holds.
+    MainActor.assumeIsolated {
+      observationTask?.cancel()
+      testObservationTickContinuation.finish()
+    }
   }
 
   // MARK: - Data Loading
 
-  func loadAll() async {
+  func loadAll(force: Bool = false) async {
     monthEnd = Calendar.current.component(.day, from: Date())
     error = nil
 
@@ -98,7 +151,12 @@ final class AnalysisStore {
       !hasCachedData
       || requestedForecastMonths != cachedForecastMonths
       || requestedLoadMonths > (cachedLoadMonths ?? 0)
-    guard needsLoad else { return }
+    // A rate tick (`force == true`) bypasses the cache guard: a background
+    // warm landed new crypto prices, so even an unchanged window must
+    // recompute. On a forced same-window reload `requestedLoadMonths ==
+    // cachedLoadMonths`, so the `growing` branch below stays false and the
+    // chart is not cleared. See #1075.
+    guard force || needsLoad else { return }
 
     isLoading = true
     defer { isLoading = false }
@@ -338,25 +396,4 @@ final class AnalysisStore {
     guard monthsAhead > 0 else { return nil }  // 0 = "None"
     return Calendar.current.date(byAdding: .month, value: monthsAhead, to: Date())
   }
-}
-
-struct CategoryOverTimePoint: Sendable {
-  let month: String
-  let monthDate: Date
-  let actualAmount: Decimal
-  let percentage: Double
-}
-
-extension CategoryOverTimePoint: Identifiable {
-  var id: String { month }
-}
-
-struct CategoryOverTimeEntry: Sendable {
-  let categoryId: UUID?
-  let points: [CategoryOverTimePoint]
-  let totalAmount: Decimal
-}
-
-extension CategoryOverTimeEntry: Identifiable {
-  var id: String { categoryId?.uuidString ?? "uncategorized" }
 }
