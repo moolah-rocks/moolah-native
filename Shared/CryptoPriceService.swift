@@ -210,7 +210,7 @@ actor CryptoPriceService {
   private func extensionWindow(
     for tokenId: String, requestedDate: Date, dateString: String
   ) -> ClosedRange<Date> {
-    let calendar = Calendar(identifier: .gregorian)
+    let calendar = Calendar.utc
     if let cache = caches[tokenId] {
       if dateString > cache.latestDate,
         let fetchStart = dateFormatter.date(from: cache.latestDate),
@@ -251,7 +251,7 @@ actor CryptoPriceService {
     let rangeStart = dateFormatter.string(from: range.lowerBound)
     let fetchEndString = dateFormatter.string(from: fetchUpperBound)
 
-    let gregorian = Calendar(identifier: .gregorian)
+    let gregorian = Calendar.utc
     if let cache = caches[tokenId] {
       if rangeStart < cache.earliestDate,
         let earliestDate = dateFormatter.date(from: cache.earliestDate),
@@ -362,7 +362,7 @@ extension CryptoPriceService {
   }
 
   private func generateDateSeries(in range: ClosedRange<Date>) -> [Date] {
-    let calendar = Calendar(identifier: .gregorian)
+    let calendar = Calendar.utc
     var dates: [Date] = []
     var current = range.lowerBound
     while current <= range.upperBound {

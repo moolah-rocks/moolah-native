@@ -64,6 +64,7 @@ actor CryptoPriceWarmer {
     while !Task.isCancelled {
       let outcome = await priceService.warmRange(
         for: registration.instrument, mapping: registration.mapping, in: range)
+      guard !Task.isCancelled else { return }
       switch outcome {
       case .filled, .unavailable:
         return

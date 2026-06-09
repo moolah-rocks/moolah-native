@@ -105,16 +105,6 @@ extension CryptoPriceService {
 
 // MARK: - Background warming
 
-/// Outcome of a background `warmRange` pass over a token's price history.
-enum WarmOutcome: Equatable {
-  /// Every uncovered sub-range fetched (or there was nothing to do).
-  case filled
-  /// A provider is rate-limited; retry after this deadline.
-  case cooledDown(until: Date)
-  /// No provider could supply data and there is no cooldown to wait on.
-  case unavailable
-}
-
 extension CryptoPriceService {
   /// Background-warm a token's prices over `range`, fetching only the
   /// sub-ranges the in-memory/on-disk cache does not already cover.
@@ -129,7 +119,11 @@ extension CryptoPriceService {
   ) async -> WarmOutcome {
     let tokenId = instrument.id
     if !hydratedTokenIds.contains(tokenId) {
-      try? await loadCache(tokenId: tokenId)
+      do { try await loadCache(tokenId: tokenId) } catch {
+        logger.warning(
+          "warmRange: loadCache failed for \(tokenId, privacy: .public): \(error.localizedDescription, privacy: .public)"
+        )
+      }
     }
     let subRanges = uncoveredSubRanges(tokenId: tokenId, range: range)
     if subRanges.isEmpty { return .filled }
@@ -163,7 +157,7 @@ extension CryptoPriceService {
     guard range.lowerBound <= fetchUpperBound else { return [] }
     let rangeStart = dateFormatter.string(from: range.lowerBound)
     let fetchEndString = dateFormatter.string(from: fetchUpperBound)
-    let gregorian = Calendar(identifier: .gregorian)
+    let gregorian = Calendar.utc
     guard let cache = caches[tokenId] else {
       return [range.lowerBound...fetchUpperBound]  // cold cache: whole range
     }
@@ -214,6 +208,9 @@ extension CryptoPriceService {
         // (e.g. USDT on Binance). Skip silently, same as `fetchRange`.
         continue
       } catch {
+        logger.warning(
+          "fetchSubRangeWarming: fetch/persist failed for \(tokenId, privacy: .public): \(error.localizedDescription, privacy: .public)"
+        )
         continue
       }
     }

@@ -13,25 +13,45 @@ import Foundation
 enum ConversionFailureClassifier {
   static func isTransient(_ error: any Error) -> Bool {
     switch error {
-    case is RateLimitGateError:
+    case is RateLimitGateError, is URLError:
       return true
     case let walletSync as WalletSyncError:
-      switch walletSync.kind {
-      case .network, .rateLimited:
-        return true
-      case .missingApiKey, .invalidApiKey, .providerMalformedResponse:
-        return false
-      }
+      return isTransient(walletSync)
     case let cryptoPrice as CryptoPriceError:
-      switch cryptoPrice {
-      case .noPriceAvailable, .allProvidersFailed:
-        return true
-      case .noProviderMapping:
-        return false
-      }
-    case is URLError:
-      return true
+      return isTransient(cryptoPrice)
+    case let conversionError as ConversionError:
+      return isTransient(conversionError)
     default:
+      return false
+    }
+  }
+
+  private static func isTransient(_ error: WalletSyncError) -> Bool {
+    switch error.kind {
+    case .network, .rateLimited:
+      return true
+    case .missingApiKey, .invalidApiKey, .providerMalformedResponse:
+      return false
+    }
+  }
+
+  private static func isTransient(_ error: CryptoPriceError) -> Bool {
+    switch error {
+    case .noPriceAvailable, .allProvidersFailed:
+      return true
+    case .noProviderMapping:
+      return false
+    }
+  }
+
+  /// Every `ConversionError` case is structural — an unsupported pair, an
+  /// unmapped token, a missing price service — so retrying cannot fix it.
+  /// The exhaustive switch makes a future `ConversionError` case a compile
+  /// error here rather than a silent `false`.
+  private static func isTransient(_ error: ConversionError) -> Bool {
+    switch error {
+    case .unsupportedInstrumentKind, .unsupportedConversion, .noCryptoPriceService,
+      .noProviderMapping:
       return false
     }
   }

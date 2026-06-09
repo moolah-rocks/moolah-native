@@ -76,6 +76,11 @@ struct FixedCryptoPriceClient: CryptoPriceClient, Sendable {
     return result
   }
 
+  // Write-once after init and only ever read (formatting) — never mutated
+  // — so the shared static is safe. `ISO8601DateFormatter` is not
+  // `Sendable`, and this `struct` is `Sendable`, so an instance `let`
+  // would break the conformance; `nonisolated(unsafe)` is the correct
+  // annotation for an immutable shared static of a non-`Sendable` type.
   nonisolated(unsafe) private static let dateFormatter: ISO8601DateFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]

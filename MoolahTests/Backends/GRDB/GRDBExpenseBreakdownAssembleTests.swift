@@ -150,6 +150,56 @@ struct GRDBExpenseBreakdownAssembleTests {
     }
   }
 
+  @Test("assembleExpenseBreakdown converts each row at its own day, not Date()")
+  func assembleUsesPerRowDay() async throws {
+    // Pins that `assembleExpenseBreakdown` feeds each row's parsed `day`
+    // into the conversion service per row — NOT a single `Date()` snapshot.
+    // Two USD rows in the SAME category and financial month, on two days
+    // with different rates: per-day conversion yields -100*1.5 + -100*2.0
+    // = -350. A `Date()` bug would convert both at one rate (or 1:1-fall
+    // back, since the fixture has no entry on `Date()`) → never -350.
+    let dayOneString = "2025-06-10"
+    let dayTwoString = "2025-06-11"
+    let dayOne = try #require(GRDBAnalysisRepository.parseDayString(dayOneString))
+    let dayTwo = try #require(GRDBAnalysisRepository.parseDayString(dayTwoString))
+    let usd = "USD"
+    let category = UUID()
+    let rateOne = try AnalysisTestHelpers.decimal("1.5")
+    let rateTwo = try AnalysisTestHelpers.decimal("2.0")
+    let conversion = DateBasedFixedConversionService(
+      rates: [
+        dayOne: [usd: rateOne],
+        dayTwo: [usd: rateTwo],
+      ])
+    // `ExpenseBreakdownRow.qty` is an `Int64` storage value (raw quantity
+    // scaled by 10^8). Use the scaled value so the post-conversion result
+    // is a recognisable integer.
+    let scaledMinusHundred: Int64 = -100 * 100_000_000
+    let aggregation = GRDBAnalysisRepository.ExpenseBreakdownAggregation(
+      rows: [
+        .init(day: dayOneString, categoryId: category, instrumentId: usd, qty: scaledMinusHundred),
+        .init(day: dayTwoString, categoryId: category, instrumentId: usd, qty: scaledMinusHundred),
+      ],
+      instrumentMap: [usd: .fiat(code: usd)])
+    let handlers = GRDBAnalysisRepository.ExpenseBreakdownHandlers(
+      handleUnparseableDay: { _ in }, handleConversionFailure: { _, _ in })
+
+    let result = try await GRDBAnalysisRepository.assembleExpenseBreakdown(
+      aggregation: aggregation,
+      profileInstrument: .defaultTestInstrument,
+      conversionService: conversion,
+      monthEnd: 25,
+      handlers: handlers)
+
+    // Both rows collapse into one (June 2025, monthEnd 25) category
+    // bucket. Per-day rates: -100*1.5 + -100*2.0 = -350. Any single-date
+    // conversion would land elsewhere.
+    #expect(result.count == 1)
+    let breakdown = try #require(result.first)
+    #expect(breakdown.totalExpenses.quantity == -350)
+    #expect(breakdown.totalExpenses.instrument == .defaultTestInstrument)
+  }
+
   @Test("CancellationError rethrown immediately without invoking handleConversionFailure")
   func cancellationErrorIsNotFoldedIntoConversionFailureLog() async throws {
     let aggregation = makeAggregation()

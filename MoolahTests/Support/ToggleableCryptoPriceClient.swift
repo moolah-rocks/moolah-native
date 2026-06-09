@@ -35,7 +35,7 @@ actor ToggleableCryptoPriceClient: CryptoPriceClient {
 
   func dailyPrice(for mapping: CryptoProviderMapping, on date: Date) async throws -> Decimal {
     if shouldFail { throw failureError }
-    let dateString = Self.dateFormatter.string(from: date)
+    let dateString = dateFormatter.string(from: date)
     guard let price = prices[mapping.instrumentId]?[dateString] else {
       throw CryptoPriceError.noPriceAvailable(tokenId: mapping.instrumentId, date: dateString)
     }
@@ -52,7 +52,7 @@ actor ToggleableCryptoPriceClient: CryptoPriceClient {
     var filtered: [String: Decimal] = [:]
     var current = range.lowerBound
     while current <= range.upperBound {
-      let key = Self.dateFormatter.string(from: current)
+      let key = dateFormatter.string(from: current)
       if let price = tokenPrices[key] {
         filtered[key] = price
       }
@@ -75,7 +75,9 @@ actor ToggleableCryptoPriceClient: CryptoPriceClient {
     return result
   }
 
-  nonisolated(unsafe) private static let dateFormatter: ISO8601DateFormatter = {
+  /// Actor-isolated (not `static`) so the non-`Sendable` formatter is
+  /// confined to this actor and needs no concurrency annotation.
+  private let dateFormatter: ISO8601DateFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]
     return formatter

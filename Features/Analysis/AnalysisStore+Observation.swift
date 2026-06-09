@@ -36,12 +36,6 @@ extension AnalysisStore {
     }
   }
 
-  /// Rate-observation errors are non-fatal to the chart; log, don't blank.
-  func surfaceObservationError(_ error: any Error) {
-    logger.error(
-      "AnalysisStore rate observation error: \(error.localizedDescription, privacy: .public)")
-  }
-
   /// Tears down the observation task. Idempotent. Called from
   /// `ProfileSession.cleanupSync(coordinator:)`.
   func stopObserving() {
