@@ -43,4 +43,35 @@ extension ProfileIndexSyncHandler {
       }
     }
   }
+
+  /// Clears `needs_push` for each saved profile record whose current
+  /// local row still matches the uploaded version. If the row changed
+  /// since the send (a newer edit), the flag stays set — CKSyncEngine
+  /// has already re-queued that edit, and its own later ack clears the
+  /// flag. Race-free under GRDB's serial write queue: a wrongly-cleared
+  /// flag is re-set by the newer edit's own write (issue #1081).
+  /// Instrument-typed saved records are ignored (shared registry).
+  func clearNeedsPushForConfirmed(_ savedRecords: [CKRecord]) {
+    var confirmed: [UUID] = []
+    for saved in savedRecords where saved.recordType == ProfileRow.recordType {
+      guard let profileId = saved.recordID.uuid else { continue }
+      do {
+        guard let current = try repository.fetchRowSync(id: profileId) else { continue }
+        if buildCKRecord(for: current).hasSameUserFields(as: saved) {
+          confirmed.append(profileId)
+        }
+      } catch {
+        logger.error(
+          "clearNeedsPushForConfirmed: failed to fetch profile row \(profileId, privacy: .public): \(error, privacy: .public)"
+        )
+      }
+    }
+    guard !confirmed.isEmpty else { return }
+    do {
+      _ = try repository.clearNeedsPushBatchSync(confirmed)
+    } catch {
+      logger.error(
+        "clearNeedsPushForConfirmed: clear failed: \(error, privacy: .public)")
+    }
+  }
 }
