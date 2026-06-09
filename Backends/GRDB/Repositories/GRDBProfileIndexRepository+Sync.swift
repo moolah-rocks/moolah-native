@@ -20,6 +20,38 @@ extension GRDBProfileIndexRepository {
       .updateAll(database, [ProfileRow.Columns.needsPush.set(to: true)])
   }
 
+  /// Self-opening convenience for callers outside an apply transaction
+  /// (tests, and the upload-ack path's clear). Opens its own write.
+  func markNeedsPushSync(id: UUID) throws {
+    try database.write { database in try markNeedsPushSync(id: id, in: database) }
+  }
+
+  /// In-transaction profile upsert/delete (mirrors the self-write
+  /// `applyRemoteChangesSync(saved:deleted:)` on the main repository).
+  /// Runs against the caller's `database` so the dirty check and the
+  /// upsert share one transaction (issue #1081 — no echo race).
+  func applyRemoteChangesSync(
+    saved rows: [ProfileRow], deleted ids: [UUID], in database: Database
+  ) throws {
+    for row in rows { try row.upsert(database) }
+    for id in ids { _ = try ProfileRow.deleteOne(database, id: id) }
+  }
+
+  /// In-transaction system-fields-only write (change tag), for dirty
+  /// profile echoes that must NOT have their field values overwritten.
+  /// Runs against the caller's `database` so it shares the apply
+  /// transaction (issue #1081).
+  func setEncodedSystemFieldsBatchSync(
+    _ updates: [(id: UUID, data: Data?)], in database: Database
+  ) throws {
+    for (id, data) in updates {
+      _ =
+        try ProfileRow
+        .filter(ProfileRow.Columns.id == id)
+        .updateAll(database, [ProfileRow.Columns.encodedSystemFields.set(to: data)])
+    }
+  }
+
   /// Subset of `ids` whose profile row currently has `needs_push = 1`,
   /// read inside the caller's transaction.
   func dirtyIdsSync(from ids: [UUID], in database: Database) throws -> Set<UUID> {
