@@ -104,16 +104,12 @@ extension SyncCoordinator {
     deleted: [(CKRecord.ID, String)]
   ) async {
     let deletedIDs = deleted.map(\.0)
-    // Snapshot the index zone's locally-pending record names on the main
-    // actor before the off-main apply, so a stale echo of a not-yet-
-    // uploaded profile rename / instrument edit can't clobber it. Same
-    // guard as the profile-data path (SYNC_GUIDE §2, cross-handler rule).
-    let pendingNames = await MainActor.run {
-      locallyPendingRecordNames(in: profileIndexHandler.zoneID)
-    }
-    // Index upsert is fast (few records), run off-main
+    // Index upsert is fast (few records), run off-main. The single-device
+    // echo race is guarded transactionally inside the handler's apply
+    // write via the `needs_push` flag (issue #1081), so no main-actor
+    // pre-snapshot is needed.
     let indexResult = profileIndexHandler.applyRemoteChanges(
-      saved: saved, deleted: deletedIDs, locallyPendingRecordNames: pendingNames)
+      saved: saved, deleted: deletedIDs)
     switch indexResult {
     case .success:
       await MainActor.run {
@@ -152,23 +148,20 @@ extension SyncCoordinator {
     // No invariant violations can reach this point — the coordinator
     // constructs its own handler bundle, so `profileNotRegistered` is
     // unreachable on the apply path.
-    // Resolve the handler and snapshot the locally-pending record names
-    // in the same MainActor hop — both read @MainActor-isolated state
-    // (`syncEngine.state`). The snapshot lets the off-main apply skip
-    // overwriting field values for any record that still has an
-    // un-uploaded local edit (the single-device echo race).
-    let resolved: (handler: ProfileDataSyncHandler, pendingNames: Set<String>)? =
+    //
+    // The single-device echo race is guarded transactionally inside the
+    // handler's apply write via the `needs_push` flag (issue #1081), so
+    // no main-actor pending-record snapshot is taken here.
+    let handler: ProfileDataSyncHandler? =
       await MainActor.run {
         do {
-          let handler = try handlerForProfileZone(profileId: profileId, zoneID: zoneID)
-          return (handler, locallyPendingRecordNames(in: zoneID))
+          return try handlerForProfileZone(profileId: profileId, zoneID: zoneID)
         } catch {
           logger.error("Failed to get handler for profile \(profileId): \(error, privacy: .public)")
           return nil
         }
       }
-    guard let resolved else { return }
-    let handler = resolved.handler
+    guard let handler else { return }
 
     // Filter pre-extracted system fields to this zone (off-main)
     let savedNames = Set(saved.map { $0.recordID.recordName })
@@ -185,8 +178,7 @@ extension SyncCoordinator {
 
     // Heavy upsert/delete/save runs off-main via nonisolated method
     let result = handler.applyRemoteChanges(
-      saved: saved, deleted: deleted, preExtractedSystemFields: zonePreExtracted,
-      locallyPendingRecordNames: resolved.pendingNames)
+      saved: saved, deleted: deleted, preExtractedSystemFields: zonePreExtracted)
 
     switch result {
     case .success:
@@ -362,29 +354,4 @@ extension SyncCoordinator {
     progress.updatePendingUploads(syncEngine.state.pendingRecordZoneChanges.count)
   }
 
-  /// Record names in `zoneID` that currently have an un-uploaded local
-  /// change queued (saves *and* deletes). A fetched save for one of
-  /// these is a stale server echo of an earlier version: applying its
-  /// field values would clobber the in-flight local edit, so the apply
-  /// path routes them through a system-fields-only update instead. See
-  /// `ProfileDataSyncHandler.applyRemoteChanges(…:locallyPendingRecordNames:)`.
-  /// Returns empty when the engine hasn't started (e.g. under
-  /// `--ui-testing`), which disables the guard and applies everything —
-  /// correct, since nothing is pending.
-  @MainActor
-  func locallyPendingRecordNames(in zoneID: CKRecordZone.ID) -> Set<String> {
-    guard let syncEngine else { return [] }
-    var names: Set<String> = []
-    for change in syncEngine.state.pendingRecordZoneChanges {
-      switch change {
-      case .saveRecord(let recordID) where recordID.zoneID == zoneID:
-        names.insert(recordID.recordName)
-      case .deleteRecord(let recordID) where recordID.zoneID == zoneID:
-        names.insert(recordID.recordName)
-      default:
-        break
-      }
-    }
-    return names
-  }
 }

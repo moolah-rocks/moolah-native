@@ -76,44 +76,6 @@ struct ProfileIndexSyncHandlerTests {
     #expect(row.financialYearStartMonth == 1)
   }
 
-  // MARK: - Pending-Echo Guard
-
-  @Test("Stale profile echo does not overwrite a pending local rename")
-  func pendingProfileEchoPreservesLocalRename() throws {
-    let (handler, repository) = try makeHandler()
-
-    let profileId = UUID()
-    // Local state reflects the user's newer rename (edit #2), not yet uploaded.
-    let local = Profile(
-      id: profileId,
-      label: "LOCAL RENAME",
-      currencyCode: "AUD",
-      financialYearStartMonth: 7
-    )
-    try repository.applyRemoteChangesSync(saved: [ProfileRow(domain: local)], deleted: [])
-
-    // Stale server echo carries the pre-rename label.
-    let staleEcho = CKRecord(
-      recordType: ProfileRow.recordType,
-      recordID: CKRecord.ID(
-        recordType: ProfileRow.recordType, uuid: profileId, zoneID: handler.zoneID)
-    )
-    staleEcho["label"] = "STALE OLD LABEL" as CKRecordValue
-    staleEcho["currencyCode"] = "AUD" as CKRecordValue
-    staleEcho["financialYearStartMonth"] = 7 as CKRecordValue
-    staleEcho["createdAt"] = Date() as CKRecordValue
-
-    _ = handler.applyRemoteChanges(
-      saved: [staleEcho],
-      deleted: [],
-      locallyPendingRecordNames: [staleEcho.recordID.recordName])
-
-    let row = try #require(try repository.fetchRowSync(id: profileId))
-    // The in-flight rename wins; only system fields were updated.
-    #expect(row.label == "LOCAL RENAME")
-    #expect(row.encodedSystemFields == staleEcho.encodedSystemFields)
-  }
-
   // MARK: - Remote Deletion
 
   @Test
@@ -162,7 +124,9 @@ struct ProfileIndexSyncHandlerTests {
     _ = handler.applyRemoteChanges(saved: [staleEcho], deleted: [])
 
     let row = try #require(try repository.fetchRowSync(id: profileId))
+    // The in-flight rename wins; only system fields were updated.
     #expect(row.label == "LOCAL RENAME")
+    #expect(row.encodedSystemFields == staleEcho.encodedSystemFields)
   }
 
   // MARK: - needs_push Conditional Clear on Ack (issue #1081)
