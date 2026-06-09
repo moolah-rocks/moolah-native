@@ -34,6 +34,77 @@ struct MonthlyIncomeExpense: Sendable, Codable, Identifiable, Hashable {
 
   /// Earmarked profit = earmarkedIncome - earmarkedExpense
   let earmarkedProfit: InstrumentAmount
+
+  /// True when one or more rows in this month could not be priced due to a
+  /// transient conversion error (e.g. crypto prices not yet warmed). The
+  /// displayed totals may be understated; callers should surface this state.
+  var hasUnavailableData: Bool = false
+
+  private enum CodingKeys: String, CodingKey {
+    case month
+    case start
+    case end
+    case income
+    case expense
+    case profit
+    case earmarkedIncome
+    case earmarkedExpense
+    case earmarkedProfit
+    case hasUnavailableData
+  }
+
+  init(
+    month: String,
+    start: Date,
+    end: Date,
+    income: InstrumentAmount,
+    expense: InstrumentAmount,
+    profit: InstrumentAmount,
+    earmarkedIncome: InstrumentAmount,
+    earmarkedExpense: InstrumentAmount,
+    earmarkedProfit: InstrumentAmount,
+    hasUnavailableData: Bool = false
+  ) {
+    self.month = month
+    self.start = start
+    self.end = end
+    self.income = income
+    self.expense = expense
+    self.profit = profit
+    self.earmarkedIncome = earmarkedIncome
+    self.earmarkedExpense = earmarkedExpense
+    self.earmarkedProfit = earmarkedProfit
+    self.hasUnavailableData = hasUnavailableData
+  }
+
+  init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    month = try container.decode(String.self, forKey: .month)
+    start = try container.decode(Date.self, forKey: .start)
+    end = try container.decode(Date.self, forKey: .end)
+    income = try container.decode(InstrumentAmount.self, forKey: .income)
+    expense = try container.decode(InstrumentAmount.self, forKey: .expense)
+    profit = try container.decode(InstrumentAmount.self, forKey: .profit)
+    earmarkedIncome = try container.decode(InstrumentAmount.self, forKey: .earmarkedIncome)
+    earmarkedExpense = try container.decode(InstrumentAmount.self, forKey: .earmarkedExpense)
+    earmarkedProfit = try container.decode(InstrumentAmount.self, forKey: .earmarkedProfit)
+    hasUnavailableData =
+      (try container.decodeIfPresent(Bool.self, forKey: .hasUnavailableData)) ?? false
+  }
+
+  func encode(to encoder: any Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(month, forKey: .month)
+    try container.encode(start, forKey: .start)
+    try container.encode(end, forKey: .end)
+    try container.encode(income, forKey: .income)
+    try container.encode(expense, forKey: .expense)
+    try container.encode(profit, forKey: .profit)
+    try container.encode(earmarkedIncome, forKey: .earmarkedIncome)
+    try container.encode(earmarkedExpense, forKey: .earmarkedExpense)
+    try container.encode(earmarkedProfit, forKey: .earmarkedProfit)
+    try container.encode(hasUnavailableData, forKey: .hasUnavailableData)
+  }
 }
 
 extension MonthlyIncomeExpense {
