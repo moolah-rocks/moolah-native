@@ -28,14 +28,21 @@ actor CryptoPriceService {
   let logger = Logger(
     subsystem: "com.moolah.app", category: "CryptoPriceService")
 
-  private let dateFormatter: ISO8601DateFormatter
+  // `dateFormatter`, `now`, and `timeZone` are `internal` (not `private`)
+  // because the warm path in `CryptoPriceService+FetchRange.swift`
+  // (`warmRange` and its `uncoveredSubRanges` helper) reuses the same
+  // ISO day formatting, injected clock, and zone the in-file
+  // cache-extension decision uses, so the sibling-file extension must see
+  // them. They remain actor-isolated; the access modifier is internal so
+  // the sibling-file extension can read them.
+  let dateFormatter: ISO8601DateFormatter
   private let resolutionClient: TokenResolutionClient
   /// Injected clock so tests can pin "today" deterministically.
-  private let now: @Sendable () -> Date
+  let now: @Sendable () -> Date
   /// Injected zone used by `cappedToYesterday` to compute "yesterday".
   /// Production defaults to `TimeZone.current`; tests asserting on a
   /// specific `YYYY-MM-DD` label pin to `UTC`.
-  private let timeZone: TimeZone
+  let timeZone: TimeZone
 
   init(
     clients: [CryptoPriceClient],
