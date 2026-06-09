@@ -72,6 +72,68 @@ extension ProfileDataSyncHandler {
     }
   }
 
+  // MARK: - needs_push conditional clear (issue #1081)
+
+  /// Clears `needs_push` for `ids` of `recordType` (each repo's
+  /// `clearNeedsPushBatchSync` opens its own write). Called from the
+  /// upload-ack path only for ids whose current row still matches the
+  /// uploaded version. Unknown record types are a no-op. Dispatch is
+  /// split into reference / domain halves for the same complexity reason
+  /// as `dirtyIds`.
+  nonisolated func clearNeedsPush(recordType: String, ids: [UUID]) throws {
+    guard
+      let clear = referenceNeedsPushClearer(for: recordType)
+        ?? domainNeedsPushClearer(for: recordType)
+    else { return }
+    _ = try clear(ids)
+  }
+
+  /// Reference-data side of the `clearNeedsPush` dispatch.
+  nonisolated private func referenceNeedsPushClearer(
+    for recordType: String
+  ) -> (([UUID]) throws -> Int)? {
+    let repos = grdbRepositories
+    switch recordType {
+    case CSVImportProfileRow.recordType:
+      return { try repos.csvImportProfiles.clearNeedsPushBatchSync($0) }
+    case ImportRuleRow.recordType:
+      return { try repos.importRules.clearNeedsPushBatchSync($0) }
+    case CategoryRow.recordType:
+      return { try repos.categories.clearNeedsPushBatchSync($0) }
+    case TransferSuggestionRow.recordType:
+      return { try repos.transferSuggestions.clearNeedsPushBatchSync($0) }
+    case AccountGroupRow.recordType:
+      return { try repos.accountGroups.clearNeedsPushBatchSync($0) }
+    case InsightDismissalRow.recordType:
+      return { try repos.insightDismissals.clearNeedsPushBatchSync($0) }
+    default:
+      return nil
+    }
+  }
+
+  /// Financial-graph side of the `clearNeedsPush` dispatch.
+  nonisolated private func domainNeedsPushClearer(
+    for recordType: String
+  ) -> (([UUID]) throws -> Int)? {
+    let repos = grdbRepositories
+    switch recordType {
+    case AccountRow.recordType:
+      return { try repos.accounts.clearNeedsPushBatchSync($0) }
+    case EarmarkRow.recordType:
+      return { try repos.earmarks.clearNeedsPushBatchSync($0) }
+    case EarmarkBudgetItemRow.recordType:
+      return { try repos.earmarkBudgetItems.clearNeedsPushBatchSync($0) }
+    case InvestmentValueRow.recordType:
+      return { try repos.investmentValues.clearNeedsPushBatchSync($0) }
+    case TransactionRow.recordType:
+      return { try repos.transactions.clearNeedsPushBatchSync($0) }
+    case TransactionLegRow.recordType:
+      return { try repos.transactionLegs.clearNeedsPushBatchSync($0) }
+    default:
+      return nil
+    }
+  }
+
   /// Writes a system-fields-only update (change tag, no field values) for
   /// the dirty echoes of `recordType` **inside** the active apply write
   /// `database`, sharing the transaction that read `needs_push`. Skips
