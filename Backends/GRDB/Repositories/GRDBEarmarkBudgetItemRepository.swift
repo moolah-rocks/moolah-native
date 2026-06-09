@@ -106,6 +106,45 @@ final class GRDBEarmarkBudgetItemRepository: @unchecked Sendable {
     }
   }
 
+  /// Sets `needs_push = 1` for `id` inside the caller's write transaction.
+  /// See `GRDBAccountRepository.markNeedsPushSync(id:in:)` (issue #1081).
+  func markNeedsPushSync(id: UUID, in database: Database) throws {
+    _ =
+      try EarmarkBudgetItemRow
+      .filter(EarmarkBudgetItemRow.Columns.id == id)
+      .updateAll(database, [EarmarkBudgetItemRow.Columns.needsPush.set(to: true)])
+  }
+
+  /// Subset of `ids` whose row currently has `needs_push = 1`. See
+  /// `GRDBAccountRepository.dirtyIdsSync(from:in:)`.
+  func dirtyIdsSync(from ids: [UUID], in database: Database) throws -> Set<UUID> {
+    guard !ids.isEmpty else { return [] }
+    let idSet = Set(ids)
+    let rows =
+      try EarmarkBudgetItemRow
+      .filter(idSet.contains(EarmarkBudgetItemRow.Columns.id))
+      .filter(EarmarkBudgetItemRow.Columns.needsPush == true)
+      .select(EarmarkBudgetItemRow.Columns.id, as: UUID.self)
+      .fetchAll(database)
+    return Set(rows)
+  }
+
+  func dirtyIdsSync(from ids: [UUID]) throws -> Set<UUID> {
+    try database.read { database in try dirtyIdsSync(from: ids, in: database) }
+  }
+
+  /// Clears `needs_push` for the given ids in one transaction. Returns the
+  /// number of rows updated.
+  @discardableResult
+  func clearNeedsPushBatchSync(_ ids: [UUID]) throws -> Int {
+    guard !ids.isEmpty else { return 0 }
+    return try database.write { database in
+      try EarmarkBudgetItemRow
+        .filter(Set(ids).contains(EarmarkBudgetItemRow.Columns.id))
+        .updateAll(database, [EarmarkBudgetItemRow.Columns.needsPush.set(to: false)])
+    }
+  }
+
   /// Clears `encoded_system_fields` on every row. Used after an
   /// `encryptedDataReset`.
   func clearAllSystemFieldsSync() throws {
