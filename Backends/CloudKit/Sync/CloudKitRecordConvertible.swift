@@ -91,6 +91,25 @@ extension CKRecord {
     coder.requiresSecureCoding = true
     return CKRecord(coder: coder)
   }
+
+  /// True when `self` and `other` carry identical user-field values
+  /// (system fields / change tag ignored). Used by the upload-ack path to
+  /// decide whether a row changed locally since the version that was
+  /// uploaded: if the current row's `toCKRecord` still matches the saved
+  /// record, the local edit has been confirmed and `needs_push` can be
+  /// cleared; if a field differs, a newer edit is pending and the flag
+  /// stays set (issue #1081). CKRecord user values are CloudKit-native
+  /// types bridged to `NSObject` (`NSString`/`NSNumber`/`NSData`/`NSDate`),
+  /// so `isEqual` compares them correctly.
+  func hasSameUserFields(as other: CKRecord) -> Bool {
+    let keys = Set(allKeys()).union(other.allKeys())
+    for key in keys {
+      let lhs = self[key] as? NSObject
+      let rhs = other[key] as? NSObject
+      if lhs != rhs { return false }
+    }
+    return true
+  }
 }
 
 // MARK: - Lookup Helper
