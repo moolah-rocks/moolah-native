@@ -344,7 +344,8 @@ extension ProfileSession {
       instrumentChanges: instrumentChanges,
       transferSuggestions: backend.transferSuggestions
     )
-    let analysis = AnalysisStore(repository: backend.analysis)
+    let analysis = AnalysisStore(
+      repository: backend.analysis, conversionService: backend.conversionService)
     let investment = InvestmentStore(
       repository: backend.investments,
       transactionRepository: backend.transactions,

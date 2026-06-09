@@ -46,6 +46,7 @@ extension ProfileSession {
     importRuleStore.stopObserving()
     transactionStore.stopObserving()
     investmentStore.stopObserving()
+    analysisStore.stopObserving()
   }
 
   // MARK: - Profile Update

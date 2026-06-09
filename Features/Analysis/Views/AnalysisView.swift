@@ -261,7 +261,8 @@ private func seedAnalysisPreview(
     repository: backend.transactions,
     conversionService: backend.conversionService,
     targetInstrument: .AUD)
-  let analysisStore = AnalysisStore(repository: backend.analysis)
+  let analysisStore = AnalysisStore(
+    repository: backend.analysis, conversionService: backend.conversionService)
 
   return NavigationStack {
     AnalysisView(store: analysisStore)
