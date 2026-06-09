@@ -73,6 +73,7 @@ extension GRDBTransactionRepository {
     }
     applyMetadata(of: transaction, to: &existing)
     try existing.update(database)
+    try markTransactionNeedsPush(id: transaction.id, in: database)
 
     let newLegIds: Set<UUID> = Set(transaction.legs.map(\.id))
     let diff = try Self.computeLegDiff(
@@ -104,6 +105,7 @@ extension GRDBTransactionRepository {
         legRow.encodedSystemFields = existingFields
       }
       try legRow.upsert(database)
+      try markLegNeedsPush(id: leg.id, in: database)
       upsertedLegIds.append(leg.id)
     }
 

@@ -67,6 +67,7 @@ final class GRDBCategoryRepository: CategoryRepository, @unchecked Sendable {
     let row = CategoryRow(domain: category)
     try await database.write { database in
       try row.insert(database)
+      try markNeedsPushSync(id: category.id, in: database)
     }
     onRecordChanged(CategoryRow.recordType, category.id)
     return row.toDomain()
@@ -85,6 +86,7 @@ final class GRDBCategoryRepository: CategoryRepository, @unchecked Sendable {
       existing.name = category.name
       existing.parentId = category.parentId
       try existing.update(database)
+      try markNeedsPushSync(id: category.id, in: database)
       return existing
     }
     onRecordChanged(CategoryRow.recordType, category.id)
@@ -109,6 +111,11 @@ final class GRDBCategoryRepository: CategoryRepository, @unchecked Sendable {
         from: id, to: replacementId, in: database)
 
       try existing.delete(database)
+      try Self.markDeleteSideEffectsNeedsPush(
+        orphanedChildIds: orphanedChildIds,
+        reassignedLegIds: reassignedLegIds,
+        updatedBudgetIds: budgetOutcome.updated,
+        in: database)
 
       return DeleteOutcome(
         orphanedChildIds: orphanedChildIds,

@@ -49,6 +49,7 @@ final class GRDBInsightDismissalRepository: InsightDismissalRepository, @uncheck
         .fetchOne(database) ?? InsightDismissalRow(kind: kind, count: 0)
       row.count += 1
       try row.upsert(database)
+      try markNeedsPushSync(id: row.id, in: database)
       return row
     }
     onRecordChanged(InsightDismissalRow.recordType, row.id)

@@ -187,6 +187,7 @@ final class GRDBTransactionRepository: TransactionRepository, @unchecked Sendabl
     let legIds = try await database.write { database -> [UUID] in
       let txnRow = TransactionRow(domain: transaction)
       try txnRow.insert(database)
+      try markNeedsPushSync(id: transaction.id, in: database)
 
       var legIds: [UUID] = []
       legIds.reserveCapacity(transaction.legs.count)
@@ -197,6 +198,7 @@ final class GRDBTransactionRepository: TransactionRepository, @unchecked Sendabl
           transactionId: transaction.id,
           sortOrder: index)
         try legRow.insert(database)
+        try Self.markLegNeedsPush(id: leg.id, in: database)
         legIds.append(leg.id)
       }
       return legIds

@@ -45,6 +45,7 @@ extension GRDBTransactionRepository {
     for transaction in transactions {
       let txnRow = TransactionRow(domain: transaction)
       try txnRow.insert(database)
+      try markTransactionNeedsPush(id: transaction.id, in: database)
 
       for (index, leg) in transaction.legs.enumerated() {
         let legRow = TransactionLegRow(
@@ -53,6 +54,7 @@ extension GRDBTransactionRepository {
           transactionId: transaction.id,
           sortOrder: index)
         try legRow.insert(database)
+        try markLegNeedsPush(id: leg.id, in: database)
         legIds.append(leg.id)
       }
     }

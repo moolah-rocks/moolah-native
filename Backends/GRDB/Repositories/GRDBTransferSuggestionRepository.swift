@@ -65,6 +65,7 @@ final class GRDBTransferSuggestionRepository: TransferSuggestionRepository,
       // any argument order) upserts the same row rather than failing on
       // a duplicate-key constraint.
       try row.upsert(database)
+      try markNeedsPushSync(id: suggestion.id, in: database)
     }
     onRecordChanged(TransferSuggestionRow.recordType, suggestion.id)
     return row.toDomain()

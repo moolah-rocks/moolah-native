@@ -12,6 +12,24 @@ import GRDB
 // `@MainActor`.
 
 extension GRDBTransactionRepository {
+  /// Static `needs_push = 1` mark for a transaction row, callable from the
+  /// `static` create/update pipeline helpers (issue #1081).
+  static func markTransactionNeedsPush(id: UUID, in database: Database) throws {
+    _ =
+      try TransactionRow
+      .filter(TransactionRow.Columns.id == id)
+      .updateAll(database, [TransactionRow.Columns.needsPush.set(to: true)])
+  }
+
+  /// Static `needs_push = 1` mark for a transaction-leg row (cross-table
+  /// relative to this repo), callable from the `static` pipeline helpers.
+  static func markLegNeedsPush(id: UUID, in database: Database) throws {
+    _ =
+      try TransactionLegRow
+      .filter(TransactionLegRow.Columns.id == id)
+      .updateAll(database, [TransactionLegRow.Columns.needsPush.set(to: true)])
+  }
+
   func applyRemoteChangesSync(saved rows: [TransactionRow], deleted ids: [UUID]) throws {
     try database.write { database in
       try applyRemoteChangesSync(saved: rows, deleted: ids, in: database)
@@ -74,6 +92,45 @@ extension GRDBTransactionRepository {
             [TransactionRow.Columns.encodedSystemFields.set(to: data)])
       }
       return updatedCount
+    }
+  }
+
+  /// Sets `needs_push = 1` for `id` inside the caller's write transaction.
+  /// See `GRDBAccountRepository.markNeedsPushSync(id:in:)` (issue #1081).
+  func markNeedsPushSync(id: UUID, in database: Database) throws {
+    _ =
+      try TransactionRow
+      .filter(TransactionRow.Columns.id == id)
+      .updateAll(database, [TransactionRow.Columns.needsPush.set(to: true)])
+  }
+
+  /// Subset of `ids` whose row currently has `needs_push = 1`. See
+  /// `GRDBAccountRepository.dirtyIdsSync(from:in:)`.
+  func dirtyIdsSync(from ids: [UUID], in database: Database) throws -> Set<UUID> {
+    guard !ids.isEmpty else { return [] }
+    let idSet = Set(ids)
+    let rows =
+      try TransactionRow
+      .filter(idSet.contains(TransactionRow.Columns.id))
+      .filter(TransactionRow.Columns.needsPush == true)
+      .select(TransactionRow.Columns.id, as: UUID.self)
+      .fetchAll(database)
+    return Set(rows)
+  }
+
+  func dirtyIdsSync(from ids: [UUID]) throws -> Set<UUID> {
+    try database.read { database in try dirtyIdsSync(from: ids, in: database) }
+  }
+
+  /// Clears `needs_push` for the given ids in one transaction. Returns the
+  /// number of rows updated.
+  @discardableResult
+  func clearNeedsPushBatchSync(_ ids: [UUID]) throws -> Int {
+    guard !ids.isEmpty else { return 0 }
+    return try database.write { database in
+      try TransactionRow
+        .filter(Set(ids).contains(TransactionRow.Columns.id))
+        .updateAll(database, [TransactionRow.Columns.needsPush.set(to: false)])
     }
   }
 

@@ -61,6 +61,7 @@ final class GRDBImportRuleRepository: ImportRuleRepository, @unchecked Sendable 
     let row = ImportRuleRow(domain: rule)
     try await database.write { database in
       try row.insert(database)
+      try markNeedsPushSync(id: rule.id, in: database)
     }
     onRecordChanged(ImportRuleRow.recordType, rule.id)
     return try row.toDomain()
@@ -85,6 +86,7 @@ final class GRDBImportRuleRepository: ImportRuleRepository, @unchecked Sendable 
       existing.actionsJSON = fresh.actionsJSON
       existing.accountScope = fresh.accountScope
       try existing.update(database)
+      try markNeedsPushSync(id: rule.id, in: database)
       return existing
     }
     onRecordChanged(ImportRuleRow.recordType, rule.id)
@@ -122,6 +124,7 @@ final class GRDBImportRuleRepository: ImportRuleRepository, @unchecked Sendable 
         if row.position != newPosition {
           row.position = newPosition
           try row.update(database)
+          try markNeedsPushSync(id: row.id, in: database)
           changed.append(row.id)
         }
       }
@@ -190,6 +193,45 @@ final class GRDBImportRuleRepository: ImportRuleRepository, @unchecked Sendable 
             [ImportRuleRow.Columns.encodedSystemFields.set(to: data)])
       }
       return updatedCount
+    }
+  }
+
+  /// Sets `needs_push = 1` for `id` inside the caller's write transaction.
+  /// See `GRDBAccountRepository.markNeedsPushSync(id:in:)` (issue #1081).
+  func markNeedsPushSync(id: UUID, in database: Database) throws {
+    _ =
+      try ImportRuleRow
+      .filter(ImportRuleRow.Columns.id == id)
+      .updateAll(database, [ImportRuleRow.Columns.needsPush.set(to: true)])
+  }
+
+  /// Subset of `ids` whose row currently has `needs_push = 1`. See
+  /// `GRDBAccountRepository.dirtyIdsSync(from:in:)`.
+  func dirtyIdsSync(from ids: [UUID], in database: Database) throws -> Set<UUID> {
+    guard !ids.isEmpty else { return [] }
+    let idSet = Set(ids)
+    let rows =
+      try ImportRuleRow
+      .filter(idSet.contains(ImportRuleRow.Columns.id))
+      .filter(ImportRuleRow.Columns.needsPush == true)
+      .select(ImportRuleRow.Columns.id, as: UUID.self)
+      .fetchAll(database)
+    return Set(rows)
+  }
+
+  func dirtyIdsSync(from ids: [UUID]) throws -> Set<UUID> {
+    try database.read { database in try dirtyIdsSync(from: ids, in: database) }
+  }
+
+  /// Clears `needs_push` for the given ids in one transaction. Returns the
+  /// number of rows updated.
+  @discardableResult
+  func clearNeedsPushBatchSync(_ ids: [UUID]) throws -> Int {
+    guard !ids.isEmpty else { return 0 }
+    return try database.write { database in
+      try ImportRuleRow
+        .filter(Set(ids).contains(ImportRuleRow.Columns.id))
+        .updateAll(database, [ImportRuleRow.Columns.needsPush.set(to: false)])
     }
   }
 
