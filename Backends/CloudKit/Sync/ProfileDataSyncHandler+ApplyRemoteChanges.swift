@@ -191,6 +191,8 @@ extension ProfileDataSyncHandler {
       if !echoed.isEmpty {
         try applySystemFieldsInTransaction(
           recordType: recordType, ckRecords: echoed, in: database)
+        try clearNeedsPushForConfirmingEchoes(
+          recordType: recordType, ckRecords: echoed, in: database)
       }
       if try applyGRDBBatchSave(
         recordType: recordType,

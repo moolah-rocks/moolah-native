@@ -87,4 +87,102 @@ extension ProfileDataSyncHandler {
   where T: CloudKitRecordConvertible & ValueTypeSystemFieldsReadable {
     buildCKRecord(from: row, encodedSystemFields: row.encodedSystemFields)
   }
+
+  /// Reads the row's currently-cached `encodedSystemFields` blob **inside**
+  /// the caller's active `database`. The outer `Optional` is whether a row
+  /// exists (and the type is known); the inner is the nullable blob. Used
+  /// by the upload-ack path to learn whether the row has ever round-tripped
+  /// (non-`nil` blob) before deciding whether clearing `needs_push` is safe
+  /// (issue #1081 follow-up). Returns `nil` for a missing row or an unknown
+  /// record type; the caller treats that conservatively (no clear).
+  /// Reads each saved record's CURRENTLY-cached `encodedSystemFields`
+  /// keyed by `<recordType>|<uuid>`, so `handleSentRecordZoneChanges` can
+  /// snapshot the pre-ack cache before `updateSystemFieldsForSaved`
+  /// overwrites it. Only rows that exist are recorded (storing their
+  /// nullable cached blob); a missing row is left absent so the ack-clear
+  /// treats it conservatively (no clear). Errors are logged and the record
+  /// is omitted (issue #1081 follow-up).
+  nonisolated func preAckCachedSystemFields(
+    _ savedRecords: [CKRecord]
+  ) -> [String: Data?] {
+    var result: [String: Data?] = [:]
+    do {
+      try grdbRepositories.database.read { database in
+        for saved in savedRecords {
+          guard let uuid = saved.recordID.uuid else { continue }
+          if let blob = try self.cachedSystemFields(
+            recordType: saved.recordType, id: uuid, in: database)
+          {
+            result[saved.recordID.systemFieldsKey] = blob
+          }
+        }
+      }
+    } catch {
+      logger.error(
+        """
+        preAckCachedSystemFields read failed: \
+        \(error.localizedDescription, privacy: .public)
+        """)
+    }
+    return result
+  }
+
+  nonisolated func cachedSystemFields(
+    recordType: String, id: UUID, in database: Database
+  ) throws -> Data?? {
+    if let reference = try cachedSystemFieldsReference(
+      recordType: recordType, id: id, in: database)
+    {
+      return reference
+    }
+    return try cachedSystemFieldsDomain(recordType: recordType, id: id, in: database)
+  }
+
+  /// Reference-data side of the `cachedSystemFields` dispatch. Outer
+  /// `.none` = "not this half's record type"; the inner double-optional is
+  /// the row-exists / nullable-blob result.
+  nonisolated private func cachedSystemFieldsReference(
+    recordType: String, id: UUID, in database: Database
+  ) throws -> (Data??)? {
+    let repos = grdbRepositories
+    switch recordType {
+    case CategoryRow.recordType:
+      return try repos.categories.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    case TransferSuggestionRow.recordType:
+      return try repos.transferSuggestions.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    case AccountGroupRow.recordType:
+      return try repos.accountGroups.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    case InsightDismissalRow.recordType:
+      return try repos.insightDismissals.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    case CSVImportProfileRow.recordType:
+      return try repos.csvImportProfiles.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    case ImportRuleRow.recordType:
+      return try repos.importRules.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    default:
+      return nil
+    }
+  }
+
+  /// Financial-graph side of the `cachedSystemFields` dispatch.
+  nonisolated private func cachedSystemFieldsDomain(
+    recordType: String, id: UUID, in database: Database
+  ) throws -> Data?? {
+    let repos = grdbRepositories
+    switch recordType {
+    case AccountRow.recordType:
+      return try repos.accounts.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    case TransactionRow.recordType:
+      return try repos.transactions.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    case TransactionLegRow.recordType:
+      return try repos.transactionLegs.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    case EarmarkRow.recordType:
+      return try repos.earmarks.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    case EarmarkBudgetItemRow.recordType:
+      return try repos.earmarkBudgetItems.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    case InvestmentValueRow.recordType:
+      return try repos.investmentValues.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    default:
+      return nil
+    }
+  }
 }

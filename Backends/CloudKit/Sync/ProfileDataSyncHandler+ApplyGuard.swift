@@ -72,6 +72,43 @@ extension ProfileDataSyncHandler {
     }
   }
 
+  // MARK: - needs_push confirming-echo clear (issue #1081 follow-up)
+
+  /// Clears `needs_push` for dirty rows whose fetched echo carries the
+  /// SAME user fields as the current local row — the round-trip is
+  /// complete (the version the device last uploaded has now come back via
+  /// fetch). Runs **inside** the active apply `database`, after the
+  /// echoes' system-fields-only update, so the compare and clear share one
+  /// transaction.
+  ///
+  /// **Why this is the safe place to clear (not the upload ack).** The
+  /// upload-ack path deliberately leaves `needs_push` set for any row that
+  /// has round-tripped before (issue #1081 follow-up), because a stale
+  /// echo of a *superseded* earlier version may still be queued in the
+  /// fetch backlog and would clobber the newer edit on the clean path. By
+  /// the time the *confirming* echo of the current version is fetched,
+  /// every earlier-token stale echo has already been delivered — CKSyncEngine
+  /// streams fetched changes in monotonic server-token order — so clearing
+  /// here cannot reopen the window. A genuine remote change carries
+  /// *different* user fields, so it never matches and never clears the
+  /// flag; it is handled by the normal pending-guard / conflict path.
+  nonisolated func clearNeedsPushForConfirmingEchoes(
+    recordType: String, ckRecords: [CKRecord], in database: Database
+  ) throws {
+    var confirmedIds: [UUID] = []
+    for echo in ckRecords {
+      guard let uuid = echo.recordID.uuid else { continue }
+      guard
+        let current = try currentCKRecord(recordType: recordType, id: uuid, in: database)
+      else { continue }
+      if current.hasSameUserFields(as: echo) {
+        confirmedIds.append(uuid)
+      }
+    }
+    guard !confirmedIds.isEmpty else { return }
+    try clearNeedsPush(recordType: recordType, ids: confirmedIds, in: database)
+  }
+
   // MARK: - needs_push conditional clear (issue #1081)
 
   /// Clears `needs_push` for `ids` of `recordType` (each repo's
