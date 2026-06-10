@@ -83,8 +83,20 @@ extension ProfileDataSyncHandler {
     failedDeletes: [(CKRecord.ID, CKError)]
   ) -> SyncErrorRecovery.ClassifiedFailures {
     if !savedRecords.isEmpty {
+      // Capture each row's CURRENTLY-cached system fields *before*
+      // `updateSystemFieldsForSaved` overwrites them with this ack's
+      // newer blob. A `nil` pre-ack blob means the row has never
+      // round-tripped — this is its first confirmed upload, so no echo
+      // of an earlier server version can still be queued, and the flag
+      // is safe to clear. A non-`nil` pre-ack blob means the row was
+      // uploaded before at an earlier server version; a stale echo of
+      // that superseded version may still be in the fetch backlog, so
+      // the flag must NOT be cleared here (issue #1081 follow-up — the
+      // step-5→6 single-device loss window). The fetch/apply path clears
+      // it later when the confirming echo of the current version arrives.
+      let preAckCached = preAckCachedSystemFields(savedRecords)
       updateSystemFieldsForSaved(savedRecords)
-      clearNeedsPushForConfirmed(savedRecords)
+      clearNeedsPushForConfirmed(savedRecords, preAckCached: preAckCached)
     }
 
     let failures = SyncErrorRecovery.classify(
@@ -111,12 +123,20 @@ extension ProfileDataSyncHandler {
   }
 
   /// Clears `needs_push` for each saved record whose current local row
-  /// still matches the uploaded version. If the row changed since the
-  /// send (a newer edit), the flag stays set — CKSyncEngine has already
-  /// re-queued that edit, and its own later ack clears the flag. Clearing
-  /// only on an exact user-field match is the safe direction — an
-  /// under-clear is a harmless extra deferral, while an over-clear could
-  /// let a later echo clobber a pending newer edit (data loss).
+  /// still matches the uploaded version AND that has never round-tripped
+  /// before (its pre-ack cached system fields were `nil`). A row with a
+  /// non-`nil` pre-ack blob was uploaded at an earlier server version; a
+  /// stale echo of that superseded version may still be queued in the
+  /// fetch backlog, and clearing the flag here would let that echo clobber
+  /// this newer edit on the clean apply path (the step-5→6 single-device
+  /// loss window). For those rows the flag stays set and is cleared later
+  /// by the fetch/apply path when the *confirming* echo of the current
+  /// version arrives — safe because CKSyncEngine delivers fetched changes
+  /// in server-token order, so every earlier-token stale echo has already
+  /// been processed by then. Clearing only on an exact user-field match is
+  /// the safe direction — an under-clear is a harmless extra deferral,
+  /// while an over-clear could let a later echo clobber a pending newer
+  /// edit (data loss).
   ///
   /// **Atomicity (issue #1081).** The current-row read, the user-field
   /// compare, and the conditional clear all run inside ONE
@@ -130,12 +150,19 @@ extension ProfileDataSyncHandler {
   /// - Precondition: call on `@MainActor` (matches `updateSystemFieldsForSaved`).
   ///   The single `database.write` is the only transaction opened, so this
   ///   must not be nested inside another write on the same queue.
-  private func clearNeedsPushForConfirmed(_ savedRecords: [CKRecord]) {
+  private func clearNeedsPushForConfirmed(
+    _ savedRecords: [CKRecord], preAckCached: [String: Data?]
+  ) {
     do {
       try grdbRepositories.database.write { database in
         var clearByType: [String: [UUID]] = [:]
         for saved in savedRecords {
           guard let uuid = saved.recordID.uuid else { continue }
+          // Only the first confirmed round-trip (pre-ack cache was nil)
+          // is safe to clear on the ack; a re-confirmation at a newer
+          // version leaves the flag for the fetch path (see doc above).
+          guard case .some(.none) = preAckCached[saved.recordID.systemFieldsKey]
+          else { continue }
           // Re-fetch the CURRENT row inside this transaction and compare.
           guard
             let current = try self.currentCKRecord(
