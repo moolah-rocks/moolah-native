@@ -131,12 +131,16 @@ extension ProfileDataSyncHandler {
   /// this newer edit on the clean apply path (the step-5→6 single-device
   /// loss window). For those rows the flag stays set and is cleared later
   /// by the fetch/apply path when the *confirming* echo of the current
-  /// version arrives — safe because CKSyncEngine delivers fetched changes
-  /// in server-token order, so every earlier-token stale echo has already
-  /// been processed by then. Clearing only on an exact user-field match is
-  /// the safe direction — an under-clear is a harmless extra deferral,
-  /// while an over-clear could let a later echo clobber a pending newer
-  /// edit (data loss).
+  /// version arrives. Even once cleared, a superseded stale echo that
+  /// arrives afterwards cannot clobber the row: the modification-date gate
+  /// on the clean apply path (`applyBatchSaves`, issue #1085) rejects any
+  /// echo whose server `modificationDate` is not strictly newer than the
+  /// date the row caches. (CloudKit does **not** guarantee fetched changes
+  /// arrive in server-token order — an earlier version of this doc wrongly
+  /// relied on that; the date gate is the actual guarantee.) Clearing only
+  /// on an exact user-field match remains the safe direction — an
+  /// under-clear is a harmless extra deferral, while an over-clear could let
+  /// a later echo clobber a pending newer edit (data loss).
   ///
   /// **Atomicity (issue #1081).** The current-row read, the user-field
   /// compare, and the conditional clear all run inside ONE

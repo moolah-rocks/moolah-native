@@ -127,6 +127,32 @@ extension ProfileDataSyncHandler {
     return result
   }
 
+  /// Reads the cached server `modificationDate` for each of `ids` of
+  /// `recordType`, decoded from the row's stored `encoded_system_fields`
+  /// blob **inside** the active apply write `database` (issue #1085). The
+  /// clean-path date gate compares these against each incoming echo's date.
+  /// Only ids whose row exists AND carries a decodable date appear in the
+  /// result; an absent id means "no cached date" → fail-open at the gate.
+  ///
+  /// Implemented as a point read + decode per id, reusing the existing
+  /// `cachedSystemFields` dispatch. The dominant cost is the
+  /// `NSKeyedUnarchiver` decode, not the indexed-PK lookups (design §M-1);
+  /// a stored, indexed `server_modification_date` column is deliberately
+  /// not added unless a benchmark shows the decode is a regression.
+  nonisolated func cachedModificationDates(
+    recordType: String, ids: [UUID], in database: Database
+  ) throws -> [UUID: Date] {
+    var result: [UUID: Date] = [:]
+    for id in ids {
+      guard
+        let blob = try cachedSystemFields(recordType: recordType, id: id, in: database),
+        let date = CKRecord.modificationDate(fromEncodedSystemFields: blob)
+      else { continue }
+      result[id] = date
+    }
+    return result
+  }
+
   nonisolated func cachedSystemFields(
     recordType: String, id: UUID, in database: Database
   ) throws -> Data?? {

@@ -194,9 +194,20 @@ extension ProfileDataSyncHandler {
         try clearNeedsPushForConfirmingEchoes(
           recordType: recordType, ckRecords: echoed, in: database)
       }
+
+      // Modification-date gate on the clean path (issue #1085). A clean
+      // row is fully round-tripped, so `needs_push` no longer protects it;
+      // an out-of-order stale echo of a superseded version would clobber
+      // the newer cached version on the upsert below. The gate rejects any
+      // clean echo whose server `modificationDate` is older-or-equal to the
+      // date the row currently caches, and collapses any same-batch
+      // duplicates of one id to the newest version first.
+      let applicable = try applicableCleanSaves(
+        recordType: recordType, clean: clean, in: database)
+
       if try applyGRDBBatchSave(
         recordType: recordType,
-        ckRecords: clean,
+        ckRecords: applicable,
         systemFields: systemFields,
         in: database)
       {
@@ -282,17 +293,33 @@ extension ProfileDataSyncHandler {
   nonisolated private static func systemFieldsLookup(
     saved: [CKRecord], preExtracted: [(String, Data)]
   ) -> [String: Data] {
+    // A single fetched batch is expected to coalesce to one version per
+    // record, but is not guaranteed to (issue #1085). On a duplicate
+    // recordID keep the NEWEST-dated blob so the stamped cached date stays
+    // consistent with the clean-path dedup-to-max winner (which upserts the
+    // newest version) — otherwise the row would hold the newest field values
+    // but an older blob, understating the cached date and re-admitting a
+    // stale echo the gate should reject. `uniquingKeysWith` also avoids the
+    // `uniqueKeysWithValues` trap on a duplicate key.
     let keyFor = CKRecordIDRecordName.systemFieldsKey(for:)
     if !preExtracted.isEmpty {
       return Dictionary(
         preExtracted.map { (keyFor($0.0), $0.1) },
-        uniquingKeysWith: { _, last in last })
+        uniquingKeysWith: newerSystemFieldsBlob)
     }
     return Dictionary(
-      uniqueKeysWithValues: saved.map {
-        ($0.recordID.systemFieldsKey, $0.encodedSystemFields)
-      }
-    )
+      saved.map { ($0.recordID.systemFieldsKey, $0.encodedSystemFields) },
+      uniquingKeysWith: newerSystemFieldsBlob)
+  }
+
+  /// On a duplicate recordID in one fetched batch, keeps the blob carrying
+  /// the newer server `modificationDate` (a `nil` date sorts as oldest), so
+  /// the stamped cached date matches the clean-path dedup-to-max winner
+  /// (issue #1085).
+  nonisolated private static func newerSystemFieldsBlob(_ lhs: Data, _ rhs: Data) -> Data {
+    (CKRecord.modificationDate(fromEncodedSystemFields: rhs) ?? .distantPast)
+      > (CKRecord.modificationDate(fromEncodedSystemFields: lhs) ?? .distantPast)
+      ? rhs : lhs
   }
 
   nonisolated private func logIncomingBatch(
