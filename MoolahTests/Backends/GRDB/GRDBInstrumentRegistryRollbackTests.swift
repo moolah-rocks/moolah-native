@@ -1,5 +1,4 @@
-// MoolahTests/Backends/GRDB/GRDBInstrumentRegistryRollbackTests.swift
-
+@preconcurrency import CloudKit
 import Foundation
 import GRDB
 import Testing
@@ -180,5 +179,71 @@ struct GRDBInstrumentRegistryRollbackTests {
     let surviving = try #require(try registry.fetchRowSync(id: eth.id))
     #expect(surviving.pricingStatus == TokenPricingStatus.spam.rawValue)
     #expect(surviving.coingeckoId == "ethereum")
+  }
+
+  /// Rollback contract for the issue-#1085 stale-echo branch of
+  /// `applyRemoteChangesSync`. When a stale echo (older `modificationDate`)
+  /// carries a `pricingStatus` that the merge resolves to a *different*
+  /// value, the gate writes ONLY `pricing_status` via a partial `updateAll`
+  /// (identity/mapping fields are date-gated out). If a later row in the
+  /// same batch throws, that partial write must roll back with the rest of
+  /// the transaction. Seeds a `.priced` row cached at the NEWER date so the
+  /// incoming older `.spam` echo takes the stale branch and fires the
+  /// `updateAll`, then trips a `BEFORE INSERT` trigger on a sentinel id.
+  @Test
+  func applyRemoteChangesSyncStaleEchoUpdateRollsBackOnFailure() async throws {
+    let database = try ProfileIndexDatabase.openInMemory()
+    let registry = GRDBInstrumentRegistryRepository(database: database)
+    let zone = CKRecordZone.ID(zoneName: "profile-index", ownerName: CKCurrentUserDefaultName)
+    let tOlder = Date(timeIntervalSince1970: 1_700_000_000)
+    let tNewer = Date(timeIntervalSince1970: 1_700_000_060)
+
+    let priorId = "1:0xabc"
+    let priorInstrument = Instrument.crypto(
+      chainId: 1, contractAddress: "0xabc", symbol: "PRE", name: "Prior", decimals: 18)
+    var prior = InstrumentRow(domain: priorInstrument)
+    prior.pricingStatus = TokenPricingStatus.priced.rawValue
+    prior.encodedSystemFields =
+      prior.toCKRecord(in: zone).withModificationDate(tNewer).encodedSystemFields
+    let priorRow = prior
+    try await database.write { database in try priorRow.insert(database) }
+
+    try await database.write { database in
+      try database.execute(
+        sql: """
+          CREATE TRIGGER fail_instrument_upsert
+          BEFORE INSERT ON instrument
+          WHEN NEW.id = '___FAIL___'
+          BEGIN
+              SELECT RAISE(ABORT, 'forced failure for rollback test');
+          END;
+          """)
+    }
+
+    // Stale echo (older date) carrying .spam → merge(.priced, .spam) = .spam,
+    // which differs from the stored .priced, so the stale branch fires the
+    // partial `updateAll(pricing_status = .spam)`.
+    var staleEcho = InstrumentRow(domain: priorInstrument)
+    staleEcho.pricingStatus = TokenPricingStatus.spam.rawValue
+    staleEcho.encodedSystemFields =
+      staleEcho.toCKRecord(in: zone).withModificationDate(tOlder).encodedSystemFields
+    var failing = InstrumentRow(
+      domain: Instrument.crypto(
+        chainId: 9, contractAddress: nil, symbol: "FAIL", name: "Fail", decimals: 18))
+    failing.id = "___FAIL___"
+    failing.recordName = "___FAIL___"
+
+    do {
+      try registry.applyRemoteChangesSync(saved: [staleEcho, failing], deleted: [])
+      Issue.record("applyRemoteChangesSync should have thrown but did not")
+    } catch {
+      // Expected — trigger raises ABORT mid-transaction.
+    }
+
+    // The partial pricing_status updateAll rolled back: status stays .priced.
+    let surviving = try #require(try registry.fetchRowSync(id: priorId))
+    #expect(surviving.pricingStatus == TokenPricingStatus.priced.rawValue)
+    #expect(try registry.fetchRowSync(id: "___FAIL___") == nil)
+    #expect(try registry.allRowIdsSync() == [priorId])
   }
 }

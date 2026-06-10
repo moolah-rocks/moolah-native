@@ -92,6 +92,19 @@ extension CKRecord {
     return CKRecord(coder: coder)
   }
 
+  /// Decodes the server-assigned `modificationDate` carried in a cached
+  /// `encoded_system_fields` blob, or `nil` when the blob is absent /
+  /// undecodable / carries no date. The modification-date gate (issue
+  /// #1085) uses this to learn the server version a clean row currently
+  /// holds: an incoming echo is applied only when its own
+  /// `modificationDate` is strictly newer. A `nil` here means fail-open
+  /// (apply), so a genuine first sync or a dateless blob is never
+  /// rejected.
+  static func modificationDate(fromEncodedSystemFields data: Data?) -> Date? {
+    guard let data, let record = fromEncodedSystemFields(data) else { return nil }
+    return record.modificationDate
+  }
+
   /// True when `self` and `other` carry identical user-field values
   /// (system fields / change tag ignored). Used by the upload-ack path to
   /// decide whether a row changed locally since the version that was

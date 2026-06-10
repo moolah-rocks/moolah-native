@@ -256,6 +256,11 @@ final class GRDBInstrumentRegistryRepository:
   func applyRemoteChangesSync(saved rows: [InstrumentRow], deleted ids: [String]) throws {
     try database.write { database in
       for var row in rows {
+        let existing =
+          try InstrumentRow
+          .filter(InstrumentRow.Columns.id == row.id)
+          .fetchOne(database)
+
         // Apply the field-level merge rule for `pricingStatus` before
         // upserting. CKSyncEngine's default "server wins" would let
         // the daily auto-resolver on one device clobber a `.spam`
@@ -269,18 +274,31 @@ final class GRDBInstrumentRegistryRepository:
         // in `InstrumentRow+CloudKit.swift`) decode as `.priced`. That
         // matches the legacy fallback and keeps the merge defensive
         // rather than throwing.
-        if let existing =
-          try InstrumentRow
-          .filter(InstrumentRow.Columns.id == row.id)
-          .fetchOne(database)
-        {
-          let local = TokenPricingStatus(rawValue: existing.pricingStatus) ?? .priced
-          let incoming = TokenPricingStatus(rawValue: row.pricingStatus) ?? .priced
-          row.pricingStatus =
-            PricingStatusMerge.merge(
-              local: local, incoming: incoming
-            ).rawValue
+        let mergedStatus = Self.mergedPricingStatus(local: existing, incoming: row)
+
+        // Modification-date gate on identity / provider-mapping fields and
+        // the cached system-fields blob (issue #1085). Instruments have no
+        // `needs_push`; the date gate piggybacks on the `fetchOne` above.
+        // A stale echo (incoming date older-or-equal to the existing row's
+        // cached date) must NOT revert the identity/mapping fields — but
+        // `pricingStatus` is EXEMPT: it always flows through
+        // `PricingStatusMerge` regardless of date, because that merge is a
+        // deliberately recency-independent CRDT (sticky `.spam`) and gating
+        // it wholesale could leave two devices divergent. So a stale echo
+        // writes only the merged `pricingStatus` (and only when it changed,
+        // to skip a no-op write), leaving identity / mapping / blob put.
+        if let existing, Self.isStaleInstrumentEcho(existing: existing, incoming: row) {
+          if mergedStatus != existing.pricingStatus {
+            _ =
+              try InstrumentRow
+              .filter(InstrumentRow.Columns.id == row.id)
+              .updateAll(
+                database, [InstrumentRow.Columns.pricingStatus.set(to: mergedStatus)])
+          }
+          continue
         }
+
+        row.pricingStatus = mergedStatus
         try row.upsert(database)
       }
       for id in ids {
@@ -291,6 +309,36 @@ final class GRDBInstrumentRegistryRepository:
     // map must be rebuilt before the next reader (e.g. a price-cache
     // resolution) observes it.
     invalidateInstrumentMapCache()
+  }
+
+  /// Resolves the `pricingStatus` raw value to persist for an incoming
+  /// instrument row, applying `PricingStatusMerge` against the existing
+  /// local row's status (issue #1085 keeps this recency-independent, so it
+  /// runs whether or not the date gate rejects the rest of the record).
+  /// With no existing row the incoming status is taken as-is.
+  private static func mergedPricingStatus(
+    local existing: InstrumentRow?, incoming row: InstrumentRow
+  ) -> String {
+    guard let existing else { return row.pricingStatus }
+    let local = TokenPricingStatus(rawValue: existing.pricingStatus) ?? .priced
+    let incoming = TokenPricingStatus(rawValue: row.pricingStatus) ?? .priced
+    return PricingStatusMerge.merge(local: local, incoming: incoming).rawValue
+  }
+
+  /// True when `row` is a superseded stale echo relative to `existing` —
+  /// its server `modificationDate` is older-or-equal to the date the local
+  /// row caches (reject-on-tie, design §4). Fail-open: if either date is
+  /// absent (no cached blob, or a dateless incoming record) returns `false`
+  /// so the incoming record applies, matching the gate's behaviour at the
+  /// UUID-keyed sites.
+  private static func isStaleInstrumentEcho(
+    existing: InstrumentRow, incoming row: InstrumentRow
+  ) -> Bool {
+    guard
+      let cached = existing.serverModificationDate,
+      let incoming = row.serverModificationDate
+    else { return false }
+    return incoming <= cached
   }
 
   /// Persists a new `pricingStatus` for the row identified by

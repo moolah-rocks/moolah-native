@@ -50,4 +50,13 @@ extension ProfileRow: CloudKitRecordConvertible {
       dataFormatVersion: fields.dataFormatVersion.map(Int.init) ?? 0
     )
   }
+
+  /// The server-assigned `modificationDate` decoded from the row's cached
+  /// `encoded_system_fields` blob, or `nil` when the blob is absent or
+  /// carries no date. The clean-path modification-date gate (issue #1085)
+  /// reads this to order two versions of the same profile. Defined here, in
+  /// the CloudKit mapping file, mirroring `InstrumentRow.serverModificationDate`.
+  var serverModificationDate: Date? {
+    CKRecord.modificationDate(fromEncodedSystemFields: encodedSystemFields)
+  }
 }

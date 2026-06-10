@@ -81,17 +81,20 @@ extension ProfileDataSyncHandler {
   /// echoes' system-fields-only update, so the compare and clear share one
   /// transaction.
   ///
-  /// **Why this is the safe place to clear (not the upload ack).** The
-  /// upload-ack path deliberately leaves `needs_push` set for any row that
-  /// has round-tripped before (issue #1081 follow-up), because a stale
-  /// echo of a *superseded* earlier version may still be queued in the
-  /// fetch backlog and would clobber the newer edit on the clean path. By
-  /// the time the *confirming* echo of the current version is fetched,
-  /// every earlier-token stale echo has already been delivered — CKSyncEngine
-  /// streams fetched changes in monotonic server-token order — so clearing
-  /// here cannot reopen the window. A genuine remote change carries
-  /// *different* user fields, so it never matches and never clears the
-  /// flag; it is handled by the normal pending-guard / conflict path.
+  /// **Why clearing here is safe.** Clearing `needs_push` exposes the row
+  /// to the clean apply path, where an out-of-order stale echo of a
+  /// superseded version could otherwise clobber the newer edit. That window
+  /// is closed not by fetch ordering — CloudKit does **not** guarantee
+  /// fetched changes arrive in server-token order (issue #1085; an earlier
+  /// version of this doc wrongly assumed it did) — but by the
+  /// modification-date gate on the clean path (`applyBatchSaves` →
+  /// `applicableCleanSaves`): a clean echo is applied only when its server
+  /// `modificationDate` is strictly newer than the date the row caches, so a
+  /// superseded echo is rejected regardless of when it is delivered. The
+  /// gate is the load-bearing guarantee; this clear is correct independent
+  /// of it. A genuine remote change carries *different* user fields, so it
+  /// never matches and never clears the flag; it is handled by the normal
+  /// pending-guard / conflict path.
   nonisolated func clearNeedsPushForConfirmingEchoes(
     recordType: String, ckRecords: [CKRecord], in database: Database
   ) throws {
