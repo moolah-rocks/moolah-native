@@ -89,20 +89,22 @@ extension ProfileIndexSyncHandler {
   }
 
   /// Looks up an `InstrumentRow` by string-keyed `recordID` and builds
-  /// a CKRecord for upload. Returns `nil` when no `instrumentRepository`
-  /// is wired or the row does not exist.
-  func instrumentRecordToSave(for recordID: CKRecord.ID) -> CKRecord? {
-    guard let instrumentRepository else { return nil }
+  /// a CKRecord for upload, as a tri-state (issue #1087): `.found` on a hit,
+  /// `.absent` when the query succeeds but the row is gone (safe to drop the
+  /// stale save + queue a deletion), `.failed` when no registry is wired or
+  /// the fetch throws (keep pending — never delete a possibly-live record).
+  func instrumentRecordToSave(for recordID: CKRecord.ID) -> RecordLookupOutcome {
+    guard let instrumentRepository else { return .failed }
     do {
       guard
         let row = try instrumentRepository.fetchRowSync(id: recordID.recordName)
-      else { return nil }
-      return buildCKRecord(for: row)
+      else { return .absent }
+      return .found(buildCKRecord(for: row))
     } catch {
       logger.error(
-        "recordToSave: failed to fetch instrument row '\(recordID.recordName, privacy: .public)': \(error, privacy: .public)"
+        "recordToSave: failed to fetch instrument row '\(recordID.recordName, privacy: .public)': \(error, privacy: .public) — keeping pending"
       )
-      return nil
+      return .failed
     }
   }
 

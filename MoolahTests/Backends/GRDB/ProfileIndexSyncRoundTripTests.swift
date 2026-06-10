@@ -114,7 +114,7 @@ struct ProfileIndexSyncRoundTripTests {
     try await harnessA.repository.upsert(domain)
     let recordID = CKRecord.ID(
       recordType: ProfileRow.recordType, uuid: id, zoneID: Self.zoneID)
-    let outgoing = try #require(harnessA.handler.recordToSave(for: recordID))
+    let outgoing = try #require(harnessA.handler.recordToSave(for: recordID).foundRecord)
 
     // Stamp the server-issued change-tag bytes onto device A's row (a
     // real CKSyncEngine save populates these via the post-send

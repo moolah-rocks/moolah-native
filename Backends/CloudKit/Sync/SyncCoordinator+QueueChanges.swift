@@ -43,17 +43,14 @@ extension SyncCoordinator {
   /// Subset of `candidates` whose record IDs are NOT already queued for
   /// deletion in `pendingChanges`. Builds a `Set<CKRecord.ID>` from the
   /// pending `.deleteRecord` entries once (O(pending)) and then filters
-  /// `candidates` against it (O(candidates)). Replaces a prior per-record
-  /// `Sequence.contains(_:)` scan that was O(candidates × pending) on the
-  /// main thread — pathological when a deleted profile leaves tens of
-  /// thousands of stale uploads queued (the same record names re-surface
-  /// every `nextRecordZoneChangeBatch` cycle until the queue drains).
+  /// `candidates` against it (O(candidates)) — linear, so a deleted profile
+  /// that left tens of thousands of stale uploads drains without a
+  /// per-record scan on the main thread.
   ///
-  /// Pending `.saveRecord` entries do not shadow a candidate: a stale
-  /// save and a fresh deletion can legitimately co-exist in the queue,
-  /// and CKSyncEngine resolves the order itself. We only dedup against
-  /// existing `.deleteRecord` entries so the same record-name isn't
-  /// queued for deletion twice.
+  /// Only `.deleteRecord` entries are consulted, so the same record-name is
+  /// not queued for deletion twice. `.saveRecord` entries are not checked:
+  /// the caller (`handleMissingRecordsToSave`) has already removed the
+  /// candidate's stale save before calling this.
   nonisolated static func newMissingDeleteIDs(
     among candidates: [CKRecord.ID],
     pendingChanges: [CKSyncEngine.PendingRecordZoneChange]
@@ -68,5 +65,43 @@ extension SyncCoordinator {
     }
     if pendingDeleteIds.isEmpty { return candidates }
     return candidates.filter { !pendingDeleteIds.contains($0) }
+  }
+
+  /// Partitions per-id upload lookups into the records to upload and the
+  /// genuinely-absent ids to drop + delete. `.found` → upload; `.absent`
+  /// (query succeeded, row gone) → remove the stale save and queue a server
+  /// deletion; `.failed` (GRDB threw / unhandled type / no registry) →
+  /// omitted entirely so the change stays pending and retries (issue #1087).
+  /// Pure and `nonisolated static` so the send-path classification is
+  /// unit-testable without a live `CKSyncEngine`.
+  nonisolated static func classifyLookups(
+    _ entries: [(recordID: CKRecord.ID, outcome: RecordLookupOutcome)]
+  ) -> (toSave: [CKRecord], absent: [CKRecord.ID]) {
+    var toSave: [CKRecord] = []
+    var absent: [CKRecord.ID] = []
+    for entry in entries {
+      switch entry.outcome {
+      case .found(let record): toSave.append(record)
+      case .absent: absent.append(entry.recordID)
+      case .failed: break
+      }
+    }
+    return (toSave, absent)
+  }
+
+  /// The subset of `changes` whose record lives in `zoneID`. Used by the
+  /// profile-delete purge to drop every pending change for a deleted
+  /// profile's data zone in one pass (issue #1087). Pure + `nonisolated
+  /// static` so the zone match is unit-testable without a live engine.
+  nonisolated static func pendingChanges(
+    _ changes: [CKSyncEngine.PendingRecordZoneChange], inZone zoneID: CKRecordZone.ID
+  ) -> [CKSyncEngine.PendingRecordZoneChange] {
+    changes.filter { change in
+      switch change {
+      case .saveRecord(let id): return id.zoneID == zoneID
+      case .deleteRecord(let id): return id.zoneID == zoneID
+      @unknown default: return false
+      }
+    }
   }
 }

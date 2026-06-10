@@ -54,8 +54,10 @@ struct ProfileDataSyncHandlerLookupTests {
       TransactionRow.recordType: [txnId],
     ])
 
-    #expect(lookup[AccountRow.recordType]?[accountId]?.recordType == "AccountRecord")
-    #expect(lookup[TransactionRow.recordType]?[txnId]?.recordType == "TransactionRecord")
+    #expect(
+      lookup[AccountRow.recordType]?.succeededHits[accountId]?.recordType == "AccountRecord")
+    #expect(
+      lookup[TransactionRow.recordType]?.succeededHits[txnId]?.recordType == "TransactionRecord")
   }
 
   @Test
@@ -80,7 +82,7 @@ struct ProfileDataSyncHandlerLookupTests {
 
     let recordID = CKRecord.ID(
       recordType: AccountRow.recordType, uuid: accountId, zoneID: handler.zoneID)
-    let result = handler.recordToSave(for: recordID)
+    let result = handler.recordToSave(for: recordID).foundRecord
     #expect(result != nil)
     #expect(result?.recordType == "AccountRecord")
     #expect(result?["name"] as? String == "Found")
@@ -100,7 +102,10 @@ struct ProfileDataSyncHandlerLookupTests {
 
     let recordID = CKRecord.ID(
       recordType: AccountRow.recordType, uuid: UUID(), zoneID: handler.zoneID)
-    let result = handler.recordToSave(for: recordID)
-    #expect(result == nil)
+    // Missing row, query succeeded → `.absent` (issue #1087 tri-state).
+    guard case .absent = handler.recordToSave(for: recordID) else {
+      Issue.record("expected .absent for a missing record")
+      return
+    }
   }
 }

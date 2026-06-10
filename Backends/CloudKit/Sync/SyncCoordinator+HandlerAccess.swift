@@ -81,6 +81,33 @@ extension SyncCoordinator {
     cachedGRDBRepositories.removeValue(forKey: profileId)
   }
 
+  /// Removes every pending change queued for a deleted profile's data zone
+  /// (issue #1087 — root prevention of the upload-queue wedge).
+  /// Profile deletion tears down the per-profile DB/zone, but the profile's
+  /// already-queued `.saveRecord`s would otherwise linger in engine state
+  /// forever: their local rows are gone, so every batch build misses them
+  /// (`built=0`) and the dead head re-selects each cycle, starving uploads.
+  ///
+  /// **Call ONLY from the genuine-deletion path** (`onProfileRemoved`), never
+  /// from the data-format-incompatibility gate (`SessionManager`), where the
+  /// profile still exists locally and on the server — dropping its pending
+  /// edits there would lose unsynced user data. That gate uses
+  /// `evictCachedState` (cache only); this purge is deliberately separate.
+  func purgePendingChanges(forProfileZone profileId: UUID) {
+    guard let syncEngine else { return }
+    let zoneID = CKRecordZone.ID(
+      zoneName: "profile-\(profileId.uuidString)",
+      ownerName: CKCurrentUserDefaultName)
+    let stale = Self.pendingChanges(
+      syncEngine.state.pendingRecordZoneChanges, inZone: zoneID)
+    guard !stale.isEmpty else { return }
+    logger.warning(
+      "Purging \(stale.count, privacy: .public) pending change(s) for deleted profile \(profileId, privacy: .public)"
+    )
+    syncEngine.state.remove(pendingRecordZoneChanges: stale)
+    refreshPendingUploadsMirror()
+  }
+
   /// Removes the per-profile `ProfileDataSyncHandler` from `dataHandlers`.
   /// Called by `SessionManager` on mid-session teardown when a remote bump
   /// pushes the profile's `dataFormatVersion` above

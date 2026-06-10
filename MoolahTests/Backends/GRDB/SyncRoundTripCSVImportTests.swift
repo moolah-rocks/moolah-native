@@ -172,7 +172,7 @@ struct SyncRoundTripCSVImportTests {
     _ = try await harnessA.handler.grdbRepositories.csvImportProfiles.create(domain)
     let recordID = CKRecord.ID(
       recordType: CSVImportProfileRow.recordType, uuid: id, zoneID: harnessA.handler.zoneID)
-    let outgoing = try #require(harnessA.handler.recordToSave(for: recordID))
+    let outgoing = try #require(harnessA.handler.recordToSave(for: recordID).foundRecord)
 
     // Stamp the server-issued change-tag bytes onto the record (a real
     // CKSyncEngine save populates these) and feed them back to Device A
@@ -227,7 +227,7 @@ struct SyncRoundTripCSVImportTests {
     _ = try await harnessA.handler.grdbRepositories.importRules.create(domain)
     let recordID = CKRecord.ID(
       recordType: ImportRuleRow.recordType, uuid: id, zoneID: harnessA.handler.zoneID)
-    let outgoing = try #require(harnessA.handler.recordToSave(for: recordID))
+    let outgoing = try #require(harnessA.handler.recordToSave(for: recordID).foundRecord)
 
     // Stamp server-issued change tag and write it back to the row.
     let stampedFields = outgoing.encodedSystemFields
