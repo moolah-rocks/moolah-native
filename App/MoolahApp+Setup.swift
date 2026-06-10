@@ -195,6 +195,10 @@ extension MoolahApp {
     store.onProfileRemoved = { [weak sessionManager, weak coordinator] profileID in
       sessionManager?.removeSession(for: profileID)
       coordinator?.evictCachedState(for: profileID)
+      // Drop the deleted profile's queued pending changes so stale saves
+      // can't wedge the upload queue (issue #1087). Genuine-deletion path
+      // only — never the data-format-incompatibility gate.
+      coordinator?.purgePendingChanges(forProfileZone: profileID)
     }
     return sessionManager
   }

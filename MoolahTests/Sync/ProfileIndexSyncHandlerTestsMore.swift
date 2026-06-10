@@ -58,7 +58,7 @@ struct ProfileIndexSyncHandlerTestsMore {
 
     let recordID = CKRecord.ID(
       recordType: ProfileRow.recordType, uuid: profileId, zoneID: handler.zoneID)
-    let result = handler.recordToSave(for: recordID)
+    let result = handler.recordToSave(for: recordID).foundRecord
     #expect(result != nil)
     #expect(result?.recordType == ProfileRow.recordType)
     #expect(result?["label"] as? String == "Found")
@@ -70,8 +70,11 @@ struct ProfileIndexSyncHandlerTestsMore {
 
     let recordID = CKRecord.ID(
       recordType: ProfileRow.recordType, uuid: UUID(), zoneID: handler.zoneID)
-    let result = handler.recordToSave(for: recordID)
-    #expect(result == nil)
+    // Missing row, query succeeded → `.absent` (issue #1087 tri-state).
+    guard case .absent = handler.recordToSave(for: recordID) else {
+      Issue.record("expected .absent for a missing profile")
+      return
+    }
   }
 
   // MARK: - clearAllSystemFields

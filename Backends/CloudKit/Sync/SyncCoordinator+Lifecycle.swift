@@ -86,9 +86,15 @@ extension SyncCoordinator {
     // `CKSyncEngine.init(configuration:)` synchronously unarchives the
     // `stateSerialization` blob via `NSKeyedUnarchiver`, which blocks the
     // calling thread for many seconds when the pending-record-zone-changes
-    // queue has grown large. Run it off the main actor so app launch stays
-    // snappy. The end-of-startup signpost + "Started" log fire in
-    // `completeStart` once the engine object is back on the main actor.
+    // queue has grown large (issue #1087: a bloated 42.5 MB persisted state).
+    // It must not run on the MainActor. `prepareEngine` is `nonisolated
+    // async`, so calling it from this `@MainActor`-originating `Task` runs its
+    // body — including `CKSyncEngine.init` — on the cooperative pool, never on
+    // the main thread (SE-0338; verified empirically, issue #565). A plain
+    // `Task` (not `Task.detached`) keeps caller priority / task-locals per
+    // CONCURRENCY_GUIDE §8 while still getting init off-main. The
+    // end-of-startup signpost + "Started" log fire in `completeStart` once the
+    // engine object is back on the main actor.
     let stateURL = self.stateFileURL
     let delegate: any CKSyncEngineDelegate & Sendable = self
     startTask = Task { [weak self] in

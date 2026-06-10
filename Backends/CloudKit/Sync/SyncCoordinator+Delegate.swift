@@ -253,15 +253,12 @@ extension SyncCoordinator: CKSyncEngineDelegate {
     recordIDs: [CKRecord.ID],
     into recordsToSave: inout [CKRecord]
   ) {
-    var missing: [CKRecord.ID] = []
-    for recordID in recordIDs {
-      if let record = profileIndexHandler.recordToSave(for: recordID) {
-        recordsToSave.append(record)
-      } else {
-        missing.append(recordID)
-      }
+    let entries = recordIDs.map { recordID in
+      (recordID: recordID, outcome: profileIndexHandler.recordToSave(for: recordID))
     }
-    handleMissingRecordsToSave(missing)
+    let (toSave, absent) = Self.classifyLookups(entries)
+    recordsToSave.append(contentsOf: toSave)
+    handleMissingRecordsToSave(absent)
   }
 
   /// Looks up profile-data records using a batch UUID lookup (plus an
@@ -278,6 +275,10 @@ extension SyncCoordinator: CKSyncEngineDelegate {
     do {
       handler = try handlerForProfileZone(profileId: profileId, zoneID: zoneID)
     } catch {
+      // Handler build failed: return WITHOUT classifying any id, so every
+      // record stays pending and nothing is removed or queued for deletion
+      // (issue #1087 safety invariant — a transient handler failure must
+      // never delete a live record). The next batch retries.
       logger.error(
         "Failed to build handler for profile \(profileId): \(error, privacy: .public) — \(recordIDs.count, privacy: .public) records remain pending for retry"
       )
@@ -303,61 +304,66 @@ extension SyncCoordinator: CKSyncEngineDelegate {
     // One IN-predicate fetch per recordType; result is keyed by recordType
     // and then by UUID, so cross-type collisions are impossible.
     let groups = byRecordType.mapValues { Set($0.map(\.1)) }
-    let recordLookup = handler.buildBatchRecordLookup(byRecordType: groups)
+    let batchOutcomes = handler.buildBatchRecordLookup(byRecordType: groups)
 
-    var missing: [CKRecord.ID] = []
+    // Expand the per-type batch outcomes (plus the per-record / instrument
+    // string-keyed path) into per-id tri-state lookups (issue #1087). A
+    // recordType group whose batch query FAILED keeps every id pending
+    // (classified `failed`); only an id absent from a SUCCEEDED query is
+    // removed + queued for deletion.
+    var entries: [(recordID: CKRecord.ID, outcome: RecordLookupOutcome)] = []
     for (recordType, items) in byRecordType {
-      let typeLookup = recordLookup[recordType] ?? [:]
-      for (recordID, uuid) in items {
-        if let record = typeLookup[uuid] {
-          recordsToSave.append(record)
-        } else {
-          missing.append(recordID)
+      switch batchOutcomes[recordType] ?? .failed {
+      case .failed:
+        for (recordID, _) in items { entries.append((recordID, .failed)) }
+      case .succeeded(let hits):
+        for (recordID, uuid) in items {
+          entries.append((recordID, hits[uuid].map(RecordLookupOutcome.found) ?? .absent))
         }
       }
     }
-
     // String-keyed (InstrumentRecord) and any remaining unprefixed IDs go
     // through the single-record path which detects strings vs UUIDs.
     for recordID in unprefixedIDs {
-      if let record = handler.recordToSave(for: recordID) {
-        recordsToSave.append(record)
-      } else {
-        missing.append(recordID)
-      }
+      entries.append((recordID, handler.recordToSave(for: recordID)))
     }
 
-    handleMissingRecordsToSave(missing)
+    let (toSave, absent) = Self.classifyLookups(entries)
+    recordsToSave.append(contentsOf: toSave)
+    handleMissingRecordsToSave(absent)
   }
 
-  /// When `recordToSave` returns nil for one or more recordIDs (records
-  /// deleted locally before the batch was built), queue a single
-  /// `.deleteRecord` for each that isn't already pending — in one
-  /// `state.add(_:)` call.
+  /// Handles records that are confirmed GONE locally (the lookup query
+  /// succeeded and the row was absent — never a failed lookup; see the
+  /// `RecordLookupOutcome` tri-state, issue #1087):
   ///
-  /// Prior history: this fired per-record and re-scanned the entire
-  /// pending queue every call (a Sequence.contains over an
-  /// `[CKSyncEngine.PendingRecordZoneChange]` is linear), so a batch
-  /// where N records were missing did N × pending equality checks on the
-  /// main thread. With a stale 50K-row queue left over from a deleted
-  /// profile, that's the source of the freeze observed during CSV import:
-  /// every `nextRecordZoneChangeBatch` cycle re-found the same 400
-  /// missing records, the scan was quadratic, and the synchronous
-  /// `state.add(_:)` hop to CloudKit's serial queue ran 400 times per
-  /// cycle. The batched call collapses all of that into one set-build,
-  /// one filter pass, and one engine hop.
+  /// 1. **Remove the stale `.saveRecord`s.** Without this the dead saves stay
+  ///    at the head of the queue and `nextRecordZoneChangeBatch` re-selects
+  ///    the same un-buildable 400 every cycle (`built=0`), wedging all
+  ///    uploads. Removing them lets the queue drain to the next buildable
+  ///    batch.
+  /// 2. **Queue a compensating server deletion** for each id not already
+  ///    pending-delete, in one `state.add(_:)` call.
+  ///
+  /// `newMissingDeleteIDs` dedups against existing pending deletions with one
+  /// set build + one filter pass (O(pending + candidates)) so a large stale
+  /// queue drains without a per-record linear scan on the main thread.
   @MainActor
   private func handleMissingRecordsToSave(_ recordIDs: [CKRecord.ID]) {
     guard let syncEngine, !recordIDs.isEmpty else { return }
+    // Drop the stale saves so the head of the queue clears.
+    syncEngine.state.remove(
+      pendingRecordZoneChanges: recordIDs.map { .saveRecord($0) })
     let novel = Self.newMissingDeleteIDs(
       among: recordIDs,
       pendingChanges: syncEngine.state.pendingRecordZoneChanges)
-    guard !novel.isEmpty else { return }
-    logger.info(
-      "\(novel.count, privacy: .public) record(s) deleted locally before batch — queueing server deletion"
-    )
-    syncEngine.state.add(
-      pendingRecordZoneChanges: novel.map { .deleteRecord($0) })
+    if !novel.isEmpty {
+      logger.info(
+        "\(novel.count, privacy: .public) record(s) deleted locally before batch — queueing server deletion"
+      )
+      syncEngine.state.add(
+        pendingRecordZoneChanges: novel.map { .deleteRecord($0) })
+    }
     refreshPendingUploadsMirror()
   }
 }

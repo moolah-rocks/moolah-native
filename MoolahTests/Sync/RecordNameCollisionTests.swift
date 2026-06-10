@@ -34,8 +34,9 @@ struct RecordNameCollisionTests {
       TransactionRow.recordType: [sharedId],
     ])
 
-    let accountRecord = try #require(lookup[AccountRow.recordType]?[sharedId])
-    let transactionRecord = try #require(lookup[TransactionRow.recordType]?[sharedId])
+    let accountRecord = try #require(lookup[AccountRow.recordType]?.succeededHits[sharedId])
+    let transactionRecord = try #require(
+      lookup[TransactionRow.recordType]?.succeededHits[sharedId])
     #expect(
       accountRecord.recordID.recordName
         == "\(AccountRow.recordType)|\(sharedId.uuidString)")
@@ -235,7 +236,7 @@ struct RecordNameCollisionTests {
       uuid: profileId,
       zoneID: handler.zoneID)
 
-    let result = try #require(handler.recordToSave(for: prefixedID))
+    let result = try #require(handler.recordToSave(for: prefixedID).foundRecord)
     #expect(result.recordType == ProfileRow.recordType)
     #expect(
       result.recordID.recordName

@@ -117,7 +117,7 @@ struct ProfileIndexInstrumentDispatchTests {
       recordName: "1:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
       zoneID: harness.handler.zoneID)
     let record = harness.handler.recordToSave(for: recordID)
-    let built = try #require(record)
+    let built = try #require(record.foundRecord)
     #expect(built.recordType == InstrumentRow.recordType)
     #expect(built.recordID.recordName == recordID.recordName)
     #expect(built["coingeckoId"] as? String == "weth")

@@ -172,14 +172,16 @@ final class ProfileIndexSyncHandler: Sendable {
   /// upload. Dispatches by record-name shape: a UUID-decoding name
   /// goes to the profile path; any other string is treated as an
   /// instrument id and dispatched to `instrumentRepository`.
-  func recordToSave(for recordID: CKRecord.ID) -> CKRecord? {
+  func recordToSave(for recordID: CKRecord.ID) -> RecordLookupOutcome {
     if let profileId = recordID.uuid {
       do {
-        guard let row = try repository.fetchRowSync(id: profileId) else { return nil }
-        return buildCKRecord(for: row)
+        guard let row = try repository.fetchRowSync(id: profileId) else { return .absent }
+        return .found(buildCKRecord(for: row))
       } catch {
-        logger.error("recordToSave: failed to fetch profile row: \(error, privacy: .public)")
-        return nil
+        logger.error(
+          "recordToSave: failed to fetch profile row: \(error, privacy: .public) — keeping pending"
+        )
+        return .failed
       }
     }
     return instrumentRecordToSave(for: recordID)
