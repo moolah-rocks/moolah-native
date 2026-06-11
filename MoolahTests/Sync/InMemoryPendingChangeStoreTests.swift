@@ -21,7 +21,7 @@ import Testing
 struct InMemoryPendingChangeStoreTests {
 
   private static let zone = CKRecordZone.ID(
-    zoneName: "profile-\(UUID().uuidString)", ownerName: CKCurrentUserDefaultName)
+    zoneName: "pending-change-store-tests", ownerName: CKCurrentUserDefaultName)
 
   private static func recordID(_ name: String) -> CKRecord.ID {
     CKRecord.ID(recordName: name, zoneID: zone)
