@@ -5,8 +5,8 @@ import Testing
 
 @testable import Moolah
 
-/// Regression harness for the confirmed automation-write-path gap (issue
-/// #1090 follow-up to the #1085 modification-date gate; task #14).
+/// Regression harness for the automation-write-path gap (issue #1090), a
+/// follow-up to the #1085 modification-date gate.
 ///
 /// ## The gap
 ///
@@ -39,21 +39,15 @@ import Testing
 /// upsert. That is a timing invariant, not an unconditional guarantee: the
 /// moment the row goes clean with a nil cache, the clobber is live.
 ///
-/// ## The fix these tests pin (task #14)
+/// ## What these tests pin
 ///
-/// `replace` / `performCreateMany` must snapshot the deleted rows'
+/// `replace` / `performCreateMany` snapshot the deleted rows'
 /// `encoded_system_fields` by id and re-attach them to any re-created same-id
-/// row — exactly as `performUpdate` already does. With the cache preserved,
-/// the gate sees the placeholder echo's date as `<=` the cached date and
-/// rejects it (reject-on-tie), so the real edit survives regardless of the
-/// `needs_push` timing.
-///
-/// ## State of these tests
-///
-/// Both are RED against current `main` and go GREEN once `replace` preserves
-/// the blob. The fix lives in `replace` / `performCreateMany`, NOT the gate,
-/// so it is safe regardless of whether any single deterministic echo trace
-/// reproduces the live loss.
+/// row — exactly as `performUpdate` does. With the cache preserved, the gate
+/// sees the placeholder echo's date as `<=` the cached date and rejects it
+/// (reject-on-tie), so the real edit survives regardless of the `needs_push`
+/// timing. The guarantee lives in `replace` / `performCreateMany`, NOT the
+/// gate, so it holds for every same-id reuse rather than any one echo trace.
 @Suite("replace must preserve encoded_system_fields so a stale echo can't clobber a reused leg id")
 struct ReplacePreservesCacheEchoLossTests {
   /// The post-`replace` fixture the two tests assert against.
@@ -158,9 +152,9 @@ struct ReplacePreservesCacheEchoLossTests {
   }
 
   /// Structural pin: after a same-id `replace`, the re-created leg row MUST
-  /// keep the deleted row's cached `encoded_system_fields`. RED today
-  /// (`replace` → `performCreateMany` inserts a fresh row with a nil blob);
-  /// GREEN once the fix snapshots + re-attaches the blob by id.
+  /// keep the deleted row's cached `encoded_system_fields` (the non-nil cache
+  /// is what lets the #1085 gate protect it). Without the snapshot/re-attach,
+  /// `performCreateMany` would insert a fresh row with a nil blob.
   @Test("replace preserves the cached system fields on the re-created same-id leg")
   func replacePreservesCachedSystemFieldsForReusedLegId() async throws {
     let fixture = try await seedPlaceholderThenReplaceWithToken()
@@ -183,9 +177,10 @@ struct ReplacePreservesCacheEchoLossTests {
   /// dirty-path guard (`needs_push == 1`) that protects the traced flows no
   /// longer applies.
   ///
-  /// RED today: nil cache → gate fails open → the stale placeholder echo (qty
-  /// 1) clobbers the token (qty 200). GREEN once `replace` preserves the blob:
-  /// the placeholder echo's date is `<=` the cached date → rejected.
+  /// With the cache preserved, the placeholder echo's date is `<=` the cached
+  /// date and the gate rejects it, so the token (qty 200) survives. A nil
+  /// cache would let the gate fail open and the stale echo (qty 1) would
+  /// clobber the token.
   @Test("token leg survives a stale placeholder echo after an automation replace")
   func tokenLegSurvivesStalePlaceholderEchoAfterReplace() async throws {
     let fixture = try await seedPlaceholderThenReplaceWithToken()

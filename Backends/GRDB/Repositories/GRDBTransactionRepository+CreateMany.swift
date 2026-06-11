@@ -1,5 +1,3 @@
-// Backends/GRDB/Repositories/GRDBTransactionRepository+CreateMany.swift
-
 import Foundation
 import GRDB
 
@@ -43,9 +41,11 @@ extension GRDBTransactionRepository {
   /// blob can never cross-attach to a header that happens to share a UUID).
   /// When a re-created row reuses a deleted row's id, its blob is re-attached
   /// here so the row keeps its CloudKit sync identity and the #1085 gate
-  /// protects it; a row whose id is absent from the map lands with `nil`
-  /// (a genuine new record). Both default to empty, so `createMany` inserts
-  /// fresh rows with `nil` blobs exactly as before. See issue #1090 follow-up.
+  /// protects it. A row whose id is absent from the map lands with `nil`
+  /// (a genuine new record); a present entry whose value is `nil` (the
+  /// deleted row had never synced) re-attaches `nil`, which is also correct.
+  /// Both maps default to empty, so a call from `createMany` inserts fresh
+  /// rows with `nil` blobs (genuine new records). See issue #1090.
   static func performCreateMany(
     database: Database,
     transactions: [Transaction],

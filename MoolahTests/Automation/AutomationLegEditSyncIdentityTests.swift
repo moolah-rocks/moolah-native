@@ -4,20 +4,17 @@ import Testing
 
 @testable import Moolah
 
-/// Pins Fix #1 of the automation-write-path gap (issue #1090 follow-up): the
-/// genuine `AutomationService.updateLeg` verb must preserve the edited leg's
-/// cached `encoded_system_fields` (its CloudKit sync identity).
+/// Pins the automation-write-path fix (issue #1090): the genuine
+/// `AutomationService.updateLeg` verb must preserve the edited leg's cached
+/// `encoded_system_fields` (its CloudKit sync identity).
 ///
-/// `updateLeg` / `addLeg` / `removeLeg` funnel through `save(...)`, which now
-/// calls `transactions.update(_:)` (an in-place, diff-by-id upsert that
-/// re-attaches each surviving leg's blob) instead of
-/// `replace(deletingIds:creating:)` (a delete-then-insert that nulled the
-/// blob on the re-created same-id row). With a nil cache, a clean row falls
-/// through the #1085 modification-date gate's fail-open and a stale self-echo
-/// reverts the edit — the placeholder-revert data loss.
-///
-/// RED before Fix #1 (`save` → `replace` nulls the cache); GREEN after
-/// (`save` → `update` preserves it).
+/// `updateLeg` / `addLeg` / `removeLeg` funnel through `save(...)`, which
+/// calls `transactions.update(_:)` — an in-place, diff-by-id upsert that
+/// re-attaches each surviving leg's blob. A delete-then-insert
+/// `replace(deletingIds:creating:)` would instead null the blob on the
+/// re-created same-id row; with a nil cache a clean row falls through the
+/// #1085 modification-date gate's fail-open and a stale self-echo reverts the
+/// edit — the placeholder-revert data loss.
 @MainActor
 @Suite("automation leg edits preserve the leg's CloudKit sync identity")
 struct AutomationLegEditSyncIdentityTests {
@@ -50,8 +47,8 @@ struct AutomationLegEditSyncIdentityTests {
 
     // The edit applied …
     #expect(updated.legs.first { $0.id == legId }?.quantity == 200)
-    // … and the leg kept its CloudKit sync identity (Fix #1: update, not
-    // replace). A nil cache here is the gap that lets a stale echo clobber.
+    // … and the leg kept its CloudKit sync identity (update, not replace).
+    // A nil cache here is the gap that lets a stale echo clobber.
     let editedRow = try #require(try legs.fetchRowSync(id: legId))
     #expect(editedRow.encodedSystemFields != nil)
   }
