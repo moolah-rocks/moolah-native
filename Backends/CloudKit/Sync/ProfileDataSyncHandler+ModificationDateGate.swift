@@ -83,13 +83,23 @@ extension ProfileDataSyncHandler {
   ///
   /// The explicit row-exists guard (`currentCKRecord` returning non-nil) is
   /// what keeps it from firing on a normal new-record insert, whose row does
-  /// not yet exist locally.
+  /// not yet exist locally. A read failure is logged and the check is skipped
+  /// rather than propagated, so a database error never interrupts the apply.
   nonisolated func warnOnExistingRowsWithNilCache(
     recordType: String, ids: [UUID], cachedDates: [UUID: Date], in database: Database
   ) {
-    let suspect =
-      (try? existingRowsWithNilCache(
-        recordType: recordType, ids: ids, cachedDates: cachedDates, in: database)) ?? []
+    let suspect: [UUID]
+    do {
+      suspect = try existingRowsWithNilCache(
+        recordType: recordType, ids: ids, cachedDates: cachedDates, in: database)
+    } catch {
+      logger.error(
+        """
+        clean-apply tripwire: existence check failed for \
+        \(recordType, privacy: .public): \(error.localizedDescription, privacy: .public)
+        """)
+      return
+    }
     for id in suspect {
       logger.error(
         """
@@ -104,8 +114,8 @@ extension ProfileDataSyncHandler {
   /// (the nil-cache regression). An id with no local row — a genuine new
   /// record — is excluded. Pure (no logging) so it can be asserted directly.
   ///
-  /// Existence is tested via `currentCKRecord`, NOT `cachedSystemFields`: the
-  /// latter is built with optional chaining (`fetchRowSync(...)?.encoded…`),
+  /// Existence is tested via `currentCKRecord` rather than `cachedSystemFields`:
+  /// the latter is built with optional chaining (`fetchRowSync(...)?.encoded…`),
   /// which collapses "row absent" and "row present with a nil blob" into the
   /// same value — so its outer optional cannot tell them apart.
   /// `currentCKRecord` returns `nil` only for a genuinely missing row.
