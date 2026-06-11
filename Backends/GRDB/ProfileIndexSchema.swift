@@ -41,7 +41,7 @@ enum ProfileIndexSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 4
+  static let version = 5
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -57,6 +57,7 @@ enum ProfileIndexSchema {
       "v3_shared_instrument_registry",
       migrate: createSharedInstrumentRegistryTables)
     migrator.registerMigration("v4_needs_push", migrate: addNeedsPush)
+    migrator.registerMigration("v5_deletion_journal", migrate: addDeletionJournal)
 
     return migrator
   }
