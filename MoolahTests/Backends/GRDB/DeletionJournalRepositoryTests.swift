@@ -61,4 +61,82 @@ struct DeletionJournalRepositoryTests {
     try repo.applyRemoteChangesSync(saved: [], deleted: [id])
     #expect(try await entries(database).isEmpty)
   }
+
+  // MARK: - Transaction (+legs)
+
+  private func makeTransactionRepo(_ database: DatabaseQueue) throws -> GRDBTransactionRepository {
+    GRDBTransactionRepository(
+      database: database,
+      defaultInstrument: .AUD,
+      conversionService: FixedConversionService(),
+      instrumentResolver: try SharedRegistryTestSupport.makeSharedRegistry(),
+      instrumentRegistrar: try SharedRegistryTestSupport.makeSharedRegistry())
+  }
+
+  @Test("transaction delete journals the header and every leg under the sentinel zone")
+  func transactionDeleteJournalsHeaderAndLegs() async throws {
+    let database = try makeDatabase()
+    let repo = try makeTransactionRepo(database)
+    let accountId = UUID()
+    let txn = Transaction(
+      date: Date(timeIntervalSince1970: 1_700_000_000),
+      legs: [
+        TransactionLeg(accountId: accountId, instrument: .AUD, quantity: -50, type: .expense),
+        TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 50, type: .income),
+      ])
+    _ = try await repo.create(txn)
+    #expect(try await entries(database).isEmpty)
+
+    try await repo.delete(id: txn.id)
+    let recorded = try await entries(database)
+    // Header + 2 legs = 3 intents, every one stored under the sentinel zone.
+    #expect(recorded.count == 3)
+    #expect(recorded.allSatisfy { $0.zoneName == DeletionJournal.profileDataSentinelZone })
+    let names = Set(recorded.map(\.recordName))
+    #expect(names.contains(TransactionRow.recordName(for: txn.id)))
+    for leg in txn.legs {
+      #expect(names.contains(TransactionLegRow.recordName(for: leg.id)))
+    }
+  }
+
+  @Test("replace reusing the header + a leg journals only the removed leg")
+  func transactionReplaceReuseJournalsOnlyRemovedLeg() async throws {
+    let database = try makeDatabase()
+    let repo = try makeTransactionRepo(database)
+    let accountId = UUID()
+    let legA = TransactionLeg(accountId: accountId, instrument: .AUD, quantity: -50, type: .expense)
+    let legB = TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 50, type: .income)
+    let txn = Transaction(
+      date: Date(timeIntervalSince1970: 1_700_000_000), legs: [legA, legB])
+    _ = try await repo.create(txn)
+
+    // Rewrite under the SAME header id, reusing legA, dropping legB, adding legC.
+    let legC = TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 10, type: .income)
+    let rebuilt = Transaction(id: txn.id, date: txn.date, legs: [legA, legC])
+    _ = try await repo.replace(deletingIds: [txn.id], creating: [rebuilt])
+
+    let recorded = try await entries(database)
+    // Only legB (deleted and NOT re-created) is journaled; the reused header,
+    // reused legA, and new legC are not.
+    #expect(recorded.map(\.recordName) == [TransactionLegRow.recordName(for: legB.id)])
+  }
+
+  // MARK: - Soft-delete lock
+
+  @Test("account delete is a soft hide and journals nothing")
+  func accountSoftDeleteDoesNotJournal() async throws {
+    let database = try makeDatabase()
+    let repo = GRDBAccountRepository(
+      database: database,
+      instrumentResolver: try SharedRegistryTestSupport.makeSharedRegistry(),
+      instrumentRegistrar: try SharedRegistryTestSupport.makeSharedRegistry())
+    let account = Account(name: "Checking", type: .bank, instrument: .AUD)
+    _ = try await repo.create(account)
+
+    try await repo.delete(id: account.id)
+
+    // `delete(id:)` flips `is_hidden` (an UPDATE) and must never journal a
+    // deletion intent — a soft hide is not a propagated deletion.
+    #expect(try await entries(database).isEmpty)
+  }
 }
