@@ -64,65 +64,6 @@ struct DeletionJournalRepositoryTests {
     #expect(try await entries(database).isEmpty)
   }
 
-  // MARK: - Transaction (+legs)
-
-  private func makeTransactionRepo(_ database: DatabaseQueue) throws -> GRDBTransactionRepository {
-    GRDBTransactionRepository(
-      database: database,
-      defaultInstrument: .AUD,
-      conversionService: FixedConversionService(),
-      instrumentResolver: try SharedRegistryTestSupport.makeSharedRegistry(),
-      instrumentRegistrar: try SharedRegistryTestSupport.makeSharedRegistry())
-  }
-
-  @Test("transaction delete journals the header and every leg under the sentinel zone")
-  func transactionDeleteJournalsHeaderAndLegs() async throws {
-    let database = try makeDatabase()
-    let repo = try makeTransactionRepo(database)
-    let accountId = UUID()
-    let txn = Transaction(
-      date: Date(timeIntervalSince1970: 1_700_000_000),
-      legs: [
-        TransactionLeg(accountId: accountId, instrument: .AUD, quantity: -50, type: .expense),
-        TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 50, type: .income),
-      ])
-    _ = try await repo.create(txn)
-    #expect(try await entries(database).isEmpty)
-
-    try await repo.delete(id: txn.id)
-    let recorded = try await entries(database)
-    // Header + 2 legs = 3 intents, every one stored under the sentinel zone.
-    #expect(recorded.count == 3)
-    #expect(recorded.allSatisfy { $0.zoneName == DeletionJournal.profileDataSentinelZone })
-    let names = Set(recorded.map(\.recordName))
-    #expect(names.contains(TransactionRow.recordName(for: txn.id)))
-    for leg in txn.legs {
-      #expect(names.contains(TransactionLegRow.recordName(for: leg.id)))
-    }
-  }
-
-  @Test("replace reusing the header + a leg journals only the removed leg")
-  func transactionReplaceReuseJournalsOnlyRemovedLeg() async throws {
-    let database = try makeDatabase()
-    let repo = try makeTransactionRepo(database)
-    let accountId = UUID()
-    let legA = TransactionLeg(accountId: accountId, instrument: .AUD, quantity: -50, type: .expense)
-    let legB = TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 50, type: .income)
-    let txn = Transaction(
-      date: Date(timeIntervalSince1970: 1_700_000_000), legs: [legA, legB])
-    _ = try await repo.create(txn)
-
-    // Rewrite under the SAME header id, reusing legA, dropping legB, adding legC.
-    let legC = TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 10, type: .income)
-    let rebuilt = Transaction(id: txn.id, date: txn.date, legs: [legA, legC])
-    _ = try await repo.replace(deletingIds: [txn.id], creating: [rebuilt])
-
-    let recorded = try await entries(database)
-    // Only legB (deleted and NOT re-created) is journaled; the reused header,
-    // reused legA, and new legC are not.
-    #expect(recorded.map(\.recordName) == [TransactionLegRow.recordName(for: legB.id)])
-  }
-
   // MARK: - Soft-delete lock
 
   @Test("account delete is a soft hide and journals nothing")
@@ -147,11 +88,9 @@ struct DeletionJournalRepositoryTests {
   @Test("a forced failure journaling a delete rolls back the row delete too")
   func deleteAndJournalAreAtomic() async throws {
     let database = try makeDatabase()
-    let repo = try makeTransactionRepo(database)
-    let txn = Transaction(
-      date: Date(timeIntervalSince1970: 1_700_000_000),
-      legs: [TransactionLeg(accountId: UUID(), instrument: .AUD, quantity: -50, type: .expense)])
-    _ = try await repo.create(txn)
+    let repo = GRDBCategoryRepository(database: database)
+    let id = UUID()
+    _ = try await repo.create(Category(id: id, name: "Food"))
 
     // Abort any insert into the journal — the delete write must roll back whole.
     try await database.write { database in
@@ -162,13 +101,14 @@ struct DeletionJournalRepositoryTests {
           """)
     }
     await #expect(throws: (any Error).self) {
-      try await repo.delete(id: txn.id)
+      try await repo.delete(id: id, withReplacement: nil)
     }
 
-    // The header survived (the delete rolled back with the failed journal
-    // insert) and no tombstone landed — the two are one transaction.
+    // The row survived (the delete rolled back with the failed journal insert)
+    // and no tombstone landed — the row delete and the journal write are one
+    // transaction.
     let survived = try await database.read {
-      try TransactionRow.fetchOne($0, key: txn.id) != nil
+      try CategoryRow.fetchOne($0, key: id) != nil
     }
     #expect(survived)
     #expect(try await entries(database).isEmpty)
@@ -255,5 +195,98 @@ struct DeletionJournalRepositoryTests {
     // only when the SAME id is re-created, which the other suites cover.
     try await repo.setValue(accountId: accountId, date: Self.date, value: amount)
     #expect(try await entries(database).count == 1)
+  }
+
+  // MARK: - Local-teardown lock: `deleteAllSync` (server-driven local clear)
+  //
+  // `deleteAllSync` is the `deleteLocalData` mirror clear (iCloud account
+  // change / remote zone deletion) — server-driven, NOT user intent. It fires
+  // no record hooks and must journal NOTHING, else a sign-out / account-switch
+  // would queue server `.deleteRecord`s for data the server already dropped
+  // (the inverted-resurrection hazard). As load-bearing as the soft-delete
+  // lock, asserted per wired type.
+
+  @Test("category deleteAllSync journals nothing")
+  func categoryDeleteAllSyncDoesNotJournal() async throws {
+    let database = try makeDatabase()
+    let repo = GRDBCategoryRepository(database: database)
+    _ = try await repo.create(Category(name: "A"))
+    _ = try await repo.create(Category(name: "B"))
+    try repo.deleteAllSync()
+    #expect(try await entries(database).isEmpty)
+  }
+
+  @Test("account-group deleteAllSync journals nothing")
+  func accountGroupDeleteAllSyncDoesNotJournal() async throws {
+    let database = try makeDatabase()
+    let repo = GRDBAccountGroupRepository(database: database)
+    _ = try await repo.create(AccountGroup(name: "G", bucket: .current, instrument: .AUD))
+    try repo.deleteAllSync()
+    #expect(try await entries(database).isEmpty)
+  }
+
+  @Test("transfer-suggestion deleteAllSync journals nothing")
+  func transferSuggestionDeleteAllSyncDoesNotJournal() async throws {
+    let database = try makeDatabase()
+    let repo = GRDBTransferSuggestionRepository(database: database)
+    _ = try await repo.create(
+      TransferSuggestion(transactionIds: [UUID(), UUID()], suggestedAt: Self.date))
+    try repo.deleteAllSync()
+    #expect(try await entries(database).isEmpty)
+  }
+
+  @Test("import-rule deleteAllSync journals nothing")
+  func importRuleDeleteAllSyncDoesNotJournal() async throws {
+    let database = try makeDatabase()
+    let repo = GRDBImportRuleRepository(database: database)
+    _ = try await repo.create(ImportRule(name: "R", position: 0, conditions: [], actions: []))
+    try repo.deleteAllSync()
+    #expect(try await entries(database).isEmpty)
+  }
+
+  @Test("csv-import-profile deleteAllSync journals nothing")
+  func csvImportProfileDeleteAllSyncDoesNotJournal() async throws {
+    let database = try makeDatabase()
+    let repo = GRDBCSVImportProfileRepository(database: database)
+    _ = try await repo.create(
+      CSVImportProfile(accountId: UUID(), parserIdentifier: "generic", headerSignature: ["D"]))
+    try repo.deleteAllSync()
+    #expect(try await entries(database).isEmpty)
+  }
+
+  @Test("investment deleteAllSync journals nothing")
+  func investmentDeleteAllSyncDoesNotJournal() async throws {
+    let database = try makeDatabase()
+    let repo = GRDBInvestmentRepository(
+      database: database,
+      defaultInstrument: .AUD,
+      instrumentResolver: try SharedRegistryTestSupport.makeSharedRegistry())
+    try await repo.setValue(
+      accountId: UUID(), date: Self.date, value: InstrumentAmount(quantity: 5, instrument: .AUD))
+    try repo.deleteAllSync()
+    #expect(try await entries(database).isEmpty)
+  }
+
+  @Test("investment removeAllValues is user-intent and journals every removed value")
+  func investmentRemoveAllValuesJournals() async throws {
+    let database = try makeDatabase()
+    let repo = GRDBInvestmentRepository(
+      database: database,
+      defaultInstrument: .AUD,
+      instrumentResolver: try SharedRegistryTestSupport.makeSharedRegistry())
+    let accountId = UUID()
+    let amount = InstrumentAmount(quantity: 5, instrument: .AUD)
+    try await repo.setValue(accountId: accountId, date: Self.date, value: amount)
+    try await repo.setValue(
+      accountId: accountId, date: Self.date.addingTimeInterval(86_400), value: amount)
+
+    let removed = try await repo.removeAllValues(accountId: accountId)
+    #expect(removed == 2)
+    let recorded = try await entries(database)
+    // Unlike `deleteAllSync`, this is a user-intent bulk delete (fires per-row
+    // hooks) and MUST journal each removed value.
+    #expect(recorded.count == 2)
+    #expect(recorded.allSatisfy { $0.zoneName == DeletionJournal.profileDataSentinelZone })
+    #expect(recorded.allSatisfy { $0.recordType == InvestmentValueRow.recordType })
   }
 }

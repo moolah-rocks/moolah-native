@@ -63,9 +63,6 @@ final class GRDBTransactionLegRepository: @unchecked Sendable {
   ) throws {
     for row in rows {
       try row.upsert(database)
-      // D1-b (issue #1090): a peer re-creating this leg clears our stale
-      // intent; the apply-path delete below is server-originated, not journaled.
-      try DeletionJournal.clearDataDeletion(recordName: row.recordName, in: database)
     }
     for id in ids {
       _ = try TransactionLegRow.deleteOne(database, id: id)

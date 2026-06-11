@@ -44,16 +44,6 @@ extension GRDBTransactionRepository {
         transactions: creating,
         preservedTransactionFields: snapshot.preservedTransactionFields,
         preservedLegFields: snapshot.preservedLegFields)
-      // Durable deletion intents (issue #1090) for headers/legs deleted and
-      // NOT re-created here. `performCreateMany` already cleared intents for
-      // the re-created ids (D1-b), so a tombstone is left only for
-      // genuinely-removed rows — mirroring the `.deleteRecord` suppression.
-      try Self.recordReplaceDeletions(
-        deletingIds: deletingIds,
-        deletedLegIds: snapshot.deletedLegIds,
-        creating: creating,
-        createdLegIds: createdLegIds,
-        in: database)
       return ReplaceOutcome(
         deletedLegIds: snapshot.deletedLegIds, createdLegIds: createdLegIds)
     }
@@ -83,32 +73,6 @@ extension GRDBTransactionRepository {
       onRecordChanged(TransactionLegRow.recordType, legId)
     }
     return creating
-  }
-
-  /// Records durable deletion intents (issue #1090) for the headers and legs
-  /// that `replace` deleted and did NOT re-create. Re-created ids are skipped
-  /// (their intents were already cleared by `performCreateMany`), mirroring the
-  /// post-commit `.deleteRecord` suppression so the journal and the queued CK
-  /// deletes agree exactly.
-  private static func recordReplaceDeletions(
-    deletingIds: [UUID],
-    deletedLegIds: [UUID],
-    creating: [Transaction],
-    createdLegIds: [UUID],
-    in database: Database
-  ) throws {
-    let recreatedTransactionIds = Set(creating.map(\.id))
-    let recreatedLegIds = Set(createdLegIds)
-    for id in deletingIds where !recreatedTransactionIds.contains(id) {
-      try DeletionJournal.recordDataDeletion(
-        recordName: TransactionRow.recordName(for: id),
-        recordType: TransactionRow.recordType,
-        at: Date(),
-        in: database)
-    }
-    for legId in deletedLegIds where !recreatedLegIds.contains(legId) {
-      try recordLegDeletion(legId, in: database)
-    }
   }
 
   /// Deletes every `deletingIds` transaction (legs first, then the header) and,
