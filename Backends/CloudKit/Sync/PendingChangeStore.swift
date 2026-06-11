@@ -15,24 +15,23 @@
 /// both more to keep faithful and more likely to silently shadow a future Apple
 /// API change.
 ///
-/// ## State semantics a faithful double MUST preserve
-/// Documented by Apple on `-[CKSyncEngineState addPendingRecordZoneChanges:]`
-/// (`CloudKit.framework/Headers/CKSyncEngineState.h`):
-/// - The engine "maintains a consistent collection of tracked pending changes,
-///   **deduplicating them as necessary**."
-/// - Order matters and the *latest* change for a record wins: adding a
-///   `.saveRecord(X)` then a `.deleteRecord(X)` "discards the save and sends
-///   only the delete"; adding a `.deleteRecord(X)` then a `.saveRecord(X)`
-///   "discards the delete and sends only the save."
-/// - On `pendingRecordZoneChanges`: "when it successfully saves a record, it
-///   removes that change from this list" — i.e. the engine drops a change once
-///   it is sent.
+/// ## What the drain relies on (and what a faithful double must model)
+/// The wedge-drain fix (#1087) does NOT lean on any subtle ordering rule: a stale
+/// `.saveRecord` whose row no longer exists is dropped with an explicit
+/// `remove(.saveRecord)`, and a compensating `.deleteRecord` is added for it. So
+/// the load-bearing behaviours a test double must reproduce are just:
+/// - **`remove` deletes the matching changes**, which is what clears the head of
+///   the queue and lets the next buildable batch through; and
+/// - **insertion order is stable** across `add`/`remove`, because
+///   `dedupedPendingChanges` walks the list in order and `prefix(400)` takes the
+///   head — the wedge only reproduces if the dead head stays at the front.
 ///
-/// The wedge-drain fix (#1087) uses both operations: a stale `.saveRecord` whose
-/// row no longer exists is dropped via `remove(.saveRecord)`, and a compensating
-/// `.deleteRecord` is added for it. (Adding the delete would also supersede the
-/// save per the rule above, but the drain removes it explicitly so the head of
-/// the queue clears immediately.)
+/// `add` additionally "deduplicat[es] as necessary" (Apple,
+/// `CloudKit.framework/Headers/CKSyncEngineState.h`). The double models same-type
+/// dedup but deliberately NOT opposite-type supersede (a `.deleteRecord(X)`
+/// dropping a pending `.saveRecord(X)`): the drain never adds a delete over a live
+/// save (it removes the save first), and an in-flight save+delete for one id can
+/// genuinely coexist (#1090). See `InMemoryPendingChangeStore` for the rationale.
 ///
 /// `: Sendable` records that a conformer is a reference type confined to the main
 /// actor and safe to hand to the `@MainActor` drain path. Both conformers satisfy
