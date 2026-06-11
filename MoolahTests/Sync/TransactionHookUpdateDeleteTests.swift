@@ -150,6 +150,58 @@ struct TransactionHookUpdateDeleteTests {
     #expect(deletedIds == originalIds)
   }
 
+  @Test("replace reusing ids suppresses their deletes; only the removed leg is deleted")
+  func transactionReplaceReusingIdsSuppressesDeletes() async throws {
+    let database = try ProfileDatabase.openInMemory()
+    let capture = HookCapture()
+    let registry = try SharedRegistryTestSupport.makeSharedRegistry()
+    let txnRepo = GRDBTransactionRepository(
+      database: database,
+      defaultInstrument: .defaultTestInstrument,
+      conversionService: FixedConversionService(),
+      instrumentResolver: registry,
+      instrumentRegistrar: registry,
+      onRecordChanged: makeChangedHook(capture),
+      onRecordDeleted: makeDeletedHook(capture))
+
+    let accountId = UUID()
+    let txn = try await txnRepo.create(
+      Transaction(
+        date: Date(), payee: "Trade",
+        legs: [
+          makeContractTestLeg(accountId: accountId, quantity: -100, type: .transfer),
+          makeContractTestLeg(accountId: accountId, quantity: 100, type: .transfer),
+        ]))
+    try await drainHookHops()
+    capture.changed.removeAll()
+    capture.deleted.removeAll()
+
+    // Rewrite under the SAME header id, reusing leg[0]'s id verbatim, dropping
+    // leg[1] (genuinely removed), and adding one fresh leg. Models a same-id
+    // rewrite through `replace`.
+    let freshLeg = makeContractTestLeg(accountId: accountId, quantity: 50, type: .transfer)
+    let rebuilt = Transaction(
+      id: txn.id, date: txn.date, payee: "Rewritten",
+      legs: [txn.legs[0], freshLeg])
+    _ = try await txnRepo.replace(deletingIds: [txn.id], creating: [rebuilt])
+    try await drainHookHops()
+
+    // Header id is reused → change, never delete.
+    let txnChanges = capture.changed.filter { $0.recordType == TransactionRow.recordType }
+    #expect(txnChanges.map(\.id) == [txn.id])
+    let txnDeletes = capture.deleted.filter { $0.recordType == TransactionRow.recordType }
+    #expect(txnDeletes.isEmpty)
+
+    // Reused leg[0] + fresh leg → changes; the reused leg is NOT deleted.
+    let legChanges = Set(
+      capture.changed.filter { $0.recordType == TransactionLegRow.recordType }.map(\.id))
+    #expect(legChanges == Set([txn.legs[0].id, freshLeg.id]))
+    // Only the genuinely-removed leg[1] fans out a delete.
+    let legDeletes = Set(
+      capture.deleted.filter { $0.recordType == TransactionLegRow.recordType }.map(\.id))
+    #expect(legDeletes == Set([txn.legs[1].id]))
+  }
+
   @Test("delete(id:) emits TransactionRecord delete plus per-leg LegRecord deletes")
   func transactionDeleteEmitsLegRecordType() async throws {
     let database = try ProfileDatabase.openInMemory()

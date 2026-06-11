@@ -1,5 +1,3 @@
-// Backends/GRDB/Repositories/GRDBTransactionRepository+Replace.swift
-
 import Foundation
 import GRDB
 
@@ -16,16 +14,21 @@ extension GRDBTransactionRepository {
   /// `delete(id:)` / `createMany(_:)`.
   ///
   /// When a `creating` transaction (or one of its legs) REUSES a
-  /// `deletingIds` row's id — as automation's in-place leg edits once did,
-  /// and as any caller that rewrites a row under its own id does — the
-  /// deleted row's cached `encoded_system_fields` blob is snapshotted
-  /// (strictly per record type) and re-attached to the re-created row, and
-  /// the self-queued `.deleteRecord` for that id is suppressed. Without that,
-  /// the re-created row would land with a `nil` cache; once it goes clean the
-  /// #1085 modification-date gate fails open and a stale self-echo clobbers
-  /// it back to the deleted version (the placeholder-revert data loss —
-  /// issue #1090 follow-up). Headers and legs whose ids are NOT reused are
-  /// deleted and fan out a `.deleteRecord` exactly as before.
+  /// `deletingIds` row's id — any caller that rewrites a row under its own
+  /// id — the deleted row's cached `encoded_system_fields` blob is
+  /// snapshotted (strictly per record type) and re-attached to the
+  /// re-created row, and the self-queued `.deleteRecord` for that id is
+  /// suppressed. Without that, the re-created row would land with a `nil`
+  /// cache; once it goes clean the #1085 modification-date gate fails open
+  /// and a stale self-echo clobbers it back to the deleted version (the
+  /// placeholder-revert data loss — issue #1090). Headers and legs whose ids
+  /// are NOT reused are deleted and fan out a `.deleteRecord`.
+  ///
+  /// A re-attached blob carries the change tag of the server's last-seen
+  /// version of that id, so the row's re-upload is a normal conditional
+  /// update on the existing record — not a fresh create that CloudKit would
+  /// reject with `.serverRecordChanged`. A genuine cross-device conflict is
+  /// still resolved by the existing conflict path; nothing here is new.
   func replace(
     deletingIds: [UUID],
     creating: [Transaction]
@@ -89,13 +92,16 @@ extension GRDBTransactionRepository {
         try TransactionLegRow
         .filter(TransactionLegRow.Columns.transactionId == id)
         .fetchAll(database)
+      let legIds = legRows.map(\.id)
       for legRow in legRows {
         preservedLegFields[legRow.id] = legRow.encodedSystemFields
       }
-      _ =
-        try TransactionLegRow
-        .filter(TransactionLegRow.Columns.transactionId == id)
-        .deleteAll(database)
+      if !legIds.isEmpty {
+        _ =
+          try TransactionLegRow
+          .filter(legIds.contains(TransactionLegRow.Columns.id))
+          .deleteAll(database)
+      }
       // Snapshot the header's blob before the row is removed.
       if let headerRow =
         try TransactionRow
@@ -108,7 +114,7 @@ extension GRDBTransactionRepository {
       guard didDelete else {
         throw BackendError.notFound("Transaction not found")
       }
-      deletedLegIds.append(contentsOf: legRows.map(\.id))
+      deletedLegIds.append(contentsOf: legIds)
     }
     return ReplaceDeletionSnapshot(
       deletedLegIds: deletedLegIds,
@@ -120,7 +126,7 @@ extension GRDBTransactionRepository {
 /// The deleted-side result of one `replace` write: the leg ids removed plus
 /// the per-record-type cached-blob snapshots used to re-attach a reused id's
 /// CloudKit system fields to its re-created row.
-private struct ReplaceDeletionSnapshot {
+private struct ReplaceDeletionSnapshot: Sendable {
   let deletedLegIds: [UUID]
   let preservedTransactionFields: [UUID: Data?]
   let preservedLegFields: [UUID: Data?]
@@ -130,7 +136,7 @@ private struct ReplaceDeletionSnapshot {
 /// the `database.write` closure so the post-commit sync hooks fan out
 /// after the transaction commits (a hook fired inside the write would
 /// observe rows that a later rollback discards).
-private struct ReplaceOutcome {
+private struct ReplaceOutcome: Sendable {
   let deletedLegIds: [UUID]
   let createdLegIds: [UUID]
 }
