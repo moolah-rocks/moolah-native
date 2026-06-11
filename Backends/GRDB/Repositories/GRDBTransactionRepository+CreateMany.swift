@@ -35,24 +35,45 @@ extension GRDBTransactionRepository {
   /// instrument registration happens *before* this write via
   /// `registerNonFiatLegInstruments` — see
   /// `GRDBTransactionRepository.createMany(_:)`.
+  ///
+  /// `preservedTransactionFields` / `preservedLegFields` carry the cached
+  /// `encoded_system_fields` blobs of rows being deleted in the same
+  /// `replace` write, keyed by record id and STRICTLY per record type (a
+  /// header map and a leg map — never one flat `[UUID: Data?]`, so a leg
+  /// blob can never cross-attach to a header that happens to share a UUID).
+  /// When a re-created row reuses a deleted row's id, its blob is re-attached
+  /// here so the row keeps its CloudKit sync identity and the #1085 gate
+  /// protects it; a row whose id is absent from the map lands with `nil`
+  /// (a genuine new record). Both default to empty, so `createMany` inserts
+  /// fresh rows with `nil` blobs exactly as before. See issue #1090 follow-up.
   static func performCreateMany(
     database: Database,
-    transactions: [Transaction]
+    transactions: [Transaction],
+    preservedTransactionFields: [UUID: Data?] = [:],
+    preservedLegFields: [UUID: Data?] = [:]
   ) throws -> [UUID] {
     var legIds: [UUID] = []
     legIds.reserveCapacity(transactions.reduce(0) { $0 + $1.legs.count })
 
     for transaction in transactions {
-      let txnRow = TransactionRow(domain: transaction)
+      var txnRow = TransactionRow(domain: transaction)
+      // Re-attach a reused header's cached blob (outer `if let` unwraps the
+      // map miss; an existing entry carrying `nil` still overwrites).
+      if let preserved = preservedTransactionFields[transaction.id] {
+        txnRow.encodedSystemFields = preserved
+      }
       try txnRow.insert(database)
       try markTransactionNeedsPush(id: transaction.id, in: database)
 
       for (index, leg) in transaction.legs.enumerated() {
-        let legRow = TransactionLegRow(
+        var legRow = TransactionLegRow(
           id: leg.id,
           domain: leg,
           transactionId: transaction.id,
           sortOrder: index)
+        if let preserved = preservedLegFields[leg.id] {
+          legRow.encodedSystemFields = preserved
+        }
         try legRow.insert(database)
         try markLegNeedsPush(id: leg.id, in: database)
         legIds.append(leg.id)
