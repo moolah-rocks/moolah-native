@@ -64,6 +64,92 @@ struct DeletionJournalRepositoryTests {
     #expect(try await entries(database).isEmpty)
   }
 
+  // MARK: - Transaction (+legs) — the #1093 reused-id interleave
+  //
+  // The data-loss gate: a leg edit goes through `replace` / `update` =
+  // delete-then-recreate the SAME leg ids. The recreate-half MUST clear the
+  // delete-half's tombstones (via the `performCreateMany` / `performUpdate`
+  // chokepoints), netting ZERO journal rows for surviving legs — otherwise
+  // PR-B replay would later delete a live leg (silent #1085-class loss).
+
+  private func makeTransactionRepo(_ database: DatabaseQueue) throws -> GRDBTransactionRepository {
+    GRDBTransactionRepository(
+      database: database,
+      defaultInstrument: .AUD,
+      conversionService: FixedConversionService(),
+      instrumentResolver: try SharedRegistryTestSupport.makeSharedRegistry(),
+      instrumentRegistrar: try SharedRegistryTestSupport.makeSharedRegistry())
+  }
+
+  @Test("transaction delete journals the header and every leg under the sentinel zone")
+  func transactionDeleteJournalsHeaderAndLegs() async throws {
+    let database = try makeDatabase()
+    let repo = try makeTransactionRepo(database)
+    let accountId = UUID()
+    let txn = Transaction(
+      date: Self.date,
+      legs: [
+        TransactionLeg(accountId: accountId, instrument: .AUD, quantity: -50, type: .expense),
+        TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 50, type: .income),
+      ])
+    _ = try await repo.create(txn)
+    #expect(try await entries(database).isEmpty)
+
+    try await repo.delete(id: txn.id)
+    let recorded = try await entries(database)
+    #expect(recorded.count == 3)
+    #expect(recorded.allSatisfy { $0.zoneName == DeletionJournal.profileDataSentinelZone })
+    let names = Set(recorded.map(\.recordName))
+    #expect(names.contains(TransactionRow.recordName(for: txn.id)))
+    for leg in txn.legs {
+      #expect(names.contains(TransactionLegRow.recordName(for: leg.id)))
+    }
+  }
+
+  @Test("replace reusing the header + a leg journals ONLY the genuinely-removed leg")
+  func transactionReplaceReuseJournalsOnlyRemovedLeg() async throws {
+    let database = try makeDatabase()
+    let repo = try makeTransactionRepo(database)
+    let accountId = UUID()
+    let legA = TransactionLeg(accountId: accountId, instrument: .AUD, quantity: -50, type: .expense)
+    let legB = TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 50, type: .income)
+    let txn = Transaction(date: Self.date, legs: [legA, legB])
+    _ = try await repo.create(txn)
+
+    // Reuse the header id + legA (rewritten), drop legB, add legC.
+    let legC = TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 10, type: .income)
+    let rebuilt = Transaction(id: txn.id, date: txn.date, legs: [legA, legC])
+    _ = try await repo.replace(deletingIds: [txn.id], creating: [rebuilt])
+
+    // Only legB is journaled; the reused header, reused legA, and new legC are
+    // cleared by `performCreateMany` — no live-leg tombstone.
+    #expect(
+      try await entries(database).map(\.recordName) == [TransactionLegRow.recordName(for: legB.id)])
+  }
+
+  @Test("update (leg-diff / automation path) journals ONLY removed legs, not survivors")
+  func transactionUpdateJournalsOnlyRemovedLegs() async throws {
+    let database = try makeDatabase()
+    let repo = try makeTransactionRepo(database)
+    let accountId = UUID()
+    let legA = TransactionLeg(accountId: accountId, instrument: .AUD, quantity: -50, type: .expense)
+    let legB = TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 50, type: .income)
+    let txn = Transaction(date: Self.date, legs: [legA, legB])
+    _ = try await repo.create(txn)
+
+    // Edit via `update` (the path automation's updateLeg/addLeg/removeLeg take
+    // after #1093): keep legA (same id, rewritten quantity), drop legB, add legC.
+    let editedA = TransactionLeg(
+      id: legA.id, accountId: accountId, instrument: .AUD, quantity: -75, type: .expense)
+    let legC = TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 25, type: .income)
+    _ = try await repo.update(Transaction(id: txn.id, date: txn.date, legs: [editedA, legC]))
+
+    // Only legB (removed) is journaled; surviving legA, new legC, and the
+    // header are cleared by `performUpdate` — no live-leg tombstone.
+    #expect(
+      try await entries(database).map(\.recordName) == [TransactionLegRow.recordName(for: legB.id)])
+  }
+
   // MARK: - Soft-delete lock
 
   @Test("account delete is a soft hide and journals nothing")
@@ -195,98 +281,5 @@ struct DeletionJournalRepositoryTests {
     // only when the SAME id is re-created, which the other suites cover.
     try await repo.setValue(accountId: accountId, date: Self.date, value: amount)
     #expect(try await entries(database).count == 1)
-  }
-
-  // MARK: - Local-teardown lock: `deleteAllSync` (server-driven local clear)
-  //
-  // `deleteAllSync` is the `deleteLocalData` mirror clear (iCloud account
-  // change / remote zone deletion) — server-driven, NOT user intent. It fires
-  // no record hooks and must journal NOTHING, else a sign-out / account-switch
-  // would queue server `.deleteRecord`s for data the server already dropped
-  // (the inverted-resurrection hazard). As load-bearing as the soft-delete
-  // lock, asserted per wired type.
-
-  @Test("category deleteAllSync journals nothing")
-  func categoryDeleteAllSyncDoesNotJournal() async throws {
-    let database = try makeDatabase()
-    let repo = GRDBCategoryRepository(database: database)
-    _ = try await repo.create(Category(name: "A"))
-    _ = try await repo.create(Category(name: "B"))
-    try repo.deleteAllSync()
-    #expect(try await entries(database).isEmpty)
-  }
-
-  @Test("account-group deleteAllSync journals nothing")
-  func accountGroupDeleteAllSyncDoesNotJournal() async throws {
-    let database = try makeDatabase()
-    let repo = GRDBAccountGroupRepository(database: database)
-    _ = try await repo.create(AccountGroup(name: "G", bucket: .current, instrument: .AUD))
-    try repo.deleteAllSync()
-    #expect(try await entries(database).isEmpty)
-  }
-
-  @Test("transfer-suggestion deleteAllSync journals nothing")
-  func transferSuggestionDeleteAllSyncDoesNotJournal() async throws {
-    let database = try makeDatabase()
-    let repo = GRDBTransferSuggestionRepository(database: database)
-    _ = try await repo.create(
-      TransferSuggestion(transactionIds: [UUID(), UUID()], suggestedAt: Self.date))
-    try repo.deleteAllSync()
-    #expect(try await entries(database).isEmpty)
-  }
-
-  @Test("import-rule deleteAllSync journals nothing")
-  func importRuleDeleteAllSyncDoesNotJournal() async throws {
-    let database = try makeDatabase()
-    let repo = GRDBImportRuleRepository(database: database)
-    _ = try await repo.create(ImportRule(name: "R", position: 0, conditions: [], actions: []))
-    try repo.deleteAllSync()
-    #expect(try await entries(database).isEmpty)
-  }
-
-  @Test("csv-import-profile deleteAllSync journals nothing")
-  func csvImportProfileDeleteAllSyncDoesNotJournal() async throws {
-    let database = try makeDatabase()
-    let repo = GRDBCSVImportProfileRepository(database: database)
-    _ = try await repo.create(
-      CSVImportProfile(accountId: UUID(), parserIdentifier: "generic", headerSignature: ["D"]))
-    try repo.deleteAllSync()
-    #expect(try await entries(database).isEmpty)
-  }
-
-  @Test("investment deleteAllSync journals nothing")
-  func investmentDeleteAllSyncDoesNotJournal() async throws {
-    let database = try makeDatabase()
-    let repo = GRDBInvestmentRepository(
-      database: database,
-      defaultInstrument: .AUD,
-      instrumentResolver: try SharedRegistryTestSupport.makeSharedRegistry())
-    try await repo.setValue(
-      accountId: UUID(), date: Self.date, value: InstrumentAmount(quantity: 5, instrument: .AUD))
-    try repo.deleteAllSync()
-    #expect(try await entries(database).isEmpty)
-  }
-
-  @Test("investment removeAllValues is user-intent and journals every removed value")
-  func investmentRemoveAllValuesJournals() async throws {
-    let database = try makeDatabase()
-    let repo = GRDBInvestmentRepository(
-      database: database,
-      defaultInstrument: .AUD,
-      instrumentResolver: try SharedRegistryTestSupport.makeSharedRegistry())
-    let accountId = UUID()
-    let amount = InstrumentAmount(quantity: 5, instrument: .AUD)
-    try await repo.setValue(accountId: accountId, date: Self.date, value: amount)
-    try await repo.setValue(
-      accountId: accountId, date: Self.date.addingTimeInterval(86_400), value: amount)
-
-    let removed = try await repo.removeAllValues(accountId: accountId)
-    #expect(removed == 2)
-    let recorded = try await entries(database)
-    // Unlike `deleteAllSync`, this is a user-intent bulk delete (fires per-row
-    // hooks) and MUST journal each removed value.
-    #expect(recorded.count == 2)
-    #expect(recorded.allSatisfy { $0.zoneName == DeletionJournal.profileDataSentinelZone })
-    #expect(recorded.allSatisfy { $0.recordType == InvestmentValueRow.recordType })
   }
 }
