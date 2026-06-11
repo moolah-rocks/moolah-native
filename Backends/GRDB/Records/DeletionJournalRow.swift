@@ -109,6 +109,31 @@ enum DeletionJournal {
       .deleteAll(database)
   }
 
+  /// Records a per-profile DATA-zone deletion intent under the sentinel zone
+  /// (Option B), in the caller's active write transaction. The owning DB holds
+  /// exactly one profile's data, so the coordinator resolves the real
+  /// `profile-<id>` zone at replay; the repos never need their profileId here.
+  static func recordDataDeletion(
+    recordName: String, recordType: String, at date: Date, in database: Database
+  ) throws {
+    try record(
+      zoneName: profileDataSentinelZone,
+      recordName: recordName,
+      recordType: recordType,
+      at: date,
+      in: database)
+  }
+
+  /// Clears a per-profile DATA-zone deletion intent (sentinel zone) in the
+  /// caller's write transaction — the D1-b drop a (re-)created data row makes
+  /// so a start-time replay can't delete the live record. Idempotent.
+  static func clearDataDeletion(
+    recordName: String, in database: Database
+  ) throws {
+    try clear(
+      zoneName: profileDataSentinelZone, recordName: recordName, in: database)
+  }
+
   /// Every recorded intent in this database, oldest first.
   static func allEntries(in database: Database) throws -> [DeletionJournalRow] {
     try DeletionJournalRow

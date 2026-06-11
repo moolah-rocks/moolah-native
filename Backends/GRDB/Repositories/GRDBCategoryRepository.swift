@@ -68,6 +68,10 @@ final class GRDBCategoryRepository: CategoryRepository, @unchecked Sendable {
     try await database.write { database in
       try row.insert(database)
       try markNeedsPushSync(id: category.id, in: database)
+      // D1-b (issue #1090): a re-created row drops any stale deletion intent
+      // in the same write, so a start-time replay can't delete the live row.
+      try DeletionJournal.clearDataDeletion(
+        recordName: CategoryRow.recordName(for: category.id), in: database)
     }
     onRecordChanged(CategoryRow.recordType, category.id)
     return row.toDomain()
@@ -117,6 +121,9 @@ final class GRDBCategoryRepository: CategoryRepository, @unchecked Sendable {
         updatedBudgetIds: budgetOutcome.updated,
         in: database)
 
+      try Self.recordDeletionIntents(
+        categoryId: id, deletedBudgetIds: budgetOutcome.deleted, in: database)
+
       return DeleteOutcome(
         orphanedChildIds: orphanedChildIds,
         reassignedLegIds: reassignedLegIds,
@@ -140,6 +147,27 @@ final class GRDBCategoryRepository: CategoryRepository, @unchecked Sendable {
     }
     for budgetId in outcome.updatedBudgetIds {
       onRecordChanged(EarmarkBudgetItemRow.recordType, budgetId)
+    }
+  }
+
+  /// Durable deletion intents (issue #1090) for a category delete, written in
+  /// the SAME txn as the row deletes: the category itself and every budget item
+  /// hard-deleted by the reassignment. Orphaned children and reassigned legs
+  /// are UPDATED, not deleted, so they are not journaled.
+  private static func recordDeletionIntents(
+    categoryId: UUID, deletedBudgetIds: [UUID], in database: Database
+  ) throws {
+    try DeletionJournal.recordDataDeletion(
+      recordName: CategoryRow.recordName(for: categoryId),
+      recordType: CategoryRow.recordType,
+      at: Date(),
+      in: database)
+    for budgetId in deletedBudgetIds {
+      try DeletionJournal.recordDataDeletion(
+        recordName: EarmarkBudgetItemRow.recordName(for: budgetId),
+        recordType: EarmarkBudgetItemRow.recordType,
+        at: Date(),
+        in: database)
     }
   }
 
@@ -256,48 +284,7 @@ final class GRDBCategoryRepository: CategoryRepository, @unchecked Sendable {
   // serial executor admits the closure. Never call these from
   // `@MainActor`.
 
-  func applyRemoteChangesSync(saved rows: [CategoryRow], deleted ids: [UUID]) throws {
-    try database.write { database in
-      try applyRemoteChangesSync(saved: rows, deleted: ids, in: database)
-    }
-  }
-
-  /// In-transaction variant — see `GRDBCSVImportProfileRepository.applyRemoteChangesSync(...:in:)`
-  /// for the rationale (one commit per `applyRemoteChanges` batch, issue #872).
-  func applyRemoteChangesSync(
-    saved rows: [CategoryRow], deleted ids: [UUID], in database: Database
-  ) throws {
-    for row in rows {
-      try row.upsert(database)
-    }
-    for id in ids {
-      // Replaces v3 FKs (transaction_leg.category_id ON DELETE SET NULL,
-      // earmark_budget_item.category_id ON DELETE NO ACTION). Sync deletes
-      // are server-authoritative, so we cannot fail on surviving children
-      // the way NO ACTION did; we delete the budget items (matching the
-      // domain delete-without-replacement path in `reassignBudgets`).
-      _ =
-        try TransactionLegRow
-        .filter(TransactionLegRow.Columns.categoryId == id)
-        .updateAll(
-          database,
-          [TransactionLegRow.Columns.categoryId.set(to: nil)])
-      _ =
-        try EarmarkBudgetItemRow
-        .filter(EarmarkBudgetItemRow.Columns.categoryId == id)
-        .deleteAll(database)
-      // category.parent_id was ON DELETE NO ACTION — children are
-      // orphaned (set to NULL) in CategoryRepository.delete via
-      // `orphanChildren`. Sync apply mirrors that for consistency.
-      _ =
-        try CategoryRow
-        .filter(CategoryRow.Columns.parentId == id)
-        .updateAll(
-          database,
-          [CategoryRow.Columns.parentId.set(to: nil)])
-      _ = try CategoryRow.deleteOne(database, id: id)
-    }
-  }
+  // `applyRemoteChangesSync(...)` lives in `GRDBCategoryRepository+Sync.swift`.
 
   /// Writes (or clears) the cached system-fields blob on a single row.
   /// Returns `true` when a row was found and updated.
