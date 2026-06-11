@@ -160,6 +160,16 @@ extension SyncCoordinator {
   /// treated as confirmed sent (CloudKit gives no positive delete ack, only the
   /// change leaving the queue). Pure + `nonisolated static` so the confirm rule
   /// is unit-testable without a live engine.
+  ///
+  /// "Left pending" covers one non-success case: a `zoneNotFound` /
+  /// `userDeletedZone` failure removes the delete from the engine state and
+  /// stashes it in `pendingZoneCreation` (not re-added to pending), so it reads
+  /// as confirmed here and the journal row is cleared before any re-send. That is
+  /// safe — a zone-absent error on a *delete* means the whole zone is gone
+  /// server-side, so the record cannot exist and there is nothing to resurrect on
+  /// a future reset. Retryable failures, by contrast, are re-added to pending by
+  /// `SyncErrorRecovery.requeueFailures` (which runs inside the awaited send,
+  /// before this check), so they stay tracked and are NOT cleared.
   nonisolated static func confirmedReplayedDeletions(
     _ inFlight: [CKRecord.ID: ReplayedDeletionRef],
     pending: [CKSyncEngine.PendingRecordZoneChange]
