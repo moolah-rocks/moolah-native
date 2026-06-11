@@ -233,6 +233,15 @@ final class SyncCoordinator {
   /// database layer again. See `ProfileGRDBRepositories`.
   var cachedGRDBRepositories: [UUID: ProfileGRDBRepositories] = [:]
 
+  /// Journal-backed deletions the start-time replay re-enqueued this session
+  /// that have not yet been confirmed sent (issue #1090, PR-B). Keyed by the
+  /// pending-change `CKRecord.ID`. `clearConfirmedReplayedDeletions` clears a
+  /// row's journal entry once its `.deleteRecord` leaves the pending queue (the
+  /// only signal CloudKit gives for a successful delete), so a confirmed
+  /// deletion does not re-replay on every subsequent start. A `.saveRecord` for
+  /// the same id (a re-create) also drops its entry here — see `applySave`.
+  var replayedDeletionsInFlight: [CKRecord.ID: ReplayedDeletionRef] = [:]
+
   /// Zones with pending zone creation — records in these zones are skipped in nextRecordZoneChangeBatch.
   var pendingZoneCreation: [CKRecordZone.ID: [CKSyncEngine.PendingRecordZoneChange]] = [:]
 
