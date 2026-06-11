@@ -62,6 +62,9 @@ final class GRDBImportRuleRepository: ImportRuleRepository, @unchecked Sendable 
     try await database.write { database in
       try row.insert(database)
       try markNeedsPushSync(id: rule.id, in: database)
+      // D1-b (issue #1090): a re-created row drops any stale deletion intent.
+      try DeletionJournal.clearDataDeletion(
+        recordName: ImportRuleRow.recordName(for: rule.id), in: database)
     }
     onRecordChanged(ImportRuleRow.recordType, rule.id)
     return try row.toDomain()
@@ -94,8 +97,17 @@ final class GRDBImportRuleRepository: ImportRuleRepository, @unchecked Sendable 
   }
 
   func delete(id: UUID) async throws {
-    let didDelete = try await database.write { database in
-      try ImportRuleRow.deleteOne(database, id: id)
+    let didDelete = try await database.write { database -> Bool in
+      let deleted = try ImportRuleRow.deleteOne(database, id: id)
+      if deleted {
+        // Durable deletion intent (issue #1090) in the SAME txn as the delete.
+        try DeletionJournal.recordDataDeletion(
+          recordName: ImportRuleRow.recordName(for: id),
+          recordType: ImportRuleRow.recordType,
+          at: Date(),
+          in: database)
+      }
+      return deleted
     }
     guard didDelete else {
       throw BackendError.serverError(404)
@@ -159,6 +171,9 @@ final class GRDBImportRuleRepository: ImportRuleRepository, @unchecked Sendable 
       // conflict on `record_name` is satisfied by the same row, so a
       // single conflict target suffices.
       try row.upsert(database)
+      // D1-b (issue #1090): a peer re-creating clears our stale intent; the
+      // apply-path delete below is server-originated and never journaled.
+      try DeletionJournal.clearDataDeletion(recordName: row.recordName, in: database)
     }
     for id in ids {
       _ = try ImportRuleRow.deleteOne(database, id: id)

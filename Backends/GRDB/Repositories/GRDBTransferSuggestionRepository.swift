@@ -66,6 +66,9 @@ final class GRDBTransferSuggestionRepository: TransferSuggestionRepository,
       // a duplicate-key constraint.
       try row.upsert(database)
       try markNeedsPushSync(id: suggestion.id, in: database)
+      // D1-b (issue #1090): a re-created row drops any stale deletion intent.
+      try DeletionJournal.clearDataDeletion(
+        recordName: TransferSuggestionRow.recordName(for: suggestion.id), in: database)
     }
     onRecordChanged(TransferSuggestionRow.recordType, suggestion.id)
     return row.toDomain()
@@ -73,7 +76,15 @@ final class GRDBTransferSuggestionRepository: TransferSuggestionRepository,
 
   func delete(id: UUID) async throws {
     try await database.write { database in
-      _ = try TransferSuggestionRow.deleteOne(database, id: id)
+      let didDelete = try TransferSuggestionRow.deleteOne(database, id: id)
+      if didDelete {
+        // Durable deletion intent (issue #1090) in the SAME txn as the delete.
+        try DeletionJournal.recordDataDeletion(
+          recordName: TransferSuggestionRow.recordName(for: id),
+          recordType: TransferSuggestionRow.recordType,
+          at: Date(),
+          in: database)
+      }
     }
     onRecordDeleted(TransferSuggestionRow.recordType, id)
   }
@@ -112,6 +123,9 @@ final class GRDBTransferSuggestionRepository: TransferSuggestionRepository,
   ) throws {
     for row in rows {
       try row.upsert(database)
+      // D1-b (issue #1090): a peer re-creating clears our stale intent; the
+      // apply-path delete below is server-originated and never journaled.
+      try DeletionJournal.clearDataDeletion(recordName: row.recordName, in: database)
     }
     for id in ids {
       _ = try TransferSuggestionRow.deleteOne(database, id: id)
