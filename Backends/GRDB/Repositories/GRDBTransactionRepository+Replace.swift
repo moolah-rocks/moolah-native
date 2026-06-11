@@ -14,6 +14,18 @@ extension GRDBTransactionRepository {
   /// before the write for the same cross-database reason as `create`.
   /// Post-commit hooks fan out per deleted and per created row, matching
   /// `delete(id:)` / `createMany(_:)`.
+  ///
+  /// When a `creating` transaction (or one of its legs) REUSES a
+  /// `deletingIds` row's id — as automation's in-place leg edits once did,
+  /// and as any caller that rewrites a row under its own id does — the
+  /// deleted row's cached `encoded_system_fields` blob is snapshotted
+  /// (strictly per record type) and re-attached to the re-created row, and
+  /// the self-queued `.deleteRecord` for that id is suppressed. Without that,
+  /// the re-created row would land with a `nil` cache; once it goes clean the
+  /// #1085 modification-date gate fails open and a stale self-echo clobbers
+  /// it back to the deleted version (the placeholder-revert data loss —
+  /// issue #1090 follow-up). Headers and legs whose ids are NOT reused are
+  /// deleted and fan out a `.deleteRecord` exactly as before.
   func replace(
     deletingIds: [UUID],
     creating: [Transaction]
@@ -22,27 +34,15 @@ extension GRDBTransactionRepository {
       creating.flatMap(\.legs), using: instrumentRegistrar)
 
     let outcome = try await database.write { database -> ReplaceOutcome in
-      var deletedLegIds: [UUID] = []
-      for id in deletingIds {
-        let legIds =
-          try TransactionLegRow
-          .filter(TransactionLegRow.Columns.transactionId == id)
-          .fetchAll(database)
-          .map(\.id)
-        _ =
-          try TransactionLegRow
-          .filter(TransactionLegRow.Columns.transactionId == id)
-          .deleteAll(database)
-        let didDelete = try TransactionRow.deleteOne(database, id: id)
-        guard didDelete else {
-          throw BackendError.notFound("Transaction not found")
-        }
-        deletedLegIds.append(contentsOf: legIds)
-      }
+      let snapshot = try Self.deleteAndSnapshot(
+        deletingIds: deletingIds, in: database)
       let createdLegIds = try Self.performCreateMany(
-        database: database, transactions: creating)
+        database: database,
+        transactions: creating,
+        preservedTransactionFields: snapshot.preservedTransactionFields,
+        preservedLegFields: snapshot.preservedLegFields)
       return ReplaceOutcome(
-        deletedLegIds: deletedLegIds, createdLegIds: createdLegIds)
+        deletedLegIds: snapshot.deletedLegIds, createdLegIds: createdLegIds)
     }
 
     // Post-commit fan-out order: all deleted headers, then all deleted
@@ -50,10 +50,17 @@ extension GRDBTransactionRepository {
     // engine processes each emit independently by `(recordType, id)`,
     // so this grouped order is observationally equivalent to the
     // per-transaction header-then-legs order `delete(id:)` uses.
-    for id in deletingIds {
+    //
+    // Suppress the `.deleteRecord` for any id re-created in this same
+    // `replace`: the re-create already emits a `.saveRecord` (an upsert) for
+    // the reused id, so also queuing a delete would race a stale delete
+    // against that save. Genuinely-removed ids still fan out a delete.
+    let recreatedTransactionIds = Set(creating.map(\.id))
+    let recreatedLegIds = Set(outcome.createdLegIds)
+    for id in deletingIds where !recreatedTransactionIds.contains(id) {
       onRecordDeleted(TransactionRow.recordType, id)
     }
-    for legId in outcome.deletedLegIds {
+    for legId in outcome.deletedLegIds where !recreatedLegIds.contains(legId) {
       onRecordDeleted(TransactionLegRow.recordType, legId)
     }
     for transaction in creating {
@@ -64,6 +71,59 @@ extension GRDBTransactionRepository {
     }
     return creating
   }
+
+  /// Deletes every `deletingIds` transaction (legs first, then the header) and,
+  /// in the same pass, snapshots each deleted row's cached
+  /// `encoded_system_fields` blob — strictly per record type — so `replace`
+  /// can re-attach a blob to any re-created same-id row. Throws
+  /// `BackendError.notFound` if a header id is absent, preserving the original
+  /// all-or-nothing contract.
+  private static func deleteAndSnapshot(
+    deletingIds: [UUID], in database: Database
+  ) throws -> ReplaceDeletionSnapshot {
+    var deletedLegIds: [UUID] = []
+    var preservedTransactionFields: [UUID: Data?] = [:]
+    var preservedLegFields: [UUID: Data?] = [:]
+    for id in deletingIds {
+      let legRows =
+        try TransactionLegRow
+        .filter(TransactionLegRow.Columns.transactionId == id)
+        .fetchAll(database)
+      for legRow in legRows {
+        preservedLegFields[legRow.id] = legRow.encodedSystemFields
+      }
+      _ =
+        try TransactionLegRow
+        .filter(TransactionLegRow.Columns.transactionId == id)
+        .deleteAll(database)
+      // Snapshot the header's blob before the row is removed.
+      if let headerRow =
+        try TransactionRow
+        .filter(TransactionRow.Columns.id == id)
+        .fetchOne(database)
+      {
+        preservedTransactionFields[id] = headerRow.encodedSystemFields
+      }
+      let didDelete = try TransactionRow.deleteOne(database, id: id)
+      guard didDelete else {
+        throw BackendError.notFound("Transaction not found")
+      }
+      deletedLegIds.append(contentsOf: legRows.map(\.id))
+    }
+    return ReplaceDeletionSnapshot(
+      deletedLegIds: deletedLegIds,
+      preservedTransactionFields: preservedTransactionFields,
+      preservedLegFields: preservedLegFields)
+  }
+}
+
+/// The deleted-side result of one `replace` write: the leg ids removed plus
+/// the per-record-type cached-blob snapshots used to re-attach a reused id's
+/// CloudKit system fields to its re-created row.
+private struct ReplaceDeletionSnapshot {
+  let deletedLegIds: [UUID]
+  let preservedTransactionFields: [UUID: Data?]
+  let preservedLegFields: [UUID: Data?]
 }
 
 /// Per-write tally of the leg ids touched by `replace`, carried out of

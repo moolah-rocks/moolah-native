@@ -103,7 +103,7 @@ extension AutomationService {
     // intact) and append the new manual leg, which carries no externalId.
     var updated = transaction
     updated.legs.append(newLeg)
-    return try await save(updated, id: transactionId, session: session)
+    return try await save(updated, session: session)
   }
 
   /// Edits one leg in place, identified by `legId`. Every supplied field in
@@ -154,7 +154,7 @@ extension AutomationService {
 
     var updated = located.transaction
     updated.legs[located.index] = edited
-    return try await save(updated, id: located.transaction.id, session: session)
+    return try await save(updated, session: session)
   }
 
   /// Drops the leg identified by `legId` from its transaction. Throws
@@ -172,25 +172,28 @@ extension AutomationService {
 
     var updated = located.transaction
     updated.legs.remove(at: located.index)
-    return try await save(updated, id: located.transaction.id, session: session)
+    return try await save(updated, session: session)
   }
 
   // MARK: - Helpers
 
-  /// Re-saves `transaction` under its own id via `replace(deletingIds:creating:)`
-  /// — an atomic delete-then-insert that re-writes every leg from the in-memory
-  /// model, so the carried-through legs persist exactly as supplied. Returns the
-  /// freshly persisted transaction.
+  /// Re-saves `transaction` in place via `update(_:)` — an in-place upsert
+  /// that diffs legs against the persisted set by stable id, so every
+  /// carried-through leg (and the header) keeps its cached
+  /// `encoded_system_fields` blob and therefore its CloudKit sync identity.
+  ///
+  /// This is the load-bearing choice over `replace(deletingIds:creating:)`:
+  /// a delete-then-insert nulls those blobs on the re-created same-id rows,
+  /// and once such a row goes clean the #1085 modification-date gate fails
+  /// open on the nil cache, letting a stale self-echo clobber the edit back
+  /// to its previous version (the placeholder-revert data loss — issue #1090
+  /// follow-up). `update` re-attaches the blobs, so the gate protects the row
+  /// unconditionally. Returns the freshly persisted transaction.
   private func save(
-    _ transaction: Transaction, id: UUID, session: ProfileSession
+    _ transaction: Transaction, session: ProfileSession
   ) async throws -> Transaction {
     do {
-      let created = try await session.backend.transactions.replace(
-        deletingIds: [id], creating: [transaction])
-      guard let result = created.first else {
-        throw AutomationError.operationFailed("Saving the transaction produced no result")
-      }
-      return result
+      return try await session.backend.transactions.update(transaction)
     } catch let error as AutomationError {
       throw error
     } catch {
