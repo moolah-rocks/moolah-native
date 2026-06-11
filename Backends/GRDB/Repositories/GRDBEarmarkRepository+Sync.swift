@@ -105,4 +105,39 @@ extension GRDBEarmarkRepository {
       .filter(Set(ids).contains(EarmarkRow.Columns.id))
       .updateAll(database, [EarmarkRow.Columns.needsPush.set(to: false)])
   }
+
+  func applyRemoteChangesSync(saved rows: [EarmarkRow], deleted ids: [UUID]) throws {
+    try database.write { database in
+      try applyRemoteChangesSync(saved: rows, deleted: ids, in: database)
+    }
+  }
+
+  /// In-transaction variant — see `GRDBCSVImportProfileRepository.applyRemoteChangesSync(...:in:)`
+  /// for the rationale (one commit per `applyRemoteChanges` batch, issue #872).
+  ///
+  /// Earmark rows carry no app-originated deletion (earmarks are soft-hidden
+  /// via `update`, never hard-deleted), so there is no deletion intent to
+  /// clear on a peer save. The apply-path budget-item / earmark deletes below
+  /// are server-originated and never journaled.
+  func applyRemoteChangesSync(
+    saved rows: [EarmarkRow], deleted ids: [UUID], in database: Database
+  ) throws {
+    for row in rows { try row.upsert(database) }
+    for id in ids {
+      // Replaces v3's ON DELETE CASCADE on earmark_budget_item.earmark_id
+      // and ON DELETE SET NULL on transaction_leg.earmark_id (both
+      // dropped in v5_drop_foreign_keys).
+      _ =
+        try EarmarkBudgetItemRow
+        .filter(EarmarkBudgetItemRow.Columns.earmarkId == id)
+        .deleteAll(database)
+      _ =
+        try TransactionLegRow
+        .filter(TransactionLegRow.Columns.earmarkId == id)
+        .updateAll(
+          database,
+          [TransactionLegRow.Columns.earmarkId.set(to: nil)])
+      _ = try EarmarkRow.deleteOne(database, id: id)
+    }
+  }
 }
