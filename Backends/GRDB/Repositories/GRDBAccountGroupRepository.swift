@@ -58,6 +58,9 @@ final class GRDBAccountGroupRepository: AccountGroupRepository, @unchecked Senda
     try await database.write { database in
       try row.insert(database)
       try markNeedsPushSync(id: group.id, in: database)
+      // D1-b (issue #1090): a re-created row drops any stale deletion intent.
+      try DeletionJournal.clearDataDeletion(
+        recordName: AccountGroupRow.recordName(for: group.id), in: database)
     }
     onRecordChanged(AccountGroupRow.recordType, group.id)
     return group
@@ -87,10 +90,18 @@ final class GRDBAccountGroupRepository: AccountGroupRepository, @unchecked Senda
 
   func delete(id: UUID) async throws {
     try await database.write { database in
-      _ =
+      let deleted =
         try AccountGroupRow
         .filter(AccountGroupRow.Columns.id == id)
         .deleteAll(database)
+      if deleted > 0 {
+        // Durable deletion intent (issue #1090) in the SAME txn as the delete.
+        try DeletionJournal.recordDataDeletion(
+          recordName: AccountGroupRow.recordName(for: id),
+          recordType: AccountGroupRow.recordType,
+          at: Date(),
+          in: database)
+      }
     }
     onRecordDeleted(AccountGroupRow.recordType, id)
   }
@@ -114,7 +125,12 @@ final class GRDBAccountGroupRepository: AccountGroupRepository, @unchecked Senda
   func applyRemoteChangesSync(
     saved rows: [AccountGroupRow], deleted ids: [UUID], in database: Database
   ) throws {
-    for row in rows { try row.upsert(database) }
+    for row in rows {
+      try row.upsert(database)
+      // D1-b (issue #1090): a peer re-creating clears our stale intent; the
+      // apply-path delete below is server-originated and never journaled.
+      try DeletionJournal.clearDataDeletion(recordName: row.recordName, in: database)
+    }
     for id in ids {
       _ = try AccountGroupRow.deleteOne(database, id: id)
     }

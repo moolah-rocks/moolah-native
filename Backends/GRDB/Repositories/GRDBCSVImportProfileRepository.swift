@@ -71,6 +71,9 @@ final class GRDBCSVImportProfileRepository: CSVImportProfileRepository, @uncheck
     try await database.write { database in
       try row.insert(database)
       try markNeedsPushSync(id: profile.id, in: database)
+      // D1-b (issue #1090): a re-created row drops any stale deletion intent.
+      try DeletionJournal.clearDataDeletion(
+        recordName: CSVImportProfileRow.recordName(for: profile.id), in: database)
     }
     onRecordChanged(CSVImportProfileRow.recordType, profile.id)
     return row.toDomain()
@@ -109,8 +112,17 @@ final class GRDBCSVImportProfileRepository: CSVImportProfileRepository, @uncheck
   }
 
   func delete(id: UUID) async throws {
-    let didDelete = try await database.write { database in
-      try CSVImportProfileRow.deleteOne(database, id: id)
+    let didDelete = try await database.write { database -> Bool in
+      let deleted = try CSVImportProfileRow.deleteOne(database, id: id)
+      if deleted {
+        // Durable deletion intent (issue #1090) in the SAME txn as the delete.
+        try DeletionJournal.recordDataDeletion(
+          recordName: CSVImportProfileRow.recordName(for: id),
+          recordType: CSVImportProfileRow.recordType,
+          at: Date(),
+          in: database)
+      }
+      return deleted
     }
     guard didDelete else {
       throw BackendError.serverError(404)
@@ -146,6 +158,9 @@ final class GRDBCSVImportProfileRepository: CSVImportProfileRepository, @uncheck
       // conflict on `record_name` is satisfied by the same row, so a
       // single conflict target suffices.
       try row.upsert(database)
+      // D1-b (issue #1090): a peer re-creating clears our stale intent; the
+      // apply-path delete below is server-originated and never journaled.
+      try DeletionJournal.clearDataDeletion(recordName: row.recordName, in: database)
     }
     for id in ids {
       _ = try CSVImportProfileRow.deleteOne(database, id: id)
