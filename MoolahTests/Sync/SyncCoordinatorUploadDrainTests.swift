@@ -69,6 +69,35 @@ struct SyncCoordinatorUploadDrainTests {
     return DrainFixture(coordinator: coordinator, saves: saves, live: live, stale: stale)
   }
 
+  /// Models the engine dropping pending changes on a successful send: the built
+  /// saves and the sent deletes, PLUS — per `CKSyncEngineState.h`'s "sends only
+  /// the delete change" — any pending `.saveRecord` SUPERSEDED by a sent delete
+  /// for the same record.
+  ///
+  /// Supersede belongs HERE (send-time), not in `add`: pre-#1087,
+  /// `handleMissingRecordsToSave` added deletes WITHOUT removing the saves and the
+  /// queue still wedged — proof a save and a delete for one id coexist in
+  /// `pendingRecordZoneChanges` (the list `nextRecordZoneChangeBatch` selects
+  /// from) until a send reconciles them. The drain itself never produces a
+  /// coexisting pair — the fix removes the stale save before queuing its delete —
+  /// so this models the documented behaviour for completeness and pins where it
+  /// applies.
+  private static func applySend(
+    _ batch: CKSyncEngine.RecordZoneChangeBatch,
+    to store: any PendingChangeStore
+  ) {
+    let sentDeletes = Set(batch.recordIDsToDelete)
+    let supersededSaves = store.pendingRecordZoneChanges.filter { change in
+      if case .saveRecord(let id) = change { return sentDeletes.contains(id) }
+      return false
+    }
+    store.remove(
+      pendingRecordZoneChanges:
+        batch.recordsToSave.map { .saveRecord($0.recordID) }
+        + batch.recordIDsToDelete.map { .deleteRecord($0) }
+        + supersededSaves)
+  }
+
   @Test(
     "a stale-save backlog drains across cycles: live records upload, stale convert to deletes, queue empties, no live record deleted"
   )
@@ -102,11 +131,8 @@ struct SyncCoordinatorUploadDrainTests {
       for record in batch.recordsToSave { uploadedSaveIDs.insert(record.recordID) }
       for recordID in batch.recordIDsToDelete { serverDeletedIDs.insert(recordID) }
 
-      // The engine drops a change from pending once it sends it.
-      store.remove(
-        pendingRecordZoneChanges:
-          batch.recordsToSave.map { .saveRecord($0.recordID) }
-          + batch.recordIDsToDelete.map { .deleteRecord($0) })
+      // The engine drops the sent changes (and any superseded save) on send.
+      Self.applySend(batch, to: store)
     }
 
     // 1. The queue fully drained — the wedge is gone (no permanent head-of-line block).
@@ -155,10 +181,7 @@ struct SyncCoordinatorUploadDrainTests {
       guard let batch = coordinator.nextRecordZoneChangeBatch(scope: .all, state: store)
       else { continue }
       for record in batch.recordsToSave { uploadedSaveIDs.insert(record.recordID) }
-      store.remove(
-        pendingRecordZoneChanges:
-          batch.recordsToSave.map { .saveRecord($0.recordID) }
-          + batch.recordIDsToDelete.map { .deleteRecord($0) })
+      Self.applySend(batch, to: store)
     }
 
     let remainingStaleSaves = store.pendingRecordZoneChanges.filter { change in
@@ -169,5 +192,28 @@ struct SyncCoordinatorUploadDrainTests {
     #expect(remainingStaleSaves.count == staleRecordIDs.count)
     // And the live records, blocked behind the stale head, never uploaded.
     #expect(uploadedSaveIDs.isEmpty)
+  }
+
+  @Test(
+    "send-time reconciliation: sending a delete also drops a coexisting pending save (delete wins)"
+  )
+  func sendDropsSaveSupersededByDelete() {
+    let zoneID = CKRecordZone.ID(
+      zoneName: "supersede-send-test", ownerName: CKCurrentUserDefaultName)
+    let id = CKRecord.ID(recordType: AccountRow.recordType, uuid: UUID(), zoneID: zoneID)
+    // A save and a delete for the same record coexist in the queue — `add` does
+    // NOT supersede (the wedge proves they coexist until a send reconciles them).
+    let store = InMemoryPendingChangeStore([.saveRecord(id), .deleteRecord(id)])
+    #expect(store.pendingRecordZoneChanges.count == 2)
+
+    // The engine sends only the delete (header: "sends only the delete change")
+    // and, on success, drops both it and the superseded save.
+    let batch = CKSyncEngine.RecordZoneChangeBatch(
+      recordsToSave: [], recordIDsToDelete: [id], atomicByZone: false)
+    Self.applySend(batch, to: store)
+
+    #expect(
+      store.pendingRecordZoneChanges.isEmpty,
+      "the delete and the save it supersedes must both leave the queue on send")
   }
 }
