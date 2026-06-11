@@ -134,4 +134,53 @@ extension GRDBCategoryRepository {
       .filter(CategoryRow.Columns.id == id)
       .fetchOne(database)
   }
+
+  func applyRemoteChangesSync(saved rows: [CategoryRow], deleted ids: [UUID]) throws {
+    try database.write { database in
+      try applyRemoteChangesSync(saved: rows, deleted: ids, in: database)
+    }
+  }
+
+  /// In-transaction variant — see `GRDBCSVImportProfileRepository.applyRemoteChangesSync(...:in:)`
+  /// for the rationale (one commit per `applyRemoteChanges` batch, issue #872).
+  func applyRemoteChangesSync(
+    saved rows: [CategoryRow], deleted ids: [UUID], in database: Database
+  ) throws {
+    for row in rows {
+      try row.upsert(database)
+      // D1-b (issue #1090): a peer re-creating this category clears our stale
+      // deletion intent so we don't re-delete a record the server now holds.
+      // Apply-path deletes below are NOT journaled — server-originated
+      // deletions are already propagated to every device.
+      try DeletionJournal.clearDataDeletion(
+        recordName: row.recordName, in: database)
+    }
+    for id in ids {
+      // Replaces v3 FKs (transaction_leg.category_id ON DELETE SET NULL,
+      // earmark_budget_item.category_id ON DELETE NO ACTION). Sync deletes
+      // are server-authoritative, so we cannot fail on surviving children
+      // the way NO ACTION did; we delete the budget items (matching the
+      // domain delete-without-replacement path in `reassignBudgets`).
+      _ =
+        try TransactionLegRow
+        .filter(TransactionLegRow.Columns.categoryId == id)
+        .updateAll(
+          database,
+          [TransactionLegRow.Columns.categoryId.set(to: nil)])
+      _ =
+        try EarmarkBudgetItemRow
+        .filter(EarmarkBudgetItemRow.Columns.categoryId == id)
+        .deleteAll(database)
+      // category.parent_id was ON DELETE NO ACTION — children are
+      // orphaned (set to NULL) in CategoryRepository.delete via
+      // `orphanChildren`. Sync apply mirrors that for consistency.
+      _ =
+        try CategoryRow
+        .filter(CategoryRow.Columns.parentId == id)
+        .updateAll(
+          database,
+          [CategoryRow.Columns.parentId.set(to: nil)])
+      _ = try CategoryRow.deleteOne(database, id: id)
+    }
+  }
 }

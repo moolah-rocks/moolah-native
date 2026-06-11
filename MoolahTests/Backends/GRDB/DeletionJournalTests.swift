@@ -79,6 +79,25 @@ struct DeletionJournalTests {
     #expect(entries.count == 2)
   }
 
+  @Test("recordDataDeletion stores the sentinel zone; clearDataDeletion removes it")
+  func dataDeletionHelpersUseSentinelZone() async throws {
+    let database = try makeDatabase()
+    try await database.write { database in
+      try DeletionJournal.recordDataDeletion(
+        recordName: "AccountRecord|1", recordType: "AccountRecord",
+        at: Self.date, in: database)
+    }
+    let entry = try await database.read { try DeletionJournal.allEntries(in: $0).first }
+    #expect(entry?.zoneName == DeletionJournal.profileDataSentinelZone)
+    #expect(entry?.recordName == "AccountRecord|1")
+
+    try await database.write { database in
+      try DeletionJournal.clearDataDeletion(recordName: "AccountRecord|1", in: database)
+    }
+    let remaining = try await database.read { try DeletionJournal.allEntries(in: $0) }
+    #expect(remaining.isEmpty)
+  }
+
   @Test("clear batch removes all listed keys, leaves others")
   func clearBatch() async throws {
     let database = try makeDatabase()
