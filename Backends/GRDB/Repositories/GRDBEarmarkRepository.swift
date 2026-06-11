@@ -246,6 +246,7 @@ final class GRDBEarmarkRepository: EarmarkRepository, @unchecked Sendable {
       guard let existing else { return SetBudgetOutcome(changedId: nil, deletedId: nil) }
       let deletedId = existing.id
       try existing.delete(database)
+      try Self.journalBudgetItemDeletion(id: deletedId, in: database)
       return SetBudgetOutcome(changedId: nil, deletedId: deletedId)
     }
 
@@ -264,6 +265,9 @@ final class GRDBEarmarkRepository: EarmarkRepository, @unchecked Sendable {
     let row = EarmarkBudgetItemRow(domain: newItem, earmarkId: earmarkId)
     try row.insert(database)
     try markBudgetItemNeedsPush(id: row.id, in: database)
+    // D1-b (issue #1090): a re-created budget item drops any stale intent.
+    try DeletionJournal.clearDataDeletion(
+      recordName: EarmarkBudgetItemRow.recordName(for: row.id), in: database)
     return SetBudgetOutcome(changedId: row.id, deletedId: nil)
   }
 
@@ -277,43 +281,21 @@ final class GRDBEarmarkRepository: EarmarkRepository, @unchecked Sendable {
     let deletedId: UUID?
   }
 
-  // MARK: - Sync entry points (synchronous, GRDB-queue-blocking)
-  //
-  // Called from the CKSyncEngine delegate executor on a non-MainActor
-  // context. `DatabaseWriter.write { db in … }` has both async and sync
-  // overloads; the sync form blocks the calling thread until the queue's
-  // serial executor admits the closure. Never call these from
-  // `@MainActor`.
-
-  func applyRemoteChangesSync(saved rows: [EarmarkRow], deleted ids: [UUID]) throws {
-    try database.write { database in
-      try applyRemoteChangesSync(saved: rows, deleted: ids, in: database)
-    }
-  }
-
-  /// In-transaction variant — see `GRDBCSVImportProfileRepository.applyRemoteChangesSync(...:in:)`
-  /// for the rationale (one commit per `applyRemoteChanges` batch, issue #872).
-  func applyRemoteChangesSync(
-    saved rows: [EarmarkRow], deleted ids: [UUID], in database: Database
+  /// Durable deletion intent (issue #1090) for a budget item removed by a
+  /// zero-amount `setBudget`, written in the SAME txn as the delete.
+  private static func journalBudgetItemDeletion(
+    id: UUID, in database: Database
   ) throws {
-    for row in rows { try row.upsert(database) }
-    for id in ids {
-      // Replaces v3's ON DELETE CASCADE on earmark_budget_item.earmark_id
-      // and ON DELETE SET NULL on transaction_leg.earmark_id (both
-      // dropped in v5_drop_foreign_keys).
-      _ =
-        try EarmarkBudgetItemRow
-        .filter(EarmarkBudgetItemRow.Columns.earmarkId == id)
-        .deleteAll(database)
-      _ =
-        try TransactionLegRow
-        .filter(TransactionLegRow.Columns.earmarkId == id)
-        .updateAll(
-          database,
-          [TransactionLegRow.Columns.earmarkId.set(to: nil)])
-      _ = try EarmarkRow.deleteOne(database, id: id)
-    }
+    try DeletionJournal.recordDataDeletion(
+      recordName: EarmarkBudgetItemRow.recordName(for: id),
+      recordType: EarmarkBudgetItemRow.recordType,
+      at: Date(),
+      in: database)
   }
+
+  // MARK: - Sync entry points
+  //
+  // `applyRemoteChangesSync(...)` lives in `GRDBEarmarkRepository+Sync.swift`.
 
   /// Writes (or clears) the cached system-fields blob on a single row.
   /// Returns `true` when a row was found and updated.

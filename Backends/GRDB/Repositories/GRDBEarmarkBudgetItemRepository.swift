@@ -65,6 +65,9 @@ final class GRDBEarmarkBudgetItemRepository: @unchecked Sendable {
   ) throws {
     for row in rows {
       try row.upsert(database)
+      // D1-b (issue #1090): a peer re-creating clears our stale intent; the
+      // apply-path delete below is server-originated and never journaled.
+      try DeletionJournal.clearDataDeletion(recordName: row.recordName, in: database)
     }
     for id in ids {
       _ = try EarmarkBudgetItemRow.deleteOne(database, id: id)
