@@ -5,8 +5,7 @@ import Testing
 
 @testable import Moolah
 
-/// Engine-bound end-to-end drain test for the upload-queue wedge fix (#1087),
-/// closing the test gap tracked as #1088.
+/// Engine-bound end-to-end drain test for the upload-queue wedge fix (#1087).
 ///
 /// The wedge fix's other tests (`UploadQueueWedgeTests`) lock the *pure helpers*
 /// (`classifyLookups`, `pendingChanges`) in isolation. This suite instead drives
@@ -111,19 +110,30 @@ struct SyncCoordinatorUploadDrainTests {
     }
 
     // 1. The queue fully drained — the wedge is gone (no permanent head-of-line block).
-    #expect(store.pendingRecordZoneChanges.isEmpty)
+    #expect(
+      store.pendingRecordZoneChanges.isEmpty,
+      "queue must fully drain — \(store.pendingRecordZoneChanges.count) changes remain")
 
     // 2. Every live record was uploaded exactly as a save — none dropped.
-    #expect(uploadedSaveIDs == Set(liveRecordIDs))
+    #expect(
+      uploadedSaveIDs == Set(liveRecordIDs),
+      "every live record must upload: missed \(Set(liveRecordIDs).subtracting(uploadedSaveIDs).count)"
+    )
 
     // 3. Every stale save was converted into a server deletion.
-    #expect(serverDeletedIDs == Set(staleRecordIDs))
+    #expect(
+      serverDeletedIDs == Set(staleRecordIDs),
+      "every stale save must convert to a server deletion")
 
     // 4. #1087 safety invariant: no live record was ever queued for deletion.
-    #expect(serverDeletedIDs.isDisjoint(with: Set(liveRecordIDs)))
+    #expect(
+      serverDeletedIDs.isDisjoint(with: Set(liveRecordIDs)),
+      "#1087 safety violation: a live record was queued for server deletion")
 
     // 5. No stale record was ever uploaded as a live save.
-    #expect(uploadedSaveIDs.isDisjoint(with: Set(staleRecordIDs)))
+    #expect(
+      uploadedSaveIDs.isDisjoint(with: Set(staleRecordIDs)),
+      "a stale record uploaded as a live save — lookup returned a row for a never-seeded UUID")
   }
 
   @Test(
