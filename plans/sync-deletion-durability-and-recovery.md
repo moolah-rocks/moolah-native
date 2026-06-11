@@ -360,6 +360,14 @@ settles (the normal PR-B clear-on-confirm then retires each tombstone as its
 records — a genuine peer re-create of an id NOT in the snapshot still upserts +
 clears normally.
 
+Trade-off (intentional): for ids that ARE in the snapshot, the shield resolves a
+concurrent same-id delete-vs-peer-recreate in favour of the **local deletion**
+rather than last-writer-wins, for the duration of the recovery window. This is
+extremely narrow — it requires a peer to re-create the *identical* UUID this
+device had un-acked-deleted, during this device's recovery session — and "the
+local delete wins" is a defensible resolution (the record we were mid-deleting
+stays deleted). Called out so the trade-off is explicit, not implicit.
+
 This hazard is **recovery-specific**: a normal PR-B replay preserves the tokens,
 so the server never re-delivers X and it cannot arise. Only the `nil`-reset's
 token loss + full re-fetch re-materialises deleted records.
