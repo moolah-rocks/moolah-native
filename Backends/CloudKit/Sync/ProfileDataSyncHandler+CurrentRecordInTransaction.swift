@@ -88,20 +88,14 @@ extension ProfileDataSyncHandler {
     buildCKRecord(from: row, encodedSystemFields: row.encodedSystemFields)
   }
 
-  /// Reads the row's currently-cached `encodedSystemFields` blob **inside**
-  /// the caller's active `database`. The outer `Optional` is whether a row
-  /// exists (and the type is known); the inner is the nullable blob. Used
-  /// by the upload-ack path to learn whether the row has ever round-tripped
-  /// (non-`nil` blob) before deciding whether clearing `needs_push` is safe
-  /// (issue #1081 follow-up). Returns `nil` for a missing row or an unknown
-  /// record type; the caller treats that conservatively (no clear).
-  /// Reads each saved record's CURRENTLY-cached `encodedSystemFields`
-  /// keyed by `<recordType>|<uuid>`, so `handleSentRecordZoneChanges` can
-  /// snapshot the pre-ack cache before `updateSystemFieldsForSaved`
-  /// overwrites it. Only rows that exist are recorded (storing their
-  /// nullable cached blob); a missing row is left absent so the ack-clear
-  /// treats it conservatively (no clear). Errors are logged and the record
-  /// is omitted (issue #1081 follow-up).
+  /// Reads each saved record's currently-cached `encodedSystemFields` keyed by
+  /// `<recordType>|<uuid>`, so `handleSentRecordZoneChanges` can snapshot the
+  /// pre-ack cache before `updateSystemFieldsForSaved` overwrites it. Records
+  /// each id whose `cachedSystemFields` lookup resolves, storing its nullable
+  /// cached blob; the ack-clear then treats a nil blob conservatively (no
+  /// clear), so an id whose row is absent or never round-tripped is handled
+  /// the same safe way. A read error is logged and the whole batch is omitted
+  /// (issue #1081 follow-up).
   nonisolated func preAckCachedSystemFields(
     _ savedRecords: [CKRecord]
   ) -> [String: Data?] {
@@ -153,6 +147,19 @@ extension ProfileDataSyncHandler {
     return result
   }
 
+  /// Reads a row's currently-cached `encodedSystemFields` blob inside the
+  /// active `database`, dispatched by record type.
+  ///
+  /// Returns `Data??`. The outer optional is `.none` ONLY when the record type
+  /// is unknown to both dispatch halves — it does NOT indicate row existence.
+  /// The per-type lookups use optional chaining
+  /// (`fetchRowSync(...)?.encodedSystemFields`), which flattens a missing row
+  /// and a present row with a nil blob to the same `.some(.none)`, so the
+  /// outer `.some` cannot tell them apart. Callers that only need "is there a
+  /// decodable blob" (a `.some(.some)`) — `cachedModificationDates`,
+  /// `preAckCachedSystemFields` — are unaffected; a caller that must
+  /// distinguish a genuinely missing row should use `currentCKRecord`
+  /// (issue #1090).
   nonisolated func cachedSystemFields(
     recordType: String, id: UUID, in database: Database
   ) throws -> Data?? {
@@ -165,8 +172,10 @@ extension ProfileDataSyncHandler {
   }
 
   /// Reference-data side of the `cachedSystemFields` dispatch. Outer
-  /// `.none` = "not this half's record type"; the inner double-optional is
-  /// the row-exists / nullable-blob result.
+  /// `.none` = "not this half's record type". The inner double-optional does
+  /// NOT distinguish a missing row from a present row with a nil blob —
+  /// optional chaining collapses both to `.some(.none)` (see
+  /// `cachedSystemFields`).
   nonisolated private func cachedSystemFieldsReference(
     recordType: String, id: UUID, in database: Database
   ) throws -> (Data??)? {
