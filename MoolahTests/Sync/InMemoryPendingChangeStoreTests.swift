@@ -4,16 +4,19 @@ import Testing
 
 @testable import Moolah
 
-/// Pins ``InMemoryPendingChangeStore`` to the `CKSyncEngine.State` contract it
-/// stands in for. The drain test (`SyncCoordinatorUploadDrainTests`) is only as
-/// trustworthy as this double's fidelity, so the State semantics it relies on
-/// are asserted here as first-class properties rather than left implicit in the
-/// drain loop.
+/// Pins ``InMemoryPendingChangeStore`` to the two `CKSyncEngine.State`
+/// behaviours the drain pipeline actually depends on — insertion-ordered
+/// storage and exact-match `remove` — plus same-type dedup. The drain test
+/// (`SyncCoordinatorUploadDrainTests`) is only as trustworthy as this double, so
+/// these properties are asserted directly rather than left implicit in the drain
+/// loop.
 ///
-/// Source of truth: Apple's `CloudKit.framework/Headers/CKSyncEngineState.h`
-/// doc comments on `-addPendingRecordZoneChanges:` (dedup + latest-change-wins)
-/// and `-removePendingRecordZoneChanges:` (removes the specified changes).
-@Suite("InMemoryPendingChangeStore — CKSyncEngine.State fidelity")
+/// Deliberately NOT asserted: opposite-type supersede (adding `.deleteRecord(X)`
+/// dropping a pending `.saveRecord(X)`). The drain never exercises it — production
+/// removes the stale save explicitly before adding the delete — and an in-flight
+/// save+delete for one id can coexist (#1090). Modelling it would be unexercised,
+/// contested fiction; the test below pins the opposite — that they coexist.
+@Suite("InMemoryPendingChangeStore — drain-relevant State fidelity")
 @MainActor
 struct InMemoryPendingChangeStoreTests {
 
@@ -29,30 +32,34 @@ struct InMemoryPendingChangeStoreTests {
     return false
   }
 
-  @Test("add(save X) then add(delete X) keeps only the delete (latest wins)")
-  func saveThenDeleteKeepsOnlyDelete() {
-    let target = Self.recordID("X")
-    let store = InMemoryPendingChangeStore()
-    store.add(pendingRecordZoneChanges: [.saveRecord(target)])
-    store.add(pendingRecordZoneChanges: [.deleteRecord(target)])
-
-    #expect(store.pendingRecordZoneChanges.count == 1)
-    #expect(InMemoryPendingChangeStore.recordID(of: store.pendingRecordZoneChanges[0]) == target)
-    #expect(Self.isDelete(store.pendingRecordZoneChanges[0]))
+  private static func names(
+    _ changes: [CKSyncEngine.PendingRecordZoneChange]
+  ) -> [String] {
+    changes.compactMap { InMemoryPendingChangeStore.recordID(of: $0)?.recordName }
   }
 
-  @Test("add(delete X) then add(save X) keeps only the save (latest wins)")
-  func deleteThenSaveKeepsOnlySave() {
-    let target = Self.recordID("X")
+  @Test("add preserves insertion order")
+  func addPreservesInsertionOrder() {
     let store = InMemoryPendingChangeStore()
-    store.add(pendingRecordZoneChanges: [.deleteRecord(target)])
-    store.add(pendingRecordZoneChanges: [.saveRecord(target)])
+    store.add(pendingRecordZoneChanges: [.saveRecord(Self.recordID("a"))])
+    store.add(pendingRecordZoneChanges: [
+      .saveRecord(Self.recordID("b")), .saveRecord(Self.recordID("c")),
+    ])
 
-    #expect(store.pendingRecordZoneChanges.count == 1)
-    #expect(!Self.isDelete(store.pendingRecordZoneChanges[0]))
+    #expect(Self.names(store.pendingRecordZoneChanges) == ["a", "b", "c"])
   }
 
-  @Test("adding the same change twice dedups to one entry")
+  @Test("remove preserves the order of the surviving entries")
+  func removePreservesOrder() {
+    let store = InMemoryPendingChangeStore(
+      ["a", "b", "c", "d"].map { .saveRecord(Self.recordID($0)) })
+
+    store.remove(pendingRecordZoneChanges: [.saveRecord(Self.recordID("b"))])
+
+    #expect(Self.names(store.pendingRecordZoneChanges) == ["a", "c", "d"])
+  }
+
+  @Test("adding the same change twice dedups to one entry (same-type dedup)")
   func duplicateAddDedups() {
     let target = Self.recordID("X")
     let store = InMemoryPendingChangeStore()
@@ -60,6 +67,18 @@ struct InMemoryPendingChangeStoreTests {
     store.add(pendingRecordZoneChanges: [.saveRecord(target)])
 
     #expect(store.pendingRecordZoneChanges.count == 1)
+  }
+
+  @Test("a save and a delete for the same id COEXIST — no opposite-type supersede")
+  func saveAndDeleteCoexist() {
+    let target = Self.recordID("X")
+    let store = InMemoryPendingChangeStore()
+    store.add(pendingRecordZoneChanges: [.saveRecord(target)])
+    store.add(pendingRecordZoneChanges: [.deleteRecord(target)])
+
+    #expect(store.pendingRecordZoneChanges.count == 2)
+    #expect(!Self.isDelete(store.pendingRecordZoneChanges[0]))  // save first
+    #expect(Self.isDelete(store.pendingRecordZoneChanges[1]))  // delete second
   }
 
   @Test("remove matches the exact change type — removing a delete leaves a pending save")
@@ -87,14 +106,5 @@ struct InMemoryPendingChangeStoreTests {
 
     #expect(store.pendingRecordZoneChanges.count == 1)
     #expect(InMemoryPendingChangeStore.recordID(of: store.pendingRecordZoneChanges[0]) == second)
-  }
-
-  @Test("init applies the same dedup/supersede rule as add")
-  func initDedups() {
-    let target = Self.recordID("X")
-    let store = InMemoryPendingChangeStore([.saveRecord(target), .deleteRecord(target)])
-
-    #expect(store.pendingRecordZoneChanges.count == 1)
-    #expect(Self.isDelete(store.pendingRecordZoneChanges[0]))
   }
 }

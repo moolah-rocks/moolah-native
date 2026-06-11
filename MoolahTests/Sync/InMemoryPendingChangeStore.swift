@@ -3,31 +3,36 @@
 @testable import Moolah
 
 /// In-memory ``PendingChangeStore`` double for driving `SyncCoordinator`'s
-/// upload-batch builder without a live `CKSyncEngine` (which has no
+/// upload-batch builder without a live `CKSyncEngine` (whose `State` has no
 /// constructible test instance). It stands in for `CKSyncEngine.State`'s pending
 /// record-zone-change list.
 ///
-/// ## Fidelity to real `CKSyncEngine.State`
-/// The drain test trusts this double to behave like Apple's state, so the two
-/// mutating operations mirror the documented contract from
-/// `CloudKit.framework/Headers/CKSyncEngineState.h`:
+/// ## Fidelity to `CKSyncEngine.State` — deliberately minimal
+/// The drain pipeline depends on only two State behaviours, and this double
+/// models exactly those, no more:
 ///
-/// - `addPendingRecordZoneChanges:` — "maintains a consistent collection of
-///   tracked pending changes, **deduplicating them as necessary**", and the
-///   *latest* change for a record wins: a `.saveRecord(X)` then `.deleteRecord(X)`
-///   keeps only the delete; a `.deleteRecord(X)` then `.saveRecord(X)` keeps only
-///   the save. Modelled here as: adding a change drops any existing change with
-///   the same `recordID`, then appends the new one (supersede + dedup in one
-///   rule).
-/// - `removePendingRecordZoneChanges:` — "Removes the specified record zone
-///   changes from the state." Modelled as removing entries that match the given
-///   changes *exactly* (same type AND recordID) — removing a `.saveRecord(X)`
-///   does not touch a pending `.deleteRecord(X)`.
+/// - **Insertion order is preserved** across `add`/`remove`. This is the
+///   load-bearing property: `dedupedPendingChanges` walks `pendingRecordZoneChanges`
+///   in order with first-occurrence dedup, then `prefix(400)` takes the head — so
+///   "the same dead 400 at the head every cycle" only reproduces if order is
+///   stable. A `Set`-backed or reordering double would stop modelling the wedge.
+/// - **`remove` deletes every entry matching the given changes** (same type AND
+///   recordID). The wedge-drain fix calls `state.remove(.saveRecord(staleID))`
+///   explicitly to clear the head, so `remove` is what actually drains.
 ///
-/// These properties are pinned by `InMemoryPendingChangeStoreTests`. The one
-/// detail Apple leaves unspecified is the array *position* of a superseded entry;
-/// we append at the end. The drain assertions depend on the multiset of pending
-/// changes and on drain-to-empty, not on exact ordering, so this is safe.
+/// `add` appends, with **same-type dedup only** (adding a change already present
+/// is a no-op — Apple documents the engine "deduplicat[es] as necessary"). It
+/// does NOT model opposite-type supersede (adding `.deleteRecord(X)` does not
+/// drop a pending `.saveRecord(X)`): the drain never exercises it — production
+/// does an explicit `remove(.saveRecord)` *then* `add(.deleteRecord)`, never
+/// `add(.deleteRecord)` over a live save — and a save+delete for one id can
+/// genuinely coexist in flight (#1090). Encoding supersede would be unexercised,
+/// contested fiction.
+///
+/// This double therefore proves the app's drain *pipeline* drains and stays
+/// drained against a faithful ordered model of State; it does NOT prove real
+/// `CKSyncEngine.State`'s add/remove/ordering (Apple-undocumented in full) — the
+/// ground truth for that is the live migration, not this test.
 @MainActor
 final class InMemoryPendingChangeStore: PendingChangeStore {
   private(set) var pendingRecordZoneChanges: [CKSyncEngine.PendingRecordZoneChange] = []
@@ -37,11 +42,8 @@ final class InMemoryPendingChangeStore: PendingChangeStore {
   }
 
   func add(pendingRecordZoneChanges changes: [CKSyncEngine.PendingRecordZoneChange]) {
-    for change in changes {
-      // Supersede + dedup: the latest change for a recordID is the one kept.
-      if let id = Self.recordID(of: change) {
-        pendingRecordZoneChanges.removeAll { Self.recordID(of: $0) == id }
-      }
+    var present = Set(pendingRecordZoneChanges.map(Self.exactKey))
+    for change in changes where present.insert(Self.exactKey(change)).inserted {
       pendingRecordZoneChanges.append(change)
     }
   }
@@ -62,7 +64,7 @@ final class InMemoryPendingChangeStore: PendingChangeStore {
     }
   }
 
-  /// Exact identity (type + record) for remove-by-exact-change matching.
+  /// Exact identity (type + record) for dedup and remove-by-exact-change.
   static func exactKey(_ change: CKSyncEngine.PendingRecordZoneChange) -> String {
     switch change {
     case .saveRecord(let id): return "save\u{1}\(id.zoneID.zoneName)\u{1}\(id.recordName)"
@@ -70,4 +72,30 @@ final class InMemoryPendingChangeStore: PendingChangeStore {
     @unknown default: return "unknown\u{1}\(String(describing: change))"
     }
   }
+}
+
+/// A ``PendingChangeStore`` whose `remove` is a no-op — it models the
+/// **pre-#1087 wedge**, where stale saves were never dropped from the head of the
+/// queue. Used by the drain test's fail-without-fix (RED) check: driving the real
+/// pipeline against this store must NOT drain (the same un-buildable head is
+/// re-selected every cycle), proving the engine-bound test would catch a
+/// reintroduced wedge rather than passing vacuously.
+@MainActor
+final class NonRemovingPendingChangeStore: PendingChangeStore {
+  private let backing = InMemoryPendingChangeStore()
+
+  init(_ initial: [CKSyncEngine.PendingRecordZoneChange] = []) {
+    backing.add(pendingRecordZoneChanges: initial)
+  }
+
+  var pendingRecordZoneChanges: [CKSyncEngine.PendingRecordZoneChange] {
+    backing.pendingRecordZoneChanges
+  }
+
+  func add(pendingRecordZoneChanges changes: [CKSyncEngine.PendingRecordZoneChange]) {
+    backing.add(pendingRecordZoneChanges: changes)
+  }
+
+  /// Intentionally does nothing — the stale saves stay at the head (the wedge).
+  func remove(pendingRecordZoneChanges changes: [CKSyncEngine.PendingRecordZoneChange]) {}
 }

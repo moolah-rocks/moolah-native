@@ -8,38 +8,35 @@ import Testing
 /// Engine-bound end-to-end drain test for the upload-queue wedge fix (#1087),
 /// closing the test gap tracked as #1088.
 ///
-/// The wedge fix's existing unit tests only exercise the *static* batch-builder
-/// helpers in isolation (`newMissingDeleteIDs`, `selectBatchKind`,
-/// `filterChanges`). None drive the full `nextRecordZoneChangeBatch` cycle —
-/// dedup → batch-kind → `prefix(400)` window → build-or-convert-to-delete →
-/// state mutation — against a seeded backlog of stale `.saveRecord`s whose rows
-/// no longer exist. That whole-cycle behaviour is exactly what wedged uploads
-/// before #1087, so this test drives it across multiple cycles via the
-/// ``PendingChangeStore`` seam (`CKSyncEngine` itself has no constructible test
-/// instance) backed by an in-memory double, with the live record lookups served
-/// by a real in-memory GRDB profile.
+/// The wedge fix's other tests (`UploadQueueWedgeTests`) lock the *pure helpers*
+/// (`classifyLookups`, `pendingChanges`) in isolation. This suite instead drives
+/// the REAL send pipeline end to end — `nextRecordZoneChangeBatch` →
+/// `dedupedPendingChanges` (scope + per-recordID dedup + `pendingZoneCreation`
+/// deferral) → `selectBatchKind`/`filterChanges` → real `prefix(400)` →
+/// `partitionBatch` → real `buildRecordsToSave` GRDB lookup → the real
+/// `handleMissingRecordsToSave` `state.remove`/`state.add` — against a seeded
+/// stale-save backlog. Nothing is re-implemented or stubbed: the records are
+/// looked up through a real GRDB-backed handler (`ProfileContainerManager.forTesting()`),
+/// and the pending queue is the ``PendingChangeStore`` seam in place of the
+/// engine (`CKSyncEngine` has no constructible test instance).
 ///
-/// What "simulate the engine sending a batch" means here: per Apple's
-/// `CKSyncEngineState.h`, the engine "removes that change from this list" once it
-/// successfully sends it. After each non-nil batch we remove its sent saves +
-/// deletes from the store, exactly as the real engine would. A *nil* batch can
-/// still have made progress (a cycle of all-stale saves converts them to
-/// deletes via `state.remove` + `state.add`, which in production re-schedules a
-/// send), so the loop continues until the queue is empty — bounded by
-/// `maxCycles` so a regressed wedge (the same un-buildable 400 re-selected
-/// forever) fails loudly instead of hanging.
+/// Scope boundary: this proves the app's drain *pipeline logic* drains and stays
+/// drained against a faithful, insertion-ordered model of `CKSyncEngine.State`.
+/// It does NOT prove real `CKSyncEngine.State`'s add/remove/ordering semantics
+/// (Apple-undocumented in full) — the ground truth for those is the live
+/// migration, not this in-process test.
 @Suite("SyncCoordinator upload-queue drain (engine-bound, #1088)")
 @MainActor
 struct SyncCoordinatorUploadDrainTests {
 
-  /// A coordinator + seeded queue ready to drain: `live` recordIDs have rows in
-  /// GRDB (must upload), `stale` recordIDs do not (deleted locally before the
-  /// batch — must convert to server deletions). 450 stale > the 400 prefix
-  /// window, so the drain must span multiple cycles. Stale saves sit at the head
-  /// (the wedge shape that head-of-line-blocked the builder).
+  /// A coordinator + the seeded pending saves ready to drain: `live` recordIDs
+  /// have rows in GRDB (must upload), `stale` recordIDs do not (deleted locally
+  /// before the batch — must convert to server deletions). 450 stale > the 400
+  /// prefix window, so the drain must span multiple cycles. Stale saves sit at
+  /// the head (the wedge shape that head-of-line-blocked the builder).
   private struct DrainFixture {
     let coordinator: SyncCoordinator
-    let store: InMemoryPendingChangeStore
+    let saves: [CKSyncEngine.PendingRecordZoneChange]
     let live: [CKRecord.ID]
     let stale: [CKRecord.ID]
   }
@@ -69,8 +66,8 @@ struct SyncCoordinatorUploadDrainTests {
     }
     let live = liveIds.map(recordID)
     let stale = (0..<450).map { _ in recordID(UUID()) }
-    let store = InMemoryPendingChangeStore((stale + live).map { .saveRecord($0) })
-    return DrainFixture(coordinator: coordinator, store: store, live: live, stale: stale)
+    let saves = (stale + live).map { CKSyncEngine.PendingRecordZoneChange.saveRecord($0) }
+    return DrainFixture(coordinator: coordinator, saves: saves, live: live, stale: stale)
   }
 
   @Test(
@@ -79,7 +76,7 @@ struct SyncCoordinatorUploadDrainTests {
   func drainsStaleBacklogAcrossCycles() async throws {
     let fixture = try await Self.makeDrainFixture()
     let coordinator = fixture.coordinator
-    let store = fixture.store
+    let store = InMemoryPendingChangeStore(fixture.saves)
     let liveRecordIDs = fixture.live
     let staleRecordIDs = fixture.stale
     #expect(store.pendingRecordZoneChanges.count == staleRecordIDs.count + liveRecordIDs.count)
@@ -127,5 +124,40 @@ struct SyncCoordinatorUploadDrainTests {
 
     // 5. No stale record was ever uploaded as a live save.
     #expect(uploadedSaveIDs.isDisjoint(with: Set(staleRecordIDs)))
+  }
+
+  @Test(
+    "fail-without-fix (RED): with the stale-save remove suppressed, the queue does NOT drain"
+  )
+  func wedgePersistsWhenStaleSavesAreNotRemoved() async throws {
+    let fixture = try await Self.makeDrainFixture()
+    let coordinator = fixture.coordinator
+    // `NonRemovingPendingChangeStore.remove` is a no-op — the pre-#1087 wedge,
+    // where stale saves were never dropped from the head of the queue.
+    let store = NonRemovingPendingChangeStore(fixture.saves)
+    let staleRecordIDs = Set(fixture.stale)
+
+    var uploadedSaveIDs = Set<CKRecord.ID>()
+    // Run several cycles. With the head never clearing, every cycle re-selects
+    // the same un-buildable 400 stale saves; the live records (past the head)
+    // are never reached and the queue never drains.
+    for _ in 0..<8 {
+      guard let batch = coordinator.nextRecordZoneChangeBatch(scope: .all, state: store)
+      else { continue }
+      for record in batch.recordsToSave { uploadedSaveIDs.insert(record.recordID) }
+      store.remove(
+        pendingRecordZoneChanges:
+          batch.recordsToSave.map { .saveRecord($0.recordID) }
+          + batch.recordIDsToDelete.map { .deleteRecord($0) })
+    }
+
+    let remainingStaleSaves = store.pendingRecordZoneChanges.filter { change in
+      guard case .saveRecord(let id) = change else { return false }
+      return staleRecordIDs.contains(id)
+    }
+    // The wedge: every stale save is STILL pending — the head never advanced.
+    #expect(remainingStaleSaves.count == staleRecordIDs.count)
+    // And the live records, blocked behind the stale head, never uploaded.
+    #expect(uploadedSaveIDs.isEmpty)
   }
 }

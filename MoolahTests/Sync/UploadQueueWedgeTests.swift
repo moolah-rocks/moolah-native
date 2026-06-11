@@ -9,9 +9,14 @@ import Testing
 /// upload, which absent records are removed + deleted, which failed lookups
 /// stay pending) and `SyncCoordinator.pendingChanges(_:inZone:)` (the
 /// delete-time purge of a removed profile's queued changes). Both are
-/// `nonisolated static` and pure, so the behaviour is locked without driving a
-/// live `CKSyncEngine` (whose `State` cannot be fabricated in a test process)
-/// — the same shape as `NewMissingDeleteIDsTests`.
+/// `nonisolated static` and pure, so the behaviour is locked here in isolation —
+/// the same shape as `NewMissingDeleteIDsTests`.
+///
+/// The end-to-end multi-cycle drain — driving the real
+/// `nextRecordZoneChangeBatch` → `handleMissingRecordsToSave` pipeline (with the
+/// actual `state.remove`/`state.add` calls and a GRDB-backed lookup) — lives in
+/// `SyncCoordinatorUploadDrainTests`, via the `PendingChangeStore` seam that
+/// stands in for `CKSyncEngine.State` (#1088).
 @Suite("upload-queue wedge fix (issue #1087)")
 struct UploadQueueWedgeTests {
   private static let zone = CKRecordZone.ID(
@@ -102,100 +107,5 @@ struct UploadQueueWedgeTests {
       .saveRecord(Self.recordID("b1", in: zoneB))
     ]
     #expect(SyncCoordinator.pendingChanges(changes, inZone: zoneA).isEmpty)
-  }
-
-  // MARK: - Multi-cycle drain
-
-  /// Applies one `nextRecordZoneChangeBatch` cycle to a simulated pending
-  /// queue using the SAME production helpers the real path uses — the batch
-  /// `prefix`, `classifyLookups`, and `handleMissingRecordsToSave`'s
-  /// remove-stale-save + `newMissingDeleteIDs` semantics — plus a model of the
-  /// engine removing a successfully-uploaded save on ack. Returns the next
-  /// queue state.
-  ///
-  /// `lookup` classifies each pending save's record id (`.found`/`.absent`);
-  /// `.found` saves are "uploaded" (removed, as CKSyncEngine does on ack),
-  /// `.absent` saves are removed and a server deletion is queued.
-  private static func drainCycle(
-    _ pending: [CKSyncEngine.PendingRecordZoneChange],
-    batchLimit: Int,
-    lookup: (CKRecord.ID) -> RecordLookupOutcome
-  ) -> [CKSyncEngine.PendingRecordZoneChange] {
-    let saveIDs: [CKRecord.ID] = pending.compactMap {
-      if case .saveRecord(let id) = $0 { return id }
-      return nil
-    }
-    let batch = Array(saveIDs.prefix(batchLimit))
-    guard !batch.isEmpty else { return pending }
-
-    let (toSave, absent) = SyncCoordinator.classifyLookups(
-      batch.map { (recordID: $0, outcome: lookup($0)) })
-
-    // `handleMissingRecordsToSave`: remove the stale saves, queue novel deletes.
-    let novelDeletes = SyncCoordinator.newMissingDeleteIDs(
-      among: absent, pendingChanges: pending)
-    let removedSaves = Set(absent).union(toSave.map(\.recordID))  // absent + uploaded
-
-    var next = pending.filter { change in
-      if case .saveRecord(let id) = change { return !removedSaves.contains(id) }
-      return true
-    }
-    next.append(contentsOf: novelDeletes.map { .deleteRecord($0) })
-    return next
-  }
-
-  /// A queue seeded with a block of stale `.saveRecord`s for gone records plus
-  /// a few live ones must EMPTY of saves across repeated cycles: stale saves
-  /// are removed (so the head advances instead of re-selecting the same dead
-  /// 400 forever — the wedge), live saves upload, and no live record is ever
-  /// queued for server deletion.
-  ///
-  /// This drives the real classification + dedup helpers in a multi-cycle
-  /// loop. TODO(#1088): a full engine-harness e2e that drives the literal
-  /// `nextRecordZoneChangeBatchOnMain` against a live `CKSyncEngine.State`
-  /// (batch selection + the actual `state.remove`/`state.add` calls) is a
-  /// fast-follow — https://github.com/moolah-rocks/moolah-native/issues/1088
-  @Test("a queue of stale saves drains across cycles; live records survive, none deleted")
-  func multiCycleDrainEmptiesStaleSaves() {
-    let zone = CKRecordZone.ID(zoneName: "profile-Z", ownerName: CKCurrentUserDefaultName)
-    let staleIDs = (0..<50).map { Self.recordID("stale-\($0)", in: zone) }
-    let liveIDs = (0..<5).map { Self.recordID("live-\($0)", in: zone) }
-    let liveSet = Set(liveIDs)
-    // Interleave: a live save after every 10 stale ones, so the live records
-    // are spread through the queue rather than trivially at the tail.
-    var ordered: [CKRecord.ID] = []
-    var liveIterator = liveIDs.makeIterator()
-    for (index, stale) in staleIDs.enumerated() {
-      ordered.append(stale)
-      if index % 10 == 9, let live = liveIterator.next() { ordered.append(live) }
-    }
-    while let live = liveIterator.next() { ordered.append(live) }
-    var queue: [CKSyncEngine.PendingRecordZoneChange] = ordered.map { .saveRecord($0) }
-
-    let lookup: (CKRecord.ID) -> RecordLookupOutcome = { id in
-      liveSet.contains(id) ? .found(CKRecord(recordType: "Test", recordID: id)) : .absent
-    }
-
-    // Drain to a fixed point; cap cycles well above the ceil(55/10) needed so a
-    // regression that fails to drain trips the post-loop assertion, not a hang.
-    func saves(_ changes: [CKSyncEngine.PendingRecordZoneChange]) -> [CKSyncEngine
-      .PendingRecordZoneChange]
-    {
-      changes.filter { if case .saveRecord = $0 { return true } else { return false } }
-    }
-    for _ in 0..<50 where !saves(queue).isEmpty {
-      queue = Self.drainCycle(queue, batchLimit: 10, lookup: lookup)
-    }
-
-    let deletedIDs: [CKRecord.ID] = queue.compactMap {
-      if case .deleteRecord(let id) = $0 { return id }
-      return nil
-    }
-    // The queue drained: no `.saveRecord` remains (stale removed, live uploaded).
-    #expect(saves(queue).isEmpty)
-    // Every stale record was queued for server deletion exactly once.
-    #expect(Set(deletedIDs) == Set(staleIDs))
-    // No LIVE record was ever queued for deletion (the safety invariant).
-    #expect(deletedIDs.allSatisfy { !liveSet.contains($0) })
   }
 }
