@@ -141,10 +141,8 @@ struct ModificationDateGateTests {
   }
 
   /// The #1090 tripwire detector flags an existing local row whose cache was
-  /// nulled (absent from the gate's `cachedDates`) — but NOT a genuine new
-  /// record (no local row) and NOT a row carrying a valid cached date. Driven
-  /// through the real `cachedModificationDates` the gate computes, so it also
-  /// guards that a brand-new incoming record (no local row) never trips it.
+  /// nulled (absent from the gate's `cachedDates`) — but not a genuine new
+  /// record (no local row) and not a row carrying a valid cached date.
   @Test("tripwire flags an existing nil-cache row, not a new record or a cached row")
   func tripwireDetectsExistingNilCacheRows() async throws {
     let harness = try await MainActor.run {
