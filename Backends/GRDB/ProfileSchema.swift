@@ -90,6 +90,9 @@ import GRDB
 /// can refuse to clobber an in-flight local edit (issue #1081). The
 /// column never crosses the CloudKit wire. See
 /// `ProfileSchema+NeedsPush.swift`.
+/// `v18_deletion_journal` — adds the local-only `deletion_journal` table
+/// so a deletion survives engine-down timing / a sync-state reset
+/// (issue #1090). See `ProfileSchema+DeletionJournal.swift`.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -110,7 +113,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 17
+  static let version = 18
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()

@@ -17,8 +17,8 @@ struct ProfileIndexSchemaV3Tests {
 
   @Test("schema version reflects the latest migration")
   func versionIsLatest() {
-    // Bumped to 4 by `v4_needs_push` (issue #1081).
-    #expect(ProfileIndexSchema.version == 4)
+    // Bumped to 5 by `v5_deletion_journal` (issue #1090).
+    #expect(ProfileIndexSchema.version == 5)
   }
 
   @Test("v3 creates the instrument table plus all six rate-cache tables")

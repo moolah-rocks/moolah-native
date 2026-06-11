@@ -15,6 +15,12 @@ extension ProfileSchema {
   /// so re-deleting is idempotent. `STRICT` per
   /// `guides/DATABASE_SCHEMA_GUIDE.md`; the statement is a string literal (no
   /// interpolation) per `guides/DATABASE_CODE_GUIDE.md` §4.
+  ///
+  /// `WITHOUT ROWID`: a composite-TEXT-key table of short rows (no BLOB) whose
+  /// writes are PK-keyed (`clear` matches on the full PK) — the §3 decision
+  /// table marks this shape WITHOUT ROWID. The `queued_at` index serves the
+  /// start-time `allEntries` replay's `ORDER BY queued_at` so it neither scans
+  /// the table nor builds a temp B-tree.
   static func addDeletionJournal(_ database: Database) throws {
     try database.execute(
       sql: """
@@ -24,7 +30,10 @@ extension ProfileSchema {
             record_type  TEXT   NOT NULL,
             queued_at    REAL   NOT NULL,
             PRIMARY KEY (zone_name, record_name)
-        ) STRICT;
+        ) STRICT, WITHOUT ROWID;
+
+        CREATE INDEX deletion_journal_by_queued_at
+            ON deletion_journal(queued_at);
         """)
   }
 }

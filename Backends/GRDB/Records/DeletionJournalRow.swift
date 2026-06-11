@@ -134,7 +134,18 @@ enum DeletionJournal {
       zoneName: profileDataSentinelZone, recordName: recordName, in: database)
   }
 
-  /// Every recorded intent in this database, oldest first.
+  /// Deletes every intent in this database. Called by the local bulk-teardown
+  /// paths (sign-out / account-switch / zone purge) so a local data wipe also
+  /// clears its pending deletions — otherwise stale intents would replay on the
+  /// next sign-in (possibly against a different account). MUST run in the SAME
+  /// write that wipes the data tables.
+  static func clearAll(in database: Database) throws {
+    _ = try DeletionJournalRow.deleteAll(database)
+  }
+
+  /// Every recorded intent in this database, oldest first. The
+  /// `deletion_journal_by_queued_at` index backs this `ORDER BY` (no table
+  /// scan / temp sort); it runs once at engine start to drive the replay.
   static func allEntries(in database: Database) throws -> [DeletionJournalRow] {
     try DeletionJournalRow
       .order(DeletionJournalRow.Columns.queuedAt)

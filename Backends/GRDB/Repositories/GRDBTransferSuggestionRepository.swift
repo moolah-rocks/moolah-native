@@ -75,9 +75,9 @@ final class GRDBTransferSuggestionRepository: TransferSuggestionRepository,
   }
 
   func delete(id: UUID) async throws {
-    try await database.write { database in
-      let didDelete = try TransferSuggestionRow.deleteOne(database, id: id)
-      if didDelete {
+    let didDelete = try await database.write { database -> Bool in
+      let deleted = try TransferSuggestionRow.deleteOne(database, id: id)
+      if deleted {
         // Durable deletion intent (issue #1090) in the SAME txn as the delete.
         try DeletionJournal.recordDataDeletion(
           recordName: TransferSuggestionRow.recordName(for: id),
@@ -85,8 +85,13 @@ final class GRDBTransferSuggestionRepository: TransferSuggestionRepository,
           at: Date(),
           in: database)
       }
+      return deleted
     }
-    onRecordDeleted(TransferSuggestionRow.recordType, id)
+    // Only fan out the delete hook when a row was actually removed, so a no-op
+    // delete can't enqueue a spurious CloudKit `.deleteRecord`.
+    if didDelete {
+      onRecordDeleted(TransferSuggestionRow.recordType, id)
+    }
   }
 
   func suggestions(touching transactionId: UUID) async throws -> [TransferSuggestion] {

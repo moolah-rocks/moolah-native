@@ -77,6 +77,8 @@ struct ProfileSchemaV10DropLegacyTests {
     // v16 insight dismissals (synced per-kind fatigue tally; UNIQUE
     // constraints yield only auto-indexes, so no named index is added)
     "insight_dismissal",
+    // v18 durable deletion journal (local-only; issue #1090)
+    "deletion_journal",
     "grdb_migrations",
   ]
 
@@ -122,6 +124,8 @@ struct ProfileSchemaV10DropLegacyTests {
     // v14 account groups
     "account_group_by_bucket_position",
     "account_by_group_id",
+    // v18 durable deletion journal (issue #1090)
+    "deletion_journal_by_queued_at",
   ]
 
   /// `DATABASE_SCHEMA_GUIDE.md` §6 rule 1 golden gate: after the FULL
