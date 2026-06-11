@@ -201,6 +201,9 @@ final class GRDBTransactionRepository: TransactionRepository, @unchecked Sendabl
         try Self.markLegNeedsPush(id: leg.id, in: database)
         legIds.append(leg.id)
       }
+      // D1-b (issue #1090): drop any stale deletion intents for the header /
+      // legs being (re-)created in the same write.
+      try Self.clearDeletionIntents(for: transaction, in: database)
       return legIds
     }
 
@@ -271,6 +274,11 @@ final class GRDBTransactionRepository: TransactionRepository, @unchecked Sendabl
         .filter(TransactionLegRow.Columns.transactionId == id)
         .deleteAll(database)
       let didDelete = try TransactionRow.deleteOne(database, id: id)
+      if didDelete {
+        // Durable deletion intents (issue #1090) for the header and every leg,
+        // in the SAME txn as the deletes.
+        try Self.recordTransactionDeletion(headerId: id, legIds: legIds, in: database)
+      }
       return (didDelete, legIds)
     }
     guard outcome.didDelete else {
