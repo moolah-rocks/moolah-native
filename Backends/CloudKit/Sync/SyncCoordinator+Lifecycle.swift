@@ -180,6 +180,13 @@ extension SyncCoordinator {
     // `containerManager.allProfileIds()` is now async (it must not block
     // the main thread on the GRDB queue).
     zoneSetupTask = Task {
+      // Start-time reconciliation (issue #1091): purge pending orphaned by a
+      // profile deleted before the engine existed — see
+      // `reconcilePendingAgainstLiveProfiles()`. It fetches its OWN live set via
+      // the throwing path — must NOT use `profileIds` below (`allProfileIds()`
+      // swallows errors to `[]`).
+      await self.reconcilePendingAgainstLiveProfiles()
+
       // On first launch (migration or truly first launch), queue all existing records
       if runFirstLaunchQueue {
         await self.queueAllExistingRecordsForAllZones()
