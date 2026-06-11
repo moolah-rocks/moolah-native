@@ -172,59 +172,10 @@ extension SyncCoordinator {
 
     let shouldBackfillUnsynced = !isFirstLaunch
     let runFirstLaunchQueue = isFirstLaunch
-    // Eagerly create the profile-index zone and all known profile-data zones,
-    // then send if needed. Reactive creation in `handleSentRecordZoneChanges`
-    // remains as a fallback per SYNC_GUIDE Rule 3.
-    //
-    // Profile id enumeration moved inside the Task because
-    // `containerManager.allProfileIds()` is now async (it must not block
-    // the main thread on the GRDB queue).
     zoneSetupTask = Task {
-      // Start-time reconciliation (issue #1091): purge pending orphaned by a
-      // profile deleted before the engine existed — see
-      // `reconcilePendingAgainstLiveProfiles()`. It fetches its OWN live set via
-      // the throwing path — must NOT use `profileIds` below (`allProfileIds()`
-      // swallows errors to `[]`).
-      await self.reconcilePendingAgainstLiveProfiles()
-
-      // On first launch (migration or truly first launch), queue all existing records
-      if runFirstLaunchQueue {
-        await self.queueAllExistingRecordsForAllZones()
-      }
-      let profileIds = await self.containerManager.allProfileIds()
-      await self.ensureZoneExists(self.profileIndexHandler.zoneID)
-      for profileId in profileIds {
-        let zoneID = CKRecordZone.ID(
-          zoneName: "profile-\(profileId.uuidString)",
-          ownerName: CKCurrentUserDefaultName)
-        await self.ensureZoneExists(zoneID)
-      }
-      // After zones are confirmed, backfill any records that never got queued for upload
-      // (e.g. data imported by migration on a build that predated the migration→sync fix,
-      // or a previous run that crashed between the local write and the sync-engine
-      // queue). Skipped on first launch because `queueAllExistingRecordsForAllZones`
-      // has already queued everything.
-      if shouldBackfillUnsynced {
-        _ = await self.queueUnsyncedRecordsForAllProfiles()
-      }
-      // Shared-registry self-heal — re-queues any `instrument` row in
-      // the profile-index DB whose `encoded_system_fields` is NULL.
-      // Closes the gap between "union runner committed" and "engine
-      // state file persisted" by catching first-launch rows that
-      // never made it into the pending list. Cheap and idempotent.
-      //
-      // The previous per-profile-zone instrument backfill (which
-      // queued auto-inserted stock/crypto rows for upload to each
-      // `profile-<UUID>` zone) is decommissioned: every instrument
-      // upload routes through the shared registry to the profile-index
-      // zone. The DEBUG trap in `ProfileDataSyncHandler.recordToSave`
-      // now refuses any residual per-profile-zone `InstrumentRecord`
-      // upload, so the self-heal lives entirely on the shared side.
-      _ = self.queueUnsyncedSharedInstruments()
-      if self.hasPendingChanges {
-        self.logger.info("Zones ready — sending pending changes")
-        await self.sendChanges()
-      }
+      await self.runZoneSetup(
+        runFirstLaunchQueue: runFirstLaunchQueue,
+        shouldBackfillUnsynced: shouldBackfillUnsynced)
     }
 
     // Initial iCloud availability probe. Skip when entitlements are missing
@@ -243,6 +194,68 @@ extension SyncCoordinator {
           )
         }
       }
+    }
+  }
+
+  /// The async body of `zoneSetupTask`: start-time reconciliation + deletion
+  /// replay, eager zone creation, the unsynced backfill, then a send. Eagerly
+  /// creates the profile-index zone and all known profile-data zones (reactive
+  /// creation in `handleSentRecordZoneChanges` remains a fallback per SYNC_GUIDE
+  /// Rule 3). `Task.isCancelled` is checked after the journal scan and before
+  /// the send so a `stop()` mid-setup doesn't act on a torn-down engine.
+  private func runZoneSetup(
+    runFirstLaunchQueue: Bool, shouldBackfillUnsynced: Bool
+  ) async {
+    // Start-time reconciliation (issue #1091): purge pending orphaned by a
+    // profile deleted before the engine existed — see
+    // `reconcilePendingAgainstLiveProfiles()`. It fetches its OWN live set via
+    // the throwing path — must NOT use `allProfileIds()` below (which swallows
+    // errors to `[]`).
+    await reconcilePendingAgainstLiveProfiles()
+
+    // Durable deletion-journal replay (issue #1090): re-issue every journaled
+    // deletion as a `.deleteRecord` so a deletion survives an engine-down
+    // window or a sync-state reset. Runs after reconciliation (issue #1091) —
+    // the two act on disjoint zones (reconcile purges dead-profile DATA pending;
+    // replay re-issues index `ProfileRecord` + live-profile data deletions), so
+    // the order is conflict-free. See `SyncCoordinator+DeletionReplay`.
+    await replayDeletionJournal()
+    guard !Task.isCancelled else { return }
+
+    // On first launch (migration or truly first launch), queue all existing records.
+    if runFirstLaunchQueue {
+      await queueAllExistingRecordsForAllZones()
+    }
+    let profileIds = await containerManager.allProfileIds()
+    await ensureZoneExists(profileIndexHandler.zoneID)
+    for profileId in profileIds {
+      let zoneID = CKRecordZone.ID(
+        zoneName: "profile-\(profileId.uuidString)",
+        ownerName: CKCurrentUserDefaultName)
+      await ensureZoneExists(zoneID)
+    }
+    // After zones are confirmed, backfill any records that never got queued for
+    // upload (e.g. data imported by migration on a build that predated the
+    // migration→sync fix, or a previous run that crashed between the local write
+    // and the sync-engine queue). Skipped on first launch because
+    // `queueAllExistingRecordsForAllZones` has already queued everything.
+    if shouldBackfillUnsynced {
+      _ = await queueUnsyncedRecordsForAllProfiles()
+    }
+    // Shared-registry self-heal — re-queues any `instrument` row in the
+    // profile-index DB whose `encoded_system_fields` is NULL. Closes the gap
+    // between "union runner committed" and "engine state file persisted" by
+    // catching first-launch rows that never made it into the pending list.
+    // Cheap and idempotent. (The decommissioned per-profile-zone instrument
+    // backfill is gone: every instrument upload routes through the shared
+    // registry to the profile-index zone, and the DEBUG trap in
+    // `ProfileDataSyncHandler.recordToSave` refuses any residual per-profile
+    // `InstrumentRecord` upload.)
+    _ = queueUnsyncedSharedInstruments()
+    guard !Task.isCancelled else { return }
+    if hasPendingChanges {
+      logger.info("Zones ready — sending pending changes")
+      await sendChanges()
     }
   }
 
@@ -291,35 +304,8 @@ extension SyncCoordinator {
     syncEngine.map { !$0.state.pendingRecordZoneChanges.isEmpty } ?? false
   }
 
-  /// Removes any pending change whose recordName is a bare UUID (no `|`
-  /// separator and parses as a UUID). Such entries can only have been
-  /// persisted by a build that predated the `<recordType>|<UUID>` prefix
-  /// (issue #416). Post-prefix they collide with their prefixed counterparts
-  /// during batch build — both pass the `Set<CKRecord.ID>` dedup (different
-  /// recordNames) but resolve to the same UUID and the same local row,
-  /// so the same `CKRecord` instance gets appended to `recordsToSave` twice
-  /// and CloudKit rejects the entire batch with `.invalidArguments`
-  /// ("You can't save the same record twice").
-  ///
-  /// Instrument records use raw string IDs (`"AUD"`, `"ASX:BHP"`) which
-  /// don't parse as UUIDs, so they are correctly excluded by this check.
-  private func purgeStaleBareUUIDPendingChanges() {
-    guard let syncEngine else { return }
-    let stale = syncEngine.state.pendingRecordZoneChanges.filter { change in
-      let recordName: String
-      switch change {
-      case .saveRecord(let id): recordName = id.recordName
-      case .deleteRecord(let id): recordName = id.recordName
-      @unknown default: return false
-      }
-      return !recordName.contains("|") && UUID(uuidString: recordName) != nil
-    }
-    guard !stale.isEmpty else { return }
-    logger.warning(
-      "Purging \(stale.count, privacy: .public) stale bare-UUID pending changes left over from pre-prefixing CKSyncEngine state"
-    )
-    syncEngine.state.remove(pendingRecordZoneChanges: stale)
-  }
+  // `purgeStaleBareUUIDPendingChanges()` (issue #416 cleanup) lives in
+  // `SyncCoordinator+StalePendingPurge.swift`.
 
   // The four `queueSave` / `queueDeletion` overloads live in
   // `SyncCoordinator+QueueChanges.swift`.
@@ -331,6 +317,10 @@ extension SyncCoordinator {
     } catch {
       logger.error("Failed to send changes: \(error, privacy: .public)")
     }
+    // Clear-on-confirm (issue #1090): retire the journal row of any
+    // replayed deletion whose `.deleteRecord` left the queue during this send
+    // (CloudKit's only success signal for a delete), so it does not re-replay.
+    await clearConfirmedReplayedDeletions()
   }
 
   func fetchChanges() async {

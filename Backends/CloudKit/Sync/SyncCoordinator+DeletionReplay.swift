@@ -1,18 +1,15 @@
 @preconcurrency import CloudKit
 import Foundation
+import GRDB
 
-// Start-time replay of the durable deletion journal (issue #1090, PR-B). A
-// deletion recorded in `deletion_journal` (PR-A) survives engine-down timing
-// and a sync-state reset; on the next engine start this re-enqueues each
-// intent as a `.deleteRecord` so the deletion reliably reaches CloudKit instead
-// of being lost with the in-memory pending state.
-//
-// This file holds the PURE record-id resolution (sentinel zone → real zone),
-// which is the load-bearing, independently-testable core. The async start-time
+// Start-time replay of the durable deletion journal (issue #1090). A deletion
+// recorded in the `deletion_journal` table survives engine-down timing and a
+// sync-state reset (it lives in GRDB, not the engine's pending state); on the
+// next engine start this re-enqueues each intent as a `.deleteRecord` so the
+// deletion reliably reaches CloudKit instead of being lost with the in-memory
+// pending state. Resolution (sentinel zone → real zone) and the async
 // orchestration (iterate the profile-index DB + each live profile's DB, enqueue
-// onto the engine, clear-on-confirm) lands alongside its dedicated adversary
-// pass — replay is where deletions actually fire, so it is the highest-risk
-// surface and is paced separately.
+// onto the engine, clear-on-confirm) both live here.
 
 extension SyncCoordinator {
   /// Resolves journal entries read from ONE per-profile data DB to the
@@ -49,4 +46,208 @@ extension SyncCoordinator {
       return CKRecord.ID(recordName: entry.recordName, zoneID: indexZoneID)
     }
   }
+}
+
+// MARK: - Start-time replay orchestration
+
+@MainActor
+extension SyncCoordinator {
+  /// Replays every durable deletion intent (issue #1090) onto the live engine.
+  /// Called once in `completeStart`'s `zoneSetupTask`, after
+  /// `reconcilePendingAgainstLiveProfiles` (issue #1091). No-op when the engine
+  /// is not yet installed.
+  func replayDeletionJournal() async {
+    guard let syncEngine else { return }
+    await replayDeletionJournal(into: syncEngine.state)
+  }
+
+  /// Reads the deletion journal from the profile-index DB and every live
+  /// profile's DB, resolves each entry's real CloudKit zone (the `@profile-data`
+  /// sentinel → `profile-<id>`, index entries already carry `profile-index`),
+  /// and re-enqueues each as a `.deleteRecord`. Each enqueued id is tracked in
+  /// `replayedDeletionsInFlight` so `clearConfirmedReplayedDeletions` can retire
+  /// its journal row once the delete is acked. Keying the resolved set by
+  /// `CKRecord.ID` also collapses any duplicate intent to one enqueue.
+  ///
+  /// `state` is a seam: production passes `syncEngine.state`; tests pass an
+  /// in-memory ``PendingChangeStore`` (a fresh empty store models the
+  /// post-reset pending queue, proving the deletion survived the reset).
+  ///
+  /// HARD RULE: every re-issued deletion comes from a positive journal row —
+  /// nothing is ever inferred from a record being absent locally.
+  func replayDeletionJournal(into state: any PendingChangeStore) async {
+    var resolved: [CKRecord.ID: ReplayedDeletionRef] = [:]
+
+    let indexEntries = await readDeletionJournal(in: containerManager.profileIndexDatabase)
+    for id in Self.indexZoneDeletionReplayIDs(
+      indexEntries, indexZoneID: profileIndexHandler.zoneID)
+    {
+      resolved[id] = ReplayedDeletionRef(
+        origin: .index,
+        journalZoneName: DeletionJournal.profileIndexZoneName,
+        recordName: id.recordName)
+    }
+
+    for profileId in await containerManager.allProfileIds() {
+      let database: DatabaseQueue
+      do {
+        database = try containerManager.database(for: profileId)
+      } catch {
+        logger.error(
+          "Deletion-journal replay: cannot open DB for profile \(profileId, privacy: .public): \(error, privacy: .public) — skipping its journal"
+        )
+        continue
+      }
+      let entries = await readDeletionJournal(in: database)
+      let dataZoneID = CKRecordZone.ID(
+        zoneName: DeletionJournal.dataZoneName(for: profileId),
+        ownerName: CKCurrentUserDefaultName)
+      for id in Self.dataZoneDeletionReplayIDs(entries, dataZoneID: dataZoneID) {
+        resolved[id] = ReplayedDeletionRef(
+          origin: .profileData(profileId),
+          journalZoneName: DeletionJournal.profileDataSentinelZone,
+          recordName: id.recordName)
+      }
+    }
+
+    // The coordinator may have been stopped while the journal reads were in
+    // flight — don't mutate state / enqueue onto a torn-down engine.
+    guard !Task.isCancelled, !resolved.isEmpty else { return }
+    for (id, ref) in resolved {
+      replayedDeletionsInFlight[id] = ref
+    }
+    state.add(pendingRecordZoneChanges: resolved.keys.map { .deleteRecord($0) })
+    logger.warning(
+      "Deletion-journal replay: re-enqueued \(resolved.count, privacy: .public) durable deletion(s)"
+    )
+    refreshPendingUploadsMirror()
+  }
+
+  /// Retires journal rows for replayed deletions whose `.deleteRecord` has left
+  /// the pending queue — the only signal CloudKit gives for a successful delete
+  /// (`SentRecordZoneChanges` never reports `savedDeletes`). An `.unknownItem`
+  /// failed-delete also leaves the queue, so this covers "server already lacks
+  /// the record" too. Imperfect clearing is harmless (a redundant `.deleteRecord`
+  /// next start, never data loss); the harmful re-create case is handled by the
+  /// in-transaction clear that the repo's create write performs instead.
+  /// Idempotent.
+  func clearConfirmedReplayedDeletions() async {
+    guard let syncEngine else { return }
+    await clearConfirmedReplayedDeletions(against: syncEngine.state)
+  }
+
+  /// Seam-driven core of clear-on-confirm. A tracked replayed deletion whose id
+  /// is no longer a pending `.deleteRecord` is treated as sent → its journal row
+  /// is cleared and it is dropped from `replayedDeletionsInFlight`. Only entries
+  /// the replay itself enqueued this session are considered, so an unrelated
+  /// absence can never clear a row.
+  func clearConfirmedReplayedDeletions(against state: any PendingChangeStore) async {
+    guard !replayedDeletionsInFlight.isEmpty else { return }
+    let confirmed = Self.confirmedReplayedDeletions(
+      replayedDeletionsInFlight, pending: state.pendingRecordZoneChanges)
+    guard !confirmed.isEmpty else { return }
+    await clearJournalRows(for: confirmed)
+    // Only retire the in-flight tracking once the journal writes have run (and
+    // not after a stop cancelled them) — re-tracking on the next start is safe,
+    // dropping the tracking while a row lingers is not.
+    guard !Task.isCancelled else { return }
+    for id in confirmed.keys {
+      replayedDeletionsInFlight.removeValue(forKey: id)
+    }
+  }
+
+  /// The subset of `inFlight` whose `.deleteRecord` is no longer in `pending` —
+  /// treated as confirmed sent (CloudKit gives no positive delete ack, only the
+  /// change leaving the queue). Pure + `nonisolated static` so the confirm rule
+  /// is unit-testable without a live engine.
+  nonisolated static func confirmedReplayedDeletions(
+    _ inFlight: [CKRecord.ID: ReplayedDeletionRef],
+    pending: [CKSyncEngine.PendingRecordZoneChange]
+  ) -> [CKRecord.ID: ReplayedDeletionRef] {
+    var stillPendingDeletes: Set<CKRecord.ID> = []
+    for case .deleteRecord(let id) in pending {
+      stillPendingDeletes.insert(id)
+    }
+    return inFlight.filter { !stillPendingDeletes.contains($0.key) }
+  }
+
+  /// Clears the journal rows for the confirmed deletions, routing each to its
+  /// owning DB (the profile-index DB for index entries, each profile's data DB
+  /// for data entries). Best-effort per DB — a DB that won't open leaves its
+  /// rows to replay (idempotently) next start.
+  private func clearJournalRows(
+    for confirmed: [CKRecord.ID: ReplayedDeletionRef]
+  ) async {
+    var indexKeys: [(zoneName: String, recordName: String)] = []
+    var dataKeysByProfile: [UUID: [(zoneName: String, recordName: String)]] = [:]
+    for ref in confirmed.values {
+      switch ref.origin {
+      case .index:
+        indexKeys.append((ref.journalZoneName, ref.recordName))
+      case .profileData(let profileId):
+        dataKeysByProfile[profileId, default: []].append((ref.journalZoneName, ref.recordName))
+      }
+    }
+
+    if !indexKeys.isEmpty {
+      await clearDeletionJournal(indexKeys, in: containerManager.profileIndexDatabase)
+    }
+    for (profileId, keys) in dataKeysByProfile {
+      guard !Task.isCancelled else { return }
+      let database: DatabaseQueue
+      do {
+        database = try containerManager.database(for: profileId)
+      } catch {
+        logger.error(
+          "Clear-on-confirm: cannot open DB for profile \(profileId, privacy: .public): \(error, privacy: .public) — leaving its journal rows for the next start"
+        )
+        continue
+      }
+      await clearDeletionJournal(keys, in: database)
+    }
+  }
+
+  /// Reads every deletion-journal row in `database` off the MainActor, returning
+  /// `[]` on any read error (a transient failure must degrade to "replay nothing
+  /// from this DB this start", never throw out of startup).
+  private func readDeletionJournal(in database: DatabaseQueue) async -> [DeletionJournalRow] {
+    do {
+      return try await database.read { try DeletionJournal.allEntries(in: $0) }
+    } catch {
+      logger.error(
+        "Deletion-journal read failed: \(error, privacy: .public) — replaying nothing from this DB")
+      return []
+    }
+  }
+
+  /// Clears the given journal rows in `database` off the MainActor. Best-effort:
+  /// a failed clear only costs a redundant (idempotent) replay next start.
+  private func clearDeletionJournal(
+    _ keys: [(zoneName: String, recordName: String)], in database: DatabaseQueue
+  ) async {
+    do {
+      try await database.write { try DeletionJournal.clear(keys, in: $0) }
+    } catch {
+      logger.error(
+        "Clear-on-confirm journal write failed: \(error, privacy: .public) — rows will replay (idempotent) next start"
+      )
+    }
+  }
+}
+
+/// Where a replayed deletion's journal row lives, so the clear-on-confirm sweep
+/// can delete the right row once its `.deleteRecord` is acked (issue #1090).
+/// `journalZoneName` is the value stored IN the row — the `@profile-data`
+/// sentinel for per-profile data entries, the real `profile-index` for index
+/// entries — NOT the resolved CloudKit zone.
+struct ReplayedDeletionRef: Sendable, Equatable {
+  let origin: ReplayedDeletionOrigin
+  let journalZoneName: String
+  let recordName: String
+}
+
+/// Which database a replayed deletion's journal row lives in.
+enum ReplayedDeletionOrigin: Sendable, Equatable {
+  case index
+  case profileData(UUID)
 }

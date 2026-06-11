@@ -15,15 +15,35 @@ extension SyncCoordinator {
   // `queueAllExistingRecordsForAllZones` / `queueUnsyncedRecordsForAllProfiles`
   // inside `completeStart`.
   func queueSave(recordType: String, id: UUID, zoneID: CKRecordZone.ID) {
-    let recordID = CKRecord.ID(
-      recordType: recordType, uuid: id, zoneID: zoneID)
-    syncEngine?.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
-    refreshPendingUploadsMirror()
+    enqueueSave(CKRecord.ID(recordType: recordType, uuid: id, zoneID: zoneID))
   }
 
   func queueSave(recordName: String, zoneID: CKRecordZone.ID) {
-    let recordID = CKRecord.ID(recordName: recordName, zoneID: zoneID)
-    syncEngine?.state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
+    enqueueSave(CKRecord.ID(recordName: recordName, zoneID: zoneID))
+  }
+
+  /// Adds a `.saveRecord` to the live engine, no-op until the engine is
+  /// installed (the documented start-window behaviour — anything persisted
+  /// before then is re-queued by the start-time backfill).
+  private func enqueueSave(_ recordID: CKRecord.ID) {
+    guard let syncEngine else { return }
+    applySave(recordID, to: syncEngine.state)
+  }
+
+  /// Shared core of the save path + the create-hook hardening (issue #1090):
+  /// BEFORE adding the save, drop any pending `.deleteRecord` for the same id,
+  /// and drop it from `replayedDeletionsInFlight`. A re-created (or undeleted)
+  /// record must not be killed by a replayed/in-flight deletion that is still
+  /// sitting in the queue — `add(.saveRecord)` does NOT supersede a coexisting
+  /// `.deleteRecord`, so the removal is explicit. (The repo's create write
+  /// already cleared the journal row in-transaction; this clears the in-memory
+  /// pending side.)
+  ///
+  /// `state` is a seam so the hardening is unit-testable without a live engine.
+  func applySave(_ recordID: CKRecord.ID, to state: any PendingChangeStore) {
+    state.remove(pendingRecordZoneChanges: [.deleteRecord(recordID)])
+    replayedDeletionsInFlight.removeValue(forKey: recordID)
+    state.add(pendingRecordZoneChanges: [.saveRecord(recordID)])
     refreshPendingUploadsMirror()
   }
 
@@ -58,10 +78,8 @@ extension SyncCoordinator {
     guard !candidates.isEmpty else { return [] }
     var pendingDeleteIds: Set<CKRecord.ID> = []
     pendingDeleteIds.reserveCapacity(pendingChanges.count)
-    for change in pendingChanges {
-      if case .deleteRecord(let id) = change {
-        pendingDeleteIds.insert(id)
-      }
+    for case .deleteRecord(let id) in pendingChanges {
+      pendingDeleteIds.insert(id)
     }
     if pendingDeleteIds.isEmpty { return candidates }
     return candidates.filter { !pendingDeleteIds.contains($0) }
