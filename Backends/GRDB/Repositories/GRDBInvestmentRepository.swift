@@ -114,6 +114,8 @@ final class GRDBInvestmentRepository: InvestmentRepository, @unchecked Sendable 
         existing.instrumentId = value.instrument.id
         try existing.update(database)
         try markNeedsPushSync(id: existing.id, in: database)
+        try DeletionJournal.clearDataDeletion(
+          recordName: InvestmentValueRow.recordName(for: existing.id), in: database)
         return existing.id
       }
 
@@ -128,6 +130,9 @@ final class GRDBInvestmentRepository: InvestmentRepository, @unchecked Sendable 
         encodedSystemFields: nil)
       try row.insert(database)
       try markNeedsPushSync(id: id, in: database)
+      // D1-b (issue #1090): a re-created row drops any stale deletion intent.
+      try DeletionJournal.clearDataDeletion(
+        recordName: InvestmentValueRow.recordName(for: id), in: database)
       return id
     }
     onRecordChanged(InvestmentValueRow.recordType, changedId)
@@ -149,6 +154,12 @@ final class GRDBInvestmentRepository: InvestmentRepository, @unchecked Sendable 
       }
       let id = existing.id
       try existing.delete(database)
+      // Durable deletion intent (issue #1090) in the SAME txn as the delete.
+      try DeletionJournal.recordDataDeletion(
+        recordName: InvestmentValueRow.recordName(for: id),
+        recordType: InvestmentValueRow.recordType,
+        at: Date(),
+        in: database)
       return id
     }
     onRecordDeleted(InvestmentValueRow.recordType, deletedId)
@@ -169,6 +180,14 @@ final class GRDBInvestmentRepository: InvestmentRepository, @unchecked Sendable 
         .select(InvestmentValueRow.Columns.id, as: UUID.self)
         .fetchAll(database)
       _ = try request.deleteAll(database)
+      // Durable deletion intents (issue #1090) in the SAME txn as the deletes.
+      for id in ids {
+        try DeletionJournal.recordDataDeletion(
+          recordName: InvestmentValueRow.recordName(for: id),
+          recordType: InvestmentValueRow.recordType,
+          at: Date(),
+          in: database)
+      }
       return ids
     }
     for id in deletedIds {
@@ -203,26 +222,7 @@ final class GRDBInvestmentRepository: InvestmentRepository, @unchecked Sendable 
   // serial executor admits the closure. Never call these from
   // `@MainActor`.
 
-  func applyRemoteChangesSync(
-    saved rows: [InvestmentValueRow], deleted ids: [UUID]
-  ) throws {
-    try database.write { database in
-      try applyRemoteChangesSync(saved: rows, deleted: ids, in: database)
-    }
-  }
-
-  /// In-transaction variant — see `GRDBCSVImportProfileRepository.applyRemoteChangesSync(...:in:)`
-  /// for the rationale (one commit per `applyRemoteChanges` batch, issue #872).
-  func applyRemoteChangesSync(
-    saved rows: [InvestmentValueRow], deleted ids: [UUID], in database: Database
-  ) throws {
-    for row in rows {
-      try row.upsert(database)
-    }
-    for id in ids {
-      _ = try InvestmentValueRow.deleteOne(database, id: id)
-    }
-  }
+  // `applyRemoteChangesSync(...)` lives in `GRDBInvestmentRepository+Sync.swift`.
 
   /// Writes (or clears) the cached system-fields blob on a single row.
   /// Returns `true` when a row was found and updated.
