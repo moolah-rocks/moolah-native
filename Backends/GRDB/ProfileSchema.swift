@@ -151,6 +151,7 @@ enum ProfileSchema {
     migrator.registerMigration(
       "v16_insight_dismissals", migrate: addInsightDismissals)
     migrator.registerMigration("v17_needs_push", migrate: addNeedsPush)
+    migrator.registerMigration("v18_deletion_journal", migrate: addDeletionJournal)
 
     return migrator
   }
