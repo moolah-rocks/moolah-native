@@ -43,10 +43,6 @@ extension GRDBTransactionRepository {
   ) throws {
     for row in rows {
       try row.upsert(database)
-      // D1-b (issue #1090): a peer re-creating this header clears our stale
-      // intent; the apply-path deletes below are server-originated and never
-      // journaled (the leg cascade is server-authoritative too).
-      try DeletionJournal.clearDataDeletion(recordName: row.recordName, in: database)
     }
     for id in ids {
       _ =
