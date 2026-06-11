@@ -68,7 +68,57 @@ extension ProfileDataSyncHandler {
     let cleanIds = deduped.compactMap { $0.recordID.uuid }
     let cachedDates = try cachedModificationDates(
       recordType: recordType, ids: cleanIds, in: database)
+    warnOnExistingRowsWithNilCache(
+      recordType: recordType, ids: cleanIds, cachedDates: cachedDates, in: database)
     return Self.applicableAfterDateGate(deduped, cachedDates: cachedDates)
+  }
+
+  /// Regression tripwire (issue #1090). Logs loudly when a CLEAN incoming
+  /// record's local row EXISTS but caches no `modificationDate` — i.e. some
+  /// write nulled the row's `encoded_system_fields`. That is the exact state
+  /// in which the gate's deliberate nil-cache fail-open lets a stale self-echo
+  /// clobber the row. The record still applies (fail-open is preserved — it is
+  /// required so a genuine first-time peer record inserts); this only surfaces
+  /// the condition so any future cache-nulling write path is caught at runtime.
+  ///
+  /// The explicit row-exists guard (`currentCKRecord` returning non-nil) is
+  /// what keeps it from firing on a normal new-record insert, whose row does
+  /// not yet exist locally.
+  nonisolated func warnOnExistingRowsWithNilCache(
+    recordType: String, ids: [UUID], cachedDates: [UUID: Date], in database: Database
+  ) {
+    let suspect =
+      (try? existingRowsWithNilCache(
+        recordType: recordType, ids: ids, cachedDates: cachedDates, in: database)) ?? []
+    for id in suspect {
+      logger.error(
+        """
+        clean-apply tripwire: existing \(recordType, privacy: .public) row \
+        \(id.uuidString, privacy: .public) has a nil cached system-fields blob — \
+        a write nulled the cache; a stale echo could clobber it (issue #1090)
+        """)
+    }
+  }
+
+  /// The `ids` whose local row EXISTS yet carries no cached `modificationDate`
+  /// (the nil-cache regression). An id with no local row — a genuine new
+  /// record — is excluded. Pure (no logging) so it can be asserted directly.
+  ///
+  /// Existence is tested via `currentCKRecord`, NOT `cachedSystemFields`: the
+  /// latter is built with optional chaining (`fetchRowSync(...)?.encoded…`),
+  /// which collapses "row absent" and "row present with a nil blob" into the
+  /// same value — so its outer optional cannot tell them apart.
+  /// `currentCKRecord` returns `nil` only for a genuinely missing row.
+  nonisolated func existingRowsWithNilCache(
+    recordType: String, ids: [UUID], cachedDates: [UUID: Date], in database: Database
+  ) throws -> [UUID] {
+    var suspect: [UUID] = []
+    for id in ids where cachedDates[id] == nil {
+      if try currentCKRecord(recordType: recordType, id: id, in: database) != nil {
+        suspect.append(id)
+      }
+    }
+    return suspect
   }
 
   /// Filters the clean records by the modification-date gate, returning only

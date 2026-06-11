@@ -139,4 +139,40 @@ struct ModificationDateGateTests {
 
     #expect(try await quantity(harness, id: id) == 500)
   }
+
+  /// The #1090 tripwire detector flags an existing local row whose cache was
+  /// nulled (absent from the gate's `cachedDates`) — but NOT a genuine new
+  /// record (no local row) and NOT a row carrying a valid cached date. Driven
+  /// through the real `cachedModificationDates` the gate computes, so it also
+  /// guards that a brand-new incoming record (no local row) never trips it.
+  @Test("tripwire flags an existing nil-cache row, not a new record or a cached row")
+  func tripwireDetectsExistingNilCacheRows() async throws {
+    let harness = try await MainActor.run {
+      try ProfileDataSyncHandlerTestSupport.makeHandlerWithDatabase()
+    }
+    // (a) existing row whose cache was nulled (no system-fields blob).
+    let nilCacheId = UUID()
+    try await ProfileDataSyncHandlerTestSupport.seed(into: harness.database) { database in
+      try ProfileDataSyncHandlerTestSupport.transactionLegRow(
+        id: nilCacheId, transactionId: UUID(), accountId: nil, quantity: 1
+      ).insert(database)
+    }
+    // (b) existing row carrying a valid cached date.
+    let cachedId = try await seedCleanLeg(harness, quantity: 5, cachedDate: Self.tOlder)
+    // (c) no local row — a genuine new record.
+    let newRecordId = UUID()
+
+    let handler = harness.handler
+    let ids = [nilCacheId, cachedId, newRecordId]
+    // Run on the writer connection, as `applicableCleanSaves` does in the apply
+    // path, so the cached-date read sees the committed seed writes.
+    let suspect = try await harness.database.write { database -> [UUID] in
+      let cachedDates = try handler.cachedModificationDates(
+        recordType: TransactionLegRow.recordType, ids: ids, in: database)
+      return try handler.existingRowsWithNilCache(
+        recordType: TransactionLegRow.recordType, ids: ids,
+        cachedDates: cachedDates, in: database)
+    }
+    #expect(suspect == [nilCacheId])
+  }
 }
