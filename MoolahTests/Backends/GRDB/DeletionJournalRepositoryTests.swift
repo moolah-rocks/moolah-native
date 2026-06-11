@@ -10,6 +10,8 @@ import Testing
 /// it (D1-b), and a server-originated apply-path delete never journals.
 @Suite("DeletionJournal — per-profile data repos")
 struct DeletionJournalRepositoryTests {
+  private static let date = Date(timeIntervalSince1970: 1_700_000_000)
+
   private func makeDatabase() throws -> DatabaseQueue {
     try ProfileDatabase.openInMemory()
   }
@@ -138,5 +140,120 @@ struct DeletionJournalRepositoryTests {
     // `delete(id:)` flips `is_hidden` (an UPDATE) and must never journal a
     // deletion intent — a soft hide is not a propagated deletion.
     #expect(try await entries(database).isEmpty)
+  }
+
+  // MARK: - Atomicity
+
+  @Test("a forced failure journaling a delete rolls back the row delete too")
+  func deleteAndJournalAreAtomic() async throws {
+    let database = try makeDatabase()
+    let repo = try makeTransactionRepo(database)
+    let txn = Transaction(
+      date: Date(timeIntervalSince1970: 1_700_000_000),
+      legs: [TransactionLeg(accountId: UUID(), instrument: .AUD, quantity: -50, type: .expense)])
+    _ = try await repo.create(txn)
+
+    // Abort any insert into the journal — the delete write must roll back whole.
+    try await database.write { database in
+      try database.execute(
+        sql: """
+          CREATE TRIGGER fail_journal BEFORE INSERT ON deletion_journal
+          BEGIN SELECT RAISE(ABORT, 'forced journal failure'); END;
+          """)
+    }
+    await #expect(throws: (any Error).self) {
+      try await repo.delete(id: txn.id)
+    }
+
+    // The header survived (the delete rolled back with the failed journal
+    // insert) and no tombstone landed — the two are one transaction.
+    let survived = try await database.read {
+      try TransactionRow.fetchOne($0, key: txn.id) != nil
+    }
+    #expect(survived)
+    #expect(try await entries(database).isEmpty)
+  }
+
+  // MARK: - D1-b recreate-clears sweep (other hard-delete types)
+
+  @Test("account-group delete journals it; re-create clears the intent")
+  func accountGroupDeleteThenRecreateClears() async throws {
+    let database = try makeDatabase()
+    let repo = GRDBAccountGroupRepository(database: database)
+    let id = UUID()
+    let group = AccountGroup(id: id, name: "Cash", bucket: .current, instrument: .AUD)
+    _ = try await repo.create(group)
+    try await repo.delete(id: id)
+    #expect(try await entries(database).map(\.recordName) == [AccountGroupRow.recordName(for: id)])
+    _ = try await repo.create(group)
+    #expect(try await entries(database).isEmpty)
+  }
+
+  @Test("transfer-suggestion delete journals it; re-create clears the intent")
+  func transferSuggestionDeleteThenRecreateClears() async throws {
+    let database = try makeDatabase()
+    let repo = GRDBTransferSuggestionRepository(database: database)
+    let suggestion = TransferSuggestion(
+      transactionIds: [UUID(), UUID()], suggestedAt: Self.date)
+    _ = try await repo.create(suggestion)
+    try await repo.delete(id: suggestion.id)
+    #expect(
+      try await entries(database).map(\.recordName)
+        == [TransferSuggestionRow.recordName(for: suggestion.id)])
+    _ = try await repo.create(suggestion)
+    #expect(try await entries(database).isEmpty)
+  }
+
+  @Test("csv-import-profile delete journals it; re-create clears the intent")
+  func csvImportProfileDeleteThenRecreateClears() async throws {
+    let database = try makeDatabase()
+    let repo = GRDBCSVImportProfileRepository(database: database)
+    let id = UUID()
+    let profile = CSVImportProfile(
+      id: id, accountId: UUID(), parserIdentifier: "generic", headerSignature: ["Date", "Amount"])
+    _ = try await repo.create(profile)
+    try await repo.delete(id: id)
+    #expect(
+      try await entries(database).map(\.recordName) == [CSVImportProfileRow.recordName(for: id)])
+    _ = try await repo.create(profile)
+    #expect(try await entries(database).isEmpty)
+  }
+
+  @Test("import-rule delete journals it; re-create clears the intent")
+  func importRuleDeleteThenRecreateClears() async throws {
+    let database = try makeDatabase()
+    let repo = GRDBImportRuleRepository(database: database)
+    let id = UUID()
+    let rule = ImportRule(id: id, name: "R", position: 0, conditions: [], actions: [])
+    _ = try await repo.create(rule)
+    try await repo.delete(id: id)
+    #expect(try await entries(database).map(\.recordName) == [ImportRuleRow.recordName(for: id)])
+    _ = try await repo.create(rule)
+    #expect(try await entries(database).isEmpty)
+  }
+
+  @Test("investment removeValue journals the deleted value under the sentinel zone")
+  func investmentRemoveValueJournals() async throws {
+    let database = try makeDatabase()
+    let repo = GRDBInvestmentRepository(
+      database: database,
+      defaultInstrument: .AUD,
+      instrumentResolver: try SharedRegistryTestSupport.makeSharedRegistry())
+    let accountId = UUID()
+    let amount = InstrumentAmount(quantity: 100, instrument: .AUD)
+    try await repo.setValue(accountId: accountId, date: Self.date, value: amount)
+    #expect(try await entries(database).isEmpty)
+
+    try await repo.removeValue(accountId: accountId, date: Self.date)
+    let recorded = try await entries(database)
+    #expect(recorded.count == 1)
+    #expect(recorded.first?.zoneName == DeletionJournal.profileDataSentinelZone)
+    #expect(recorded.first?.recordType == InvestmentValueRow.recordType)
+
+    // `setValue` after a remove mints a NEW value id (a new record), so the
+    // removed value's deletion correctly still stands — D1-b clears a tombstone
+    // only when the SAME id is re-created, which the other suites cover.
+    try await repo.setValue(accountId: accountId, date: Self.date, value: amount)
+    #expect(try await entries(database).count == 1)
   }
 }

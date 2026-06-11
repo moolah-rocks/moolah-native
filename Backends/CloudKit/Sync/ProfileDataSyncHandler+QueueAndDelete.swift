@@ -316,6 +316,17 @@ extension ProfileDataSyncHandler {
         TransferSuggestionRow.recordType,
         { try self.grdbRepositories.transferSuggestions.deleteAllSync() }
       ),
+      // Clear pending deletion intents too (issue #1090): a local teardown
+      // (sign-out / account-switch / zone purge) must not leave tombstones that
+      // would replay as `.deleteRecord`s on the next sign-in.
+      (
+        "deletion_journal",
+        {
+          try self.grdbRepositories.database.write { database in
+            try DeletionJournal.clearAll(in: database)
+          }
+        }
+      ),
     ]
   }
 

@@ -30,6 +30,10 @@ extension GRDBProfileIndexRepository {
   func deleteAllProfileIndexDataSync() throws {
     try database.write { database in
       _ = try ProfileRow.deleteAll(database)
+      // Clear pending deletion intents too (issue #1090): a local index wipe
+      // (sign-out / account-switch / zone purge) must not leave tombstones that
+      // would replay on the next sign-in.
+      try DeletionJournal.clearAll(in: database)
       let existingTables = try Set(
         String.fetchAll(
           database,

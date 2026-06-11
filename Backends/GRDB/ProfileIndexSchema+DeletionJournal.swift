@@ -10,7 +10,9 @@ extension ProfileIndexSchema {
   /// record is reliably deleted rather than resurrecting as an empty shell.
   ///
   /// Same shape as the per-profile `deletion_journal` (`ProfileSchema+DeletionJournal`):
-  /// `(zone_name, record_name)` primary key, `STRICT`, string-literal SQL.
+  /// `(zone_name, record_name)` primary key, `STRICT, WITHOUT ROWID` (composite
+  /// TEXT key, short rows, PK-keyed writes — §3 decision table), plus a
+  /// `queued_at` index for the start-time replay's `ORDER BY`; string-literal SQL.
   static func addDeletionJournal(_ database: Database) throws {
     try database.execute(
       sql: """
@@ -20,7 +22,10 @@ extension ProfileIndexSchema {
             record_type  TEXT   NOT NULL,
             queued_at    REAL   NOT NULL,
             PRIMARY KEY (zone_name, record_name)
-        ) STRICT;
+        ) STRICT, WITHOUT ROWID;
+
+        CREATE INDEX deletion_journal_by_queued_at
+            ON deletion_journal(queued_at);
         """)
   }
 }
