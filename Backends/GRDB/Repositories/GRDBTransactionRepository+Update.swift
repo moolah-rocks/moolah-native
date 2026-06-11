@@ -80,6 +80,11 @@ extension GRDBTransactionRepository {
       database: database,
       transactionId: transaction.id,
       newLegIds: newLegIds)
+    // Durable deletion intents (issue #1090) for legs removed by this edit —
+    // `computeLegDiff` has already deleted their rows in this txn.
+    for legId in diff.deletedIds {
+      try recordLegDeletion(legId, in: database)
+    }
 
     // Upsert every leg in the new array. Idempotent for unchanged
     // rows; updates `sort_order` for legs that moved; inserts new
@@ -108,6 +113,10 @@ extension GRDBTransactionRepository {
       try markLegNeedsPush(id: leg.id, in: database)
       upsertedLegIds.append(leg.id)
     }
+
+    // D1-b (issue #1090): the (re-)written header and its current legs drop any
+    // stale deletion intents in the same write.
+    try clearDeletionIntents(for: transaction, in: database)
 
     return UpdateOutcome(
       deletedLegIds: diff.deletedIds,

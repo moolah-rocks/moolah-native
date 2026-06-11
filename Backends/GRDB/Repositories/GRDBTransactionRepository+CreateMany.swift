@@ -78,6 +78,9 @@ extension GRDBTransactionRepository {
         try markLegNeedsPush(id: leg.id, in: database)
         legIds.append(leg.id)
       }
+      // D1-b (issue #1090): a (re-)created header / legs drop any stale
+      // deletion intents in the same write — covers `replace` reusing an id.
+      try clearDeletionIntents(for: transaction, in: database)
     }
     return legIds
   }
