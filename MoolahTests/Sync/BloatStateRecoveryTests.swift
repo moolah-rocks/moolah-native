@@ -132,6 +132,40 @@ struct BloatStateRecoveryTests {
     #expect(toApply.map(\.recordID) == [peerID])
   }
 
+  @Test(
+    "the shield covers a just-deleted-un-propagated instrument: a re-delivered save is suppressed (#1097)"
+  )
+  func shieldCoversDeletedInstrument() async throws {
+    let (coordinator, manager) = try Support.makeCoordinator()
+    let indexZoneID = coordinator.profileIndexHandler.zoneID
+    // Instruments are journaled in the profile-index DB; the recovery snapshot
+    // unions the index DB's journal, so a journaled instrument deletion is
+    // shielded for free.
+    let registry = GRDBInstrumentRegistryRepository(database: manager.profileIndexDatabase)
+    let eth = Instrument.crypto(
+      chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    try await registry.registerCrypto(
+      eth,
+      mapping: CryptoProviderMapping(
+        instrumentId: eth.id, coingeckoId: "ethereum",
+        cryptocompareSymbol: nil, binanceSymbol: nil))
+    try await registry.remove(id: eth.id)
+
+    coordinator.armRecoveryShield()
+    let doomedID = CKRecord.ID(recordName: eth.id, zoneID: indexZoneID)
+    let shield = await coordinator.activeRecoveryShield()
+    #expect(shield.contains(doomedID))
+
+    // The forced refetch re-delivers the deleted instrument → it must be
+    // suppressed, not resurrected; an unrelated peer instrument applies.
+    let doomedRecord = CKRecord(recordType: InstrumentRow.recordType, recordID: doomedID)
+    let peerID = CKRecord.ID(recordName: "1:0xpeer", zoneID: indexZoneID)
+    let peerRecord = CKRecord(recordType: InstrumentRow.recordType, recordID: peerID)
+    let (toApply, suppressed) = await coordinator.recoveryShieldedSaves([doomedRecord, peerRecord])
+    #expect(suppressed.map(\.recordID) == [doomedID])
+    #expect(toApply.map(\.recordID) == [peerID])
+  }
+
   @Test("an empty journal arms no shield (nothing to suppress)")
   func emptyJournalArmsNoShield() async throws {
     let (coordinator, manager) = try Support.makeCoordinator()

@@ -3,12 +3,13 @@
 import Foundation
 import GRDB
 
-// The row-level upsert helpers live here, split out of
-// `GRDBInstrumentRegistryRepository.swift` so that file stays under
+// Row-level upsert helpers for `GRDBInstrumentRegistryRepository`. They
+// live in a sibling extension file so the primary file stays under
 // SwiftLint's `file_length` budget. They are `static` and module-scoped
 // (default `internal`) so the primary type's `register…` methods can call
-// `Self.upsertCrypto` / `Self.upsertStock` across the same-module
-// extension boundary — mirroring the `+SyncHooks` / `+Lookup` split.
+// `Self.upsertCrypto` / `Self.upsertStock`, and `applyRemoteChangesSync`
+// can call `Self.clearDeletionIntent`, across the same-module extension
+// boundary — mirroring the `+SyncHooks` / `+Lookup` split.
 extension GRDBInstrumentRegistryRepository {
   /// Inserts a new crypto row or updates the existing one in-place,
   /// preserving `recordName` and `encodedSystemFields`. Mirrors
@@ -50,6 +51,7 @@ extension GRDBInstrumentRegistryRepository {
       if let status { row.pricingStatus = status.rawValue }
       try row.insert(database)
     }
+    try clearDeletionIntent(for: instrument.id, in: database)
   }
 
   /// Upgrade-only field merge: a nil/empty incoming column must never
@@ -108,5 +110,21 @@ extension GRDBInstrumentRegistryRepository {
       let row = InstrumentRow(domain: instrument)
       try row.insert(database)
     }
+    try clearDeletionIntent(for: instrument.id, in: database)
+  }
+
+  /// Drops any stale durable deletion intent for `id` in the caller's write
+  /// transaction (D1-b, issue #1097), symmetric with `ProfileRow`'s clear in
+  /// `upsert` and `Category`'s in `create`: a delete-then-re-register nets zero
+  /// tombstone, so a start-time replay can never delete the live re-created
+  /// instrument. The intent is keyed by the `profile-index` zone (the bare
+  /// instrument id is its CloudKit recordName). Idempotent. MUST be called from
+  /// inside an existing `database.write { db in … }` closure (it takes the
+  /// `Database` token, so it runs on the GRDB writer's serial queue).
+  static func clearDeletionIntent(for id: String, in database: Database) throws {
+    try DeletionJournal.clear(
+      zoneName: DeletionJournal.profileIndexZoneName,
+      recordName: InstrumentRow.recordName(for: id),
+      in: database)
   }
 }

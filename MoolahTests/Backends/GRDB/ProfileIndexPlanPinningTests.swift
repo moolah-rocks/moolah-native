@@ -20,6 +20,10 @@ import Testing
 ///    `GRDBProfileIndexRepository.profile(forID:)` (every session-open)
 ///    and `mergeDataFormatVersionSync` (every sync-merge). Must use the
 ///    table's primary key.
+/// 3. `deletion_journal` ordered by `queued_at` — the start-time
+///    deletion-journal replay sweep (`DeletionJournal.allEntries(in:)`,
+///    issue #1090 / #1097). Must hit `deletion_journal_by_queued_at`
+///    and avoid a temp B-tree sort.
 @Suite("Profile-index GRDB query plans")
 struct ProfileIndexPlanPinningTests {
   /// `PlanPinningTestHelpers.makeDatabase` opens the per-profile
@@ -74,5 +78,21 @@ struct ProfileIndexPlanPinningTests {
     // pin.
     #expect(detail.contains("sqlite_autoindex_profile_1"))
     #expect(!detail.contains("SCAN"))
+  }
+
+  @Test("allEntries ORDER BY queued_at uses deletion_journal_by_queued_at index")
+  func deletionJournalOrderByQueuedAtUsesIndex() throws {
+    let database = try makeDatabase()
+    let detail = try PlanPinningTestHelpers.planDetail(
+      database,
+      query: """
+        SELECT zone_name, record_name, record_type, queued_at
+        FROM deletion_journal ORDER BY queued_at
+        """)
+    // `DeletionJournal.allEntries(in:)` runs at every engine start to drive the
+    // deletion-journal replay (issue #1090 / #1097); pinning the index prevents
+    // a future schema edit from regressing it to a temp-B-tree sort.
+    #expect(detail.contains("USING INDEX deletion_journal_by_queued_at"))
+    #expect(!detail.contains("USE TEMP B-TREE"))
   }
 }
