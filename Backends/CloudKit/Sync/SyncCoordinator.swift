@@ -59,6 +59,10 @@ final class SyncCoordinator {
     /// engine rebuilt with `nil` state; `completeStart` arms the recovery
     /// tombstone shield and bumps the attempt count on it.
     let recoveryOutcome: BloatGateOutcome
+    /// `true` when the recovery was forced by the durable "recovery incomplete"
+    /// marker (not the size gate) — it must NOT count against the size-recovery
+    /// ceiling.
+    let recoveryWasForced: Bool
   }
 
   // MARK: - Index Observer
@@ -266,8 +270,16 @@ final class SyncCoordinator {
 
   /// Fail-closed: a journal read failed building the snapshot, so the apply path
   /// suppresses ALL fetched saves this session rather than resurrect an
-  /// un-enumerable deletion (legitimate peer data defers one fetch).
+  /// un-enumerable deletion. Because the engine advances its change token past
+  /// dropped saves, a durable "recovery incomplete" marker forces a fresh
+  /// recovery next launch to re-deliver any stranded peer-only record.
   var recoveryShieldSuppressAll = false
+
+  /// `true` once `replayDeletionJournal` has run this start — the other half of
+  /// the release condition. Without it a fetch settling in the window before
+  /// replay enqueues the deletions (when `replayedDeletionsInFlight` is still
+  /// empty) could release the shield early. Reset by `armRecoveryShield` / `stop`.
+  var recoveryReplayDidRun = false
 
   /// The union of every journal deletion id captured at recovery start. While
   /// the shield is active the forced refetch must NOT re-insert (or clear the

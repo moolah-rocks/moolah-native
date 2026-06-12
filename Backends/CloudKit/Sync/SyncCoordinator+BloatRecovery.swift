@@ -48,6 +48,17 @@ extension SyncCoordinator {
   /// UserDefaults key for the consecutive-recovery counter.
   static let bloatRecoveryAttemptCountKey = "com.moolah.sync.bloatRecoveryAttemptCount"
 
+  /// Durable "recovery incomplete" marker key — set when a recovery had to fail
+  /// closed (suppress-all) and may have dropped peer-only records the engine's
+  /// change token has since advanced past. Forces a fresh recovery (regardless
+  /// of state size) on the next launch to re-deliver them.
+  static let recoveryIncompleteMarkerKey = "com.moolah.sync.recoveryIncomplete"
+
+  /// How many times to re-read the journal before giving up and failing closed
+  /// — a transient GRDB read error usually clears on a retry, yielding a precise
+  /// shield with no drops at all.
+  static let recoverySnapshotReadAttempts = 3
+
   // MARK: - Off-actor engine construction + gate
 
   /// Off-actor: reads the persisted sync state, applies the byte-size gate, and
@@ -66,6 +77,7 @@ extension SyncCoordinator {
     stateFileURL: URL,
     delegate: any CKSyncEngineDelegate & Sendable,
     allowRecovery: Bool,
+    forceRecovery: Bool,
     bloatThreshold: Int
   ) async -> PreparedEngine {
     // A missing file is the normal first launch; a genuine read error is logged
@@ -88,7 +100,10 @@ extension SyncCoordinator {
     )
 
     let outcome = bloatGateOutcome(
-      stateByteCount: data?.count, allowRecovery: allowRecovery, threshold: bloatThreshold)
+      stateByteCount: data?.count,
+      allowRecovery: allowRecovery,
+      forceRecovery: forceRecovery,
+      threshold: bloatThreshold)
     // `.recovered` drops the bloated blob → `nil` state → instant init,
     // `isFirstLaunch = true`. `.healthy` / `.bloatedButSkipped` decode and pass
     // the existing state through (off-main init absorbs any stall).
@@ -102,7 +117,10 @@ extension SyncCoordinator {
     return PreparedEngine(
       engine: CKSyncEngine(configuration),
       isFirstLaunch: savedState == nil,
-      recoveryOutcome: outcome)
+      recoveryOutcome: outcome,
+      // Forced (marker-driven) recoveries must NOT count against the normal
+      // size-recovery ceiling — they're a separate, self-clearing mechanism.
+      recoveryWasForced: forceRecovery && outcome == .recovered)
   }
 
   /// Decodes the persisted state, logging (not swallowing) a corrupt /
@@ -123,12 +141,15 @@ extension SyncCoordinator {
   // MARK: - Gate decision (pure)
 
   /// Classifies the persisted state from its byte size + whether recovery is
-  /// currently allowed. `nil` byteCount (no state file) is `.healthy`. Pure +
-  /// `nonisolated static` so the gate is unit-tested without touching disk or a
-  /// live engine.
+  /// allowed / forced. `forceRecovery` (the durable "recovery incomplete"
+  /// marker) wins regardless of size — a prior fail-closed recovery may have
+  /// dropped peer-only records the engine's token has advanced past, and only a
+  /// fresh nil-reset re-delivers them. Otherwise `nil` byteCount (no state file)
+  /// or a below-threshold size is `.healthy`. Pure + `nonisolated static`.
   nonisolated static func bloatGateOutcome(
-    stateByteCount: Int?, allowRecovery: Bool, threshold: Int
+    stateByteCount: Int?, allowRecovery: Bool, forceRecovery: Bool, threshold: Int
   ) -> BloatGateOutcome {
+    if forceRecovery { return .recovered }
     guard let byteCount = stateByteCount, byteCount > threshold else { return .healthy }
     return allowRecovery ? .recovered : .bloatedButSkipped
   }
@@ -163,17 +184,48 @@ extension SyncCoordinator {
     return recoveryAttemptCount < Self.bloatRecoveryAttemptCeiling
   }
 
+  /// `true` while a prior recovery failed closed: a fresh recovery is forced on
+  /// this launch (regardless of state size, and bypassing the size-recovery
+  /// ceiling) to re-deliver any peer-only record dropped under suppress-all.
+  /// Gated on entitlements + iCloud-not-known-unavailable like `isRecoveryAllowed`.
+  var isRecoveryForced: Bool {
+    guard isCloudKitAvailable, recoveryIncomplete else { return false }
+    if case .unavailable = iCloudAvailability { return false }
+    return true
+  }
+
+  /// The durable "recovery incomplete" marker (UserDefaults).
+  var recoveryIncomplete: Bool {
+    userDefaults.bool(forKey: Self.recoveryIncompleteMarkerKey)
+  }
+
+  /// Sets the marker so the next launch forces a fresh recovery — survives the
+  /// attempt-ceiling reset (a separate key) so a healthy launch can't swallow it.
+  func markRecoveryIncomplete() {
+    userDefaults.set(true, forKey: Self.recoveryIncompleteMarkerKey)
+  }
+
+  /// Clears the marker once a recovery completed WITHOUT failing closed — the
+  /// forced refetch re-delivered and applied any stranded peer record.
+  func clearRecoveryIncomplete() {
+    userDefaults.removeObject(forKey: Self.recoveryIncompleteMarkerKey)
+  }
+
   // MARK: - Outcome handling (called from completeStart)
 
-  /// Applies the byte-size gate outcome at start: a recovery bumps the attempt
-  /// count and arms the tombstone shield; a healthy launch re-arms the ceiling;
-  /// a skipped-but-bloated launch warns (the existing state is running as-is).
-  func applyRecoveryOutcome(_ outcome: BloatGateOutcome) {
+  /// Applies the byte-size gate outcome at start: a recovery arms the tombstone
+  /// shield (and, unless it was marker-FORCED, bumps the size-recovery ceiling);
+  /// a healthy launch re-arms the ceiling; a skipped-but-bloated launch warns
+  /// (the existing state runs as-is). A healthy launch does NOT touch the
+  /// recovery-incomplete marker — only a clean recovery clears it.
+  func applyRecoveryOutcome(_ outcome: BloatGateOutcome, wasForced: Bool) {
     switch outcome {
     case .recovered:
-      incrementRecoveryAttemptCount()
+      if !wasForced {
+        incrementRecoveryAttemptCount()
+      }
       logger.warning(
-        "Bloated sync state recovered: rebuilt the engine with empty state (consecutive recovery #\(self.recoveryAttemptCount, privacy: .public) of \(Self.bloatRecoveryAttemptCeiling, privacy: .public))"
+        "Bloated sync state recovered (\(wasForced ? "forced re-recovery" : "size-gated", privacy: .public)): rebuilt the engine with empty state"
       )
       armRecoveryShield()
     case .healthy:
@@ -195,6 +247,7 @@ extension SyncCoordinator {
     isRecoveryShieldActive = true
     recoveryFetchDidSettle = false
     recoveryShieldSuppressAll = false
+    recoveryReplayDidRun = false
     // Cancel any in-flight snapshot from a prior arm before replacing it, so an
     // abandoned build can't resume and overwrite the new snapshot.
     recoverySnapshotTask?.cancel()
@@ -205,23 +258,45 @@ extension SyncCoordinator {
 
   /// Builds `recoveringDeletions` = the union of every journal deletion id
   /// (index DB + each live profile DB), resolved to its real CloudKit zone.
-  ///
-  /// Fail-closed: if a journal read failed the snapshot is INCOMPLETE, so the
-  /// shield can't know which ids to protect → `recoveryShieldSuppressAll` makes
-  /// the apply path drop ALL fetched saves for the session (the forced refetch
-  /// would otherwise resurrect every un-propagated deletion). If the reads all
-  /// succeeded and the journals are empty there is nothing to shield, so the
-  /// shield deactivates immediately.
+  /// Retries a failed read a few times first (a transient GRDB error usually
+  /// clears, yielding a precise shield with no drops), then hands the result to
+  /// `applyRecoverySnapshot`.
   private func buildRecoveryDeletionSnapshot() async {
-    let (resolved, readFailed) = await resolveAllJournalDeletions()
-    // `stop()` (or a re-arm) may have cancelled us during the journal reads and
-    // already cleared the shield state — don't resurrect it with a stale set.
-    guard !Task.isCancelled else { return }
+    var resolved: [CKRecord.ID: ReplayedDeletionRef] = [:]
+    var readFailed = true
+    for attempt in 0..<Self.recoverySnapshotReadAttempts {
+      if attempt > 0 {
+        try? await Task.sleep(for: .milliseconds(100))
+      }
+      guard !Task.isCancelled else { return }
+      let result = await resolveAllJournalDeletions()
+      guard !Task.isCancelled else { return }
+      resolved = result.resolved
+      readFailed = result.readFailed
+      if !readFailed { break }
+      logger.error(
+        "Recovery shield: journal read attempt \(attempt + 1, privacy: .public) of \(Self.recoverySnapshotReadAttempts, privacy: .public) failed"
+      )
+    }
+    applyRecoverySnapshot(resolved: resolved, readFailed: readFailed)
+  }
+
+  /// Installs the resolved snapshot. Fail-closed on `readFailed`: the snapshot is
+  /// INCOMPLETE, so `recoveryShieldSuppressAll` makes the apply path drop ALL
+  /// fetched saves this session (the forced refetch would otherwise resurrect an
+  /// un-enumerable deletion) and a durable marker forces a fresh recovery next
+  /// launch (the engine advances its token past dropped saves, so a peer-only
+  /// record dropped here would otherwise be permanently missing). Reads-OK +
+  /// empty journals ⇒ nothing to shield ⇒ deactivate.
+  func applyRecoverySnapshot(
+    resolved: [CKRecord.ID: ReplayedDeletionRef], readFailed: Bool
+  ) {
     recoveringDeletions = Set(resolved.keys)
     recoveryShieldSuppressAll = readFailed
     if readFailed {
+      markRecoveryIncomplete()
       logger.error(
-        "Recovery shield: journal read failed — failing closed, suppressing ALL fetched saves this recovery session to avoid resurrecting un-propagated deletions"
+        "Recovery shield: journal read failed after \(Self.recoverySnapshotReadAttempts, privacy: .public) attempts — failing closed (suppressing ALL fetched saves) and marking recovery incomplete to force a fresh recovery next launch"
       )
     } else if recoveringDeletions.isEmpty {
       isRecoveryShieldActive = false
@@ -270,14 +345,23 @@ extension SyncCoordinator {
   /// Called from `clearConfirmedReplayedDeletions` and `endFetchingChanges`.
   func releaseRecoveryShieldIfSettled() {
     guard isRecoveryShieldActive,
+      recoveryReplayDidRun,
       replayedDeletionsInFlight.isEmpty,
       recoveryFetchDidSettle,
       !isFetchingChanges
     else { return }
+    // A recovery that never failed closed has now applied the full refetch
+    // cleanly — clear the durable marker so we don't force another recovery. A
+    // suppress-all session leaves the marker set (it may have dropped peer-only
+    // records) so the next launch re-recovers.
+    if !recoveryShieldSuppressAll {
+      clearRecoveryIncomplete()
+    }
     isRecoveryShieldActive = false
     recoveringDeletions = []
     recoveryShieldSuppressAll = false
     recoveryFetchDidSettle = false
+    recoveryReplayDidRun = false
     recoverySnapshotTask = nil
     logger.info(
       "Recovery shield released — deletions confirmed and the post-recovery refetch has settled")

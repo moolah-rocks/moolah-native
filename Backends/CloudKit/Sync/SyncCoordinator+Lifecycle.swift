@@ -101,12 +101,14 @@ extension SyncCoordinator {
     // ceiling); capture it here and pass it into the off-main `prepareEngine`,
     // which owns the byte-size measurement (issue #1090 / #12).
     let allowRecovery = self.isRecoveryAllowed
+    let forceRecovery = self.isRecoveryForced
     let bloatThreshold = Self.bloatRecoveryByteThreshold
     startTask = Task { [weak self] in
       let prepared = await Self.prepareEngine(
         stateFileURL: stateURL,
         delegate: delegate,
         allowRecovery: allowRecovery,
+        forceRecovery: forceRecovery,
         bloatThreshold: bloatThreshold)
       // `stop()` cancels `startTask` — if that races with prepareEngine, drop
       // the prepared engine. `delegate` strongly captures `self`, so the
@@ -132,7 +134,7 @@ extension SyncCoordinator {
     // Handle the byte-size gate outcome (issue #1090 / #12) BEFORE installing the
     // engine, so a `.recovered` launch arms the tombstone shield before the
     // engine's automatic post-init fetch can deliver a re-fetched record.
-    applyRecoveryOutcome(prepared.recoveryOutcome)
+    applyRecoveryOutcome(prepared.recoveryOutcome, wasForced: prepared.recoveryWasForced)
 
     syncEngine = prepared.engine
     isFirstLaunch = prepared.isFirstLaunch
@@ -264,6 +266,7 @@ extension SyncCoordinator {
     recoveringDeletions = []
     recoveryFetchDidSettle = false
     recoveryShieldSuppressAll = false
+    recoveryReplayDidRun = false
     fetchChangesTask?.cancel()
     fetchChangesTask = nil
     cancelRefetchTasks()

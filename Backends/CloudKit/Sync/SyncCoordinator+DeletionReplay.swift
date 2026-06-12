@@ -79,15 +79,21 @@ extension SyncCoordinator {
     let resolved = await resolveAllJournalDeletions().resolved
     // The coordinator may have been stopped while the journal reads were in
     // flight — don't mutate state / enqueue onto a torn-down engine.
-    guard !Task.isCancelled, !resolved.isEmpty else { return }
-    for (id, ref) in resolved {
-      replayedDeletionsInFlight[id] = ref
+    guard !Task.isCancelled else { return }
+    if !resolved.isEmpty {
+      for (id, ref) in resolved {
+        replayedDeletionsInFlight[id] = ref
+      }
+      state.add(pendingRecordZoneChanges: resolved.keys.map { .deleteRecord($0) })
+      logger.warning(
+        "Deletion-journal replay: re-enqueued \(resolved.count, privacy: .public) durable deletion(s)"
+      )
+      refreshPendingUploadsMirror()
     }
-    state.add(pendingRecordZoneChanges: resolved.keys.map { .deleteRecord($0) })
-    logger.warning(
-      "Deletion-journal replay: re-enqueued \(resolved.count, privacy: .public) durable deletion(s)"
-    )
-    refreshPendingUploadsMirror()
+    // Mark that replay has run this start — half of the recovery-shield release
+    // condition, so a fetch settling before replay can't release it early
+    // (issue #1090 / #12).
+    recoveryReplayDidRun = true
   }
 
   /// Reads the deletion journal from the profile-index DB and every live
