@@ -97,8 +97,17 @@ extension SyncCoordinator {
     // engine object is back on the main actor.
     let stateURL = self.stateFileURL
     let delegate: any CKSyncEngineDelegate & Sendable = self
+    // Recovery eligibility is MainActor state (entitlements, account, attempt
+    // ceiling); capture it here and pass it into the off-main `prepareEngine`,
+    // which owns the byte-size measurement (issue #1090 / #12).
+    let allowRecovery = self.isRecoveryAllowed
+    let bloatThreshold = Self.bloatRecoveryByteThreshold
     startTask = Task { [weak self] in
-      let prepared = await Self.prepareEngine(stateFileURL: stateURL, delegate: delegate)
+      let prepared = await Self.prepareEngine(
+        stateFileURL: stateURL,
+        delegate: delegate,
+        allowRecovery: allowRecovery,
+        bloatThreshold: bloatThreshold)
       // `stop()` cancels `startTask` — if that races with prepareEngine, drop
       // the prepared engine. `delegate` strongly captures `self`, so the
       // `guard let self` alone would still succeed after a stop.
@@ -107,32 +116,8 @@ extension SyncCoordinator {
     }
   }
 
-  /// Off-actor: reads sync state from disk and constructs the `CKSyncEngine`.
-  ///
-  /// The body's heavy synchronous work (`NSKeyedUnarchiver` inside
-  /// `CKSyncEngine.init`) must not run on the main thread. The
-  /// `nonisolated async` hop from the `@MainActor`-originating `Task {}`
-  /// in `start()` is sufficient on the current toolchain — verified
-  /// empirically (issue #565) by logging `Thread.isMainThread` at entry
-  /// and observing `false`, plus a different OS TID from the surrounding
-  /// `@MainActor` `completeStart`. `Task.detached` is not required here.
-  nonisolated static func prepareEngine(
-    stateFileURL: URL,
-    delegate: any CKSyncEngineDelegate & Sendable
-  ) async -> PreparedEngine {
-    let data = try? Data(contentsOf: stateFileURL)
-    let savedState = data.flatMap {
-      try? JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: $0)
-    }
-    let configuration = CKSyncEngine.Configuration(
-      database: CloudKitContainer.app.privateCloudDatabase,
-      stateSerialization: savedState,
-      delegate: delegate
-    )
-    return PreparedEngine(
-      engine: CKSyncEngine(configuration),
-      isFirstLaunch: savedState == nil)
-  }
+  // `prepareEngine` (off-actor engine construction + the #1090/#12 byte-size
+  // gate) lives in `SyncCoordinator+BloatRecovery.swift`.
 
   /// Back-on-MainActor half of `start()`: installs the engine and kicks off
   /// zone setup. Separate from `start()` so the heavy init can run off-actor.
@@ -143,6 +128,11 @@ extension SyncCoordinator {
       os_signpost(.end, log: Signposts.sync, name: "coordinatorStart", signpostID: signpostID)
       startTask = nil
     }
+
+    // Handle the byte-size gate outcome (issue #1090 / #12) BEFORE installing the
+    // engine, so a `.recovered` launch arms the tombstone shield before the
+    // engine's automatic post-init fetch can deliver a re-fetched record.
+    applyRecoveryOutcome(prepared.recoveryOutcome)
 
     syncEngine = prepared.engine
     isFirstLaunch = prepared.isFirstLaunch
@@ -268,6 +258,10 @@ extension SyncCoordinator {
     zoneSetupTask = nil
     availabilityProbeTask?.cancel()
     availabilityProbeTask = nil
+    recoverySnapshotTask?.cancel()
+    recoverySnapshotTask = nil
+    isRecoveryShieldActive = false
+    recoveringDeletions = []
     fetchChangesTask?.cancel()
     fetchChangesTask = nil
     cancelRefetchTasks()
