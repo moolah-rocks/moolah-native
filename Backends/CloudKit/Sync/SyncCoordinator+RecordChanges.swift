@@ -107,8 +107,7 @@ extension SyncCoordinator {
     // Recovery tombstone shield (issue #1090 / #12) — suppress a re-delivered
     // deleted ProfileRecord so the token-less refetch can't resurrect an
     // empty-shell profile mid-recovery. See `applyFetchedProfileDataChanges`.
-    let shield = await activeRecoveryShield()
-    let (toApply, suppressed) = Self.partitionShieldedSaves(saved, shield: shield)
+    let (toApply, suppressed) = await recoveryShieldedSaves(saved)
     if !suppressed.isEmpty {
       logger.warning(
         "Recovery shield suppressed \(suppressed.count, privacy: .public) re-delivered index deletion(s)"
@@ -178,11 +177,10 @@ extension SyncCoordinator {
     // locally whose `.deleteRecord` never propagated. Drop those saves so the
     // replayed deletion wins on both the local row and the server — the per-repo
     // D1-b journal clear runs per-upserted-row, so suppressing the upsert also
-    // skips the clear. `activeRecoveryShield()` awaits the snapshot build, so
-    // there is no race with the engine's automatic post-init fetch; it is `[]`
-    // (no filtering) outside recovery.
-    let shield = await activeRecoveryShield()
-    let (toApply, suppressed) = Self.partitionShieldedSaves(saved, shield: shield)
+    // skips the clear. `recoveryShieldedSaves` awaits the snapshot build, so
+    // there is no race with the engine's automatic post-init fetch; it returns
+    // everything unfiltered outside recovery.
+    let (toApply, suppressed) = await recoveryShieldedSaves(saved)
     if !suppressed.isEmpty {
       logger.warning(
         "Recovery shield suppressed \(suppressed.count, privacy: .public) re-delivered deletion(s) for profile \(profileId, privacy: .public)"

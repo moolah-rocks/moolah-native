@@ -76,7 +76,7 @@ extension SyncCoordinator {
   /// HARD RULE: every re-issued deletion comes from a positive journal row —
   /// nothing is ever inferred from a record being absent locally.
   func replayDeletionJournal(into state: any PendingChangeStore) async {
-    let resolved = await resolveAllJournalDeletions()
+    let resolved = await resolveAllJournalDeletions().resolved
     // The coordinator may have been stopped while the journal reads were in
     // flight — don't mutate state / enqueue onto a torn-down engine.
     guard !Task.isCancelled, !resolved.isEmpty else { return }
@@ -96,41 +96,54 @@ extension SyncCoordinator {
   /// `profile-index`). Shared by the start-time replay and the recovery
   /// tombstone-shield snapshot (issue #1090 / #12). Keyed by `CKRecord.ID` so a
   /// duplicate intent collapses to one entry.
-  func resolveAllJournalDeletions() async -> [CKRecord.ID: ReplayedDeletionRef] {
+  ///
+  /// `readFailed` is `true` when ANY journal read (or DB open) failed: the
+  /// resolved set is then INCOMPLETE. The replay tolerates that (the missed rows
+  /// replay next start), but the recovery shield must fail closed — see
+  /// `buildRecoveryDeletionSnapshot`.
+  func resolveAllJournalDeletions()
+    async -> (resolved: [CKRecord.ID: ReplayedDeletionRef], readFailed: Bool)
+  {
     var resolved: [CKRecord.ID: ReplayedDeletionRef] = [:]
+    var readFailed = false
 
-    let indexEntries = await readDeletionJournal(in: containerManager.profileIndexDatabase)
-    for id in Self.indexZoneDeletionReplayIDs(
-      indexEntries, indexZoneID: profileIndexHandler.zoneID)
-    {
-      resolved[id] = ReplayedDeletionRef(
-        origin: .index,
-        journalZoneName: DeletionJournal.profileIndexZoneName,
-        recordName: id.recordName)
+    do {
+      let indexEntries = try await readDeletionJournal(in: containerManager.profileIndexDatabase)
+      for id in Self.indexZoneDeletionReplayIDs(
+        indexEntries, indexZoneID: profileIndexHandler.zoneID)
+      {
+        resolved[id] = ReplayedDeletionRef(
+          origin: .index,
+          journalZoneName: DeletionJournal.profileIndexZoneName,
+          recordName: id.recordName)
+      }
+    } catch {
+      logger.error(
+        "Deletion-journal resolve: index DB read failed: \(error, privacy: .public)")
+      readFailed = true
     }
 
     for profileId in await containerManager.allProfileIds() {
-      let database: DatabaseQueue
       do {
-        database = try containerManager.database(for: profileId)
+        let database = try containerManager.database(for: profileId)
+        let entries = try await readDeletionJournal(in: database)
+        let dataZoneID = CKRecordZone.ID(
+          zoneName: DeletionJournal.dataZoneName(for: profileId),
+          ownerName: CKCurrentUserDefaultName)
+        for id in Self.dataZoneDeletionReplayIDs(entries, dataZoneID: dataZoneID) {
+          resolved[id] = ReplayedDeletionRef(
+            origin: .profileData(profileId),
+            journalZoneName: DeletionJournal.profileDataSentinelZone,
+            recordName: id.recordName)
+        }
       } catch {
         logger.error(
-          "Deletion-journal resolve: cannot open DB for profile \(profileId, privacy: .public): \(error, privacy: .public) — skipping its journal"
+          "Deletion-journal resolve: read failed for profile \(profileId, privacy: .public): \(error, privacy: .public)"
         )
-        continue
-      }
-      let entries = await readDeletionJournal(in: database)
-      let dataZoneID = CKRecordZone.ID(
-        zoneName: DeletionJournal.dataZoneName(for: profileId),
-        ownerName: CKCurrentUserDefaultName)
-      for id in Self.dataZoneDeletionReplayIDs(entries, dataZoneID: dataZoneID) {
-        resolved[id] = ReplayedDeletionRef(
-          origin: .profileData(profileId),
-          journalZoneName: DeletionJournal.profileDataSentinelZone,
-          recordName: id.recordName)
+        readFailed = true
       }
     }
-    return resolved
+    return (resolved, readFailed)
   }
 
   /// Retires journal rows for replayed deletions whose `.deleteRecord` has left
@@ -231,17 +244,13 @@ extension SyncCoordinator {
     }
   }
 
-  /// Reads every deletion-journal row in `database` off the MainActor, returning
-  /// `[]` on any read error (a transient failure must degrade to "replay nothing
-  /// from this DB this start", never throw out of startup).
-  private func readDeletionJournal(in database: DatabaseQueue) async -> [DeletionJournalRow] {
-    do {
-      return try await database.read { try DeletionJournal.allEntries(in: $0) }
-    } catch {
-      logger.error(
-        "Deletion-journal read failed: \(error, privacy: .public) — replaying nothing from this DB")
-      return []
-    }
+  /// Reads every deletion-journal row in `database` off the MainActor. Throws on
+  /// a read error so the caller can tell "no tombstones" (`[]`) from "could not
+  /// read" — the recovery shield must fail closed on the latter rather than
+  /// proceed with an incomplete snapshot.
+  private func readDeletionJournal(in database: DatabaseQueue) async throws -> [DeletionJournalRow]
+  {
+    try await database.read { try DeletionJournal.allEntries(in: $0) }
   }
 
   /// Clears the given journal rows in `database` off the MainActor. Best-effort:

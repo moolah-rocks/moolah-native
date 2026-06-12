@@ -176,99 +176,140 @@ struct BloatStateRecoveryTests {
     #expect(!coordinator.isRecoveryShieldActive)  // deactivated — nothing to shield
   }
 
-  // MARK: - Shield release on settle
-
-  @Test("the shield releases once every recovered deletion is confirmed sent")
-  func shieldReleasesWhenRecoverySettles() async throws {
-    let (coordinator, manager) = try Self.makeCoordinator()
-    let profileId = UUID()
-    try await manager.profileIndexRepository.upsert(
-      Profile(id: profileId, label: "Recover", currencyCode: "AUD"))
-    let database = try manager.database(for: profileId)
-    let categories = GRDBCategoryRepository(database: database)
-    let doomed = try await categories.create(Moolah.Category(name: "Doomed"))
-    try await categories.delete(id: doomed.id, withReplacement: nil)
-
-    coordinator.armRecoveryShield()
-    _ = await coordinator.activeRecoveryShield()
-    #expect(coordinator.isRecoveryShieldActive)
-
-    // Replay enqueues the deletion; once it is confirmed sent, clear-on-confirm
-    // empties `replayedDeletionsInFlight` and the shield releases.
-    let store = InMemoryPendingChangeStore()
-    await coordinator.replayDeletionJournal(into: store)
-    let dataZoneID = CKRecordZone.ID(
-      zoneName: DeletionJournal.dataZoneName(for: profileId),
-      ownerName: CKCurrentUserDefaultName)
-    let doomedID = CKRecord.ID(
-      recordType: CategoryRow.recordType, uuid: doomed.id, zoneID: dataZoneID)
-    store.remove(pendingRecordZoneChanges: [.deleteRecord(doomedID)])
-    await coordinator.clearConfirmedReplayedDeletions(against: store)
-
-    #expect(!coordinator.isRecoveryShieldActive)
-    #expect(coordinator.recoveringDeletions.isEmpty)
-    #expect(await coordinator.activeRecoveryShield().isEmpty)
-  }
-
   // MARK: - Refetch-resurrection closed in BOTH orderings (the CRITICAL hazard)
 
-  @Test(
-    "the deleted record is suppressed whether the refetch arrives before OR after replay; after the deletion settles a peer re-create applies again"
-  )
-  func refetchDoesNotResurrectInEitherOrdering() async throws {
-    let (coordinator, manager) = try Self.makeCoordinator()
+  /// A coordinator + a profile with one locally-deleted-but-un-propagated
+  /// category whose tombstone is journaled, plus the resolved `CKRecord.ID`.
+  private struct ShieldFixture {
+    let coordinator: SyncCoordinator
+    let doomedID: CKRecord.ID
+  }
+
+  private static func makeShieldFixture() async throws -> ShieldFixture {
+    let (coordinator, manager) = try makeCoordinator()
     let profileId = UUID()
     try await manager.profileIndexRepository.upsert(
       Profile(id: profileId, label: "Recover", currencyCode: "AUD"))
-    let database = try manager.database(for: profileId)
-    let categories = GRDBCategoryRepository(database: database)
+    let categories = GRDBCategoryRepository(database: try manager.database(for: profileId))
     let doomed = try await categories.create(Moolah.Category(name: "Doomed"))
     try await categories.delete(id: doomed.id, withReplacement: nil)
-
-    let dataZoneID = CKRecordZone.ID(
-      zoneName: DeletionJournal.dataZoneName(for: profileId),
-      ownerName: CKCurrentUserDefaultName)
     let doomedID = CKRecord.ID(
-      recordType: CategoryRow.recordType, uuid: doomed.id, zoneID: dataZoneID)
-    let redelivered = CKRecord(recordType: CategoryRow.recordType, recordID: doomedID)
+      recordType: CategoryRow.recordType,
+      uuid: doomed.id,
+      zoneID: CKRecordZone.ID(
+        zoneName: DeletionJournal.dataZoneName(for: profileId),
+        ownerName: CKCurrentUserDefaultName))
+    return ShieldFixture(coordinator: coordinator, doomedID: doomedID)
+  }
 
+  /// Drives a complete fetch session (begin → end) so the forced post-recovery
+  /// refetch is considered "settled".
+  private static func settleFetchSession(_ coordinator: SyncCoordinator) {
+    coordinator.beginFetchingChanges()
+    coordinator.endFetchingChanges()
+  }
+
+  private static func suppresses(
+    _ id: CKRecord.ID, _ coordinator: SyncCoordinator
+  ) async -> Bool {
+    let record = CKRecord(recordType: CategoryRow.recordType, recordID: id)
+    return await coordinator.recoveryShieldedSaves([record]).toApply.isEmpty
+  }
+
+  @Test(
+    "the deleted record is suppressed whether the refetch arrives before OR after replay (pre-settle, both orderings)"
+  )
+  func refetchSuppressedInEitherOrderingBeforeSettle() async throws {
+    let fixture = try await Self.makeShieldFixture()
+    let coordinator = fixture.coordinator
     coordinator.armRecoveryShield()
 
     // ORDERING A — refetch BEFORE replay. The shield snapshot is built from the
     // journal at recovery start, independent of replay, so the re-delivered
-    // record is suppressed even though no `.deleteRecord` has been enqueued yet.
-    let shieldBeforeReplay = await coordinator.activeRecoveryShield()
-    #expect(
-      SyncCoordinator.partitionShieldedSaves([redelivered], shield: shieldBeforeReplay)
-        .toApply.isEmpty)
+    // record is suppressed even though no `.deleteRecord` is enqueued yet.
+    #expect(await Self.suppresses(fixture.doomedID, coordinator))
 
-    // Now replay enqueues the deletion.
+    // Replay enqueues the deletion (closes the server side).
     let store = InMemoryPendingChangeStore()
     await coordinator.replayDeletionJournal(into: store)
-
-    // ORDERING B — refetch AFTER replay. Still suppressed (the shield holds for
-    // the whole recovery session until the deletion is confirmed).
-    let shieldAfterReplay = await coordinator.activeRecoveryShield()
-    #expect(
-      SyncCoordinator.partitionShieldedSaves([redelivered], shield: shieldAfterReplay)
-        .toApply.isEmpty)
-
-    // The server-side resurrection is closed separately: replay enqueued the
-    // `.deleteRecord` for the same id, so CloudKit deletes the server copy.
     #expect(
       store.pendingRecordZoneChanges.contains { change in
-        if case .deleteRecord(let id) = change { return id == doomedID }
+        if case .deleteRecord(let id) = change { return id == fixture.doomedID }
         return false
       })
 
-    // Once the deletion is confirmed sent the session settles and the shield
-    // releases — a genuine later peer re-create of that id now applies normally
-    // (the shield is recovery-scoped, not a permanent veto).
-    store.remove(pendingRecordZoneChanges: [.deleteRecord(doomedID)])
+    // ORDERING B — refetch AFTER replay. Still suppressed.
+    #expect(await Self.suppresses(fixture.doomedID, coordinator))
+  }
+
+  // MARK: - Shield must OUTLIVE the forced refetch (the Critical regression lock)
+
+  @Test(
+    "the shield holds after delete-confirm until the post-recovery refetch settles, THEN a peer re-create applies"
+  )
+  func shieldOutlivesDeleteConfirmUntilRefetchSettles() async throws {
+    let fixture = try await Self.makeShieldFixture()
+    let coordinator = fixture.coordinator
+    coordinator.armRecoveryShield()
+
+    let store = InMemoryPendingChangeStore()
+    await coordinator.replayDeletionJournal(into: store)
+
+    // The `.deleteRecord` is confirmed sent — under the OLD (broken) rule the
+    // shield would release here. But the forced full refetch may still be
+    // draining, so it MUST stay armed: a still-in-flight re-delivery of the same
+    // id would otherwise be resurrected with no tombstone left.
+    store.remove(pendingRecordZoneChanges: [.deleteRecord(fixture.doomedID)])
     await coordinator.clearConfirmedReplayedDeletions(against: store)
-    let releasedShield = await coordinator.activeRecoveryShield()
-    #expect(
-      SyncCoordinator.partitionShieldedSaves([redelivered], shield: releasedShield)
-        .toApply.map(\.recordID) == [doomedID])
+    #expect(coordinator.isRecoveryShieldActive)
+    #expect(await Self.suppresses(fixture.doomedID, coordinator))
+
+    // Only once a full fetch session has completed does the shield release —
+    // now the server no longer holds the record, so a genuine later peer
+    // re-create of that id applies normally (recovery-scoped, not a veto).
+    Self.settleFetchSession(coordinator)
+    #expect(!coordinator.isRecoveryShieldActive)
+    #expect(!(await Self.suppresses(fixture.doomedID, coordinator)))
+  }
+
+  @Test("the shield also releases when the refetch settles before the delete is confirmed")
+  func shieldReleasesWhenRefetchSettlesThenDeleteConfirms() async throws {
+    let fixture = try await Self.makeShieldFixture()
+    let coordinator = fixture.coordinator
+    coordinator.armRecoveryShield()
+
+    let store = InMemoryPendingChangeStore()
+    await coordinator.replayDeletionJournal(into: store)
+
+    // Refetch settles FIRST — but the deletion isn't confirmed yet, so the
+    // shield must stay armed (the record is still on the server).
+    Self.settleFetchSession(coordinator)
+    #expect(coordinator.isRecoveryShieldActive)
+    #expect(await Self.suppresses(fixture.doomedID, coordinator))
+
+    // Now the delete confirms → both conditions met → released.
+    store.remove(pendingRecordZoneChanges: [.deleteRecord(fixture.doomedID)])
+    await coordinator.clearConfirmedReplayedDeletions(against: store)
+    #expect(!coordinator.isRecoveryShieldActive)
+    #expect(coordinator.recoveringDeletions.isEmpty)
+  }
+
+  // MARK: - Fail-closed on a journal-read failure during arming
+
+  @Test("a read-failed shield suppresses ALL fetched saves (fail-closed), not just snapshot ids")
+  func failClosedShieldSuppressesEverything() async throws {
+    let (coordinator, _) = try Self.makeCoordinator()
+    // Simulate the snapshot-build read-failure outcome directly (the apply path
+    // can't enumerate which deletions to protect → it must drop everything).
+    coordinator.isRecoveryShieldActive = true
+    coordinator.recoveryShieldSuppressAll = true
+
+    let zone = CKRecordZone.ID(zoneName: "profile-x", ownerName: CKCurrentUserDefaultName)
+    let anyRecord = CKRecord(
+      recordType: CategoryRow.recordType,
+      recordID: CKRecord.ID(recordType: CategoryRow.recordType, uuid: UUID(), zoneID: zone))
+    let (toApply, suppressed) = await coordinator.recoveryShieldedSaves([anyRecord])
+    #expect(toApply.isEmpty)
+    #expect(suppressed.count == 1)
   }
 }

@@ -262,6 +262,8 @@ extension SyncCoordinator {
     recoverySnapshotTask = nil
     isRecoveryShieldActive = false
     recoveringDeletions = []
+    recoveryFetchDidSettle = false
+    recoveryShieldSuppressAll = false
     fetchChangesTask?.cancel()
     fetchChangesTask = nil
     cancelRefetchTasks()
@@ -369,6 +371,14 @@ extension SyncCoordinator {
     }
     fetchSessionTouchedIndexZone = false
     progress.endReceiving(now: Date())
+    // A full fetch session has completed — the forced post-recovery refetch (if
+    // any) has now delivered everything. Record that and try to release the
+    // recovery shield (issue #1090 / #12): it must outlive the refetch, not just
+    // the delete-send. `isFetchingChanges` is already false here.
+    if isRecoveryShieldActive {
+      recoveryFetchDidSettle = true
+      releaseRecoveryShieldIfSettled()
+    }
   }
 
   /// Fires the index-observer callbacks if the profile-index zone changed
