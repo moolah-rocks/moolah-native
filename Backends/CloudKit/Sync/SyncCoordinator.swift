@@ -61,21 +61,6 @@ final class SyncCoordinator {
     let recoveryOutcome: BloatGateOutcome
   }
 
-  /// Classification of the persisted sync-state file by the start-time
-  /// byte-size gate (issue #1090 / #12).
-  enum BloatGateOutcome: Sendable, Equatable {
-    /// State is absent or below the bloat threshold — the engine starts from it
-    /// normally and the recovery attempt count is re-armed (reset to 0).
-    case healthy
-    /// State exceeded the threshold and recovery was allowed — the engine was
-    /// rebuilt with `nil` state (instant init) and self-heals on launch.
-    case recovered
-    /// State exceeded the threshold but recovery was NOT allowed (attempt
-    /// ceiling reached, or iCloud known-unavailable) — the existing state is
-    /// passed through (off-main init absorbs the stall) and a warning is logged.
-    case bloatedButSkipped
-  }
-
   // MARK: - Index Observer
 
   private struct IndexObserver {
@@ -177,8 +162,8 @@ final class SyncCoordinator {
 
   let logger = Logger(subsystem: "com.moolah.app", category: "SyncCoordinator")
 
-  /// The same logger for the `nonisolated static` off-actor paths (e.g.
-  /// `prepareEngine`) that cannot reach the `@MainActor` instance `logger`.
+  /// Logger for `nonisolated static` off-actor paths (e.g. `prepareEngine`) that
+  /// can't reach the `@MainActor` instance `logger`.
   nonisolated static let offActorLogger = Logger(
     subsystem: "com.moolah.app", category: "SyncCoordinator")
 
@@ -267,20 +252,27 @@ final class SyncCoordinator {
   /// the same id (a re-create) also drops its entry here — see `applySave`.
   var replayedDeletionsInFlight: [CKRecord.ID: ReplayedDeletionRef] = [:]
 
-  /// `true` for the duration of a bloated-state recovery session (issue #1090 /
-  /// #12), from when `completeStart` arms the shield until every recovered
-  /// deletion is confirmed sent. While active, the fetched-change apply path
-  /// suppresses any re-delivered record whose id is in `recoveringDeletions`
-  /// (see `SyncCoordinator+BloatRecovery`).
+  // Bloated-state recovery shield (issue #1090 / #12) — see
+  // `SyncCoordinator+BloatRecovery`. Releases only once every recovered deletion
+  // is confirmed AND the forced refetch has settled.
+
+  /// `true` while the recovery tombstone shield is suppressing re-delivered
+  /// deletions in the apply path.
   var isRecoveryShieldActive = false
 
-  /// The recovery-scoped tombstone shield: the union of every journal deletion
-  /// id captured at recovery start. While `isRecoveryShieldActive`, the
-  /// token-less full refetch must NOT re-insert (or clear the tombstone of) any
-  /// record in this set — the replayed `.deleteRecord` wins on both the local
-  /// row and the server copy. Built off-main by `recoverySnapshotTask`; the
-  /// apply path awaits that task before reading this, so there is no race with
-  /// the engine's automatic post-init fetch.
+  /// `true` once a full fetch session has completed since arming — one half of
+  /// the release condition. Set in `endFetchingChanges`.
+  var recoveryFetchDidSettle = false
+
+  /// Fail-closed: a journal read failed building the snapshot, so the apply path
+  /// suppresses ALL fetched saves this session rather than resurrect an
+  /// un-enumerable deletion (legitimate peer data defers one fetch).
+  var recoveryShieldSuppressAll = false
+
+  /// The union of every journal deletion id captured at recovery start. While
+  /// the shield is active the forced refetch must NOT re-insert (or clear the
+  /// tombstone of) these — the replayed `.deleteRecord` wins. Built off-main by
+  /// `recoverySnapshotTask`; the apply path awaits that task (race-free).
   var recoveringDeletions: Set<CKRecord.ID> = []
 
   /// Builds `recoveringDeletions` from the journals at recovery start. Held so

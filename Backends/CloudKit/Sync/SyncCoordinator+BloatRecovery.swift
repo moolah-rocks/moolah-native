@@ -13,6 +13,25 @@ import OSLog
 // its tombstone cleared, so the replayed `.deleteRecord` wins. Save-completeness
 // comes from `isFirstLaunch = true` → `queueAllExistingRecordsForAllZones`.
 
+/// Classification of the persisted sync-state file by the start-time byte-size
+/// gate (issue #1090 / #12).
+enum BloatGateOutcome: Sendable, Equatable {
+  /// State is absent or below the bloat threshold — the engine starts from it
+  /// normally and the recovery attempt count is re-armed (reset to 0).
+  case healthy
+  /// State exceeded the threshold and recovery was allowed — the engine was
+  /// rebuilt with `nil` state (instant init) and self-heals on launch.
+  case recovered
+  /// State exceeded the threshold but recovery was NOT allowed (attempt ceiling
+  /// reached, or iCloud known-unavailable) — the existing state is passed
+  /// through (off-main init absorbs the stall) and a warning is logged.
+  case bloatedButSkipped
+}
+
+// Instance members are `@MainActor` (the shield state they mutate is
+// MainActor-isolated); the `nonisolated static` members (the off-actor
+// `prepareEngine` + the pure gate / partition helpers) keep their isolation.
+@MainActor
 extension SyncCoordinator {
   /// State-file byte size above which the persisted state is treated as
   /// pathological and recovered. A healthy state is KB–low-MB; the wedge that
@@ -174,6 +193,8 @@ extension SyncCoordinator {
   /// post-init fetch. Idempotent within a start.
   func armRecoveryShield() {
     isRecoveryShieldActive = true
+    recoveryFetchDidSettle = false
+    recoveryShieldSuppressAll = false
     // Cancel any in-flight snapshot from a prior arm before replacing it, so an
     // abandoned build can't resume and overwrite the new snapshot.
     recoverySnapshotTask?.cancel()
@@ -183,16 +204,26 @@ extension SyncCoordinator {
   }
 
   /// Builds `recoveringDeletions` = the union of every journal deletion id
-  /// (index DB + each live profile DB), resolved to its real CloudKit zone. If
-  /// the journals are empty there is nothing to shield, so the shield
-  /// deactivates immediately.
+  /// (index DB + each live profile DB), resolved to its real CloudKit zone.
+  ///
+  /// Fail-closed: if a journal read failed the snapshot is INCOMPLETE, so the
+  /// shield can't know which ids to protect → `recoveryShieldSuppressAll` makes
+  /// the apply path drop ALL fetched saves for the session (the forced refetch
+  /// would otherwise resurrect every un-propagated deletion). If the reads all
+  /// succeeded and the journals are empty there is nothing to shield, so the
+  /// shield deactivates immediately.
   private func buildRecoveryDeletionSnapshot() async {
-    let resolved = await resolveAllJournalDeletions()
+    let (resolved, readFailed) = await resolveAllJournalDeletions()
     // `stop()` (or a re-arm) may have cancelled us during the journal reads and
     // already cleared the shield state — don't resurrect it with a stale set.
     guard !Task.isCancelled else { return }
     recoveringDeletions = Set(resolved.keys)
-    if recoveringDeletions.isEmpty {
+    recoveryShieldSuppressAll = readFailed
+    if readFailed {
+      logger.error(
+        "Recovery shield: journal read failed — failing closed, suppressing ALL fetched saves this recovery session to avoid resurrecting un-propagated deletions"
+      )
+    } else if recoveringDeletions.isEmpty {
       isRecoveryShieldActive = false
     } else {
       logger.warning(
@@ -201,29 +232,55 @@ extension SyncCoordinator {
     }
   }
 
-  /// The active shield id-set for the apply path. Awaits the snapshot build so a
-  /// fetched change that arrives before the snapshot is ready is still shielded
-  /// (race-free). Returns `[]` when no recovery is in progress.
-  func activeRecoveryShield() async -> Set<CKRecord.ID> {
-    guard isRecoveryShieldActive else { return [] }
+  #if DEBUG
+    /// Test seam: observe the built shield id-set, awaiting the snapshot build
+    /// (race-free). The production apply path uses `recoveryShieldedSaves`, which
+    /// additionally models the fail-closed suppress-all mode. Guarded by
+    /// `#if DEBUG` so it is not part of the shipping API surface.
+    func activeRecoveryShield() async -> Set<CKRecord.ID> {
+      guard isRecoveryShieldActive else { return [] }
+      await recoverySnapshotTask?.value
+      guard !Task.isCancelled, isRecoveryShieldActive else { return [] }
+      return recoveringDeletions
+    }
+  #endif
+
+  /// The apply-path entry point: partitions fetched saves into those to apply
+  /// and those the recovery shield suppresses. Awaits the snapshot build
+  /// (race-free vs the forced refetch). Outside recovery everything applies;
+  /// under a read-failed (fail-closed) recovery EVERYTHING is suppressed.
+  func recoveryShieldedSaves(
+    _ saved: [CKRecord]
+  ) async -> (toApply: [CKRecord], suppressed: [CKRecord]) {
+    guard isRecoveryShieldActive else { return (saved, []) }
     await recoverySnapshotTask?.value
-    // Re-check after the suspension: `stop()` may have deactivated the shield
-    // (and cleared `recoveringDeletions`) while we were awaiting the build.
-    guard isRecoveryShieldActive else { return [] }
-    return recoveringDeletions
+    // Re-check after the suspension: `stop()` may have deactivated the shield,
+    // or the apply task may have been cancelled, while we awaited the build.
+    guard !Task.isCancelled, isRecoveryShieldActive else { return (saved, []) }
+    if recoveryShieldSuppressAll { return ([], saved) }
+    return Self.partitionShieldedSaves(saved, shield: recoveringDeletions)
   }
 
-  /// Releases the whole shield once every recovered deletion has been confirmed
-  /// sent (`replayedDeletionsInFlight` emptied by clear-on-confirm) — the
-  /// recovery session has settled, so a later legitimate peer re-create of a
-  /// (formerly) shielded id upserts normally again. Called from
-  /// `clearConfirmedReplayedDeletions`.
+  /// Releases the whole shield only once the recovery session has fully settled:
+  /// every recovered deletion confirmed sent (`replayedDeletionsInFlight`
+  /// emptied) AND a full fetch session has completed since arming AND we are not
+  /// mid-fetch. The shield MUST outlive the forced token-less refetch —
+  /// releasing on delete-confirm alone would let a still-draining refetch
+  /// re-deliver (and resurrect) a record whose `.deleteRecord` just propagated.
+  /// Called from `clearConfirmedReplayedDeletions` and `endFetchingChanges`.
   func releaseRecoveryShieldIfSettled() {
-    guard isRecoveryShieldActive, replayedDeletionsInFlight.isEmpty else { return }
+    guard isRecoveryShieldActive,
+      replayedDeletionsInFlight.isEmpty,
+      recoveryFetchDidSettle,
+      !isFetchingChanges
+    else { return }
     isRecoveryShieldActive = false
     recoveringDeletions = []
+    recoveryShieldSuppressAll = false
+    recoveryFetchDidSettle = false
     recoverySnapshotTask = nil
-    logger.info("Recovery shield released — all recovered deletions confirmed")
+    logger.info(
+      "Recovery shield released — deletions confirmed and the post-recovery refetch has settled")
   }
 
   /// Partitions fetched saved records into those to apply and those the shield
