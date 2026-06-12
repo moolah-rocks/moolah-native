@@ -209,4 +209,66 @@ struct BloatStateRecoveryTests {
     #expect(coordinator.recoveringDeletions.isEmpty)
     #expect(await coordinator.activeRecoveryShield().isEmpty)
   }
+
+  // MARK: - Refetch-resurrection closed in BOTH orderings (the CRITICAL hazard)
+
+  @Test(
+    "the deleted record is suppressed whether the refetch arrives before OR after replay; after the deletion settles a peer re-create applies again"
+  )
+  func refetchDoesNotResurrectInEitherOrdering() async throws {
+    let (coordinator, manager) = try Self.makeCoordinator()
+    let profileId = UUID()
+    try await manager.profileIndexRepository.upsert(
+      Profile(id: profileId, label: "Recover", currencyCode: "AUD"))
+    let database = try manager.database(for: profileId)
+    let categories = GRDBCategoryRepository(database: database)
+    let doomed = try await categories.create(Moolah.Category(name: "Doomed"))
+    try await categories.delete(id: doomed.id, withReplacement: nil)
+
+    let dataZoneID = CKRecordZone.ID(
+      zoneName: DeletionJournal.dataZoneName(for: profileId),
+      ownerName: CKCurrentUserDefaultName)
+    let doomedID = CKRecord.ID(
+      recordType: CategoryRow.recordType, uuid: doomed.id, zoneID: dataZoneID)
+    let redelivered = CKRecord(recordType: CategoryRow.recordType, recordID: doomedID)
+
+    coordinator.armRecoveryShield()
+
+    // ORDERING A — refetch BEFORE replay. The shield snapshot is built from the
+    // journal at recovery start, independent of replay, so the re-delivered
+    // record is suppressed even though no `.deleteRecord` has been enqueued yet.
+    let shieldBeforeReplay = await coordinator.activeRecoveryShield()
+    #expect(
+      SyncCoordinator.partitionShieldedSaves([redelivered], shield: shieldBeforeReplay)
+        .toApply.isEmpty)
+
+    // Now replay enqueues the deletion.
+    let store = InMemoryPendingChangeStore()
+    await coordinator.replayDeletionJournal(into: store)
+
+    // ORDERING B — refetch AFTER replay. Still suppressed (the shield holds for
+    // the whole recovery session until the deletion is confirmed).
+    let shieldAfterReplay = await coordinator.activeRecoveryShield()
+    #expect(
+      SyncCoordinator.partitionShieldedSaves([redelivered], shield: shieldAfterReplay)
+        .toApply.isEmpty)
+
+    // The server-side resurrection is closed separately: replay enqueued the
+    // `.deleteRecord` for the same id, so CloudKit deletes the server copy.
+    #expect(
+      store.pendingRecordZoneChanges.contains { change in
+        if case .deleteRecord(let id) = change { return id == doomedID }
+        return false
+      })
+
+    // Once the deletion is confirmed sent the session settles and the shield
+    // releases — a genuine later peer re-create of that id now applies normally
+    // (the shield is recovery-scoped, not a permanent veto).
+    store.remove(pendingRecordZoneChanges: [.deleteRecord(doomedID)])
+    await coordinator.clearConfirmedReplayedDeletions(against: store)
+    let releasedShield = await coordinator.activeRecoveryShield()
+    #expect(
+      SyncCoordinator.partitionShieldedSaves([redelivered], shield: releasedShield)
+        .toApply.map(\.recordID) == [doomedID])
+  }
 }
