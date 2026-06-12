@@ -76,6 +76,27 @@ extension SyncCoordinator {
   /// HARD RULE: every re-issued deletion comes from a positive journal row —
   /// nothing is ever inferred from a record being absent locally.
   func replayDeletionJournal(into state: any PendingChangeStore) async {
+    let resolved = await resolveAllJournalDeletions()
+    // The coordinator may have been stopped while the journal reads were in
+    // flight — don't mutate state / enqueue onto a torn-down engine.
+    guard !Task.isCancelled, !resolved.isEmpty else { return }
+    for (id, ref) in resolved {
+      replayedDeletionsInFlight[id] = ref
+    }
+    state.add(pendingRecordZoneChanges: resolved.keys.map { .deleteRecord($0) })
+    logger.warning(
+      "Deletion-journal replay: re-enqueued \(resolved.count, privacy: .public) durable deletion(s)"
+    )
+    refreshPendingUploadsMirror()
+  }
+
+  /// Reads the deletion journal from the profile-index DB and every live
+  /// profile's DB and resolves each row to its real CloudKit `CKRecord.ID`
+  /// (sentinel `@profile-data` → `profile-<id>`; index rows already carry
+  /// `profile-index`). Shared by the start-time replay and the recovery
+  /// tombstone-shield snapshot (issue #1090 / #12). Keyed by `CKRecord.ID` so a
+  /// duplicate intent collapses to one entry.
+  func resolveAllJournalDeletions() async -> [CKRecord.ID: ReplayedDeletionRef] {
     var resolved: [CKRecord.ID: ReplayedDeletionRef] = [:]
 
     let indexEntries = await readDeletionJournal(in: containerManager.profileIndexDatabase)
@@ -94,7 +115,7 @@ extension SyncCoordinator {
         database = try containerManager.database(for: profileId)
       } catch {
         logger.error(
-          "Deletion-journal replay: cannot open DB for profile \(profileId, privacy: .public): \(error, privacy: .public) — skipping its journal"
+          "Deletion-journal resolve: cannot open DB for profile \(profileId, privacy: .public): \(error, privacy: .public) — skipping its journal"
         )
         continue
       }
@@ -109,18 +130,7 @@ extension SyncCoordinator {
           recordName: id.recordName)
       }
     }
-
-    // The coordinator may have been stopped while the journal reads were in
-    // flight — don't mutate state / enqueue onto a torn-down engine.
-    guard !Task.isCancelled, !resolved.isEmpty else { return }
-    for (id, ref) in resolved {
-      replayedDeletionsInFlight[id] = ref
-    }
-    state.add(pendingRecordZoneChanges: resolved.keys.map { .deleteRecord($0) })
-    logger.warning(
-      "Deletion-journal replay: re-enqueued \(resolved.count, privacy: .public) durable deletion(s)"
-    )
-    refreshPendingUploadsMirror()
+    return resolved
   }
 
   /// Retires journal rows for replayed deletions whose `.deleteRecord` has left
@@ -154,6 +164,10 @@ extension SyncCoordinator {
     for id in confirmed.keys {
       replayedDeletionsInFlight.removeValue(forKey: id)
     }
+    // A recovery session settles once its replayed deletions are all confirmed
+    // (issue #1090 / #12) — release the tombstone shield so later incoming
+    // records upsert normally again.
+    releaseRecoveryShieldIfSettled()
   }
 
   /// The subset of `inFlight` whose `.deleteRecord` is no longer in `pending` —

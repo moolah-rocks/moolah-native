@@ -104,12 +104,22 @@ extension SyncCoordinator {
     deleted: [(CKRecord.ID, String)]
   ) async {
     let deletedIDs = deleted.map(\.0)
+    // Recovery tombstone shield (issue #1090 / #12) — suppress a re-delivered
+    // deleted ProfileRecord so the token-less refetch can't resurrect an
+    // empty-shell profile mid-recovery. See `applyFetchedProfileDataChanges`.
+    let shield = await activeRecoveryShield()
+    let (toApply, suppressed) = Self.partitionShieldedSaves(saved, shield: shield)
+    if !suppressed.isEmpty {
+      logger.warning(
+        "Recovery shield suppressed \(suppressed.count, privacy: .public) re-delivered index deletion(s)"
+      )
+    }
     // Index upsert is fast (few records), run off-main. The single-device
     // echo race is guarded transactionally inside the handler's apply
     // write via the `needs_push` flag (issue #1081), so no main-actor
     // pre-snapshot is needed.
     let indexResult = profileIndexHandler.applyRemoteChanges(
-      saved: saved, deleted: deletedIDs)
+      saved: toApply, deleted: deletedIDs)
     switch indexResult {
     case .success:
       await MainActor.run {
@@ -163,8 +173,24 @@ extension SyncCoordinator {
       }
     guard let handler else { return }
 
+    // Recovery tombstone shield (issue #1090 / #12): during a bloated-state
+    // recovery, the token-less full refetch re-delivers any record deleted
+    // locally whose `.deleteRecord` never propagated. Drop those saves so the
+    // replayed deletion wins on both the local row and the server — the per-repo
+    // D1-b journal clear runs per-upserted-row, so suppressing the upsert also
+    // skips the clear. `activeRecoveryShield()` awaits the snapshot build, so
+    // there is no race with the engine's automatic post-init fetch; it is `[]`
+    // (no filtering) outside recovery.
+    let shield = await activeRecoveryShield()
+    let (toApply, suppressed) = Self.partitionShieldedSaves(saved, shield: shield)
+    if !suppressed.isEmpty {
+      logger.warning(
+        "Recovery shield suppressed \(suppressed.count, privacy: .public) re-delivered deletion(s) for profile \(profileId, privacy: .public)"
+      )
+    }
+
     // Filter pre-extracted system fields to this zone (off-main)
-    let savedNames = Set(saved.map { $0.recordID.recordName })
+    let savedNames = Set(toApply.map { $0.recordID.recordName })
     let zonePreExtracted = preExtractedSystemFields.filter { recordName, _ in
       savedNames.contains(recordName)
     }
@@ -174,11 +200,11 @@ extension SyncCoordinator {
     // path. The deduper hook below uses this set to scope its sweep to
     // legs the fetch could plausibly have introduced duplicates for —
     // bounded work even when an unrelated zone push arrived.
-    let touchedExternalIds = Self.extractTouchedExternalIds(saved: saved)
+    let touchedExternalIds = Self.extractTouchedExternalIds(saved: toApply)
 
     // Heavy upsert/delete/save runs off-main via nonisolated method
     let result = handler.applyRemoteChanges(
-      saved: saved, deleted: deleted, preExtractedSystemFields: zonePreExtracted)
+      saved: toApply, deleted: deleted, preExtractedSystemFields: zonePreExtracted)
 
     switch result {
     case .success:
