@@ -95,11 +95,16 @@ final class GRDBInstrumentRegistryRepository:
   // MARK: - Cross-extension internals
   //
   // `attachSyncHooks` and the `fireOnRecord*` helpers live in
-  // `GRDBInstrumentRegistryRepository+SyncHooks.swift`, and the row-level
-  // upsert helpers (`upsertCrypto`, `upsertStock`) live in
-  // `GRDBInstrumentRegistryRepository+Upsert.swift`. They access `hooks`
-  // / are called as `Self.upsert…` via the `internal` visibility implied
-  // by Swift's same-module-extension scope.
+  // `GRDBInstrumentRegistryRepository+SyncHooks.swift`; the row-level
+  // upsert helpers (`upsertCrypto`, `upsertStock`) and the
+  // `clearDeletionIntent(for:in:)` deletion-journal helper live in
+  // `GRDBInstrumentRegistryRepository+Upsert.swift`; and the remote-apply
+  // entry point (`applyRemoteChangesSync`, which calls
+  // `Self.clearDeletionIntent`) lives in
+  // `GRDBInstrumentRegistryRepository+SyncEntryPoints.swift`. They access
+  // `hooks` / are called as `Self.upsert…` / `Self.clearDeletionIntent`
+  // via the `internal` visibility implied by Swift's same-module-extension
+  // scope.
 
   // MARK: - InstrumentRegistryRepository conformance
 
@@ -184,7 +189,26 @@ final class GRDBInstrumentRegistryRepository:
           .fetchOne(database)
       else { return false }
       guard existing.kind != fiatKind else { return false }
-      return try InstrumentRow.deleteOne(database, key: id)
+      let didDelete = try InstrumentRow.deleteOne(database, key: id)
+      if didDelete {
+        // Durable deletion intent (issue #1097) written in the SAME
+        // transaction as the row delete, so an engine-down window or a
+        // sync-state reset can't lose it before the `.deleteRecord`
+        // propagates — otherwise a token-less refetch (zone purge,
+        // encrypted-data reset, or #1090/#12 bloated-state recovery) would
+        // resurrect the instrument. Instruments live in the profile-index DB
+        // and sync in the `profile-index` zone (like `ProfileRow`, NOT the
+        // per-profile `@profile-data` sentinel), so the real index zone name
+        // is stored — the start-time replay then re-enqueues it as a
+        // `.deleteRecord` and the recovery shield snapshots it for free.
+        try DeletionJournal.record(
+          zoneName: DeletionJournal.profileIndexZoneName,
+          recordName: InstrumentRow.recordName(for: id),
+          recordType: InstrumentRow.recordType,
+          at: Date(),
+          in: database)
+      }
+      return didDelete
     }
     guard didDelete else { return }
     invalidateInstrumentMapCache()
@@ -247,99 +271,11 @@ final class GRDBInstrumentRegistryRepository:
 
   // MARK: - Sync entry points (synchronous, GRDB-queue-blocking)
   //
-  // Called from the CKSyncEngine delegate executor on a non-MainActor
-  // context. `DatabaseWriter.write { db in … }` has both async and sync
-  // overloads; the sync form blocks the calling thread until the queue's
-  // serial executor admits the closure. Never call these from
-  // `@MainActor`.
-
-  func applyRemoteChangesSync(saved rows: [InstrumentRow], deleted ids: [String]) throws {
-    try database.write { database in
-      for var row in rows {
-        let existing =
-          try InstrumentRow
-          .filter(InstrumentRow.Columns.id == row.id)
-          .fetchOne(database)
-
-        // Apply the field-level merge rule for `pricingStatus` before
-        // upserting. CKSyncEngine's default "server wins" would let
-        // the daily auto-resolver on one device clobber a `.spam`
-        // classification a user made on another. The rule is
-        // centralised in `PricingStatusMerge.merge` and unit-tested
-        // against the full 3x3 truth table.
-        //
-        // Unrecognised raw values (only possible from a future-version
-        // device sending an enum case this build doesn't compile against,
-        // since legacy records that omit the field decode as `"priced"`
-        // in `InstrumentRow+CloudKit.swift`) decode as `.priced`. That
-        // matches the legacy fallback and keeps the merge defensive
-        // rather than throwing.
-        let mergedStatus = Self.mergedPricingStatus(local: existing, incoming: row)
-
-        // Modification-date gate on identity / provider-mapping fields and
-        // the cached system-fields blob (issue #1085). Instruments have no
-        // `needs_push`; the date gate piggybacks on the `fetchOne` above.
-        // A stale echo (incoming date older-or-equal to the existing row's
-        // cached date) must NOT revert the identity/mapping fields — but
-        // `pricingStatus` is EXEMPT: it always flows through
-        // `PricingStatusMerge` regardless of date, because that merge is a
-        // deliberately recency-independent CRDT (sticky `.spam`) and gating
-        // it wholesale could leave two devices divergent. So a stale echo
-        // writes only the merged `pricingStatus` (and only when it changed,
-        // to skip a no-op write), leaving identity / mapping / blob put.
-        if let existing, Self.isStaleInstrumentEcho(existing: existing, incoming: row) {
-          if mergedStatus != existing.pricingStatus {
-            _ =
-              try InstrumentRow
-              .filter(InstrumentRow.Columns.id == row.id)
-              .updateAll(
-                database, [InstrumentRow.Columns.pricingStatus.set(to: mergedStatus)])
-          }
-          continue
-        }
-
-        row.pricingStatus = mergedStatus
-        try row.upsert(database)
-      }
-      for id in ids {
-        _ = try InstrumentRow.deleteOne(database, key: id)
-      }
-    }
-    // Remote pulls mutate rows just like local writes; the memoised
-    // map must be rebuilt before the next reader (e.g. a price-cache
-    // resolution) observes it.
-    invalidateInstrumentMapCache()
-  }
-
-  /// Resolves the `pricingStatus` raw value to persist for an incoming
-  /// instrument row, applying `PricingStatusMerge` against the existing
-  /// local row's status (issue #1085 keeps this recency-independent, so it
-  /// runs whether or not the date gate rejects the rest of the record).
-  /// With no existing row the incoming status is taken as-is.
-  private static func mergedPricingStatus(
-    local existing: InstrumentRow?, incoming row: InstrumentRow
-  ) -> String {
-    guard let existing else { return row.pricingStatus }
-    let local = TokenPricingStatus(rawValue: existing.pricingStatus) ?? .priced
-    let incoming = TokenPricingStatus(rawValue: row.pricingStatus) ?? .priced
-    return PricingStatusMerge.merge(local: local, incoming: incoming).rawValue
-  }
-
-  /// True when `row` is a superseded stale echo relative to `existing` —
-  /// its server `modificationDate` is older-or-equal to the date the local
-  /// row caches (reject-on-tie, design §4). Fail-open: if either date is
-  /// absent (no cached blob, or a dateless incoming record) returns `false`
-  /// so the incoming record applies, matching the gate's behaviour at the
-  /// UUID-keyed sites.
-  private static func isStaleInstrumentEcho(
-    existing: InstrumentRow, incoming row: InstrumentRow
-  ) -> Bool {
-    guard
-      let cached = existing.serverModificationDate,
-      let incoming = row.serverModificationDate
-    else { return false }
-    return incoming <= cached
-  }
+  // `applyRemoteChangesSync` (the CKSyncEngine remote-apply path) and its
+  // `mergedPricingStatus` / `isStaleInstrumentEcho` helpers live in the
+  // sibling `+SyncEntryPoints` extension file, alongside the other
+  // synchronous sync entry points, so this file stays under SwiftLint's
+  // `file_length` budget.
 
   /// Persists a new `pricingStatus` for the row identified by
   /// `registration.instrument.id`, leaving every other column unchanged.

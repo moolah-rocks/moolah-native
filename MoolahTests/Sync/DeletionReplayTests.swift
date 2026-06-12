@@ -146,6 +146,37 @@ struct DeletionReplayTests {
     #expect(deletes.allSatisfy { $0.zoneID == indexZoneID })
   }
 
+  // MARK: - 3b. Instrument deletion replays as an index-zone .deleteRecord (#1097)
+
+  @Test(
+    "a journaled instrument deletion survives a state reset and replays as an index-zone .deleteRecord"
+  )
+  func deletedInstrumentReplaysIndexRecordDeletion() async throws {
+    let fixture = try await Self.makeFixture()
+    let indexZoneID = fixture.coordinator.profileIndexHandler.zoneID
+    // The shared instrument registry lives in the profile-index DB and syncs in
+    // the `profile-index` zone — the same DB the replay reads for index entries.
+    let registry = GRDBInstrumentRegistryRepository(
+      database: fixture.manager.profileIndexDatabase)
+
+    let eth = Instrument.crypto(
+      chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    try await registry.registerCrypto(
+      eth,
+      mapping: CryptoProviderMapping(
+        instrumentId: eth.id, coingeckoId: "ethereum",
+        cryptocompareSymbol: nil, binanceSymbol: nil))
+    try await registry.remove(id: eth.id)
+
+    let store = InMemoryPendingChangeStore()
+    await fixture.coordinator.replayDeletionJournal(into: store)
+
+    let expected = CKRecord.ID(recordName: eth.id, zoneID: indexZoneID)
+    let deletes = Self.deleteRecordIDs(store.pendingRecordZoneChanges)
+    #expect(deletes.contains(expected))
+    #expect(deletes.allSatisfy { $0.zoneID == indexZoneID })
+  }
+
   // MARK: - 4. Clear-on-confirm → no infinite re-replay across restarts
 
   @Test(
