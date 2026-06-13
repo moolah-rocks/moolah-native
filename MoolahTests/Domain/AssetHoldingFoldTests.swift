@@ -43,7 +43,7 @@ struct AssetHoldingFoldTests {
   }
 
   @Test
-  func partialConversionFailureMakesValueNil() {
+  func partialConversionFailureMakesValueNil() throws {
     let rows = [
       ValuedPosition(
         instrument: eth(1), quantity: 1, unitPrice: amt(4000), costBasis: amt(3000),
@@ -51,7 +51,7 @@ struct AssetHoldingFoldTests {
       ValuedPosition(
         instrument: eth(10), quantity: 2, unitPrice: nil, costBasis: nil, value: nil),
     ]
-    let holding = AssetHolding.fold(rows, assetKeys: ethKeys, hostCurrency: aud)[0]
+    let holding = try #require(AssetHolding.fold(rows, assetKeys: ethKeys, hostCurrency: aud).first)
     #expect(holding.quantity == 3)
     #expect(holding.value == nil)
     #expect(holding.costBasis == nil)
@@ -59,7 +59,7 @@ struct AssetHoldingFoldTests {
   }
 
   @Test
-  func costBasisIndependentOfValue() {
+  func costBasisIndependentOfValue() throws {
     let rows = [
       ValuedPosition(
         instrument: eth(1), quantity: 1, unitPrice: amt(4000), costBasis: amt(3000),
@@ -67,7 +67,7 @@ struct AssetHoldingFoldTests {
       ValuedPosition(
         instrument: eth(10), quantity: 2, unitPrice: nil, costBasis: amt(6000), value: nil),
     ]
-    let holding = AssetHolding.fold(rows, assetKeys: ethKeys, hostCurrency: aud)[0]
+    let holding = try #require(AssetHolding.fold(rows, assetKeys: ethKeys, hostCurrency: aud).first)
     #expect(holding.value == nil)
     #expect(holding.costBasis == amt(9000))
     #expect(holding.gainLoss == nil)
@@ -102,15 +102,52 @@ struct AssetHoldingFoldTests {
   }
 
   @Test
-  func singleChainPassthroughKeepsChainId() {
+  func singleChainPassthroughKeepsChainId() throws {
     let rows = [
       ValuedPosition(
         instrument: eth(1), quantity: 1, unitPrice: amt(4000), costBasis: amt(3000),
         value: amt(4000))
     ]
-    let holding = AssetHolding.fold(rows, assetKeys: ["1:native": "ethereum"], hostCurrency: aud)[0]
+    let holding = try #require(
+      AssetHolding.fold(rows, assetKeys: ["1:native": "ethereum"], hostCurrency: aud).first)
     #expect(holding.chainId == 1)
     #expect(holding.chainCount == 1)
     #expect(holding.id == "ethereum")
+  }
+
+  @Test
+  func emptyInputYieldsNoHoldings() {
+    #expect(AssetHolding.fold([], assetKeys: [:], hostCurrency: aud).isEmpty)
+  }
+
+  @Test
+  func derivesUnitPriceFromValueAndQuantity() throws {
+    let rows = [
+      ValuedPosition(
+        instrument: eth(1), quantity: 1, unitPrice: amt(4000), costBasis: amt(3000),
+        value: amt(4000)),
+      ValuedPosition(
+        instrument: eth(10), quantity: 2, unitPrice: amt(4000), costBasis: amt(6000),
+        value: amt(8000)),
+    ]
+    let holding = try #require(AssetHolding.fold(rows, assetKeys: ethKeys, hostCurrency: aud).first)
+    #expect(holding.quantity == 3)
+    #expect(holding.value == amt(12000))
+    #expect(holding.unitPrice == amt(4000))
+  }
+
+  @Test
+  func zeroQuantityYieldsNilUnitPrice() throws {
+    let rows = [
+      ValuedPosition(
+        instrument: eth(1), quantity: 1, unitPrice: amt(4000), costBasis: amt(4000),
+        value: amt(4000)),
+      ValuedPosition(
+        instrument: eth(10), quantity: -1, unitPrice: amt(4000), costBasis: amt(-4000),
+        value: amt(-4000)),
+    ]
+    let holding = try #require(AssetHolding.fold(rows, assetKeys: ethKeys, hostCurrency: aud).first)
+    #expect(holding.quantity == 0)
+    #expect(holding.unitPrice == nil)
   }
 }
