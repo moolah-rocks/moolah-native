@@ -11,8 +11,9 @@ import Foundation
 // rather than feature business logic.
 import GRDB
 
-struct ImportEntityCounts: Sendable {
+struct ImportEntityCounts: Sendable, Equatable {
   let accounts: Int
+  let accountGroups: Int
   let categories: Int
   let earmarks: Int
   let transactions: Int
@@ -38,6 +39,7 @@ struct ImportVerifier {
     let actualCounts = try await database.read { database in
       try ImportEntityCounts(
         accounts: AccountRow.fetchCount(database),
+        accountGroups: AccountGroupRow.fetchCount(database),
         categories: CategoryRow.fetchCount(database),
         earmarks: EarmarkRow.fetchCount(database),
         transactions: TransactionRow.fetchCount(database),
@@ -48,20 +50,14 @@ struct ImportVerifier {
     let expectedInvestmentValueCount = exported.investmentValues.values.reduce(0) { $0 + $1.count }
     let expectedCounts = ImportEntityCounts(
       accounts: exported.accounts.count,
+      accountGroups: exported.accountGroups.count,
       categories: exported.categories.count,
       earmarks: exported.earmarks.count,
       transactions: exported.transactions.count,
       investmentValues: expectedInvestmentValueCount
     )
-    let countMatch =
-      actualCounts.accounts == expectedCounts.accounts
-      && actualCounts.categories == expectedCounts.categories
-      && actualCounts.earmarks == expectedCounts.earmarks
-      && actualCounts.transactions == expectedCounts.transactions
-      && actualCounts.investmentValues == expectedCounts.investmentValues
-
     return ImportVerificationResult(
-      countMatch: countMatch,
+      countMatch: actualCounts == expectedCounts,
       expectedCounts: expectedCounts,
       actualCounts: actualCounts
     )

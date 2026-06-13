@@ -4,6 +4,7 @@ import OSLog
 
 struct ImportResult: Sendable {
   let accountCount: Int
+  let accountGroupCount: Int
   let categoryCount: Int
   let earmarkCount: Int
   let budgetItemCount: Int
@@ -11,8 +12,8 @@ struct ImportResult: Sendable {
   let investmentValueCount: Int
 
   var totalCount: Int {
-    accountCount + categoryCount + earmarkCount + budgetItemCount + transactionCount
-      + investmentValueCount
+    accountCount + accountGroupCount + categoryCount + earmarkCount + budgetItemCount
+      + transactionCount + investmentValueCount
   }
 }
 
@@ -66,11 +67,12 @@ struct CloudKitDataImporter {
     let investmentValueCount = data.investmentValues.values.reduce(0) { $0 + $1.count }
 
     logger.info(
-      "Import complete: \(data.accounts.count) accounts, \(data.transactions.count) transactions, \(investmentValueCount) investment values"
+      "Import complete: \(data.accounts.count) accounts, \(data.accountGroups.count) groups, \(data.transactions.count) transactions, \(investmentValueCount) investment values"
     )
 
     return ImportResult(
       accountCount: data.accounts.count,
+      accountGroupCount: data.accountGroups.count,
       categoryCount: data.categories.count,
       earmarkCount: data.earmarks.count,
       budgetItemCount: budgetItemCount,
@@ -94,6 +96,10 @@ struct CloudKitDataImporter {
     try await registerInstruments(data: data)
     try await database.write { database in
       try Self.writeCategories(data: data, database: database)
+      // Groups before accounts so a member's `groupId` resolves to a
+      // present group row (the schema omits the FK constraint to allow
+      // out-of-order sync delivery, but a clean import writes parents first).
+      try Self.writeAccountGroups(data: data, database: database)
       try Self.writeAccountsAndEarmarks(data: data, database: database)
       try Self.writeTransactions(data: data, database: database)
       try Self.writeInvestmentValues(data: data, database: database)
@@ -116,6 +122,7 @@ struct CloudKitDataImporter {
       let hasNonFiat =
         data.instruments.contains { $0.kind != .fiatCurrency }
         || data.accounts.contains { $0.instrument.kind != .fiatCurrency }
+        || data.accountGroups.contains { $0.instrument.kind != .fiatCurrency }
         || data.transactions.contains { txn in
           txn.legs.contains { $0.instrument.kind != .fiatCurrency }
         }
@@ -138,6 +145,9 @@ struct CloudKitDataImporter {
     for account in data.accounts {
       try await register(account.instrument)
     }
+    for group in data.accountGroups {
+      try await register(group.instrument)
+    }
     for txn in data.transactions {
       for leg in txn.legs {
         try await register(leg.instrument)
@@ -150,6 +160,14 @@ struct CloudKitDataImporter {
   ) throws {
     for category in data.categories {
       try CategoryRow(domain: category).upsert(database)
+    }
+  }
+
+  nonisolated private static func writeAccountGroups(
+    data: ExportedData, database: Database
+  ) throws {
+    for group in data.accountGroups {
+      try AccountGroupRow(domain: group).upsert(database)
     }
   }
 

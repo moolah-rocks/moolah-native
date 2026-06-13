@@ -44,6 +44,7 @@ actor DataExporter {
   /// the assembly to separate helpers.
   private struct StagedDownloads {
     let accounts: [Account]
+    let accountGroups: [AccountGroup]
     let categories: [Category]
     let earmarks: [Earmark]
     let earmarkBudgets: [UUID: [EarmarkBudgetItem]]
@@ -60,6 +61,13 @@ actor DataExporter {
       "accounts", signpost: "export.accounts", signpostID: signpostID
     ) {
       try await backend.accounts.fetchAll()
+    }
+
+    progress(.downloading(step: "account groups"))
+    let accountGroups = try await runStage(
+      "account groups", signpost: "export.accountGroups", signpostID: signpostID
+    ) {
+      try await backend.accountGroups.fetchAll()
     }
 
     progress(.downloading(step: "categories"))
@@ -100,7 +108,8 @@ actor DataExporter {
     }
 
     return StagedDownloads(
-      accounts: accounts, categories: categories, earmarks: earmarks, earmarkBudgets: budgets,
+      accounts: accounts, accountGroups: accountGroups, categories: categories,
+      earmarks: earmarks, earmarkBudgets: budgets,
       transactions: transactions, investmentValues: investmentValues)
   }
 
@@ -111,7 +120,10 @@ actor DataExporter {
     financialYearStartMonth: Int
   ) -> ExportedData {
     let instruments = collectInstruments(
-      currencyCode: currencyCode, transactions: stages.transactions)
+      currencyCode: currencyCode,
+      accounts: stages.accounts,
+      accountGroups: stages.accountGroups,
+      transactions: stages.transactions)
     return ExportedData(
       version: 1,
       exportedAt: Date(),
@@ -120,6 +132,7 @@ actor DataExporter {
       financialYearStartMonth: financialYearStartMonth,
       instruments: instruments,
       accounts: stages.accounts,
+      accountGroups: stages.accountGroups,
       categories: stages.categories,
       earmarks: stages.earmarks,
       earmarkBudgets: stages.earmarkBudgets,
@@ -147,10 +160,19 @@ actor DataExporter {
   }
 
   private func collectInstruments(
-    currencyCode: String, transactions: [Transaction]
+    currencyCode: String,
+    accounts: [Account],
+    accountGroups: [AccountGroup],
+    transactions: [Transaction]
   ) -> [Instrument] {
     let profileInstrument = Instrument.fiat(code: currencyCode)
     var instrumentsById: [String: Instrument] = [profileInstrument.id: profileInstrument]
+    for account in accounts {
+      instrumentsById[account.instrument.id] = account.instrument
+    }
+    for group in accountGroups {
+      instrumentsById[group.instrument.id] = group.instrument
+    }
     for txn in transactions {
       for leg in txn.legs {
         instrumentsById[leg.instrument.id] = leg.instrument
