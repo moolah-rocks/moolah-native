@@ -86,10 +86,10 @@ struct TransactionStoreRegistryRefreshTests {
 
     let store = makeStore(backend, registry)
     await store.load(filter: TransactionFilter(accountId: accountId))
-    try await store.waitForNextEmission(
-      matching: { $0.transactions.count == 1 },
-      description: "store sees the seeded crypto transaction")
-    #expect(cryptoLegName(store, id: crypto.id) == "Wrapped Bitcoin")
+    await expectEventually("store sees the seeded crypto transaction") {
+      store.transactions.count == 1
+        && self.cryptoLegName(store, id: crypto.id) == "Wrapped Bitcoin"
+    }
 
     // Rename in the SHARED registry. No per-profile GRDB write happens,
     // so the data-change observation does NOT re-fire — only the

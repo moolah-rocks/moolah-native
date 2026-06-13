@@ -48,14 +48,15 @@ struct TransactionStoreRunningBalanceTests {
       ]
     )
     _ = await store.create(expense)
-    try await store.awaitTransactionCount(2)
 
-    // Newest first: expense (balance 97000), then income (balance 100000)
-    #expect(store.transactions.count == 2)
-    #expect(store.transactions[0].transaction.payee == "Coffee")
-    #expect(store.transactions[0].balance?.quantity == Decimal(97000) / 100)
-    #expect(store.transactions[1].transaction.payee == "Initial")
-    #expect(store.transactions[1].balance?.quantity == Decimal(100000) / 100)
+    // Newest first: expense (balance 97000), then income (balance 100000).
+    await expectEventually("running balances recompute after create") {
+      store.transactions.count == 2
+        && store.transactions[0].transaction.payee == "Coffee"
+        && store.transactions[0].balance?.quantity == Decimal(97000) / 100
+        && store.transactions[1].transaction.payee == "Initial"
+        && store.transactions[1].balance?.quantity == Decimal(100000) / 100
+    }
   }
 
   @Test
@@ -98,9 +99,11 @@ struct TransactionStoreRunningBalanceTests {
 
     // Delete the expense — balance should revert
     await store.delete(id: coffee.id)
-    try await store.awaitTransactionCount(1)
-    #expect(store.transactions.count == 1)
-    #expect(store.transactions[0].balance?.quantity == Decimal(100000) / 100)  // Only Salary remains
+    // Only Salary remains, so its running balance reverts to 100000.
+    await expectEventually("running balance reverts after delete") {
+      store.transactions.count == 1
+        && store.transactions[0].balance?.quantity == Decimal(100000) / 100
+    }
   }
 
   @Test
@@ -129,12 +132,10 @@ struct TransactionStoreRunningBalanceTests {
       )
     ]
     await store.update(updated)
-    try await store.waitForNextEmission(
-      matching: { $0.transactions.first?.balance?.quantity == 950 },
-      description: "updated balance is observable"
-    )
-    #expect(store.transactions[0].balance?.quantity == 950)
-    #expect(store.transactions[1].balance?.quantity == 1000)
+    await expectEventually("running balances recompute after amount change") {
+      store.transactions[0].balance?.quantity == 950
+        && store.transactions[1].balance?.quantity == 1000
+    }
   }
 
   // MARK: - Helpers

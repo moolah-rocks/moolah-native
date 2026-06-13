@@ -52,11 +52,10 @@ struct TransactionStoreSyncRefreshTests {
     )
     _ = try await backend.transactions.create(remote)
 
-    try await store.waitForNextEmission(
-      matching: { $0.transactions.count == 1 },
-      description: "store sees synced transaction"
-    )
-    #expect(store.transactions.first?.transaction.payee == "Synced")
+    await expectEventually("store sees synced transaction") {
+      store.transactions.count == 1
+        && store.transactions.first?.transaction.payee == "Synced"
+    }
 
     store.stopObserving()
   }
@@ -133,11 +132,10 @@ struct TransactionStoreSyncRefreshTests {
           )
         ]
       ))
-    try await store.waitForNextEmission(
-      matching: { $0.transactions.count == 1 },
-      description: "observe(accountId:) sees the new transaction"
-    )
-    #expect(store.transactions.first?.transaction.payee == "via observe(accountId:)")
+    await expectEventually("observe(accountId:) sees the new transaction") {
+      store.transactions.count == 1
+        && store.transactions.first?.transaction.payee == "via observe(accountId:)"
+    }
   }
 
   @Test("GRDB wipes during sign-out reach the store before stopObserving cancels it")

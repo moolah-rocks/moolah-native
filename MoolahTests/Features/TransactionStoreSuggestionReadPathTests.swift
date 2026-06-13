@@ -23,24 +23,22 @@ struct TransactionStoreSuggestionReadPathTests {
       transferSuggestions: backend.transferSuggestions)
   }
 
-  /// Blocks until the store's `observeAll()`-fed
-  /// `suggestedTransactionIds` reflects the supplied membership.
-  /// `hasSuggestion(for:)` is now a synchronous read of that observed
-  /// set, so tests must let the suggestion observation settle before
-  /// asserting — the `waitForNextEmission(matching:)` idiom, same as
-  /// the data-observation suites. The predicate matching the current
-  /// state returns immediately if the stream has already emitted.
+  /// Polls until the store's `observeAll()`-fed `suggestedTransactionIds`
+  /// reflects the supplied membership. `hasSuggestion(for:)` is a
+  /// synchronous read of that observed set, so tests must let the
+  /// suggestion observation settle before asserting. Polling the exact
+  /// membership (rather than awaiting a single emission and reading once)
+  /// avoids the race where a later emission lands between the awaited
+  /// emission and the follow-up read.
   private func waitForSuggestionState(
     _ store: TransactionStore,
     contains ids: Set<UUID>,
     excludes excluded: Set<UUID> = []
-  ) async throws {
-    try await store.waitForNextEmission(
-      matching: { snapshot in
-        ids.isSubset(of: snapshot.suggestedTransactionIds)
-          && excluded.isDisjoint(with: snapshot.suggestedTransactionIds)
-      },
-      description: "suggestion set contains \(ids), excludes \(excluded)")
+  ) async {
+    await expectEventually("suggestion set contains \(ids), excludes \(excluded)") {
+      ids.isSubset(of: store.suggestedTransactionIds)
+        && excluded.isDisjoint(with: store.suggestedTransactionIds)
+    }
   }
 
   @Test
@@ -89,7 +87,7 @@ struct TransactionStoreSuggestionReadPathTests {
     // Let the suggestion observation deliver the record before
     // dismissing so the post-dismiss "set is now empty" wait is
     // meaningful (not just observing the never-populated initial state).
-    try await waitForSuggestionState(
+    await waitForSuggestionState(
       store, contains: [outgoing.id, incoming.id])
 
     await store.dismissSuggestedTransfer(incoming)
@@ -105,10 +103,10 @@ struct TransactionStoreSuggestionReadPathTests {
     // C1 regression guard: the store's reactive presence set must clear
     // for both sides once `observeAll()` delivers the deletion, so the
     // detail banner hides without a `transaction.id` change.
-    try await waitForSuggestionState(
-      store, contains: [], excludes: [outgoing.id, incoming.id])
-    #expect(store.hasSuggestion(for: outgoing) == false)
-    #expect(store.hasSuggestion(for: incoming) == false)
+    await expectEventually("hasSuggestion clears for both sides after dismiss") {
+      store.hasSuggestion(for: outgoing) == false
+        && store.hasSuggestion(for: incoming) == false
+    }
   }
 
   @Test
@@ -128,11 +126,11 @@ struct TransactionStoreSuggestionReadPathTests {
         transactionIds: [outgoing.id, incoming.id], suggestedAt: date))
     let store = makeStore(backend: backend)
 
-    try await waitForSuggestionState(
-      store, contains: [outgoing.id, incoming.id], excludes: [unrelated.id])
-    #expect(store.hasSuggestion(for: outgoing))
-    #expect(store.hasSuggestion(for: incoming))
-    #expect(store.hasSuggestion(for: unrelated) == false)
+    await expectEventually("hasSuggestion reflects record presence for the pair only") {
+      store.hasSuggestion(for: outgoing)
+        && store.hasSuggestion(for: incoming)
+        && store.hasSuggestion(for: unrelated) == false
+    }
   }
 
   /// C1 regression guard, isolated: the detail banner derives its
@@ -157,17 +155,17 @@ struct TransactionStoreSuggestionReadPathTests {
         transactionIds: [outgoing.id, incoming.id], suggestedAt: date))
     let store = makeStore(backend: backend)
 
-    try await waitForSuggestionState(
-      store, contains: [outgoing.id, incoming.id])
-    #expect(store.hasSuggestion(for: outgoing))
-    #expect(store.hasSuggestion(for: incoming))
+    await expectEventually("both sides have a suggestion before dismiss") {
+      store.hasSuggestion(for: outgoing)
+        && store.hasSuggestion(for: incoming)
+    }
 
     await store.dismissSuggestedTransfer(outgoing)
 
-    try await waitForSuggestionState(
-      store, contains: [], excludes: [outgoing.id, incoming.id])
-    #expect(store.hasSuggestion(for: outgoing) == false)
-    #expect(store.hasSuggestion(for: incoming) == false)
+    await expectEventually("hasSuggestion clears for both sides after dismiss") {
+      store.hasSuggestion(for: outgoing) == false
+        && store.hasSuggestion(for: incoming) == false
+    }
   }
 
   @Test

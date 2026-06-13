@@ -35,13 +35,13 @@ struct TransactionStoreAccountBalanceTests {
     )
     _ = await store.create(transaction)
 
-    // AccountStore is reactive — wait for observation to settle (OB 1000 + new -50 = 950).
-    try await accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: accountId)?.positions.first?.quantity == Decimal(950) },
-      description: "account settled at 950 after -50 expense created")
-    // Seeded balance is 1000 (from OB tx), create adds -50 expense -> 950
-    let balance = try await accountStore.displayBalance(for: accountId)
-    #expect(balance.quantity == Decimal(950))
+    // AccountStore is reactive — poll the displayed balance until the
+    // observation settles (OB 1000 + new -50 = 950). Seeded balance is
+    // 1000 (from OB tx), create adds -50 expense -> 950.
+    await expectEventually("account settled at 950 after -50 expense created") {
+      let balance = try? await accountStore.displayBalance(for: accountId)
+      return balance?.quantity == Decimal(950)
+    }
   }
 
   @Test
@@ -80,14 +80,14 @@ struct TransactionStoreAccountBalanceTests {
     ]
     await store.update(updated)
 
-    // AccountStore is reactive — wait for observation to settle (OB 950 + updated -75 = 875).
-    try await accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: accountId)?.positions.first?.quantity == Decimal(875) },
-      description: "account settled at 875 after -50 expense updated to -75")
-    // Seeded account OB=950 + seeded tx=-50 gives loaded balance=900
-    // Update delta: (-75)-(-50)=-25, so 900-25=875
-    let balance = try await accountStore.displayBalance(for: accountId)
-    #expect(balance.quantity == Decimal(875))
+    // AccountStore is reactive — poll the displayed balance until the
+    // observation settles (OB 950 + updated -75 = 875).
+    // Seeded account OB=950 + seeded tx=-50 gives loaded balance=900.
+    // Update delta: (-75)-(-50)=-25, so 900-25=875.
+    await expectEventually("account settled at 875 after -50 expense updated to -75") {
+      let balance = try? await accountStore.displayBalance(for: accountId)
+      return balance?.quantity == Decimal(875)
+    }
   }
 
   @Test
@@ -116,13 +116,13 @@ struct TransactionStoreAccountBalanceTests {
 
     await store.delete(id: transaction.id)
 
-    // AccountStore is reactive — wait for observation to settle (OB 950 only, positions = 950).
-    try await accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: accountId)?.positions.first?.quantity == Decimal(950) },
-      description: "account settled at 950 after -50 expense deleted")
-    // Seeded account OB=950 + seeded tx=-50 gives loaded balance=900
-    // Deleting the -50 expense adds 50 back: 900+50=950
-    let balance = try await accountStore.displayBalance(for: accountId)
-    #expect(balance.quantity == Decimal(950))
+    // AccountStore is reactive — poll the displayed balance until the
+    // observation settles (OB 950 only, positions = 950).
+    // Seeded account OB=950 + seeded tx=-50 gives loaded balance=900.
+    // Deleting the -50 expense adds 50 back: 900+50=950.
+    await expectEventually("account settled at 950 after -50 expense deleted") {
+      let balance = try? await accountStore.displayBalance(for: accountId)
+      return balance?.quantity == Decimal(950)
+    }
   }
 }

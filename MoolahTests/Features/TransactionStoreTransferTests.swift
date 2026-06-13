@@ -39,16 +39,18 @@ struct TransactionStoreTransferTests {
     ]
     await store.update(updated)
 
-    // AccountStore is reactive — wait for observation to settle (OB 900 + -150 = 750).
+    // AccountStore is reactive — poll both displayed balances until the
+    // observation settles (OB 900 + -150 = 750).
     // Loaded: checking=900-100=800, savings=1100+100=1200
     // Update: checking: -150-(-100)=-50 → 750, savings: +150-100=+50 → 1250
-    try await accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: accountId)?.positions.first?.quantity == Decimal(750) },
-      description: "checking settled at 750 after transfer amount increased")
-    let checkingBalance = try await accountStore.displayBalance(for: accountId)
-    let savingsBalance = try await accountStore.displayBalance(for: savingsId)
-    #expect(checkingBalance.quantity == Decimal(750))
-    #expect(savingsBalance.quantity == Decimal(1250))
+    await expectEventually(
+      "checking settled at 750 and savings at 1250 after transfer amount increased"
+    ) {
+      let checkingBalance = try? await accountStore.displayBalance(for: accountId)
+      let savingsBalance = try? await accountStore.displayBalance(for: savingsId)
+      return checkingBalance?.quantity == Decimal(750)
+        && savingsBalance?.quantity == Decimal(1250)
+    }
   }
 
   @Test
@@ -80,18 +82,20 @@ struct TransactionStoreTransferTests {
     ]
     await store.update(updated)
 
-    // AccountStore is reactive — wait for observation to settle (savings: 1200-100=1100).
-    try await accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: savingsId)?.positions.first?.quantity == Decimal(1100) },
-      description: "savings settled at 1100 after transfer destination changed")
+    // AccountStore is reactive — poll all three displayed balances until
+    // the observation settles (savings: 1200-100=1100).
     // Loaded: checking=900-100=800, savings=1100+100=1200, investment=500
     // Change dest from savings→investment: savings -100=1100, investment +100=600
-    let checkingBalance = try await accountStore.displayBalance(for: accountId)
-    let savingsBalance = try await accountStore.displayBalance(for: savingsId)
-    let investmentBalance = try await accountStore.displayBalance(for: investmentId)
-    #expect(checkingBalance.quantity == Decimal(800))
-    #expect(savingsBalance.quantity == Decimal(1100))
-    #expect(investmentBalance.quantity == Decimal(600))
+    await expectEventually(
+      "checking 800, savings 1100, investment 600 after transfer destination changed"
+    ) {
+      let checkingBalance = try? await accountStore.displayBalance(for: accountId)
+      let savingsBalance = try? await accountStore.displayBalance(for: savingsId)
+      let investmentBalance = try? await accountStore.displayBalance(for: investmentId)
+      return checkingBalance?.quantity == Decimal(800)
+        && savingsBalance?.quantity == Decimal(1100)
+        && investmentBalance?.quantity == Decimal(600)
+    }
   }
 
   // MARK: - Helpers
