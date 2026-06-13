@@ -108,18 +108,14 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
     // from a superseded task never overwrites the freshly-emitting one.
     guard !Task.isCancelled else { return }
     var assetKeys: [String: String] = [:]
-    if let registry = session?.backend.instrumentRegistry {
-      do {
-        let registrations = try await registry.allCryptoRegistrations()
-        try Task.checkCancellation()
-        assetKeys = CryptoRegistration.assetKeys(from: registrations)
-      } catch is CancellationError {
-        return
-      } catch {
-        Self.logger.warning(
-          "allCryptoRegistrations failed, asset rollup disabled: \(error.localizedDescription, privacy: .public)"
-        )
-      }
+    do {
+      assetKeys = try await CryptoRegistration.assetKeys(from: session?.backend.instrumentRegistry)
+    } catch is CancellationError {
+      return
+    } catch {
+      Self.logger.warning(
+        "allCryptoRegistrations failed, asset rollup disabled: \(error.localizedDescription, privacy: .public)"
+      )
     }
     guard !Task.isCancelled else { return }
     positionsInput = PositionsViewInput(

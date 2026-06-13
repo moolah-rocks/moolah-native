@@ -261,6 +261,8 @@ private func mixedPositionsInput() -> PositionsViewInput {
   let cba = Instrument.stock(ticker: "CBA.AX", exchange: "ASX", name: "CBA")
   let eth = Instrument.crypto(
     chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+  let ethOptimism = Instrument.crypto(
+    chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
   let aud = Instrument.AUD
   return PositionsViewInput(
     title: "Brokerage", hostCurrency: aud,
@@ -281,11 +283,17 @@ private func mixedPositionsInput() -> PositionsViewInput {
         costBasis: InstrumentAmount(quantity: 7_500, instrument: aud),
         value: InstrumentAmount(quantity: 9_800, instrument: aud)),
       ValuedPosition(
+        instrument: ethOptimism, quantity: 1.10,
+        unitPrice: InstrumentAmount(quantity: 4_000, instrument: aud),
+        costBasis: InstrumentAmount(quantity: 3_500, instrument: aud),
+        value: InstrumentAmount(quantity: 4_400, instrument: aud)),
+      ValuedPosition(
         instrument: aud, quantity: 2_480,
         unitPrice: nil, costBasis: nil,
         value: InstrumentAmount(quantity: 2_480, instrument: aud)),
     ],
-    historicalValue: nil)
+    historicalValue: nil,
+    assetKeysByInstrumentId: ["1:native": "ethereum", "10:native": "ethereum"])
 }
 
 #Preview("PositionsTable - mixed wide") {

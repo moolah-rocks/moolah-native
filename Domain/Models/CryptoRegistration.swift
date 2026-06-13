@@ -35,6 +35,19 @@ struct CryptoRegistration: Codable, Sendable, Hashable, Identifiable {
     }
   }
 
+  /// Fetches all crypto registrations from `registry` and folds them into the
+  /// `[instrumentId: assetKey]` rollup map. Returns an empty map when `registry`
+  /// is nil. Throws `CancellationError` if the task is cancelled, and rethrows
+  /// any backing-store error — callers decide how to log/degrade.
+  static func assetKeys(
+    from registry: (any InstrumentRegistryRepository)?
+  ) async throws -> [String: String] {
+    guard let registry else { return [:] }
+    let registrations = try await registry.allCryptoRegistrations()
+    try Task.checkCancellation()
+    return assetKeys(from: registrations)
+  }
+
   private enum CodingKeys: String, CodingKey {
     case instrument
     case mapping
