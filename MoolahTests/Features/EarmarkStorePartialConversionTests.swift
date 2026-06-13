@@ -72,17 +72,17 @@ struct EarmarkStorePartialConversionTests {
       retryDelay: .seconds(60))
 
     // The reactive store publishes the partial-failure state on the
-    // first emission; awaiting an emission where the healthy earmark's
-    // balance is populated is sufficient to assert convergence.
-    try await store.waitForNextEmission(
-      matching: { $0.convertedBalance(for: healthyEarmark.id)?.quantity == 300 },
-      description: "healthy earmark balance settled",
+    // first emission: the healthy earmark's balance populates while the
+    // mixed earmark (and therefore the aggregate total) stay nil. Poll the
+    // full post-condition so a racing recompute can't slip a stale read in.
+    await expectEventually(
+      "healthy earmark settles while the failing earmark and total stay nil",
       timeout: Self.convergenceTimeout
-    )
-
-    #expect(store.convertedBalance(for: healthyEarmark.id)?.quantity == 300)
-    #expect(store.convertedBalance(for: mixedEarmark.id) == nil)
-    #expect(store.convertedTotalBalance == nil)
+    ) {
+      store.convertedBalance(for: healthyEarmark.id)?.quantity == 300
+        && store.convertedBalance(for: mixedEarmark.id) == nil
+        && store.convertedTotalBalance == nil
+    }
   }
 
   /// After the conversion service recovers, a retry populates the
@@ -127,16 +127,16 @@ struct EarmarkStorePartialConversionTests {
     // Wait for the first conversion pass; since EUR fails we land in
     // the partial-failure state with a retry loop running in the
     // background.
-    try await store.waitForNextEmission(
-      matching: { $0.convertedBalance(for: audEarmark.id)?.quantity == 400 },
-      description: "AUD earmark balance settled",
+    // Aggregate cannot be computed (EUR → AUD fails) while the AUD earmark
+    // balance settles. Per-earmark balances are still displayed in their own
+    // currency where no conversion is needed.
+    await expectEventually(
+      "AUD earmark settles while the EUR failure keeps the total nil",
       timeout: Self.convergenceTimeout
-    )
-
-    // Aggregate cannot be computed (EUR → AUD fails). Per-earmark balances
-    // are still displayed in their own currency where no conversion is
-    // needed.
-    #expect(store.convertedTotalBalance == nil)
+    ) {
+      store.convertedBalance(for: audEarmark.id)?.quantity == 400
+        && store.convertedTotalBalance == nil
+    }
 
     // Recover the conversion service and wait for the retry loop to
     // succeed — `waitForPendingConversions()` returns when the loop
@@ -145,8 +145,10 @@ struct EarmarkStorePartialConversionTests {
     await store.waitForPendingConversions()
 
     // 400 AUD + 200 EUR (1:1 fallback) = 600 AUD
-    #expect(store.convertedTotalBalance?.quantity == 600)
-    #expect(store.convertedBalance(for: audEarmark.id)?.quantity == 400)
-    #expect(store.convertedBalance(for: eurEarmark.id)?.quantity == 200)
+    await expectEventually("recovered retry populates per-earmark balances and the total") {
+      store.convertedTotalBalance?.quantity == 600
+        && store.convertedBalance(for: audEarmark.id)?.quantity == 400
+        && store.convertedBalance(for: eurEarmark.id)?.quantity == 200
+    }
   }
 }

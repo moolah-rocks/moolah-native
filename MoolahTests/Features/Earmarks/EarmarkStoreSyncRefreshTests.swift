@@ -32,11 +32,9 @@ struct EarmarkStoreSyncRefreshTests {
       Earmark(name: "Synced", instrument: .defaultTestInstrument)
     )
 
-    try await store.waitForNextEmission(
-      matching: { $0.earmarks.count == 1 },
-      description: "earmarks.count == 1"
-    )
-    #expect(store.earmarks.ordered.first?.name == "Synced")
+    await expectEventually("remote insert refreshes the store with the synced earmark") {
+      store.earmarks.count == 1 && store.earmarks.ordered.first?.name == "Synced"
+    }
   }
 
   @Test("stopObserving cancels the observation task")
