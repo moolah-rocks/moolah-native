@@ -48,7 +48,15 @@ struct PositionsChart: View {
             .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
-        .frame(minWidth: 44, minHeight: 44)
+        #if os(macOS)
+          .frame(minWidth: 44, minHeight: 44)
+        #else
+          // Pin to exactly 44×44 on iOS: with only a `minWidth`/`minHeight`
+          // a constrained header `HStack` can still compress the hit area
+          // below the HIG touch minimum. The `maxWidth`/`maxHeight` clamp
+          // makes the 44pt target non-compressible.
+          .frame(minWidth: 44, maxWidth: 44, minHeight: 44, maxHeight: 44)
+        #endif
         .contentShape(Rectangle())
         .accessibilityLabel("Clear \(selection.displayLabel) filter")
         Spacer()
@@ -75,7 +83,7 @@ struct PositionsChart: View {
       ContentUnavailableView {
         Label("No chart data yet", systemImage: "chart.line.uptrend.xyaxis")
       } description: {
-        Text("Record a trade to start tracking value over time.")
+        Text("Record your first trade and we'll start charting its value over time.")
       }
       .frame(minHeight: 200)
     } else {

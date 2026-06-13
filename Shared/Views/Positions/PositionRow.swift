@@ -13,13 +13,22 @@ import SwiftUI
 struct PositionRow: View {
   let row: AssetHolding
 
+  // Rows breathe a little more under touch (12pt) than under a pointer
+  // (8pt), per `guides/UI_GUIDE.md`. `@ScaledMetric` so the padding tracks
+  // Dynamic Type, matching `TransactionRowView`.
+  #if os(macOS)
+    @ScaledMetric private var verticalPadding: CGFloat = 8
+  #else
+    @ScaledMetric private var verticalPadding: CGFloat = 12
+  #endif
+
   var body: some View {
     HStack(alignment: .firstTextBaseline) {
       leadingColumn
       Spacer()
       trailingColumn
     }
-    .padding(.vertical, 8)
+    .padding(.vertical, verticalPadding)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(accessibilityLabel)
   }
