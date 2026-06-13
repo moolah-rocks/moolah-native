@@ -84,6 +84,7 @@ extension InvestmentStore {
   func loadAllData(account: Account, profileCurrency: Instrument) async {
     setLoadedHostCurrency(profileCurrency)
     setAccountPerformance(nil)  // clear stale data immediately
+    await refreshAssetKeys()
     switch account.valuationMode {
     case .recordedValue:
       await loadRecordedValueBranch(account: account, profileCurrency: profileCurrency)

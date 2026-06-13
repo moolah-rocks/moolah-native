@@ -80,6 +80,7 @@ extension InvestmentStore {
       hostCurrency: hostCurrency,
       positions: rowsWithCost,
       historicalValue: series,
+      assetKeysByInstrumentId: assetKeysByInstrumentId,
       performance: accountPerformance,
       hasAnyHistoricalActivity: Self.hasAnyTradeLeg(
         in: txns, accountId: loadedAccountId, hostCurrency: hostCurrency),
