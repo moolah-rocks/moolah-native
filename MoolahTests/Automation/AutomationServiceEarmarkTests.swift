@@ -31,7 +31,7 @@ struct AutomationServiceEarmarkTests {
 
   @Test("createEarmark creates and lists earmarks")
   func createAndListEarmarks() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, _) = try await makeServiceWithSession()
 
     let earmark = try await service.createEarmark(
       profileIdentifier: "Test",
@@ -42,34 +42,29 @@ struct AutomationServiceEarmarkTests {
     #expect(earmark.name == "Holiday Fund")
     #expect(earmark.savingsGoal?.quantity == 5000)
 
-    // EarmarkStore is reactive — the new earmark is observable via
-    // observeAll() shortly after the GRDB write commits, not synchronously.
-    try await session.earmarkStore.waitForNextEmission(
-      matching: { $0.earmarks.contains { $0.name == "Holiday Fund" } },
-      description: "new earmark observable"
-    )
-
-    let earmarks = try service.listEarmarks(profileIdentifier: "Test")
-    #expect(earmarks.count == 1)
-    #expect(earmarks.first?.name == "Holiday Fund")
+    // EarmarkStore is reactive — the new earmark becomes listable shortly after
+    // the GRDB write commits. Poll the exact asserted value (the service
+    // listing) so a racing observation pass can't slip a stale read between an
+    // awaited emission and a single read.
+    await expectEventually("created earmark is listed via the service") {
+      let earmarks = (try? service.listEarmarks(profileIdentifier: "Test")) ?? []
+      return earmarks.count == 1 && earmarks.first?.name == "Holiday Fund"
+    }
   }
 
   @Test("resolveEarmark finds earmark case-insensitively")
   func resolveEarmarkCaseInsensitive() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, _) = try await makeServiceWithSession()
 
     _ = try await service.createEarmark(
       profileIdentifier: "Test",
       name: "Emergency Fund"
     )
 
-    try await session.earmarkStore.waitForNextEmission(
-      matching: { $0.earmarks.contains { $0.name == "Emergency Fund" } },
-      description: "new earmark observable"
-    )
-
-    let resolved = try service.resolveEarmark(named: "emergency fund", profileIdentifier: "Test")
-    #expect(resolved.name == "Emergency Fund")
+    await expectEventually("created earmark resolves case-insensitively") {
+      (try? service.resolveEarmark(named: "emergency fund", profileIdentifier: "Test"))?.name
+        == "Emergency Fund"
+    }
   }
 
   @Test("resolveEarmark throws when not found")
