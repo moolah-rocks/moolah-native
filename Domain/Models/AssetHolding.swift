@@ -13,6 +13,8 @@ struct AssetHolding: Sendable, Hashable, Identifiable {
   let id: String
   let kind: Instrument.Kind
   let name: String
+  /// Short ticker/symbol (e.g. "ETH"), not the full `name` — used as the
+  /// quantity suffix and inline label.
   let displayLabel: String
   /// Max decimals across contributors — drives quantity formatting.
   let decimals: Int
@@ -31,7 +33,8 @@ struct AssetHolding: Sendable, Hashable, Identifiable {
   /// chart filtering when the row is selected.
   let contributingInstrumentIds: [String]
 
-  /// Number of distinct chains contributing. 1 for single-instrument rows.
+  /// Number of distinct chains contributing; drives whether the row shows a
+  /// chain-breakdown indicator (a count of 1 is a plain single-chain row).
   var chainCount: Int { contributingInstrumentIds.count }
 
   /// Value minus cost basis in the host currency, or `nil` if either side is
@@ -48,8 +51,11 @@ struct AssetHolding: Sendable, Hashable, Identifiable {
     return (value.quantity - costBasis.quantity) / costBasis.quantity * 100
   }
 
+  /// `true` iff a cost basis has been provided for this row.
   var hasCostBasis: Bool { costBasis != nil }
 
+  /// Quantity string for the primary cell; delegates to `QuantityFormatting`
+  /// so this row model renders identically to `ValuedPosition`.
   var quantityFormatted: String {
     QuantityFormatting.formatted(
       kind: kind,
@@ -59,6 +65,8 @@ struct AssetHolding: Sendable, Hashable, Identifiable {
       currencyCode: currencyCode)
   }
 
+  /// Caption-style quantity for a row's secondary line; delegates to
+  /// `QuantityFormatting` so it mirrors `ValuedPosition`'s display.
   var quantityCaption: String {
     QuantityFormatting.caption(
       kind: kind,
@@ -71,6 +79,9 @@ struct AssetHolding: Sendable, Hashable, Identifiable {
 
 // MARK: - Sortable accessors (mirror ValuedPosition for Table columns)
 
+/// Non-optional `Decimal` views of the optional monetary fields for sortable
+/// Table columns. Missing values sort as zero — paired with the `—`
+/// placeholder rendered in the cell, this groups failed/unknown rows at one end.
 extension AssetHolding {
   var unitPriceQuantity: Decimal { unitPrice?.quantity ?? 0 }
   var costBasisQuantity: Decimal { costBasis?.quantity ?? 0 }

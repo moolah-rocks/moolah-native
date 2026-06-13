@@ -29,7 +29,10 @@ enum QuantityFormatting {
     }
   }
 
-  /// Caption variant: adds "shares" for stock; identical otherwise.
+  /// Caption-style variant for a row's secondary line: adds "shares" for
+  /// stock, identical otherwise. The wide table omits the suffix because the
+  /// "Qty" column header already supplies the context; the narrow layout's
+  /// secondary line has none, so it needs the explicit "shares" word.
   static func caption(
     kind: Instrument.Kind,
     quantity: Decimal,
@@ -47,10 +50,6 @@ enum QuantityFormatting {
   }
 
   private static func decimalString(_ value: Decimal, maxFraction: Int) -> String {
-    let formatter = NumberFormatter()
-    formatter.numberStyle = .decimal
-    formatter.minimumFractionDigits = 0
-    formatter.maximumFractionDigits = maxFraction
-    return formatter.string(from: value as NSDecimalNumber) ?? "\(value)"
+    value.formatted(.number.precision(.fractionLength(0...maxFraction)))
   }
 }
