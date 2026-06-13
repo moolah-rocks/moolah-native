@@ -9,7 +9,7 @@ struct AutomationServiceAccountTests {
 
   @Test("createAccount creates and lists accounts")
   func createAndListAccounts() async throws {
-    let (service, session) = try await AutomationTestSession.make()
+    let (service, _) = try await AutomationTestSession.make()
 
     let account = try await service.createAccount(
       profileIdentifier: "Test",
@@ -21,16 +21,14 @@ struct AutomationServiceAccountTests {
     #expect(account.type == .bank)
     #expect(account.positions.isEmpty)
 
-    // AccountStore is reactive — the new account is observable via
-    // `accounts` once `observeAll()` delivers the post-write snapshot.
-    try await session.accountStore.waitForNextEmission(
-      matching: { $0.accounts.count == 1 },
-      description: "new account observable"
-    )
-
-    let accounts = try service.listAccounts(profileIdentifier: "Test")
-    #expect(accounts.count == 1)
-    #expect(accounts.first?.name == "Savings")
+    // AccountStore is reactive — the new account becomes listable shortly
+    // after the GRDB write commits. Poll the exact asserted value so a racing
+    // observation pass can't slip a stale read between an awaited emission and
+    // a single read.
+    await expectEventually("created account is listed via the service") {
+      let accounts = (try? service.listAccounts(profileIdentifier: "Test")) ?? []
+      return accounts.count == 1 && accounts.first?.name == "Savings"
+    }
   }
 
   @Test("createAccount defaults a new investment account to calculatedFromTrades")
@@ -106,15 +104,13 @@ struct AutomationServiceAccountTests {
     let openingBalance = InstrumentAmount(quantity: 1000, instrument: instrument)
     _ = try await session.accountStore.create(bankAccount, openingBalance: openingBalance)
 
-    // Wait for the reactive observation to deliver the position
-    // computed from the opening-balance transaction.
-    try await session.accountStore.waitForNextEmission(
-      matching: { !($0.positions(for: bankAccount.id).isEmpty) },
-      description: "opening balance position observable"
-    )
-
-    let netWorth = try await service.getNetWorth(profileIdentifier: "Test")
-    #expect(netWorth.quantity == 1000)
+    // The net worth derives from the position computed off the opening-balance
+    // transaction, which the reactive observation delivers shortly after the
+    // write commits. Poll the exact asserted value so a racing observation pass
+    // can't slip a stale read in.
+    await expectEventually("net worth reflects the opening balance") {
+      (try? await service.getNetWorth(profileIdentifier: "Test"))?.quantity == 1000
+    }
   }
 
   @Test("updateAccount changes account name")
@@ -159,16 +155,13 @@ struct AutomationServiceAccountTests {
     // `AccountRepository.delete` is a soft delete (flips `isHidden`).
     // Under the reactive observation contract, the row stays in GRDB
     // (and therefore in `accounts`) but with `isHidden == true`.
-    try await session.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: created.id)?.isHidden == true },
-      description: "account hidden observable"
-    )
-
-    // `listAccounts` exposes the raw `accounts` list (including hidden
-    // rows), so the assertion checks the soft-delete contract: the row
-    // is still present but hidden.
-    let accounts = try service.listAccounts(profileIdentifier: "Test")
-    #expect(accounts.count == 1)
-    #expect(accounts.first?.isHidden == true)
+    // `listAccounts` exposes the raw `accounts` list (including hidden rows),
+    // so polling it asserts the soft-delete contract: the row is still present
+    // but hidden. Poll the exact asserted value so a racing observation pass
+    // can't slip a stale read between an awaited emission and a single read.
+    await expectEventually("deleted account is hidden but still listed") {
+      let accounts = (try? service.listAccounts(profileIdentifier: "Test")) ?? []
+      return accounts.count == 1 && accounts.first?.isHidden == true
+    }
   }
 }

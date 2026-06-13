@@ -132,11 +132,13 @@
         Issue.record("expected .ready")
         return
       }
-      try await importedSession.accountStore.waitForNextEmission(
-        matching: { $0.accounts.contains { $0.name == "Savings" } },
-        description: "imported account observable"
-      )
-      #expect(importedSession.accountStore.accounts.contains { $0.name == "Savings" })
+      // The imported account becomes observable on the reactive store shortly
+      // after the import write commits. Poll the exact asserted value so a
+      // racing observation pass can't slip a stale read between an awaited
+      // emission and a single read.
+      await expectEventually("imported account is observable on the store") {
+        importedSession.accountStore.accounts.contains { $0.name == "Savings" }
+      }
     }
 
     @Test("importProfile throws for a missing file")
