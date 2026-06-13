@@ -2,7 +2,7 @@
 
 import SwiftUI
 
-/// Responsive table of `ValuedPosition`s. On wide layouts (macOS, regular iOS
+/// Responsive table of `AssetHolding`s. On wide layouts (macOS, regular iOS
 /// width) renders a `Table` with sortable columns. On compact layouts falls
 /// back to a `List` of `PositionRow`s.
 ///
@@ -67,8 +67,8 @@ struct PositionsTable: View {
       KindBadge(kind: row.kind)
       VStack(alignment: .leading) {
         Text(row.name)
-        if let exchange = row.exchange {
-          Text(exchange).font(.caption).foregroundStyle(.secondary)
+        if let secondary = instrumentSecondaryLabel(for: row) {
+          Text(secondary).font(.caption).foregroundStyle(.secondary)
         }
       }
     }
@@ -76,12 +76,23 @@ struct PositionsTable: View {
     .accessibilityLabel(instrumentLabel(for: row))
   }
 
+  /// Secondary caption under the instrument name in the wide table, mirroring
+  /// `PositionRow`: the exchange for stocks, the chain summary for crypto, and
+  /// nothing for fiat.
+  private func instrumentSecondaryLabel(for row: AssetHolding) -> String? {
+    switch row.kind {
+    case .stock: return row.exchange
+    case .cryptoToken: return row.chainSummaryLabel
+    case .fiatCurrency: return nil
+    }
+  }
+
   @ViewBuilder
   private func amountCell(_ amount: InstrumentAmount?) -> some View {
     if let amount {
       Text(amount.formatted).monospacedDigit()
     } else {
-      Text("—").foregroundStyle(.tertiary)
+      Text("—").monospacedDigit().foregroundStyle(.tertiary)
     }
   }
 
@@ -195,10 +206,16 @@ struct PositionsTable: View {
       case .fiatCurrency: return "Cash"
       }
     }()
-    if let exchange = row.exchange {
-      return "\(row.name), \(kindWord), \(exchange)"
+    var parts = ["\(row.name)", kindWord]
+    switch row.kind {
+    case .stock:
+      if let exchange = row.exchange { parts.append(exchange) }
+    case .cryptoToken:
+      if let chains = row.chainAccessibilitySummary { parts.append("on \(chains)") }
+    case .fiatCurrency:
+      break
     }
-    return "\(row.name), \(kindWord)"
+    return parts.joined(separator: ", ")
   }
 }
 

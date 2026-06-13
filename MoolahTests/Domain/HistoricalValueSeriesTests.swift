@@ -13,7 +13,7 @@ struct HistoricalValueSeriesTests {
     Date(timeIntervalSince1970: TimeInterval(day) * 86_400)
   }
 
-  @Test("series(for:) returns the per-instrument slice when present")
+  @Test("series(forInstrumentIds:) returns the per-instrument slice when present")
   func sliceLookup() {
     let series = HistoricalValueSeries(
       hostCurrency: aud,
@@ -28,8 +28,8 @@ struct HistoricalValueSeriesTests {
       ]
     )
 
-    #expect(series.series(for: bhp).count == 1)
-    #expect(series.series(for: cba).isEmpty)
+    #expect(series.series(forInstrumentIds: [bhp.id]).count == 1)
+    #expect(series.series(forInstrumentIds: [cba.id]).isEmpty)
     #expect(series.totalSeries.count == 2)
   }
 
@@ -57,7 +57,7 @@ struct HistoricalValueSeriesTests {
       ]
     )
     #expect(series.totalSeries.isEmpty)
-    #expect(series.series(for: bhp).count == 1)
+    #expect(series.series(forInstrumentIds: [bhp.id]).count == 1)
   }
 
   @Test("Point.contributions round-trips and participates in Hashable")

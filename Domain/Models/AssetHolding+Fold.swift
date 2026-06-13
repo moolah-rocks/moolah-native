@@ -105,7 +105,8 @@ extension AssetHolding {
       unitPrice: unitPrice,
       costBasis: costBasis,
       value: value,
-      contributingInstrumentIds: group.map { $0.instrument.id }.sorted()
+      contributingInstrumentIds: group.map { $0.instrument.id }.sorted(),
+      contributingChainIds: chainIds.sorted()
     )
   }
 }

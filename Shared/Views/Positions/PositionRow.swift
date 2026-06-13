@@ -1,3 +1,5 @@
+// Reason: AssetHolding preview literals span many labelled arguments; the
+// rule fires on every previewRows() call site.
 // swiftlint:disable multiline_arguments
 
 import SwiftUI
@@ -49,6 +51,7 @@ struct PositionRow: View {
           .monospacedDigit()
       } else {
         Text("—")
+          .monospacedDigit()
           .foregroundStyle(.tertiary)
       }
       if let gain = row.gainLoss {
@@ -72,10 +75,7 @@ struct PositionRow: View {
   private var secondaryIdentifier: String? {
     switch row.kind {
     case .stock: return row.exchange
-    case .cryptoToken:
-      if row.chainCount > 1 { return "\(row.chainCount) chains" }
-      if let chainId = row.chainId { return Instrument.chainName(for: chainId) }
-      return nil
+    case .cryptoToken: return row.chainSummaryLabel
     case .fiatCurrency: return nil
     }
   }
@@ -88,7 +88,9 @@ struct PositionRow: View {
 
   private var accessibilityLabel: String {
     var parts: [String] = [row.name]
-    if row.chainCount > 1 { parts.append("across \(row.chainCount) chains") }
+    if let chains = row.chainAccessibilitySummary, row.kind == .cryptoToken {
+      parts.append("on \(chains)")
+    }
     parts.append(row.quantityCaption)
     if let value = row.value {
       parts.append("valued at \(value.formatted)")
@@ -140,16 +142,18 @@ private func previewRows() -> [AssetHolding] {
     AssetHolding(
       id: "ASX:BHP.AX", kind: .stock, name: "BHP", displayLabel: "BHP.AX", decimals: 0,
       currencyCode: nil, chainId: nil, exchange: "ASX", quantity: 250, unitPrice: amount(45.30),
-      costBasis: amount(10_125), value: amount(11_325), contributingInstrumentIds: ["ASX:BHP.AX"]),
+      costBasis: amount(10_125), value: amount(11_325), contributingInstrumentIds: ["ASX:BHP.AX"],
+      contributingChainIds: []),
     AssetHolding(
       id: "ethereum", kind: .cryptoToken, name: "Ethereum", displayLabel: "ETH", decimals: 18,
       currencyCode: nil, chainId: nil, exchange: nil, quantity: Decimal(string: "12.95694") ?? 0,
       unitPrice: amount(4_000), costBasis: amount(35_000), value: amount(51_827),
-      contributingInstrumentIds: ["1:native", "10:native"]),
+      contributingInstrumentIds: ["1:native", "10:native"], contributingChainIds: [1, 10]),
     AssetHolding(
       id: "AUD", kind: .fiatCurrency, name: "AUD", displayLabel: "$", decimals: 2,
       currencyCode: "AUD", chainId: nil, exchange: nil, quantity: 1_520, unitPrice: nil,
-      costBasis: nil, value: amount(1_520), contributingInstrumentIds: ["AUD"]),
+      costBasis: nil, value: amount(1_520), contributingInstrumentIds: ["AUD"],
+      contributingChainIds: []),
   ]
 }
 

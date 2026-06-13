@@ -85,7 +85,7 @@ struct PositionsHistoryBuilderTests {
     // The per-instrument series is one point per day. Cost on each daily
     // point reflects the cumulative cost basis at that date — exact step
     // function: 4_000 from day 1, 6_500 from day 10 onwards.
-    let bhpSeries = series.series(for: bhp)
+    let bhpSeries = series.series(forInstrumentIds: [bhp.id])
     let calendar = Calendar(identifier: .gregorian)
     let day5 = try #require(
       bhpSeries.first { calendar.isDate($0.date, inSameDayAs: date(daysAfterEpoch: 5)) })
@@ -115,7 +115,7 @@ struct PositionsHistoryBuilderTests {
     // CBA must be skipped.
     #expect(series.totalSeries.allSatisfy { $0.date < self.date(daysAfterEpoch: 2) })
     // Per-instrument BHP still has full daily coverage.
-    #expect(series.series(for: bhp).count == 5)
+    #expect(series.series(forInstrumentIds: [bhp.id]).count == 5)
   }
 
   @Test("pre-fold: transactions before the visible range still seed cost basis at start")
@@ -132,7 +132,7 @@ struct PositionsHistoryBuilderTests {
 
     // First visible point's cost should reflect the prior buy ($500), and
     // value should reflect 10 shares × $60 = $600.
-    let bhpSeries = series.series(for: bhp)
+    let bhpSeries = series.series(forInstrumentIds: [bhp.id])
     let firstPoint = try #require(bhpSeries.first)
     #expect(firstPoint.cost == 500)
     #expect(firstPoint.value == 600)
@@ -153,7 +153,7 @@ struct PositionsHistoryBuilderTests {
       hostCurrency: aud, range: .threeMonths, now: now
     )
 
-    let bhpSeries = series.series(for: bhp)
+    let bhpSeries = series.series(forInstrumentIds: [bhp.id])
     let firstPoint = try #require(bhpSeries.first)
     // Both buys folded by end of day 1: 150 shares total cost 6500.
     #expect(firstPoint.value == 150 * Decimal(50))
@@ -218,7 +218,7 @@ struct PositionsHistoryBuilderTests {
     // Three points (days 1..3), each priced at that day's rate. A
     // regression to "always use today's rate" would emit three equal
     // values (all at day 3's rate of 70).
-    let bhpSeries = series.series(for: bhp)
+    let bhpSeries = series.series(forInstrumentIds: [bhp.id])
     #expect(bhpSeries.count == 3)
     #expect(bhpSeries[0].value == 100 * Decimal(50))
     #expect(bhpSeries[1].value == 100 * Decimal(60))

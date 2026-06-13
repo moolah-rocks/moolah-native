@@ -12,13 +12,12 @@ import SwiftUI
 /// Chart of value (solid line + soft area) and cost basis (dashed step) over
 /// the active time range. Driven by `PositionsViewInput.historicalValue`.
 ///
-/// When `selectedInstrument` is non-nil, plots that instrument's series
-/// instead of the aggregate (and shows a clearable filter chip in the
-/// header).
+/// When `selection` is non-nil, plots that asset's combined series instead of
+/// the aggregate (and shows a clearable filter chip in the header).
 struct PositionsChart: View {
   let input: PositionsViewInput
   @Binding var range: PositionsTimeRange
-  @Binding var selectedSelection: PositionSelection?
+  @Binding var selection: PositionSelection?
 
   #if !os(macOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -36,13 +35,13 @@ struct PositionsChart: View {
   // MARK: - Header
 
   @ViewBuilder private var header: some View {
-    if let selectedSelection {
+    if let selection {
       HStack(spacing: 6) {
-        KindBadge(kind: selectedSelection.kind)
-        Text(selectedSelection.displayLabel)
+        KindBadge(kind: selection.kind)
+        Text(selection.displayLabel)
           .font(.caption.weight(.semibold))
         Button {
-          self.selectedSelection = nil
+          self.selection = nil
         } label: {
           Image(systemName: "xmark.circle.fill")
             .imageScale(.medium)
@@ -51,7 +50,7 @@ struct PositionsChart: View {
         .buttonStyle(.plain)
         .frame(minWidth: 44, minHeight: 44)
         .contentShape(Rectangle())
-        .accessibilityLabel("Clear instrument filter, showing all positions")
+        .accessibilityLabel("Clear \(selection.displayLabel) filter")
         Spacer()
       }
     } else {
@@ -81,7 +80,7 @@ struct PositionsChart: View {
       .frame(minHeight: 200)
     } else {
       let mode: PositionsChartMode =
-        (selectedSelection == nil) ? .aggregate : .perInstrument
+        (selection == nil) ? .aggregate : .perInstrument
       let rows = PositionsChartBaselineResolver.resolve(points: points, mode: mode)
       Chart {
         ForEach(rows, id: \.date) { row in
@@ -203,8 +202,8 @@ struct PositionsChart: View {
   /// Filtered or aggregate slice for the current selection.
   private var visiblePoints: [HistoricalValueSeries.Point] {
     guard let series = input.historicalValue else { return [] }
-    if let selectedSelection {
-      return series.series(forInstrumentIds: selectedSelection.instrumentIds)
+    if let selection {
+      return series.series(forInstrumentIds: selection.instrumentIds)
     }
     return input.showsAggregateChart ? series.totalSeries : []
   }
@@ -238,7 +237,7 @@ extension PositionsChart: AXChartDescriptorRepresentable {
   private func chartSnapshot() -> ChartSnapshot {
     let points = visiblePoints
     let title =
-      selectedSelection.map { "Chart of \($0.displayLabel)" } ?? "Chart of all positions"
+      selection.map { "Chart of \($0.displayLabel)" } ?? "Chart of all positions"
 
     let dateLabels = points.map { $0.date.formatted(.dateTime.month(.abbreviated).day().year()) }
     let valueDoubles = points.map { Double(truncating: $0.value as NSDecimalNumber) }
@@ -247,7 +246,7 @@ extension PositionsChart: AXChartDescriptorRepresentable {
     // before they reach the AX descriptor so VoiceOver doesn't speak NaN.
     let baselinePairs: [(label: String, value: Double)] = points.compactMap { point in
       let baseline: Decimal? =
-        selectedSelection == nil ? point.contributions : point.cost
+        selection == nil ? point.contributions : point.cost
       guard let baseline else { return nil }
       return (
         point.date.formatted(.dateTime.month(.abbreviated).day().year()),
@@ -265,7 +264,7 @@ extension PositionsChart: AXChartDescriptorRepresentable {
         AXDataPoint(x: date, y: val)
       }
     )
-    let baselineName = selectedSelection == nil ? "Invested amount" : "Cost basis"
+    let baselineName = selection == nil ? "Invested amount" : "Cost basis"
     let baselineSeries = AXDataSeriesDescriptor(
       name: baselineName, isContinuous: true,
       dataPoints: baselinePairs.map { AXDataPoint(x: $0.label, y: $0.value) }
@@ -330,7 +329,7 @@ private func previewChartInput(days: Int, base: Decimal, step: Decimal, cost: De
   PositionsChart(
     input: previewChartInput(days: 60, base: 10_000, step: 30, cost: 9_500),
     range: .constant(.threeMonths),
-    selectedSelection: .constant(nil)
+    selection: .constant(nil)
   )
   .frame(width: 600, height: 320)
   .padding()
@@ -340,11 +339,12 @@ private func previewChartInput(days: Int, base: Decimal, step: Decimal, cost: De
   let bhp = AssetHolding(
     id: "ASX:BHP.AX", kind: .stock, name: "BHP", displayLabel: "BHP.AX", decimals: 0,
     currencyCode: nil, chainId: nil, exchange: "ASX", quantity: 100, unitPrice: nil,
-    costBasis: nil, value: nil, contributingInstrumentIds: ["ASX:BHP.AX"])
+    costBasis: nil, value: nil, contributingInstrumentIds: ["ASX:BHP.AX"],
+    contributingChainIds: [])
   return PositionsChart(
     input: previewChartInput(days: 30, base: 4_500, step: 25, cost: 4_000),
     range: .constant(.oneMonth),
-    selectedSelection: .constant(bhp.positionSelection)
+    selection: .constant(bhp.positionSelection)
   )
   .frame(width: 600, height: 320)
   .padding()
@@ -356,7 +356,7 @@ private func previewChartInput(days: Int, base: Decimal, step: Decimal, cost: De
       title: "x", hostCurrency: .AUD, positions: [], historicalValue: nil
     ),
     range: .constant(.oneMonth),
-    selectedSelection: .constant(nil)
+    selection: .constant(nil)
   )
   .frame(width: 600, height: 320)
   .padding()
