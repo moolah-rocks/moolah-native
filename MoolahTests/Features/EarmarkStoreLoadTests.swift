@@ -19,13 +19,9 @@ struct EarmarkStoreLoadTests {
       repository: backend.earmarks, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
 
-    try await store.waitForNextEmission(
-      matching: { $0.earmarks.count == 1 },
-      description: "seeded earmark observed"
-    )
-
-    #expect(store.earmarks.count == 1)
-    #expect(store.earmarks.first?.name == "Holiday Fund")
+    await expectEventually("seeded earmark observed") {
+      store.earmarks.count == 1 && store.earmarks.first?.name == "Holiday Fund"
+    }
   }
 
   @Test
@@ -45,14 +41,11 @@ struct EarmarkStoreLoadTests {
       repository: backend.earmarks, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
 
-    try await store.waitForNextEmission(
-      matching: { $0.earmarks.count == 2 },
-      description: "both seeded earmarks observed"
-    )
-
-    #expect(store.earmarks.count == 2)
-    #expect(store.earmarks[0].name == "E2")
-    #expect(store.earmarks[1].name == "E1")
+    await expectEventually("earmarks observed sorted by position") {
+      store.earmarks.count == 2
+        && store.earmarks[0].name == "E2"
+        && store.earmarks[1].name == "E1"
+    }
   }
 
   @Test
@@ -77,13 +70,10 @@ struct EarmarkStoreLoadTests {
       repository: backend.earmarks, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
 
-    try await store.waitForNextEmission(
-      matching: { $0.earmarks.count == 2 },
-      description: "both seeded earmarks observed"
-    )
-
-    #expect(store.earmarks.count == 2)
-    #expect(store.earmarks[0].instrument == Instrument.defaultTestInstrument)
-    #expect(store.earmarks[1].instrument == Instrument.defaultTestInstrument)
+    await expectEventually("both earmarks observed with default instrument") {
+      store.earmarks.count == 2
+        && store.earmarks[0].instrument == Instrument.defaultTestInstrument
+        && store.earmarks[1].instrument == Instrument.defaultTestInstrument
+    }
   }
 }

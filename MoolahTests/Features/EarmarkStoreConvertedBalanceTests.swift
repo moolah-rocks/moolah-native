@@ -37,12 +37,9 @@ struct EarmarkStoreConvertedBalanceTests {
       repository: backend.earmarks, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
 
-    try await store.waitForNextEmission(
-      matching: { $0.convertedTotalBalance?.quantity == 500 },
-      description: "converted total balance computed"
-    )
-
-    #expect(store.convertedTotalBalance?.quantity == 500)
+    await expectEventually("converted total balance computed") {
+      store.convertedTotalBalance?.quantity == 500
+    }
   }
 
   @Test
@@ -71,17 +68,13 @@ struct EarmarkStoreConvertedBalanceTests {
       repository: backend.earmarks, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
 
-    try await store.waitForNextEmission(
-      matching: { $0.convertedTotalBalance?.quantity == 500 },
-      description: "converted balances computed"
-    )
-
-    // Individual balances should reflect true values
-    #expect(store.convertedBalance(for: positiveId)?.quantity == 500)
-    #expect(store.convertedBalance(for: negativeId)?.quantity == -18950)
-
-    // Total should clamp negative earmarks to 0, so total = 500 (not 500 - 18950)
-    #expect(store.convertedTotalBalance?.quantity == 500)
+    // Individual balances should reflect true values; the total should clamp
+    // negative earmarks to 0, so total = 500 (not 500 - 18950).
+    await expectEventually("balances settle with negative earmark clamped from the total") {
+      store.convertedBalance(for: positiveId)?.quantity == 500
+        && store.convertedBalance(for: negativeId)?.quantity == -18950
+        && store.convertedTotalBalance?.quantity == 500
+    }
   }
 
   @Test
@@ -113,7 +106,9 @@ struct EarmarkStoreConvertedBalanceTests {
       spentDeltas: [earmarkId: [instrument: 100]]
     )
 
-    #expect(store.convertedTotalBalance?.quantity == 400)
+    await expectEventually("converted total reflects the applied delta") {
+      store.convertedTotalBalance?.quantity == 400
+    }
   }
 
   // MARK: - Per-earmark converted amounts
@@ -137,14 +132,11 @@ struct EarmarkStoreConvertedBalanceTests {
       repository: backend.earmarks, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
 
-    try await store.waitForNextEmission(
-      matching: { $0.convertedBalance(for: earmarkId)?.quantity == 500 },
-      description: "converted balance computed"
-    )
-
-    #expect(store.convertedBalance(for: earmarkId)?.quantity == 500)
-    #expect(store.convertedSaved(for: earmarkId)?.quantity == 500)
-    #expect(store.convertedSpent(for: earmarkId)?.quantity == 0)
+    await expectEventually("per-earmark converted balance, saved, and spent settle") {
+      store.convertedBalance(for: earmarkId)?.quantity == 500
+        && store.convertedSaved(for: earmarkId)?.quantity == 500
+        && store.convertedSpent(for: earmarkId)?.quantity == 0
+    }
   }
 
   @Test
@@ -176,7 +168,9 @@ struct EarmarkStoreConvertedBalanceTests {
       spentDeltas: [earmarkId: [instrument: 100]]
     )
 
-    #expect(store.convertedBalance(for: earmarkId)?.quantity == 400)
-    #expect(store.convertedSpent(for: earmarkId)?.quantity == 100)
+    await expectEventually("per-earmark balance and spent reflect the applied delta") {
+      store.convertedBalance(for: earmarkId)?.quantity == 400
+        && store.convertedSpent(for: earmarkId)?.quantity == 100
+    }
   }
 }

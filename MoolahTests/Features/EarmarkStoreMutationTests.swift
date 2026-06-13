@@ -19,11 +19,9 @@ struct EarmarkStoreMutationTests {
 
     #expect(created != nil)
     #expect(created?.name == "New Fund")
-    try await store.waitForNextEmission(
-      matching: { $0.earmarks.count == 1 },
-      description: "created earmark observed"
-    )
-    #expect(store.earmarks.first?.name == "New Fund")
+    await expectEventually("created earmark observed") {
+      store.earmarks.count == 1 && store.earmarks.first?.name == "New Fund"
+    }
   }
 
   @Test
@@ -52,12 +50,9 @@ struct EarmarkStoreMutationTests {
     let second = Earmark(name: "Second", instrument: .defaultTestInstrument)
     _ = await store.create(second)
 
-    try await store.waitForNextEmission(
-      matching: { $0.earmarks.count == 2 },
-      description: "both created earmarks observed"
-    )
-    #expect(store.earmarks.by(id: first.id) != nil)
-    #expect(store.earmarks.by(id: second.id) != nil)
+    await expectEventually("both created earmarks observed") {
+      store.earmarks.by(id: first.id) != nil && store.earmarks.by(id: second.id) != nil
+    }
   }
 
   @Test
@@ -114,11 +109,10 @@ struct EarmarkStoreMutationTests {
     let result = await store.hide(earmark)
 
     #expect(result?.isHidden == true)
-    try await store.waitForNextEmission(
-      matching: { $0.earmarks.by(id: earmark.id)?.isHidden == true },
-      description: "hidden flag propagates via observation"
-    )
-    #expect(store.visibleEarmarks.contains(where: { $0.id == earmark.id }) == false)
+    await expectEventually("hidden flag propagates and removes the earmark from the visible list") {
+      store.earmarks.by(id: earmark.id)?.isHidden == true
+        && store.visibleEarmarks.contains(where: { $0.id == earmark.id }) == false
+    }
   }
 }
 
