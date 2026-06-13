@@ -152,15 +152,12 @@ final class InvestmentStore {
   /// `CancellationError` preserves the previous map and propagates no
   /// failure, any other error logs and disables the rollup (empty map →
   /// per-chain rows). A `nil` registry seam clears the map.
+  ///
+  /// Internal (not private): also invoked from
+  /// `InvestmentStore+Loading.loadAllData`.
   func refreshAssetKeys() async {
-    guard let instrumentRegistry else {
-      assetKeysByInstrumentId = [:]
-      return
-    }
     do {
-      let registrations = try await instrumentRegistry.allCryptoRegistrations()
-      try Task.checkCancellation()
-      assetKeysByInstrumentId = CryptoRegistration.assetKeys(from: registrations)
+      assetKeysByInstrumentId = try await CryptoRegistration.assetKeys(from: instrumentRegistry)
     } catch is CancellationError {
       // Preserve the previous map on cancellation.
     } catch {

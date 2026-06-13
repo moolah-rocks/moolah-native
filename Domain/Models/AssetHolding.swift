@@ -38,7 +38,7 @@ struct AssetHolding: Sendable, Hashable, Identifiable {
 
   /// Number of distinct chains contributing; drives whether the row shows a
   /// chain-breakdown indicator (a count of 1 is a plain single-chain row).
-  var chainCount: Int { contributingInstrumentIds.count }
+  var chainCount: Int { contributingChainIds.count }
 
   /// Value minus cost basis in the host currency, or `nil` if either side is
   /// missing. Sign preserved (CLAUDE.md) — callers must not `abs()`.

@@ -88,7 +88,7 @@ struct PositionRow: View {
 
   private var accessibilityLabel: String {
     var parts: [String] = [row.name]
-    if let chains = row.chainAccessibilitySummary, row.kind == .cryptoToken {
+    if let chains = row.chainAccessibilitySummary {
       parts.append("on \(chains)")
     }
     parts.append(row.quantityCaption)
