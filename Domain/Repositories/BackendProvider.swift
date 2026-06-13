@@ -41,6 +41,12 @@ protocol BackendProvider: Sendable {
   /// exposes only `InstrumentChangeObserving` — not the full
   /// read/write registry surface.
   var instrumentChangeObserver: (any InstrumentChangeObserving)? { get }
+
+  /// The full instrument registry, when the backend has one. Mirrors the
+  /// narrow `instrumentChangeObserver` seam but exposes read access to crypto
+  /// registrations (for the holdings cross-chain asset-key rollup). `nil` for
+  /// backends without a registry (e.g. preview/empty backends).
+  var instrumentRegistry: (any InstrumentRegistryRepository)? { get }
 }
 
 extension BackendProvider {
@@ -49,4 +55,9 @@ extension BackendProvider {
   /// overrides this — keeps the blast radius of the seam to a single
   /// conformer.
   var instrumentChangeObserver: (any InstrumentChangeObserving)? { nil }
+
+  /// Default for backends without a shared instrument registry. Only a
+  /// backend that actually owns one (production `CloudKitBackend`)
+  /// overrides this.
+  var instrumentRegistry: (any InstrumentRegistryRepository)? { nil }
 }

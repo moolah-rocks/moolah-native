@@ -48,7 +48,7 @@ struct InvestmentStorePositionsInputTests {
   private func registerCoingeckoOnly(
     _ instrument: Instrument, coingeckoId: String, in backend: CloudKitBackend
   ) async throws {
-    try await backend.instrumentRegistry.registerCrypto(
+    try await backend.instrumentRegistryRepository.registerCrypto(
       instrument,
       mapping: CryptoProviderMapping(
         instrumentId: instrument.id, coingeckoId: coingeckoId,

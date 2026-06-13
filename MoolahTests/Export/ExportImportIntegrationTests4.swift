@@ -26,7 +26,7 @@ struct ExportImportIntegrationTests4 {
     // ensureInstrument now refuses to write an unmapped crypto leg, so
     // register ETH with a provider mapping before seeding the crypto income
     // transaction below.
-    try await backend.instrumentRegistry.registerCrypto(
+    try await backend.instrumentRegistryRepository.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",

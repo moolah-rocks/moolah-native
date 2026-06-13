@@ -185,19 +185,19 @@ extension ProfileSession {
     // through the proxy. Falls back to local storage when no
     // coordinator is wired (preview / legacy tests).
     let store = CryptoTokenStore(
-      registry: cloudBackend.instrumentRegistry,
+      registry: cloudBackend.instrumentRegistryRepository,
       cryptoPriceService: cryptoPriceService,
       conversionService: cloudBackend.conversionService,
       sharedStore: sharedRegistryStore)
     let searchService = InstrumentSearchService(
-      registry: cloudBackend.instrumentRegistry,
+      registry: cloudBackend.instrumentRegistryRepository,
       catalog: catalog,
       resolutionClient: resolutionClient,
       stockSearchClient: YahooFinanceStockSearchClient(
         http: networking.client(forHost: "query1.finance.yahoo.com"))
     )
     return RegistryWiring(
-      registry: cloudBackend.instrumentRegistry,
+      registry: cloudBackend.instrumentRegistryRepository,
       cryptoTokenStore: store,
       searchService: searchService,
       coinGeckoCatalog: catalog,

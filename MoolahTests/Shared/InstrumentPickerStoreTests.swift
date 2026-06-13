@@ -11,14 +11,14 @@ struct InstrumentPickerStoreTests {
   func startYieldsFiatList() async throws {
     let (backend, _) = try TestBackend.create()
     let service = InstrumentSearchService(
-      registry: backend.instrumentRegistry,
+      registry: backend.instrumentRegistryRepository,
       catalog: nil,
       resolutionClient: StubTokenResolutionClient(),
       stockSearchClient: StubStockSearchClient()
     )
     let store = InstrumentPickerStore(
       searchService: service,
-      registry: backend.instrumentRegistry,
+      registry: backend.instrumentRegistryRepository,
       kinds: [.fiatCurrency]
     )
     await store.start()
@@ -30,14 +30,14 @@ struct InstrumentPickerStoreTests {
   func typedQueryNarrows() async throws {
     let (backend, _) = try TestBackend.create()
     let service = InstrumentSearchService(
-      registry: backend.instrumentRegistry,
+      registry: backend.instrumentRegistryRepository,
       catalog: nil,
       resolutionClient: StubTokenResolutionClient(),
       stockSearchClient: StubStockSearchClient()
     )
     let store = InstrumentPickerStore(
       searchService: service,
-      registry: backend.instrumentRegistry,
+      registry: backend.instrumentRegistryRepository,
       kinds: [.fiatCurrency]
     )
     await store.start()
@@ -55,14 +55,14 @@ struct InstrumentPickerStoreTests {
   func selectRegisteredFiat() async throws {
     let (backend, _) = try TestBackend.create()
     let service = InstrumentSearchService(
-      registry: backend.instrumentRegistry,
+      registry: backend.instrumentRegistryRepository,
       catalog: nil,
       resolutionClient: StubTokenResolutionClient(),
       stockSearchClient: StubStockSearchClient()
     )
     let store = InstrumentPickerStore(
       searchService: service,
-      registry: backend.instrumentRegistry,
+      registry: backend.instrumentRegistryRepository,
       kinds: [.fiatCurrency]
     )
     await store.start()
@@ -70,7 +70,7 @@ struct InstrumentPickerStoreTests {
     let picked = await store.select(usd)
     #expect(picked?.id == "USD")
     // Registry should be unchanged: no new stock/crypto rows added.
-    let registered = try await backend.instrumentRegistry.all()
+    let registered = try await backend.instrumentRegistryRepository.all()
     #expect(registered.allSatisfy { $0.kind == .fiatCurrency })
   }
 
@@ -78,16 +78,16 @@ struct InstrumentPickerStoreTests {
   func kindsFilterExcludesStocks() async throws {
     let (backend, _) = try TestBackend.create()
     let bhp = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
-    try await backend.instrumentRegistry.registerStock(bhp)
+    try await backend.instrumentRegistryRepository.registerStock(bhp)
     let service = InstrumentSearchService(
-      registry: backend.instrumentRegistry,
+      registry: backend.instrumentRegistryRepository,
       catalog: nil,
       resolutionClient: StubTokenResolutionClient(),
       stockSearchClient: StubStockSearchClient()
     )
     let store = InstrumentPickerStore(
       searchService: service,
-      registry: backend.instrumentRegistry,
+      registry: backend.instrumentRegistryRepository,
       kinds: [.fiatCurrency]
     )
     await store.start()
@@ -131,14 +131,14 @@ struct InstrumentPickerStoreTests {
     let stockHit = StockSearchHit(
       symbol: "AAPL", name: "Apple Inc.", exchange: "NASDAQ", quoteType: .equity)
     let service = InstrumentSearchService(
-      registry: backend.instrumentRegistry,
+      registry: backend.instrumentRegistryRepository,
       catalog: nil,
       resolutionClient: StubTokenResolutionClient(),
       stockSearchClient: StubStockSearchClient(hits: [stockHit])
     )
     let store = InstrumentPickerStore(
       searchService: service,
-      registry: backend.instrumentRegistry,
+      registry: backend.instrumentRegistryRepository,
       kinds: Set(Instrument.Kind.allCases)
     )
     store.updateQuery("AAPL")
@@ -147,7 +147,7 @@ struct InstrumentPickerStoreTests {
     #expect(hit.isRegistered == false)
     let picked = await store.select(hit)
     #expect(picked?.ticker == "AAPL")
-    let registered = try await backend.instrumentRegistry.all()
+    let registered = try await backend.instrumentRegistryRepository.all()
     #expect(registered.contains { $0.id == "NASDAQ:AAPL" })
   }
 

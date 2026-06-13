@@ -16,7 +16,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let conversionService: any InstrumentConversionService
   let csvImportProfiles: any CSVImportProfileRepository
   let importRules: any ImportRuleRepository
-  let instrumentRegistry: any InstrumentRegistryRepository
+  let instrumentRegistryRepository: any InstrumentRegistryRepository
   let walletSyncState: any WalletSyncStateRepository
   let groupUIState: any GroupUIStateRepository
 
@@ -26,7 +26,16 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   /// already refines `InstrumentChangeObserving`, so this is the same
   /// instance up-cast — no extra wiring.
   var instrumentChangeObserver: (any InstrumentChangeObserving)? {
-    instrumentRegistry
+    instrumentRegistryRepository
+  }
+
+  /// `BackendProvider` read-access seam over the shared instrument
+  /// registry. The same instance as `instrumentChangeObserver`, exposed
+  /// through the full read/write registry protocol so feature code can
+  /// read crypto registrations (e.g. the holdings asset-key rollup)
+  /// without downcasting to a concrete backend type.
+  var instrumentRegistry: (any InstrumentRegistryRepository)? {
+    instrumentRegistryRepository
   }
   /// Concrete GRDB-backed repositories. Exposed alongside the
   /// protocol-typed properties so `ProfileSession` can register the
@@ -149,7 +158,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.investments = repos.investments
     self.csvImportProfiles = repos.csvImportProfiles
     self.importRules = repos.importRules
-    self.instrumentRegistry = instrumentRegistry
+    self.instrumentRegistryRepository = instrumentRegistry
     self.conversionService = conversionService
     self.walletSyncState = GRDBWalletSyncStateRepository(database: database)
     self.groupUIState = GRDBGroupUIStateRepository(database: database)
