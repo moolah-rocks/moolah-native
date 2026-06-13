@@ -1,4 +1,5 @@
 import SwiftUI
+import os
 
 /// Conditionally wraps a `TransactionListView` (or any other content)
 /// in a `PositionsTransactionsSplit` when the account has positions in
@@ -26,8 +27,13 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
   let conversionService: (any InstrumentConversionService)?
   let registrationsVersion: Int
 
+  @Environment(ProfileSession.self) private var session: ProfileSession?
+
   @State private var positionsInput: PositionsViewInput?
   @State private var positionsRange: PositionsTimeRange = .threeMonths
+
+  private static let logger = Logger(
+    subsystem: "com.moolah.app", category: "MultiInstrumentPositionsSplitModifier")
 
   /// Pure decision helper. Once the valuator produces a
   /// `positionsInput`, that becomes authoritative — its `shouldHide`
@@ -101,11 +107,27 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
     // non-throwing return — re-check here so a stale (or partial) `rows`
     // from a superseded task never overwrites the freshly-emitting one.
     guard !Task.isCancelled else { return }
+    var assetKeys: [String: String] = [:]
+    if let registry = session?.backend.instrumentRegistry {
+      do {
+        let registrations = try await registry.allCryptoRegistrations()
+        try Task.checkCancellation()
+        assetKeys = CryptoRegistration.assetKeys(from: registrations)
+      } catch is CancellationError {
+        return
+      } catch {
+        Self.logger.warning(
+          "allCryptoRegistrations failed, asset rollup disabled: \(error.localizedDescription, privacy: .public)"
+        )
+      }
+    }
+    guard !Task.isCancelled else { return }
     positionsInput = PositionsViewInput(
       title: title,
       hostCurrency: hostCurrency,
       positions: rows,
-      historicalValue: nil
+      historicalValue: nil,
+      assetKeysByInstrumentId: assetKeys
     )
   }
 }
