@@ -175,6 +175,20 @@ extension SyncCoordinator {
     let confirmed = Self.confirmedReplayedDeletions(
       replayedDeletionsInFlight, pending: state.pendingRecordZoneChanges)
     guard !confirmed.isEmpty else { return }
+    // The recovery tombstone shield snapshots the journal via an async task
+    // armed at recovery start (`recoverySnapshotTask`). Clearing a journal row
+    // before that read runs would let the snapshot read an already-emptied
+    // journal and drop this id from the shield — so the still-draining forced
+    // refetch could resurrect the just-deleted record. Await the snapshot so it
+    // captures the journal BEFORE we delete from it. No-op outside a recovery
+    // session (the task is nil). Issue #1090 / #12.
+    await recoverySnapshotTask?.value
+    // `Task.isCancelled` here is the CALLING task (e.g. `zoneSetupTask`
+    // cancelled by `stop()`) while we awaited the snapshot — skip the GRDB
+    // clear so we don't write through a torn-down coordinator. The snapshot
+    // task's own cancellation is handled separately (`stop()` zeroes the
+    // shield), so a cancelled snapshot here is harmless.
+    guard !Task.isCancelled else { return }
     await clearJournalRows(for: confirmed)
     // Only retire the in-flight tracking once the journal writes have run (and
     // not after a stop cancelled them) — re-tracking on the next start is safe,
