@@ -64,30 +64,6 @@ struct CryptoTokenDiscoveryServiceTests {
     #expect(snapshot.updateCallCount == 0)
   }
 
-  @Test("isSpam metadata wins over a successful provider resolution")
-  func spamWinsOverResolution() async throws {
-    let subject = makeDiscoverySubject()
-    subject.resolver.script(
-      .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: "spammy-but-listed", cryptocompare: nil, binance: nil))
-    subject.alchemy.script(
-      .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .metadata(
-        AlchemyTokenMetadata(
-          symbol: "SPAM", name: "Spam", decimals: 18, logo: nil, isSpam: true)))
-
-    let registration = try await subject.service.resolveOrLoad(
-      chain: .ethereum,
-      contractAddress: Self.usdcAddress,
-      symbol: "SPAM",
-      name: "Spam",
-      decimals: 18)
-
-    #expect(registration.pricingStatus == .spam)
-    let stored = try await subject.registry.cryptoRegistration(byId: Self.usdcId)
-    #expect(stored?.pricingStatus == .spam)
-  }
-
   @Test("No mapping + not spam → .unpriced")
   func noMappingIsUnpriced() async throws {
     struct ProviderFailed: Error {}
@@ -95,7 +71,6 @@ struct CryptoTokenDiscoveryServiceTests {
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
       .failure(ProviderFailed()))
-    subject.alchemy.setDefaultSpam(false)
 
     let registration = try await subject.service.resolveOrLoad(
       chain: .ethereum,
@@ -130,28 +105,7 @@ struct CryptoTokenDiscoveryServiceTests {
     #expect(registration.mapping.binanceSymbol == nil)
   }
 
-  @Test("Native token never queries Alchemy spam metadata")
-  func nativeTokenSkipsSpamCheck() async throws {
-    let subject = makeDiscoverySubject()
-    subject.resolver.setDefault(
-      .success(coingecko: "ethereum", cryptocompare: "ETH", binance: "ETHUSDT"))
-
-    let registration = try await subject.service.resolveOrLoad(
-      chain: .ethereum,
-      contractAddress: nil,
-      symbol: "ETH",
-      name: "Ethereum",
-      decimals: 18)
-
-    #expect(registration.pricingStatus == .priced)
-    // The Alchemy stub keys on (chainId, contractAddress); a native call
-    // would key on the empty address. Either way, the only ERC-20-style
-    // callers are the explicit scripts we set above, so the recorded
-    // count for the empty-string key is the right thing to check.
-    #expect(subject.alchemy.callCount(for: .init(chainId: 1, contractAddress: "")) == 0)
-  }
-
-  @Test("Existing registration short-circuits — no resolver or Alchemy call")
+  @Test("Existing registration short-circuits — no resolver call")
   func existingRegistrationShortCircuits() async throws {
     let preexisting = CryptoRegistration(
       instrument: Instrument.crypto(
@@ -174,9 +128,6 @@ struct CryptoTokenDiscoveryServiceTests {
     #expect(
       subject.resolver.callCount(
         for: .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased())) == 0)
-    #expect(
-      subject.alchemy.callCount(
-        for: .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased())) == 0)
   }
 
   // MARK: - Local spam heuristics (#1102)
@@ -188,7 +139,6 @@ struct CryptoTokenDiscoveryServiceTests {
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
       .failure(ProviderFailed()))
-    subject.alchemy.setDefaultSpam(false)
 
     let registration = try await subject.service.resolveOrLoad(
       chain: .ethereum,
@@ -205,6 +155,77 @@ struct CryptoTokenDiscoveryServiceTests {
     #expect(stored?.pricingStatus == .spam)
   }
 
+  // MARK: - Canonical-registry impersonation (#1102)
+
+  @Test("Impersonating token is .spam even when a provider returns a price")
+  func impersonatingTokenIsSpamEvenWhenPriced() async throws {
+    // A non-canonical address claiming the "OP" symbol on Optimism (chain
+    // 10). Even with a successful provider price, the canonical-registry
+    // impersonation check wins and flags it `.spam`.
+    let fakeAddress = "0xdeadbeef00000000000000000000000000000001"
+    let subject = makeDiscoverySubject()
+    subject.resolver.script(
+      .init(chainId: 10, contractAddress: fakeAddress),
+      .success(coingecko: "optimism", cryptocompare: nil, binance: nil))
+
+    let registration = try await subject.service.resolveOrLoad(
+      chain: .optimism,
+      contractAddress: fakeAddress,
+      symbol: "OP",
+      name: "Optimism",
+      decimals: 18)
+
+    #expect(registration.pricingStatus == .spam)
+    #expect(!registration.mapping.hasProviderMapping)
+    // Impersonation is a synchronous lookup that short-circuits ahead of the
+    // provider round-trip — a known impersonator never hits the resolver.
+    #expect(
+      subject.resolver.callCount(for: .init(chainId: 10, contractAddress: fakeAddress)) == 0)
+    let stored = try await subject.registry.cryptoRegistration(
+      byId: registration.instrument.id)
+    #expect(stored?.pricingStatus == .spam)
+  }
+
+  @Test("Impersonating token is .spam even when the resolver finds no price")
+  func impersonatingTokenIsSpamWithoutPrice() async throws {
+    struct ResolveFailed: Error {}
+    let fakeAddress = "0xdeadbeef00000000000000000000000000000002"
+    let subject = makeDiscoverySubject()
+    subject.resolver.script(
+      .init(chainId: 10, contractAddress: fakeAddress), .failure(ResolveFailed()))
+
+    let registration = try await subject.service.resolveOrLoad(
+      chain: .optimism,
+      contractAddress: fakeAddress,
+      symbol: "OP",
+      name: "Optimism",
+      decimals: 18)
+
+    #expect(registration.pricingStatus == .spam)
+    #expect(!registration.mapping.hasProviderMapping)
+  }
+
+  @Test("Canonical OP address is not impersonation → stays .priced")
+  func canonicalTokenIsNotImpersonation() async throws {
+    // OP at its canonical address on Optimism — the registry recognises it
+    // as legitimate, so a provider price stands.
+    let canonicalAddress = "0x4200000000000000000000000000000000000042"
+    let subject = makeDiscoverySubject()
+    subject.resolver.script(
+      .init(chainId: 10, contractAddress: canonicalAddress),
+      .success(coingecko: "optimism", cryptocompare: nil, binance: nil))
+
+    let registration = try await subject.service.resolveOrLoad(
+      chain: .optimism,
+      contractAddress: canonicalAddress,
+      symbol: "OP",
+      name: "Optimism",
+      decimals: 18)
+
+    #expect(registration.pricingStatus == .priced)
+    #expect(registration.mapping.coingeckoId == "optimism")
+  }
+
   @Test("A priced token keeps .priced even when its name contains a domain")
   func pricedDomainBrandedTokenStaysPriced() async throws {
     // yearn.finance / YFI: a legitimately listed token whose name is a
@@ -214,7 +235,6 @@ struct CryptoTokenDiscoveryServiceTests {
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
       .success(coingecko: "yearn-finance", cryptocompare: nil, binance: nil))
-    subject.alchemy.setDefaultSpam(false)
 
     let registration = try await subject.service.resolveOrLoad(
       chain: .ethereum,
@@ -229,8 +249,8 @@ struct CryptoTokenDiscoveryServiceTests {
 
   // MARK: - Chain-id entry point
 
-  @Test("resolveOrLoad(chainId:) without ChainConfig skips Alchemy and registers")
-  func resolveByChainIdWithoutChainConfigSkipsAlchemyAndRegisters() async throws {
+  @Test("resolveOrLoad(chainId:) for a chain without a ChainConfig registers")
+  func resolveByChainIdWithoutChainConfigRegisters() async throws {
     let subject = makeDiscoverySubject()
     subject.resolver.setDefault(.success(coingecko: "usd-coin", cryptocompare: nil, binance: nil))
 
@@ -245,7 +265,6 @@ struct CryptoTokenDiscoveryServiceTests {
     #expect(registration.instrument.id == "42161:0xff970a61a04b1ca14834a43f5de4533ebddb5cc8")
     #expect(registration.instrument.decimals == 6)
     #expect(registration.pricingStatus == .priced)
-    #expect(subject.alchemy.tokenMetadataCallCount == 0)
     let snap = subject.registry.snapshot()
     #expect(snap.registeredCryptos.contains { $0.id == registration.instrument.id })
   }
@@ -307,8 +326,5 @@ struct CryptoTokenDiscoveryServiceTests {
     let resolverKey = CountingRegistrationResolver.Key(
       chainId: 1, contractAddress: Self.usdcAddress.lowercased())
     #expect(subject.resolver.callCount(for: resolverKey) == 0)
-    let alchemyKey = CountingAlchemyClientStub.Key(
-      chainId: 1, contractAddress: Self.usdcAddress.lowercased())
-    #expect(subject.alchemy.callCount(for: alchemyKey) == 0)
   }
 }

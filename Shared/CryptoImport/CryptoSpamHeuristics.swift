@@ -93,6 +93,11 @@ enum CryptoSpamHeuristics {
   /// Compiles a pattern that is a compile-time constant. A failure here can
   /// only mean a maintainer garbled the pattern string, so trap loudly rather
   /// than silently classify every token as not-spam.
+  ///
+  /// The returned `NSRegularExpression` is stored in a `static let` and never
+  /// mutated after init; `NSRegularExpression` is documented as safe for
+  /// concurrent use from multiple threads for matching, so sharing the compiled
+  /// instance across actors (e.g. `CryptoTokenDiscoveryService`) is race-free.
   private static func compile(_ pattern: String) -> NSRegularExpression {
     do {
       return try NSRegularExpression(pattern: pattern)

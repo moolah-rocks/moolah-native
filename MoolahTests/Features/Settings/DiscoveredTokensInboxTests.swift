@@ -25,7 +25,6 @@ struct DiscoveredTokensInboxTests {
     let store: CryptoTokenStore
     let registry: GRDBInstrumentRegistryRepository
     let resolver: CountingRegistrationResolver
-    let alchemy: CountingAlchemyClientStub
     let discovery: CryptoTokenDiscoveryService
   }
 
@@ -43,12 +42,11 @@ struct DiscoveredTokensInboxTests {
       cryptoPriceService: priceService,
       conversionService: RecordingConversionService())
     let resolver = CountingRegistrationResolver()
-    let alchemy = CountingAlchemyClientStub()
     let discovery = CryptoTokenDiscoveryService(
-      registry: registry, resolver: resolver, alchemy: alchemy)
+      registry: registry, resolver: resolver)
     return Fixture(
       store: store, registry: registry, resolver: resolver,
-      alchemy: alchemy, discovery: discovery)
+      discovery: discovery)
   }
 
   /// Seeds an unpriced registration directly through the registry — no

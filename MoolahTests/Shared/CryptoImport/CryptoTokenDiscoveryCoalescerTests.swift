@@ -13,7 +13,7 @@ struct CryptoTokenDiscoveryCoalescerTests {
   private static let usdcAddress = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
   private static let usdcId = "1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
 
-  @Test("100 concurrent resolves on the same key → 1 resolver + 1 Alchemy call")
+  @Test("100 concurrent resolves on the same key → 1 resolver call")
   func coalescerCoalescesIdenticalKey() async throws {
     let subject = makeDiscoverySubject()
     subject.resolver.script(
@@ -41,10 +41,7 @@ struct CryptoTokenDiscoveryCoalescerTests {
 
     let resolverKey = CountingRegistrationResolver.Key(
       chainId: 1, contractAddress: Self.usdcAddress.lowercased())
-    let alchemyKey = CountingAlchemyClientStub.Key(
-      chainId: 1, contractAddress: Self.usdcAddress.lowercased())
     #expect(subject.resolver.callCount(for: resolverKey) == 1)
-    #expect(subject.alchemy.callCount(for: alchemyKey) == 1)
   }
 
   @Test("Stress: 1000 resolves across 5 keys → exactly 1 call per key")
@@ -82,10 +79,7 @@ struct CryptoTokenDiscoveryCoalescerTests {
     for (chain, address) in keys {
       let resolverKey = CountingRegistrationResolver.Key(
         chainId: chain.chainId, contractAddress: address.lowercased())
-      let alchemyKey = CountingAlchemyClientStub.Key(
-        chainId: chain.chainId, contractAddress: address.lowercased())
       #expect(subject.resolver.callCount(for: resolverKey) == 1)
-      #expect(subject.alchemy.callCount(for: alchemyKey) == 1)
     }
   }
 }

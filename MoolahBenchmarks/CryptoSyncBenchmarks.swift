@@ -162,7 +162,7 @@ final class CryptoSyncBenchmarks: XCTestCase {
     let registry = StubInstrumentRegistry()
     let resolver = BenchmarkRegistrationResolver()
     let discovery = CryptoTokenDiscoveryService(
-      registry: registry, resolver: resolver, alchemy: alchemy)
+      registry: registry, resolver: resolver)
     let walletSyncEngine = WalletSyncEngine(
       alchemy: alchemy,
       blockExplorer: EmptyBlockExplorerStub(),

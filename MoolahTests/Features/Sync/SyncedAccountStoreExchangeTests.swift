@@ -34,8 +34,7 @@ struct SyncedAccountStoreExchangeTests {
     let registry = GRDBInstrumentRegistryRepository(database: database)
     let discovery = CryptoTokenDiscoveryService(
       registry: registry,
-      resolver: CountingRegistrationResolver(),
-      alchemy: alchemy)
+      resolver: CountingRegistrationResolver())
     let walletSyncEngine = WalletSyncEngine(
       alchemy: alchemy,
       blockExplorer: BlockExplorerTestDoubles.empty,
@@ -104,7 +103,7 @@ struct SyncedAccountStoreExchangeTests {
     let regResolver = CountingRegistrationResolver()
     regResolver.setDefault(.success(coingecko: "id", cryptocompare: nil, binance: nil))
     let discovery = CryptoTokenDiscoveryService(
-      registry: registry, resolver: regResolver, alchemy: CountingAlchemyClientStub())
+      registry: registry, resolver: regResolver)
     fixture.store.appendSourceForTesting(
       CoinstashSyncSource(
         tokenStore: tokenStore,
@@ -195,7 +194,8 @@ struct SyncedAccountStoreExchangeTests {
     #expect(
       leg.instrument.id == "10:0x4200000000000000000000000000000000000042",
       "leg must resolve to canonical Optimism OP instrument id")
-    // Verify it is not spam-flagged (CountingAlchemyClientStub returns isSpam=false).
+    // Verify it is not spam-flagged: OP at its canonical address is not
+    // impersonation, so the canonical-registry check passes it through.
     let regs = try await fixture.backend.grdbInstruments.allCryptoRegistrations()
     let opReg = try #require(
       regs.first { $0.instrument.id == "10:0x4200000000000000000000000000000000000042" },

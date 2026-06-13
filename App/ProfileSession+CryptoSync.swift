@@ -72,7 +72,7 @@ extension ProfileSession {
       apiKeyProvider: { ProfileSession.resolveAlchemyApiKey() },
       rateLimiter: rateLimiter)
     let discovery = CryptoTokenDiscoveryService(
-      registry: registry, resolver: cryptoPriceService, alchemy: alchemy)
+      registry: registry, resolver: cryptoPriceService)
     let walletSyncEngine = makeWalletSyncEngine(
       alchemy: alchemy,
       blockExplorer: makeLiveBlockExplorer(),

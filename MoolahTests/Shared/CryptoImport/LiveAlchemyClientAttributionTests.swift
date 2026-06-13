@@ -20,20 +20,6 @@ struct LiveAlchemyClientAttributionTests {
     }
   }
 
-  @Test("A network failure from getTokenMetadata is attributed to .alchemy")
-  func tokenMetadataNetworkErrorIsAttributed() async throws {
-    let client = AlchemyTestSupport.makeClient { _ in
-      throw URLError(.notConnectedToInternet)
-    }
-    do {
-      _ = try await client.getTokenMetadata(
-        chain: .ethereum, contractAddress: "0xtoken")
-      Issue.record("expected throw")
-    } catch let error as WalletSyncError {
-      #expect(error.provider == .alchemy)
-    }
-  }
-
   @Test("A network failure from getTransactionReceipt is attributed to .alchemy")
   func transactionReceiptNetworkErrorIsAttributed() async throws {
     let client = AlchemyTestSupport.makeClient { _ in

@@ -142,9 +142,7 @@ enum BenchmarkAlchemyFixtures {
 /// Scripted in-process Alchemy client used by every benchmark. Returns
 /// the transfers seeded for the requested wallet address (case-
 /// insensitive); throws on any unscripted call so a misconfigured
-/// benchmark fails loudly. `getTokenMetadata` always returns a non-spam
-/// metadata record so discovery resolves to `.priced` without making a
-/// network call.
+/// benchmark fails loudly.
 ///
 /// Implemented as an immutable `Sendable` struct — every stored value is
 /// already Sendable so there is no concurrent-mutation surface.
@@ -166,14 +164,6 @@ struct ScriptedBenchmarkAlchemyClient: AlchemyClient, Sendable {
       return scripted
     }
     throw UnscriptedTransfersCall(walletAddress: walletAddress)
-  }
-
-  func getTokenMetadata(
-    chain: ChainConfig,
-    contractAddress: String
-  ) async throws -> AlchemyTokenMetadata {
-    AlchemyTokenMetadata(
-      symbol: "TKN", name: "Token", decimals: 18, logo: nil, isSpam: false)
   }
 
   /// Thrown when a benchmark path triggers an unscripted receipt fetch.

@@ -32,11 +32,6 @@ struct AlchemyJSONRPCRequest<Params: Encodable>: Encodable {
   }
 }
 
-/// Outer JSON-RPC 2.0 response envelope, generic over the result body.
-struct AlchemyJSONRPCResponse<Result: Decodable>: Decodable {
-  let result: Result
-}
-
 /// JSON-RPC 2.0 envelope variant that allows `result: null`. Used by
 /// `eth_getTransactionReceipt` because the spec returns `null` for
 /// hashes the node hasn't seen yet (instead of an error envelope).
@@ -48,7 +43,6 @@ struct AlchemyJSONRPCNullableResponse<Result: Decodable>: Decodable {
 // `LiveAlchemyClient.send`, so they cross actor boundaries; their
 // instances are safe to send whenever the generic body is.
 extension AlchemyJSONRPCRequest: Sendable where Params: Sendable {}
-extension AlchemyJSONRPCResponse: Sendable where Result: Sendable {}
 extension AlchemyJSONRPCNullableResponse: Sendable where Result: Sendable {}
 
 /// Discriminated `params` payload — covers the JSON-RPC methods this
@@ -57,7 +51,6 @@ extension AlchemyJSONRPCNullableResponse: Sendable where Result: Sendable {}
 /// hash string).
 enum AlchemyJSONRPCParams: Encodable, Sendable {
   case assetTransfers(AlchemyAssetTransfersParams)
-  case tokenMetadata(contractAddress: String)
   case transactionReceipt(hash: String)
 
   func encode(to encoder: Encoder) throws {
@@ -65,8 +58,6 @@ enum AlchemyJSONRPCParams: Encodable, Sendable {
     switch self {
     case .assetTransfers(let params):
       try container.encode(params)
-    case .tokenMetadata(let address):
-      try container.encode(address)
     case .transactionReceipt(let hash):
       try container.encode(hash)
     }
@@ -90,9 +81,8 @@ struct AlchemyAssetTransfersParams: Encodable, Sendable {
   let pageKey: String?
 }
 
-/// Decodes the `result` object of `alchemy_getAssetTransfers`. The
-/// outer envelope wraps this in
-/// `AlchemyJSONRPCResponse<AlchemyTransferResult>`.
+/// Decodes the `result` object of `alchemy_getAssetTransfers`. Wraps the
+/// `AlchemyTransferResult` body in the JSON-RPC `result` key.
 struct AlchemyTransferEnvelope: Decodable {
   let result: AlchemyTransferResult
 }
