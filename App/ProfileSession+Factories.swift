@@ -350,7 +350,8 @@ extension ProfileSession {
       repository: backend.investments,
       transactionRepository: backend.transactions,
       conversionService: backend.conversionService,
-      instrumentChanges: instrumentChanges
+      instrumentChanges: instrumentChanges,
+      instrumentRegistry: backend.instrumentRegistry
     )
     let reporting = ReportingStore(
       transactionRepository: backend.transactions,

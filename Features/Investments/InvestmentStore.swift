@@ -68,6 +68,16 @@ final class InvestmentStore {
   /// previews / legacy tests.
   private let instrumentChanges: (any InstrumentChangeObserving)?
 
+  /// Read-only seam onto the shared instrument registry, used to build the
+  /// cross-chain asset-key map. `nil` in previews / legacy tests, in which
+  /// case the holdings surface degrades to per-chain rows.
+  private let instrumentRegistry: (any InstrumentRegistryRepository)?
+
+  /// `[instrumentId: assetKey]` for the holdings cross-chain rollup, refreshed
+  /// by `loadAllData`. Empty until first load, or if the registry is absent or
+  /// errors — the surface then shows per-chain rows (a safe degradation).
+  private(set) var assetKeysByInstrumentId: [String: String] = [:]
+
   /// Observes `instrumentChanges.observeChanges()` and re-runs the
   /// valuation recompute on each tick. Spawned from `init` only when a
   /// registry seam is wired; torn down by `stopObserving()` / `deinit`
@@ -87,12 +97,14 @@ final class InvestmentStore {
     repository: InvestmentRepository,
     transactionRepository: TransactionRepository? = nil,
     conversionService: any InstrumentConversionService,
-    instrumentChanges: (any InstrumentChangeObserving)? = nil
+    instrumentChanges: (any InstrumentChangeObserving)? = nil,
+    instrumentRegistry: (any InstrumentRegistryRepository)? = nil
   ) {
     self.repository = repository
     self.transactionRepository = transactionRepository
     self.conversionService = conversionService
     self.instrumentChanges = instrumentChanges
+    self.instrumentRegistry = instrumentRegistry
     let pair = AsyncStream<Void>.makeStream()
     self.testObservationTickStream = pair.stream
     self.testObservationTickContinuation = pair.continuation
@@ -130,6 +142,32 @@ final class InvestmentStore {
       if Task.isCancelled { return }
       await recomputeOnRateTick()
       if Task.isCancelled { return }
+      await refreshAssetKeys()
+      if Task.isCancelled { return }
+    }
+  }
+
+  /// Refreshes the `[instrumentId: assetKey]` rollup map from the shared
+  /// instrument registry. Mirrors the file's repository-error style: a
+  /// `CancellationError` preserves the previous map and propagates no
+  /// failure, any other error logs and disables the rollup (empty map →
+  /// per-chain rows). A `nil` registry seam clears the map.
+  func refreshAssetKeys() async {
+    guard let instrumentRegistry else {
+      assetKeysByInstrumentId = [:]
+      return
+    }
+    do {
+      let registrations = try await instrumentRegistry.allCryptoRegistrations()
+      try Task.checkCancellation()
+      assetKeysByInstrumentId = CryptoRegistration.assetKeys(from: registrations)
+    } catch is CancellationError {
+      // Preserve the previous map on cancellation.
+    } catch {
+      logger.warning(
+        "allCryptoRegistrations failed, asset rollup disabled: \(error.localizedDescription, privacy: .public)"
+      )
+      assetKeysByInstrumentId = [:]
     }
   }
 

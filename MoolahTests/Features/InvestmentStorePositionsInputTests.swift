@@ -117,6 +117,63 @@ struct InvestmentStorePositionsInputTests {
     #expect(btcRow.costBasis == InstrumentAmount(quantity: 6_000, instrument: aud))
   }
 
+  @Test("same-asset ETH across chains rolls into one holding via the registry map")
+  func crossChainEthRollsIntoOneHolding() async throws {
+    let (backend, _) = try TestBackend.create()
+    let ethMainnet = Instrument.crypto(
+      chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    let ethOptimism = Instrument.crypto(
+      chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    // Both chains' native ETH map to the same coingecko asset key, so the
+    // holdings fold should collapse them into a single "ethereum" row.
+    try await registerCoingeckoOnly(ethMainnet, coingeckoId: "ethereum", in: backend)
+    try await registerCoingeckoOnly(ethOptimism, coingeckoId: "ethereum", in: backend)
+
+    let conversionService = FixedConversionService(rates: [
+      ethMainnet.id: Decimal(3_000),
+      ethOptimism.id: Decimal(3_000),
+    ])
+    let store = InvestmentStore(
+      repository: backend.investments,
+      transactionRepository: backend.transactions,
+      conversionService: conversionService,
+      instrumentRegistry: backend.instrumentRegistryRepository
+    )
+    let account = Account(
+      name: "Crypto", type: .investment, instrument: aud,
+      valuationMode: .calculatedFromTrades)
+    _ = try await backend.accounts.create(
+      account, openingBalance: InstrumentAmount(quantity: 0, instrument: aud))
+
+    // Buy 3 ETH on mainnet and 2 ETH on Optimism — 5 ETH held in total.
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: Date(timeIntervalSinceNow: -86_400 * 10),
+        legs: [
+          TransactionLeg(accountId: account.id, instrument: ethMainnet, quantity: 3, type: .trade),
+          TransactionLeg(accountId: account.id, instrument: aud, quantity: -9_000, type: .trade),
+        ]
+      )
+    )
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: Date(timeIntervalSinceNow: -86_400 * 5),
+        legs: [
+          TransactionLeg(accountId: account.id, instrument: ethOptimism, quantity: 2, type: .trade),
+          TransactionLeg(accountId: account.id, instrument: aud, quantity: -6_000, type: .trade),
+        ]
+      )
+    )
+
+    let input = try await store.loadAndBuildPositionsInput(
+      account: account, profileCurrency: aud, range: .threeMonths)
+
+    let ethHoldings = input.assetHoldings.filter { $0.id == "ethereum" }
+    let ethHolding = try #require(ethHoldings.first)
+    #expect(ethHoldings.count == 1)
+    #expect(ethHolding.quantity == Decimal(5))
+  }
+
   @Test("loadAndBuildPositionsInput loads store state and returns built input")
   func loadAndBuildPositionsInputCoordinatesBothSteps() async throws {
     let (backend, _) = try TestBackend.create()
