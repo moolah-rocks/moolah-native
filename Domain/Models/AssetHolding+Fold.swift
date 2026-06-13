@@ -3,8 +3,7 @@ import Foundation
 extension AssetHolding {
   /// Folds per-chain `ValuedPosition`s into asset rows. Crypto positions that
   /// share an `assetKey` merge into one `AssetHolding`; stocks, fiat, and
-  /// crypto without a key each stand alone. Input order is irrelevant; output
-  /// is sorted by id for determinism.
+  /// crypto without a key each stand alone.
   ///
   /// - Parameters:
   ///   - assetKeys: `[instrumentId: assetKey]`. A missing entry (or a
@@ -13,61 +12,78 @@ extension AssetHolding {
   ///     expressed in. Used as the seed for the monetary sums; the caller
   ///     (`PositionsViewInput`) holds this as the single source of truth, so the
   ///     sums never touch mismatched `InstrumentAmount`s.
+  ///
+  /// Output is sorted by id so SwiftUI rows have stable identity and tests are
+  /// deterministic; the backend's input order is arbitrary.
   static func fold(
     _ positions: [ValuedPosition], assetKeys: [String: String], hostCurrency: Instrument
   ) -> [AssetHolding] {
-    func key(for position: ValuedPosition) -> String {
-      guard position.instrument.kind == .cryptoToken else { return position.instrument.id }
-      return assetKeys[position.instrument.id] ?? position.instrument.id
-    }
-
-    var order: [String] = []
-    var groups: [String: [ValuedPosition]] = [:]
+    var orderedGroups: [(key: String, positions: [ValuedPosition])] = []
+    var indexByKey: [String: Int] = [:]
     for position in positions {
-      let groupKey = key(for: position)
-      if groups[groupKey] == nil { order.append(groupKey) }
-      groups[groupKey, default: []].append(position)
+      let groupKey = Self.groupKey(for: position, assetKeys: assetKeys)
+      if let i = indexByKey[groupKey] {
+        orderedGroups[i].positions.append(position)
+      } else {
+        indexByKey[groupKey] = orderedGroups.count
+        orderedGroups.append((key: groupKey, positions: [position]))
+      }
     }
+    return
+      orderedGroups
+      .map { Self.merge($0.positions, key: $0.key, hostCurrency: hostCurrency) }
+      .sorted { $0.id < $1.id }
+  }
 
-    return order.compactMap { groupKey -> AssetHolding? in
-      guard let group = groups[groupKey] else { return nil }
-      return Self.merge(group, key: groupKey, hostCurrency: hostCurrency)
+  /// The key a position groups under: its curated asset key for crypto tokens
+  /// (so the same asset on different chains rolls up), otherwise its own id
+  /// (stocks, fiat, and crypto without a mapping each stand alone).
+  private static func groupKey(for position: ValuedPosition, assetKeys: [String: String]) -> String
+  {
+    guard position.instrument.kind == .cryptoToken else { return position.instrument.id }
+    return assetKeys[position.instrument.id] ?? position.instrument.id
+  }
+
+  /// Sums an optional host-currency amount across the group, propagating nil:
+  /// the result is nil if *any* contributor's amount is nil (the project's
+  /// "never display a partial aggregate" rule). Seeded with the host currency
+  /// so every `+` is same-instrument.
+  private static func sum(
+    _ keyPath: KeyPath<ValuedPosition, InstrumentAmount?>,
+    over group: [ValuedPosition],
+    hostCurrency: Instrument
+  ) -> InstrumentAmount? {
+    var result: InstrumentAmount? = .zero(instrument: hostCurrency)
+    for row in group {
+      guard let accumulated = result, let contribution = row[keyPath: keyPath] else { return nil }
+      result = accumulated + contribution
     }
-    .sorted { $0.id < $1.id }
+    return result
   }
 
   /// Merges a non-empty group of same-asset positions into one row.
-  ///
-  /// Quantity is a plain `Decimal` sum: this is only valid because every
-  /// contributor shares the same asset *and* the same unit (decimals). The
-  /// asset key is the curated price-provider id, which today never maps two
-  /// instruments of differing `decimals` to the same key.
   private static func merge(
     _ group: [ValuedPosition], key: String, hostCurrency: Instrument
   ) -> AssetHolding {
     precondition(!group.isEmpty, "merge called with empty group")
+    // Diagnostic: when present, value/costBasis must be in the host currency,
+    // so the nil-propagating `+` in `sum` never traps on mismatched instruments.
+    for row in group {
+      precondition(
+        (row.value?.instrument ?? hostCurrency) == hostCurrency,
+        "AssetHolding.merge: value not in host currency")
+      precondition(
+        (row.costBasis?.instrument ?? hostCurrency) == hostCurrency,
+        "AssetHolding.merge: costBasis not in host currency")
+    }
     let first = group[0]
+    // Same-unit assumption: contributors sharing an asset key are the same
+    // token, so summing raw quantities and taking the max decimals is valid.
     let quantity = group.reduce(Decimal(0)) { $0 + $1.quantity }
 
-    // "Never display a partial aggregate": nil if ANY contributor is nil.
-    // Seeded with the explicit host currency so the `+` is always same-instrument.
-    var value: InstrumentAmount? = .zero(instrument: hostCurrency)
-    for row in group {
-      guard let accumulated = value, let rowValue = row.value else {
-        value = nil
-        break
-      }
-      value = accumulated + rowValue
-    }
-    // Cost basis is independent of value: defined iff EVERY contributor has one.
-    var costBasis: InstrumentAmount? = .zero(instrument: hostCurrency)
-    for row in group {
-      guard let accumulated = costBasis, let rowCost = row.costBasis else {
-        costBasis = nil
-        break
-      }
-      costBasis = accumulated + rowCost
-    }
+    let value = Self.sum(\.value, over: group, hostCurrency: hostCurrency)
+    let costBasis = Self.sum(\.costBasis, over: group, hostCurrency: hostCurrency)
+
     // Unit price in host currency: value / quantity when available.
     let unitPrice: InstrumentAmount? = {
       guard let value, quantity != 0 else { return nil }
