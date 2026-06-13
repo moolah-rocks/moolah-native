@@ -22,6 +22,25 @@ struct CryptoProviderMapping: Codable, Sendable, Hashable, Identifiable {
     coingeckoId != nil || cryptocompareSymbol != nil || binanceSymbol != nil
   }
 
+  /// Canonical cross-chain asset key: the curated price-provider id, which is
+  /// shared by every chain's variant of the same asset (e.g. `"ethereum"` for
+  /// ETH on mainnet and every L2). Falls back to the instrument's own id when
+  /// no provider id is present — an unmapped token cannot safely be claimed to
+  /// be "the same asset" as anything else, so it stands alone.
+  var assetKey: String {
+    coingeckoId ?? cryptocompareSymbol ?? binanceSymbol ?? instrumentId
+  }
+
+  /// Builds an `[instrumentId: assetKey]` lookup from a set of crypto
+  /// registrations, for the holdings rollup. Instruments absent from the
+  /// result stand alone (the fold treats a missing key as the instrument's
+  /// own id).
+  static func assetKeys(from registrations: [CryptoRegistration]) -> [String: String] {
+    registrations.reduce(into: [String: String]()) { map, reg in
+      map[reg.instrument.id] = reg.mapping.assetKey
+    }
+  }
+
   /// Built-in presets for common tokens.
   static let builtInPresets: [CryptoProviderMapping] =
     CryptoRegistration.builtInPresets.map(\.mapping)
