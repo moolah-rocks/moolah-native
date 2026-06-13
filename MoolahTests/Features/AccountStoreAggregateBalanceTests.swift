@@ -45,15 +45,12 @@ struct AccountStoreAggregateBalanceTests {
       repository: backend.accounts,
       conversionService: backend.conversionService,
       targetInstrument: .defaultTestInstrument)
-    try await store.waitForNextEmission(
-      matching: { $0.convertedBalances.count == 2 },
-      description: "balances converted")
-
-    let aggregate = try await store.aggregateBalance(
-      for: [memberA.id, memberB.id], in: .defaultTestInstrument)
-    let amount = try #require(aggregate)
-    #expect(amount.quantity == dec("350.00"))
-    #expect(amount.instrument == .defaultTestInstrument)
+    await expectEventually("aggregate sums both accounts to 350.00") {
+      let aggregate = try? await store.aggregateBalance(
+        for: [memberA.id, memberB.id], in: .defaultTestInstrument)
+      return aggregate?.quantity == dec("350.00")
+        && aggregate?.instrument == .defaultTestInstrument
+    }
   }
 
   /// A 1-element id list collapses to the single account's converted
@@ -82,14 +79,11 @@ struct AccountStoreAggregateBalanceTests {
       repository: backend.accounts,
       conversionService: backend.conversionService,
       targetInstrument: .defaultTestInstrument)
-    try await store.waitForNextEmission(
-      matching: { $0.convertedBalances[account.id] != nil },
-      description: "balance converted")
-
-    let aggregate = try await store.aggregateBalance(
-      for: [account.id], in: .defaultTestInstrument)
-    let amount = try #require(aggregate)
-    #expect(amount.quantity == dec("400.00"))
+    await expectEventually("single-account aggregate settles to 400.00") {
+      let aggregate = try? await store.aggregateBalance(
+        for: [account.id], in: .defaultTestInstrument)
+      return aggregate?.quantity == dec("400.00")
+    }
   }
 
   /// Empty id list returns nil — the caller renders an "unavailable"

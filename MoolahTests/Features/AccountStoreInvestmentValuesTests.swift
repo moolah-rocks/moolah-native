@@ -41,13 +41,10 @@ struct AccountStoreInvestmentValuesTests {
       targetInstrument: instrument,
       investmentRepository: backend.investments)
 
-    try await store.waitForNextEmission(
-      matching: { $0.investmentValues[acctId] != nil },
-      description: "investmentValues populated"
-    )
-
-    #expect(store.investmentValues[acctId]?.quantity == Decimal(250000) / 100)
-    #expect(store.convertedBalances[acctId]?.quantity == Decimal(250000) / 100)
+    await expectEventually("latest investment value preloads into value and balance") {
+      store.investmentValues[acctId]?.quantity == Decimal(250000) / 100
+        && store.convertedBalances[acctId]?.quantity == Decimal(250000) / 100
+    }
   }
 
   @Test("first emission with recordedValue and no snapshot yields zero balance")
@@ -64,16 +61,13 @@ struct AccountStoreInvestmentValuesTests {
       targetInstrument: .defaultTestInstrument,
       investmentRepository: backend.investments)
 
-    try await store.waitForNextEmission(
-      matching: { $0.convertedBalances[acctId] != nil },
-      description: "balance is published (zero)"
-    )
-
     // `recordedValue` (default) + no snapshot → balance = 0. Position sum is
     // intentionally not used as a fallback; see `displayBalance` in
     // `AccountBalanceCalculator`.
-    #expect(store.investmentValues[acctId] == nil)
-    #expect(store.convertedBalances[acctId]?.quantity == 0)
+    await expectEventually("balance settles to zero with no investment value") {
+      store.investmentValues[acctId] == nil
+        && store.convertedBalances[acctId]?.quantity == 0
+    }
   }
 
   @Test("first emission with calculatedFromTrades sums positions when no snapshot exists")
@@ -90,13 +84,10 @@ struct AccountStoreInvestmentValuesTests {
       targetInstrument: .defaultTestInstrument,
       investmentRepository: backend.investments)
 
-    try await store.waitForNextEmission(
-      matching: { $0.convertedBalances[acctId]?.quantity == Decimal(100000) / 100 },
-      description: "position-derived balance"
-    )
-
-    #expect(store.investmentValues[acctId] == nil)
-    #expect(store.convertedBalances[acctId]?.quantity == Decimal(100000) / 100)
+    await expectEventually("position-derived balance settles, no recorded value") {
+      store.investmentValues[acctId] == nil
+        && store.convertedBalances[acctId]?.quantity == Decimal(100000) / 100
+    }
   }
 
   // MARK: - updateInvestmentValue
@@ -119,9 +110,10 @@ struct AccountStoreInvestmentValuesTests {
 
     let account = try #require(store.accounts.first)
     await store.updateInvestmentValue(accountId: account.id, value: newValue)
-    #expect(store.investmentValues[account.id] == newValue)
-    let balance = try await store.displayBalance(for: account.id)
-    #expect(balance == newValue)
+    await expectEventually("investment value and display balance settle to newValue") {
+      let balance = try? await store.displayBalance(for: account.id)
+      return store.investmentValues[account.id] == newValue && balance == newValue
+    }
   }
 
   @Test
@@ -143,12 +135,14 @@ struct AccountStoreInvestmentValuesTests {
     await store.updateInvestmentValue(accountId: account.id, value: investmentValue)
     await store.updateInvestmentValue(accountId: account.id, value: nil)
 
-    #expect(store.investmentValues[account.id] == nil)
     // recordedValue (default) + cleared snapshot → balance = 0 (no fallback to
     // positions). The position sum would be 1000.00 if the account were in
     // calculatedFromTrades mode; see `loadCalculatedFromTradesUsesPositionsWhenSnapshotMissing`.
-    let balance = try await store.displayBalance(for: account.id)
-    #expect(balance == .zero(instrument: .defaultTestInstrument))
+    await expectEventually("cleared value settles to nil and zero balance") {
+      let balance = try? await store.displayBalance(for: account.id)
+      return store.investmentValues[account.id] == nil
+        && balance == .zero(instrument: .defaultTestInstrument)
+    }
   }
 
   @Test
@@ -168,9 +162,10 @@ struct AccountStoreInvestmentValuesTests {
       quantity: Decimal(150000) / 100, instrument: Instrument.defaultTestInstrument)
     await store.updateInvestmentValue(accountId: UUID(), value: newValue)
 
-    // Should not affect existing accounts
-    #expect(store.accounts.count == 1)
-    #expect(store.investmentValues.isEmpty)
+    // Should not affect existing accounts.
+    await expectEventually("unknown-account update leaves state untouched") {
+      store.accounts.count == 1 && store.investmentValues.isEmpty
+    }
   }
 
   // MARK: - Display Balance
@@ -194,8 +189,10 @@ struct AccountStoreInvestmentValuesTests {
       quantity: Decimal(150000) / 100, instrument: Instrument.defaultTestInstrument)
     await store.updateInvestmentValue(accountId: acctId, value: investmentValue)
 
-    let balance = try await store.displayBalance(for: acctId)
-    #expect(balance == investmentValue)
+    await expectEventually("display balance settles to the investment value") {
+      let balance = try? await store.displayBalance(for: acctId)
+      return balance == investmentValue
+    }
   }
 
   @Test
@@ -206,12 +203,9 @@ struct AccountStoreInvestmentValuesTests {
     let store = AccountStore(
       repository: backend.accounts, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
-    try await store.waitForNextEmission(
-      matching: { $0.accounts.by(id: acctId) != nil },
-      description: "seeded account observed"
-    )
-
-    #expect(store.canDelete(acctId))
+    await expectEventually("seeded empty account can be deleted") {
+      store.canDelete(acctId)
+    }
   }
 
   @Test
@@ -223,11 +217,8 @@ struct AccountStoreInvestmentValuesTests {
     let store = AccountStore(
       repository: backend.accounts, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
-    try await store.waitForNextEmission(
-      matching: { ($0.accounts.by(id: acctId)?.positions.isEmpty == false) },
-      description: "seeded account with positions observed"
-    )
-
-    #expect(!store.canDelete(acctId))
+    await expectEventually("account with positions cannot be deleted") {
+      store.accounts.by(id: acctId)?.positions.isEmpty == false && !store.canDelete(acctId)
+    }
   }
 }

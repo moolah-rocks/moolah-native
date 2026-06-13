@@ -127,15 +127,11 @@ struct AccountStoreConversionTestsMoreExtra {
       repository: backend.accounts,
       conversionService: conversion,
       targetInstrument: .USD)
-    try await store.waitForNextEmission(
-      matching: { $0.positions(for: accountId).count == 2 },
-      description: "both positions observed"
-    )
-
-    let total = try await store.computeConvertedInvestmentTotal(in: .USD)
-    #expect(total.instrument == .USD)
     // Single-pass: 100 USD + (1000 AUD * 0.67) = 100 + 670 = 770 USD
-    #expect(total.quantity == dec("770.00"))
+    await expectEventually("single-pass investment total settles to 770 USD") {
+      let total = try? await store.computeConvertedInvestmentTotal(in: .USD)
+      return total?.instrument == .USD && total?.quantity == dec("770.00")
+    }
   }
 
   /// When an investment account has an externally-supplied value (e.g. from
@@ -180,10 +176,11 @@ struct AccountStoreConversionTestsMoreExtra {
       quantity: dec("2000.00"), instrument: .AUD)
     await store.updateInvestmentValue(accountId: accountId, value: externalValue)
 
-    let total = try await store.computeConvertedInvestmentTotal(in: .USD)
     // 2000 AUD -> USD at 0.5 = 1000 USD (external value converted once)
-    #expect(total.instrument == .USD)
-    #expect(total.quantity == dec("1000.00"))
+    await expectEventually("external value converts once to 1000 USD") {
+      let total = try? await store.computeConvertedInvestmentTotal(in: .USD)
+      return total?.instrument == .USD && total?.quantity == dec("1000.00")
+    }
   }
 
   /// Same-instrument positions and target must hit the fast path without
@@ -216,14 +213,9 @@ struct AccountStoreConversionTestsMoreExtra {
       repository: backend.accounts,
       conversionService: backend.conversionService,
       targetInstrument: .defaultTestInstrument)
-    try await store.waitForNextEmission(
-      matching: { !($0.positions(for: accountId).isEmpty) },
-      description: "position observed"
-    )
-
-    let total = try await store.computeConvertedInvestmentTotal(
-      in: .defaultTestInstrument)
-    #expect(total.instrument == .defaultTestInstrument)
-    #expect(total.quantity == dec("1234.56"))
+    await expectEventually("fast-path total settles to the raw position sum") {
+      let total = try? await store.computeConvertedInvestmentTotal(in: .defaultTestInstrument)
+      return total?.instrument == .defaultTestInstrument && total?.quantity == dec("1234.56")
+    }
   }
 }

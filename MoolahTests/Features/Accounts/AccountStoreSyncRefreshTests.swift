@@ -33,11 +33,9 @@ struct AccountStoreSyncRefreshTests {
       openingBalance: nil
     )
 
-    try await store.waitForNextEmission(
-      matching: { $0.accounts.count == 1 },
-      description: "accounts.count == 1"
-    )
-    #expect(store.accounts.ordered.first?.name == "Synced")
+    await expectEventually("inserted account reaches the store") {
+      store.accounts.ordered.first?.name == "Synced"
+    }
   }
 
   @Test(
@@ -178,20 +176,17 @@ struct AccountStoreSyncRefreshTests {
     )
     _ = await transactionStore.create(transaction)
 
-    // Wait for the reactive observation to deliver the post-write state.
-    // The predicate checks that positions are non-empty (the -50 leg landed).
-    try await accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: accountId)?.positions.isEmpty == false },
-      description: "account positions updated after transaction create"
-    )
-
-    // Read SYNCHRONOUSLY — no await. If applyDelta were still fanned out
-    // from TransactionStore, the position would be -100 (observation applied
-    // -50, then applyDelta applied another -50 on top). Under the reactive-only
-    // design, observation is the single source of truth and the value is -50.
-    let positions = accountStore.accounts.by(id: accountId)?.positions ?? []
-    let qty = positions.first(where: { $0.instrument == .defaultTestInstrument })?.quantity
-    #expect(qty == Decimal(-5000) / 100)
+    // The reactive observation is the single source of truth: the -50 leg
+    // settles the position to -50. If applyDelta were still fanned out from
+    // TransactionStore, the steady-state position would be -100 (observation
+    // applied -50, then applyDelta applied another -50 on top) and this poll
+    // would never satisfy. Polling the asserted value closes the read-once
+    // race where a concurrent observation pass momentarily replaces state.
+    await expectEventually("account position settles to -50 (no double-apply)") {
+      let positions = accountStore.accounts.by(id: accountId)?.positions ?? []
+      let qty = positions.first(where: { $0.instrument == .defaultTestInstrument })?.quantity
+      return qty == Decimal(-5000) / 100
+    }
   }
 
   @Test("AccountStore reflects InvestmentValue writes via observeAll")

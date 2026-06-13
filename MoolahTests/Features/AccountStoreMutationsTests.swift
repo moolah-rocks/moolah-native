@@ -20,13 +20,9 @@ struct AccountStoreMutationsTests {
       repository: backend.accounts, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
 
-    try await store.waitForNextEmission(
-      matching: { $0.accounts.count == 2 },
-      description: "both seeded accounts are observed"
-    )
-
-    #expect(store.currentAccounts.count == 1)
-    #expect(store.currentAccounts[0].name == "Visible")
+    await expectEventually("only the visible account is current") {
+      store.currentAccounts.count == 1 && store.currentAccounts.first?.name == "Visible"
+    }
   }
 
   @Test("currentAccounts includes hidden accounts when showHidden is true")
@@ -46,7 +42,9 @@ struct AccountStoreMutationsTests {
     )
     store.showHidden = true
 
-    #expect(store.currentAccounts.count == 2)
+    await expectEventually("both accounts current once hidden shown") {
+      store.currentAccounts.count == 2
+    }
   }
 
   @Test("investmentAccounts respects showHidden flag")
@@ -61,14 +59,13 @@ struct AccountStoreMutationsTests {
       repository: backend.accounts, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
 
-    try await store.waitForNextEmission(
-      matching: { $0.accounts.count == 2 },
-      description: "both seeded accounts are observed"
-    )
-
-    #expect(store.investmentAccounts.count == 1)
+    await expectEventually("visible-only investment accounts count is 1") {
+      store.investmentAccounts.count == 1
+    }
     store.showHidden = true
-    #expect(store.investmentAccounts.count == 2)
+    await expectEventually("investment accounts count is 2 with hidden shown") {
+      store.investmentAccounts.count == 2
+    }
   }
 
   @Test("convertedCurrentTotal refreshes when showHidden toggles to include hidden accounts")
@@ -114,19 +111,14 @@ struct AccountStoreMutationsTests {
       repository: backend.accounts, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
 
-    // `waitForFirstEmission()` would race the rate-tick recompute (which
+    // Poll the asserted snapshot directly: the rate-tick recompute (which
     // `FixedConversionService.observeRates()` fires synchronously on
-    // subscription) against the accounts observation — the first tick
-    // can arrive before `apply(accounts:)` has run, so `store.accounts`
-    // is still empty. Predicate-match on the accounts snapshot to wait
-    // for the emission that actually carries the seeded rows, mirroring
-    // the other tests in this suite.
-    try await store.waitForNextEmission(
-      matching: { $0.accounts.count == 2 },
-      description: "both seeded accounts are observed"
-    )
-
-    #expect(store.investmentAccounts.map(\.name).sorted() == ["Brokerage", "ETH Wallet"])
+    // subscription) can race the accounts observation, so an early tick can
+    // land before `apply(accounts:)` has run. Polling the final condition
+    // closes that window instead of reading once after a single emission.
+    await expectEventually("both brokerage and crypto appear in investmentAccounts") {
+      store.investmentAccounts.map(\.name).sorted() == ["Brokerage", "ETH Wallet"]
+    }
   }
 
   // MARK: - Instrument Persistence
@@ -147,11 +139,9 @@ struct AccountStoreMutationsTests {
 
     #expect(created.instrument.id == usdInstrument.id)
 
-    try await store.waitForNextEmission(
-      matching: { $0.accounts.first?.instrument.id == usdInstrument.id },
-      description: "store sees created account with USD instrument"
-    )
-    #expect(store.accounts.first?.instrument.id == usdInstrument.id)
+    await expectEventually("store sees created account with USD instrument") {
+      store.accounts.first?.instrument.id == usdInstrument.id
+    }
 
     let fetched = try await backend.accounts.fetchAll()
     #expect(fetched.first?.instrument.id == usdInstrument.id)
@@ -175,15 +165,11 @@ struct AccountStoreMutationsTests {
 
     let created = try await store.create(account)
 
-    try await store.waitForNextEmission(
-      matching: { $0.convertedBalances[created.id] != nil },
-      description: "convertedBalance for new account is populated"
-    )
-
-    let balance = store.convertedBalances[created.id]
-    #expect(balance != nil)
-    #expect(balance?.quantity == 0)
-    #expect(balance?.instrument.id == Instrument.defaultTestInstrument.id)
+    await expectEventually("convertedBalance for new account is zero in its instrument") {
+      let balance = store.convertedBalances[created.id]
+      return balance?.quantity == 0
+        && balance?.instrument.id == Instrument.defaultTestInstrument.id
+    }
   }
 
   @Test
@@ -235,13 +221,9 @@ struct AccountStoreMutationsTests {
     // Reverse order: C, B, A
     await store.reorderAccounts([third, second, first])
 
-    try await store.waitForNextEmission(
-      matching: { $0.accounts.ordered.map(\.name) == ["C", "B", "A"] },
-      description: "store sees reordered accounts"
-    )
-
-    #expect(store.error == nil)
-    #expect(store.accounts.ordered.map(\.name) == ["C", "B", "A"])
+    await expectEventually("store sees reordered accounts with no error") {
+      store.error == nil && store.accounts.ordered.map(\.name) == ["C", "B", "A"]
+    }
 
     let persisted = try await backend.accounts.fetchAll().sorted { $0.position < $1.position }
     #expect(persisted.map(\.name) == ["C", "B", "A"])
@@ -263,11 +245,9 @@ struct AccountStoreMutationsTests {
     let store = AccountStore(
       repository: repository, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
-    try await store.waitForNextEmission(
-      matching: { $0.accounts.count == 2 },
-      description: "initial accounts observed"
-    )
-    #expect(store.accounts.ordered.map(\.name) == ["A", "B"])
+    await expectEventually("initial accounts observed in order") {
+      store.accounts.ordered.map(\.name) == ["A", "B"]
+    }
 
     // Start failing repository updates.
     repository.shouldFail = true

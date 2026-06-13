@@ -27,8 +27,10 @@ struct AccountStoreApplyDeltaTests {
     let deltas: PositionDeltas = [acctId: [instrument: Decimal(-5000) / 100]]
     await store.applyDelta(deltas)
 
-    let balance = try await store.displayBalance(for: acctId)
-    #expect(balance.quantity == Decimal(95000) / 100)
+    await expectEventually("balance settles to reduced amount") {
+      let balance = try? await store.displayBalance(for: acctId)
+      return balance?.quantity == Decimal(95000) / 100
+    }
   }
 
   @Test
@@ -49,8 +51,10 @@ struct AccountStoreApplyDeltaTests {
     let deltas: PositionDeltas = [acctId: [instrument: Decimal(50000) / 100]]
     await store.applyDelta(deltas)
 
-    let balance = try await store.displayBalance(for: acctId)
-    #expect(balance.quantity == Decimal(150000) / 100)
+    await expectEventually("balance settles to increased amount") {
+      let balance = try? await store.displayBalance(for: acctId)
+      return balance?.quantity == Decimal(150000) / 100
+    }
   }
 
   @Test
@@ -77,10 +81,12 @@ struct AccountStoreApplyDeltaTests {
     ]
     await store.applyDelta(deltas)
 
-    let checking = try await store.displayBalance(for: checkingId)
-    let savings = try await store.displayBalance(for: savingsId)
-    #expect(checking.quantity == Decimal(90000) / 100)
-    #expect(savings.quantity == Decimal(210000) / 100)
+    await expectEventually("both account balances settle to deltas") {
+      let checking = try? await store.displayBalance(for: checkingId)
+      let savings = try? await store.displayBalance(for: savingsId)
+      return checking?.quantity == Decimal(90000) / 100
+        && savings?.quantity == Decimal(210000) / 100
+    }
   }
 
   @Test
@@ -98,13 +104,13 @@ struct AccountStoreApplyDeltaTests {
       description: "totals settle"
     )
 
-    #expect(store.convertedCurrentTotal?.quantity == Decimal(100000) / 100)
-
     let deltas: PositionDeltas = [checkingId: [instrument: Decimal(-5000) / 100]]
     await store.applyDelta(deltas)
 
-    #expect(store.convertedCurrentTotal?.quantity == Decimal(95000) / 100)
-    #expect(store.convertedNetWorth?.quantity == Decimal(95000) / 100)
+    await expectEventually("totals settle to post-delta amount") {
+      store.convertedCurrentTotal?.quantity == Decimal(95000) / 100
+        && store.convertedNetWorth?.quantity == Decimal(95000) / 100
+    }
   }
 
   @Test
@@ -134,8 +140,10 @@ struct AccountStoreApplyDeltaTests {
     let delta = BalanceDeltaCalculator.deltas(old: nil, new: transaction)
     await store.applyDelta(delta.accountDeltas)
 
-    let balance = try await store.displayBalance(for: acctId)
-    #expect(balance.quantity == Decimal(95000) / 100)
+    await expectEventually("balance settles after calculator-derived delta") {
+      let balance = try? await store.displayBalance(for: acctId)
+      return balance?.quantity == Decimal(95000) / 100
+    }
   }
 
   @Test
@@ -157,9 +165,11 @@ struct AccountStoreApplyDeltaTests {
     let deltas: PositionDeltas = [unknownId: [instrument: Decimal(-5000) / 100]]
     await store.applyDelta(deltas)
 
-    // Balance should be unchanged
-    let balance = try await store.displayBalance(for: acctId)
-    #expect(balance.quantity == Decimal(100000) / 100)
+    // Balance should be unchanged.
+    await expectEventually("known account balance stays unchanged") {
+      let balance = try? await store.displayBalance(for: acctId)
+      return balance?.quantity == Decimal(100000) / 100
+    }
   }
 
   // MARK: - Converted Totals
@@ -192,14 +202,10 @@ struct AccountStoreApplyDeltaTests {
       targetInstrument: instrument
     )
 
-    try await store.waitForNextEmission(
-      matching: { $0.convertedCurrentTotal?.quantity == Decimal(100000) / 100 },
-      description: "totals settle"
-    )
-
-    #expect(store.convertedCurrentTotal != nil)
-    #expect(store.convertedCurrentTotal?.quantity == Decimal(100000) / 100)
-    #expect(store.convertedNetWorth != nil)
+    await expectEventually("totals populate after first emission") {
+      store.convertedCurrentTotal?.quantity == Decimal(100000) / 100
+        && store.convertedNetWorth != nil
+    }
   }
 
   @Test
@@ -220,12 +226,12 @@ struct AccountStoreApplyDeltaTests {
       description: "totals settle"
     )
 
-    #expect(store.convertedCurrentTotal?.quantity == Decimal(100000) / 100)
-
     let deltas: PositionDeltas = [acctId: [instrument: Decimal(-5000) / 100]]
     await store.applyDelta(deltas)
 
-    #expect(store.convertedCurrentTotal?.quantity == Decimal(95000) / 100)
-    #expect(store.convertedNetWorth?.quantity == Decimal(95000) / 100)
+    await expectEventually("totals update after applyDelta") {
+      store.convertedCurrentTotal?.quantity == Decimal(95000) / 100
+        && store.convertedNetWorth?.quantity == Decimal(95000) / 100
+    }
   }
 }

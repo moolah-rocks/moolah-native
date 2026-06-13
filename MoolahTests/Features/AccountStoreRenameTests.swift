@@ -23,11 +23,9 @@ struct AccountStoreRenameTests {
     let result = try await store.rename(id: original.id, to: "New")
 
     #expect(result?.name == "New")
-    try await store.waitForNextEmission(
-      matching: { $0.accounts.by(id: original.id)?.name == "New" },
-      description: "rename observed"
-    )
-    #expect(store.error == nil)
+    await expectEventually("rename reaches the store with no error") {
+      store.accounts.by(id: original.id)?.name == "New" && store.error == nil
+    }
     let fetched = try await backend.accounts.fetchAll()
     #expect(fetched.first(where: { $0.id == original.id })?.name == "New")
   }
@@ -73,7 +71,9 @@ struct AccountStoreRenameTests {
 
     // Returns the existing account unchanged; no write happens.
     #expect(result?.name == "Old")
-    #expect(store.accounts.by(id: original.id)?.name == "Old")
+    await expectEventually("store name stays Old after no-op rename") {
+      store.accounts.by(id: original.id)?.name == "Old"
+    }
   }
 
   @Test("rename to the same name is a no-op (no write, returns current)")
@@ -92,7 +92,9 @@ struct AccountStoreRenameTests {
     let result = try await store.rename(id: original.id, to: "Stable")
 
     #expect(result?.name == "Stable")
-    #expect(store.error == nil)
+    await expectEventually("no-op rename surfaces no error") {
+      store.error == nil
+    }
     let fetched = try await backend.accounts.fetchAll()
     #expect(fetched.first(where: { $0.id == original.id })?.name == "Stable")
   }
@@ -108,6 +110,8 @@ struct AccountStoreRenameTests {
     let result = try await store.rename(id: UUID(), to: "Whatever")
 
     #expect(result == nil)
-    #expect(store.error == nil)
+    await expectEventually("unknown-id rename surfaces no error") {
+      store.error == nil
+    }
   }
 }

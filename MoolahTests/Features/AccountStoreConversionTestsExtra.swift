@@ -40,15 +40,12 @@ struct AccountStoreConversionTestsExtra {
       conversionService: backend.conversionService,
       targetInstrument: .defaultTestInstrument
     )
-    try await store.waitForNextEmission(
-      matching: { $0.positions(for: accountId).count == 2 },
-      description: "both fiat and stock positions observed"
-    )
-
-    let positions = store.positions(for: accountId)
-    #expect(positions.count == 2)
-    #expect(positions.contains { $0.instrument == .AUD })
-    #expect(positions.contains { $0.instrument == bhp })
+    await expectEventually("both fiat and stock positions settle") {
+      let positions = store.positions(for: accountId)
+      return positions.count == 2
+        && positions.contains { $0.instrument == .AUD }
+        && positions.contains { $0.instrument == bhp }
+    }
   }
 
   @Test
@@ -96,15 +93,11 @@ struct AccountStoreConversionTestsExtra {
       conversionService: backend.conversionService,
       targetInstrument: .defaultTestInstrument
     )
-    try await store.waitForNextEmission(
-      matching: { $0.positions(for: accountId).count == 3 },
-      description: "all three kinds of positions observed"
-    )
-
-    let positions = store.positions(for: accountId)
-    #expect(positions.count == 3)
-    let kinds = Set(positions.map(\.instrument.kind))
-    #expect(kinds == [.fiatCurrency, .stock, .cryptoToken])
+    await expectEventually("fiat, stock and crypto positions all settle") {
+      let positions = store.positions(for: accountId)
+      return positions.count == 3
+        && Set(positions.map(\.instrument.kind)) == [.fiatCurrency, .stock, .cryptoToken]
+    }
   }
 
   // MARK: - displayBalance
@@ -140,15 +133,11 @@ struct AccountStoreConversionTestsExtra {
     let store = AccountStore(
       repository: backend.accounts, conversionService: conversion,
       targetInstrument: .AUD)
-    try await store.waitForNextEmission(
-      matching: { $0.positions(for: accountId).count == 2 },
-      description: "both positions observed"
-    )
-
-    let balance = try await store.displayBalance(for: accountId)
-    #expect(balance.instrument == .AUD)
     // 1000 AUD + 200 USD * 1.5 = 1300 AUD
-    #expect(balance.quantity == dec("1300.00"))
+    await expectEventually("display balance sums positions in AUD") {
+      let balance = try? await store.displayBalance(for: accountId)
+      return balance?.instrument == .AUD && balance?.quantity == dec("1300.00")
+    }
   }
 
   @Test
@@ -173,13 +162,9 @@ struct AccountStoreConversionTestsExtra {
       repository: backend.accounts,
       conversionService: backend.conversionService,
       targetInstrument: .defaultTestInstrument)
-    try await store.waitForNextEmission(
-      matching: { !($0.positions(for: accountId).isEmpty) },
-      description: "position observed"
-    )
-
-    let balance = try await store.displayBalance(for: accountId)
-    #expect(balance.quantity == dec("750.00"))
-    #expect(balance.instrument == .defaultTestInstrument)
+    await expectEventually("single-currency display balance settles") {
+      let balance = try? await store.displayBalance(for: accountId)
+      return balance?.quantity == dec("750.00") && balance?.instrument == .defaultTestInstrument
+    }
   }
 }
