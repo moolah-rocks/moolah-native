@@ -298,13 +298,6 @@ struct AssetHolding: Sendable, Hashable, Identifiable {
       kind: kind, quantity: quantity, decimals: decimals,
       displayLabel: displayLabel, currencyCode: currencyCode)
   }
-
-  /// A selection value for this row, used to drive the chart filter.
-  var positionSelection: PositionSelection {
-    PositionSelection(
-      id: id, kind: kind, displayLabel: displayLabel,
-      instrumentIds: contributingInstrumentIds)
-  }
 }
 
 // MARK: - Sortable accessors (mirror ValuedPosition for Table columns)
@@ -317,12 +310,12 @@ extension AssetHolding {
 }
 ```
 
-> `positionSelection` references `PositionSelection`, created in Task 5. Tasks 2 and 5 must both be present before this file compiles — do Task 5 in the same working session, or temporarily stub `PositionSelection`. Recommended order: Task 5 before final build of Task 2 (they are committed separately but compiled together).
+> The `positionSelection` bridge (`AssetHolding → PositionSelection`) is added in Task 5, where `PositionSelection` is defined — so this file compiles standalone now.
 
 - [ ] **Step 4: Build to verify**
 
 Run: `just build-mac 2>&1 | tee .agent-tmp/t2.txt`
-Expected: builds after Task 5's `PositionSelection` exists. If building standalone errors only on `PositionSelection`, proceed to Task 5 then rebuild.
+Expected: builds clean, no warnings (no `PositionSelection` reference here).
 
 - [ ] **Step 5: Commit**
 
@@ -735,6 +728,16 @@ struct PositionSelection: Sendable, Hashable, Identifiable {
   /// The per-chain instrument ids this selection covers (1+).
   let instrumentIds: [String]
 }
+
+/// Bridge from a display row to its selection value (defined here, alongside
+/// `PositionSelection`, so `AssetHolding` compiles without depending on it).
+extension AssetHolding {
+  var positionSelection: PositionSelection {
+    PositionSelection(
+      id: id, kind: kind, displayLabel: displayLabel,
+      instrumentIds: contributingInstrumentIds)
+  }
+}
 ```
 
 - [ ] **Step 4: Add the field + fold entry point to `PositionsViewInput`**
@@ -1125,7 +1128,7 @@ In `Features/Investments/InvestmentStore.swift`:
     do {
       let registrations = try await instrumentRegistry.allCryptoRegistrations()
       try Task.checkCancellation()
-      assetKeysByInstrumentId = CryptoProviderMapping.assetKeys(from: registrations)
+      assetKeysByInstrumentId = CryptoRegistration.assetKeys(from: registrations)
     } catch is CancellationError {
       // leave the previous map intact on cancellation
     } catch {
@@ -1203,7 +1206,7 @@ In `valuatePositions()`, after the existing valuation and **before** building `p
       do {
         let registrations = try await registry.allCryptoRegistrations()
         try Task.checkCancellation()
-        assetKeys = CryptoProviderMapping.assetKeys(from: registrations)
+        assetKeys = CryptoRegistration.assetKeys(from: registrations)
       } catch is CancellationError {
         return
       } catch {
