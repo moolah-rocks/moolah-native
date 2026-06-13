@@ -44,7 +44,9 @@ struct PositionsTable: View {
       TableColumn("Instrument", value: \.instrument.name) { row in
         instrumentCell(for: row)
       }
-      TableColumn("Qty", value: \.quantity) { row in
+      // Full word, not "Qty": macOS `Table` reads the column header to
+      // VoiceOver, where "Qty" would be spoken as an abbreviation.
+      TableColumn("Quantity", value: \.quantity) { row in
         Text(row.quantityFormatted).monospacedDigit()
       }
       TableColumn("Unit Price", value: \.unitPriceQuantity) { row in
@@ -73,6 +75,15 @@ struct PositionsTable: View {
         }
       }
     }
+    // The wide `Table` gives this cell a fixed column width, so the caption
+    // (exchange / chain summary) clips rather than wraps at the largest
+    // accessibility sizes. Cap Dynamic Type at the guide's standard ceiling
+    // (`guides/UI_GUIDE.md` §4: `.medium...accessibility3`) — the tradeoff is
+    // that accessibility4+ users see this cell at accessibility3 scale. The cap
+    // is scoped to the instrument cell so the numeric columns keep scaling for
+    // low-vision readability; the narrow `List` layout (`PositionRow`) keeps the
+    // full range since it can wrap.
+    .dynamicTypeSize(...DynamicTypeSize.accessibility3)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(instrumentLabel(for: row))
   }
