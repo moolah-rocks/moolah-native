@@ -37,21 +37,51 @@ struct AssetKeyTests {
   }
 
   @Test
-  func mapMergesSameAssetAcrossChains() {
-    let eth1 = CryptoRegistration(
+  func chainOneMapsToSharedAsset() {
+    let map = CryptoRegistration.assetKeys(from: ethAcrossChains())
+    #expect(map["1:native"] == "ethereum")
+  }
+
+  @Test
+  func chainTenMapsToSharedAsset() {
+    let map = CryptoRegistration.assetKeys(from: ethAcrossChains())
+    #expect(map["10:native"] == "ethereum")
+  }
+
+  @Test
+  func duplicateInstrumentIdLastWriteWins() {
+    let first = CryptoRegistration(
       instrument: .crypto(
         chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
       mapping: CryptoProviderMapping(
-        instrumentId: "1:native", coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
-    let eth10 = CryptoRegistration(
+        instrumentId: "1:native", coingeckoId: "ethereum",
+        cryptocompareSymbol: nil, binanceSymbol: nil))
+    let second = CryptoRegistration(
       instrument: .crypto(
-        chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
+        chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
       mapping: CryptoProviderMapping(
-        instrumentId: "10:native", coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
-    let assetKeyMap = CryptoProviderMapping.assetKeys(from: [eth1, eth10])
-    #expect(assetKeyMap["1:native"] == "ethereum")
-    #expect(assetKeyMap["10:native"] == "ethereum")
+        instrumentId: "1:native", coingeckoId: "ether-renamed",
+        cryptocompareSymbol: nil, binanceSymbol: nil))
+    let map = CryptoRegistration.assetKeys(from: [first, second])
+    #expect(map["1:native"] == "ether-renamed")
+  }
+
+  /// ETH registered on mainnet (chain 1) and Optimism (chain 10), both
+  /// mapped to the shared `"ethereum"` asset key.
+  private func ethAcrossChains() -> [CryptoRegistration] {
+    [
+      CryptoRegistration(
+        instrument: .crypto(
+          chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
+        mapping: CryptoProviderMapping(
+          instrumentId: "1:native", coingeckoId: "ethereum",
+          cryptocompareSymbol: nil, binanceSymbol: nil)),
+      CryptoRegistration(
+        instrument: .crypto(
+          chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
+        mapping: CryptoProviderMapping(
+          instrumentId: "10:native", coingeckoId: "ethereum",
+          cryptocompareSymbol: nil, binanceSymbol: nil)),
+    ]
   }
 }
