@@ -177,8 +177,7 @@ struct TransactionStoreSyncRefreshTests {
     }
     try await store.waitForNextEmission(
       matching: { $0.transactions.isEmpty },
-      description: "wipe propagated to store before cancellation",
-      timeout: .seconds(2)
+      description: "wipe propagated to store before cancellation"
     )
     store.stopObserving()
     #expect(store.transactions.isEmpty)

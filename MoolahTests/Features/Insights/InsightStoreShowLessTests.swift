@@ -76,7 +76,7 @@ struct InsightStoreShowLessTests {
     #expect(store.items.count == 2)
 
     // The per-kind fatigue count was persisted (all fixtures share one kind).
-    try await waitUntil(timeout: .seconds(5)) {
+    try await waitUntil {
       let count =
         (try? await backend.insightDismissals.fetchAll())?
         .first { $0.kind == .netWorthMilestone }?.count
@@ -116,7 +116,7 @@ struct InsightStoreShowLessTests {
   // MARK: - Polling helper
 
   private func waitUntil(
-    timeout: Duration,
+    timeout: Duration = .seconds(10),
     pollEvery: Duration = .milliseconds(20),
     _ condition: @MainActor () async -> Bool
   ) async throws {

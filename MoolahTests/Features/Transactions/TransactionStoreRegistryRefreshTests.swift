@@ -98,8 +98,7 @@ struct TransactionStoreRegistryRefreshTests {
 
     try await store.waitForNextEmission(
       matching: { self.cryptoLegName($0, id: crypto.id) == "Renamed WBTC" },
-      description: "registry rename live-refreshes the open list",
-      timeout: .seconds(2))
+      description: "registry rename live-refreshes the open list")
 
     store.stopObserving()
   }

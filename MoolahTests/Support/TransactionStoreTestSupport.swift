@@ -128,7 +128,7 @@ extension TransactionStore {
   /// by tests that want a one-line "do mutation; await emission"
   /// pattern rather than calling `waitForNextEmission(matching:)` with
   /// a custom predicate.
-  func awaitNextSyncRefresh(timeout: Duration = .seconds(2)) async throws {
+  func awaitNextSyncRefresh(timeout: Duration = .seconds(10)) async throws {
     try await waitForFirstEmission(timeout: timeout)
   }
 
@@ -136,7 +136,7 @@ extension TransactionStore {
   /// `transactions.count` matches `expected`". Useful for the most
   /// common test shape after a create/update/delete.
   func awaitTransactionCount(
-    _ expected: Int, timeout: Duration = .seconds(2)
+    _ expected: Int, timeout: Duration = .seconds(10)
   ) async throws {
     if transactions.count == expected { return }
     try await waitForNextEmission(

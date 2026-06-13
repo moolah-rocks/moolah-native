@@ -7,19 +7,6 @@ import Testing
 @MainActor
 struct EarmarkStorePartialConversionTests {
 
-  /// Timeout for the first-emission convergence waits in this suite.
-  ///
-  /// Deliberately more generous than the helper's 2s default: unlike the
-  /// other store tests (which drive emissions via an explicit action such
-  /// as `applyDelta`), these waits race the store's init-spawned
-  /// observation task through a GRDB `observeAll()` emission *and* N async
-  /// per-earmark conversion calls. On a loaded CI runner that first
-  /// emission can land just past 2s — a timing artefact, not a regression
-  /// (see issue #1025). `waitForNextEmission` polls the predicate every
-  /// 20ms, so the fast path still returns the instant state settles; the
-  /// larger cap only buys headroom for a slow runner.
-  private static let convergenceTimeout: Duration = .seconds(10)
-
   /// When one earmark's positions can't be converted to its own instrument,
   /// other earmarks whose conversions succeed still appear in
   /// `convertedBalances`. The aggregate `convertedTotalBalance` stays nil
@@ -76,8 +63,7 @@ struct EarmarkStorePartialConversionTests {
     // mixed earmark (and therefore the aggregate total) stay nil. Poll the
     // full post-condition so a racing recompute can't slip a stale read in.
     await expectEventually(
-      "healthy earmark settles while the failing earmark and total stay nil",
-      timeout: Self.convergenceTimeout
+      "healthy earmark settles while the failing earmark and total stay nil"
     ) {
       store.convertedBalance(for: healthyEarmark.id)?.quantity == 300
         && store.convertedBalance(for: mixedEarmark.id) == nil
@@ -131,8 +117,7 @@ struct EarmarkStorePartialConversionTests {
     // balance settles. Per-earmark balances are still displayed in their own
     // currency where no conversion is needed.
     await expectEventually(
-      "AUD earmark settles while the EUR failure keeps the total nil",
-      timeout: Self.convergenceTimeout
+      "AUD earmark settles while the EUR failure keeps the total nil"
     ) {
       store.convertedBalance(for: audEarmark.id)?.quantity == 400
         && store.convertedTotalBalance == nil

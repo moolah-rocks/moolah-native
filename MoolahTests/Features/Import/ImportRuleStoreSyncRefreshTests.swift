@@ -81,8 +81,7 @@ struct ImportRuleStoreSyncRefreshTests {
     }
     try await store.waitForNextEmission(
       matching: { $0.rules.isEmpty },
-      description: "wipe propagated to store before cancellation",
-      timeout: .seconds(2)
+      description: "wipe propagated to store before cancellation"
     )
     store.stopObserving()
     #expect(store.rules.isEmpty)
