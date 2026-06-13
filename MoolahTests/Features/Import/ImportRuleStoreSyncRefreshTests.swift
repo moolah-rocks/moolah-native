@@ -35,11 +35,9 @@ struct ImportRuleStoreSyncRefreshTests {
 
     _ = try await backend.importRules.create(rule(name: "Synced", position: 0))
 
-    try await store.waitForNextEmission(
-      matching: { $0.rules.count == 1 },
-      description: "rules.count == 1"
-    )
-    #expect(store.rules.first?.name == "Synced")
+    await expectEventually("rules has one rule named Synced") {
+      store.rules.count == 1 && store.rules.first?.name == "Synced"
+    }
   }
 
   @Test("stopObserving cancels the observation task")

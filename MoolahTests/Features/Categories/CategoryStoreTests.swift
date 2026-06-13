@@ -30,11 +30,10 @@ struct CategoryStoreTests {
 
     #expect(created != nil)
     #expect(created?.name == "Transport")
-    try await store.waitForNextEmission(
-      matching: { $0.categories.roots.count == 1 },
-      description: "categories.roots.count == 1"
-    )
-    #expect(store.categories.roots.first?.name == "Transport")
+    await expectEventually("categories has one root named Transport") {
+      store.categories.roots.count == 1
+        && store.categories.roots.first?.name == "Transport"
+    }
   }
 
   @Test
@@ -112,11 +111,10 @@ struct CategoryStoreTests {
     let success = await store.delete(id: cat1.id, withReplacement: cat2.id)
 
     #expect(success == true)
-    try await store.waitForNextEmission(
-      matching: { $0.categories.roots.count == 1 },
-      description: "categories collapsed to one"
-    )
-    #expect(store.categories.roots.first?.name == "New Category")
+    await expectEventually("categories collapsed to one named New Category") {
+      store.categories.roots.count == 1
+        && store.categories.roots.first?.name == "New Category"
+    }
   }
 
   @Test
