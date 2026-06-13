@@ -1,3 +1,6 @@
+// Reason: AssetHolding preview literals and the Table column builders span
+// many labelled arguments; the multiline_arguments rule fires on every such
+// call site in this file.
 // swiftlint:disable multiline_arguments
 
 import SwiftUI
@@ -113,7 +116,7 @@ struct PositionsTable: View {
       .accessibilityElement(children: .combine)
       .accessibilityLabel(gainAccessibilityLabel(gain: gain, percent: row.gainLossPercent))
     } else {
-      Text("—").foregroundStyle(.tertiary)
+      Text("—").monospacedDigit().foregroundStyle(.tertiary)
     }
   }
 
