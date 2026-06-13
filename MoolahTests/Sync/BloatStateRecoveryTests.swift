@@ -234,6 +234,39 @@ struct BloatStateRecoveryTests {
     #expect(!(await Support.suppresses(fixture.doomedID, coordinator)))
   }
 
+  @Test(
+    "clear-on-confirm captures the shield snapshot BEFORE deleting journal rows (deterministic race lock)"
+  )
+  func clearOnConfirmCapturesSnapshotBeforeClearingJournal() async throws {
+    let fixture = try await Support.makeShieldFixture()
+    let coordinator = fixture.coordinator
+
+    // Resolve the journal refs up front — no shield is armed yet, so there is
+    // no snapshot task to race, and these are the exact refs the real replay
+    // would track.
+    let resolved = await coordinator.resolveAllJournalDeletions().resolved
+    #expect(resolved[fixture.doomedID] != nil)
+
+    // Arm the shield (which spawns the async snapshot task) and then seed the
+    // in-flight replay state WITHOUT any suspension point. Holding the MainActor
+    // synchronously guarantees the snapshot task has not run when clear-on-
+    // confirm starts — the precise ordering that used to lose the race.
+    coordinator.armRecoveryShield()
+    coordinator.replayedDeletionsInFlight = resolved
+    coordinator.recoveryReplayDidRun = true
+
+    // The empty pending store makes the doomed delete read as confirmed, so its
+    // journal row is cleared. Clear-on-confirm must await the snapshot first, so
+    // the snapshot reads the journal while the tombstone still exists and the id
+    // stays shielded. Without the fix the row is deleted first, the snapshot
+    // reads an empty journal, drops the id, and the still-draining refetch could
+    // resurrect the just-deleted record (#1090 / #12).
+    await coordinator.clearConfirmedReplayedDeletions(against: InMemoryPendingChangeStore())
+
+    #expect(coordinator.isRecoveryShieldActive)
+    #expect(await Support.suppresses(fixture.doomedID, coordinator))
+  }
+
   @Test("the shield also releases when the refetch settles before the delete is confirmed")
   func shieldReleasesWhenRefetchSettlesThenDeleteConfirms() async throws {
     let fixture = try await Support.makeShieldFixture()
