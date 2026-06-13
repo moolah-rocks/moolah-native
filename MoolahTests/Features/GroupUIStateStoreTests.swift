@@ -25,12 +25,9 @@ struct GroupUIStateStoreTests {
         name: "G", bucket: .investments, instrument: .defaultTestInstrument))
 
     await store.setExpanded(true, for: group.id)
-    try await store.waitForNextEmission(
-      matching: { $0.expandedGroupIds.contains(group.id) },
-      description: "expanded observed")
-
-    #expect(store.expandedGroupIds == [group.id])
-    #expect(store.error == nil)
+    await expectEventually("expanded set is exactly the group with no error") {
+      store.expandedGroupIds == [group.id] && store.error == nil
+    }
   }
 
   @Test("setExpanded(false) removes from the snapshot")
@@ -49,11 +46,9 @@ struct GroupUIStateStoreTests {
       description: "expanded observed")
 
     await store.setExpanded(false, for: group.id)
-    try await store.waitForNextEmission(
-      matching: { $0.expandedGroupIds.isEmpty },
-      description: "collapsed observed")
-
-    #expect(store.expandedGroupIds.isEmpty)
+    await expectEventually("collapse removes the group from the snapshot") {
+      store.expandedGroupIds.isEmpty
+    }
   }
 
   @Test("toggle flips the expand state")
@@ -67,16 +62,14 @@ struct GroupUIStateStoreTests {
         name: "G", bucket: .investments, instrument: .defaultTestInstrument))
 
     await store.toggle(group.id)
-    try await store.waitForNextEmission(
-      matching: { $0.expandedGroupIds.contains(group.id) },
-      description: "toggle to expanded")
-    #expect(store.expandedGroupIds == [group.id])
+    await expectEventually("toggle expands to exactly the group") {
+      store.expandedGroupIds == [group.id]
+    }
 
     await store.toggle(group.id)
-    try await store.waitForNextEmission(
-      matching: { $0.expandedGroupIds.isEmpty },
-      description: "toggle to collapsed")
-    #expect(store.expandedGroupIds.isEmpty)
+    await expectEventually("toggle collapses back to empty") {
+      store.expandedGroupIds.isEmpty
+    }
   }
 
   @Test("multiple expanded groups all appear in the snapshot")
@@ -96,11 +89,9 @@ struct GroupUIStateStoreTests {
 
     await store.setExpanded(true, for: groupA.id)
     await store.setExpanded(true, for: groupB.id)
-    try await store.waitForNextEmission(
-      matching: { $0.expandedGroupIds.count == 2 },
-      description: "both observed")
-
-    #expect(store.expandedGroupIds == [groupA.id, groupB.id])
+    await expectEventually("both groups appear in the snapshot") {
+      store.expandedGroupIds == [groupA.id, groupB.id]
+    }
   }
 
   @Test("deleting a group reaps its expand state through the cascade")
@@ -119,10 +110,8 @@ struct GroupUIStateStoreTests {
       description: "expanded observed")
 
     try await backend.accountGroups.delete(id: group.id)
-    try await store.waitForNextEmission(
-      matching: { $0.expandedGroupIds.isEmpty },
-      description: "cascade observed")
-
-    #expect(store.expandedGroupIds.isEmpty)
+    await expectEventually("delete cascade reaps the expand state") {
+      store.expandedGroupIds.isEmpty
+    }
   }
 }

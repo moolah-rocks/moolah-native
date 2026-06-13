@@ -26,14 +26,13 @@ struct SidebarDropDispatchReorderRootTests {
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: third.id)?.position == 0 },
-      description: "third now first")
-    let order = stores.accountStore.accounts.ordered
-      .filter { $0.bucket == .current && $0.groupId == nil }
-      .sorted { $0.position < $1.position }
-      .map(\.id)
-    #expect(order == [third.id, first.id, second.id])
+    await expectEventually("third moved ahead to first in the root order") {
+      let order = stores.accountStore.accounts.ordered
+        .filter { $0.bucket == .current && $0.groupId == nil }
+        .sorted { $0.position < $1.position }
+        .map(\.id)
+      return order == [third.id, first.id, second.id]
+    }
   }
 
   @Test("reorderRoot moves a group ahead of a standalone account")
@@ -81,9 +80,11 @@ struct SidebarDropDispatchReorderRootTests {
     try await stores.accountGroupStore.waitForNextEmission(
       matching: { $0.by(id: group.id)?.position == 0 },
       description: "group landed at position 0")
-    let groupPos = stores.accountGroupStore.by(id: group.id)?.position
-    let standalonePos = stores.accountStore.accounts.by(id: standalone.id)?.position
-    #expect((groupPos ?? -1) < (standalonePos ?? -1))
+    await expectEventually("group ends up ahead of the standalone account") {
+      let groupPos = stores.accountGroupStore.by(id: group.id)?.position
+      let standalonePos = stores.accountStore.accounts.by(id: standalone.id)?.position
+      return (groupPos ?? -1) < (standalonePos ?? -1)
+    }
   }
 
   @Test("reorderRoot clamps insertion index past the end")
@@ -142,20 +143,15 @@ struct SidebarDropDispatchReorderRootTests {
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
-    try await stores.accountGroupStore.waitForNextEmission(
-      matching: { $0.by(id: group.id)?.position == 2 },
-      description: "group walked to position 2")
-
     // Per-entry walk-index writes — not a contiguous 0..N-1 collapse —
     // so each entry's absolute position matches its walk-order index.
-    let postStandaloneA = try #require(
-      stores.accountStore.accounts.by(id: standaloneA.id))
-    let postStandaloneB = try #require(
-      stores.accountStore.accounts.by(id: standaloneB.id))
-    let postGroup = try #require(stores.accountGroupStore.by(id: group.id))
-    #expect(postStandaloneA.position == 0)
-    #expect(postStandaloneB.position == 1)
-    #expect(postGroup.position == 2)
+    await expectEventually("each root entry's position matches its walk-order index") {
+      let postStandaloneA = stores.accountStore.accounts.by(id: standaloneA.id)
+      let postStandaloneB = stores.accountStore.accounts.by(id: standaloneB.id)
+      let postGroup = stores.accountGroupStore.by(id: group.id)
+      return postStandaloneA?.position == 0 && postStandaloneB?.position == 1
+        && postGroup?.position == 2
+    }
   }
 
   @Test("reorderRoot is a no-op when the dragged id is unknown")
@@ -210,11 +206,11 @@ struct SidebarDropDispatchReorderRootTests {
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: memberA.id)?.groupId == nil },
-      description: "memberA back to root")
-    #expect(stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id)
-    #expect(stores.accountGroupStore.by(id: group.id) != nil)
+    await expectEventually("memberA back to root; group survives with memberB") {
+      stores.accountStore.accounts.by(id: memberA.id)?.groupId == nil
+        && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
+        && stores.accountGroupStore.by(id: group.id) != nil
+    }
   }
 
   @Test("reorderRoot deletes the old group when the source was its sole member")

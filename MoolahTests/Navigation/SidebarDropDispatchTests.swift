@@ -157,10 +157,10 @@ struct SidebarDropDispatchTests {
       accountGroupStore: stores.accountGroupStore,
       groupUIStateStore: stores.groupUIStateStore)
 
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: source.id)?.groupId == group.id },
-      description: "source joined target group")
-    #expect(stores.accountStore.accounts.by(id: source.id)?.position == 1)
+    await expectEventually("source joined target group at position 1") {
+      let source = stores.accountStore.accounts.by(id: source.id)
+      return source?.groupId == group.id && source?.position == 1
+    }
     try await stores.groupUIStateStore.waitForNextEmission(
       matching: { $0.expandedGroupIds.contains(group.id) },
       description: "target group auto-expanded after drop")
@@ -192,10 +192,9 @@ struct SidebarDropDispatchTests {
       accountGroupStore: stores.accountGroupStore,
       groupUIStateStore: stores.groupUIStateStore)
 
-    try await stores.groupUIStateStore.waitForNextEmission(
-      matching: { $0.expandedGroupIds.contains(group.id) },
-      description: "target group auto-expanded after drop")
-    #expect(stores.groupUIStateStore.expandedGroupIds.contains(group.id))
+    await expectEventually("target group auto-expanded after drop") {
+      stores.groupUIStateStore.expandedGroupIds.contains(group.id)
+    }
   }
 
   @Test("dropOntoGroup is a no-op when the account is already in the target group")
