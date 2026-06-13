@@ -1,4 +1,3 @@
-// MoolahTests/Shared/CryptoImport/CryptoTokenDiscoveryServiceTests.swift
 import Foundation
 import Testing
 
@@ -178,6 +177,54 @@ struct CryptoTokenDiscoveryServiceTests {
     #expect(
       subject.alchemy.callCount(
         for: .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased())) == 0)
+  }
+
+  // MARK: - Local spam heuristics (#1102)
+
+  @Test("Unpriced token with a URL in its name → .spam via local heuristic")
+  func unpricedWithDomainNameIsSpam() async throws {
+    struct ProviderFailed: Error {}
+    let subject = makeDiscoverySubject()
+    subject.resolver.script(
+      .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
+      .failure(ProviderFailed()))
+    subject.alchemy.setDefaultSpam(false)
+
+    let registration = try await subject.service.resolveOrLoad(
+      chain: .ethereum,
+      contractAddress: Self.usdcAddress,
+      // Keyword-free symbol so this exercises the domain path, not the
+      // keyword path (the name carries both signals).
+      symbol: "SCM",
+      name: "Visit op-rewards.xyz for details",
+      decimals: 18)
+
+    #expect(registration.pricingStatus == .spam)
+    #expect(!registration.mapping.hasProviderMapping)
+    let stored = try await subject.registry.cryptoRegistration(byId: Self.usdcId)
+    #expect(stored?.pricingStatus == .spam)
+  }
+
+  @Test("A priced token keeps .priced even when its name contains a domain")
+  func pricedDomainBrandedTokenStaysPriced() async throws {
+    // yearn.finance / YFI: a legitimately listed token whose name is a
+    // domain. Because the provider resolves it, the local domain heuristic
+    // must not demote it to .spam.
+    let subject = makeDiscoverySubject()
+    subject.resolver.script(
+      .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
+      .success(coingecko: "yearn-finance", cryptocompare: nil, binance: nil))
+    subject.alchemy.setDefaultSpam(false)
+
+    let registration = try await subject.service.resolveOrLoad(
+      chain: .ethereum,
+      contractAddress: Self.usdcAddress,
+      symbol: "YFI",
+      name: "yearn.finance",
+      decimals: 18)
+
+    #expect(registration.pricingStatus == .priced)
+    #expect(registration.mapping.coingeckoId == "yearn-finance")
   }
 
   // MARK: - Chain-id entry point

@@ -1,4 +1,3 @@
-// Shared/CryptoImport/CryptoTokenDiscoveryService.swift
 import Foundation
 import OSLog
 
@@ -21,6 +20,10 @@ import OSLog
 /// 4. Apply the design's status precedence:
 ///    - `isSpam == true` → `.spam` (regardless of resolver outcome).
 ///    - resolver succeeded with at least one provider id → `.priced`.
+///    - no provider price but `CryptoSpamHeuristics` flags the name/symbol
+///      (embedded URL/domain or airdrop-"invitation" phrasing) → `.spam`
+///      (issue #1102). Runs only on otherwise-`.unpriced` tokens so a listed
+///      domain-branded token like yearn.finance keeps its price.
 ///    - else → `.unpriced` (surfaces in the Discovered Tokens inbox).
 /// 5. Persist via the registry. Status is sticky-positive: once a row
 ///    transitions out of `.unpriced`, the next sync cycle leaves it alone.
@@ -170,11 +173,26 @@ actor CryptoTokenDiscoveryService {
     let mapping: CryptoProviderMapping
     let status: TokenPricingStatus
     if isSpam {
+      // Alchemy's curated spam database is authoritative and wins even over
+      // a successful provider resolution.
       status = .spam
       mapping = resolved?.mapping ?? emptyMapping(for: instrument.id)
     } else if let resolved, resolved.mapping.hasProviderMapping {
+      // A token with a real price from a provider is legitimate — the local
+      // name heuristics deliberately do not run here, so a domain-branded but
+      // listed token (e.g. yearn.finance / YFI) keeps its `.priced` status.
       status = .priced
       mapping = resolved.mapping
+    } else if let signal = CryptoSpamHeuristics.spamSignal(
+      name: instrument.name, symbol: instrument.ticker)
+    {
+      // No provider price and the name/symbol carries a spam signal (an
+      // embedded URL/domain or airdrop-"invitation" phrasing) — issue #1102.
+      logger.debug(
+        "Local spam heuristic (\(signal.rawValue, privacy: .public)) flagged \(instrument.id, privacy: .public)"
+      )
+      status = .spam
+      mapping = emptyMapping(for: instrument.id)
     } else {
       status = .unpriced
       mapping = emptyMapping(for: instrument.id)
