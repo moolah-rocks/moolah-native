@@ -129,9 +129,16 @@ struct InvestmentStorePositionsInputTests {
     try await registerCoingeckoOnly(ethMainnet, coingeckoId: "ethereum", in: backend)
     try await registerCoingeckoOnly(ethOptimism, coingeckoId: "ethereum", in: backend)
 
-    let conversionService = FixedConversionService(rates: [
-      ethMainnet.id: Decimal(3_000),
-      ethOptimism.id: Decimal(3_000),
+    // Date-based fixed rates (effective from well before the earliest trade)
+    // so the conversion exercises the `on date:` valuation-date threading
+    // rather than a flat per-currency rate. The fold itself introduces no
+    // conversions, so the held quantity is unaffected.
+    let rateEffectiveFrom = Date(timeIntervalSinceNow: -86_400 * 365)
+    let conversionService = DateBasedFixedConversionService(rates: [
+      rateEffectiveFrom: [
+        ethMainnet.id: Decimal(3_000),
+        ethOptimism.id: Decimal(3_000),
+      ]
     ])
     let store = InvestmentStore(
       repository: backend.investments,
