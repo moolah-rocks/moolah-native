@@ -44,11 +44,11 @@ struct SidebarDropDispatchCrossGroupTests {
       accountGroupStore: stores.accountGroupStore,
       groupUIStateStore: stores.groupUIStateStore)
 
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: aMember1.id)?.groupId == groupB.id },
-      description: "aMember1 now in groupB")
-    #expect(stores.accountStore.accounts.by(id: aMember2.id)?.groupId == groupA.id)
-    #expect(stores.accountGroupStore.by(id: groupA.id) != nil)
+    await expectEventually("aMember1 moved to groupB; groupA survives with aMember2") {
+      stores.accountStore.accounts.by(id: aMember1.id)?.groupId == groupB.id
+        && stores.accountStore.accounts.by(id: aMember2.id)?.groupId == groupA.id
+        && stores.accountGroupStore.by(id: groupA.id) != nil
+    }
   }
 
   @Test("dropOntoAccount onto cross-group member deletes empty old group")

@@ -48,13 +48,10 @@ struct AccountGroupStoreMutationsTests {
 
     #expect(group.name == "New Group")
     #expect(group.bucket == .investments)
-    try await accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: account.id)?.groupId == group.id },
-      description: "member.groupId set"
-    )
-    let member = try #require(accountStore.accounts.by(id: account.id))
-    #expect(member.groupId == group.id)
-    #expect(member.position == 0)
+    await expectEventually("member joined the new group at position 0") {
+      let member = accountStore.accounts.by(id: account.id)
+      return member?.groupId == group.id && member?.position == 0
+    }
   }
 
   @Test("createGroup(joining:and:) creates a 2-member group")
@@ -74,17 +71,12 @@ struct AccountGroupStoreMutationsTests {
     let group = try await groupStore.createGroup(
       joining: accountA, and: accountB, name: "Pair", accountStore: accountStore)
 
-    try await accountStore.waitForNextEmission(
-      matching: {
-        $0.accounts.by(id: accountA.id)?.groupId == group.id
-          && $0.accounts.by(id: accountB.id)?.groupId == group.id
-      },
-      description: "both members in group"
-    )
-    let memberA = try #require(accountStore.accounts.by(id: accountA.id))
-    let memberB = try #require(accountStore.accounts.by(id: accountB.id))
-    #expect(memberA.position == 0)
-    #expect(memberB.position == 1)
+    await expectEventually("both members in group at positions 0 and 1") {
+      let memberA = accountStore.accounts.by(id: accountA.id)
+      let memberB = accountStore.accounts.by(id: accountB.id)
+      return memberA?.groupId == group.id && memberB?.groupId == group.id
+        && memberA?.position == 0 && memberB?.position == 1
+    }
   }
 
   @Test("addAccount(_:to:) sets groupId and persists order")
@@ -109,13 +101,10 @@ struct AccountGroupStoreMutationsTests {
     )
 
     try await groupStore.addAccount(target, to: group, accountStore: accountStore)
-    try await accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: target.id)?.groupId == group.id },
-      description: "target joined"
-    )
-    let added = try #require(accountStore.accounts.by(id: target.id))
-    #expect(added.groupId == group.id)
-    #expect(added.position == 1)
+    await expectEventually("target joined group at position 1") {
+      let added = accountStore.accounts.by(id: target.id)
+      return added?.groupId == group.id && added?.position == 1
+    }
   }
 
   @Test("removeAccount clears groupId and auto-deletes single-member group")
@@ -146,11 +135,9 @@ struct AccountGroupStoreMutationsTests {
       matching: { $0.accounts.by(id: account.id)?.groupId == nil },
       description: "groupId cleared"
     )
-    try await groupStore.waitForNextEmission(
-      matching: { !$0.groups.contains { $0.id == group.id } },
-      description: "empty group auto-deleted"
-    )
-    #expect(groupStore.by(id: group.id) == nil)
+    await expectEventually("empty group auto-deleted") {
+      groupStore.by(id: group.id) == nil
+    }
   }
 
   @Test("removeAccount leaves group when other members remain")
@@ -180,12 +167,11 @@ struct AccountGroupStoreMutationsTests {
     // Reload the post-join A so it carries the updated `groupId`.
     let memberA = try #require(accountStore.accounts.by(id: accountA.id))
     try await groupStore.removeAccount(memberA, accountStore: accountStore)
-    try await accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: accountA.id)?.groupId == nil },
-      description: "A removed"
-    )
-    #expect(groupStore.by(id: group.id) != nil)
-    #expect(accountStore.accounts.by(id: accountB.id)?.groupId == group.id)
+    await expectEventually("A removed; group survives with B still a member") {
+      accountStore.accounts.by(id: accountA.id)?.groupId == nil
+        && groupStore.by(id: group.id) != nil
+        && accountStore.accounts.by(id: accountB.id)?.groupId == group.id
+    }
   }
 
   @Test("rename updates a group's name")
@@ -204,11 +190,9 @@ struct AccountGroupStoreMutationsTests {
     let renamed = try await store.rename(id: group.id, to: "New")
 
     #expect(renamed?.name == "New")
-    try await store.waitForNextEmission(
-      matching: { $0.by(id: group.id)?.name == "New" },
-      description: "rename observed"
-    )
-    #expect(store.error == nil)
+    await expectEventually("rename observed with no error") {
+      store.by(id: group.id)?.name == "New" && store.error == nil
+    }
   }
 
   @Test("rename trims whitespace before persisting")

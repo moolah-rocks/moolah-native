@@ -27,12 +27,10 @@ struct AccountGroupStoreTests {
         name: "Trust Fund Crypto", bucket: .investments,
         instrument: .defaultTestInstrument))
 
-    try await store.waitForNextEmission(
-      matching: { $0.groups.count == 1 },
-      description: "create observed"
-    )
-    #expect(store.groups.first?.name == "Trust Fund Crypto")
-    #expect(store.error == nil)
+    await expectEventually("create observed with no error") {
+      store.groups.count == 1 && store.groups.first?.name == "Trust Fund Crypto"
+        && store.error == nil
+    }
   }
 
   @Test("groups are ordered by position ascending")
@@ -50,11 +48,9 @@ struct AccountGroupStoreTests {
         name: "A", bucket: .investments,
         instrument: .defaultTestInstrument, position: 1))
 
-    try await store.waitForNextEmission(
-      matching: { $0.groups.count == 2 },
-      description: "creates observed"
-    )
-    #expect(store.groups.map(\.name) == ["A", "B"])
+    await expectEventually("both creates observed in position order") {
+      store.groups.map(\.name) == ["A", "B"]
+    }
   }
 
   @Test("by(id:) finds an existing group")
@@ -68,12 +64,9 @@ struct AccountGroupStoreTests {
         name: "G", bucket: .investments,
         instrument: .defaultTestInstrument))
 
-    try await store.waitForNextEmission(
-      matching: { $0.groups.count == 1 },
-      description: "create observed"
-    )
-
-    #expect(store.by(id: created.id)?.name == "G")
+    await expectEventually("created group is findable by id") {
+      store.by(id: created.id)?.name == "G"
+    }
     #expect(store.by(id: UUID()) == nil)
   }
 

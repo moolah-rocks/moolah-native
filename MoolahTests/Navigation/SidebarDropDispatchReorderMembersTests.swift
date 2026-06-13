@@ -43,14 +43,13 @@ struct SidebarDropDispatchReorderMembersTests {
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: memberC.id)?.position == 0 },
-      description: "C now first member")
-    let members = stores.accountStore.accounts.ordered
-      .filter { $0.groupId == group.id }
-      .sorted { $0.position < $1.position }
-      .map(\.id)
-    #expect(members == [memberC.id, memberA.id, memberB.id])
+    await expectEventually("C reordered to first member") {
+      let members = stores.accountStore.accounts.ordered
+        .filter { $0.groupId == group.id }
+        .sorted { $0.position < $1.position }
+        .map(\.id)
+      return members == [memberC.id, memberA.id, memberB.id]
+    }
   }
 
   @Test("reorderMembers clamps insertion index past the end")
@@ -149,14 +148,13 @@ struct SidebarDropDispatchReorderMembersTests {
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: standalone.id)?.groupId == group.id },
-      description: "standalone joined group")
-    let members = stores.accountStore.accounts.ordered
-      .filter { $0.groupId == group.id }
-      .sorted { $0.position < $1.position }
-      .map(\.id)
-    #expect(members == [memberA.id, standalone.id, memberB.id])
+    await expectEventually("standalone inserted into group at index 1") {
+      let members = stores.accountStore.accounts.ordered
+        .filter { $0.groupId == group.id }
+        .sorted { $0.position < $1.position }
+        .map(\.id)
+      return members == [memberA.id, standalone.id, memberB.id]
+    }
   }
 
   @Test("reorderMembers moves source from group A to group B; A keeps remaining members")
@@ -187,16 +185,18 @@ struct SidebarDropDispatchReorderMembersTests {
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: accA1.id)?.groupId == groupB.id },
-      description: "accA1 now in group B")
-    #expect(stores.accountStore.accounts.by(id: accA2.id)?.groupId == groupA.id)
-    #expect(stores.accountGroupStore.by(id: groupA.id) != nil)
-    let bMembers = stores.accountStore.accounts.ordered
-      .filter { $0.groupId == groupB.id }
-      .sorted { $0.position < $1.position }
-      .map(\.id)
-    #expect(bMembers == [accB1.id, accA1.id, accB2.id])
+    await expectEventually(
+      "accA1 moved into group B at index 1; group A survives with accA2"
+    ) {
+      let bMembers = stores.accountStore.accounts.ordered
+        .filter { $0.groupId == groupB.id }
+        .sorted { $0.position < $1.position }
+        .map(\.id)
+      return stores.accountStore.accounts.by(id: accA1.id)?.groupId == groupB.id
+        && stores.accountStore.accounts.by(id: accA2.id)?.groupId == groupA.id
+        && stores.accountGroupStore.by(id: groupA.id) != nil
+        && bMembers == [accB1.id, accA1.id, accB2.id]
+    }
   }
 
   @Test("reorderMembers deletes empty old group when source was its sole member")
