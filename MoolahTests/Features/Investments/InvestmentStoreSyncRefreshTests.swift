@@ -39,8 +39,7 @@ struct InvestmentStoreSyncRefreshTests {
 
     try await store.waitForNextEmission(
       matching: { $0.values.contains(where: { $0.value.quantity == dec("12345.00") }) },
-      description: "values contains the remote-sync write",
-      timeout: .seconds(2)
+      description: "values contains the remote-sync write"
     )
   }
 
@@ -89,13 +88,11 @@ struct InvestmentStoreSyncRefreshTests {
     store.setActiveAccount(accountA)
     try await store.waitForNextEmission(
       matching: { $0.values.first?.value.quantity == dec("100.00") },
-      description: "store sees account A's value",
-      timeout: .seconds(2))
+      description: "store sees account A's value")
 
     store.setActiveAccount(accountB)
     try await store.waitForNextEmission(
       matching: { $0.values.first?.value.quantity == dec("200.00") },
-      description: "store sees account B's value after switch",
-      timeout: .seconds(2))
+      description: "store sees account B's value after switch")
   }
 }

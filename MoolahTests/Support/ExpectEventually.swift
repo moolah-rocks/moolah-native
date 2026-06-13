@@ -25,10 +25,14 @@ import Testing
 /// `waitForNextEmission`: use that to assert an emission *occurs*; use this to
 /// assert a *value* settles. A `condition` that throws should be wrapped in
 /// `try?` by the caller (a thrown error reads as "not yet satisfied").
+/// The default timeout is deliberately generous (10s): a value-settling wait
+/// should never fail because a loaded CI runner was slow — short timeouts are
+/// a leading source of CI flakes. Polling means the fast path still returns
+/// the instant the value settles, so the large cap only buys headroom.
 @MainActor
 func expectEventually(
   _ description: @autoclosure () -> String = "condition to hold",
-  timeout: Duration = .seconds(2),
+  timeout: Duration = .seconds(10),
   pollInterval: Duration = .milliseconds(20),
   sourceLocation: SourceLocation = #_sourceLocation,
   _ condition: @MainActor () async -> Bool

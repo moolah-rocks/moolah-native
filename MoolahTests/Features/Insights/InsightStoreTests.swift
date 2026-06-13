@@ -263,7 +263,7 @@ struct InsightStoreTests {
 
     // The write-through fires in a detached `Task`; poll the repository until
     // the committed increment lands (no fixed sleep — bounded poll).
-    try await waitUntil(timeout: .seconds(5)) {
+    try await waitUntil {
       let count =
         (try? await backend.insightDismissals.fetchAll())?
         .first { $0.kind == .uncategorizedBacklog }?.count
@@ -293,7 +293,7 @@ struct InsightStoreTests {
     _ = try await backend.insightDismissals.recordDismissal(of: .uncategorizedBacklog)
     let store = makeStore(backend)
 
-    try await waitUntil(timeout: .seconds(5)) {
+    try await waitUntil {
       store.overrideLastLoadedAtForTesting(nil)  // force each poll to rebuild
       await store.refresh()
       guard
@@ -311,7 +311,7 @@ struct InsightStoreTests {
   /// elapses, throwing `TimeoutError` otherwise. Used to wait on the async
   /// write-through / observation seam without a fixed sleep.
   private func waitUntil(
-    timeout: Duration,
+    timeout: Duration = .seconds(10),
     pollEvery: Duration = .milliseconds(20),
     _ condition: @MainActor () async -> Bool
   ) async throws {

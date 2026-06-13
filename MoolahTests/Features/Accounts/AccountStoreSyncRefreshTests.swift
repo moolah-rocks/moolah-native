@@ -87,8 +87,7 @@ struct AccountStoreSyncRefreshTests {
 
     try await store.waitForNextEmission(
       matching: { _ in true },
-      description: "any emission post-rate-write to \(table)",
-      timeout: .seconds(2)
+      description: "any emission post-rate-write to \(table)"
     )
   }
 
@@ -219,8 +218,7 @@ struct AccountStoreSyncRefreshTests {
 
     try await store.waitForNextEmission(
       matching: { $0.convertedBalances[investmentAccount.id]?.quantity == 12345 },
-      description: "investment value reaches account store",
-      timeout: .seconds(2)
+      description: "investment value reaches account store"
     )
   }
 
@@ -326,8 +324,7 @@ struct AccountStoreSyncRefreshTests {
     }
     try await store.waitForNextEmission(
       matching: { $0.accounts.ordered.isEmpty },
-      description: "wipe propagated to store before cancellation",
-      timeout: .seconds(2)
+      description: "wipe propagated to store before cancellation"
     )
     store.stopObserving()
     #expect(store.accounts.ordered.isEmpty)

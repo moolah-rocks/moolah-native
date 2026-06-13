@@ -38,7 +38,14 @@ extension TestableStoreObservation {
   /// already cancelled the observation) counts as a timeout, not a
   /// completion — `didEmitWithin` relies on this distinction to assert
   /// the absence of post-cancellation emissions.
-  func waitForFirstEmission(timeout: Duration = .seconds(2)) async throws {
+  ///
+  /// The default is deliberately generous (10s). A match-wait should never
+  /// fail because a loaded CI runner was slow — short timeouts are a leading
+  /// source of CI flakes. The helper returns the instant the emission lands,
+  /// so the large cap only buys headroom, never latency. Pass a short
+  /// `timeout` only to assert the *absence* of an emission (see
+  /// `didEmitWithin`).
+  func waitForFirstEmission(timeout: Duration = .seconds(10)) async throws {
     let ticks = observationTicks
     try await withEmissionTimeout(
       timeout,
@@ -53,7 +60,7 @@ extension TestableStoreObservation {
       // timeout-task in `withEmissionTimeout` always wins, so the
       // caller observes "no emission" rather than a false-positive
       // completion. 5 minutes is far past every per-test timeout in
-      // the suite (default 2s) but tight enough that a runaway
+      // the suite (default 10s) but tight enough that a runaway
       // cancellation doesn't hang CI for an hour.
       try? await Task.sleep(for: .seconds(300))
     }
@@ -64,10 +71,15 @@ extension TestableStoreObservation {
   /// `timeout`. The predicate runs on `@MainActor` (it reads
   /// `@MainActor`-isolated store state); each tick body hops to
   /// `@MainActor` to read the snapshot before evaluating.
+  ///
+  /// The default is deliberately generous (10s) — see `waitForFirstEmission`.
+  /// Callers should not pass a `timeout`; a match-wait wants headroom, not a
+  /// short cap. Short timeouts belong only on absence assertions
+  /// (`didEmitWithin`).
   func waitForNextEmission(
     matching predicate: @MainActor @Sendable @escaping (State) -> Bool,
     description: String = "<predicate>",
-    timeout: Duration = .seconds(2)
+    timeout: Duration = .seconds(10)
   ) async throws {
     let ticks = observationTicks
     // The body must be `@Sendable` for `withTaskGroup`; we cannot

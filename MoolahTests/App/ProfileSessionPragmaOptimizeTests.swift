@@ -43,7 +43,7 @@ struct ProfileSessionPragmaOptimizeTests {
     // generous because heavily-loaded CI (iOS Simulator under merge-queue
     // contention) can drag the 20 ms cadence into seconds-range; we only
     // need *eventually*-fires, not tight cadence (#884).
-    try await waitUntil(timeout: .seconds(10)) {
+    try await waitUntil {
       session.pragmaOptimizeRunCount >= baseline + 3
     }
 
@@ -66,7 +66,7 @@ struct ProfileSessionPragmaOptimizeTests {
     // takes effect.
     session.startPeriodicPragmaOptimize(interval: .milliseconds(20))
 
-    try await waitUntil(timeout: .seconds(10)) {
+    try await waitUntil {
       session.pragmaOptimizeRunCount >= baselineAfterFirstStart + 2
     }
 
@@ -87,7 +87,7 @@ struct ProfileSessionPragmaOptimizeTests {
     session.startPeriodicPragmaOptimize(interval: .milliseconds(20))
 
     // Let it fire at least once so we know the loop is running.
-    try await waitUntil(timeout: .seconds(10)) {
+    try await waitUntil {
       session.pragmaOptimizeRunCount >= 1
     }
 
@@ -109,7 +109,7 @@ struct ProfileSessionPragmaOptimizeTests {
   /// timeout elapses. Throws `TimeoutError` if the condition never holds.
   /// Used to wait on background ticks without relying on a fixed sleep.
   private func waitUntil(
-    timeout: Duration,
+    timeout: Duration = .seconds(10),
     pollEvery: Duration = .milliseconds(10),
     _ condition: @MainActor () -> Bool
   ) async throws {
