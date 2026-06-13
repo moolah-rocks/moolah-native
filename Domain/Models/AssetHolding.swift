@@ -32,6 +32,9 @@ struct AssetHolding: Sendable, Hashable, Identifiable {
   /// The per-chain instrument ids that contribute to this row (1+). Drives
   /// chart filtering when the row is selected.
   let contributingInstrumentIds: [String]
+  /// The distinct chain ids contributing to this row, sorted. Empty for
+  /// non-crypto holdings (stocks and fiat have no chain).
+  let contributingChainIds: [Int]
 
   /// Number of distinct chains contributing; drives whether the row shows a
   /// chain-breakdown indicator (a count of 1 is a plain single-chain row).
@@ -87,4 +90,37 @@ extension AssetHolding {
   var costBasisQuantity: Decimal { costBasis?.quantity ?? 0 }
   var valueQuantity: Decimal { value?.quantity ?? 0 }
   var gainQuantity: Decimal { gainLoss?.quantity ?? 0 }
+}
+
+// MARK: - Chain display helpers
+
+/// Domain-level chain naming, reused by both the wide (`Table`) and narrow
+/// (`List`) holdings layouts so they stay in lockstep. Uses
+/// `Instrument.chainName(for:)`, which is domain logic.
+extension AssetHolding {
+  /// Resolved chain names for a crypto holding's contributing chains, sorted.
+  /// Empty for non-crypto holdings.
+  var contributingChainNames: [String] {
+    guard kind == .cryptoToken else { return [] }
+    return contributingChainIds.map { Instrument.chainName(for: $0) }
+  }
+
+  /// Secondary row label naming the chains a crypto holding spans: the chain
+  /// names joined for a small rollup (≤3), a count beyond that, or the single
+  /// chain name. `nil` when there are no chains to show (non-crypto, or crypto
+  /// with no known chain ids).
+  var chainSummaryLabel: String? {
+    let names = contributingChainNames
+    guard !names.isEmpty else { return nil }
+    return names.count <= 3 ? names.joined(separator: " · ") : "\(names.count) chains"
+  }
+
+  /// Spoken form of the chains for VoiceOver — same ≤3 rule but comma/`and`
+  /// joined (no "·"), e.g. "Ethereum and Optimism" or "4 chains".
+  var chainAccessibilitySummary: String? {
+    let names = contributingChainNames
+    guard !names.isEmpty else { return nil }
+    if names.count > 3 { return "\(names.count) chains" }
+    return ListFormatter.localizedString(byJoining: names)
+  }
 }

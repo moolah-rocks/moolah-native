@@ -41,13 +41,9 @@ struct HistoricalValueSeries: Sendable, Hashable {
   /// All instrument ids represented in the per-instrument map.
   var instruments: [String] { perInstrument.keys.sorted() }
 
-  /// The aggregate points; convenience for symmetry with `series(for:)`.
+  /// The aggregate points; convenience for symmetry with
+  /// `series(forInstrumentIds:)`.
   var totalSeries: [Point] { total }
-
-  /// Per-instrument points; empty array when the instrument has no slice.
-  func series(for instrument: Instrument) -> [Point] {
-    perInstrument[instrument.id] ?? []
-  }
 
   /// Returns a combined series for the given instrument ids, summing `value`
   /// and `cost` at each date present in *every* contributing series.

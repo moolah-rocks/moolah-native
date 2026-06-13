@@ -37,7 +37,7 @@ struct PositionsView: View {
           PositionsChart(
             input: input,
             range: $range,
-            selectedSelection: $selection
+            selection: $selection
           )
           .padding(.vertical, 8)
         }

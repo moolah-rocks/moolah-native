@@ -39,6 +39,7 @@ struct AssetHoldingFoldTests {
     #expect(holding.costBasis == amt(35000))
     #expect(holding.chainCount == 2)
     #expect(holding.chainId == nil)
+    #expect(holding.contributingChainIds == [1, 10])
     #expect(Set(holding.contributingInstrumentIds) == ["1:native", "10:native"])
   }
 
