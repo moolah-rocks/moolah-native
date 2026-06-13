@@ -19,7 +19,7 @@ import SwiftUI
 struct PositionsView: View {
   let input: PositionsViewInput
 
-  @State private var selection: Instrument?
+  @State private var selection: PositionSelection?
   @Binding var range: PositionsTimeRange
 
   var body: some View {
@@ -37,7 +37,7 @@ struct PositionsView: View {
           PositionsChart(
             input: input,
             range: $range,
-            selectedInstrument: $selection
+            selectedSelection: $selection
           )
           .padding(.vertical, 8)
         }

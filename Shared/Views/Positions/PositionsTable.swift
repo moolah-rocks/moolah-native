@@ -10,11 +10,11 @@ import SwiftUI
 /// present (per `PositionsViewInput.showsGroupSubtotals`).
 struct PositionsTable: View {
   let input: PositionsViewInput
-  @Binding var selection: Instrument?
+  @Binding var selection: PositionSelection?
 
   @Environment(\.horizontalSizeClass) private var sizeClass
 
-  @State private var sortOrder: [KeyPathComparator<ValuedPosition>] = [
+  @State private var sortOrder: [KeyPathComparator<AssetHolding>] = [
     .init(\.valueQuantity, order: .reverse)
   ]
 
@@ -32,16 +32,15 @@ struct PositionsTable: View {
     }
   }
 
-  private var groups: [InstrumentGroup] {
-    InstrumentGroup.from(input.positions)
-  }
+  private var holdings: [AssetHolding] { input.assetHoldings }
+  private var groups: [InstrumentGroup] { InstrumentGroup.from(holdings) }
 
   // MARK: - Wide
 
   @ViewBuilder private var wideLayout: some View {
     let sortedRows = groups.flatMap(\.rows).sorted(using: sortOrder)
     Table(sortedRows, selection: rowSelectionBinding, sortOrder: $sortOrder) {
-      TableColumn("Instrument", value: \.instrument.name) { row in
+      TableColumn("Instrument", value: \.name) { row in
         instrumentCell(for: row)
       }
       TableColumn("Qty", value: \.quantity) { row in
@@ -63,12 +62,12 @@ struct PositionsTable: View {
   }
 
   @ViewBuilder
-  private func instrumentCell(for row: ValuedPosition) -> some View {
+  private func instrumentCell(for row: AssetHolding) -> some View {
     HStack(spacing: 6) {
-      KindBadge(kind: row.instrument.kind)
+      KindBadge(kind: row.kind)
       VStack(alignment: .leading) {
-        Text(row.instrument.name)
-        if let exchange = row.instrument.exchange {
+        Text(row.name)
+        if let exchange = row.exchange {
           Text(exchange).font(.caption).foregroundStyle(.secondary)
         }
       }
@@ -87,7 +86,7 @@ struct PositionsTable: View {
   }
 
   @ViewBuilder
-  private func gainCell(_ row: ValuedPosition) -> some View {
+  private func gainCell(_ row: AssetHolding) -> some View {
     if let gain = row.gainLoss {
       HStack(spacing: 4) {
         Text(gain.signedFormatted)
@@ -124,16 +123,14 @@ struct PositionsTable: View {
     return "gain of \(gain.formatted)\(pctText)"
   }
 
-  /// `Table` selects on `id` (which is `instrument.id`); we adapt that to
-  /// our `Instrument?` selection binding.
+  /// `Table` selects on `id` (which is the holding's row id); we adapt that
+  /// to our `PositionSelection?` selection binding.
   private var rowSelectionBinding: Binding<Set<String>> {
     Binding(
       get: { selection.map { [$0.id] } ?? [] },
       set: { ids in
-        if let id = ids.first,
-          let instrument = input.positions.first(where: { $0.id == id })?.instrument
-        {
-          selection = (selection?.id == id) ? nil : instrument
+        if let id = ids.first, let holding = holdings.first(where: { $0.id == id }) {
+          selection = (selection?.id == id) ? nil : holding.positionSelection
         } else {
           selection = nil
         }
@@ -173,8 +170,8 @@ struct PositionsTable: View {
     Binding(
       get: { selection?.id },
       set: { id in
-        if let id, let instrument = input.positions.first(where: { $0.id == id })?.instrument {
-          selection = (selection?.id == id) ? nil : instrument
+        if let id, let holding = holdings.first(where: { $0.id == id }) {
+          selection = (selection?.id == id) ? nil : holding.positionSelection
         } else {
           selection = nil
         }
@@ -190,18 +187,18 @@ struct PositionsTable: View {
     return .green
   }
 
-  private func instrumentLabel(for row: ValuedPosition) -> String {
+  private func instrumentLabel(for row: AssetHolding) -> String {
     let kindWord: String = {
-      switch row.instrument.kind {
+      switch row.kind {
       case .stock: return "Stock"
       case .cryptoToken: return "Crypto"
       case .fiatCurrency: return "Cash"
       }
     }()
-    if let exchange = row.instrument.exchange {
-      return "\(row.instrument.name), \(kindWord), \(exchange)"
+    if let exchange = row.exchange {
+      return "\(row.name), \(kindWord), \(exchange)"
     }
-    return "\(row.instrument.name), \(kindWord)"
+    return "\(row.name), \(kindWord)"
   }
 }
 
@@ -211,7 +208,7 @@ struct InstrumentGroup: Identifiable {
   enum Kind { case stocks, crypto, cash }
 
   let kind: Kind
-  let rows: [ValuedPosition]
+  let rows: [AssetHolding]
   var id: String {
     switch kind {
     case .stocks: return "stocks"
@@ -227,10 +224,10 @@ struct InstrumentGroup: Identifiable {
     }
   }
 
-  static func from(_ rows: [ValuedPosition]) -> [InstrumentGroup] {
-    let stocks = rows.filter { $0.instrument.kind == .stock }
-    let crypto = rows.filter { $0.instrument.kind == .cryptoToken }
-    let cash = rows.filter { $0.instrument.kind == .fiatCurrency }
+  static func from(_ rows: [AssetHolding]) -> [InstrumentGroup] {
+    let stocks = rows.filter { $0.kind == .stock }
+    let crypto = rows.filter { $0.kind == .cryptoToken }
+    let cash = rows.filter { $0.kind == .fiatCurrency }
     return [
       .init(kind: .stocks, rows: stocks),
       .init(kind: .crypto, rows: crypto),
