@@ -25,11 +25,9 @@ struct ImportRuleStoreTests {
     _ = try await backend.importRules.create(rule(name: "ruleA", position: 1))
     _ = try await backend.importRules.create(rule(name: "ruleB", position: 3))
     let store = ImportRuleStore(repository: backend.importRules)
-    try await store.waitForNextEmission(
-      matching: { $0.rules.count == 3 },
-      description: "rules.count == 3"
-    )
-    #expect(store.rules.map(\.name) == ["ruleA", "ruleB", "ruleC"])
+    await expectEventually("rules sorted by position") {
+      store.rules.map(\.name) == ["ruleA", "ruleB", "ruleC"]
+    }
   }
 
   @Test("create produces an emission with the appended rule")
@@ -43,11 +41,9 @@ struct ImportRuleStoreTests {
       description: "rules.count == 1"
     )
     await store.create(rule(name: "beta", position: 1))
-    try await store.waitForNextEmission(
-      matching: { $0.rules.count == 2 },
-      description: "rules.count == 2"
-    )
-    #expect(store.rules.map(\.name) == ["alpha", "beta"])
+    await expectEventually("both rules appended in order") {
+      store.rules.map(\.name) == ["alpha", "beta"]
+    }
   }
 
   @Test("update emits the renamed rule with refreshed conditions")
@@ -67,11 +63,10 @@ struct ImportRuleStoreTests {
     edited.name = "renamed"
     edited.conditions = [.descriptionContains(["FOO"])]
     await store.update(edited)
-    try await store.waitForNextEmission(
-      matching: { $0.rules.first?.name == "renamed" },
-      description: "store sees renamed rule"
-    )
-    #expect(store.rules.first?.conditions == [.descriptionContains(["FOO"])])
+    await expectEventually("store sees renamed rule with refreshed conditions") {
+      store.rules.first?.name == "renamed"
+        && store.rules.first?.conditions == [.descriptionContains(["FOO"])]
+    }
   }
 
   @Test("delete emits an empty rules list")
@@ -116,11 +111,10 @@ struct ImportRuleStoreTests {
       description: "store sees all three created rules"
     )
     await store.reorder([ruleC.id, ruleA.id, ruleB.id])
-    try await store.waitForNextEmission(
-      matching: { $0.rules.map(\.name) == ["ruleC", "ruleA", "ruleB"] },
-      description: "store sees reorder applied"
-    )
-    #expect(store.rules.map(\.position) == [0, 1, 2])
+    await expectEventually("store sees reorder applied with renumbered positions") {
+      store.rules.map(\.name) == ["ruleC", "ruleA", "ruleB"]
+        && store.rules.map(\.position) == [0, 1, 2]
+    }
   }
 
   @Test("countAffected counts matching imported transactions")

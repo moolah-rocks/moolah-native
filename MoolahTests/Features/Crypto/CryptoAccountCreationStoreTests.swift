@@ -117,12 +117,10 @@ struct CryptoAccountCreationStoreTests {
     // `accounts` only once the GRDB write commits and `observeAll()`
     // emits. Wait for that emission before asserting the store's view
     // of the world.
-    try await fixture.accountStore.waitForNextEmission(
-      matching: { $0.accounts.contains(where: { $0.id == created.id }) },
-      description: "newly-created crypto account observed in store"
-    )
-    #expect(fixture.accountStore.accounts.count == 1)
-    #expect(fixture.accountStore.accounts.first?.id == created.id)
+    await expectEventually("newly-created crypto account observed in store") {
+      fixture.accountStore.accounts.count == 1
+        && fixture.accountStore.accounts.first?.id == created.id
+    }
   }
 
   @Test(
@@ -306,11 +304,9 @@ struct CryptoAccountCreationStoreTests {
     // exists but was never handed to the logic, so the alchemy stub
     // saw no activity). AccountStore is reactive — wait for the
     // observation to deliver the new account before reading.
-    try await fixture.accountStore.waitForNextEmission(
-      matching: { $0.accounts.count == 1 },
-      description: "new account observable"
-    )
-    #expect(fixture.accountStore.accounts.count == 1)
+    await expectEventually("new account observable") {
+      fixture.accountStore.accounts.count == 1
+    }
     #expect(fixture.alchemy.recordedCalls.isEmpty)
   }
 }

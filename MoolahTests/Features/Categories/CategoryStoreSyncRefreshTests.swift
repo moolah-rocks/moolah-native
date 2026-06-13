@@ -28,11 +28,10 @@ struct CategoryStoreSyncRefreshTests {
       Moolah.Category(name: "Synced")
     )
 
-    try await store.waitForNextEmission(
-      matching: { $0.categories.roots.count == 1 },
-      description: "categories.roots.count == 1"
-    )
-    #expect(store.categories.roots.first?.name == "Synced")
+    await expectEventually("categories has one root named Synced") {
+      store.categories.roots.count == 1
+        && store.categories.roots.first?.name == "Synced"
+    }
   }
 
   @Test("stopObserving cancels the observation task")
