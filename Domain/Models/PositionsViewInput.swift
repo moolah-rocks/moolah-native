@@ -169,6 +169,10 @@ struct PositionsViewInput: Sendable, Hashable {
   /// The positions folded into asset rows for display. Crypto positions
   /// sharing an `assetKey` (per `assetKeysByInstrumentId`) merge into one row;
   /// stocks, fiat, and unmapped crypto stand alone.
+  ///
+  /// Computed, not stored: it folds on each access, consistent with this
+  /// type's other computed aggregates (`totalValue`, `totalGainLoss`). Safe to
+  /// memoize later only if profiling shows a hot path.
   var assetHoldings: [AssetHolding] {
     AssetHolding.fold(positions, assetKeys: assetKeysByInstrumentId, hostCurrency: hostCurrency)
   }

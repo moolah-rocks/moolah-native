@@ -146,16 +146,12 @@ struct PositionsViewInputTests {
     #expect(mixed.showsGroupSubtotals)
   }
 
-  @Test
+  @Test("assetHoldings merges crypto positions that share an asset key")
   func assetHoldingsFoldCryptoUsingAssetKeyMap() {
     let eth1 = Instrument.crypto(
       chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
     let eth10 = Instrument.crypto(
       chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
-    let aud = Instrument.AUD
-    func amount(_ value: Decimal) -> InstrumentAmount {
-      InstrumentAmount(quantity: value, instrument: aud)
-    }
     let input = PositionsViewInput(
       title: "Wallet",
       hostCurrency: aud,
@@ -175,16 +171,12 @@ struct PositionsViewInputTests {
     #expect(holdings.first?.value == amount(12000))
   }
 
-  @Test
+  @Test("assetHoldings stands each position alone when no asset key map is supplied")
   func assetHoldingsDefaultEmptyMapStandsAlone() {
     let eth1 = Instrument.crypto(
       chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
     let eth10 = Instrument.crypto(
       chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
-    let aud = Instrument.AUD
-    func amount(_ value: Decimal) -> InstrumentAmount {
-      InstrumentAmount(quantity: value, instrument: aud)
-    }
     let input = PositionsViewInput(
       title: "Wallet",
       hostCurrency: aud,
