@@ -38,7 +38,6 @@ final class RecordingAlchemyClientStub: AlchemyClient, @unchecked Sendable {
   /// Errors thrown when scripting hooks are unset and a test path hits
   /// the stub anyway. Keeps the failure message specific to the path.
   struct UnscriptedTransfersCall: Error { let chainId: Int }
-  struct UnexpectedTokenMetadataCall: Error {}
   /// Thrown when `getTransactionReceipt` is called for a hash that
   /// hasn't been scripted on this stub. Tests that exercise the
   /// receipt path script per-hash responses; tests that don't stay on
@@ -100,13 +99,6 @@ final class RecordingAlchemyClientStub: AlchemyClient, @unchecked Sendable {
     case let .transfers(transfers):
       return transfers
     }
-  }
-
-  func getTokenMetadata(
-    chain: ChainConfig,
-    contractAddress: String
-  ) async throws -> AlchemyTokenMetadata {
-    throw UnexpectedTokenMetadataCall()
   }
 
   /// Scripts a receipt response for a given on-chain hash. The lookup
@@ -237,14 +229,13 @@ func makeWalletImportOrigin(
 }
 
 /// `AlchemyClient` that returns a zero-cost receipt for every receipt
-/// fetch and traps on the unrelated `getAssetTransfers` /
-/// `getTokenMetadata` paths. Used by `TransferEventBuilder` tests that
-/// only care about transfer-leg construction — a zero receipt produces
-/// no gas leg (the builder drops a non-positive total) so the legs the
-/// test actually inspects stay deterministic without extra plumbing.
+/// fetch and traps on the unrelated `getAssetTransfers` path. Used by
+/// `TransferEventBuilder` tests that only care about transfer-leg
+/// construction — a zero receipt produces no gas leg (the builder drops
+/// a non-positive total) so the legs the test actually inspects stay
+/// deterministic without extra plumbing.
 final class ZeroReceiptAlchemyStub: AlchemyClient, @unchecked Sendable {
   struct UnexpectedAssetTransfersCall: Error {}
-  struct UnexpectedTokenMetadataCall: Error {}
 
   private let lock = NSLock()
   private var receiptHashes: [String] = []
@@ -261,13 +252,6 @@ final class ZeroReceiptAlchemyStub: AlchemyClient, @unchecked Sendable {
     fromBlock: UInt64
   ) async throws -> [AlchemyTransfer] {
     throw UnexpectedAssetTransfersCall()
-  }
-
-  func getTokenMetadata(
-    chain: ChainConfig,
-    contractAddress: String
-  ) async throws -> AlchemyTokenMetadata {
-    throw UnexpectedTokenMetadataCall()
   }
 
   func getTransactionReceipt(

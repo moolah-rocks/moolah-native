@@ -47,8 +47,7 @@ struct SyncedAccountTransferTriggerTests {
     let registry = backend.grdbInstruments
     let discovery = CryptoTokenDiscoveryService(
       registry: registry,
-      resolver: CountingRegistrationResolver(),
-      alchemy: alchemy)
+      resolver: CountingRegistrationResolver())
     let walletSyncEngine = WalletSyncEngine(
       alchemy: alchemy,
       blockExplorer: BlockExplorerTestDoubles.empty,
@@ -100,8 +99,7 @@ struct SyncedAccountTransferTriggerTests {
     let registry = fixture.backend.grdbInstruments
     let discovery = CryptoTokenDiscoveryService(
       registry: registry,
-      resolver: CountingRegistrationResolver(),
-      alchemy: CountingAlchemyClientStub())
+      resolver: CountingRegistrationResolver())
     fixture.store.appendSourceForTesting(
       CoinstashSyncSource(
         tokenStore: tokenStore,

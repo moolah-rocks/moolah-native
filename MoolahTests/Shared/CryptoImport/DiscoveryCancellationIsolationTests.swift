@@ -66,9 +66,8 @@ struct DiscoveryCancellationIsolationTests {
   func sessionACancelDoesNotPropagateToSessionB() async throws {
     let registry = StubInstrumentRegistry()
     let resolver = BlockingRegistrationResolver()
-    let alchemy = CountingAlchemyClientStub()
     let service = CryptoTokenDiscoveryService(
-      registry: registry, resolver: resolver, alchemy: alchemy)
+      registry: registry, resolver: resolver)
 
     let chain = ChainConfig.ethereum
     let contract = "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"

@@ -61,8 +61,7 @@ struct SharedInstrumentScopeTests {
       stockSearchClient: NoOpStockSearchClient())
     let discovery = CryptoTokenDiscoveryService(
       registry: registry,
-      resolver: CountingRegistrationResolver(),
-      alchemy: ZeroReceiptAlchemyStub())
+      resolver: CountingRegistrationResolver())
 
     let scope = SharedInstrumentScope(
       instrumentRegistry: registry,
@@ -104,8 +103,7 @@ struct SharedInstrumentScopeTests {
         stockSearchClient: NoOpStockSearchClient()),
       cryptoTokenDiscovery: CryptoTokenDiscoveryService(
         registry: registry,
-        resolver: CountingRegistrationResolver(),
-        alchemy: ZeroReceiptAlchemyStub()))
+        resolver: CountingRegistrationResolver()))
   }
 }
 

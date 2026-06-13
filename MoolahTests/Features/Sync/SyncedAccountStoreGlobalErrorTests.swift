@@ -47,8 +47,7 @@ struct SyncedAccountStoreGlobalErrorTests {
     let registry = GRDBInstrumentRegistryRepository(database: database)
     let discovery = CryptoTokenDiscoveryService(
       registry: registry,
-      resolver: CountingRegistrationResolver(),
-      alchemy: alchemy)
+      resolver: CountingRegistrationResolver())
     let walletSyncEngine = WalletSyncEngine(
       alchemy: alchemy,
       blockExplorer: BlockExplorerTestDoubles.empty,
@@ -234,7 +233,7 @@ struct SyncedAccountStoreGlobalErrorTests {
     let regResolver = CountingRegistrationResolver()
     regResolver.setDefault(.success(coingecko: "id", cryptocompare: nil, binance: nil))
     let discovery = CryptoTokenDiscoveryService(
-      registry: registry, resolver: regResolver, alchemy: CountingAlchemyClientStub())
+      registry: registry, resolver: regResolver)
     fixture.store.appendSourceForTesting(
       CoinstashSyncSource(
         tokenStore: tokenStore,

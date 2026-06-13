@@ -38,7 +38,7 @@ func makeExchangeSyncEngine(
     resolverToUse = defaultResolver
   }
   let discovery = CryptoTokenDiscoveryService(
-    registry: registry, resolver: resolverToUse, alchemy: CountingAlchemyClientStub())
+    registry: registry, resolver: resolverToUse)
   return ExchangeSyncEngine(
     resolver: ExchangeInstrumentResolver(
       registry: registry, fiatInstrument: .AUD,

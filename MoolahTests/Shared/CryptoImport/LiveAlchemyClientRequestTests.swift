@@ -114,26 +114,4 @@ struct LiveAlchemyClientRequestTests {
     #expect(transfers.count == 2)
     #expect(transfers[0].asset == "ETH")
   }
-
-  @Test
-  func tokenMetadataDecodesUSDC() async throws {
-    let fixture = try AlchemyTestSupport.loadFixture("token-metadata-usdc")
-    let client = AlchemyTestSupport.makeClient { request in
-      AlchemyURLProtocolStub.captureRequest(request)
-      return (AlchemyTestSupport.okResponse(for: request), fixture)
-    }
-    let metadata = try await client.getTokenMetadata(
-      chain: .ethereum,
-      contractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
-    )
-    #expect(metadata.symbol == "USDC")
-    #expect(metadata.name == "USD Coin")
-    #expect(metadata.decimals == 6)
-    #expect(metadata.isSpam == false)
-
-    let body = AlchemyURLProtocolStub.lastBodyJSON
-    #expect(body["method"] as? String == "alchemy_getTokenMetadata")
-    let paramsArray = try #require(body["params"] as? [String])
-    #expect(paramsArray.first == "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
-  }
 }

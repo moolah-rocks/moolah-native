@@ -1,4 +1,3 @@
-import Foundation
 import Testing
 
 @testable import Moolah
@@ -36,10 +35,16 @@ struct CanonicalTokenRegistryTests {
 
   @Test("Case-insensitive symbol and checksummed address still match")
   func caseInsensitiveMatch() {
-    let checksummed = "0x4200000000000000000000000000000000000042"
     #expect(
       !CanonicalTokenRegistry.isImpersonation(
-        chainId: 10, contractAddress: checksummed.uppercased(), symbol: "op"))
+        chainId: 10, contractAddress: Self.opOptimism.uppercased(), symbol: "op"))
+  }
+
+  @Test("Canonical USDC on Ethereum is not impersonation")
+  func canonicalUsdcMainnetIsLegit() {
+    #expect(
+      !CanonicalTokenRegistry.isImpersonation(
+        chainId: 1, contractAddress: Self.usdcEthereum, symbol: "USDC"))
   }
 
   // MARK: - Impersonators are flagged

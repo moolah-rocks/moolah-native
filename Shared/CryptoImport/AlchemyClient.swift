@@ -20,14 +20,6 @@ protocol AlchemyClient: Sendable {
     fromBlock: UInt64
   ) async throws -> [AlchemyTransfer]
 
-  /// Best-effort token metadata fetch — used for `isSpam` classification
-  /// in Stage 5's discovery service. Native tokens are not represented
-  /// by a contract address, so callers do not call this for native gas.
-  func getTokenMetadata(
-    chain: ChainConfig,
-    contractAddress: String
-  ) async throws -> AlchemyTokenMetadata
-
   /// Fetches the on-chain receipt for `hash` so the wallet sync
   /// pipeline can compute the gas-leg quantity (`gasUsed *
   /// effectiveGasPrice`). Alchemy's `alchemy_getAssetTransfers` doesn't
@@ -42,33 +34,6 @@ protocol AlchemyClient: Sendable {
     chain: ChainConfig,
     hash: String
   ) async throws -> AlchemyTransactionReceipt
-}
-
-/// Token metadata returned by Alchemy's `alchemy_getTokenMetadata` JSON-RPC
-/// method. All fields are optional because Alchemy returns `null` for
-/// unknown tokens. `isSpam` is `false` if the field is absent — the field
-/// is only present on chains where Alchemy provides spam classification.
-struct AlchemyTokenMetadata: Sendable, Hashable, Codable {
-  let symbol: String?
-  let name: String?
-  let decimals: Int?
-  let logo: URL?
-  let isSpam: Bool
-}
-
-extension AlchemyTokenMetadata {
-  /// Custom decoder so a missing `isSpam` field decodes as `false` rather
-  /// than failing the decode. Defined in an extension to preserve the
-  /// synthesised memberwise initializer on the primary declaration.
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    let symbol = try container.decodeIfPresent(String.self, forKey: .symbol)
-    let name = try container.decodeIfPresent(String.self, forKey: .name)
-    let decimals = try container.decodeIfPresent(Int.self, forKey: .decimals)
-    let logo = try container.decodeIfPresent(URL.self, forKey: .logo)
-    let isSpam = try container.decodeIfPresent(Bool.self, forKey: .isSpam) ?? false
-    self.init(symbol: symbol, name: name, decimals: decimals, logo: logo, isSpam: isSpam)
-  }
 }
 
 /// The fixed inputs for one direction's paginated transfer fetch.
@@ -354,37 +319,6 @@ extension LiveAlchemyClient: AlchemyClient {
               apiKey: apiKey)))
       }
       return transfers
-    }
-  }
-
-  func getTokenMetadata(
-    chain: ChainConfig,
-    contractAddress: String
-  ) async throws -> AlchemyTokenMetadata {
-    try await attributingErrors(to: .alchemy) {
-      let apiKey = try resolveApiKey()
-      try await rateLimiter.acquire()
-      let body = AlchemyJSONRPCRequest<AlchemyJSONRPCParams>(
-        method: "alchemy_getTokenMetadata",
-        params: .tokenMetadata(contractAddress: contractAddress)
-      )
-      let request = try buildRequest(chain: chain, body: body, apiKey: apiKey)
-      logger.debug(
-        "Alchemy token metadata: chain \(chain.chainId, privacy: .public) contract \(contractAddress, privacy: .private)"
-      )
-      let data = try await send(request: request, stage: "getTokenMetadata")
-      do {
-        let envelope = try JSONDecoder().decode(
-          AlchemyJSONRPCResponse<AlchemyTokenMetadata>.self,
-          from: data
-        )
-        return envelope.result
-      } catch {
-        logger.error(
-          "Alchemy token metadata decode failed for chain \(chain.chainId, privacy: .public): \(error.localizedDescription, privacy: .public)"
-        )
-        throw WalletSyncError.providerMalformedResponse(stage: "getTokenMetadata")
-      }
     }
   }
 

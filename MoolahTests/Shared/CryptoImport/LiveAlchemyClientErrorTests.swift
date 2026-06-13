@@ -172,26 +172,6 @@ struct LiveAlchemyClientErrorTests {
   }
 
   @Test
-  func emptyApiKeyShortCircuitsGetTokenMetadataWithMissingApiKey() async throws {
-    let touched = NetworkTouchRecorder()
-    let client = AlchemyTestSupport.makeClient(apiKey: "") { request in
-      touched.markTouched()
-      let response = AlchemyTestSupport.response(for: request, statusCode: 401)
-      return (response, Data())
-    }
-    do {
-      _ = try await client.getTokenMetadata(
-        chain: .ethereum, contractAddress: "0xabc"
-      )
-      Issue.record("Expected WalletSyncError.missingApiKey")
-    } catch let error as WalletSyncError {
-      #expect(error.kind == .missingApiKey)
-      #expect(error.provider == .alchemy)
-    }
-    #expect(touched.wasTouched == false)
-  }
-
-  @Test
   func emptyApiKeyShortCircuitsGetTransactionReceiptWithMissingApiKey() async throws {
     let touched = NetworkTouchRecorder()
     let client = AlchemyTestSupport.makeClient(apiKey: "") { request in
