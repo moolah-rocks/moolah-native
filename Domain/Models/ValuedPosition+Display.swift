@@ -14,35 +14,24 @@ extension ValuedPosition {
   /// "shares" because the secondary line has no other context. Callers
   /// pick one — see `quantityCaption` for the suffix-bearing variant.
   var quantityFormatted: String {
-    switch instrument.kind {
-    case .fiatCurrency:
-      return InstrumentAmount(quantity: quantity, instrument: instrument).formatted
-    case .stock:
-      let formatter = NumberFormatter()
-      formatter.numberStyle = .decimal
-      formatter.minimumFractionDigits = 0
-      formatter.maximumFractionDigits = instrument.decimals
-      return formatter.string(from: quantity as NSDecimalNumber) ?? "\(quantity)"
-    case .cryptoToken:
-      let formatter = NumberFormatter()
-      formatter.numberStyle = .decimal
-      formatter.minimumFractionDigits = 0
-      formatter.maximumFractionDigits = min(instrument.decimals, 8)
-      let qty = formatter.string(from: quantity as NSDecimalNumber) ?? "\(quantity)"
-      return "\(qty) \(instrument.displayLabel)"
-    }
+    QuantityFormatting.formatted(
+      kind: instrument.kind,
+      quantity: quantity,
+      decimals: instrument.decimals,
+      displayLabel: instrument.displayLabel,
+      currencyCode: instrument.kind == .fiatCurrency ? instrument.id : nil)
   }
 
   /// Caption-style quantity suitable for the secondary line of a row in the
   /// narrow `PositionsTable` layout. Adds "shares" suffix for stocks; same
   /// as `quantityFormatted` otherwise.
   var quantityCaption: String {
-    switch instrument.kind {
-    case .stock:
-      return "\(quantityFormatted) shares"
-    case .fiatCurrency, .cryptoToken:
-      return quantityFormatted
-    }
+    QuantityFormatting.caption(
+      kind: instrument.kind,
+      quantity: quantity,
+      decimals: instrument.decimals,
+      displayLabel: instrument.displayLabel,
+      currencyCode: instrument.kind == .fiatCurrency ? instrument.id : nil)
   }
 }
 
