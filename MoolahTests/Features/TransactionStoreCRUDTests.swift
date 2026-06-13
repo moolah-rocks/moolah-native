@@ -35,10 +35,11 @@ struct TransactionStoreCRUDTests {
       ]
     )
     _ = await store.create(transaction)
-    try await store.awaitTransactionCount(1)
 
-    #expect(store.transactions.count == 1)
-    #expect(store.transactions[0].transaction.payee == "Coffee Shop")
+    await expectEventually("created transaction is observable") {
+      store.transactions.count == 1
+        && store.transactions[0].transaction.payee == "Coffee Shop"
+    }
     #expect(store.error == nil)
   }
 
@@ -74,11 +75,14 @@ struct TransactionStoreCRUDTests {
     )
 
     let created = await store.create(placeholder)
-    try await store.awaitTransactionCount(1)
 
+    // `created` is the captured return value (non-reactive), so assert it
+    // directly; the store list is reactive, so poll it.
     #expect(created?.id == placeholderId)
-    #expect(store.transactions.count == 1)
-    #expect(store.transactions[0].transaction.id == placeholderId)
+    await expectEventually("placeholder UUID preserved in observed list") {
+      store.transactions.count == 1
+        && store.transactions[0].transaction.id == placeholderId
+    }
   }
 
   @Test
@@ -117,14 +121,12 @@ struct TransactionStoreCRUDTests {
       )
     ]
     await store.update(updated)
-    try await store.waitForNextEmission(
-      matching: { $0.transactions.first?.transaction.payee == "Fancy Coffee" },
-      description: "update is observable"
-    )
 
-    #expect(store.transactions.count == 1)
-    #expect(store.transactions[0].transaction.payee == "Fancy Coffee")
-    #expect(store.transactions[0].displayAmount?.quantity == Decimal(-7500) / 100)
+    await expectEventually("update is observable") {
+      store.transactions.count == 1
+        && store.transactions[0].transaction.payee == "Fancy Coffee"
+        && store.transactions[0].displayAmount?.quantity == Decimal(-7500) / 100
+    }
     #expect(store.error == nil)
   }
 
@@ -154,9 +156,10 @@ struct TransactionStoreCRUDTests {
     #expect(store.transactions.count == 1)
 
     await store.delete(id: transaction.id)
-    try await store.awaitTransactionCount(0)
 
-    #expect(store.transactions.isEmpty)
+    await expectEventually("delete is observable") {
+      store.transactions.isEmpty
+    }
     #expect(store.error == nil)
   }
 
@@ -185,8 +188,9 @@ struct TransactionStoreCRUDTests {
       ]
     )
     _ = await store.create(transaction)
-    try await store.awaitTransactionCount(1)
-    #expect(store.transactions.count == 1)
+    await expectEventually("created transaction is observable") {
+      store.transactions.count == 1
+    }
 
     // Update
     var modified = transaction
@@ -199,17 +203,16 @@ struct TransactionStoreCRUDTests {
       )
     ]
     await store.update(modified)
-    try await store.waitForNextEmission(
-      matching: { $0.transactions.first?.displayAmount?.quantity == Decimal(110000) / 100 },
-      description: "update is observable"
-    )
-    #expect(store.transactions.count == 1)
-    #expect(store.transactions[0].displayAmount?.quantity == Decimal(110000) / 100)
+    await expectEventually("update is observable") {
+      store.transactions.count == 1
+        && store.transactions[0].displayAmount?.quantity == Decimal(110000) / 100
+    }
 
     // Delete
     await store.delete(id: transaction.id)
-    try await store.awaitTransactionCount(0)
-    #expect(store.transactions.isEmpty)
+    await expectEventually("delete is observable") {
+      store.transactions.isEmpty
+    }
   }
 
   // Running-balance recompute tests live in

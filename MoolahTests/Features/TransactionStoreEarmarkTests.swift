@@ -40,17 +40,13 @@ struct TransactionStoreEarmarkTests {
     )
     _ = await store.create(transaction)
 
-    // EarmarkStore is reactive — wait for the observation to settle
-    // on the post-create state (spent = 50). This both lets the
-    // applyDelta + observation race converge and asserts the final
-    // converged value rather than whichever transient mid-state
-    // happens to be visible synchronously.
-    try await earmarkStore.waitForNextEmission(
-      matching: { $0.earmarks.by(id: earmarkId)?.spentPositions.first?.quantity == Decimal(50) },
-      description: "earmark spent settled at 50"
-    )
-    let updatedEarmark = earmarkStore.earmarks.by(id: earmarkId)
-    #expect(updatedEarmark?.spentPositions.first?.quantity == Decimal(50))
+    // EarmarkStore is reactive — poll the post-create state (spent = 50).
+    // This both lets the applyDelta + observation race converge and
+    // asserts the final converged value rather than whichever transient
+    // mid-state happens to be visible synchronously.
+    await expectEventually("earmark spent settled at 50") {
+      earmarkStore.earmarks.by(id: earmarkId)?.spentPositions.first?.quantity == Decimal(50)
+    }
   }
 
   @Test
@@ -100,17 +96,15 @@ struct TransactionStoreEarmarkTests {
     ]
     await store.update(updated)
 
-    // EarmarkStore is reactive — wait for the observation to settle
-    // on the post-update state. Earmark1 should have spent reversed
-    // (transaction moved away) and earmark2 should have spent=50.
-    try await earmarkStore.waitForNextEmission(
-      matching: { $0.earmarks.by(id: earmarkId2)?.spentPositions.first?.quantity == Decimal(50) },
-      description: "earmark2 spent settled at 50"
-    )
-    let updatedEarmark1 = earmarkStore.earmarks.by(id: earmarkId1)
-    #expect(updatedEarmark1?.spentPositions.first?.quantity ?? 0 == Decimal(0))
-    let updatedEarmark2 = earmarkStore.earmarks.by(id: earmarkId2)
-    #expect(updatedEarmark2?.spentPositions.first?.quantity == Decimal(50))
+    // EarmarkStore is reactive — poll the post-update state. Earmark1
+    // should have spent reversed (transaction moved away) and earmark2
+    // should have spent=50.
+    await expectEventually("earmark1 spent reversed to 0 and earmark2 settled at 50") {
+      let earmark1 = earmarkStore.earmarks.by(id: earmarkId1)
+      let earmark2 = earmarkStore.earmarks.by(id: earmarkId2)
+      return earmark1?.spentPositions.first?.quantity ?? 0 == Decimal(0)
+        && earmark2?.spentPositions.first?.quantity == Decimal(50)
+    }
   }
 
   @Test
@@ -149,12 +143,12 @@ struct TransactionStoreEarmarkTests {
     ]
     await store.update(updated)
 
-    // AccountStore is reactive — wait for observation to settle (OB 950 + income +50 = 1000).
-    try await accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: accountId)?.positions.first?.quantity == Decimal(1000) },
-      description: "account settled at 1000 after expense-to-income update")
-    let balance = try await accountStore.displayBalance(for: accountId)
-    #expect(balance.quantity == Decimal(1000))
+    // AccountStore is reactive — poll the displayed balance until the
+    // observation settles (OB 950 + income +50 = 1000).
+    await expectEventually("account settled at 1000 after expense-to-income update") {
+      let balance = try? await accountStore.displayBalance(for: accountId)
+      return balance?.quantity == Decimal(1000)
+    }
   }
 
   @Test
@@ -184,13 +178,13 @@ struct TransactionStoreEarmarkTests {
     await store.load(filter: TransactionFilter(scheduled: .scheduledOnly))
     _ = await store.payScheduledTransaction(scheduled)
 
-    // AccountStore is reactive — wait for observation to settle (OB 1000 + paid -2000 = -1000).
-    try await accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: accountId)?.positions.first?.quantity == Decimal(-1000) },
-      description: "account settled at -1000 after paying -2000 scheduled expense")
-    // Paying a -2000 expense should decrease balance by 2000
-    let balance = try await accountStore.displayBalance(for: accountId)
-    #expect(balance.quantity == Decimal(-1000))
+    // AccountStore is reactive — poll the displayed balance until the
+    // observation settles (OB 1000 + paid -2000 = -1000). Paying a
+    // -2000 expense should decrease balance by 2000.
+    await expectEventually("account settled at -1000 after paying -2000 scheduled expense") {
+      let balance = try? await accountStore.displayBalance(for: accountId)
+      return balance?.quantity == Decimal(-1000)
+    }
   }
 
   @Test
@@ -220,13 +214,13 @@ struct TransactionStoreEarmarkTests {
     await store.load(filter: TransactionFilter(scheduled: .scheduledOnly))
     _ = await store.payScheduledTransaction(scheduled)
 
-    // AccountStore is reactive — wait for observation to settle (OB 1000 + paid -500 = 500).
-    try await accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: accountId)?.positions.first?.quantity == Decimal(500) },
-      description: "account settled at 500 after paying -500 one-time expense")
-    // Paying a -500 expense should decrease balance by 500
-    let balance = try await accountStore.displayBalance(for: accountId)
-    #expect(balance.quantity == Decimal(500))
+    // AccountStore is reactive — poll the displayed balance until the
+    // observation settles (OB 1000 + paid -500 = 500). Paying a -500
+    // expense should decrease balance by 500.
+    await expectEventually("account settled at 500 after paying -500 one-time expense") {
+      let balance = try? await accountStore.displayBalance(for: accountId)
+      return balance?.quantity == Decimal(500)
+    }
   }
 
   // Running-balance update tests live in
