@@ -29,20 +29,25 @@ struct AccountStoreConversionTestsMore {
     let store = AccountStore(
       repository: backend.accounts, conversionService: conversion,
       targetInstrument: .AUD)
+    // This wait is a load-bearing ORDERING BARRIER (not a read-gate): it ensures
+    // the initial observeAll snapshot has landed before `updateInvestmentValue`,
+    // so a late initial emission can't clobber the externally-set snapshot back
+    // to zero. Do NOT replace it with a value poll.
+    try await store.waitForNextEmission(
+      matching: { !($0.positions(for: accountId).isEmpty) },
+      description: "USD position observed"
+    )
+
     // recordedValue + no snapshot → balance = 0 (positions are NOT a fallback).
-    await expectEventually("recorded-value balance settles to zero without snapshot") {
-      let sumBalance = try? await store.displayBalance(for: accountId)
-      return sumBalance == .zero(instrument: .AUD)
-    }
+    let sumBalance = try await store.displayBalance(for: accountId)
+    #expect(sumBalance == .zero(instrument: .AUD))
 
     // Investment value set externally → recorded mode uses the snapshot verbatim.
     let externalValue = InstrumentAmount(
       quantity: dec("999.00"), instrument: .AUD)
     await store.updateInvestmentValue(accountId: accountId, value: externalValue)
-    await expectEventually("recorded-value balance settles to the external value") {
-      let override = try? await store.displayBalance(for: accountId)
-      return override == externalValue
-    }
+    let override = try await store.displayBalance(for: accountId)
+    #expect(override == externalValue)
   }
 
   @Test
