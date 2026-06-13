@@ -9,7 +9,7 @@ import SwiftUI
 /// Failed valuations render as `—` per `guides/UI_GUIDE.md`. Signs are
 /// preserved across value, cost, and gain — the row never `abs()`s an amount.
 struct PositionRow: View {
-  let row: ValuedPosition
+  let row: AssetHolding
 
   var body: some View {
     HStack(alignment: .firstTextBaseline) {
@@ -25,8 +25,8 @@ struct PositionRow: View {
   private var leadingColumn: some View {
     VStack(alignment: .leading, spacing: 2) {
       HStack(spacing: 6) {
-        KindBadge(kind: row.instrument.kind)
-        Text(row.instrument.name)
+        KindBadge(kind: row.kind)
+        Text(row.name)
           .font(.headline)
       }
       if let secondary = secondaryIdentifier {
@@ -70,12 +70,11 @@ struct PositionRow: View {
   }
 
   private var secondaryIdentifier: String? {
-    switch row.instrument.kind {
-    case .stock: return row.instrument.exchange
+    switch row.kind {
+    case .stock: return row.exchange
     case .cryptoToken:
-      if let chainId = row.instrument.chainId {
-        return Instrument.chainName(for: chainId)
-      }
+      if row.chainCount > 1 { return "\(row.chainCount) chains" }
+      if let chainId = row.chainId { return Instrument.chainName(for: chainId) }
       return nil
     case .fiatCurrency: return nil
     }
@@ -88,7 +87,9 @@ struct PositionRow: View {
   }
 
   private var accessibilityLabel: String {
-    var parts: [String] = [row.instrument.name, row.quantityCaption]
+    var parts: [String] = [row.name]
+    if row.chainCount > 1 { parts.append("across \(row.chainCount) chains") }
+    parts.append(row.quantityCaption)
     if let value = row.value {
       parts.append("valued at \(value.formatted)")
     } else {
@@ -130,42 +131,25 @@ struct KindBadge: View {
   }
 }
 
-private func previewRows() -> [ValuedPosition] {
-  let bhp = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
-  let eth = Instrument.crypto(
-    chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+private func previewRows() -> [AssetHolding] {
   let aud = Instrument.AUD
+  func amount(_ value: Decimal) -> InstrumentAmount {
+    InstrumentAmount(quantity: value, instrument: aud)
+  }
   return [
-    ValuedPosition(
-      instrument: bhp, quantity: 250,
-      unitPrice: InstrumentAmount(quantity: 45.30, instrument: aud),
-      costBasis: InstrumentAmount(quantity: 10_125, instrument: aud),
-      value: InstrumentAmount(quantity: 11_325, instrument: aud)),
-    ValuedPosition(
-      instrument: eth, quantity: 2.45,
-      unitPrice: InstrumentAmount(quantity: 4_000, instrument: aud),
-      costBasis: InstrumentAmount(quantity: 7_500, instrument: aud),
-      value: InstrumentAmount(quantity: 9_800, instrument: aud)),
-    ValuedPosition(
-      instrument: aud, quantity: 1_520,
-      unitPrice: nil, costBasis: nil,
-      value: InstrumentAmount(quantity: 1_520, instrument: aud)),
-    ValuedPosition(
-      instrument: bhp, quantity: 100,
-      unitPrice: nil, costBasis: nil, value: nil),
-    ValuedPosition(
-      instrument: bhp, quantity: 50,
-      unitPrice: InstrumentAmount(quantity: 30, instrument: aud),
-      costBasis: InstrumentAmount(quantity: 2_000, instrument: aud),
-      value: InstrumentAmount(quantity: 1_500, instrument: aud)),
-    // Zero cost basis: gainLoss is non-nil (5,000 − 0 = 5,000) but
-    // gainLossPercent is nil (division by zero). Exercises the
-    // nil-percent-but-non-nil-gain branch of captionText.
-    ValuedPosition(
-      instrument: bhp, quantity: 100,
-      unitPrice: InstrumentAmount(quantity: 50, instrument: aud),
-      costBasis: InstrumentAmount(quantity: 0, instrument: aud),
-      value: InstrumentAmount(quantity: 5_000, instrument: aud)),
+    AssetHolding(
+      id: "ASX:BHP.AX", kind: .stock, name: "BHP", displayLabel: "BHP.AX", decimals: 0,
+      currencyCode: nil, chainId: nil, exchange: "ASX", quantity: 250, unitPrice: amount(45.30),
+      costBasis: amount(10_125), value: amount(11_325), contributingInstrumentIds: ["ASX:BHP.AX"]),
+    AssetHolding(
+      id: "ethereum", kind: .cryptoToken, name: "Ethereum", displayLabel: "ETH", decimals: 18,
+      currencyCode: nil, chainId: nil, exchange: nil, quantity: Decimal(string: "12.95694") ?? 0,
+      unitPrice: amount(4_000), costBasis: amount(35_000), value: amount(51_827),
+      contributingInstrumentIds: ["1:native", "10:native"]),
+    AssetHolding(
+      id: "AUD", kind: .fiatCurrency, name: "AUD", displayLabel: "$", decimals: 2,
+      currencyCode: "AUD", chainId: nil, exchange: nil, quantity: 1_520, unitPrice: nil,
+      costBasis: nil, value: amount(1_520), contributingInstrumentIds: ["AUD"]),
   ]
 }
 
