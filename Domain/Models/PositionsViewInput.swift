@@ -13,6 +13,12 @@ struct PositionsViewInput: Sendable, Hashable {
   let positions: [ValuedPosition]
   let historicalValue: HistoricalValueSeries?
 
+  /// `[instrumentId: assetKey]` used to roll same-asset-across-chains crypto
+  /// positions into a single holdings row. Empty (the default) means no
+  /// rollup — every position stands alone, preserving pre-aggregation
+  /// behaviour at call sites that don't supply it.
+  let assetKeysByInstrumentId: [String: String]
+
   /// Account-level performance numbers for the host. Non-nil triggers
   /// the three-tile `AccountPerformanceTiles` strip in place of the
   /// single-row `PositionsHeader`. Non-investment-account hosts leave
@@ -52,6 +58,7 @@ struct PositionsViewInput: Sendable, Hashable {
     hostCurrency: Instrument,
     positions: [ValuedPosition],
     historicalValue: HistoricalValueSeries?,
+    assetKeysByInstrumentId: [String: String] = [:],
     performance: AccountPerformance? = nil,
     hasAnyHistoricalActivity: Bool = false,
     alwaysShowsFullSurface: Bool = false
@@ -60,6 +67,7 @@ struct PositionsViewInput: Sendable, Hashable {
     self.hostCurrency = hostCurrency
     self.positions = positions
     self.historicalValue = historicalValue
+    self.assetKeysByInstrumentId = assetKeysByInstrumentId
     self.performance = performance
     self.hasAnyHistoricalActivity = hasAnyHistoricalActivity
     self.alwaysShowsFullSurface = alwaysShowsFullSurface
@@ -156,5 +164,12 @@ struct PositionsViewInput: Sendable, Hashable {
   /// tiles/chart/table surface for layout consistency.
   var rendersNothing: Bool {
     shouldHide && !alwaysShowsFullSurface
+  }
+
+  /// The positions folded into asset rows for display. Crypto positions
+  /// sharing an `assetKey` (per `assetKeysByInstrumentId`) merge into one row;
+  /// stocks, fiat, and unmapped crypto stand alone.
+  var assetHoldings: [AssetHolding] {
+    AssetHolding.fold(positions, assetKeys: assetKeysByInstrumentId, hostCurrency: hostCurrency)
   }
 }

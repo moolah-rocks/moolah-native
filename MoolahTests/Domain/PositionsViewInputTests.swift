@@ -146,4 +146,58 @@ struct PositionsViewInputTests {
     #expect(mixed.showsGroupSubtotals)
   }
 
+  @Test
+  func assetHoldingsFoldCryptoUsingAssetKeyMap() {
+    let eth1 = Instrument.crypto(
+      chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    let eth10 = Instrument.crypto(
+      chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    let aud = Instrument.AUD
+    func amount(_ value: Decimal) -> InstrumentAmount {
+      InstrumentAmount(quantity: value, instrument: aud)
+    }
+    let input = PositionsViewInput(
+      title: "Wallet",
+      hostCurrency: aud,
+      positions: [
+        ValuedPosition(
+          instrument: eth1, quantity: 2, unitPrice: amount(4000),
+          costBasis: amount(6000), value: amount(8000)),
+        ValuedPosition(
+          instrument: eth10, quantity: 1, unitPrice: amount(4000),
+          costBasis: amount(3000), value: amount(4000)),
+      ],
+      historicalValue: nil,
+      assetKeysByInstrumentId: ["1:native": "ethereum", "10:native": "ethereum"])
+    let holdings = input.assetHoldings
+    #expect(holdings.count == 1)
+    #expect(holdings.first?.quantity == 3)
+    #expect(holdings.first?.value == amount(12000))
+  }
+
+  @Test
+  func assetHoldingsDefaultEmptyMapStandsAlone() {
+    let eth1 = Instrument.crypto(
+      chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    let eth10 = Instrument.crypto(
+      chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    let aud = Instrument.AUD
+    func amount(_ value: Decimal) -> InstrumentAmount {
+      InstrumentAmount(quantity: value, instrument: aud)
+    }
+    let input = PositionsViewInput(
+      title: "Wallet",
+      hostCurrency: aud,
+      positions: [
+        ValuedPosition(
+          instrument: eth1, quantity: 2, unitPrice: amount(4000),
+          costBasis: amount(6000), value: amount(8000)),
+        ValuedPosition(
+          instrument: eth10, quantity: 1, unitPrice: amount(4000),
+          costBasis: amount(3000), value: amount(4000)),
+      ],
+      historicalValue: nil)  // no map → no merge
+    #expect(input.assetHoldings.count == 2)
+  }
+
 }
