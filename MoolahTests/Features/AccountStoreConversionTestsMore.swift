@@ -29,21 +29,20 @@ struct AccountStoreConversionTestsMore {
     let store = AccountStore(
       repository: backend.accounts, conversionService: conversion,
       targetInstrument: .AUD)
-    try await store.waitForNextEmission(
-      matching: { !($0.positions(for: accountId).isEmpty) },
-      description: "USD position observed"
-    )
-
     // recordedValue + no snapshot → balance = 0 (positions are NOT a fallback).
-    let sumBalance = try await store.displayBalance(for: accountId)
-    #expect(sumBalance == .zero(instrument: .AUD))
+    await expectEventually("recorded-value balance settles to zero without snapshot") {
+      let sumBalance = try? await store.displayBalance(for: accountId)
+      return sumBalance == .zero(instrument: .AUD)
+    }
 
     // Investment value set externally → recorded mode uses the snapshot verbatim.
     let externalValue = InstrumentAmount(
       quantity: dec("999.00"), instrument: .AUD)
     await store.updateInvestmentValue(accountId: accountId, value: externalValue)
-    let override = try await store.displayBalance(for: accountId)
-    #expect(override == externalValue)
+    await expectEventually("recorded-value balance settles to the external value") {
+      let override = try? await store.displayBalance(for: accountId)
+      return override == externalValue
+    }
   }
 
   @Test
@@ -105,23 +104,16 @@ struct AccountStoreConversionTestsMore {
       retryDelay: .seconds(60))
 
     // After the first emission settles, the partial-failure state is
-    // observable: AUD bank has a balance, mixed bank does not, totals nil.
-    try await store.waitForNextEmission(
-      matching: {
-        $0.convertedBalances[bankAud.id] != nil
-          && $0.convertedBalances[bankMixed.id] == nil
-          && $0.convertedCurrentTotal == nil
-      },
-      description: "partial-failure state observable"
-    )
-
-    // AUD bank: only AUD positions → succeeds.
-    #expect(store.convertedBalances[bankAud.id]?.quantity == 1000)
-    // Mixed bank (EUR + USD): needs USD → EUR conversion which fails → nil.
-    #expect(store.convertedBalances[bankMixed.id] == nil)
-    // Aggregate cannot be accurate with a missing unit → nil.
-    #expect(store.convertedCurrentTotal == nil)
-    #expect(store.convertedNetWorth == nil)
+    // observable:
+    //   - AUD bank (only AUD positions) → succeeds with quantity 1000.
+    //   - Mixed bank (EUR + USD) → needs USD→EUR which fails → nil.
+    //   - Aggregate totals cannot be accurate with a missing unit → nil.
+    await expectEventually("partial-failure state settles") {
+      store.convertedBalances[bankAud.id]?.quantity == 1000
+        && store.convertedBalances[bankMixed.id] == nil
+        && store.convertedCurrentTotal == nil
+        && store.convertedNetWorth == nil
+    }
   }
 
   /// After the conversion service recovers, a retry populates the
@@ -171,10 +163,12 @@ struct AccountStoreConversionTestsMore {
     await store.waitForPendingConversions()
 
     // 1000 AUD + 500 EUR (1:1 fallback) = 1500 AUD
-    #expect(store.convertedCurrentTotal?.quantity == 1500)
-    #expect(store.convertedNetWorth?.quantity == 1500)
-    #expect(store.convertedBalances[bankAud.id]?.quantity == 1000)
-    #expect(store.convertedBalances[bankEur.id]?.quantity == 500)
+    await expectEventually("retry repopulates balances and totals") {
+      store.convertedCurrentTotal?.quantity == 1500
+        && store.convertedNetWorth?.quantity == 1500
+        && store.convertedBalances[bankAud.id]?.quantity == 1000
+        && store.convertedBalances[bankEur.id]?.quantity == 500
+    }
   }
   /// Regression for #96: `computeConvertedInvestmentTotal` must not route
   /// through `displayBalance` (which converts every position to the

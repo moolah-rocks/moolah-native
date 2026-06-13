@@ -33,16 +33,13 @@ struct AccountStoreConversionTests {
       conversionService: backend.conversionService,
       targetInstrument: .defaultTestInstrument
     )
-    try await store.waitForNextEmission(
-      matching: { !($0.positions(for: accountId).isEmpty) },
-      description: "positions are observed"
-    )
-
-    let positions = store.positions(for: accountId)
-    #expect(positions.count == 1)
-    #expect(positions.first?.instrument == .AUD)
-    // Quantity will be from storage (Int64 scaled), so compare with tolerance
-    #expect(positions.first?.quantity == dec("1000.00"))
+    // Quantity comes from storage (Int64 scaled); poll the settled snapshot.
+    await expectEventually("single AUD position settles") {
+      let positions = store.positions(for: accountId)
+      return positions.count == 1
+        && positions.first?.instrument == .AUD
+        && positions.first?.quantity == dec("1000.00")
+    }
   }
 
   @Test
@@ -83,21 +80,12 @@ struct AccountStoreConversionTests {
       conversionService: backend.conversionService,
       targetInstrument: .defaultTestInstrument
     )
-    try await store.waitForNextEmission(
-      matching: { $0.positions(for: accountId).count == 2 },
-      description: "both positions observed"
-    )
-
-    let positions = store.positions(for: accountId)
-    #expect(positions.count == 2)
-    #expect(
-      positions.contains(where: {
-        $0.instrument == .AUD && $0.quantity == dec("1000.00")
-      }))
-    #expect(
-      positions.contains(where: {
-        $0.instrument == .USD && $0.quantity == dec("500.00")
-      }))
+    await expectEventually("both AUD and USD positions settle") {
+      let positions = store.positions(for: accountId)
+      return positions.count == 2
+        && positions.contains(where: { $0.instrument == .AUD && $0.quantity == dec("1000.00") })
+        && positions.contains(where: { $0.instrument == .USD && $0.quantity == dec("500.00") })
+    }
   }
 
   @Test
@@ -147,17 +135,13 @@ struct AccountStoreConversionTests {
       conversionService: backend.conversionService,
       targetInstrument: .defaultTestInstrument
     )
-    try await store.waitForNextEmission(
-      matching: { $0.positions(for: accountId).count == 2 },
-      description: "both positions observed"
-    )
-
     // 1000 AUD + 500 USD converted to AUD (500 * 1.5385 = 769.25)
-    let total = try await store.computeConvertedCurrentTotal(in: .AUD)
     let expectedUsdInAud = dec("500.00") * dec("1.5385")
     let expected = dec("1000.00") + expectedUsdInAud
-    #expect(total.quantity == expected)
-    #expect(total.instrument == .AUD)
+    await expectEventually("converted total settles to AUD sum") {
+      let total = try? await store.computeConvertedCurrentTotal(in: .AUD)
+      return total?.quantity == expected && total?.instrument == .AUD
+    }
   }
 
   @Test

@@ -16,13 +16,9 @@ struct AccountStoreLoadingTests {
       repository: backend.accounts, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
 
-    try await store.waitForNextEmission(
-      matching: { $0.accounts.count == 1 },
-      description: "seeded account is observed"
-    )
-
-    #expect(store.accounts.count == 1)
-    #expect(store.accounts.first?.name == "Checking")
+    await expectEventually("seeded account populates the store") {
+      store.accounts.count == 1 && store.accounts.first?.name == "Checking"
+    }
   }
 
   @Test
@@ -36,14 +32,11 @@ struct AccountStoreLoadingTests {
       repository: backend.accounts, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
 
-    try await store.waitForNextEmission(
-      matching: { $0.accounts.count == 2 },
-      description: "both seeded accounts are observed"
-    )
-
-    #expect(store.accounts.count == 2)
-    #expect(store.accounts[0].name == "A2")
-    #expect(store.accounts[1].name == "A1")
+    await expectEventually("accounts settle sorted by position") {
+      store.accounts.count == 2
+        && store.accounts[0].name == "A2"
+        && store.accounts[1].name == "A1"
+    }
   }
 
   @Test
@@ -68,24 +61,18 @@ struct AccountStoreLoadingTests {
       repository: backend.accounts, conversionService: FixedConversionService(),
       targetInstrument: .defaultTestInstrument)
 
-    try await store.waitForNextEmission(
-      matching: { $0.convertedNetWorth?.quantity == Decimal(2_550_000) / 100 },
-      description: "totals settle"
-    )
-
-    #expect(
+    // currentTotal = 100000 + 500000 - 50000 = 550000 (hidden excluded)
+    await expectEventually("all three totals settle to expected amounts") {
       store.convertedCurrentTotal
         == InstrumentAmount(
-          quantity: Decimal(550000) / 100, instrument: Instrument.defaultTestInstrument))  // 100000 + 500000 - 50000
-    #expect(
-      store.convertedInvestmentTotal
-        == InstrumentAmount(
-          quantity: Decimal(2_000_000) / 100, instrument: Instrument.defaultTestInstrument))
-    #expect(
-      store.convertedNetWorth
-        == InstrumentAmount(
-          quantity: Decimal(2_550_000) / 100, instrument: Instrument.defaultTestInstrument)
-    )
+          quantity: Decimal(550000) / 100, instrument: Instrument.defaultTestInstrument)
+        && store.convertedInvestmentTotal
+          == InstrumentAmount(
+            quantity: Decimal(2_000_000) / 100, instrument: Instrument.defaultTestInstrument)
+        && store.convertedNetWorth
+          == InstrumentAmount(
+            quantity: Decimal(2_550_000) / 100, instrument: Instrument.defaultTestInstrument)
+    }
   }
 
   @Test
@@ -106,17 +93,12 @@ struct AccountStoreLoadingTests {
     let store = AccountStore(
       repository: backend.accounts, conversionService: conversion, targetInstrument: aud)
 
-    try await store.waitForNextEmission(
-      matching: { $0.convertedCurrentTotal?.quantity == Decimal(240_000) / 100 },
-      description: "totals settle"
-    )
-
     // 1_000.00 AUD + (500.00 USD * 2) + (200.00 USD * 2) = 1_000 + 1_000 + 400 = 2_400.00
-    #expect(
+    await expectEventually("mixed-instrument totals settle to 2400.00 AUD") {
       store.convertedCurrentTotal
-        == InstrumentAmount(quantity: Decimal(240_000) / 100, instrument: aud))
-    #expect(
-      store.convertedNetWorth
-        == InstrumentAmount(quantity: Decimal(240_000) / 100, instrument: aud))
+        == InstrumentAmount(quantity: Decimal(240_000) / 100, instrument: aud)
+        && store.convertedNetWorth
+          == InstrumentAmount(quantity: Decimal(240_000) / 100, instrument: aud)
+    }
   }
 }

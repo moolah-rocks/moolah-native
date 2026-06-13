@@ -29,13 +29,9 @@ struct AccountStorePreloadFilterTests {
       conversionService: FixedConversionService(),
       targetInstrument: .AUD,
       investmentRepository: backend.investments)
-    try await store.waitForNextEmission(
-      matching: { $0.investmentValues[recorded.id] != nil },
-      description: "investment values preloaded"
-    )
-
-    #expect(store.investmentValues[recorded.id] != nil)
-    #expect(store.investmentValues[trades.id] == nil)
+    await expectEventually("only recordedValue account is preloaded") {
+      store.investmentValues[recorded.id] != nil && store.investmentValues[trades.id] == nil
+    }
   }
 
   @Test("crypto accounts are never preloaded into the investment snapshot cache")
@@ -67,13 +63,9 @@ struct AccountStorePreloadFilterTests {
       conversionService: FixedConversionService(),
       targetInstrument: .AUD,
       investmentRepository: backend.investments)
-    try await store.waitForNextEmission(
-      matching: { $0.investmentValues[recorded.id] != nil },
-      description: "investment values preloaded"
-    )
-
-    #expect(store.investmentValues[recorded.id] != nil)
-    #expect(store.investmentValues[wallet.id] == nil)
+    await expectEventually("recorded account preloads but crypto wallet does not") {
+      store.investmentValues[recorded.id] != nil && store.investmentValues[wallet.id] == nil
+    }
   }
 
   @Test("flipping mode to recordedValue triggers a snapshot preload")
@@ -107,11 +99,8 @@ struct AccountStorePreloadFilterTests {
 
     // Wait for the observation to deliver the updated mode and trigger
     // the snapshot preload.
-    try await store.waitForNextEmission(
-      matching: { $0.investmentValues[account.id]?.quantity == 250 },
-      description: "snapshot preloaded after mode flip"
-    )
-
-    #expect(store.investmentValues[account.id]?.quantity == 250)
+    await expectEventually("snapshot preloads after mode flip to recordedValue") {
+      store.investmentValues[account.id]?.quantity == 250
+    }
   }
 }
