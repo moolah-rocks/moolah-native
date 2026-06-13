@@ -48,4 +48,31 @@ struct HistoricalValueSeries: Sendable, Hashable {
   func series(for instrument: Instrument) -> [Point] {
     perInstrument[instrument.id] ?? []
   }
+
+  /// Sums the per-instrument series for a set of instrument ids by date —
+  /// used when an aggregated asset row (e.g. ETH across chains) is selected.
+  /// A date is emitted only if it is present in *every* contributing series
+  /// (anchored on the first series, which is correct because a date missing
+  /// from the first is by definition not in all). This preserves the "never
+  /// display a partial aggregate" rule. `value` and `cost` sum; `contributions`
+  /// is left `nil` (per-instrument series carry none).
+  func series(forInstrumentIds ids: [String]) -> [Point] {
+    let seriesList = ids.compactMap { perInstrument[$0] }
+    guard let firstSeries = seriesList.first else { return [] }
+    if seriesList.count == 1 { return firstSeries }
+
+    let byDate: [[Date: Point]] = seriesList.map { series in
+      Dictionary(series.map { ($0.date, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+    return firstSeries.compactMap { anchor -> Point? in
+      var value = Decimal(0)
+      var cost = Decimal(0)
+      for table in byDate {
+        guard let matched = table[anchor.date] else { return nil }  // partial coverage → drop
+        value += matched.value
+        cost += matched.cost
+      }
+      return Point(date: anchor.date, value: value, cost: cost, contributions: nil)
+    }
+  }
 }
