@@ -49,16 +49,23 @@ struct HistoricalValueSeries: Sendable, Hashable {
     perInstrument[instrument.id] ?? []
   }
 
-  /// Sums the per-instrument series for a set of instrument ids by date —
-  /// used when an aggregated asset row (e.g. ETH across chains) is selected.
-  /// A date is emitted only if it is present in *every* contributing series
-  /// (anchored on the first series, which is correct because a date missing
-  /// from the first is by definition not in all). This preserves the "never
-  /// display a partial aggregate" rule. `value` and `cost` sum; `contributions`
-  /// is left `nil` (per-instrument series carry none).
+  /// Returns a combined series for the given instrument ids, summing `value`
+  /// and `cost` at each date present in *every* contributing series.
+  ///
+  /// Dates are intersected, not unioned: a date missing from one chain's
+  /// series means that chain's conversion failed that day, so including it
+  /// would misrepresent the asset's total value/cost ("never display a
+  /// partial aggregate"). The intersection is anchored on the first series —
+  /// every per-instrument series from `PositionsHistoryBuilder` already
+  /// satisfies this rule, so a date absent from the first is absent from at
+  /// least one series regardless, and anchor choice doesn't change the result.
+  ///
+  /// `contributions` is always `nil` on the result; per-instrument series
+  /// carry no flow data.
   func series(forInstrumentIds ids: [String]) -> [Point] {
     let seriesList = ids.compactMap { perInstrument[$0] }
     guard let firstSeries = seriesList.first else { return [] }
+    // No intersection needed — return the single series unchanged.
     if seriesList.count == 1 { return firstSeries }
 
     let byDate: [[Date: Point]] = seriesList.map { series in
