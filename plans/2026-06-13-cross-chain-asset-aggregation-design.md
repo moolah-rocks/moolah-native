@@ -64,16 +64,28 @@ This was chosen over two alternatives:
 
 ### 1. Canonical asset key (derived, not stored)
 
-A computed `assetKey` on `Instrument`:
-
-- `.cryptoToken` → `coingeckoId` if present, else `cryptocompareSymbol`, else
-  `binanceSymbol`, else the instrument's own `id` (stands alone — no provider id
-  means we cannot safely claim it is "the same asset").
-- `.stock` / `.fiatCurrency` → always the instrument's own `id` (never merged).
+The asset key for a crypto instrument is its **price-provider id**:
+`coingeckoId` if present, else `cryptocompareSymbol`, else `binanceSymbol`, else
+the instrument's own `id` (stands alone — no provider id means we cannot safely
+claim it is "the same asset"). Stocks and fiat always key on their own `id`
+(never merged).
 
 So `1:native` and `10:native` both yield `"ethereum"` and merge; a brand-new
 unpriced token merges with nothing. The key is **derived from data already
-present** on every crypto instrument — no schema column, no migration.
+present** — no schema column, no migration.
+
+**Where the key comes from (important):** `coingeckoId` lives on
+`CryptoProviderMapping` in the instrument registry, **not** on the domain
+`Instrument` (which carries only `id, kind, name, decimals, ticker, exchange,
+chainId, contractAddress`) and **not** on `ValuedPosition`. So the asset key is
+not a pure computed property on `Instrument` — it must be resolved from the
+registry's `allCryptoRegistrations()`. We build a `[instrumentId: assetKey]`
+map at the point the holdings input is assembled (the store, which has registry
+access) and thread it into the surface via a new
+`PositionsViewInput.assetKeysByInstrumentId` field (default empty — an absent
+key means "stand alone", preserving today's behaviour at any call site that
+doesn't populate it). The fold reads this map; it never reaches into the
+registry itself, keeping the view layer pure.
 
 ### 2. Display-row model — `AssetHolding`
 
@@ -178,12 +190,23 @@ those venues is wanted later it is a separate, isolated migration.
 
 ## Affected files (initial map)
 
-- `Domain/Models/Instrument.swift` — add computed `assetKey`.
-- `Domain/Models/` — new `AssetHolding` display model + fold function.
+- `Domain/Models/CryptoProviderMapping.swift` — `assetKey` helper (provider-id
+  fallback chain).
+- `Domain/Models/` — new `AssetHolding` display model + pure fold function
+  `[ValuedPosition] + [instrumentId: assetKey] → [AssetHolding]`, and an
+  asset-key map builder from `[CryptoRegistration]`.
+- `Domain/Models/PositionsViewInput.swift` — add `assetKeysByInstrumentId`
+  (default `[:]`).
+- `Features/Investments/InvestmentStore+PositionsInput.swift` — build the map
+  from the registry and pass it into the input. (Plus any other crypto-bearing
+  input site — enumerated in the plan.)
 - `Shared/Views/Positions/PositionsTable.swift` — render `AssetHolding`s;
-  generalise selection.
+  generalise selection to a `PositionSelection`.
 - `Shared/Views/Positions/PositionsView.swift` — selection type change.
-- `Shared/Views/Positions/PositionsChart.swift` — sum selected-asset series.
+- `Shared/Views/Positions/PositionsChart.swift` — sum selected-asset series via
+  a new `HistoricalValueSeries.series(forInstrumentIds:)`.
+- `Domain/Models/HistoricalValueSeries.swift` — `series(forInstrumentIds:)`
+  summation by date.
 - `Domain/Models/ValuedPosition+Display.swift` — quantity/label helpers reused
   by `AssetHolding`.
 - Tests under `MoolahTests/Domain/`.
