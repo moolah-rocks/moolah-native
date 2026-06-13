@@ -25,6 +25,16 @@ struct CryptoRegistration: Codable, Sendable, Hashable, Identifiable {
 
   var id: String { instrument.id }
 
+  /// Builds an `[instrumentId: assetKey]` lookup from a set of crypto
+  /// registrations, for the holdings rollup. An instrument absent from the
+  /// result is treated by callers as keyed by its own id — it matches no
+  /// other instrument. On a duplicate instrument id, the last entry wins.
+  static func assetKeys(from registrations: [CryptoRegistration]) -> [String: String] {
+    registrations.reduce(into: [String: String]()) { map, reg in
+      map[reg.instrument.id] = reg.mapping.assetKey
+    }
+  }
+
   private enum CodingKeys: String, CodingKey {
     case instrument
     case mapping
