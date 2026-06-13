@@ -31,7 +31,7 @@ struct AutomationServiceCategoryTests {
 
   @Test("createCategory creates and lists categories")
   func createAndListCategories() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, _) = try await makeServiceWithSession()
 
     let category = try await service.createCategory(
       profileIdentifier: "Test",
@@ -42,21 +42,19 @@ struct AutomationServiceCategoryTests {
     #expect(category.name == "Food")
     #expect(category.parentId == nil)
 
-    // CategoryStore is reactive — the new category is observable via
-    // `categories` once `observeAll()` delivers the post-write snapshot.
-    try await session.categoryStore.waitForNextEmission(
-      matching: { $0.categories.roots.count == 1 },
-      description: "new category observable"
-    )
-
-    let categories = try service.listCategories(profileIdentifier: "Test")
-    #expect(categories.count == 1)
-    #expect(categories.first?.name == "Food")
+    // CategoryStore is reactive — the new category becomes listable shortly
+    // after the GRDB write commits. Poll the exact asserted value so a racing
+    // observation pass can't slip a stale read between an awaited emission and
+    // a single read.
+    await expectEventually("created category is listed via the service") {
+      let categories = (try? service.listCategories(profileIdentifier: "Test")) ?? []
+      return categories.count == 1 && categories.first?.name == "Food"
+    }
   }
 
   @Test("resolveCategory finds category by name case-insensitively")
   func resolveCategoryByName() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, _) = try await makeServiceWithSession()
 
     _ = try await service.createCategory(
       profileIdentifier: "Test",
@@ -64,13 +62,10 @@ struct AutomationServiceCategoryTests {
       parentName: nil
     )
 
-    try await session.categoryStore.waitForNextEmission(
-      matching: { $0.categories.roots.contains { $0.name == "Transport" } },
-      description: "new category observable"
-    )
-
-    let resolved = try service.resolveCategory(named: "transport", profileIdentifier: "Test")
-    #expect(resolved.name == "Transport")
+    await expectEventually("created category resolves case-insensitively") {
+      (try? service.resolveCategory(named: "transport", profileIdentifier: "Test"))?.name
+        == "Transport"
+    }
   }
 
   @Test("resolveCategory throws when not found")
