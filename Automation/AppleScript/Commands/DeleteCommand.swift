@@ -98,7 +98,7 @@
       target: DeleteTarget, profileName: String, service: AutomationService
     ) async throws {
       guard let name = target.name else { throw AutomationError.earmarkNotFound("unknown") }
-      let earmark = try service.resolveEarmark(named: name, profileIdentifier: profileName)
+      let earmark = try await service.resolveEarmark(named: name, profileIdentifier: profileName)
       try await service.deleteEarmark(profileIdentifier: profileName, earmarkId: earmark.id)
     }
 
@@ -107,7 +107,7 @@
       target: DeleteTarget, profileName: String, service: AutomationService
     ) async throws {
       guard let name = target.name else { throw AutomationError.categoryNotFound("unknown") }
-      let category = try service.resolveCategory(named: name, profileIdentifier: profileName)
+      let category = try await service.resolveCategory(named: name, profileIdentifier: profileName)
       try await service.deleteCategory(profileIdentifier: profileName, categoryId: category.id)
     }
   }

@@ -92,10 +92,14 @@ final class AutomationService {
   private func resolveLegs(
     _ legs: [LegSpec], profileIdentifier: String, instrument: Instrument
   ) async throws -> (legs: [TransactionLeg], accountIds: Set<UUID>) {
-    // Fetch the authoritative account snapshot once and resolve every leg
-    // against it (see `resolveAccount(named:)` for why this is a
-    // repository read rather than a reactive-store read).
+    // Fetch the authoritative account / category / earmark snapshots once and
+    // resolve every leg against them in-memory (see `resolveAccount(named:)`
+    // for why these are repository reads rather than reactive-store reads).
+    // Hoisting out of the loop keeps a many-legged transaction to one read per
+    // store rather than one per leg.
     let accounts = try await fetchAccounts(profileIdentifier: profileIdentifier)
+    let categories = try await fetchCategories(profileIdentifier: profileIdentifier)
+    let earmarks = try await fetchEarmarks(profileIdentifier: profileIdentifier)
     var resolvedLegs: [TransactionLeg] = []
     var accountIds = Set<UUID>()
     for spec in legs {
@@ -104,14 +108,14 @@ final class AutomationService {
 
       let categoryId: UUID? =
         if let categoryName = spec.categoryName {
-          try resolveCategory(named: categoryName, profileIdentifier: profileIdentifier).id
+          try Self.category(named: categoryName, in: categories).id
         } else {
           nil
         }
 
       let earmarkId: UUID? =
         if let earmarkName = spec.earmarkName {
-          try resolveEarmark(named: earmarkName, profileIdentifier: profileIdentifier).id
+          try Self.earmark(named: earmarkName, in: earmarks).id
         } else {
           nil
         }

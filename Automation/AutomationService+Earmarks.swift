@@ -1,7 +1,7 @@
 import Foundation
 
-// Earmark / category / investment / analysis / refresh handlers. All
-// members are `@MainActor` via the containing class.
+// Earmark / category / investment / analysis / refresh / crypto-sync
+// handlers. All members are `@MainActor` via the containing class.
 extension AutomationService {
 
   // MARK: - Earmark Operations
@@ -13,12 +13,34 @@ extension AutomationService {
   }
 
   /// Resolves an earmark by name (case-insensitive) within a profile.
-  func resolveEarmark(named name: String, profileIdentifier: String) throws -> Earmark {
+  ///
+  /// Reads the authoritative repository snapshot (`fetchAll()`) rather than
+  /// the reactive `EarmarkStore.earmarks` — see
+  /// `resolveAccount(named:profileIdentifier:)` for why automation needs a
+  /// repository-direct read. A script (or single intent) creates an earmark
+  /// and references it by name in the very next operation; the reactive store
+  /// is only eventually consistent with a committed write, so under load it
+  /// can throw `.earmarkNotFound` for an earmark that is already persisted.
+  /// `fetchAll()` reflects the committed write immediately, making resolution
+  /// deterministic.
+  func resolveEarmark(named name: String, profileIdentifier: String) async throws -> Earmark {
+    let earmarks = try await fetchEarmarks(profileIdentifier: profileIdentifier)
+    return try Self.earmark(named: name, in: earmarks)
+  }
+
+  /// Authoritative earmark snapshot for a profile, read straight from the
+  /// repository so it reflects every committed write immediately. Mirrors
+  /// `fetchAccounts` — callers that resolve several names (e.g. `resolveLegs`)
+  /// fetch once and match in-memory rather than re-reading per name.
+  func fetchEarmarks(profileIdentifier: String) async throws -> [Earmark] {
     let session = try resolveSession(for: profileIdentifier)
+    return try await session.backend.earmarks.fetchAll()
+  }
+
+  /// Case-insensitive name lookup within an already-fetched earmark list.
+  static func earmark(named name: String, in earmarks: [Earmark]) throws -> Earmark {
     let lowered = name.lowercased()
-    guard
-      let earmark = session.earmarkStore.earmarks.first(where: { $0.name.lowercased() == lowered })
-    else {
+    guard let earmark = earmarks.first(where: { $0.name.lowercased() == lowered }) else {
       throw AutomationError.earmarkNotFound(name)
     }
     return earmark
@@ -102,10 +124,34 @@ extension AutomationService {
 
   /// Resolves a category by name or path (case-insensitive) within a profile.
   /// Matches either the category name or the full path (e.g., "Food:Groceries").
-  func resolveCategory(named name: String, profileIdentifier: String) throws -> Category {
+  ///
+  /// Reads the authoritative repository snapshot (`fetchAll()`) rather than the
+  /// reactive `CategoryStore.categories` — see
+  /// `resolveAccount(named:profileIdentifier:)` for the read-after-write
+  /// rationale. The repository returns a flat `[Category]`, so the hierarchy is
+  /// rebuilt with `Categories(from:)` to keep full-path matching working.
+  /// `fetchAll()` reflects the committed write immediately, making resolution
+  /// deterministic.
+  func resolveCategory(named name: String, profileIdentifier: String) async throws -> Category {
+    let categories = try await fetchCategories(profileIdentifier: profileIdentifier)
+    return try Self.category(named: name, in: categories)
+  }
+
+  /// Authoritative category hierarchy for a profile, rebuilt from the flat
+  /// repository snapshot so it reflects every committed write immediately.
+  /// Mirrors `fetchAccounts` — callers that resolve several names (e.g.
+  /// `resolveLegs`) fetch once and match in-memory rather than re-reading
+  /// per name.
+  func fetchCategories(profileIdentifier: String) async throws -> Categories {
     let session = try resolveSession(for: profileIdentifier)
+    return Categories(from: try await session.backend.categories.fetchAll())
+  }
+
+  /// Case-insensitive path-then-name lookup within an already-fetched
+  /// category hierarchy.
+  static func category(named name: String, in categories: Categories) throws -> Category {
     let lowered = name.lowercased()
-    let entries = session.categoryStore.categories.flattenedByPath()
+    let entries = categories.flattenedByPath()
 
     // Try matching by path first, then by name
     if let entry = entries.first(where: { $0.path.lowercased() == lowered }) {
@@ -126,7 +172,8 @@ extension AutomationService {
   ) async throws -> Category {
     let parentId: UUID?
     if let parentName {
-      parentId = try resolveCategory(named: parentName, profileIdentifier: profileIdentifier).id
+      parentId = try await resolveCategory(named: parentName, profileIdentifier: profileIdentifier)
+        .id
     } else {
       parentId = nil
     }
@@ -150,7 +197,7 @@ extension AutomationService {
 
     let replacementId: UUID?
     if let replacementName {
-      replacementId = try resolveCategory(
+      replacementId = try await resolveCategory(
         named: replacementName, profileIdentifier: profileIdentifier
       ).id
     } else {

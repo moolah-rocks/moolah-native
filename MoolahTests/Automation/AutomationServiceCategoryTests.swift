@@ -62,24 +62,39 @@ struct AutomationServiceCategoryTests {
       parentName: nil
     )
 
-    await expectEventually("created category resolves case-insensitively") {
-      (try? service.resolveCategory(named: "transport", profileIdentifier: "Test"))?.name
-        == "Transport"
-    }
+    // Authoritative read — resolves deterministically, no expectEventually.
+    let resolved = try await service.resolveCategory(
+      named: "transport", profileIdentifier: "Test")
+    #expect(resolved.name == "Transport")
+  }
+
+  @Test("resolveCategory matches by full path after authoritative read")
+  func resolveCategoryByPath() async throws {
+    let (service, _) = try await makeServiceWithSession()
+
+    _ = try await service.createCategory(profileIdentifier: "Test", name: "Food")
+    let child = try await service.createCategory(
+      profileIdentifier: "Test", name: "Groceries", parentName: "Food")
+
+    // The repository returns a flat list; resolveCategory rebuilds the
+    // hierarchy so a full "Food:Groceries" path still resolves.
+    let resolved = try await service.resolveCategory(
+      named: "food:groceries", profileIdentifier: "Test")
+    #expect(resolved.id == child.id)
   }
 
   @Test("resolveCategory throws when not found")
   func resolveCategoryNotFound() async throws {
     let (service, _) = try await makeServiceWithSession()
 
-    #expect(throws: AutomationError.self) {
-      try service.resolveCategory(named: "NonExistent", profileIdentifier: "Test")
+    await #expect(throws: AutomationError.self) {
+      try await service.resolveCategory(named: "NonExistent", profileIdentifier: "Test")
     }
   }
 
   @Test("createCategory with parent creates subcategory")
   func createSubcategory() async throws {
-    let (service, session) = try await makeServiceWithSession()
+    let (service, _) = try await makeServiceWithSession()
 
     let parent = try await service.createCategory(
       profileIdentifier: "Test",
@@ -87,14 +102,9 @@ struct AutomationServiceCategoryTests {
       parentName: nil
     )
 
-    // The subsequent createCategory call resolves "Food" against the
-    // store's `categories` cache — wait for the first create to land
-    // there before issuing the second.
-    try await session.categoryStore.waitForNextEmission(
-      matching: { $0.categories.roots.contains { $0.name == "Food" } },
-      description: "parent category observable"
-    )
-
+    // createCategory resolves the parent via the authoritative repository
+    // snapshot, so the second create sees "Food" deterministically without
+    // waiting on the reactive store.
     let child = try await service.createCategory(
       profileIdentifier: "Test",
       name: "Groceries",
