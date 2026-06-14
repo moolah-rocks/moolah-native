@@ -111,8 +111,23 @@ pkill -f 'watch-stacked-pr.sh <N> '
 | Native merge queue is BLOCKED with all PR-level checks green | The queue branch's CI hasn't run, or hasn't passed. Likely the workflow doesn't subscribe to `merge_group:`. | Verify `.github/workflows/ci.yml` has `merge_group:` in `on:`. If a workflow change is needed, push a fix to the same PR (auto-removes from queue), re-enable automerge after CI passes on the new head. |
 | `mergeStateStatus: BEHIND` | Branch is behind base; native MQ doesn't auto-rebase. | Either rebase locally + force-push (rebase merge method), or `gh pr update-branch <N>` for merge-commit method. |
 
-## Why no auto-cleanup of worktrees / branches
+## Clean up the worktree once automerge is enabled
 
-This skill stops at "PR landed on main". Worktree removal, local branch deletion, and follow-on tasks are out of scope — the user has their own cleanup habits, and the cost of being wrong on cleanup is high (lost work) compared to the small inconvenience of doing it manually.
+As soon as automerge is on, the PR is done from your side — the remote branch holds the work and the merge queue handles the rest. **Remove the worktree and delete its local branch now; don't leave it sitting around waiting for the merge to complete.** Everything is committed and pushed, so the worktree is disposable and trivially recreated later if you ever need it again.
 
-If you need merge-event-driven cleanup, layer it on top using the user-level `monitoring-pr-status` skill, which exposes merge / failure events as a stream of stdout lines suitable for `Monitor`-based integration.
+```bash
+git -C <repo> worktree remove .claude/worktrees/<name>
+git -C <repo> branch -D <local-branch>
+```
+
+Safe because: the work is on `origin/<branch>` and tied to the PR. If a follow-up is needed, re-create the worktree off the remote branch (`git -C <repo> worktree add --no-track .claude/worktrees/<name> <branch> origin/<branch>`).
+
+**Skip cleanup only when:**
+
+- There are uncommitted or unpushed changes in the worktree (nothing to recover from if you delete it).
+- Automerge isn't enabled yet — e.g. a stacked PR whose `watch-stacked-pr.sh` watcher is still waiting on the parent (the watcher reads nothing from the worktree, but you may still need it for fix-ups before the child can land).
+- `worktree remove` refuses because the tree is dirty; investigate rather than force it.
+
+This is a deliberate exception to the older "leave cleanup to the user" stance: cleanup is cheap and reversible precisely *because* the gate is "committed + pushed + on automerge."
+
+If you need merge-event-driven follow-on work (not just worktree cleanup), layer it on top using the user-level `monitoring-pr-status` skill, which exposes merge / failure events as a stream of stdout lines suitable for `Monitor`-based integration.
