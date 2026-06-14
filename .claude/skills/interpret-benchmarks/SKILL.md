@@ -35,14 +35,14 @@ grep -A2 "measured" .agent-tmp/benchmark-output.txt
 | Stddev | Interpretation |
 |---|---|
 | < 5% | Highly reliable. Safe to compare small differences. |
-| 5-10% | Reliable. Normal for SwiftData operations. |
+| 5-10% | Reliable. Normal for database (GRDB) operations. |
 | 10-20% | Marginal. Can detect large regressions but not subtle ones. |
 | > 20% | Unreliable. Do not draw conclusions. Fix the benchmark first. |
 
 If stddev is high, check:
 - Is other work running on the machine?
 - Is setup or teardown leaking into the measure block?
-- Is SwiftData's change tracker accumulating? (Add `context.reset()` between iterations)
+- Is the in-memory GRDB database growing across iterations? (Reset / recreate the database between iterations)
 - Is there autorelease pool buildup? (Add `autoreleasepool {}`)
 
 ## Step 4: Scaling Analysis
@@ -65,7 +65,7 @@ Ratio = (2x average) / (1x average)
 Look at the individual values array for each benchmark:
 
 - **One high outlier, rest consistent** — likely a one-time cost (cache miss, JIT warmup). Usually not actionable unless it happens on every app launch.
-- **Steadily increasing values** — SwiftData context accumulation or memory pressure. The benchmark setup may need fixing (context reset, autoreleasepool).
+- **Steadily increasing values** — database growth across iterations or memory pressure. The benchmark setup may need fixing (reset the in-memory database between iterations, autoreleasepool).
 - **Bimodal distribution** (some fast, some slow) — contention or a code path that sometimes hits a slow branch. Investigate with Instruments.
 
 ## Step 6: Compare Against Baselines

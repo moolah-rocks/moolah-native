@@ -40,7 +40,7 @@ The only exception is scope the user has explicitly authorised in the conversati
 Architectural rules are the highest priority: these are the violations that make the codebase hard to test, change, or reason about.
 
 - **No SwiftLint baseline may be (re)introduced.** The `.swiftlint-baseline.yml` allowlist has been fully paid down and removed; `format-check` runs `swiftlint lint --strict` with zero suppression. Any PR that adds a `.swiftlint-baseline.yml`, adds a `--baseline` flag to a `swiftlint` invocation, runs `swiftlint --write-baseline`, silences a violation with `// swiftlint:disable` (absent a real, documented justification), or bumps a `.swiftlint.yml` threshold to dodge a failure is an automatic **Critical** finding — no exceptions unless the PR body explicitly quotes user authorisation. PRs fix newly-flagged violations in source, never launder them. Covered in `CLAUDE.md` > Pre-Commit Checklist.
-- **Domain isolation** -- `Domain/Models/` and `Domain/Repositories/` import nothing from `SwiftUI`, `SwiftData`, `URLSession`, `Backends/`, or any `Remote*` type.
+- **Domain isolation** -- `Domain/Models/` and `Domain/Repositories/` import nothing from `SwiftUI`, `GRDB`, `URLSession`, `Backends/`, or any `Remote*` type.
 - **Repository access** only via `@Environment(BackendProvider.self)` + repository protocols. Feature code must not import `Backends/` or reference `Remote*` types directly.
 - **Thin views** -- no multi-step async flows, no error formatting, no aggregations, no parsing in private view methods. Flag logic that should live in a store, model extension, or shared utility. Private view methods are not unit-testable.
 - **Critical — Searchable invariant for detail-column leaves.** The
@@ -67,7 +67,7 @@ Architectural rules are the highest priority: these are the violations that make
   to a diff that demonstrates intra-leaf shape variance — only the new
   invariant applies.
 - **Store shape** -- `@MainActor @Observable`, state rollback on failure (save old state, mutate, revert on error), error state surfaced for the UI.
-- **Currency sign convention** -- no `abs()` on monetary values; sign preserved through arithmetic; `MonetaryAmount.parseCents(from:)` is the single parser (don't duplicate `parseCurrency` in views).
+- **Currency sign convention** -- no `abs()` on monetary values; sign preserved through arithmetic; `InstrumentAmount.parseQuantity(from:decimals:)` is the single parser (don't duplicate amount parsing in views).
 - **Singleton / global sniffing** -- flag `UserDefaults.standard` outside a dedicated wrapper type; flag `Date()` in non-boundary business logic (tests need injection); flag static mutable state.
 
 ### B. Swift idiom quality (from CODE_GUIDE.md)
@@ -109,7 +109,7 @@ Architectural rules are the highest priority: these are the violations that make
 - **`UserDefaults.standard` inside a dedicated wrapper type** is fine -- the wrapper is the boundary.
 - **`Date()` in views for display-only formatting** is fine; only flag when used to compute business logic that a test would need to pin.
 - **`@unchecked Sendable` on `CloudKitBackend`** -- concurrency-review's exemption list covers this; don't flag here.
-- **`MonetaryAmount(cents: max(0, -serverAmount.cents))`** -- documented sign pattern from CLAUDE.md for expense displays; this is not an `abs()` violation.
+- **`InstrumentAmount(quantity: max(0, -serverAmount.quantity), instrument:)`** -- documented sign pattern from CLAUDE.md for expense displays; this is not an `abs()` violation.
 - **Large-file exemptions granted in `.swiftlint.yml`** (especially for test files) are valid -- don't demand they be revisited unless the context obviously changed.
 - **Empty / single-line trailing `private extension Self {}`** -- if the file genuinely has no private helpers, don't demand one.
 

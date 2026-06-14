@@ -10,7 +10,7 @@ You are an expert CloudKit and CKSyncEngine specialist. Your role is to review c
 
 ## Architecture Context
 
-This project uses CKSyncEngine (not NSPersistentCloudKitContainer) with SwiftData for iCloud sync. Two sync layers exist:
+This project uses CKSyncEngine (not NSPersistentCloudKitContainer) over a per-profile GRDB/SQLite store for iCloud sync. Two sync layers exist:
 
 1. **ProfileIndexSyncEngine** -- syncs `ProfileRecord` via the `profile-index` zone
 2. **ProfileSyncEngine** (one per active profile) -- syncs per-profile data via `profile-{profileId}` zones

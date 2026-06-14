@@ -261,8 +261,8 @@ Use these when writing about the app. Do not invent features.
 | Sync | Optional iCloud sync (user's own iCloud, end-to-end) |
 | Accounts | No sign-up required, no user accounts |
 | Cloud servers | None — no third-party servers touch user data |
-| Key features | Transaction tracking, custom categories, split transactions, notes, search, recurring transactions, multiple accounts, budgets, reports, charts (spending trends, income vs expenses, category breakdowns), filters, export |
-| What it's not | Not a bank, not a payment processor, no bank-sync/open-banking, no investment tracking |
+| Key features | Transaction tracking, custom categories, split transactions, notes, search, recurring transactions, multiple accounts, earmarks (savings goals) & budgets, investment & crypto holdings tracking, reports, charts (spending trends, income vs expenses, category breakdowns, net worth & forecast), filters, CSV import, export |
+| What it's not | Not a bank, not a payment processor, no bank-sync/open-banking |
 
 ---
 

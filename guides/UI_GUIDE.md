@@ -173,7 +173,7 @@ Moolah uses semantic colors to communicate financial meaning at a glance.
 
 #### Transaction Amount Colors
 ```swift
-// Current implementation in MonetaryAmountView.swift
+// Current implementation in InstrumentAmountView.swift
 .foregroundStyle(amount.isPositive ? .green : amount.isNegative ? .red : .primary)
 ```
 
@@ -185,12 +185,14 @@ Moolah uses semantic colors to communicate financial meaning at a glance.
 | Balances (neutral) | `.secondary` | Use `colorOverride: .secondary` |
 
 #### Expense Amount Display Convention
-Expenses are stored internally as **negative cents** (they reduce the account balance). However, when displaying expense totals to the user (e.g., in category breakdowns, analysis summaries), **negate them to positive** values. Users expect "an expense of $20" — not "$-20". A negative expense (e.g., a refund) should display as a negative value.
+Expenses are stored internally as **negative quantities** (they reduce the account balance). However, when displaying expense totals to the user (e.g., in category breakdowns, analysis summaries), **negate them to positive** values. Users expect "an expense of $20" — not "$-20". A negative expense (e.g., a refund) should display as a negative value.
 
 ```swift
-// Server returns -5000 cents for a $50 expense
+// Server returns a -50.00 quantity for a $50 expense
 // Display as: $50.00 (positive)
-let displayAmount = MonetaryAmount(cents: max(0, -serverAmount.cents), currency: serverAmount.currency)
+let displayAmount = InstrumentAmount(
+  quantity: max(0, -serverAmount.quantity),
+  instrument: serverAmount.instrument)
 ```
 
 This matches the web app's `Math.max(0, -totalExpenses)` pattern. This convention applies to both aggregated expense summaries **and** expense amount fields in forms/editors — users enter and see positive values (e.g., "$50"), and the sign is applied internally based on transaction type. Transaction lists that show the raw signed amount (with income positive and expenses negative) are the exception.
@@ -280,9 +282,9 @@ HStack(alignment: .firstTextBaseline, spacing: 12) {
   Spacer()
 
   VStack(alignment: .trailing, spacing: 4) {
-    MonetaryAmountView(amount: amount, font: .body)
+    InstrumentAmountView(amount: amount, font: .body)
     if let balance = balance {
-      MonetaryAmountView(amount: balance, colorOverride: .secondary, font: .caption)
+      InstrumentAmountView(amount: balance, colorOverride: .secondary, font: .caption)
     }
   }
 }
@@ -738,11 +740,11 @@ Chart(categoryTotals) { category in
 Gauge(value: spent, in: 0...budgeted) {
   Text(category.name)
 } currentValueLabel: {
-  MonetaryAmountView(amount: spentAmount, font: .body)
+  InstrumentAmountView(amount: spentAmount, font: .body)
 } minimumValueLabel: {
   Text("$0")
 } maximumValueLabel: {
-  MonetaryAmountView(amount: budgetedAmount, font: .caption)
+  InstrumentAmountView(amount: budgetedAmount, font: .caption)
 }
 .gaugeStyle(.accessoryCircularCapacity)
 .tint(spent > budgeted ? .red : .green)
@@ -824,7 +826,7 @@ Image(systemName: "chart.pie.fill")
 HStack {
   Text(transaction.payee)
   Spacer()
-  MonetaryAmountView(amount: transaction.amount)
+  InstrumentAmountView(amount: transaction.amount)
 }
 .accessibilityElement(children: .combine)
 .accessibilityLabel("\(transaction.payee), \(transaction.amount.decimalValue.formatted(.currency(code: transaction.amount.currency.code)))")

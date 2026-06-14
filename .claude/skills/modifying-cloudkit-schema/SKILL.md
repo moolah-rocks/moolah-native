@@ -76,7 +76,7 @@ Not allowed. Same as rename: add a new field with the new type, deprecate the ol
 
 1. Declare the type in `schema.ckdb` with the standard system-field block, `___recordID REFERENCE QUERYABLE`, and the standard grants.
 2. `just generate`. New wire struct exists.
-3. Add the domain type in `Domain/Models/` (and the SwiftData `@Model` in `Backends/CloudKit/Models/` if applicable).
+3. Add the domain type in `Domain/Models/` (and, if it needs local persistence, the GRDB row + schema under `Backends/GRDB/` per `guides/DATABASE_SCHEMA_GUIDE.md`).
 4. Create `Backends/CloudKit/Sync/<RecordType>+CloudKit.swift` with `CloudKitRecordConvertible` conformance using the wire struct.
 5. Register the type in `RecordTypeRegistry.allTypes` (in `Backends/CloudKit/Sync/CloudKitRecordConvertible.swift`).
 6. Add a round-trip test in `MoolahTests/Backends/CloudKit/RoundTripTests.swift`.

@@ -109,7 +109,7 @@ Examples:
 
 2. **Use 10 iterations** (`options.iterationCount = 10`). XCTest's default of 5 is too few for noisy operations.
 
-3. **No per-iteration store reset is needed for fetch benchmarks.** GRDB decodes a fresh value-type row on every fetch and keeps no cross-fetch identity map or change tracker, so later iterations don't drift the way SwiftData's accumulated objects did. Reuse the same in-memory database from `TestBackend.create()` across iterations:
+3. **No per-iteration store reset is needed for fetch benchmarks.** GRDB decodes a fresh value-type row on every fetch and keeps no cross-fetch identity map or change tracker, so later iterations don't drift the way a change-tracked object graph would. Reuse the same in-memory database from `TestBackend.create()` across iterations:
 
    ```swift
    measure(metrics: metrics, options: options) {

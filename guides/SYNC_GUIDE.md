@@ -564,7 +564,7 @@ Verify that repository mutations trigger the sync closures with the correct IDs:
 ```swift
 @MainActor
 func testCreateQueuesSync() async throws {
-    let (backend, _, _) = try TestBackend.create()
+    let (backend, _) = try TestBackend.create()
     let repo = backend.accounts as! CloudKitAccountRepository
 
     var changedIds: [UUID] = []

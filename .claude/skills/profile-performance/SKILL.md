@@ -55,7 +55,6 @@ These show up in Instruments under the "os_signpost" instrument:
 | Sync | `applyRemoteChanges` | Full batch processing (saves + deletes + balance + save) |
 | Sync | `applyBatchSaves` | Record upsert by type |
 | Sync | `applyBatchDeletions` | Record deletion by type |
-| Sync | `contextSave` | SwiftData context.save() |
 | Sync | `queueAllExistingRecords` | Initial record scanning for upload |
 | Sync | `nextRecordZoneChangeBatch` | Building upload batch |
 | Balance | `invalidateCachedBalances` | Clearing cached balances after sync |

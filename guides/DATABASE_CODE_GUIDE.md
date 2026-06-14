@@ -62,21 +62,21 @@ Construction sites are `Backends/GRDB/`, `ProfileSession`, and test targets. The
 
 ### Repository pattern
 
-Repositories live under `Backends/GRDB/Repositories/`, are `Sendable` structs, and hold a `DatabaseWriter`:
+Repositories live under `Backends/GRDB/Repositories/`, are `final class`es marked `@unchecked Sendable`, and hold a `DatabaseWriter`:
 
 ```swift
-struct GRDBAccountRepository: AccountRepository {
-    let writer: any DatabaseWriter
+final class GRDBAccountRepository: AccountRepository, @unchecked Sendable {
+    let database: any DatabaseWriter
 
     func accounts() async throws -> [Account] {
-        try await writer.read { db in
-            try AccountRecord.fetchAll(db).map(\.domain)
+        try await database.read { db in
+            try AccountRow.fetchAll(db).map(\.domain)
         }
     }
 
     func upsert(_ account: Account) async throws {
-        try await writer.write { db in
-            try AccountRecord(domain: account).upsert(db)
+        try await database.write { db in
+            try AccountRow(domain: account).upsert(db)
         }
     }
 }
@@ -88,7 +88,7 @@ struct GRDBAccountRepository: AccountRepository {
 
 ### `InferSendableFromCaptures`
 
-Closure-shorthand uses (`writer.read(Type.fetchAll)`) compile cleanly without `@Sendable` ceremony because the project ships at `SWIFT_VERSION: "6.0"` — and `InferSendableFromCaptures` ([SE-0418](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0418-inferring-sendable-for-methods.md)) is enabled by default in Swift 6 mode.
+Closure-shorthand uses (`database.read(Type.fetchAll)`) compile cleanly without `@Sendable` ceremony because the project ships at `SWIFT_VERSION: "6.0"` — and `InferSendableFromCaptures` ([SE-0418](https://github.com/swiftlang/swift-evolution/blob/main/proposals/0418-inferring-sendable-for-methods.md)) is enabled by default in Swift 6 mode.
 
 **Do not** add `-enable-upcoming-feature InferSendableFromCaptures` to `OTHER_SWIFT_FLAGS` — Swift 6 rejects it with `error: upcoming feature 'InferSendableFromCaptures' is already enabled as of Swift version 6`. The feature is only an opt-in flag for Swift 5 mode codebases.
 
@@ -98,7 +98,7 @@ In GRDB 7, async `read` / `write` honour task cancellation: cancelling the surro
 
 ### Non-reentrancy
 
-`writer.write { writer.write { … } }` traps. Compose work inside one closure; don't nest.
+`database.write { database.write { … } }` traps. Compose work inside one closure; don't nest.
 
 ### `unsafeRead` / `writeWithoutTransaction` / `unsafeReentrant*`
 
@@ -113,7 +113,7 @@ Conventions, all enforced by `database-code-review`:
 1. **Tracking closure form.** Use `ValueObservation.tracking { db in … }` for queries that fetch concrete data; GRDB infers the region from the SQL/table accesses. **Empty-table caveat:** region inference only registers a table if at least one row is touched during the first fetch (SQLite's `SQLITE_READ` authorizer fires on row access, not on `SELECT 1 FROM empty_table LIMIT 1` returning zero rows). For tracking closures that may run against empty tables — most notably `Void`-emitting tick streams over cache tables — use the explicit-region form `ValueObservation.tracking(regions: [Table("name1"), Table("name2"), ...]) { _ in () }` so the regions are registered unconditionally.
    - **`WITHOUT ROWID` caveat.** SQLite's `sqlite3_update_hook` (the mechanism `ValueObservation` relies on to detect writes) does **not** fire for `WITHOUT ROWID` tables — a documented SQLite limitation. Any write site that targets a `WITHOUT ROWID` table whose region is being observed MUST call `db.notifyChanges(in: Table("name"))` inside the same `db.write { ... }` block, **after** the insert / update / delete. Without the notify the observation registers the region correctly and emits the initial value, but never re-fires on subsequent writes — every subscriber hangs. The rate-cache helper at `Backends/GRDB/Observation/RateCacheTable.swift` (`db.notifyRateCacheChange(.exchangeRate | .stockPrice | .cryptoPrice)`) is the canonical example; production write sites in `ExchangeRateService+Persistence.swift`, `StockPriceService.swift`, and `CryptoPriceService+Persistence.swift` use it after every insert / delete against the three `WITHOUT ROWID` rate-cache tables.
 2. **`.removeDuplicates()` is the default** for every `observe…` method that emits a value type (relies on the row decoder being `Equatable`). **Carve-out:** streams that emit `Void` (e.g. `InstrumentConversionService.observeRates()`) MUST NOT apply `removeDuplicates` — `Void == Void` would suppress every emission.
-3. **Scheduling.** `.values(in: writer)` with no explicit `scheduling:` argument. The default `.task` scheduler (cooperative thread pool) is correct for `AsyncSequence` consumption inside a Swift `Task`. Do not override with a `DispatchQueue`-targeting scheduler (`.async(...)` factories on `DispatchQueue` or the `.mainActorQueued` style); those exist for the Combine `publisher(in:scheduling:)` and callback `start(in:scheduling:onError:onChange:)` paths, and using them with `.values(in:)` causes a redundant dispatch hop when the consuming `Task` is already actor-isolated.
+3. **Scheduling.** `.values(in: database)` with no explicit `scheduling:` argument. The default `.task` scheduler (cooperative thread pool) is correct for `AsyncSequence` consumption inside a Swift `Task`. Do not override with a `DispatchQueue`-targeting scheduler (`.async(...)` factories on `DispatchQueue` or the `.mainActorQueued` style); those exist for the Combine `publisher(in:scheduling:)` and callback `start(in:scheduling:onError:onChange:)` paths, and using them with `.values(in:)` causes a redundant dispatch hop when the consuming `Task` is already actor-isolated.
 4. **AsyncStream bridge.** All domain protocols return `AsyncStream<T>` (Foundation, `Sendable`). The bridge lives at `Backends/GRDB/Observation/AsyncValueObservation+AsyncStream.swift` and MUST wire `continuation.onTermination` to cancel the underlying observation `Task`. Without this, an `AsyncStream` consumer that cancels its `Task` would not propagate cancellation to GRDB and the observation would leak.
 5. **Errors — categorise at the repository, not the bridge.** The bridge is single-shot: it delivers the first error to `onError` and completes the stream (no retry, no categorisation, no logging — see the doc comment on `toAsyncStream(onError:)`). Repositories provide an `onError` callback that distinguishes:
    - **Programmer bugs** (`SQLITE_ERROR` from malformed SQL, missing tables) — `fatalError` in debug; in release, surface to the store via the repository's `observeErrors()` channel and let the stream complete (no restart).
@@ -135,14 +135,14 @@ Stores subscribe in `init` with strong `self` (the store is `@MainActor`; the ta
 
 ## 3. Records & Mapping
 
-Records are pure `Sendable` value types under `Backends/GRDB/Records/`, mapped to/from Domain models by extensions under `Backends/GRDB/Mapping/`.
+Records are pure `Sendable` value types under `Backends/GRDB/Records/`, named `<Name>Row`, mapped to/from Domain models by a sibling `<Name>Row+Mapping.swift` extension in the same directory. (The rate/price *cache* records — `ExchangeRateRecord`, `CryptoPriceRecord`, `StockPriceRecord` — keep the `Record` suffix; domain-mirroring records use `Row`.)
 
 ### Layout
 
 ```
-Domain/Models/Account.swift                       // Sendable; no GRDB import
-Backends/GRDB/Records/AccountRecord.swift         // Sendable; GRDB record protocols
-Backends/GRDB/Mapping/AccountRecord+Domain.swift  // init(domain:) + var domain: Account
+Domain/Models/Account.swift                      // Sendable; no GRDB import
+Backends/GRDB/Records/AccountRow.swift           // Sendable; GRDB record protocols
+Backends/GRDB/Records/AccountRow+Mapping.swift   // init(domain:) + var domain: Account
 ```
 
 ### Record protocols
@@ -162,7 +162,7 @@ Moolah uses UUID PKs throughout; records adopt `PersistableRecord` only.
 ```swift
 import GRDB
 
-struct AccountRecord: Codable, Sendable, FetchableRecord, PersistableRecord {
+struct AccountRow: Codable, Sendable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "account"
 
     enum Columns: String, ColumnExpression, CaseIterable {
@@ -196,7 +196,7 @@ static var databaseSelection: [any SQLSelectable] {
 ### Record ↔ Domain mapping lives in the extension
 
 ```swift
-extension AccountRecord {
+extension AccountRow {
     init(domain: Account) {
         self.init(
             id: domain.id,
@@ -232,7 +232,7 @@ Backend isolation. The reviewer treats either as Critical.
 
 ### `Decimal` is forbidden in record structs
 
-GRDB stores `Decimal` as TEXT — string comparisons sort lexically and aggregations through implicit numeric coercion lose precision. Money is integer cents (`InstrumentAmount`); rates are `Double` stored as REAL. Any `Decimal` property in a record struct under `Backends/GRDB/Records/` is flagged.
+GRDB stores `Decimal` as TEXT — string comparisons sort lexically and aggregations through implicit numeric coercion lose precision. Money is stored as a scaled `Int64` (the `Int64 × 10^8` representation behind `InstrumentAmount`); rates are `Double` stored as REAL. Any `Decimal` property in a record struct under `Backends/GRDB/Records/` is flagged.
 
 ### Date encoding
 
@@ -244,7 +244,7 @@ The project default is GRDB's Codable default: ISO-8601 TEXT. `databaseDateEncod
 
 ### Query interface vs raw SQL
 
-Default to GRDB's **query interface** (`AccountRecord.filter(Column.id == accountId).fetchOne(db)`) for simple lookups. Reach for **raw SQL** when:
+Default to GRDB's **query interface** (`AccountRow.filter(Column.id == accountId).fetchOne(db)`) for simple lookups. Reach for **raw SQL** when:
 
 - The query uses a SQL feature the interface can't express (window functions, recursive CTEs, complex aggregates).
 - Performance demands a hand-tuned join or covering-index lookup.
@@ -258,7 +258,7 @@ There is **exactly one unsafe shape**: a Swift `String` (built with `\()`, `Stri
 | `db.execute(sql: "UPDATE x SET n = ? WHERE id = ?", arguments: [n, id])` | Safe (positional bind) |
 | `db.execute(sql: "UPDATE x SET n = :n WHERE id = :id", arguments: ["n": n, "id": id])` | Safe (named bind) |
 | `db.execute(literal: "UPDATE x SET n = \(n) WHERE id = \(id)")` | Safe (`SQL` literal interpolation parameterises) |
-| `AccountRecord.filter(Column("id") == id).fetchOne(db)` | Safe (query interface) |
+| `AccountRow.filter(Column("id") == id).fetchOne(db)` | Safe (query interface) |
 | `db.execute(sql: "UPDATE x SET n = '\(n)' WHERE id = \(id)")` | **Critical: SQL injection** |
 | `db.execute(sql: someStringVariable)` (not a string literal) | **Critical: dynamic SQL** |
 | `db.execute(sql: String(format: "SELECT %@", x))` | **Critical** |
@@ -272,10 +272,10 @@ For dynamic SQL composition use the `SQL` literal type (`db.execute(literal: "..
 SQLite cannot parameterise identifiers. For dynamic identifier substitution, validate against an allowlist before concatenation, in the same expression as the use:
 
 ```swift
-guard let sortColumn = AccountRecord.Columns(rawValue: userInput) else {
+guard let sortColumn = AccountRow.Columns(rawValue: userInput) else {
     throw RepositoryError.invalidSortColumn
 }
-let request = AccountRecord.order(Column(sortColumn.rawValue))  // safe: closed set
+let request = AccountRow.order(Column(sortColumn.rawValue))  // safe: closed set
 ```
 
 Dynamic ORDER BY / table / column name from outside the data layer without an immediately-preceding allowlist assertion is Critical.
@@ -291,7 +291,7 @@ The `quote()` SQL function is for administrative dumping, never for substituting
 let rows = Array(try Row.fetchCursor(db, sql: "SELECT * FROM account"))
 
 // Right — fetch as records, or copy:
-let records = try AccountRecord.fetchAll(db)
+let records = try AccountRow.fetchAll(db)
 let rows = try Row.fetchCursor(db, sql: "...").map { $0.copy() }
 ```
 
@@ -304,7 +304,7 @@ Record CRUD methods (`insert`, `update`, `upsert`, `delete`, `fetchAll`, `fetchO
 For raw SQL inside a tight loop (e.g. CKSyncEngine batch upsert), use `db.cachedStatement(sql:)` instead of `db.makeStatement(sql:)` to skip re-preparation:
 
 ```swift
-try writer.write { db in
+try database.write { db in
     let statement = try db.cachedStatement(sql: "INSERT INTO leg (id, ...) VALUES (?, ...)")
     for leg in legs {
         try statement.execute(arguments: [leg.id, ...])
@@ -317,11 +317,11 @@ try writer.write { db in
 ```swift
 // Wrong — opens N transactions, N fsyncs:
 for record in records {
-    try await writer.write { db in try record.insert(db) }
+    try await database.write { db in try record.insert(db) }
 }
 
 // Right — one transaction, one fsync:
-try await writer.write { db in
+try await database.write { db in
     for record in records { try record.insert(db) }
 }
 ```
@@ -335,21 +335,20 @@ try await writer.write { db in
 
 ## 5. Transactions
 
-- `writer.write { ... }` opens an `IMMEDIATE` transaction. Default deferred transactions are not used — they fail with `SQLITE_BUSY` on first write under any concurrent writer.
+- `database.write { ... }` opens an `IMMEDIATE` transaction. Default deferred transactions are not used — they fail with `SQLITE_BUSY` on first write under any concurrent writer.
 - Every multi-statement write must be inside the same `write` closure (one transaction, one rollback boundary).
 - Every multi-statement write must have a paired test asserting that a thrown error inside the closure leaves the database unchanged.
-- `writer.read { ... }` opens a deferred read transaction with snapshot isolation. Compiler refuses mutating methods inside.
+- `database.read { ... }` opens a deferred read transaction with snapshot isolation. Compiler refuses mutating methods inside.
 
 ```swift
 func payScheduledTransaction(_ tx: Transaction) async throws -> PayResult {
-    try await writer.write { db in
-        let saved = try TransactionRecord(domain: tx).insert(db)
-        try ScheduledRecord
+    try await database.write { db in
+        let saved = try TransactionRow(domain: tx).insert(db)
+        // Clear the recurrence on the scheduled template (recurrence is
+        // stored as fields on TransactionRow, not a separate table).
+        try TransactionRow
             .filter(Column("id") == tx.scheduledId)
-            .deleteAll(db)
-        try AccountRecord
-            .filter(Column("id") == tx.accountId)
-            .updateAll(db, Column("balance") += saved.amount)
+            .updateAll(db, Columns.recurPeriod.set(to: nil))
         return PayResult(...)
     }
 }
@@ -422,7 +421,7 @@ final class GRDBAccountRepositoryTests {
 
     @Test
     func upsertAndFetchRoundTrip() async throws {
-        let repo = GRDBAccountRepository(writer: queue)
+        let repo = GRDBAccountRepository(database: queue)
         let account = Account(name: "Checking", ...)
         try await repo.upsert(account)
         let loaded = try await repo.accounts()
@@ -465,7 +464,7 @@ Production stores expose only their public API. Test seams (counters, fixture lo
 ```swift
 extension GRDBAccountRepository {
     func accountCountForTesting() async throws -> Int {
-        try await writer.read { db in try AccountRecord.fetchCount(db) }
+        try await database.read { db in try AccountRow.fetchCount(db) }
     }
 }
 ```
@@ -486,7 +485,7 @@ See §6.
 
 The full sync model lives in `guides/SYNC_GUIDE.md`. Code-side specifics:
 
-- Each apply-remote-changes batch is a single `writer.write` transaction. A partial apply must roll back; the next sync cycle re-delivers the failed batch.
+- Each apply-remote-changes batch is a single `database.write` transaction. A partial apply must roll back; the next sync cycle re-delivers the failed batch.
 - `encoded_system_fields` bytes are bit-for-bit copies; never decode or interpret them outside the `Backends/CloudKit/Sync/` boundary.
 - Use `db.cachedStatement(sql:)` for the per-record upsert in batch-apply loops.
 
@@ -496,10 +495,10 @@ The full sync model lives in `guides/SYNC_GUIDE.md`. Code-side specifics:
 
 When adding a new table to the profile DB:
 
-- [ ] One record type under `Backends/GRDB/Records/<Name>Record.swift`, `Sendable`, `Codable`, conforms to `FetchableRecord, PersistableRecord`.
+- [ ] One record type under `Backends/GRDB/Records/<Name>Row.swift`, `Sendable`, `Codable`, conforms to `FetchableRecord, PersistableRecord`.
 - [ ] `enum Columns: String, ColumnExpression, CaseIterable` matching the SQL columns.
-- [ ] Domain ↔ Record mapping under `Backends/GRDB/Mapping/<Name>Record+Domain.swift`.
-- [ ] Repository in `Backends/GRDB/Repositories/<Name>Repository.swift`, `Sendable`, async-only.
+- [ ] Domain ↔ Row mapping under `Backends/GRDB/Records/<Name>Row+Mapping.swift`.
+- [ ] Repository in `Backends/GRDB/Repositories/GRDB<Name>Repository.swift`, a `final class` marked `@unchecked Sendable`, async-only.
 - [ ] No `Decimal` properties on the record.
 - [ ] `databaseSelection` (if overridden) is `static var`.
 - [ ] No `import GRDB` outside `Backends/GRDB/`; no record types referenced from `Domain/`, `Features/`, `App/`.
