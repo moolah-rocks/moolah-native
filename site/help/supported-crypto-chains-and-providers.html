@@ -141,8 +141,8 @@
       <tr><th>Provider</th><th>Used for</th><th>Notes</th></tr>
     </thead>
     <tbody>
-      <tr><td>Alchemy</td><td>On-chain transaction fetch for crypto wallets</td><td>Required. Uses your own API key, configured in <strong>Settings &gt; Crypto Tokens</strong>.</td></tr>
-      <tr><td>Blockscout</td><td>On-chain transaction fetch, fallback</td><td>Used automatically when Alchemy is unavailable. No key needed.</td></tr>
+      <tr><td>Alchemy</td><td>ERC-20 token transfers for crypto wallets</td><td>Required. Runs on every sync. Uses your own API key, configured in <strong>Settings &gt; Crypto Tokens</strong>.</td></tr>
+      <tr><td>Blockscout</td><td>Native and internal ETH activity for crypto wallets</td><td>Required. Runs on every sync; it's the authoritative source, so a failure stops the sync. No key needed.</td></tr>
       <tr><td>Coinstash</td><td>Exchange account sync</td><td>Uses your own read-only API token, configured per account.</td></tr>
       <tr><td>CoinGecko</td><td>Token prices, highest priority</td><td>Optional. Add a free Demo API key in <strong>Settings &gt; Crypto Tokens</strong> to use it.</td></tr>
       <tr><td>CryptoCompare</td><td>Token prices, fallback</td><td>No key needed.</td></tr>
