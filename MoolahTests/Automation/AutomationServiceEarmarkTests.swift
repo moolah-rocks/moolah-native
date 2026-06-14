@@ -61,18 +61,18 @@ struct AutomationServiceEarmarkTests {
       name: "Emergency Fund"
     )
 
-    await expectEventually("created earmark resolves case-insensitively") {
-      (try? service.resolveEarmark(named: "emergency fund", profileIdentifier: "Test"))?.name
-        == "Emergency Fund"
-    }
+    // Authoritative read — resolves deterministically, no expectEventually.
+    let resolved = try await service.resolveEarmark(
+      named: "emergency fund", profileIdentifier: "Test")
+    #expect(resolved.name == "Emergency Fund")
   }
 
   @Test("resolveEarmark throws when not found")
   func resolveEarmarkNotFound() async throws {
     let (service, _) = try await makeServiceWithSession()
 
-    #expect(throws: AutomationError.self) {
-      try service.resolveEarmark(named: "NonExistent", profileIdentifier: "Test")
+    await #expect(throws: AutomationError.self) {
+      try await service.resolveEarmark(named: "NonExistent", profileIdentifier: "Test")
     }
   }
 }

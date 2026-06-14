@@ -86,9 +86,9 @@ extension AutomationService {
       named: draft.accountName, profileIdentifier: profileIdentifier)
     let instrument = try await resolveInstrument(draft.instrumentId, session: session)
     let legType = try Self.transactionType(draft.type)
-    let categoryId = try resolveOptionalCategory(
+    let categoryId = try await resolveOptionalCategory(
       draft.categoryName, profileIdentifier: profileIdentifier)
-    let earmarkId = try resolveOptionalEarmark(
+    let earmarkId = try await resolveOptionalEarmark(
       draft.earmarkName, profileIdentifier: profileIdentifier)
 
     let newLeg = TransactionLeg(
@@ -134,10 +134,10 @@ extension AutomationService {
     let resolvedType: TransactionType =
       if let type = changes.type { try Self.transactionType(type) } else { located.leg.type }
     let resolvedCategoryId: UUID? =
-      try resolveOptionalCategory(changes.categoryName, profileIdentifier: profileIdentifier)
+      try await resolveOptionalCategory(changes.categoryName, profileIdentifier: profileIdentifier)
       ?? located.leg.categoryId
     let resolvedEarmarkId: UUID? =
-      try resolveOptionalEarmark(changes.earmarkName, profileIdentifier: profileIdentifier)
+      try await resolveOptionalEarmark(changes.earmarkName, profileIdentifier: profileIdentifier)
       ?? located.leg.earmarkId
 
     // Rebuild the leg keeping id / externalId / counterpartyAddress.
@@ -251,17 +251,17 @@ extension AutomationService {
   /// Resolves an optional category name to its id, or `nil` when unset.
   private func resolveOptionalCategory(
     _ name: String?, profileIdentifier: String
-  ) throws -> UUID? {
+  ) async throws -> UUID? {
     guard let name else { return nil }
-    return try resolveCategory(named: name, profileIdentifier: profileIdentifier).id
+    return try await resolveCategory(named: name, profileIdentifier: profileIdentifier).id
   }
 
   /// Resolves an optional earmark name to its id, or `nil` when unset.
   private func resolveOptionalEarmark(
     _ name: String?, profileIdentifier: String
-  ) throws -> UUID? {
+  ) async throws -> UUID? {
     guard let name else { return nil }
-    return try resolveEarmark(named: name, profileIdentifier: profileIdentifier).id
+    return try await resolveEarmark(named: name, profileIdentifier: profileIdentifier).id
   }
 
   /// Resolves an `instrumentId` string to an `Instrument`.
