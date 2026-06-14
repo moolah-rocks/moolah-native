@@ -212,12 +212,12 @@ Apple's [Choosing Between Structures and Classes](https://developer.apple.com/do
   ```swift
   enum CurrencyFormat {                          // Good
     static let maxFractionDigits = 2
-    static func parseCents(from text: String) -> Int? { … }
+    static func parseQuantity(from text: String, decimals: Int) -> Decimal? { … }
   }
 
   struct CurrencyFormat {                        // Bad — use a case-less enum
     static let maxFractionDigits = 2
-    static func parseCents(from text: String) -> Int? { … }
+    static func parseQuantity(from text: String, decimals: Int) -> Decimal? { … }
   }
   ```
 
@@ -472,9 +472,9 @@ SwiftLint enforces most of these via opt-in rules; follow them by habit.
 
 Cross-references — these rules are normative and live in `CLAUDE.md`:
 
-- **`Int` cents are the canonical representation.** All monetary values are stored as integer cents. See `CLAUDE.md` "Currency" section.
+- **`InstrumentAmount` is the canonical representation.** Monetary values are a `Decimal` `quantity` paired with their `Instrument` (stored as `Int64` scaled by 10^8 at the persistence layer). See `CLAUDE.md` "Currency & instruments" section.
 - **Preserve the sign** of monetary amounts. Expenses are typically negative, but a refund is an expense with a positive value — any transaction type may carry the opposite sign to its norm. **Do not use `abs()`** or otherwise discard the sign. Display logic must handle both signs correctly. See `CLAUDE.md` "Monetary Sign Convention."
-- **Parse via `MonetaryAmount.parseCents(from:)`.** Never duplicate `parseCurrency` in views or reimplement cent parsing anywhere else.
+- **Parse via `InstrumentAmount.parseQuantity(from:decimals:)`.** Never duplicate amount parsing in views or reimplement quantity parsing anywhere else.
 - **Conversion correctness** — all multi-currency aggregation rules live in `guides/INSTRUMENT_CONVERSION_GUIDE.md`.
 
 ---

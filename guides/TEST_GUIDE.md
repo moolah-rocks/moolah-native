@@ -166,7 +166,7 @@ This convention is also documented in `CLAUDE.md` and the Capturing Test Output 
 | --- | --- | --- |
 | `MoolahTests_macOS` | Store, contract, repository, model tests on native macOS | `TestBackend` (in-memory `CloudKitBackend`) |
 | `MoolahTests_iOS` | Same suite on iOS Simulator | `TestBackend` |
-| `MoolahBenchmarks` | Performance benchmarks on macOS only | `TestBackend` |
+| `MoolahBenchmarks_macOS` | Performance benchmarks on macOS only | `TestBackend` |
 | `MoolahUITests_macOS` | XCUITest end-to-end tests on macOS only | App launched with `--ui-testing` + seeded `TestBackend` |
 
 Every test target uses `TestBackend` — the production `CloudKitBackend` initialised against an in-memory GRDB database. No mocks at the repository layer. UI tests additionally seed the backend through fixed-UUID fixtures.

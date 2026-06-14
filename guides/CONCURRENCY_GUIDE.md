@@ -69,7 +69,7 @@ All domain models are `struct` conforming to `Sendable`. They are the data that 
 struct Transaction: Identifiable, Codable, Sendable, Hashable {
     let id: UUID
     var payee: String
-    var amount: MonetaryAmount
+    var amount: InstrumentAmount
     // ...
 }
 ```
@@ -627,7 +627,7 @@ All store tests are `@MainActor` because the stores themselves are `@MainActor`:
 @MainActor
 final class AccountStoreTests: XCTestCase {
     func testLoad() async throws {
-        let (backend, _, _) = try TestBackend.create()
+        let (backend, _) = try TestBackend.create()
         let store = AccountStore(repository: backend.accounts)
 
         await store.load()

@@ -1,8 +1,9 @@
 # Moolah — Native iOS/macOS App
 
 A universal personal finance app for iPhone and Mac. Tracks accounts, transactions,
-categories, earmarks (savings goals), scheduled payments, and provides analysis and
-reporting. Data syncs across devices via iCloud/CloudKit — no server component required.
+categories, earmarks (savings goals), scheduled payments, and investment & crypto
+holdings, and provides analysis and reporting. Data syncs across devices via
+iCloud/CloudKit — no server component required.
 
 ## Requirements
 
@@ -53,9 +54,10 @@ press **Run** (⌘R).
 just test
 ```
 
-Runs the full test suite on both iPhone 17 Pro simulator and macOS. All feature and
-domain tests use `InMemoryBackend` — no network connection or server account is
-needed. See [`scripts/test.sh`](scripts/test.sh) for the platform-specific details.
+Runs the full test suite on both iPhone 17 Pro simulator and macOS. Feature and
+domain tests run against `TestBackend` (a `CloudKitBackend` backed by an in-memory
+GRDB database) — no network connection or server account is needed. See
+[`scripts/test.sh`](scripts/test.sh) for the platform-specific details.
 
 To run one platform manually:
 
@@ -73,26 +75,29 @@ moolah-native/
 │   ├── Models/             # Plain Swift structs: UserProfile, Account, Transaction, …
 │   └── Repositories/       # Protocol definitions only — no backend imports
 ├── Backends/
-│   └── CloudKit/           # iCloud/CloudKit backend (SwiftData, local-first sync)
+│   ├── CloudKit/           # Production backend: GRDB/SQLite repositories + CKSyncEngine iCloud sync
+│   ├── GRDB/               # SQLite schema, records, and repository implementations
+│   └── …                   # Price/rate providers (CoinGecko, CryptoCompare, Binance, YahooFinance, Frankfurter)
 ├── Features/               # One folder per screen/feature
-│   ├── Auth/               # AuthStore, AppRootView, WelcomeView, UserMenuView
+│   ├── Auth/               # AuthStore, AppRootView, SignedOutView, UserMenuView
 │   └── …
 ├── Shared/
 │   ├── Components/         # Reusable SwiftUI views
-│   └── Extensions/
-├── MoolahTests/
+│   ├── Extensions/
+│   └── PreviewBackend.swift # In-memory backend used by SwiftUI previews
+├── MoolahTests/            # Unit + store tests (MoolahTests_iOS, MoolahTests_macOS)
 │   ├── Domain/             # Pure logic and model tests
-│   ├── Features/           # Store tests using InMemoryBackend
-│   ├── Support/
-│   │   ├── InMemoryBackend/ # In-memory BackendProvider for tests
-│   │   └── Fixtures/        # JSON fixture files
-│   └── UI/                 # Snapshot and XCUITest
+│   ├── Features/           # Store tests using TestBackend
+│   └── Support/
+│       ├── TestBackend.swift # CloudKitBackend over an in-memory GRDB database
+│       └── Fixtures/         # JSON/CSV fixture files
+├── MoolahUITests_macOS/    # XCUITest UI tests (macOS only)
 ├── fastlane/               # Fastlane config for TestFlight/App Store builds
-├── prompts/                # Prompts for related server-side changes
 ├── plans/                  # Planning documents and feature specs
+├── guides/                 # Engineering guides (architecture, testing, sync, …)
 ├── justfile                # Common dev tasks (just build-mac, just test, …)
 ├── project.yml             # XcodeGen spec — edit this, not the .xcodeproj
-├── .github/workflows/      # CI, TestFlight, and monthly auto-tag workflows
+├── .github/workflows/      # CI, release (RC/final), and monthly-RC workflows
 └── scripts/
     └── test.sh             # Runs tests on both platforms
 ```
@@ -103,17 +108,20 @@ The app uses a **repository pattern** to decouple features from any specific bac
 
 ```
 Views / Stores  →  Repository protocols  →  Backend implementations
-                   (Domain layer)            CloudKit (SwiftData + iCloud sync)
+                   (Domain layer)            CloudKit (GRDB/SQLite + CKSyncEngine sync)
 ```
 
 - **Domain models** (`UserProfile`, `Account`, `Transaction`, etc.) are plain Swift
   structs in the `Domain` module. Features only ever see these types.
 - **Repository protocols** (`AuthProvider`, `AccountRepository`, ...) express
   operations in domain terms — no networking or persistence imports.
-- **`BackendProvider`** is the single injection point via `@Environment`. All profiles
-  use CloudKit (iCloud) for storage and sync — no server component required.
-- **`InMemoryBackend`** (test target only) is a full in-memory implementation used in
-  all tests. It is never compiled into the app binary.
+- **`BackendProvider`** is the single injection point via `@Environment`. The
+  production implementation, **`CloudKitBackend`**, wraps the GRDB repositories
+  (`Backends/GRDB/`) over a per-profile SQLite database plus a CKSyncEngine iCloud
+  sync layer — no server component required.
+- **`TestBackend`** (test target only) is a `CloudKitBackend` backed by an in-memory
+  GRDB database, used by every test. **`PreviewBackend`** is the equivalent for
+  SwiftUI previews. Neither is compiled into the app binary.
 
 ## Code Signing
 
@@ -125,25 +133,35 @@ Views / Stores  →  Repository protocols  →  Backend implementations
 
 ## Release & TestFlight
 
-Releases are automated via GitHub Actions and Fastlane:
+Releases ship in two stages — release candidate, then final — both driven by `just`
+targets and GitHub Actions:
 
-- **Tag push** (`v1.0.0`) triggers `.github/workflows/testflight.yml` which builds and
-  uploads to TestFlight.
-- **Monthly auto-tag** (`.github/workflows/monthly-tag.yml`) creates a tag on the 1st
-  of each month to keep TestFlight builds within the 90-day expiry.
-- **Manual trigger** via `workflow_dispatch` on either workflow.
+- **RC tag** (`vX.Y.Z-rc.N`) fires `.github/workflows/release-rc.yml`, which builds and
+  notarises the macOS zip (attached to the GitHub pre-release) and uploads the iOS build
+  to TestFlight.
+- **Final tag** (`vX.Y.Z`) fires `.github/workflows/release-final.yml` at the same commit
+  as the promoted RC: it submits to the App Store and publishes the notarised Mac zip on
+  the GitHub Release.
+- **Monthly RC** (`.github/workflows/monthly-tag.yml`) cuts a fresh RC on the 1st of each
+  month so TestFlight builds stay within the 90-day expiry. `workflow_dispatch` triggers
+  it manually.
+
+The flow is orchestrated by the release scripts — never push a release tag by hand:
 
 ```bash
-just bump-version 1.2.0   # update MARKETING_VERSION in project.yml
-git tag v1.2.0 && git push origin v1.2.0   # triggers TestFlight build
+just release-preflight                 # verify a clean, in-sync, green-CI HEAD
+just release-next-version rc            # compute the next RC version + notes base
+just release-create-rc 1.2.0-rc.1 notes.md   # tag + create the GH pre-release
+just release-wait v1.2.0-rc.1           # follow the workflow to completion
 ```
 
-Local shortcuts:
+Local Fastlane shortcuts:
 
 ```bash
 just certificates   # sync signing certs via Fastlane Match
-just testflight     # build and upload to TestFlight locally
+just testflight     # build and upload to TestFlight locally (fastlane ios beta)
+just bump-version 1.2.0   # update MARKETING_VERSION in project.yml
 ```
 
-See [`plans/IOS_RELEASE_AUTOMATION_PLAN.md`](plans/IOS_RELEASE_AUTOMATION_PLAN.md) for
-the full setup guide including Apple Developer account configuration and GitHub secrets.
+See [`guides/RELEASE_GUIDE.md`](guides/RELEASE_GUIDE.md) for the full procedure,
+recovery steps, and the CloudKit schema-deploy gate.

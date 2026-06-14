@@ -117,7 +117,7 @@ grep -B5 -A10 'testMethodName' .agent-tmp/test-output.txt
 - **Targeting:** iOS 26+ and macOS 26+ (Universal SwiftUI app).
 - **Domain Layer:** Strictly isolated. `Domain/Models/` and `Domain/Repositories/` must never import `SwiftUI`, `GRDB`, `URLSession`, or any backend module.
 - **Features:** Only talk to repository protocols via `@Environment(BackendProvider.self)`. No feature file may import `Backends/` directly.
-- **Currency:** All currency values are stored as `Int` (cents). Currency flows from `Profile.currency` → backend → `MonetaryAmount` on all domain objects. Views derive currency from loaded domain objects, never from a global constant. Tests use `Currency.defaultTestCurrency` (defined in `MoolahTests/Support/TestCurrency.swift`).
+- **Currency & instruments:** Monetary values are modelled as `InstrumentAmount` — a `Decimal` `quantity` paired with its `Instrument` (a fiat currency, stock, or crypto token), stored as `Int64` scaled by 10^8. A profile's base currency comes from `Profile.currencyCode` (exposed as the computed `Profile.instrument`). Domain objects carry their own `InstrumentAmount`s, and views derive the instrument/currency from loaded domain objects, never from a global constant. Arithmetic across mismatched instruments traps at runtime — see `guides/INSTRUMENT_CONVERSION_GUIDE.md`. Tests use `Instrument.defaultTestInstrument` (defined in `MoolahTests/Support/Instrument+TestInstrument.swift`).
 - **Monetary Sign Convention:** The sign of monetary amounts (positive or negative) is semantically important — avoid using `abs()` or otherwise discarding it. Expenses are typically negative values, but refunds are expenses with positive values. Any transaction type may have values with the opposite sign to normal. Preserve and propagate the original sign; display logic should handle both signs correctly.
 - **Backend:** `BackendProvider` is the injection point. `CloudKitBackend` is the production backend — it wraps the GRDB repositories (`Backends/GRDB/`) over a per-profile SQLite database and the CKSyncEngine sync layer. `TestBackend` (CloudKitBackend backed by an in-memory GRDB database) is used in tests; `PreviewBackend` is used in SwiftUI previews.
 - **CloudKit Schema:** `CloudKit/schema.ckdb` is the canonical CloudKit
@@ -143,8 +143,8 @@ Views must be thin wrappers that bind state, dispatch actions, and render. **All
 - Computed aggregations over domain data (e.g., available funds, filtered totals).
 
 **What belongs in a Model extension or Shared utility:**
-- Data transformation and validation (e.g., form fields → Transaction, currency text → cents).
-- Parsing logic (use `MonetaryAmount.parseCents(from:)` — never duplicate `parseCurrency` in views).
+- Data transformation and validation (e.g., form fields → Transaction, amount text → `Decimal` quantity).
+- Parsing logic (use `InstrumentAmount.parseQuantity(from:decimals:)` — never duplicate amount parsing in views).
 - Computed display properties that are reused across views.
 
 **What stays in the View:**
@@ -153,7 +153,7 @@ Views must be thin wrappers that bind state, dispatch actions, and render. **All
 - Passing the store's result to local UI state (e.g., updating `selectedTransaction` from a `PayResult`).
 - SwiftUI layout, styling, and modifiers.
 
-**Why:** Private view methods cannot be unit-tested. Logic in stores runs against `TestBackend` (CloudKitBackend + in-memory GRDB) in milliseconds with no simulator. See `plans/UI_TESTING_PLAN.md` for the full audit and refactoring roadmap.
+**Why:** Private view methods cannot be unit-tested. Logic in stores runs against `TestBackend` (CloudKitBackend + in-memory GRDB) in milliseconds with no simulator. See `plans/completed/UI_TESTING_PLAN.md` for the full audit and refactoring roadmap.
 
 ## Testing & TDD
 
