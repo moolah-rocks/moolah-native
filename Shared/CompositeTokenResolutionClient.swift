@@ -5,14 +5,23 @@ import Foundation
 struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
   private let networking: NetworkingServices
   private let coinGeckoApiKey: String?
+  /// Offline `(chainId, contract) → CoinGecko id` source, consulted before any
+  /// network provider so a token already known to the bundled / cached catalog
+  /// is priced immediately. `nil` disables the local-first path (e.g. tests).
+  private let localResolver: LocalContractResolver?
 
   // For testing: inject pre-parsed reference data
   private let preloadedCoinList: Data?
   private let preloadedExchangeInfo: Data?
 
-  init(networking: NetworkingServices, coinGeckoApiKey: String? = nil) {
+  init(
+    networking: NetworkingServices,
+    coinGeckoApiKey: String? = nil,
+    localResolver: LocalContractResolver? = nil
+  ) {
     self.networking = networking
     self.coinGeckoApiKey = coinGeckoApiKey
+    self.localResolver = localResolver
     self.preloadedCoinList = nil
     self.preloadedExchangeInfo = nil
   }
@@ -24,10 +33,12 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
     coinListData: Data,
     exchangeInfoData: Data,
     coinGeckoApiKey: String?,
-    networking: NetworkingServices = NetworkingServices()
+    networking: NetworkingServices = NetworkingServices(),
+    localResolver: LocalContractResolver? = nil
   ) {
     self.networking = networking
     self.coinGeckoApiKey = coinGeckoApiKey
+    self.localResolver = localResolver
     self.preloadedCoinList = coinListData
     self.preloadedExchangeInfo = exchangeInfoData
   }
@@ -36,6 +47,23 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
     chainId: Int, contractAddress: String?, symbol: String?, isNative: Bool
   ) async throws -> TokenResolutionResult {
     var result = TokenResolutionResult()
+
+    // Local-first: a contract-addressed token already known to the bundled /
+    // cached catalog is priced from local data, short-circuiting ahead of any
+    // network provider call. Natives are identified by symbol below, not by
+    // contract, so they skip this path. The discovery service persists the
+    // on-chain instrument (correct decimals), so only the provider id is
+    // needed here.
+    if !isNative, let contractAddress,
+      let local = await localResolver?.localContractMatch(
+        chainId: chainId, contractAddress: contractAddress)
+    {
+      result.coingeckoId = local.coingeckoId
+      result.resolvedSymbol = local.symbol
+      result.resolvedName = local.name
+      return result
+    }
+
     let coinListData = try await fetchCoinListData()
 
     resolveFromCryptoCompare(
