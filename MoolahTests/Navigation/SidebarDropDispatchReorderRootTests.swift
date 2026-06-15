@@ -6,6 +6,20 @@ import Testing
 
 /// Tests for `SidebarDropDispatch.reorderRoot`. Shared fixtures live in
 /// `SidebarDropDispatchTestSupport.swift`.
+///
+/// Post-mutation state is asserted with `expectEventually` (polls the
+/// exact asserted expression) rather than `waitForNextEmission` (awaits
+/// one tick, then reads). A store's `observationTicks` is a
+/// single-consumer `AsyncStream`; when one test feeds two sequential
+/// waits to the same store, the second iterator can miss the tick that
+/// carries the awaited state and then block until the deadline even
+/// though the steady-state value is already correct. `reorderRoot`
+/// writes to both `accountStore` and `accountGroupStore`, so polling the
+/// cross-store invariant directly also avoids the ordering hazard that
+/// motivated #1000 (a single-store waiter reading the other store's
+/// not-yet-emitted state). The `didEmitWithin` absence check keeps
+/// `waitForNextEmission`'s stream — asserting an emission does not occur
+/// is its job.
 @Suite("SidebarDropDispatch — reorderRoot")
 @MainActor
 struct SidebarDropDispatchReorderRootTests {
@@ -48,12 +62,10 @@ struct SidebarDropDispatchReorderRootTests {
     let group = try await stores.accountGroupStore.createGroup(
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: {
-        $0.accounts.by(id: memberA.id)?.groupId == group.id
-          && $0.accounts.by(id: memberB.id)?.groupId == group.id
-      },
-      description: "members joined")
+    await expectEventually("members joined") {
+      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+        && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
+    }
 
     // After the create the bucket entries (tie-break: account first on
     // equal position) are [standalone@0, group@0]. Drop the group at
@@ -67,23 +79,12 @@ struct SidebarDropDispatchReorderRootTests {
 
     // `reorderRoot` writes to BOTH stores: the group's new position on
     // `accountGroupStore`, and the shifted standalone's position on
-    // `accountStore`. The original waiter parked on `accountGroupStore`
-    // and read `accountStore` inside the predicate — if the watched
-    // store emitted first (still showing the pre-shift state on the
-    // other), the predicate was false, no further emission came on
-    // the watched store, and the waiter timed out (#1000). Wait on
-    // both stores' writes individually, then assert the cross-store
-    // invariant synchronously.
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: standalone.id)?.position == 1 },
-      description: "standalone shifted to position 1")
-    try await stores.accountGroupStore.waitForNextEmission(
-      matching: { $0.by(id: group.id)?.position == 0 },
-      description: "group landed at position 0")
-    await expectEventually("group ends up ahead of the standalone account") {
+    // `accountStore`. Poll the cross-store invariant directly so a
+    // not-yet-emitted write on either store can't strand the assertion.
+    await expectEventually("group ends up ahead of the shifted standalone account") {
       let groupPos = stores.accountGroupStore.by(id: group.id)?.position
       let standalonePos = stores.accountStore.accounts.by(id: standalone.id)?.position
-      return (groupPos ?? -1) < (standalonePos ?? -1)
+      return groupPos == 0 && standalonePos == 1
     }
   }
 
@@ -102,12 +103,10 @@ struct SidebarDropDispatchReorderRootTests {
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
-    try await stores.accountStore.waitForNextEmission(
-      matching: {
-        ($0.accounts.by(id: first.id)?.position ?? -1)
-          > ($0.accounts.by(id: second.id)?.position ?? -1)
-      },
-      description: "first clamped to after second")
+    await expectEventually("first clamped to after second") {
+      (stores.accountStore.accounts.by(id: first.id)?.position ?? -1)
+        > (stores.accountStore.accounts.by(id: second.id)?.position ?? -1)
+    }
   }
 
   @Test("reorderRoot preserves the standalone/group interleave (3-entry mixed)")
@@ -126,12 +125,10 @@ struct SidebarDropDispatchReorderRootTests {
     let group = try await stores.accountGroupStore.createGroup(
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: {
-        $0.accounts.by(id: memberA.id)?.groupId == group.id
-          && $0.accounts.by(id: memberB.id)?.groupId == group.id
-      },
-      description: "members joined")
+    await expectEventually("members joined") {
+      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+        && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
+    }
 
     // Drag the group to the bottom of the bucket (insertionIndex 2 in
     // the 3-entry root: [standaloneA, group, standaloneB] → after the
@@ -191,12 +188,10 @@ struct SidebarDropDispatchReorderRootTests {
     let group = try await stores.accountGroupStore.createGroup(
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: {
-        $0.accounts.by(id: memberA.id)?.groupId == group.id
-          && $0.accounts.by(id: memberB.id)?.groupId == group.id
-      },
-      description: "members joined")
+    await expectEventually("members joined") {
+      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+        && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
+    }
 
     // Drop memberA at root insertion index 0 (ahead of standalone + group).
     try await SidebarDropDispatch.reorderRoot(
@@ -225,9 +220,9 @@ struct SidebarDropDispatchReorderRootTests {
 
     let group = try await stores.accountGroupStore.createGroup(
       from: soleMember, name: "Lonely", accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: soleMember.id)?.groupId == group.id },
-      description: "soleMember joined group")
+    await expectEventually("soleMember joined group") {
+      stores.accountStore.accounts.by(id: soleMember.id)?.groupId == group.id
+    }
 
     try await SidebarDropDispatch.reorderRoot(
       dragged: DraggableSidebarItem(kind: .account, id: soleMember.id),
@@ -236,11 +231,9 @@ struct SidebarDropDispatchReorderRootTests {
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: soleMember.id)?.groupId == nil },
-      description: "soleMember back to root")
-    try await stores.accountGroupStore.waitForNextEmission(
-      matching: { $0.by(id: group.id) == nil },
-      description: "lonely group auto-deleted")
+    await expectEventually("soleMember back to root; lonely group auto-deleted") {
+      stores.accountStore.accounts.by(id: soleMember.id)?.groupId == nil
+        && stores.accountGroupStore.by(id: group.id) == nil
+    }
   }
 }

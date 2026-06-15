@@ -8,6 +8,15 @@ import Testing
 /// covers `dropOntoAccount` and `dropOntoGroup` cases where the source
 /// leaves its old group to join the destination's. Shared fixtures live
 /// in `SidebarDropDispatchTestSupport.swift`.
+///
+/// Post-mutation state is asserted with `expectEventually` (polls the
+/// exact asserted expression) rather than `waitForNextEmission` (awaits
+/// one tick, then reads). A store's `observationTicks` is a
+/// single-consumer `AsyncStream`; when one test feeds two sequential
+/// waits to the same store, the second iterator can miss the tick that
+/// carries the awaited state and then block until the deadline even
+/// though the steady-state value is already correct. Polling the value
+/// sidesteps the stream entirely.
 @Suite("SidebarDropDispatch — cross-group drops")
 @MainActor
 struct SidebarDropDispatchCrossGroupTests {
@@ -24,18 +33,16 @@ struct SidebarDropDispatchCrossGroupTests {
     let groupA = try await stores.accountGroupStore.createGroup(
       joining: aMember1, and: aMember2, name: "A",
       accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: {
-        $0.accounts.by(id: aMember1.id)?.groupId == groupA.id
-          && $0.accounts.by(id: aMember2.id)?.groupId == groupA.id
-      },
-      description: "group A members joined")
+    await expectEventually("group A members joined") {
+      stores.accountStore.accounts.by(id: aMember1.id)?.groupId == groupA.id
+        && stores.accountStore.accounts.by(id: aMember2.id)?.groupId == groupA.id
+    }
 
     let groupB = try await stores.accountGroupStore.createGroup(
       from: bMember, name: "B", accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: bMember.id)?.groupId == groupB.id },
-      description: "B single-member group seeded")
+    await expectEventually("B single-member group seeded") {
+      stores.accountStore.accounts.by(id: bMember.id)?.groupId == groupB.id
+    }
 
     _ = try await SidebarDropDispatch.dropOntoAccount(
       sourceId: aMember1.id,
@@ -61,14 +68,14 @@ struct SidebarDropDispatchCrossGroupTests {
 
     let groupA = try await stores.accountGroupStore.createGroup(
       from: aSole, name: "A", accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: aSole.id)?.groupId == groupA.id },
-      description: "aSole joined group A")
+    await expectEventually("aSole joined group A") {
+      stores.accountStore.accounts.by(id: aSole.id)?.groupId == groupA.id
+    }
     let groupB = try await stores.accountGroupStore.createGroup(
       from: bMember, name: "B", accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: bMember.id)?.groupId == groupB.id },
-      description: "bMember joined group B")
+    await expectEventually("bMember joined group B") {
+      stores.accountStore.accounts.by(id: bMember.id)?.groupId == groupB.id
+    }
 
     _ = try await SidebarDropDispatch.dropOntoAccount(
       sourceId: aSole.id,
@@ -77,12 +84,10 @@ struct SidebarDropDispatchCrossGroupTests {
       accountGroupStore: stores.accountGroupStore,
       groupUIStateStore: stores.groupUIStateStore)
 
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: aSole.id)?.groupId == groupB.id },
-      description: "aSole now in groupB")
-    try await stores.accountGroupStore.waitForNextEmission(
-      matching: { $0.by(id: groupA.id) == nil },
-      description: "group A auto-deleted")
+    await expectEventually("aSole now in groupB and group A auto-deleted") {
+      stores.accountStore.accounts.by(id: aSole.id)?.groupId == groupB.id
+        && stores.accountGroupStore.by(id: groupA.id) == nil
+    }
   }
 
   @Test("dropOntoGroup from a sole-member-group deletes the old group")
@@ -95,14 +100,14 @@ struct SidebarDropDispatchCrossGroupTests {
 
     let groupA = try await stores.accountGroupStore.createGroup(
       from: aSole, name: "A", accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: aSole.id)?.groupId == groupA.id },
-      description: "aSole joined group A")
+    await expectEventually("aSole joined group A") {
+      stores.accountStore.accounts.by(id: aSole.id)?.groupId == groupA.id
+    }
     let groupB = try await stores.accountGroupStore.createGroup(
       from: bMember, name: "B", accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: bMember.id)?.groupId == groupB.id },
-      description: "bMember joined group B")
+    await expectEventually("bMember joined group B") {
+      stores.accountStore.accounts.by(id: bMember.id)?.groupId == groupB.id
+    }
 
     try await SidebarDropDispatch.dropOntoGroup(
       sourceId: aSole.id,
@@ -111,11 +116,9 @@ struct SidebarDropDispatchCrossGroupTests {
       accountGroupStore: stores.accountGroupStore,
       groupUIStateStore: stores.groupUIStateStore)
 
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: aSole.id)?.groupId == groupB.id },
-      description: "aSole now in groupB")
-    try await stores.accountGroupStore.waitForNextEmission(
-      matching: { $0.by(id: groupA.id) == nil },
-      description: "group A auto-deleted")
+    await expectEventually("aSole now in groupB and group A auto-deleted") {
+      stores.accountStore.accounts.by(id: aSole.id)?.groupId == groupB.id
+        && stores.accountGroupStore.by(id: groupA.id) == nil
+    }
   }
 }
