@@ -6,6 +6,17 @@ import Testing
 
 /// Tests for `SidebarDropDispatch.reorderMembers`. Shared fixtures live in
 /// `SidebarDropDispatchTestSupport.swift`.
+///
+/// Post-mutation state is asserted with `expectEventually` (polls the
+/// exact asserted expression) rather than `waitForNextEmission` (awaits
+/// one tick, then reads). A store's `observationTicks` is a
+/// single-consumer `AsyncStream`; when one test feeds two sequential
+/// waits to the same store, the second iterator can miss the tick that
+/// carries the awaited state and then block until the deadline even
+/// though the steady-state value is already correct. Polling the value
+/// sidesteps the stream entirely. The `didEmitWithin` absence check
+/// keeps `waitForNextEmission`'s stream — asserting an emission does not
+/// occur is its job.
 @Suite("SidebarDropDispatch — reorderMembers")
 @MainActor
 struct SidebarDropDispatchReorderMembersTests {
@@ -22,19 +33,17 @@ struct SidebarDropDispatchReorderMembersTests {
     let group = try await stores.accountGroupStore.createGroup(
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: {
-        $0.accounts.by(id: memberA.id)?.groupId == group.id
-          && $0.accounts.by(id: memberB.id)?.groupId == group.id
-      },
-      description: "A,B joined")
+    await expectEventually("A,B joined") {
+      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+        && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
+    }
 
     let postC = try #require(stores.accountStore.accounts.by(id: memberC.id))
     try await stores.accountGroupStore.addAccount(
       postC, to: group, accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: memberC.id)?.groupId == group.id },
-      description: "C joined")
+    await expectEventually("C joined") {
+      stores.accountStore.accounts.by(id: memberC.id)?.groupId == group.id
+    }
 
     try await SidebarDropDispatch.reorderMembers(
       groupId: group.id,
@@ -63,12 +72,10 @@ struct SidebarDropDispatchReorderMembersTests {
     let group = try await stores.accountGroupStore.createGroup(
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: {
-        $0.accounts.by(id: memberA.id)?.groupId == group.id
-          && $0.accounts.by(id: memberB.id)?.groupId == group.id
-      },
-      description: "members joined")
+    await expectEventually("members joined") {
+      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+        && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
+    }
 
     try await SidebarDropDispatch.reorderMembers(
       groupId: group.id,
@@ -77,12 +84,10 @@ struct SidebarDropDispatchReorderMembersTests {
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
-    try await stores.accountStore.waitForNextEmission(
-      matching: {
-        ($0.accounts.by(id: memberA.id)?.position ?? -1)
-          > ($0.accounts.by(id: memberB.id)?.position ?? -1)
-      },
-      description: "A clamped to end")
+    await expectEventually("A clamped to end") {
+      (stores.accountStore.accounts.by(id: memberA.id)?.position ?? -1)
+        > (stores.accountStore.accounts.by(id: memberB.id)?.position ?? -1)
+    }
   }
 
   @Test("reorderMembers is a no-op when the source id is unknown")
@@ -96,12 +101,10 @@ struct SidebarDropDispatchReorderMembersTests {
     let group = try await stores.accountGroupStore.createGroup(
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: {
-        $0.accounts.by(id: memberA.id)?.groupId == group.id
-          && $0.accounts.by(id: memberB.id)?.groupId == group.id
-      },
-      description: "members joined")
+    await expectEventually("members joined") {
+      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+        && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
+    }
 
     await stores.accountStore.drainPendingEmissions()
     try await SidebarDropDispatch.reorderMembers(
@@ -137,9 +140,9 @@ struct SidebarDropDispatchReorderMembersTests {
     let group = try await stores.accountGroupStore.createGroup(
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: memberA.id)?.groupId == group.id },
-      description: "group seeded")
+    await expectEventually("group seeded") {
+      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+    }
 
     try await SidebarDropDispatch.reorderMembers(
       groupId: group.id,
@@ -169,14 +172,14 @@ struct SidebarDropDispatchReorderMembersTests {
 
     let groupA = try await stores.accountGroupStore.createGroup(
       joining: accA1, and: accA2, name: "A", accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: accA1.id)?.groupId == groupA.id },
-      description: "group A seeded")
+    await expectEventually("group A seeded") {
+      stores.accountStore.accounts.by(id: accA1.id)?.groupId == groupA.id
+    }
     let groupB = try await stores.accountGroupStore.createGroup(
       joining: accB1, and: accB2, name: "B", accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: accB1.id)?.groupId == groupB.id },
-      description: "group B seeded")
+    await expectEventually("group B seeded") {
+      stores.accountStore.accounts.by(id: accB1.id)?.groupId == groupB.id
+    }
 
     try await SidebarDropDispatch.reorderMembers(
       groupId: groupB.id,
@@ -210,14 +213,14 @@ struct SidebarDropDispatchReorderMembersTests {
 
     let groupA = try await stores.accountGroupStore.createGroup(
       from: aSole, name: "A", accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: aSole.id)?.groupId == groupA.id },
-      description: "aSole joined A")
+    await expectEventually("aSole joined A") {
+      stores.accountStore.accounts.by(id: aSole.id)?.groupId == groupA.id
+    }
     let groupB = try await stores.accountGroupStore.createGroup(
       joining: accB1, and: accB2, name: "B", accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: accB1.id)?.groupId == groupB.id },
-      description: "group B seeded")
+    await expectEventually("group B seeded") {
+      stores.accountStore.accounts.by(id: accB1.id)?.groupId == groupB.id
+    }
 
     try await SidebarDropDispatch.reorderMembers(
       groupId: groupB.id,
@@ -226,11 +229,9 @@ struct SidebarDropDispatchReorderMembersTests {
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)
 
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: aSole.id)?.groupId == groupB.id },
-      description: "aSole now in group B")
-    try await stores.accountGroupStore.waitForNextEmission(
-      matching: { $0.by(id: groupA.id) == nil },
-      description: "group A auto-deleted")
+    await expectEventually("aSole now in group B; group A auto-deleted") {
+      stores.accountStore.accounts.by(id: aSole.id)?.groupId == groupB.id
+        && stores.accountGroupStore.by(id: groupA.id) == nil
+    }
   }
 }

@@ -12,6 +12,17 @@ import Testing
 /// the membership-change policy gate (same-bucket, no self-drop, no
 /// re-add). Shared fixtures live in
 /// `SidebarDropDispatchTestSupport.swift`.
+///
+/// Post-mutation state is asserted with `expectEventually` (polls the
+/// exact asserted expression) rather than `waitForNextEmission` (awaits
+/// one tick, then reads). A single store feeds two sequential
+/// observation waits in several of these tests, and a store's
+/// `observationTicks` is a single-consumer `AsyncStream`: a second
+/// iterator can miss the tick that carries the awaited state and then
+/// block until the deadline even though the steady-state value is
+/// already correct. Polling the value sidesteps the stream entirely.
+/// Absence-of-emission checks stay on `didEmitWithin` — polling cannot
+/// prove an event never occurs, so the stream is the right tool there.
 @Suite("SidebarDropDispatch — drop onto")
 @MainActor
 struct SidebarDropDispatchTests {
@@ -35,15 +46,13 @@ struct SidebarDropDispatchTests {
 
     let createdGroup = try #require(created)
     #expect(createdGroup.bucket == .current)
-    try await stores.accountStore.waitForNextEmission(
-      matching: {
-        $0.accounts.by(id: target.id)?.groupId == createdGroup.id
-          && $0.accounts.by(id: source.id)?.groupId == createdGroup.id
-      },
-      description: "both accounts joined the new group")
-    try await stores.groupUIStateStore.waitForNextEmission(
-      matching: { $0.expandedGroupIds.contains(createdGroup.id) },
-      description: "new group auto-expanded")
+    await expectEventually("both accounts joined the new group") {
+      stores.accountStore.accounts.by(id: target.id)?.groupId == createdGroup.id
+        && stores.accountStore.accounts.by(id: source.id)?.groupId == createdGroup.id
+    }
+    await expectEventually("new group auto-expanded") {
+      stores.groupUIStateStore.expandedGroupIds.contains(createdGroup.id)
+    }
   }
 
   @Test("dropOntoAccount where target is already a member adds source to target's group")
@@ -58,9 +67,9 @@ struct SidebarDropDispatchTests {
     let preexisting = try await stores.accountGroupStore.createGroup(
       joining: seedMember, and: target, name: "Pre",
       accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: target.id)?.groupId == preexisting.id },
-      description: "target observed as member")
+    await expectEventually("target observed as member") {
+      stores.accountStore.accounts.by(id: target.id)?.groupId == preexisting.id
+    }
 
     let result = try await SidebarDropDispatch.dropOntoAccount(
       sourceId: source.id,
@@ -70,9 +79,9 @@ struct SidebarDropDispatchTests {
       groupUIStateStore: stores.groupUIStateStore)
 
     #expect(result == nil, "no new group when joining target's existing group")
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: source.id)?.groupId == preexisting.id },
-      description: "source joined preexisting group")
+    await expectEventually("source joined preexisting group") {
+      stores.accountStore.accounts.by(id: source.id)?.groupId == preexisting.id
+    }
   }
 
   @Test("dropOntoAccount with cross-bucket source is a no-op")
@@ -146,9 +155,9 @@ struct SidebarDropDispatchTests {
 
     let group = try await stores.accountGroupStore.createGroup(
       from: seed, name: "G", accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: seed.id)?.groupId == group.id },
-      description: "seed member observed")
+    await expectEventually("seed member observed") {
+      stores.accountStore.accounts.by(id: seed.id)?.groupId == group.id
+    }
 
     try await SidebarDropDispatch.dropOntoGroup(
       sourceId: source.id,
@@ -161,9 +170,9 @@ struct SidebarDropDispatchTests {
       let source = stores.accountStore.accounts.by(id: source.id)
       return source?.groupId == group.id && source?.position == 1
     }
-    try await stores.groupUIStateStore.waitForNextEmission(
-      matching: { $0.expandedGroupIds.contains(group.id) },
-      description: "target group auto-expanded after drop")
+    await expectEventually("target group auto-expanded after drop") {
+      stores.groupUIStateStore.expandedGroupIds.contains(group.id)
+    }
   }
 
   @Test("dropOntoGroup auto-expands the target group so the new member is visible")
@@ -176,14 +185,14 @@ struct SidebarDropDispatchTests {
 
     let group = try await stores.accountGroupStore.createGroup(
       from: seed, name: "G", accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: seed.id)?.groupId == group.id },
-      description: "seed member observed")
+    await expectEventually("seed member observed") {
+      stores.accountStore.accounts.by(id: seed.id)?.groupId == group.id
+    }
     // Collapse the target group so the auto-expand effect is observable.
     await stores.groupUIStateStore.setExpanded(false, for: group.id)
-    try await stores.groupUIStateStore.waitForNextEmission(
-      matching: { !$0.expandedGroupIds.contains(group.id) },
-      description: "target group starts collapsed")
+    await expectEventually("target group starts collapsed") {
+      !stores.groupUIStateStore.expandedGroupIds.contains(group.id)
+    }
 
     try await SidebarDropDispatch.dropOntoGroup(
       sourceId: source.id,
@@ -208,12 +217,10 @@ struct SidebarDropDispatchTests {
     let group = try await stores.accountGroupStore.createGroup(
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: {
-        $0.accounts.by(id: memberA.id)?.groupId == group.id
-          && $0.accounts.by(id: memberB.id)?.groupId == group.id
-      },
-      description: "both members observed")
+    await expectEventually("both members observed") {
+      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+        && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
+    }
 
     let originalA = try #require(stores.accountStore.accounts.by(id: memberA.id))
     await stores.accountStore.drainPendingEmissions()
@@ -242,9 +249,9 @@ struct SidebarDropDispatchTests {
 
     let group = try await stores.accountGroupStore.createGroup(
       from: seed, name: "Current Group", accountStore: stores.accountStore)
-    try await stores.accountStore.waitForNextEmission(
-      matching: { $0.accounts.by(id: seed.id)?.groupId == group.id },
-      description: "seed observed in group")
+    await expectEventually("seed observed in group") {
+      stores.accountStore.accounts.by(id: seed.id)?.groupId == group.id
+    }
 
     await stores.accountStore.drainPendingEmissions()
     try await SidebarDropDispatch.dropOntoGroup(
