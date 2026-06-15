@@ -238,10 +238,48 @@ struct InstrumentSearchServiceTests {
     let results = await service.search(query: "BHP", kinds: [.stock])
     let bhpResult = try #require(results.first { $0.instrument.id == "ASX:BHP.AX" })
     #expect(bhpResult.isRegistered == true)
-    let registeredIdx = results.firstIndex { $0.instrument.id == "ASX:BHP.AX" } ?? 0
+    let registeredIdx = try #require(
+      results.firstIndex { $0.instrument.id == "ASX:BHP.AX" })
     let providerIdx =
       results.firstIndex { $0.instrument.kind == .stock && !$0.isRegistered } ?? Int.max
     #expect(registeredIdx < providerIdx)
+  }
+
+  @Test("exact currency code match ranks first")
+  func exactCurrencyCodeRanksFirst() async throws {
+    // A crypto hit that also matches "usd" by name must not displace the
+    // exact ISO-code match: typing "USD" puts US Dollar first.
+    let usdc = CatalogEntry(
+      coingeckoId: "usd-coin",
+      symbol: "USDC",
+      name: "USD Coin",
+      platforms: [
+        PlatformBinding(slug: "ethereum", chainId: 1, contractAddress: "0xusdc")
+      ]
+    )
+    let service = makeSubject(catalogEntries: [usdc])
+    let results = await service.search(query: "usd", kinds: [.fiatCurrency, .cryptoToken])
+    let first = try #require(results.first)
+    #expect(first.instrument.id == "USD")
+    #expect(first.instrument.kind == .fiatCurrency)
+  }
+
+  @Test("currency results rank before crypto tokens")
+  func currencyResultsRankBeforeCrypto() async throws {
+    // "dollar" matches several fiat currencies by localized name and the
+    // crypto entry by name; every currency must precede every crypto token.
+    let dollarCoin = CatalogEntry(
+      coingeckoId: "dollar-coin",
+      symbol: "DLR",
+      name: "Dollar Coin",
+      platforms: []
+    )
+    let service = makeSubject(catalogEntries: [dollarCoin])
+    let results = await service.search(
+      query: "dollar", kinds: [.fiatCurrency, .cryptoToken])
+    let lastFiat = results.lastIndex { $0.instrument.kind == .fiatCurrency } ?? -1
+    let firstCrypto = results.firstIndex { $0.instrument.kind == .cryptoToken } ?? Int.max
+    #expect(lastFiat < firstCrypto)
   }
 }
 
