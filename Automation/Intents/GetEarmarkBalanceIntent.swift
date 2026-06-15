@@ -15,8 +15,8 @@ struct GetEarmarkBalanceIntent: AppIntent {
     guard let service = AutomationServiceLocator.shared.service else {
       throw AutomationError.operationFailed("App not ready")
     }
-    let resolved = try await service.resolveEarmark(
-      named: earmark.name, profileIdentifier: profile.id.uuidString)
-    return .result(value: InstrumentAmount.zero(instrument: resolved.instrument).formatted)
+    let session = try service.resolveSession(for: profile.id.uuidString)
+    let balance = try await session.earmarkStore.displayBalance(for: earmark.id)
+    return .result(value: balance.formatted)
   }
 }

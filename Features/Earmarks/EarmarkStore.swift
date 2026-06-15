@@ -201,18 +201,6 @@ final class EarmarkStore {
     showHiddenTask = nil
   }
 
-  func convertedBalance(for earmarkId: UUID) -> InstrumentAmount? {
-    convertedBalances[earmarkId]
-  }
-
-  func convertedSaved(for earmarkId: UUID) -> InstrumentAmount? {
-    convertedSavedAmounts[earmarkId]
-  }
-
-  func convertedSpent(for earmarkId: UUID) -> InstrumentAmount? {
-    convertedSpentAmounts[earmarkId]
-  }
-
   /// Recompute task spawned by the `showHidden` `didSet`. Tracked (not
   /// fire-and-forget) so `stopObserving()` and `deinit` can cancel an
   /// in-flight recompute. A rapid double-toggle cancels the prior task
@@ -386,6 +374,7 @@ final class EarmarkStore {
     return anyFailed
   }
 
+  // Read-only query accessors live in `EarmarkStore+Queries.swift`.
   // Per-earmark conversion helpers live in `EarmarkStore+Conversion.swift`.
   // Mutation methods live in `EarmarkStore+Mutations.swift`.
   // Budget CRUD lives in `EarmarkStore+Budget.swift`.
