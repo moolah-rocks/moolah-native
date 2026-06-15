@@ -50,6 +50,38 @@ struct CryptoSpamHeuristicsTests {
     #expect(CryptoSpamHeuristics.spamSignal(name: name, symbol: nil) == .scamKeyword)
   }
 
+  // MARK: - Mixed-script (homoglyph) symbols
+
+  /// A spam contract spoofs a popular ASCII ticker by swapping one Latin
+  /// letter for a visually identical character from another script — e.g.
+  /// `USD` + Cyrillic `Es` (U+0421) renders as "USDC" but is not byte-equal
+  /// to it, so the canonical-registry impersonation check misses it. A ticker
+  /// that mixes Latin with another script is therefore itself a spam signal.
+  @Test(
+    "A symbol mixing Latin with another script (homoglyph spoof) is flagged",
+    arguments: [
+      "USD\u{0421}",  // USD + Cyrillic Es — spoofs USDC
+      "\u{0410}AVE",  // Cyrillic A + Latin AVE — spoofs AAVE
+      "L\u{0406}NK",  // Cyrillic Byelorussian-Ukrainian I — spoofs LINK
+    ])
+  func flagsMixedScriptSymbol(symbol: String) {
+    #expect(
+      CryptoSpamHeuristics.spamSignal(name: symbol, symbol: symbol) == .mixedScriptSymbol)
+  }
+
+  @Test("A mixed-script symbol is flagged even when the name is plain ASCII")
+  func flagsMixedScriptSymbolWithCleanName() {
+    #expect(
+      CryptoSpamHeuristics.spamSignal(name: "USD Coin", symbol: "USD\u{0421}")
+        == .mixedScriptSymbol)
+  }
+
+  @Test("Pure-ASCII symbols are never flagged as mixed-script")
+  func pureASCIISymbolNotMixedScript() {
+    #expect(CryptoSpamHeuristics.spamSignal(name: "USDC", symbol: "USDC") == nil)
+    #expect(CryptoSpamHeuristics.spamSignal(name: "Chainlink", symbol: "LINK") == nil)
+  }
+
   // MARK: - Legitimate tokens are not flagged
 
   @Test(
