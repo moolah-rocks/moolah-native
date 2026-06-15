@@ -5,17 +5,22 @@
 
   private let logger = Logger(subsystem: "com.moolah.app", category: "ScriptCommand")
 
-  /// Thread-safe box for transferring results across actor boundaries via semaphore.
-  /// The semaphore ensures happens-before ordering between write (in Task) and read (after wait).
-  final class ScriptResultBox<T: Sendable>: @unchecked Sendable {
-    var value: T?
-    var error: String?
-  }
-
-  /// Sendable wrapper so a non-Sendable `NSScriptCommand` can be handed to a
-  /// `@MainActor` `Task` without tripping Swift 6 isolation checks. The command
-  /// is only ever read on `@MainActor`, matching Cocoa's scripting dispatch.
-  final class ScriptCommandBox: @unchecked Sendable {
+  /// One-way hand-off carrier for a non-`Sendable` `NSScriptCommand` (see
+  /// `guides/CONCURRENCY_GUIDE.md` Carve-out 5).
+  ///
+  /// `runBlockingWithError` suspends the command on the main thread and resumes
+  /// it from a `@MainActor` `Task` once the async work finishes. Cocoa retains
+  /// the command across that suspension but, by the scripting contract, does not
+  /// touch it again until `resumeExecution(withResult:)` is called — so the
+  /// command is only ever read on the `MainActor`. Swift's region-isolation pass
+  /// can't see that contract: capturing `self` directly trips
+  /// `sending 'self' risks causing data races`, because for an instance method
+  /// `self` is task-isolated and could, in principle, be used by the caller
+  /// after the method returns. This box is the documented escape: it carries the
+  /// command into the `Task` with the invariant that the value is touched only on
+  /// the `MainActor`. The alternative — `DispatchSemaphore` to block until the
+  /// async work finishes — is forbidden (it parks a cooperative-pool thread).
+  private final class ScriptCommandBox: @unchecked Sendable {
     let command: NSScriptCommand
 
     init(_ command: NSScriptCommand) { self.command = command }
@@ -31,6 +36,9 @@
   /// ("doesn't understand the message"). Overriding `execute()` to call
   /// `performDefaultImplementation()` directly keeps the handler class in
   /// charge of resolving the direct parameter itself.
+  ///
+  /// Intentionally non-`final`: subclassed by every app-level AppleScript
+  /// command (`CreateAccountCommand`, `RefreshCommand`, …).
   class AppLevelScriptCommand: NSScriptCommand {
     override func execute() -> Any? {
       performDefaultImplementation()
@@ -55,60 +63,37 @@
       return nil
     }
 
-    /// Runs an async MainActor block from an `NSScriptCommand.performDefaultImplementation`.
+    /// Runs an async `@MainActor` block from an
+    /// `NSScriptCommand.performDefaultImplementation`.
     ///
     /// Cocoa's scripting infrastructure on macOS 26 dispatches commands on the
-    /// main thread, so the historical "bridge async → sync via semaphore" trick
-    /// deadlocks: the `Task { @MainActor in ... }` can never run because
-    /// `semaphore.wait()` is blocking the very thread it needs. On main, this
-    /// helper instead uses `NSScriptCommand.suspendExecution()` and resumes
-    /// asynchronously when the operation completes — `performDefaultImplementation`
-    /// returns `nil` immediately, and the real result is delivered later via
-    /// `resumeExecution(withResult:)`. Off-main (vestigial, for whatever dedicated
-    /// thread Cocoa might use in future) it still blocks on a semaphore.
+    /// main thread, so this helper suspends the command and resumes it
+    /// asynchronously once `operation` completes — Cocoa's documented pattern
+    /// for async script commands. `performDefaultImplementation` returns `nil`
+    /// immediately; the real result is delivered later via
+    /// `resumeExecution(withResult:)`.
+    ///
+    /// There is no off-main / blocking branch: a `DispatchSemaphore` would park
+    /// a cooperative-pool thread (forbidden — see `guides/CONCURRENCY_GUIDE.md`),
+    /// and Cocoa dispatches these commands only on the main thread. The command
+    /// crosses into the `@MainActor` `Task` via `ScriptCommandBox` (Carve-out 5)
+    /// — it is touched only on the main thread for the rest of its life.
     func runBlockingWithError<T: Sendable>(
       _ operation: @escaping @MainActor @Sendable () async throws -> sending T
     ) -> T? {
-      if Thread.isMainThread {
-        suspendExecution()
-        let commandBox = ScriptCommandBox(self)
-        Task { @MainActor in
-          do {
-            let value = try await operation()
-            commandBox.command.resumeExecution(withResult: value)
-          } catch {
-            logger.error(
-              "Script command failed: \(error.localizedDescription, privacy: .public)")
-            commandBox.command.scriptErrorNumber = errOSAGeneralError
-            commandBox.command.scriptErrorString = error.localizedDescription
-            commandBox.command.resumeExecution(withResult: nil)
-          }
-        }
-        return nil
-      }
-
-      let box = ScriptResultBox<T>()
-      let semaphore = DispatchSemaphore(value: 0)
-
+      suspendExecution()
+      let box = ScriptCommandBox(self)
       Task { @MainActor in
         do {
-          box.value = try await operation()
+          box.command.resumeExecution(withResult: try await operation())
         } catch {
-          box.error = error.localizedDescription
+          logger.error("Script command failed: \(error.localizedDescription, privacy: .public)")
+          box.command.scriptErrorNumber = errOSAGeneralError
+          box.command.scriptErrorString = error.localizedDescription
+          box.command.resumeExecution(withResult: nil)
         }
-        semaphore.signal()
       }
-
-      semaphore.wait()
-
-      if let errorMessage = box.error {
-        logger.error("Script command failed: \(errorMessage)")
-        scriptErrorNumber = errOSAGeneralError
-        scriptErrorString = errorMessage
-        return nil
-      }
-
-      return box.value
+      return nil
     }
   }
 
