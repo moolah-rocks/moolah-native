@@ -71,6 +71,9 @@ struct ExpenseBreakdownCard: View {
         }
       }
     }
+    // The legendGrid below already lists each category with its colour
+    // swatch and total, so the chart's built-in legend is redundant.
+    .chartLegend(.hidden)
     .frame(height: 250)
     .accessibilityLabel("Expense breakdown pie chart")
   }
