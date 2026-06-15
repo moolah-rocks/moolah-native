@@ -155,6 +155,32 @@ struct CryptoTokenDiscoveryServiceTests {
     #expect(stored?.pricingStatus == .spam)
   }
 
+  @Test("Unpriced token with a mixed-script (homoglyph) symbol → .spam via local heuristic")
+  func unpricedWithHomoglyphSymbolIsSpam() async throws {
+    struct ProviderFailed: Error {}
+    // A non-canonical address claiming "USD" + Cyrillic Es (U+0421). It
+    // renders as "USDC" but is not byte-equal, so the exact-match
+    // impersonation check misses it; the mixed-script heuristic catches it.
+    let fakeAddress = "0xdeadbeef00000000000000000000000000000003"
+    let subject = makeDiscoverySubject()
+    subject.resolver.script(
+      .init(chainId: 1, contractAddress: fakeAddress),
+      .failure(ProviderFailed()))
+
+    let registration = try await subject.service.resolveOrLoad(
+      chain: .ethereum,
+      contractAddress: fakeAddress,
+      symbol: "USD\u{0421}",
+      name: "USD\u{0421}",
+      decimals: 18)
+
+    #expect(registration.pricingStatus == .spam)
+    #expect(!registration.mapping.hasProviderMapping)
+    let stored = try await subject.registry.cryptoRegistration(
+      byId: registration.instrument.id)
+    #expect(stored?.pricingStatus == .spam)
+  }
+
   // MARK: - Canonical-registry impersonation (#1102)
 
   @Test("Impersonating token is .spam even when a provider returns a price")

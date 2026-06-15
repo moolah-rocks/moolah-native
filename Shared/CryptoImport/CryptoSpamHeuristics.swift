@@ -21,6 +21,9 @@ enum CryptoSpamHeuristics {
     case embeddedURL
     /// The name or symbol contains airdrop / invitation / voucher phrasing.
     case scamKeyword
+    /// The symbol mixes Latin with another script (a homoglyph spoof of a
+    /// popular ASCII ticker, e.g. `USD` + Cyrillic `Es`).
+    case mixedScriptSymbol
   }
 
   /// Returns the heuristic that classifies `(name, symbol)` as spam, or `nil`
@@ -33,6 +36,7 @@ enum CryptoSpamHeuristics {
     guard !haystack.allSatisfy(\.isWhitespace) else { return nil }
     if containsURLOrDomain(haystack) { return .embeddedURL }
     if containsScamKeyword(haystack) { return .scamKeyword }
+    if let symbol, isMixedScript(symbol) { return .mixedScriptSymbol }
     return nil
   }
 
@@ -86,6 +90,44 @@ enum CryptoSpamHeuristics {
 
   private static func containsScamKeyword(_ haystack: String) -> Bool {
     matches(scamKeywordRegex, in: haystack)
+  }
+
+  // MARK: - Mixed-script (homoglyph) detection
+
+  /// Returns `true` when `symbol` mixes a Latin letter with a letter from
+  /// another script. Legitimate tickers are pure ASCII/Latin; a spam contract
+  /// spoofs a popular ticker by swapping one Latin letter for a visually
+  /// identical character from another script — e.g. Cyrillic `Es` (U+0421)
+  /// for Latin `C` to fake "USDC". Such a symbol renders as the target ticker
+  /// but is not byte-equal to it, so the canonical-registry impersonation
+  /// check (exact match) misses it; this signal closes that gap.
+  ///
+  /// Pure single-script symbols are intentionally not flagged: an all-Latin
+  /// ticker is the normal case, and an all-non-Latin ticker cannot read as a
+  /// Latin target (the spoof must keep the Latin letters that lack a
+  /// convincing confusable, so the result is always mixed).
+  private static func isMixedScript(_ symbol: String) -> Bool {
+    var hasLatin = false
+    var hasNonLatin = false
+    for scalar in symbol.unicodeScalars where scalar.properties.isAlphabetic {
+      if isLatinLetter(scalar) { hasLatin = true } else { hasNonLatin = true }
+      if hasLatin && hasNonLatin { return true }
+    }
+    return false
+  }
+
+  /// Whether `scalar` is a letter in the Latin script: Basic Latin, Latin-1
+  /// Supplement, and Latin Extended-A/B/Additional. Any alphabetic scalar
+  /// outside these blocks counts as another script for mixed-script detection.
+  private static func isLatinLetter(_ scalar: Unicode.Scalar) -> Bool {
+    switch scalar.value {
+    case 0x41...0x5A, 0x61...0x7A,  // A–Z, a–z
+      0xC0...0x24F,  // Latin-1 Supplement + Latin Extended-A/B
+      0x1E00...0x1EFF:  // Latin Extended Additional
+      return true
+    default:
+      return false
+    }
   }
 
   // MARK: - Regex plumbing
