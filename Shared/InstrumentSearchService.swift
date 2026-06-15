@@ -54,7 +54,8 @@ struct InstrumentSearchService: Sendable {
     let provider = await (fiatResults + cryptoResults + stockResults)
     let registeredMatches = registeredMatches(
       query: trimmed, all: filteredRegistered, cryptoMappings: cryptoRegistrations)
-    return merge(registered: registeredMatches, provider: provider)
+    let merged = merge(registered: registeredMatches, provider: provider)
+    return rank(merged, query: trimmed)
   }
 
   private func loadRegisteredOrLog() async -> [Instrument] {
@@ -299,5 +300,54 @@ struct InstrumentSearchService: Sendable {
       out.append(result)
     }
     return out
+  }
+}
+
+// MARK: - Ranking
+
+extension InstrumentSearchService {
+  /// Orders the merged results by relevance. The primary signal is an exact
+  /// ticker/code match against the query — typing "USD" puts US Dollar first;
+  /// the secondary signal favours fiat currencies over every other kind so
+  /// currency matches lead crypto tokens. Within a bucket the merge order is
+  /// preserved (registered rows already lead their provider counterparts), so
+  /// the original index is the final, stability-preserving tiebreaker.
+  private func rank(
+    _ results: [InstrumentSearchResult],
+    query: String
+  ) -> [InstrumentSearchResult] {
+    let lowered = query.lowercased()
+    return
+      results
+      .enumerated()
+      .sorted { lhs, rhs in
+        RankKey(lhs.element, lowered: lowered, index: lhs.offset)
+          < RankKey(rhs.element, lowered: lowered, index: rhs.offset)
+      }
+      .map(\.element)
+  }
+
+  /// Sort key for a single search result. Lower values rank earlier: exact
+  /// ticker/code matches before inexact ones, fiat currencies before every
+  /// other kind, and the original merge index as a stable final tiebreaker.
+  private struct RankKey: Comparable {
+    let exactRank: Int
+    let kindRank: Int
+    let index: Int
+
+    init(_ result: InstrumentSearchResult, lowered: String, index: Int) {
+      let instrument = result.instrument
+      let isExact =
+        instrument.id.lowercased() == lowered
+        || instrument.ticker?.lowercased() == lowered
+      self.exactRank = isExact ? 0 : 1
+      self.kindRank = instrument.kind == .fiatCurrency ? 0 : 1
+      self.index = index
+    }
+
+    static func < (lhs: RankKey, rhs: RankKey) -> Bool {
+      (lhs.exactRank, lhs.kindRank, lhs.index)
+        < (rhs.exactRank, rhs.kindRank, rhs.index)
+    }
   }
 }
