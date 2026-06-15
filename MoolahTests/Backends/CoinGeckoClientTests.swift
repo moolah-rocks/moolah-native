@@ -18,20 +18,40 @@ struct CoinGeckoClientTests {
   // MARK: - URL construction
 
   @Test
-  func marketChartURLIncludesCoinIdAndDays() throws {
-    let url = CoinGeckoClient.marketChartURL(
-      coinId: "ethereum", days: 10, apiKey: "test-key"
+  func marketChartRangeURLIncludesCoinIdAndDateRange() throws {
+    let from = try date("2024-01-10")
+    let to = try date("2024-01-20")
+    let url = CoinGeckoClient.marketChartRangeURL(
+      coinId: "ethereum", from: from, to: to, apiKey: "test-key"
     )
     let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
     #expect(components.host == "pro-api.coingecko.com")
-    #expect(components.path == "/api/v3/coins/ethereum/market_chart")
+    #expect(components.path == "/api/v3/coins/ethereum/market_chart/range")
     let items = try #require(components.queryItems)
     let queryItems = try Dictionary(
       uniqueKeysWithValues: items.map { try ($0.name, #require($0.value)) })
     #expect(queryItems["vs_currency"] == "usd")
-    #expect(queryItems["days"] == "10")
-    #expect(queryItems["interval"] == "daily")
+    #expect(queryItems["from"] == String(Int(from.timeIntervalSince1970)))
+    #expect(queryItems["to"] == String(Int(to.timeIntervalSince1970) + 86_400))
     #expect(queryItems["x_cg_pro_api_key"] == "test-key")
+  }
+
+  @Test
+  func marketChartRangeURLExtendsSingleDayRangeByOneDay() throws {
+    let day = try date("2024-03-15")
+    let url = CoinGeckoClient.marketChartRangeURL(
+      coinId: "bitcoin", from: day, to: day, apiKey: "k"
+    )
+    let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+    let items = try #require(components.queryItems)
+    let queryItems = try Dictionary(
+      uniqueKeysWithValues: items.map { try ($0.name, #require($0.value)) })
+    let fromTimestamp = Int(day.timeIntervalSince1970)
+    // A single-day `from == to` window must not collapse to an empty
+    // range: `to` is pushed to the next-day boundary so the day's prices
+    // are returned.
+    #expect(queryItems["from"] == String(fromTimestamp))
+    #expect(queryItems["to"] == String(fromTimestamp + 86_400))
   }
 
   @Test
@@ -51,10 +71,14 @@ struct CoinGeckoClientTests {
   // MARK: - Public free-tier fallback (no API key)
 
   @Test
-  func marketChartURLUsesPublicHostWhenApiKeyIsEmpty() throws {
-    let url = CoinGeckoClient.marketChartURL(coinId: "ethereum", days: 1, apiKey: "")
+  func marketChartRangeURLUsesPublicHostWhenApiKeyIsEmpty() throws {
+    let from = try date("2024-01-10")
+    let to = try date("2024-01-11")
+    let url = CoinGeckoClient.marketChartRangeURL(
+      coinId: "ethereum", from: from, to: to, apiKey: "")
     let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
     #expect(components.host == "api.coingecko.com")
+    #expect(components.path == "/api/v3/coins/ethereum/market_chart/range")
     let names = Set((components.queryItems ?? []).map(\.name))
     #expect(!names.contains("x_cg_pro_api_key"))
   }
