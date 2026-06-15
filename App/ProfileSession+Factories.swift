@@ -36,6 +36,10 @@ extension ProfileSession {
       service: KeychainServices.apiKeys, account: "coingecko", synchronizable: true
     )
     let coinGeckoApiKey = try? apiKeyStore.restoreString()
+    // Read-only handle to the shared CoinGecko catalog so the discovery token
+    // resolver can price a known token offline (see `makeLookupCatalog`).
+    let lookupCatalog = Self.makeLookupCatalog(
+      apiKey: coinGeckoApiKey, networking: networking)
     return MarketDataServices(
       exchangeRate: ExchangeRateService(
         client: FrankfurterClient(
@@ -43,7 +47,8 @@ extension ProfileSession {
         database: database),
       stockPrice: StockPriceService(client: yahooClient, database: database),
       cryptoPrice: Self.makeCryptoPriceService(
-        coinGeckoApiKey: coinGeckoApiKey, database: database, networking: networking),
+        coinGeckoApiKey: coinGeckoApiKey, database: database, networking: networking,
+        localResolver: lookupCatalog),
       yahooPriceFetcher: yahooClient,
       coinGeckoApiKey: coinGeckoApiKey
     )
@@ -58,7 +63,8 @@ extension ProfileSession {
   static func makeCryptoPriceService(
     coinGeckoApiKey: String?,
     database: any DatabaseWriter,
-    networking: NetworkingServices
+    networking: NetworkingServices,
+    localResolver: (any LocalContractResolver)? = nil
   ) -> CryptoPriceService {
     // Empty key → CoinGeckoClient targets the free public host;
     // non-empty key → Pro host with `x_cg_pro_api_key`. Always included
@@ -93,7 +99,8 @@ extension ProfileSession {
       clients: priceClients,
       database: database,
       resolutionClient: CompositeTokenResolutionClient(
-        networking: networking, coinGeckoApiKey: resolverApiKey)
+        networking: networking, coinGeckoApiKey: resolverApiKey,
+        localResolver: localResolver)
     )
   }
 
@@ -262,38 +269,6 @@ extension ProfileSession {
     }
 
   #endif
-
-  /// Builds the per-profile CoinGecko catalog and kicks off a background
-  /// `refreshIfStale()` so the SQLite snapshot is brought up to date once per
-  /// session without blocking init. Returns `(nil, nil)` (and logs) when the
-  /// SQLite file can't be opened — the caller treats that as a degraded
-  /// search path. The returned `refreshTask` handle is stored on
-  /// `ProfileSession` so it can be cancelled on teardown.
-  @MainActor
-  private static func makeCoinGeckoCatalog(
-    apiKey: String?,
-    networking: NetworkingServices
-  ) -> (catalog: (any CoinGeckoCatalog)?, refreshTask: Task<Void, Never>?) {
-    let directory = URL.moolahScopedApplicationSupport
-      .appending(path: "InstrumentRegistry", directoryHint: .isDirectory)
-    do {
-      let host = (apiKey ?? "").isEmpty ? "api.coingecko.com" : "pro-api.coingecko.com"
-      let catalog = try SQLiteCoinGeckoCatalog.make(
-        directory: directory,
-        http: networking.client(forHost: host))
-      // `SQLiteCoinGeckoCatalog` is an actor, so `await catalog.refreshIfStale()`
-      // hops to the catalog's executor regardless of the enclosing Task's
-      // isolation — no `Task.detached` needed (CONCURRENCY_GUIDE §8).
-      let refreshTask = Task(priority: .background) { [catalog] in
-        await catalog.refreshIfStale()
-      }
-      return (catalog, refreshTask)
-    } catch {
-      Logger(subsystem: "com.moolah.app", category: "ProfileSession")
-        .error("CoinGecko catalog init failed: \(error.localizedDescription, privacy: .public)")
-      return (nil, nil)
-    }
-  }
 
   // MARK: - Domain Stores
 
