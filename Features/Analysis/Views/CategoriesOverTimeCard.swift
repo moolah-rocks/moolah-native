@@ -117,6 +117,9 @@ struct CategoriesOverTimeCard: View {
       }
     }
     .chartXSelection(value: $selectedDate)
+    // The legend below already lists each category with its colour swatch
+    // and total, so the chart's built-in legend is redundant.
+    .chartLegend(.hidden)
     .frame(height: 400)
     .accessibilityLabel(chartAccessibilityLabel)
   }
