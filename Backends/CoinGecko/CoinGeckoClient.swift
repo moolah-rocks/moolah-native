@@ -49,12 +49,8 @@ struct CoinGeckoClient: CryptoPriceClient, Sendable {
     guard let coinId = mapping.coingeckoId else {
       throw CryptoPriceError.noProviderMapping(tokenId: mapping.instrumentId, provider: "CoinGecko")
     }
-    let calendar = Calendar(identifier: .gregorian)
-    let days = max(
-      1,
-      calendar.dateComponents([.day], from: range.lowerBound, to: range.upperBound).day ?? 1
-    )
-    let url = Self.marketChartURL(coinId: coinId, days: days, apiKey: apiKey)
+    let url = Self.marketChartRangeURL(
+      coinId: coinId, from: range.lowerBound, to: range.upperBound, apiKey: apiKey)
     let (data, _) = try await http.data(for: URLRequest(url: url))
     return try Self.parseMarketChartResponse(data)
   }
@@ -84,15 +80,38 @@ struct CoinGeckoClient: CryptoPriceClient, Sendable {
 
   // MARK: - URL builders (internal for testing)
 
-  static func marketChartURL(coinId: String, days: Int, apiKey: String) -> URL {
+  /// Builds the **date-anchored** `market_chart/range` URL for the
+  /// requested `[from, to]` window, using UNIX-second timestamps.
+  ///
+  /// The `market_chart?days=N` endpoint returns the last N days from
+  /// *now*, so it cannot fetch an arbitrary historical window;
+  /// `market_chart/range` fetches exactly the dates asked for, which is
+  /// what backfilling a gap in the price cache requires.
+  ///
+  /// `to` is extended by one day so the upper-bound day's prices are
+  /// included: the range endpoint is timestamp-inclusive, so a midnight
+  /// `to` returns no intraday points for that final day, and a single-day
+  /// `from == to` request would otherwise be an empty window.
+  ///
+  /// For windows of 90 days or less the endpoint returns hourly
+  /// granularity; `parseMarketChartResponse` keys by calendar day and
+  /// keeps the last point per day, so each day resolves to its latest
+  /// intraday price. Windows over 90 days return daily points directly.
+  ///
+  /// On the public/free tier CoinGecko serves only the last 365 days of
+  /// history and 401s for older `from` values; the price service then
+  /// falls through to the next provider in its chain.
+  static func marketChartRangeURL(coinId: String, from: Date, to: Date, apiKey: String) -> URL {
     let pathURL = baseURL(apiKey: apiKey).appendingPathComponent(
-      "coins/\(coinId)/market_chart")
+      "coins/\(coinId)/market_chart/range")
     var components =
       URLComponents(url: pathURL, resolvingAgainstBaseURL: false) ?? URLComponents()
+    let fromTimestamp = Int(from.timeIntervalSince1970)
+    let toTimestamp = Int(to.timeIntervalSince1970) + 86_400
     var items: [URLQueryItem] = [
       URLQueryItem(name: "vs_currency", value: "usd"),
-      URLQueryItem(name: "days", value: String(days)),
-      URLQueryItem(name: "interval", value: "daily"),
+      URLQueryItem(name: "from", value: String(fromTimestamp)),
+      URLQueryItem(name: "to", value: String(toTimestamp)),
     ]
     if let auth = authQueryItem(apiKey: apiKey) { items.append(auth) }
     components.queryItems = items
