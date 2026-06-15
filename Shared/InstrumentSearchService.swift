@@ -96,15 +96,15 @@ struct InstrumentSearchService: Sendable {
     return Locale.Currency.isoCurrencies.compactMap { currency in
       let code = currency.identifier
       let lowerCode = code.lowercased()
-      let localizedName =
-        Locale.current.localizedString(forCurrencyCode: code)?.lowercased() ?? ""
-      guard lowerCode.hasPrefix(lowered) || localizedName.contains(lowered)
+      let localizedName = Locale.current.localizedString(forCurrencyCode: code) ?? ""
+      guard lowerCode.hasPrefix(lowered) || localizedName.lowercased().contains(lowered)
       else { return nil }
       return InstrumentSearchResult(
         instrument: Instrument.fiat(code: code),
         cryptoMapping: nil,
         isRegistered: true,
-        requiresResolution: false
+        requiresResolution: false,
+        matchName: localizedName
       )
     }
   }
@@ -306,12 +306,15 @@ struct InstrumentSearchService: Sendable {
 // MARK: - Ranking
 
 extension InstrumentSearchService {
-  /// Orders the merged results by relevance. The primary signal is an exact
-  /// ticker/code match against the query — typing "USD" puts US Dollar first;
-  /// the secondary signal favours fiat currencies over every other kind so
-  /// currency matches lead crypto tokens. Within a bucket the merge order is
-  /// preserved (registered rows already lead their provider counterparts), so
-  /// the original index is the final, stability-preserving tiebreaker.
+  /// Orders the merged results by relevance, best match first. The dominant
+  /// signal is *how* the query matched (exact ticker/code → exact name →
+  /// ticker prefix → name word-prefix → loose substring), applied uniformly
+  /// across fiat, crypto, and stock so the likeliest target leads regardless
+  /// of kind. Equal-quality matches break ties on, in order: already-registered
+  /// rows (fiat is always registered, so currencies lead unregistered tokens of
+  /// the same quality); a light fiat nudge; then the original merge index, which
+  /// preserves the provider's own ranking (CoinGecko market cap, Yahoo
+  /// relevance, ISO order for fiat).
   private func rank(
     _ results: [InstrumentSearchResult],
     query: String
@@ -321,33 +324,60 @@ extension InstrumentSearchService {
       results
       .enumerated()
       .sorted { lhs, rhs in
-        RankKey(lhs.element, lowered: lowered, index: lhs.offset)
-          < RankKey(rhs.element, lowered: lowered, index: rhs.offset)
+        RankKey(lhs.element, query: lowered, index: lhs.offset)
+          < RankKey(rhs.element, query: lowered, index: rhs.offset)
       }
       .map(\.element)
   }
 
-  /// Sort key for a single search result. Lower values rank earlier: exact
-  /// ticker/code matches before inexact ones, fiat currencies before every
-  /// other kind, and the original merge index as a stable final tiebreaker.
+  /// Sort key for a single search result. Every member is "lower ranks earlier".
   private struct RankKey: Comparable {
-    let exactRank: Int
-    let kindRank: Int
+    let quality: Int
+    let registeredRank: Int
+    let fiatRank: Int
     let index: Int
 
-    init(_ result: InstrumentSearchResult, lowered: String, index: Int) {
+    /// `query` is expected pre-lowercased.
+    init(_ result: InstrumentSearchResult, query: String, index: Int) {
       let instrument = result.instrument
-      let isExact =
-        instrument.id.lowercased() == lowered
-        || instrument.ticker?.lowercased() == lowered
-      self.exactRank = isExact ? 0 : 1
-      self.kindRank = instrument.kind == .fiatCurrency ? 0 : 1
+      self.quality = Self.matchQuality(
+        query: query,
+        id: instrument.id,
+        ticker: instrument.ticker,
+        name: result.matchName
+      )
+      self.registeredRank = result.isRegistered ? 0 : 1
+      self.fiatRank = instrument.kind == .fiatCurrency ? 0 : 1
       self.index = index
     }
 
+    /// Lower is a better match. The result is already known to match the query
+    /// somehow (it survived the per-kind filter), so the loosest tier is the
+    /// catch-all default.
+    static func matchQuality(query: String, id: String, ticker: String?, name: String)
+      -> Int
+    {
+      let loweredId = id.lowercased()
+      let loweredTicker = ticker?.lowercased()
+      let loweredName = name.lowercased()
+      if loweredId == query || loweredTicker == query { return 0 }
+      if loweredName == query { return 1 }
+      if loweredId.hasPrefix(query) || loweredTicker?.hasPrefix(query) == true { return 2 }
+      if hasWordPrefix(loweredName, prefix: query) { return 3 }
+      return 4
+    }
+
+    /// True when any whitespace/punctuation-delimited word in `text` starts with
+    /// `prefix` — so "dollar" word-matches "US Dollar" but "rusd" does not.
+    static func hasWordPrefix(_ text: String, prefix: String) -> Bool {
+      text
+        .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+        .contains { $0.hasPrefix(prefix) }
+    }
+
     static func < (lhs: RankKey, rhs: RankKey) -> Bool {
-      (lhs.exactRank, lhs.kindRank, lhs.index)
-        < (rhs.exactRank, rhs.kindRank, rhs.index)
+      (lhs.quality, lhs.registeredRank, lhs.fiatRank, lhs.index)
+        < (rhs.quality, rhs.registeredRank, rhs.fiatRank, rhs.index)
     }
   }
 }

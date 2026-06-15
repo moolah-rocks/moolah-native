@@ -6,7 +6,6 @@ import Testing
 @Suite("InstrumentSearchService")
 @MainActor
 struct InstrumentSearchServiceTests {
-  @MainActor
   func makeSubject(
     registered: [Instrument] = [],
     cryptoRegistrations: [CryptoRegistration] = [],
@@ -245,6 +244,11 @@ struct InstrumentSearchServiceTests {
     #expect(registeredIdx < providerIdx)
   }
 
+}
+
+// MARK: - Ranking
+
+extension InstrumentSearchServiceTests {
   @Test("exact currency code match ranks first")
   func exactCurrencyCodeRanksFirst() async throws {
     // A crypto hit that also matches "usd" by name must not displace the
@@ -280,6 +284,56 @@ struct InstrumentSearchServiceTests {
     let lastFiat = results.lastIndex { $0.instrument.kind == .fiatCurrency } ?? -1
     let firstCrypto = results.firstIndex { $0.instrument.kind == .cryptoToken } ?? Int.max
     #expect(lastFiat < firstCrypto)
+  }
+
+  @Test("exact ticker outranks a ticker-prefix match")
+  func exactTickerOutranksPrefix() async throws {
+    let uni = cryptoEntry(symbol: "UNI", name: "Uniswap", address: "0xaaa")
+    let unibright = cryptoEntry(symbol: "UNIB", name: "Unibright", address: "0xbbb")
+    let service = makeSubject(catalogEntries: [unibright, uni])
+    let results = await service.search(query: "uni", kinds: [.cryptoToken])
+    let exactIdx = try #require(results.firstIndex { $0.instrument.ticker == "UNI" })
+    let prefixIdx = try #require(results.firstIndex { $0.instrument.ticker == "UNIB" })
+    #expect(exactIdx < prefixIdx)
+  }
+
+  @Test("ticker prefix outranks a name word-prefix match")
+  func tickerPrefixOutranksNamePrefix() async throws {
+    // "comp" prefixes the COMP ticker (tier 2) but only word-prefixes the
+    // "Cosmos" name (tier 3); the ticker match must lead.
+    let comp = cryptoEntry(symbol: "COMP", name: "Compound", address: "0xaaa")
+    let cosmos = cryptoEntry(symbol: "ATOM", name: "Cosmos Network", address: "0xbbb")
+    let service = makeSubject(catalogEntries: [cosmos, comp])
+    let results = await service.search(query: "co", kinds: [.cryptoToken])
+    let tickerIdx = try #require(results.firstIndex { $0.instrument.ticker == "COMP" })
+    let nameIdx = try #require(results.firstIndex { $0.instrument.ticker == "ATOM" })
+    #expect(tickerIdx < nameIdx)
+  }
+
+  @Test("name word-prefix outranks a mid-word substring match")
+  func nameWordPrefixOutranksSubstring() async throws {
+    // "eth" word-prefixes "Ethereal" (tier 3) but only appears mid-word in
+    // "Tether" (tier 4); neither ticker matches, so the word-prefix wins.
+    let ethereal = cryptoEntry(symbol: "ETL", name: "Ethereal", address: "0xaaa")
+    let tether = cryptoEntry(symbol: "USDT", name: "Tether", address: "0xbbb")
+    let service = makeSubject(catalogEntries: [tether, ethereal])
+    let results = await service.search(query: "eth", kinds: [.cryptoToken])
+    let wordPrefixIdx = try #require(results.firstIndex { $0.instrument.ticker == "ETL" })
+    let substringIdx = try #require(results.firstIndex { $0.instrument.ticker == "USDT" })
+    #expect(wordPrefixIdx < substringIdx)
+  }
+
+  private func cryptoEntry(
+    symbol: String, name: String, address: String
+  ) -> CatalogEntry {
+    CatalogEntry(
+      coingeckoId: symbol.lowercased(),
+      symbol: symbol,
+      name: name,
+      platforms: [
+        PlatformBinding(slug: "ethereum", chainId: 1, contractAddress: address)
+      ]
+    )
   }
 }
 
