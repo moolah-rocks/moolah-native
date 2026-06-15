@@ -50,6 +50,8 @@
     }
 
     /// Tells the scripting infrastructure which keys the application handles.
+    /// Only `scriptableProfiles` is exposed — it is the sole top-level element
+    /// in Moolah's SDEF.
     func application(_ sender: NSApplication, delegateHandlesKey key: String) -> Bool {
       key == "scriptableProfiles"
     }
@@ -57,36 +59,20 @@
     /// The top-level scripting element: all open profiles.
     /// Called by the scripting infrastructure when AppleScript accesses
     /// `profiles of application`. On macOS 26 this runs on the main thread,
-    /// so we access `SessionManager` (also main-isolated) synchronously.
+    /// so we hop onto the `MainActor` synchronously (`assumeIsolated`) and read
+    /// `SessionManager` (also main-isolated) in place. There is no off-main
+    /// branch: a `DispatchSemaphore` would park a cooperative-pool thread
+    /// (forbidden — see `guides/CONCURRENCY_GUIDE.md`), and Cocoa calls this
+    /// accessor only on the main thread. If it is ever called off the main
+    /// thread, `assumeIsolated` traps loudly.
     @objc var scriptableProfiles: [ScriptableProfile] {
-      if Thread.isMainThread {
-        return MainActor.assumeIsolated {
-          guard let sessionManager = ScriptingContext.sessionManager else {
-            logger.warning("ScriptingBridge accessed before configuration")
-            return []
-          }
-          return sessionManager.openProfiles.map { ScriptableProfile(session: $0) }
-        }
-      }
-
-      // Off main — kept for whatever dedicated thread Cocoa might use in future.
-      final class ResultBox: @unchecked Sendable {
-        var profiles: [ScriptableProfile] = []
-      }
-      let box = ResultBox()
-      let semaphore = DispatchSemaphore(value: 0)
-
-      Task { @MainActor in
-        if let sessionManager = ScriptingContext.sessionManager {
-          box.profiles = sessionManager.openProfiles.map { ScriptableProfile(session: $0) }
-        } else {
+      MainActor.assumeIsolated {
+        guard let sessionManager = ScriptingContext.sessionManager else {
           logger.warning("ScriptingBridge accessed before configuration")
+          return []
         }
-        semaphore.signal()
+        return sessionManager.openProfiles.map { ScriptableProfile(session: $0) }
       }
-
-      semaphore.wait()
-      return box.profiles
     }
   }
 #endif
