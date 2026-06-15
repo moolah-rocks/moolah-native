@@ -173,4 +173,51 @@ struct EarmarkStoreConvertedBalanceTests {
         && store.convertedSpent(for: earmarkId)?.quantity == 100
     }
   }
+
+  // MARK: - displayBalance (authoritative on-demand)
+
+  @Test
+  func testDisplayBalanceComputesAuthoritativeBalance() async throws {
+    let earmarkId = UUID()
+    let accountId = UUID()
+    let instrument = Instrument.defaultTestInstrument
+    let (backend, database) = try TestBackend.create()
+    TestBackend.seed(
+      accounts: [
+        Account(
+          id: accountId, name: "Test", type: .bank, instrument: .defaultTestInstrument)
+      ], in: database)
+    TestBackend.seedWithTransactions(
+      earmarks: [Earmark(id: earmarkId, name: "Holiday Fund", instrument: instrument)],
+      amounts: [earmarkId: (saved: 500, spent: 0)],
+      accountId: accountId, in: database)
+    let store = EarmarkStore(
+      repository: backend.earmarks, conversionService: FixedConversionService(),
+      targetInstrument: .defaultTestInstrument)
+    // Only wait for the earmark to be observed — `displayBalance` recomputes
+    // from positions on demand, so it must not depend on the converted-balance
+    // dictionary having settled first.
+    try await store.waitForNextEmission(
+      matching: { $0.earmarks.by(id: earmarkId) != nil },
+      description: "seeded earmark observed"
+    )
+
+    let balance = try await store.displayBalance(for: earmarkId)
+
+    #expect(balance.quantity == 500)
+    #expect(balance.instrument == instrument)
+  }
+
+  @Test
+  func testDisplayBalanceReturnsZeroForUnknownEarmark() async throws {
+    let (backend, _) = try TestBackend.create()
+    let store = EarmarkStore(
+      repository: backend.earmarks, conversionService: FixedConversionService(),
+      targetInstrument: .defaultTestInstrument)
+
+    let balance = try await store.displayBalance(for: UUID())
+
+    #expect(balance.quantity == 0)
+    #expect(balance.instrument == .defaultTestInstrument)
+  }
 }
