@@ -1,29 +1,20 @@
 <article>
   <h1>Get a CryptoCompare API key</h1>
-  <p>Create a free CryptoCompare API key and enter it in Moolah to restore deep price history for tokens that only CryptoCompare can price, such as DAI.</p>
+  <p>Create a free CryptoCompare API key and enter it in Moolah to restore deep price history for tokens that only CryptoCompare can price, such as DAI. The key is yours. Moolah stores it in your iCloud Keychain and queries CryptoCompare directly from your device — never through a Moolah server.</p>
 
   <h2>Why you might need one</h2>
   <p>CryptoCompare — now called CoinDesk Data — is one of the price sources Moolah falls back to for crypto tokens. It used to work without a key. It now needs a free API key for the deep historical data behind it. For most tokens this doesn't matter, because CoinGecko prices them. But a few tokens, like DAI, rely on CryptoCompare for their full price history. Without a key, their older prices can't backfill.</p>
-  <p>The key is optional. Crypto sync, current prices, and most history all work without it. Add a key only if you hold a token whose older prices aren't filling in.</p>
-
-  <h2>Before you start</h2>
-  <ul>
-    <li>You'll create a free account on the CoinDesk Data developer portal. No payment details are needed for the free tier.</li>
-    <li>The key is yours. Moolah stores it privately in your iCloud Keychain and queries CryptoCompare directly from your device — never through a Moolah server.</li>
-  </ul>
+  <p>The key is optional. Crypto sync, current prices, and most history all work without it. If a token's older prices aren't filling in, add a key.</p>
 
   <h2>Steps</h2>
-  <p>First, create the key on the developer portal:</p>
+  <p>First, create the key on the CoinDesk Data developer portal. No payment details are needed for the free tier. Then enter it in Moolah.</p>
   <ol>
-    <li>Go to the CoinDesk Data developer portal at <strong>developers.coindesk.com</strong>.</li>
+    <li>Go to the CoinDesk Data developer portal at <a href="https://developers.coindesk.com">developers.coindesk.com</a>.</li>
     <li>Select <strong>Log In / Sign Up</strong> and create a free account.</li>
     <li>Open your API keys page from your account profile.</li>
     <li>Create a new API key and give it a name you'll recognise, such as "Moolah".</li>
     <li>Copy the key.</li>
-  </ol>
-  <p>Then enter it in Moolah:</p>
-  <ol>
-    <li>Open <strong>Settings &gt; Crypto Tokens</strong>.</li>
+    <li>In Moolah, open <strong>Settings &gt; Crypto Tokens</strong>.</li>
     <li>In the <strong>CryptoCompare</strong> section, paste the key into the <strong>CryptoCompare API Key</strong> field.</li>
     <li>Select <strong>Save</strong>.</li>
   </ol>

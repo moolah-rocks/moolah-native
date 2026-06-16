@@ -12,7 +12,7 @@
 
   <p>Exchange API tokens are a special case. They're stored in iCloud Keychain, which is Apple's encrypted store for secrets. iCloud Keychain is separate from CloudKit. It syncs the token across your devices so you don't have to paste it on every one. The token stays out of the regular profile data.</p>
 
-  <p>Your price-provider keys — the Alchemy key and the optional CoinGecko key — work the same way. They're kept in iCloud Keychain too, so you enter them once and they follow you to your other devices, separate from your profile data.</p>
+  <p>Your price-provider keys — the Alchemy key, the optional CoinGecko key, and the optional CryptoCompare key — work the same way. They're kept in iCloud Keychain too, so you enter them once and they follow you to your other devices, separate from your profile data.</p>
 
   <h2>Third-party providers</h2>
   <p>If you add a crypto wallet or an exchange account, your device talks directly to the relevant providers. That's Alchemy, Blockscout, CoinGecko, and Coinstash, depending on what you've set up. Frankfurter is used for fiat exchange rates. These calls go from your device to those providers; they don't go through Moolah. The API keys and tokens you supply are yours, used by your device.</p>
