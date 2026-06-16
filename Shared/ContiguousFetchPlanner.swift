@@ -31,7 +31,14 @@ enum ContiguousFetchPlanner {
         windowDays: windowDays, forwardBuffer: forwardBuffer)
     }
     if requested >= earliest && requested <= latest { return nil }
-    return nil  // filled in by later tasks
+    if requested > latest {
+      let cap = min(requested, addingDays(forwardBuffer, to: today))
+      let upper = min(addingDays(windowDays, to: latest), cap)
+      // Anchor at `latest` itself so a stale latest-day tick is overwritten.
+      guard latest <= upper else { return nil }
+      return latest...upper
+    }
+    return nil  // filled in by Task 4 (backward branch)
   }
 
   /// Adds `days` calendar days to a `DateKey` (`Int32` yyyymmdd), crossing

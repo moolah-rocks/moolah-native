@@ -22,4 +22,30 @@ import Testing
     #expect(ContiguousFetchPlanner.addingDays(-1, to: 20_240_301) == 20_240_229)  // leap year
     #expect(ContiguousFetchPlanner.addingDays(30, to: 20_240_101) == 20_240_131)
   }
+
+  @Test func forwardWindowIsBoundedAndAnchoredAtLatest() {
+    // latest=Jan15, requested far ahead → window [Jan15 … Jan15+30], not [Jan15 … requested].
+    let w = ContiguousFetchPlanner.nextWindow(
+      earliest: 20_240_101, latest: 20_240_115,
+      requested: 20_240_601, today: 20_240_601,
+      windowDays: 30, forwardBuffer: 2)
+    #expect(w == 20_240_115...20_240_214)  // includes latest (re-query to overwrite stale), spans 30 days
+  }
+
+  @Test func forwardWindowStopsAtRequestedWhenNearer() {
+    let w = ContiguousFetchPlanner.nextWindow(
+      earliest: 20_240_101, latest: 20_240_115,
+      requested: 20_240_120, today: 20_240_601,
+      windowDays: 30, forwardBuffer: 2)
+    #expect(w == 20_240_115...20_240_120)
+  }
+
+  @Test func forwardWindowCappedAtTodayPlusBuffer() {
+    // requested beyond today → cap at today+buffer, never an arbitrary future date.
+    let w = ContiguousFetchPlanner.nextWindow(
+      earliest: 20_240_101, latest: 20_240_115,
+      requested: 20_240_601, today: 20_240_118,
+      windowDays: 30, forwardBuffer: 2)
+    #expect(w == 20_240_115...20_240_120)  // today(18)+buffer(2)=20
+  }
 }
