@@ -21,11 +21,11 @@ final class SQLiteCoinGeckoCatalogRefreshTests {
     try? FileManager.default.removeItem(at: tempDir)
   }
 
-  private func makeClient() -> RateLimitedHTTPClient {
+  private func makeNetworking() -> NetworkingServices {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [StubURLProtocol.self]
     let session = URLSession(configuration: config)
-    return NetworkingServices(session: session).client(forHost: "api.coingecko.com")
+    return NetworkingServices(session: session)
   }
 
   private func loadFixture(_ name: String) throws -> Data {
@@ -45,7 +45,8 @@ final class SQLiteCoinGeckoCatalogRefreshTests {
       (HTTPURLResponse.ok(etag: "W/\"p1\""), platformsData)
     }
 
-    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, http: makeClient())
+    let catalog = try SQLiteCoinGeckoCatalog.make(
+      directory: tempDir, apiKeyProvider: { "" }, networking: makeNetworking())
     await catalog.refreshIfStale()
 
     let count = try await catalog.coinCountForTesting()
@@ -68,7 +69,8 @@ final class SQLiteCoinGeckoCatalogRefreshTests {
     StubURLProtocol.handlers["api.coingecko.com:/api/v3/asset_platforms"] = { _ in
       (HTTPURLResponse.ok(etag: "W/\"p1\""), platformsData)
     }
-    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, http: makeClient())
+    let catalog = try SQLiteCoinGeckoCatalog.make(
+      directory: tempDir, apiKeyProvider: { "" }, networking: makeNetworking())
     await catalog.refreshIfStale()
 
     // Fast-forward `last_fetched` so the next call is "stale".
@@ -106,7 +108,8 @@ final class SQLiteCoinGeckoCatalogRefreshTests {
     StubURLProtocol.handlers["api.coingecko.com:/api/v3/asset_platforms"] = { _ in
       (HTTPURLResponse.ok(etag: "W/\"p1\""), platformsData)
     }
-    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, http: makeClient())
+    let catalog = try SQLiteCoinGeckoCatalog.make(
+      directory: tempDir, apiKeyProvider: { "" }, networking: makeNetworking())
     await catalog.refreshIfStale()
     await catalog.refreshIfStale()
 
@@ -123,7 +126,8 @@ final class SQLiteCoinGeckoCatalogRefreshTests {
     StubURLProtocol.handlers["api.coingecko.com:/api/v3/asset_platforms"] = { _ in
       (HTTPURLResponse.ok(etag: "W/\"p1\""), platformsData)
     }
-    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, http: makeClient())
+    let catalog = try SQLiteCoinGeckoCatalog.make(
+      directory: tempDir, apiKeyProvider: { "" }, networking: makeNetworking())
     await catalog.refreshIfStale()
     try await catalog.bumpLastFetchedBackwardForTesting(by: 25 * 3600)
 
@@ -150,7 +154,8 @@ final class SQLiteCoinGeckoCatalogRefreshTests {
     StubURLProtocol.handlers["api.coingecko.com:/api/v3/asset_platforms"] = { _ in
       (HTTPURLResponse.ok(etag: "W/\"p1\""), platforms)
     }
-    let catalog = try SQLiteCoinGeckoCatalog.make(directory: tempDir, http: makeClient())
+    let catalog = try SQLiteCoinGeckoCatalog.make(
+      directory: tempDir, apiKeyProvider: { "" }, networking: makeNetworking())
     await catalog.refreshIfStale()
     try await catalog.bumpLastFetchedBackwardForTesting(by: 25 * 3600)
 
@@ -165,5 +170,47 @@ final class SQLiteCoinGeckoCatalogRefreshTests {
     #expect(pepe.first?.coingeckoId == "pepe")
     let meta = try await catalog.readMetaForTesting()
     #expect(meta.coinsEtag == "W/\"a2\"")
+  }
+
+  /// A provider returning a Pro key must route the refresh to the Pro host
+  /// with the `x_cg_pro_api_key` query item — and still carry
+  /// `include_platform=true` on the coins-list request. Guards the key-aware
+  /// host/auth selection now that the catalog reads its key per refresh.
+  @Test
+  func refreshWithProKeyTargetsProHostWithKey() async throws {
+    let coinsData = try loadFixture("coingecko-coins-list-small")
+    let platformsData = try loadFixture("coingecko-asset-platforms")
+    let coinsURL = LockedBox<URL?>(nil)
+    let platformsURL = LockedBox<URL?>(nil)
+    StubURLProtocol.handlers["pro-api.coingecko.com:/api/v3/coins/list"] = { request in
+      coinsURL.set(request.url)
+      return (HTTPURLResponse.ok(etag: "W/\"a1\""), coinsData)
+    }
+    StubURLProtocol.handlers["pro-api.coingecko.com:/api/v3/asset_platforms"] = { request in
+      platformsURL.set(request.url)
+      return (HTTPURLResponse.ok(etag: "W/\"p1\""), platformsData)
+    }
+    let catalog = try SQLiteCoinGeckoCatalog.make(
+      directory: tempDir, apiKeyProvider: { "prokey" }, networking: makeNetworking())
+    await catalog.refreshIfStale()
+
+    let coins = try #require(coinsURL.get())
+    let coinsComponents = try #require(URLComponents(url: coins, resolvingAgainstBaseURL: false))
+    #expect(coinsComponents.host == "pro-api.coingecko.com")
+    #expect(queryValue(coinsComponents, "x_cg_pro_api_key") == "prokey")
+    #expect(queryValue(coinsComponents, "include_platform") == "true")
+
+    let platforms = try #require(platformsURL.get())
+    let platformsComponents = try #require(
+      URLComponents(url: platforms, resolvingAgainstBaseURL: false))
+    #expect(platformsComponents.host == "pro-api.coingecko.com")
+    #expect(queryValue(platformsComponents, "x_cg_pro_api_key") == "prokey")
+
+    let coinCount = try await catalog.coinCountForTesting()
+    #expect(coinCount == 3)
+  }
+
+  private func queryValue(_ components: URLComponents, _ name: String) -> String? {
+    components.queryItems?.first { $0.name == name }?.value
   }
 }

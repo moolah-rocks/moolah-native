@@ -13,7 +13,12 @@ actor SQLiteCoinGeckoCatalog: CoinGeckoCatalog {
   static let log = Logger(subsystem: "moolah.instrument-registry", category: "catalog")
 
   private let directory: URL
-  let http: RateLimitedHTTPClient
+  /// Resolves the CoinGecko key per refresh (not once at construction) so a
+  /// Pro key entered in Settings flips the `/coins/list` + `/asset_platforms`
+  /// refresh from the free public host to the authenticated Pro host on the
+  /// next refresh.
+  let apiKeyProvider: @Sendable () -> String?
+  let networking: NetworkingServices
   private(set) var database: OpaquePointer?
 
   // MARK: - Cross-extension internals
@@ -28,7 +33,8 @@ actor SQLiteCoinGeckoCatalog: CoinGeckoCatalog {
   // `+SQLite.swift`.
   //
   // Used by +Search.swift only:    nothing in this file
-  // Used by +Refresh.swift only:   `http`, `replaceAll`, `insertCoins`,
+  // Used by +Refresh.swift only:   `apiKeyProvider`, `networking`,
+  //                                `replaceAll`, `insertCoins`,
   //                                `insertPlatforms`, `readMeta`
   // Used by both extensions:       `log` (static), `database` (read-only)
 
@@ -40,23 +46,29 @@ actor SQLiteCoinGeckoCatalog: CoinGeckoCatalog {
   /// in one named place.
   static func make(
     directory: URL,
-    http: RateLimitedHTTPClient
+    apiKeyProvider: @Sendable @escaping () -> String?,
+    networking: NetworkingServices
   ) throws -> SQLiteCoinGeckoCatalog {
     try FileManager.default.createDirectory(
       at: directory, withIntermediateDirectories: true
     )
     let database = try open(dbURL: directory.appendingPathComponent("catalog.sqlite"))
     return SQLiteCoinGeckoCatalog(
-      directory: directory, http: http, database: database)
+      directory: directory,
+      apiKeyProvider: apiKeyProvider,
+      networking: networking,
+      database: database)
   }
 
   private init(
     directory: URL,
-    http: RateLimitedHTTPClient,
+    apiKeyProvider: @Sendable @escaping () -> String?,
+    networking: NetworkingServices,
     database: OpaquePointer
   ) {
     self.directory = directory
-    self.http = http
+    self.apiKeyProvider = apiKeyProvider
+    self.networking = networking
     self.database = database
   }
 
