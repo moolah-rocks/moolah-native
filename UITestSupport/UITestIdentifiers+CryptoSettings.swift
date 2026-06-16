@@ -31,6 +31,17 @@ extension UITestIdentifiers {
     /// "Remove" button shown when an Alchemy key is already configured.
     public static let alchemyApiKeyRemoveButton = "crypto.settings.alchemy.remove"
 
+    /// Secure field for the CryptoCompare API key. Pinned so a UI test
+    /// can drive the settings flow end-to-end.
+    public static let cryptoCompareApiKeyField = "crypto.settings.cryptocompare.field"
+
+    /// "Save" button next to the CryptoCompare API key entry field.
+    public static let cryptoCompareApiKeySaveButton = "crypto.settings.cryptocompare.save"
+
+    /// "Remove" button shown when a CryptoCompare key is already
+    /// configured.
+    public static let cryptoCompareApiKeyRemoveButton = "crypto.settings.cryptocompare.remove"
+
     /// Navigation row that opens the Discovered Tokens inbox.
     public static let discoveredTokensRow = "crypto.settings.discoveredTokens"
 

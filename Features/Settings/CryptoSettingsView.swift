@@ -24,6 +24,7 @@ struct CryptoSettingsView: View {
   // `CryptoSettingsView+TokenList.swift` can read / mutate the same
   // local UI state. Not part of the public surface.
   @State var coinGeckoApiKeyInput = ""
+  @State var cryptoCompareApiKeyInput = ""
   @State var alchemyApiKeyInput = ""
   @State var showAddToken = false
 
@@ -43,6 +44,7 @@ struct CryptoSettingsView: View {
       tokenInboxNavigationSection
       tokenListSection
       coinGeckoApiKeySection
+      cryptoCompareApiKeySection
     }
     .formStyle(.grouped)
     .navigationTitle("Crypto Tokens")

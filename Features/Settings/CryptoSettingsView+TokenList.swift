@@ -1,10 +1,11 @@
 // Features/Settings/CryptoSettingsView+TokenList.swift
 import SwiftUI
 
-/// "Registered Tokens" + "CoinGecko API Key" sections of the Crypto
-/// preferences tab. Every member here closes over the parent view's
-/// `store` / `showAddToken` / `coinGeckoApiKeyInput` bindings — no new
-/// state owned at this layer.
+/// "Registered Tokens" + "CoinGecko" / "CryptoCompare" API-key sections
+/// of the Crypto preferences tab. Every member here closes over the
+/// parent view's `store` / `showAddToken` / `coinGeckoApiKeyInput` /
+/// `cryptoCompareApiKeyInput` bindings — no new state owned at this
+/// layer.
 extension CryptoSettingsView {
 
   // MARK: - Registered Tokens
@@ -165,5 +166,70 @@ extension CryptoSettingsView {
         .disabled(coinGeckoApiKeyInput.trimmingCharacters(in: .whitespaces).isEmpty)
       }
     }
+  }
+
+  // MARK: - CryptoCompare API Key
+
+  var cryptoCompareApiKeySection: some View {
+    Section {
+      cryptoCompareApiKeyControl
+      Link(
+        "How to get a CryptoCompare API key",
+        destination: cryptoCompareSignupURL
+      )
+      .font(.caption)
+    } header: {
+      Text("CryptoCompare")
+    } footer: {
+      Text(
+        "Optional. Restores deep price history for tokens like DAI. "
+          + "Requires a free API key from CoinDesk Data, formerly CryptoCompare."
+      )
+    }
+  }
+
+  @ViewBuilder var cryptoCompareApiKeyControl: some View {
+    if store.hasCryptoCompareApiKey {
+      HStack {
+        Label("CryptoCompare API Key", systemImage: "key")
+        Spacer()
+        Text("Configured")
+          .foregroundStyle(.secondary)
+        Button("Remove", role: .destructive) {
+          store.clearCryptoCompareApiKey()
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.cryptoCompareApiKeyRemoveButton)
+      }
+    } else {
+      HStack {
+        SecureField("CryptoCompare API Key", text: $cryptoCompareApiKeyInput)
+          .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.cryptoCompareApiKeyField)
+        Button("Save") {
+          let trimmed = cryptoCompareApiKeyInput.trimmingCharacters(in: .whitespaces)
+          guard !trimmed.isEmpty else { return }
+          store.saveCryptoCompareApiKey(trimmed)
+          cryptoCompareApiKeyInput = ""
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .disabled(cryptoCompareApiKeyInput.trimmingCharacters(in: .whitespaces).isEmpty)
+        .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.cryptoCompareApiKeySaveButton)
+      }
+    }
+  }
+
+  /// CoinDesk Data (formerly CryptoCompare) API landing page. Hard-coded
+  /// constant rather than environment / config because the URL is a
+  /// public resource and keeping it inline keeps the link a one-line
+  /// `Link(...)` call. `URL(string:)`'s force-unwrap is gated by a
+  /// known-good literal so a `nil` here is a programmer error, not a
+  /// runtime failure mode.
+  private var cryptoCompareSignupURL: URL {
+    guard let url = URL(string: "https://developers.coindesk.com") else {
+      preconditionFailure("CryptoSettingsView: malformed CryptoCompare signup URL literal")
+    }
+    return url
   }
 }
