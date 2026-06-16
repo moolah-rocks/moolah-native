@@ -124,14 +124,12 @@ struct CryptoSettingsView: View {
       SecureField("Alchemy API Key", text: $alchemyApiKeyInput)
         .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.alchemyApiKeyField)
       Button("Save") {
-        let trimmed = alchemyApiKeyInput.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty else { return }
-        store.saveAlchemyApiKey(trimmed)
+        store.saveAlchemyApiKey(alchemyApiKeyInput)
         alchemyApiKeyInput = ""
       }
       .buttonStyle(.bordered)
       .controlSize(.small)
-      .disabled(alchemyApiKeyInput.trimmingCharacters(in: .whitespaces).isEmpty)
+      .disabled(alchemyApiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.alchemyApiKeySaveButton)
     }
   }
@@ -221,4 +219,26 @@ struct CryptoSettingsView: View {
 
   // The "Registered Tokens" + "CoinGecko API Key" sections live in
   // `CryptoSettingsView+TokenList.swift`.
+}
+
+#Preview("No keys") {
+  // Preview-only wiring: an in-memory registry + a no-network price
+  // service exercises the empty "no keys configured" state. The store's
+  // keychain reads return `nil` on the preview host, so every provider
+  // renders its entry-field row. `PreviewBackend.create(sharedRegistry:)`
+  // supplies a conversion service wired over the same in-memory
+  // profile-index DB the registry owns.
+  // In-memory open cannot fail (no filesystem path); preview-only path.
+  // swiftlint:disable:next force_try
+  let database = try! ProfileIndexDatabase.openInMemory()
+  let registry = GRDBInstrumentRegistryRepository(database: database)
+  let backend = PreviewBackend.create(sharedRegistry: registry)
+  let priceService = CryptoPriceService(clients: [], database: registry.database)
+  let store = CryptoTokenStore(
+    registry: registry,
+    cryptoPriceService: priceService,
+    conversionService: backend.conversionService)
+  return NavigationStack {
+    CryptoSettingsView(store: store)
+  }
 }

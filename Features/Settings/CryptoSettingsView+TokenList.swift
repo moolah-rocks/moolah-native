@@ -129,6 +129,11 @@ extension CryptoSettingsView {
   var coinGeckoApiKeySection: some View {
     Section {
       coinGeckoApiKeyControl
+      Link(
+        "How to get a CoinGecko API key",
+        destination: coinGeckoSignupURL
+      )
+      .font(.caption)
     } header: {
       Text("CoinGecko")
     } footer: {
@@ -140,30 +145,31 @@ extension CryptoSettingsView {
   }
 
   @ViewBuilder var coinGeckoApiKeyControl: some View {
-    if store.hasApiKey {
+    if store.hasCoinGeckoApiKey {
       HStack {
         Label("CoinGecko API Key", systemImage: "key")
         Spacer()
         Text("Configured")
           .foregroundStyle(.secondary)
         Button("Remove", role: .destructive) {
-          store.clearApiKey()
+          store.clearCoinGeckoApiKey()
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
+        .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.coinGeckoApiKeyRemoveButton)
       }
     } else {
       HStack {
         SecureField("CoinGecko API Key", text: $coinGeckoApiKeyInput)
+          .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.coinGeckoApiKeyField)
         Button("Save") {
-          let trimmed = coinGeckoApiKeyInput.trimmingCharacters(in: .whitespaces)
-          guard !trimmed.isEmpty else { return }
-          store.saveApiKey(trimmed)
+          store.saveCoinGeckoApiKey(coinGeckoApiKeyInput)
           coinGeckoApiKeyInput = ""
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .disabled(coinGeckoApiKeyInput.trimmingCharacters(in: .whitespaces).isEmpty)
+        .disabled(coinGeckoApiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.coinGeckoApiKeySaveButton)
       }
     }
   }
@@ -207,14 +213,12 @@ extension CryptoSettingsView {
         SecureField("CryptoCompare API Key", text: $cryptoCompareApiKeyInput)
           .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.cryptoCompareApiKeyField)
         Button("Save") {
-          let trimmed = cryptoCompareApiKeyInput.trimmingCharacters(in: .whitespaces)
-          guard !trimmed.isEmpty else { return }
-          store.saveCryptoCompareApiKey(trimmed)
+          store.saveCryptoCompareApiKey(cryptoCompareApiKeyInput)
           cryptoCompareApiKeyInput = ""
         }
         .buttonStyle(.bordered)
         .controlSize(.small)
-        .disabled(cryptoCompareApiKeyInput.trimmingCharacters(in: .whitespaces).isEmpty)
+        .disabled(cryptoCompareApiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.cryptoCompareApiKeySaveButton)
       }
     }
@@ -229,6 +233,18 @@ extension CryptoSettingsView {
   private var cryptoCompareSignupURL: URL {
     guard let url = URL(string: "https://developers.coindesk.com") else {
       preconditionFailure("CryptoSettingsView: malformed CryptoCompare signup URL literal")
+    }
+    return url
+  }
+
+  /// CoinGecko API landing page. Hard-coded constant rather than
+  /// environment / config because the URL is a public resource and keeping
+  /// it inline keeps the link a one-line `Link(...)` call. `URL(string:)`'s
+  /// force-unwrap is gated by a known-good literal so a `nil` here is a
+  /// programmer error, not a runtime failure mode.
+  private var coinGeckoSignupURL: URL {
+    guard let url = URL(string: "https://www.coingecko.com/en/api") else {
+      preconditionFailure("CryptoSettingsView: malformed CoinGecko signup URL literal")
     }
     return url
   }
