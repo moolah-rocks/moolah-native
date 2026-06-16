@@ -38,7 +38,7 @@ final class CompositeTokenResolutionLocalFirstTests {
     let client = CompositeTokenResolutionClient(
       coinListData: Data(#"{"Data":{}}"#.utf8),
       exchangeInfoData: Data(#"{"symbols":[]}"#.utf8),
-      coinGeckoApiKey: nil,
+      coinGeckoApiKeyProvider: { nil },
       localResolver: local
     )
 
@@ -62,7 +62,7 @@ final class CompositeTokenResolutionLocalFirstTests {
       match: LocalContractMatch(coingeckoId: "usd-coin", symbol: "USDC", name: "USDC"))
     let client = CompositeTokenResolutionClient(
       networking: noHandlerNetworking(),
-      coinGeckoApiKey: "",
+      coinGeckoApiKeyProvider: { "" },
       localResolver: local
     )
 
@@ -83,7 +83,7 @@ final class CompositeTokenResolutionLocalFirstTests {
     let client = CompositeTokenResolutionClient(
       coinListData: Data(#"{"Data":{}}"#.utf8),
       exchangeInfoData: Data(#"{"symbols":[]}"#.utf8),
-      coinGeckoApiKey: nil,
+      coinGeckoApiKeyProvider: { nil },
       localResolver: local
     )
 
