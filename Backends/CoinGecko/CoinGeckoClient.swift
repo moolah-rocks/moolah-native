@@ -32,8 +32,10 @@ struct CoinGeckoClient: CryptoPriceClient, Sendable {
   private static let proHost = "pro-api.coingecko.com"
 
   /// Picks the host that matches the key the URL builders target so the
-  /// rate-limit gate and the request URL never diverge.
-  private static func host(apiKey: String) -> String {
+  /// rate-limit gate and the request URL never diverge. Internal (not
+  /// `private`) so the catalog refresh path can resolve the same host from
+  /// the one place these literals live (see `SQLiteCoinGeckoCatalog+Refresh`).
+  static func host(apiKey: String) -> String {
     apiKey.isEmpty ? publicHost : proHost
   }
 
@@ -52,7 +54,7 @@ struct CoinGeckoClient: CryptoPriceClient, Sendable {
 
   func dailyPrice(for mapping: CryptoProviderMapping, on date: Date) async throws -> Decimal {
     let prices = try await dailyPrices(for: mapping, in: date...date)
-    let dateString = Self.dateString(from: date)
+    let dateString = date.iso8601DateOnlyString
     guard let price = prices[dateString] else {
       throw CryptoPriceError.noPriceAvailable(tokenId: mapping.instrumentId, date: dateString)
     }
@@ -240,12 +242,6 @@ struct CoinGeckoClient: CryptoPriceClient, Sendable {
     return ContractLookupResult(
       id: raw.id, symbol: raw.symbol, name: raw.name, decimals: decimals
     )
-  }
-
-  private static func dateString(from date: Date) -> String {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withFullDate]
-    return formatter.string(from: date)
   }
 }
 

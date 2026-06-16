@@ -19,7 +19,7 @@ struct BinanceClient: CryptoPriceClient, Sendable {
 
   func dailyPrice(for mapping: CryptoProviderMapping, on date: Date) async throws -> Decimal {
     let prices = try await dailyPrices(for: mapping, in: date...date)
-    let dateString = Self.dateString(from: date)
+    let dateString = date.iso8601DateOnlyString
     guard let price = prices[dateString] else {
       throw CryptoPriceError.noPriceAvailable(tokenId: mapping.instrumentId, date: dateString)
     }
@@ -129,12 +129,6 @@ struct BinanceClient: CryptoPriceClient, Sendable {
 
   static func applyUsdtRate(_ prices: [String: Decimal], rate: Decimal) -> [String: Decimal] {
     prices.mapValues { $0 * rate }
-  }
-
-  private static func dateString(from date: Date) -> String {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withFullDate]
-    return formatter.string(from: date)
   }
 }
 

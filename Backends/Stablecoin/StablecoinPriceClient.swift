@@ -21,7 +21,7 @@ struct StablecoinPriceClient: CryptoPriceClient, Sendable {
 
   func dailyPrice(for mapping: CryptoProviderMapping, on date: Date) async throws -> Decimal {
     let prices = try await dailyPrices(for: mapping, in: date...date)
-    let key = Self.dateString(from: date)
+    let key = date.iso8601DateOnlyString
     guard let price = prices[key] else {
       throw CryptoPriceError.noPriceAvailable(tokenId: mapping.instrumentId, date: key)
     }
@@ -38,7 +38,7 @@ struct StablecoinPriceClient: CryptoPriceClient, Sendable {
     var result: [String: Decimal] = [:]
     var current = range.lowerBound
     while current <= range.upperBound {
-      result[Self.dateString(from: current)] = Decimal(1)
+      result[current.iso8601DateOnlyString] = Decimal(1)
       guard let next = Calendar.utc.date(byAdding: .day, value: 1, to: current) else { break }
       current = next
     }
@@ -66,11 +66,5 @@ struct StablecoinPriceClient: CryptoPriceClient, Sendable {
         chainId: chainId, contractAddress: String(addressPart))
     else { return false }
     return peggedSymbols.contains(symbol)
-  }
-
-  private static func dateString(from date: Date) -> String {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withFullDate]
-    return formatter.string(from: date)
   }
 }

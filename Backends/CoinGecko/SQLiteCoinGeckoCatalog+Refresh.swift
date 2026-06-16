@@ -33,8 +33,7 @@ extension SQLiteCoinGeckoCatalog {
       // and the rate-limit gate are derived from the same key, so they never
       // diverge.
       let apiKey = apiKeyProvider() ?? ""
-      let host = apiKey.isEmpty ? "api.coingecko.com" : "pro-api.coingecko.com"
-      let http = networking.client(forHost: host)
+      let http = networking.client(forHost: CoinGeckoClient.host(apiKey: apiKey))
       let coinsListURL = CoinGeckoClient.coinsListURL(apiKey: apiKey)
       let assetPlatformsURL = CoinGeckoClient.assetPlatformsURL(apiKey: apiKey)
       async let coinsRequest = Self.fetchConditional(
