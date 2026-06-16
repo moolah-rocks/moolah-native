@@ -17,7 +17,13 @@ extension ProfileSession {
   nonisolated static func resolveAlchemyApiKey() -> String? {
     let store = KeychainStore(
       service: KeychainServices.apiKeys, account: "alchemy", synchronizable: true)
-    return try? store.restoreString()
+    do {
+      return try store.restoreString()
+    } catch {
+      logger.error(
+        "Alchemy keychain read failed: \(error.localizedDescription, privacy: .public)")
+      return nil
+    }
   }
 
   /// Returns the live CryptoCompare API key from the keychain, or `nil` when
@@ -29,7 +35,13 @@ extension ProfileSession {
   nonisolated static func resolveCryptoCompareApiKey() -> String? {
     let store = KeychainStore(
       service: KeychainServices.apiKeys, account: "cryptocompare", synchronizable: true)
-    return try? store.restoreString()
+    do {
+      return try store.restoreString()
+    } catch {
+      logger.error(
+        "CryptoCompare keychain read failed: \(error.localizedDescription, privacy: .public)")
+      return nil
+    }
   }
 
   /// Returns the live CoinGecko API key from the keychain, or `nil` when no
@@ -41,7 +53,13 @@ extension ProfileSession {
   nonisolated static func resolveCoinGeckoApiKey() -> String? {
     let store = KeychainStore(
       service: KeychainServices.apiKeys, account: "coingecko", synchronizable: true)
-    return try? store.restoreString()
+    do {
+      return try store.restoreString()
+    } catch {
+      logger.error(
+        "CoinGecko keychain read failed: \(error.localizedDescription, privacy: .public)")
+      return nil
+    }
   }
 
   /// Output of `makeCryptoSyncWiring`. The discovery actor is plumbed
