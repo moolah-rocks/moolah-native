@@ -96,6 +96,45 @@ struct CanonicalTokenRegistryTests {
         chainId: 10, contractAddress: nil, symbol: "OP"))
   }
 
+  // MARK: - Reverse lookup: (chain, address) → canonical symbol
+
+  @Test("Canonical USDC address on Ethereum resolves to the USDC symbol")
+  func symbolForCanonicalUsdc() {
+    #expect(
+      CanonicalTokenRegistry.symbol(chainId: 1, contractAddress: Self.usdcEthereum) == "USDC")
+  }
+
+  @Test("Canonical OP address on Optimism resolves to the OP symbol")
+  func symbolForCanonicalOp() {
+    #expect(
+      CanonicalTokenRegistry.symbol(chainId: 10, contractAddress: Self.opOptimism) == "OP")
+  }
+
+  @Test("A checksummed/uppercased address still resolves its symbol")
+  func symbolMatchesCaseInsensitively() {
+    #expect(
+      CanonicalTokenRegistry.symbol(
+        chainId: 1, contractAddress: Self.usdcEthereum.uppercased()) == "USDC")
+  }
+
+  @Test("An unknown address resolves to no symbol")
+  func symbolNilForUnknownAddress() {
+    #expect(
+      CanonicalTokenRegistry.symbol(
+        chainId: 1, contractAddress: "0x0000000000000000000000000000000000000bad") == nil)
+  }
+
+  @Test("A native (nil) address resolves to no symbol")
+  func symbolNilForNativeAddress() {
+    #expect(CanonicalTokenRegistry.symbol(chainId: 1, contractAddress: nil) == nil)
+  }
+
+  @Test("A canonical address looked up on the wrong chain resolves to no symbol")
+  func symbolNilForWrongChain() {
+    #expect(
+      CanonicalTokenRegistry.symbol(chainId: 137, contractAddress: Self.usdcEthereum) == nil)
+  }
+
   @Test("Bundled data covers all four supported chains with non-empty sets")
   func bundledDataIsWellFormed() {
     for chainId in [1, 10, 8453, 137] {

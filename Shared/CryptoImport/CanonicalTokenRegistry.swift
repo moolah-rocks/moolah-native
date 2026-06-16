@@ -31,4 +31,27 @@ enum CanonicalTokenRegistry {
     guard let canonical = bundled[chainId]?[key] else { return false }
     return !canonical.contains(contractAddress.lowercased())
   }
+
+  /// The canonical (uppercase) symbol for the token deployed at
+  /// `contractAddress` on `chainId`, or `nil` when the address is not a
+  /// known-legitimate deployment in the bundled registry. Native (`nil`)
+  /// addresses return `nil`.
+  ///
+  /// The bundled symbols are the standard tickers the major price providers
+  /// key on, so the result doubles as a CryptoCompare `fsym` for a
+  /// recognised token — used to give CoinGecko-only tokens (e.g. USDC, DAI,
+  /// which CryptoCompare omits from its contract-address index) a
+  /// date-anchored deep-history provider. This is the reverse of
+  /// `isImpersonation`: it returns a symbol only for an address the registry
+  /// recognises as legitimate, so a look-alike at a non-canonical address
+  /// yields `nil`.
+  static func symbol(chainId: Int, contractAddress: String?) -> String? {
+    guard let contractAddress else { return nil }
+    let needle = contractAddress.lowercased()
+    guard let symbolsForChain = bundled[chainId] else { return nil }
+    for (protectedSymbol, addresses) in symbolsForChain where addresses.contains(needle) {
+      return protectedSymbol
+    }
+    return nil
+  }
 }
