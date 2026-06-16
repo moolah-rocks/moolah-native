@@ -117,6 +117,32 @@ struct CoinGeckoClientTests {
     #expect((components.queryItems ?? []).isEmpty)
   }
 
+  @Test
+  func coinsListURLUsesPublicHostAndIncludesPlatformWhenApiKeyIsEmpty() throws {
+    let url = CoinGeckoClient.coinsListURL(apiKey: "")
+    let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+    #expect(components.host == "api.coingecko.com")
+    #expect(components.path == "/api/v3/coins/list")
+    let items = try #require(components.queryItems)
+    let queryItems = try Dictionary(
+      uniqueKeysWithValues: items.map { try ($0.name, #require($0.value)) })
+    #expect(queryItems["include_platform"] == "true")
+    #expect(queryItems["x_cg_pro_api_key"] == nil)
+  }
+
+  @Test
+  func coinsListURLUsesProHostWithKeyWhenApiKeyIsSet() throws {
+    let url = CoinGeckoClient.coinsListURL(apiKey: "prokey")
+    let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+    #expect(components.host == "pro-api.coingecko.com")
+    #expect(components.path == "/api/v3/coins/list")
+    let items = try #require(components.queryItems)
+    let queryItems = try Dictionary(
+      uniqueKeysWithValues: items.map { try ($0.name, #require($0.value)) })
+    #expect(queryItems["include_platform"] == "true")
+    #expect(queryItems["x_cg_pro_api_key"] == "prokey")
+  }
+
   // MARK: - Response parsing
 
   @Test
@@ -206,7 +232,7 @@ struct CoinGeckoClientTests {
     let services = NetworkingServices(
       session: URLSession(configuration: .ephemeral))
     let client = CoinGeckoClient(
-      apiKey: "key", http: services.client(forHost: "pro-api.coingecko.com"))
+      apiKeyProvider: { "key" }, networking: services)
     await #expect(throws: CryptoPriceError.self) {
       try await client.dailyPrice(for: mapping, on: Date())
     }

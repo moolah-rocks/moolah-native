@@ -32,6 +32,18 @@ extension ProfileSession {
     return try? store.restoreString()
   }
 
+  /// Returns the live CoinGecko API key from the keychain, or `nil` when no
+  /// key is configured. `nonisolated` so the `@Sendable` key-provider closure
+  /// threaded into the CoinGecko price client, token resolver, and discovery
+  /// catalog can resolve it per request — a Pro key entered in Settings then
+  /// flips every consumer from the free public host to the authenticated Pro
+  /// host on the next fetch without rebuilding the session.
+  nonisolated static func resolveCoinGeckoApiKey() -> String? {
+    let store = KeychainStore(
+      service: KeychainServices.apiKeys, account: "coingecko", synchronizable: true)
+    return try? store.restoreString()
+  }
+
   /// Output of `makeCryptoSyncWiring`. The discovery actor is plumbed
   /// out alongside the store so the Discovered Tokens inbox can drive
   /// `reResolve(_:chain:)` on the same actor instance the sync engine
