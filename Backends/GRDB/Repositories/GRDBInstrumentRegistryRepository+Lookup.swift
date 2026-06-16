@@ -59,12 +59,11 @@ extension GRDBInstrumentRegistryRepository {
   static func project(row: InstrumentRow) throws -> CryptoRegistration? {
     let status =
       TokenPricingStatus(rawValue: row.pricingStatus) ?? .priced
-    let mapping = row.cryptoMapping() ?? row.emptyCryptoMapping()
-    let hasMapping = row.cryptoMapping() != nil
-    guard hasMapping || status != .priced else { return nil }
+    let mapping = row.cryptoMapping()
+    guard mapping != nil || status != .priced else { return nil }
     return CryptoRegistration(
       instrument: try row.toDomain(),
-      mapping: mapping,
+      mapping: mapping ?? row.emptyCryptoMapping(),
       pricingStatus: status)
   }
 }
