@@ -7,8 +7,10 @@ import Foundation
 /// store's `let` keychain handles; none owns new state.
 ///
 /// Each provider follows the same shape: a `has…ApiKey` read that
-/// drives a status badge, a `save…ApiKey(_:)` that persists to the
-/// synced Keychain, and a `clear…ApiKey()` that removes the entry. The
+/// drives a status badge, a `save…ApiKey(_:)` that trims surrounding
+/// whitespace and persists to the synced Keychain (an all-whitespace
+/// input is a no-op, never persisted empty), and a `clear…ApiKey()`
+/// that removes the entry. The
 /// key value itself is never logged; failure paths log only the
 /// wrapping `error.localizedDescription` (which carries the underlying
 /// `OSStatus` via `KeychainError`).
@@ -16,7 +18,7 @@ extension CryptoTokenStore {
 
   // MARK: - CoinGecko API Key
 
-  var hasApiKey: Bool {
+  var hasCoinGeckoApiKey: Bool {
     do {
       return try apiKeyStore.restoreString() != nil
     } catch {
@@ -25,9 +27,11 @@ extension CryptoTokenStore {
     }
   }
 
-  func saveApiKey(_ key: String) {
+  func saveCoinGeckoApiKey(_ key: String) {
+    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
     do {
-      try apiKeyStore.saveString(key)
+      try apiKeyStore.saveString(trimmed)
       setError(nil)
     } catch {
       logger.error(
@@ -36,7 +40,7 @@ extension CryptoTokenStore {
     }
   }
 
-  func clearApiKey() {
+  func clearCoinGeckoApiKey() {
     apiKeyStore.clear()
   }
 
@@ -63,8 +67,10 @@ extension CryptoTokenStore {
   /// Persists the Alchemy API key to the synced Keychain. Sets
   /// `error` (without logging the key) on failure.
   func saveAlchemyApiKey(_ key: String) {
+    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
     do {
-      try alchemyKeyStore.saveString(key)
+      try alchemyKeyStore.saveString(trimmed)
       setError(nil)
     } catch {
       logger.error(
@@ -103,8 +109,10 @@ extension CryptoTokenStore {
   /// Persists the CryptoCompare API key to the synced Keychain. Sets
   /// `error` (without logging the key) on failure.
   func saveCryptoCompareApiKey(_ key: String) {
+    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
     do {
-      try cryptocompareKeyStore.saveString(key)
+      try cryptocompareKeyStore.saveString(trimmed)
       setError(nil)
     } catch {
       logger.error(

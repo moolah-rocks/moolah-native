@@ -21,6 +21,16 @@ extension UITestIdentifiers {
       "crypto.settings.registration.\(id)"
     }
 
+    /// Secure field for the CoinGecko API key. Pinned so a UI test can
+    /// drive the settings flow end-to-end.
+    public static let coinGeckoApiKeyField = "crypto.settings.coingecko.field"
+
+    /// "Save" button next to the CoinGecko API key entry field.
+    public static let coinGeckoApiKeySaveButton = "crypto.settings.coingecko.save"
+
+    /// "Remove" button shown when a CoinGecko key is already configured.
+    public static let coinGeckoApiKeyRemoveButton = "crypto.settings.coingecko.remove"
+
     /// Secure field for the Alchemy API key. Pinned so a UI test can
     /// drive the settings flow end-to-end.
     public static let alchemyApiKeyField = "crypto.settings.alchemy.field"

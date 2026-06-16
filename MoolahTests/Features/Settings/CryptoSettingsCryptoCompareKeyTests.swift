@@ -85,6 +85,30 @@ struct CryptoSettingsCryptoCompareKeyTests {
     #expect(fixture.store.hasCryptoCompareApiKey == false)
   }
 
+  // MARK: - Trimming
+
+  @Test("saveCryptoCompareApiKey trims surrounding whitespace before persisting")
+  func saveCryptoCompareApiKeyTrimsWhitespace() throws {
+    let fixture = try makeFixture()
+    defer { fixture.cryptocompareKeychain.clear() }
+
+    fixture.store.saveCryptoCompareApiKey("  k  ")
+
+    #expect(fixture.store.hasCryptoCompareApiKey == true)
+    #expect(try fixture.cryptocompareKeychain.restoreString() == "k")
+  }
+
+  @Test("saveCryptoCompareApiKey ignores an all-whitespace key")
+  func saveCryptoCompareApiKeyIgnoresBlank() throws {
+    let fixture = try makeFixture()
+    defer { fixture.cryptocompareKeychain.clear() }
+
+    fixture.store.saveCryptoCompareApiKey("   ")
+
+    #expect(fixture.store.hasCryptoCompareApiKey == false)
+    #expect(try fixture.cryptocompareKeychain.restoreString() == nil)
+  }
+
   // MARK: - Service / account isolation
 
   @Test("saveCryptoCompareApiKey writes to the cryptocompare keychain, not coingecko")

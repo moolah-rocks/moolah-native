@@ -93,6 +93,30 @@ struct CryptoSettingsAPIKeyTests {
     #expect(fixture.store.hasAlchemyApiKey == false)
   }
 
+  // MARK: - Trimming
+
+  @Test("saveAlchemyApiKey trims surrounding whitespace before persisting")
+  func saveAlchemyApiKeyTrimsWhitespace() throws {
+    let fixture = try makeFixture()
+    defer { fixture.alchemyKeychain.clear() }
+
+    fixture.store.saveAlchemyApiKey("  k  ")
+
+    #expect(fixture.store.hasAlchemyApiKey == true)
+    #expect(try fixture.alchemyKeychain.restoreString() == "k")
+  }
+
+  @Test("saveAlchemyApiKey ignores an all-whitespace key")
+  func saveAlchemyApiKeyIgnoresBlank() throws {
+    let fixture = try makeFixture()
+    defer { fixture.alchemyKeychain.clear() }
+
+    fixture.store.saveAlchemyApiKey("   ")
+
+    #expect(fixture.store.hasAlchemyApiKey == false)
+    #expect(try fixture.alchemyKeychain.restoreString() == nil)
+  }
+
   // MARK: - Service / account isolation
 
   @Test("saveAlchemyApiKey writes to the alchemy keychain, not coingecko")
