@@ -36,14 +36,13 @@ Concretely, in the production "Real Profile":
    Data) key in Settings so deep history works again for every CryptoCompare
    token (DAI, HEX, and the rest). Takes effect immediately — no restart.
 4. **CoinGecko key (add-on):** make the existing CoinGecko key take effect
-   immediately too, instead of only at the next session construction.
+   immediately across **all** of its uses — price fetching, token resolution,
+   and the discovery catalog — instead of only at the next session
+   construction.
 
 ## Non-goals
 
 - Pegging DAI or any other stablecoin. Only USDC and USDT.
-- Making the token-discovery catalog / resolver pick up a new CoinGecko key
-  without a restart (see Scope boundary below). This change covers the
-  **price-fetch** path, which is what governs backfill.
 - Any schema, CloudKit, or migration change. All changes are read-time.
 
 ## Background: how the price pipeline fills gaps
@@ -140,25 +139,52 @@ attributed outage.
   `CryptoCompareClient` is constructed in
   `ProfileSession.makeCryptoPriceService`.
 
-### 3. CoinGecko key — also per-request
+### 3. CoinGecko key — per-request across all consumers
 
-Currently the key and the host (`api.coingecko.com` free vs
-`pro-api.coingecko.com` pro) are baked at construction, so a newly entered key
-needs a restart.
+Today the key is read **once** in `makeMarketDataServices`
+(`ProfileSession+Factories.swift:35-38`) into a `String?` and threaded into
+four consumers, each of which bakes the key (and its free-vs-pro host choice)
+at construction. A newly entered key therefore needs a restart everywhere.
 
-- `CoinGeckoClient` gains the same `apiKeyProvider: @Sendable () -> String?`
-  closure and holds **both** host-bound HTTP clients (free + pro). Per request:
-  resolve the key; if non-empty, target the pro host with `x_cg_pro_api_key`;
-  else the free host (current keyless behaviour).
-- Wiring reads the key per request via a `resolveCoinGeckoApiKey()` closure
-  from the `"coingecko"` keychain entry.
+The fix: stop threading a `String?`. Instead thread a single
+`@Sendable () -> String?` **key-provider closure** —
+`resolveCoinGeckoApiKey()`, a `nonisolated static func` that reads the
+`"coingecko"` keychain entry on each call (mirrors `resolveAlchemyApiKey`).
+Every consumer resolves the key (and selects host: empty → `api.coingecko.com`,
+non-empty → `pro-api.coingecko.com` + `x_cg_pro_api_key`) **per
+request/refresh**. `NetworkingServices.client(forHost:)` vends a fresh wrapper
+over a per-host cached rate gate, so switching host per call is cheap and safe.
 
-**Scope boundary (confirmed):** this immediacy applies to the **price-fetch**
-clients only. The discovery catalog (`makeCoinGeckoCatalog`,
-`makeLookupCatalog`) and `CompositeTokenResolutionClient` continue to read the
-CoinGecko key once at session construction; a restart picks up a new key for
-those. Bounding the change here keeps it focused on backfill, which is the
-reported problem.
+Consumer-by-consumer:
+
+- **`CoinGeckoClient`** (price): replace the stored `apiKey: String` + single
+  pre-bound `http` with the provider closure + a `NetworkingServices` handle
+  (or both host-bound clients). Per request: resolve key → pick host → build
+  URL with the `x_cg_pro_api_key` param when present. Its URL builders already
+  pick the base URL from the key (`baseURL(apiKey:)`); only the bound `http`
+  host must move from construction-time to per-request so it can't diverge from
+  the URL host.
+- **`CompositeTokenResolutionClient`** (resolver): smallest change — it already
+  selects host per request (`resolveFromCoinGecko` / `fetchAssetPlatforms`) and
+  holds `networking`. Replace the stored `coinGeckoApiKey: String?` with the
+  provider closure and call it at each use. Empty key keeps today's free-host
+  behaviour.
+- **`SQLiteCoinGeckoCatalog`** (discovery catalog, via `makeCoinGeckoCatalog`
+  and `makeLookupCatalog`): today its refresh uses **hardcoded free-tier URLs
+  and never sends the key** (`SQLiteCoinGeckoCatalog+Refresh.swift:75-86`), and
+  the host is baked at `make(...)`. Give the catalog the provider closure +
+  `NetworkingServices` so each `refreshIfStale()` resolves the key, selects the
+  host, and builds the `coins/list` / `asset_platforms` URLs with the pro key
+  param when present. This both honours a runtime key change and fixes the
+  latent gap where a configured Pro key was ignored by catalog refresh.
+
+  **Timing nuance:** catalog refresh is a once-per-session background task
+  gated by a 24 h max-age + ETag, not a per-user-action request. So
+  "immediately" here means **its next refresh** uses the current key — the
+  catalog is not re-fetched the instant a key is saved. Price fetching and
+  token resolution, which *are* request-driven, do pick up the new key on the
+  very next call. This matches the user intent (no stale baked-in key, no
+  restart needed) while being honest about the catalog's refresh cadence.
 
 ### 4. Settings UI
 
@@ -206,8 +232,16 @@ New `CryptoTokenStore` members (mirroring the Alchemy ones):
   provider returns a non-empty key, omitted when nil/empty.
 - **`CoinGeckoClient`**: pro host + `x_cg_pro_api_key` when key present, free
   host and no pro param when absent; key resolved per request (a provider that
-  flips from empty to non-empty changes the targeted host without
+  flips from empty to non-empty changes the targeted host + param without
   reconstruction).
+- **`CompositeTokenResolutionClient`**: the contract-lookup and
+  `asset_platforms` calls resolve the key per request — a provider flipping
+  empty → non-empty switches host + param on the next resolution, no
+  reconstruction.
+- **`SQLiteCoinGeckoCatalog`** refresh: builds `coins/list` / `asset_platforms`
+  URLs with the pro key param + pro host when the provider returns a key, and
+  the free host with no param when empty (a regression guard for the latent
+  "refresh ignored the key" gap). Use an injected provider + stub HTTP.
 - **`CryptoTokenStore`**: save / has / clear the CryptoCompare key (mirror the
   Alchemy store tests), against an injected in-memory `KeychainStore`.
 - **`help-review`** agent over the new + edited help articles before merge.
@@ -221,13 +255,13 @@ New `CryptoTokenStore` members (mirroring the Alchemy ones):
 - **Keyless CryptoCompare still 401s.** Users without a key see no regression;
   USDC/USDT are covered by the peg, and other CryptoCompare-only tokens (DAI,
   HEX) stay gapped until a key is entered — exactly today's behaviour for them.
-- **Per-request keychain reads** add one keychain lookup per price fetch.
-  Fetches are already rate-limited and infrequent; negligible. Matches the
-  existing Alchemy per-request pattern.
+- **Per-request keychain reads** add one keychain lookup per outbound CoinGecko
+  / CryptoCompare call (price fetch, token resolution, catalog refresh). These
+  are rate-limited and infrequent; negligible. Matches the existing Alchemy
+  per-request pattern. If it ever shows up, the provider closure can memoise
+  with invalidation on save — not needed now.
 
 ## Out-of-scope follow-ups
 
-- Making the CoinGecko discovery catalog / resolver pick up a key change
-  without a restart.
 - Pegging additional fiat-backed stablecoins (PYUSD, GUSD, TUSD, USDS) — easy
   to add to the `{"USDC","USDT"}` gate later if wanted, but not in this change.
