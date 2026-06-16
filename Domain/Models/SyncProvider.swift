@@ -13,6 +13,7 @@ enum SyncProvider: String {
   case coinGecko
   case cryptoCompare
   case binance
+  case peggedStablecoin
 
   /// Returns the user-facing brand name for each case, shown in the
   /// synced-account error caption. `.blockExplorer` resolves to the concrete
@@ -26,6 +27,7 @@ enum SyncProvider: String {
     case .coinGecko: return "CoinGecko"
     case .cryptoCompare: return "CryptoCompare"
     case .binance: return "Binance"
+    case .peggedStablecoin: return "Pegged stablecoin"
     }
   }
 }

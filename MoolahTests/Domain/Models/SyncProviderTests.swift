@@ -26,6 +26,16 @@ struct SyncProviderTests {
     #expect(SyncProvider.binance.displayName == "Binance")
   }
 
+  @Test("Pegged stablecoin provider has a user-facing display name")
+  func peggedStablecoinDisplayName() {
+    #expect(SyncProvider.peggedStablecoin.displayName == "Pegged stablecoin")
+  }
+
+  @Test("Pegged stablecoin is enumerated in allCases")
+  func peggedStablecoinIsACase() {
+    #expect(SyncProvider.allCases.contains(.peggedStablecoin))
+  }
+
   @Test("Round-trips through JSON as its raw token")
   func jsonRoundTrip() throws {
     let data = try JSONEncoder().encode(SyncProvider.blockExplorer)
