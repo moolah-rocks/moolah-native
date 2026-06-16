@@ -1,16 +1,14 @@
-// MoolahTests/Features/Settings/CryptoSettingsAPIKeyTests.swift
 import Foundation
 import GRDB
 import Testing
 
 @testable import Moolah
 
-/// Tests for the Alchemy API key UI surface on `CryptoTokenStore`.
+/// Tests for the CryptoCompare API key UI surface on `CryptoTokenStore`.
 /// The store wraps a `KeychainStore` keyed on
-/// (`com.moolah.api-keys`, `alchemy`) — the same entry
-/// `ProfileSession.resolveAlchemyApiKey()` reads on the sync side, so
-/// a write here must round-trip through the keychain to be picked up
-/// by the next sync cycle.
+/// (`com.moolah.api-keys`, `cryptocompare`) — the same entry the price
+/// client reads on the fetch side, so a write here must round-trip
+/// through the keychain to be picked up by the next price request.
 ///
 /// Production uses the iCloud-synced keychain
 /// (`synchronizable: true`), but the macOS test runner cannot write to
@@ -19,26 +17,20 @@ import Testing
 /// the store's test seam initialiser. Each test uses a unique service
 /// id (`UUID()` in the prefix) so concurrent test runs cannot collide
 /// on the same keychain row, mirroring `KeychainStoreTests`.
-///
-/// We still cover the "production wires the iCloud-synced keychain at
-/// the canonical service / account" claim via a separate test that
-/// inspects the production initialiser's plumbing without depending on
-/// a successful save.
-@Suite("CryptoTokenStore — Alchemy API key")
+@Suite("CryptoTokenStore — CryptoCompare API key")
 @MainActor
-struct CryptoSettingsAPIKeyTests {
+struct CryptoSettingsCryptoCompareKeyTests {
   private struct Fixture {
     let store: CryptoTokenStore
-    let alchemyKeychain: KeychainStore
+    let cryptocompareKeychain: KeychainStore
     let coingeckoKeychain: KeychainStore
   }
 
-  /// Builds a store whose Alchemy + CoinGecko keychain entries are
+  /// Builds a store whose CryptoCompare + CoinGecko keychain entries are
   /// non-synchronisable and namespaced under per-test unique service
   /// ids. Returns the keychain handles too so tests can read the raw
   /// entry to confirm round-trips.
   private func makeFixture() throws -> Fixture {
-    // Registry + price cache live on the profile-index DB.
     let database = try ProfileIndexDatabase.openInMemory()
     let registry = GRDBInstrumentRegistryRepository(database: database)
     let priceService = CryptoPriceService(
@@ -61,51 +53,51 @@ struct CryptoSettingsAPIKeyTests {
       cryptocompareKeyStore: cryptocompareKeychain)
     return Fixture(
       store: store,
-      alchemyKeychain: alchemyKeychain,
+      cryptocompareKeychain: cryptocompareKeychain,
       coingeckoKeychain: coingeckoKeychain)
   }
 
   // MARK: - Save / read round-trip
 
-  @Test("saveAlchemyApiKey persists through KeychainStore")
-  func saveAlchemyApiKeyPersists() throws {
+  @Test("saveCryptoCompareApiKey persists through KeychainStore")
+  func saveCryptoCompareApiKeyPersists() throws {
     let fixture = try makeFixture()
-    defer { fixture.alchemyKeychain.clear() }
+    defer { fixture.cryptocompareKeychain.clear() }
 
-    fixture.store.saveAlchemyApiKey("alch_test_round_trip_abc")
+    fixture.store.saveCryptoCompareApiKey("cc_test_round_trip_abc")
 
-    #expect(fixture.store.hasAlchemyApiKey == true)
-    let restored = try fixture.alchemyKeychain.restoreString()
-    #expect(restored == "alch_test_round_trip_abc")
+    #expect(fixture.store.hasCryptoCompareApiKey == true)
+    let restored = try fixture.cryptocompareKeychain.restoreString()
+    #expect(restored == "cc_test_round_trip_abc")
   }
 
-  @Test("hasAlchemyApiKey is false on a fresh keychain entry")
-  func hasAlchemyApiKeyIsFalseWhenEmpty() throws {
+  @Test("hasCryptoCompareApiKey is false on a fresh keychain entry")
+  func hasCryptoCompareApiKeyIsFalseWhenEmpty() throws {
     let fixture = try makeFixture()
-    #expect(fixture.store.hasAlchemyApiKey == false)
+    #expect(fixture.store.hasCryptoCompareApiKey == false)
   }
 
-  @Test("clearAlchemyApiKey removes the keychain entry")
-  func clearAlchemyApiKeyRemovesEntry() throws {
+  @Test("clearCryptoCompareApiKey removes the keychain entry")
+  func clearCryptoCompareApiKeyRemovesEntry() throws {
     let fixture = try makeFixture()
-    fixture.store.saveAlchemyApiKey("alch_test_clear_me")
-    fixture.store.clearAlchemyApiKey()
-    #expect(fixture.store.hasAlchemyApiKey == false)
+    fixture.store.saveCryptoCompareApiKey("cc_test_clear_me")
+    fixture.store.clearCryptoCompareApiKey()
+    #expect(fixture.store.hasCryptoCompareApiKey == false)
   }
 
   // MARK: - Service / account isolation
 
-  @Test("saveAlchemyApiKey writes to the alchemy keychain, not coingecko")
-  func saveAlchemyApiKeyTargetsAlchemyAccount() throws {
+  @Test("saveCryptoCompareApiKey writes to the cryptocompare keychain, not coingecko")
+  func saveCryptoCompareApiKeyTargetsCryptoCompareAccount() throws {
     let fixture = try makeFixture()
     defer {
-      fixture.alchemyKeychain.clear()
+      fixture.cryptocompareKeychain.clear()
       fixture.coingeckoKeychain.clear()
     }
 
-    fixture.store.saveAlchemyApiKey("alch_isolation_test_xyz")
+    fixture.store.saveCryptoCompareApiKey("cc_isolation_test_xyz")
 
-    #expect(try fixture.alchemyKeychain.restoreString() == "alch_isolation_test_xyz")
+    #expect(try fixture.cryptocompareKeychain.restoreString() == "cc_isolation_test_xyz")
     // The write must not spill into the CoinGecko slot. With per-test
     // unique service ids this is guaranteed by construction; the
     // assertion documents the contract for future readers.
@@ -114,17 +106,14 @@ struct CryptoSettingsAPIKeyTests {
 
   // MARK: - Privacy
 
-  @Test("saveAlchemyApiKey does not surface the key in store.error on success")
-  func saveAlchemyApiKeyNeverLogsKeyOnSuccess() throws {
+  @Test("saveCryptoCompareApiKey does not surface the key in store.error on success")
+  func saveCryptoCompareApiKeyNeverLogsKeyOnSuccess() throws {
     let fixture = try makeFixture()
-    defer { fixture.alchemyKeychain.clear() }
+    defer { fixture.cryptocompareKeychain.clear() }
 
-    let secret = "alch_privacy_canary_should_not_appear"
-    fixture.store.saveAlchemyApiKey(secret)
+    let secret = "cc_privacy_canary_should_not_appear"
+    fixture.store.saveCryptoCompareApiKey(secret)
 
-    // The store's `error` should not contain the secret value on
-    // either path. (On success it's nil; we still check just in case
-    // a future refactor sets an info string with the key inside.)
     #expect(fixture.store.error?.contains(secret) != true)
   }
 }

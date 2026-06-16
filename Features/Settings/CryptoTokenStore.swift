@@ -69,10 +69,18 @@ final class CryptoTokenStore {
   private let registry: any InstrumentRegistryRepository
   private let cryptoPriceService: CryptoPriceService
   private let conversionService: any InstrumentConversionService
-  private let logger = Logger(
+
+  /// Internal (not `private`) so the `CryptoTokenStore+APIKeys`
+  /// extension in its own file can log keychain failures through the
+  /// same category.
+  let logger = Logger(
     subsystem: "com.moolah.app", category: "CryptoTokenStore")
 
-  private let apiKeyStore: KeychainStore
+  // The three API-key keychain stores are internal (not `private`) so
+  // the `CryptoTokenStore+APIKeys` extension — which lives in a sibling
+  // file to keep this type under the file-length limit — can read and
+  // write them. The save / has / clear surface lives in that extension.
+  let apiKeyStore: KeychainStore
 
   /// Keychain entry for the Alchemy API key, used by the crypto-wallet
   /// auto-import. Service / account strings are pinned to the values
@@ -82,7 +90,17 @@ final class CryptoTokenStore {
   /// inject a
   /// non-synced `KeychainStore` since the test runner cannot write to
   /// the synced keychain in CI.
-  private let alchemyKeyStore: KeychainStore
+  let alchemyKeyStore: KeychainStore
+
+  /// Keychain entry for the CryptoCompare API key, used by the price
+  /// client to unlock deep historical price coverage for tokens like
+  /// DAI. Service / account strings are pinned to the values
+  /// `ProfileSession+CryptoSync` reads on the fetch side so reads pick
+  /// up whatever the settings UI writes here. Production wires this to
+  /// the iCloud-synced keychain (`synchronizable: true`); tests inject a
+  /// non-synced `KeychainStore` since the test runner cannot write to
+  /// the synced keychain in CI.
+  let cryptocompareKeyStore: KeychainStore
 
   /// Subscription to the registry's change stream so per-session side
   /// effects fire when ANY session (including this one) mutates the
@@ -105,6 +123,7 @@ final class CryptoTokenStore {
     conversionService: any InstrumentConversionService,
     apiKeyStore: KeychainStore,
     alchemyKeyStore: KeychainStore,
+    cryptocompareKeyStore: KeychainStore,
     sharedStore: SharedRegistryStore? = nil
   ) {
     self.registry = registry
@@ -112,6 +131,7 @@ final class CryptoTokenStore {
     self.conversionService = conversionService
     self.apiKeyStore = apiKeyStore
     self.alchemyKeyStore = alchemyKeyStore
+    self.cryptocompareKeyStore = cryptocompareKeyStore
     self.sharedStore = sharedStore
 
     let stream = registry.observeChanges()
@@ -156,6 +176,8 @@ final class CryptoTokenStore {
         service: KeychainServices.apiKeys, account: "coingecko", synchronizable: true),
       alchemyKeyStore: KeychainStore(
         service: KeychainServices.apiKeys, account: "alchemy", synchronizable: true),
+      cryptocompareKeyStore: KeychainStore(
+        service: KeychainServices.apiKeys, account: "cryptocompare", synchronizable: true),
       sharedStore: sharedStore)
   }
 
@@ -307,72 +329,12 @@ final class CryptoTokenStore {
     onRegistrationsChanged?()
   }
 
-  // MARK: - CoinGecko API Key
-
-  var hasApiKey: Bool {
-    do {
-      return try apiKeyStore.restoreString() != nil
-    } catch {
-      logger.error("keychain read failed: \(error.localizedDescription)")
-      return false
-    }
-  }
-
-  func saveApiKey(_ key: String) {
-    do {
-      try apiKeyStore.saveString(key)
-      self.error = nil
-    } catch {
-      logger.error(
-        "CoinGecko API key save failed: \(error.localizedDescription, privacy: .public)")
-      self.error = "Failed to save API key: \(error.localizedDescription)"
-    }
-  }
-
-  func clearApiKey() {
-    apiKeyStore.clear()
-  }
-
-  // MARK: - Alchemy API Key
-  //
-  // The Alchemy key drives the wallet auto-import.
-  // `ProfileSession.resolveAlchemyApiKey()` reads from the same
-  // `(service, account)` keychain entry, so a write here is picked up
-  // by the next sync cycle without further plumbing. The key value
-  // itself is never logged; failure paths log only the wrapping
-  // `error.localizedDescription` (which carries the underlying
-  // `OSStatus` via `KeychainError`).
-
-  /// `true` when an Alchemy API key is configured in the synced
-  /// Keychain. Read on every UI render to drive the status badge —
-  /// the keychain read is cheap (~µs) and consulting a cached `Bool`
-  /// would require an explicit invalidation hook on save / clear.
-  var hasAlchemyApiKey: Bool {
-    do {
-      return try alchemyKeyStore.restoreString() != nil
-    } catch {
-      logger.error("keychain read failed: \(error.localizedDescription)")
-      return false
-    }
-  }
-
-  /// Persists the Alchemy API key to the synced Keychain. Sets
-  /// `error` (without logging the key) on failure.
-  func saveAlchemyApiKey(_ key: String) {
-    do {
-      try alchemyKeyStore.saveString(key)
-      self.error = nil
-    } catch {
-      logger.error(
-        "Alchemy API key save failed: \(error.localizedDescription, privacy: .public)")
-      self.error = "Failed to save Alchemy API key: \(error.localizedDescription)"
-    }
-  }
-
-  /// Removes the Alchemy API key from the synced Keychain. Subsequent
-  /// sync cycles will produce `WalletSyncError.missingApiKey` until a
-  /// new key is saved.
-  func clearAlchemyApiKey() {
-    alchemyKeyStore.clear()
+  /// Internal write seam for the `error` published state, used by the
+  /// `CryptoTokenStore+APIKeys` extension (a sibling file) which cannot
+  /// reach the `private(set)` setter directly. Keeps the public read
+  /// surface `private(set)` while allowing the split-out key methods to
+  /// clear / set the error string.
+  func setError(_ message: String?) {
+    self.error = message
   }
 }
