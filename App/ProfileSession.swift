@@ -185,7 +185,7 @@ final class ProfileSession: Identifiable {
       backend: backend,
       cryptoPriceService: services.cryptoPrice,
       yahooPriceFetcher: services.yahooPriceFetcher,
-      coinGeckoApiKey: services.coinGeckoApiKey,
+      coinGeckoApiKeyProvider: services.coinGeckoApiKeyProvider,
       networking: resolvedNetworking,
       sharedRegistryStore: syncCoordinator?.sharedRegistryStore
     )

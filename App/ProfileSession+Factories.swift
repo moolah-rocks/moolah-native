@@ -19,7 +19,7 @@ extension ProfileSession {
     let stockPrice: StockPriceService
     let cryptoPrice: CryptoPriceService
     let yahooPriceFetcher: any YahooFinancePriceFetcher
-    let coinGeckoApiKey: String?
+    let coinGeckoApiKeyProvider: @Sendable () -> String?
   }
 
   /// Builds the fiat/stock/crypto market-data services used throughout the
@@ -32,14 +32,15 @@ extension ProfileSession {
   ) -> MarketDataServices {
     let yahooClient = YahooFinanceClient(
       http: networking.client(forHost: "query2.finance.yahoo.com"))
-    let apiKeyStore = KeychainStore(
-      service: KeychainServices.apiKeys, account: "coingecko", synchronizable: true
-    )
-    let coinGeckoApiKey = try? apiKeyStore.restoreString()
+    // Closure (not a resolved value): a CoinGecko Pro key entered in Settings
+    // after this wiring is built takes effect on the next price fetch / token
+    // resolution / catalog refresh without rebuilding the session — every
+    // consumer reads the key per request through this provider.
+    let cgKeyProvider: @Sendable () -> String? = { ProfileSession.resolveCoinGeckoApiKey() }
     // Read-only handle to the shared CoinGecko catalog so the discovery token
     // resolver can price a known token offline (see `makeLookupCatalog`).
     let lookupCatalog = Self.makeLookupCatalog(
-      apiKey: coinGeckoApiKey, networking: networking)
+      coinGeckoApiKeyProvider: cgKeyProvider, networking: networking)
     return MarketDataServices(
       exchangeRate: ExchangeRateService(
         client: FrankfurterClient(
@@ -47,10 +48,10 @@ extension ProfileSession {
         database: database),
       stockPrice: StockPriceService(client: yahooClient, database: database),
       cryptoPrice: Self.makeCryptoPriceService(
-        coinGeckoApiKey: coinGeckoApiKey, database: database, networking: networking,
+        coinGeckoApiKeyProvider: cgKeyProvider, database: database, networking: networking,
         localResolver: lookupCatalog),
       yahooPriceFetcher: yahooClient,
-      coinGeckoApiKey: coinGeckoApiKey
+      coinGeckoApiKeyProvider: cgKeyProvider
     )
   }
 
@@ -61,17 +62,16 @@ extension ProfileSession {
   /// client on any error, so an anonymous CoinGecko 429 still resolves
   /// via CryptoCompare/Binance.
   static func makeCryptoPriceService(
-    coinGeckoApiKey: String?,
+    coinGeckoApiKeyProvider: @Sendable @escaping () -> String?,
     database: any DatabaseWriter,
     networking: NetworkingServices,
     localResolver: (any LocalContractResolver)? = nil
   ) -> CryptoPriceService {
-    // Empty key → CoinGeckoClient targets the free public host;
-    // non-empty key → Pro host with `x_cg_pro_api_key`. Always included
-    // so users without a Pro key still get coverage for tokens like
-    // USDC that CryptoCompare omits from its contract index.
-    let resolverApiKey = coinGeckoApiKey ?? ""
-    let cgHost = resolverApiKey.isEmpty ? "api.coingecko.com" : "pro-api.coingecko.com"
+    // `CoinGeckoClient` resolves the key per request: an empty key targets
+    // the free public host; a configured key targets the Pro host with
+    // `x_cg_pro_api_key`. Always included so users without a Pro key still
+    // get coverage for tokens like USDC that CryptoCompare omits from its
+    // contract index.
     let cryptoCompareClient = CryptoCompareClient(
       http: networking.client(forHost: "min-api.cryptocompare.com"),
       apiKeyProvider: { ProfileSession.resolveCryptoCompareApiKey() })
@@ -90,8 +90,8 @@ extension ProfileSession {
       })
     let priceClients: [CryptoPriceClient] = [
       CoinGeckoClient(
-        apiKey: resolverApiKey,
-        http: networking.client(forHost: cgHost)),
+        apiKeyProvider: coinGeckoApiKeyProvider,
+        networking: networking),
       cryptoCompareClient,
       binanceClient,
       // Last-resort $1 fallback for canonical USDC/USDT only (peg).
@@ -102,7 +102,10 @@ extension ProfileSession {
       clients: priceClients,
       database: database,
       resolutionClient: CompositeTokenResolutionClient(
-        networking: networking, coinGeckoApiKey: resolverApiKey,
+        networking: networking,
+        // Coalesce a missing keychain entry to `""` so the resolver always
+        // runs the free-tier CoinGecko path (it treats `nil` as opt-out).
+        coinGeckoApiKeyProvider: { coinGeckoApiKeyProvider() ?? "" },
         localResolver: localResolver)
     )
   }
@@ -166,7 +169,7 @@ extension ProfileSession {
     backend: BackendProvider,
     cryptoPriceService: CryptoPriceService,
     yahooPriceFetcher: any YahooFinancePriceFetcher,
-    coinGeckoApiKey: String?,
+    coinGeckoApiKeyProvider: @Sendable @escaping () -> String?,
     networking: NetworkingServices,
     sharedRegistryStore: SharedRegistryStore? = nil
   ) -> RegistryWiring {
@@ -182,13 +185,17 @@ extension ProfileSession {
       refreshTask = nil
       resolutionClient = overrides.resolutionClient
     } else {
-      let made = makeCoinGeckoCatalog(apiKey: coinGeckoApiKey, networking: networking)
+      let made = makeCoinGeckoCatalog(
+        coinGeckoApiKeyProvider: coinGeckoApiKeyProvider, networking: networking)
       catalog = made.catalog
       refreshTask = made.refreshTask
-      // Empty string when no key is configured so the resolver targets
-      // the free public CoinGecko endpoint. See `makeCryptoPriceService`.
+      // Resolves the key per request: an empty key targets the free public
+      // CoinGecko endpoint, a configured key the Pro host. Coalesce a missing
+      // keychain entry to `""` so the resolver always runs the free-tier path
+      // (it treats `nil` as opt-out). See `makeCryptoPriceService`.
       resolutionClient = CompositeTokenResolutionClient(
-        networking: networking, coinGeckoApiKey: coinGeckoApiKey ?? "")
+        networking: networking,
+        coinGeckoApiKeyProvider: { coinGeckoApiKeyProvider() ?? "" })
     }
     // Pass the shared registry store from the coordinator when
     // wired so cross-session mutations are observed transparently
