@@ -27,9 +27,11 @@ actor CryptoPriceService {
   /// In-flight cache-extension fetches, keyed by token id, so concurrent
   /// `price(...)` requests for the same token share one provider round-trip
   /// instead of each issuing its own. The `id` tags the owning request so a
-  /// completing fetch only clears its own entry, never a successor's. See
-  /// `price(for:mapping:on:)`.
-  private var extensionTasks: [String: (id: UUID, task: Task<Decimal, Error>)] = [:]
+  /// completing fetch only clears its own entry, never a successor's.
+  /// `internal` (not `private`) so `fetchWindowCoalesced` in
+  /// `CryptoPriceService+FetchRange.swift` can read and mutate it from the
+  /// sibling-file extension. It remains actor-isolated.
+  var extensionTasks: [String: (id: UUID, task: Task<Decimal, Error>)] = [:]
   let database: any DatabaseWriter
   let logger = Logger(
     subsystem: "com.moolah.app", category: "CryptoPriceService")
@@ -153,50 +155,12 @@ actor CryptoPriceService {
       return inRange
     }
 
-    // Out of cached range — extend toward the requested date and try
-    // each provider in order. Continues past providers that return
-    // empty so a fallback chain (CoinGecko → CryptoCompare → Binance)
-    // can collectively fill in the dates one of them has.
-    //
-    // Coalesce concurrent extensions for the same token: if a fetch is
-    // already in flight, await it and re-resolve from the freshly-extended
-    // cache rather than issuing a duplicate provider round-trip. Only fall
-    // through to our own fetch when the shared one didn't reach our date (a
-    // wider / older range), preserving each request's eventual coverage.
-    if let inFlight = extensionTasks[tokenId] {
-      _ = try? await inFlight.task.value
-      if let cached = lookupPrice(tokenId: tokenId, dateString: dateString) {
-        return cached
-      }
-      if let inRange = try inRangeFallback(tokenId: tokenId, dateString: dateString) {
-        return inRange
-      }
-    }
-    let fetchInterval = extensionWindow(
-      for: tokenId, requestedDate: date, dateString: dateString)
-    let requestId = UUID()
-    let task = Task<Decimal, Error> { [self] in
-      try await self.fetchAndExtendCache(
-        instrument: instrument,
-        mapping: mapping,
-        fetchInterval: fetchInterval,
-        dateString: dateString)
-    }
-    extensionTasks[tokenId] = (requestId, task)
-    defer {
-      if extensionTasks[tokenId]?.id == requestId {
-        extensionTasks.removeValue(forKey: tokenId)
-      }
-    }
-    // Propagate the owner's cancellation into the shared fetch so a cancelled
-    // request doesn't block on a network round-trip it no longer needs. Any
-    // request still coalescing on this task observes the cancellation and
-    // re-fetches its own range above.
-    return try await withTaskCancellationHandler {
-      try await task.value
-    } onCancel: {
-      task.cancel()
-    }
+    // Out of cached range: extend contiguously toward the requested date.
+    return try await extendContiguously(
+      instrument: instrument,
+      mapping: mapping,
+      tokenId: tokenId,
+      dateString: dateString)
   }
 
   /// Resolves the request from the in-memory cache when the requested
@@ -211,7 +175,11 @@ actor CryptoPriceService {
   /// chart's visible range dispatched a network probe and a `saveCache`
   /// rewrite, saturating the GRDB queue. Mirrors
   /// `ExchangeRateService.rate(...)`'s in-range branch.
-  private func inRangeFallback(tokenId: String, dateString: String) throws -> Decimal? {
+  ///
+  /// `internal` (not `private`) because `extendContiguously` in
+  /// `CryptoPriceService+FetchRange.swift` calls it from a sibling
+  /// extension on the same actor.
+  func inRangeFallback(tokenId: String, dateString: String) throws -> Decimal? {
     guard let cache = caches[tokenId],
       dateString >= cache.earliestDate, dateString <= cache.latestDate
     else { return nil }
@@ -219,55 +187,6 @@ actor CryptoPriceService {
       return fallback
     }
     throw CryptoPriceError.noPriceAvailable(tokenId: tokenId, date: dateString)
-  }
-
-  /// Returns the date range a fetch should cover when the cache cannot
-  /// satisfy the request directly. Mirrors the extension shape used by
-  /// `StockPriceService.fetchToCoverDate` and `ExchangeRateService`:
-  ///
-  /// - **Cache exists, requested date past `latestDate`:** forward
-  ///   extension *including* `latestDate` so a stale value (e.g. an
-  ///   intraday tick persisted by an older build) is overwritten by
-  ///   the next finalised close.
-  /// - **Cache exists, requested date before `earliestDate`:** backward
-  ///   extension from the requested date to the day before
-  ///   `earliestDate`. Guarded by `requestedDate <= fetchEnd` so that when
-  ///   the requested day is the one *immediately* before `earliestDate` —
-  ///   where `requestedDate` is a noon-anchored day token but `fetchEnd` is
-  ///   midnight of that same calendar day — the branch falls through to the
-  ///   single-day window instead of building an inverted (lower > upper)
-  ///   `ClosedRange`, which would trap.
-  /// - **Cold cache (no entry for token):** 30-day surrounding window so
-  ///   a first-ever request on a non-trading day can still fall back
-  ///   to a recent prior price.
-  ///
-  /// The in-range case is unreachable here — `price(...)` short-circuits
-  /// before calling this — but a defensive single-day window is returned
-  /// just in case.
-  ///
-  /// `requestedDate` is already capped at yesterday by `price(...)`.
-  private func extensionWindow(
-    for tokenId: String, requestedDate: Date, dateString: String
-  ) -> ClosedRange<Date> {
-    let calendar = Calendar.utc
-    if let cache = caches[tokenId] {
-      if dateString > cache.latestDate,
-        let fetchStart = dateFormatter.date(from: cache.latestDate),
-        fetchStart <= requestedDate
-      {
-        return fetchStart...requestedDate
-      }
-      if dateString < cache.earliestDate,
-        let earliestDate = dateFormatter.date(from: cache.earliestDate),
-        let fetchEnd = calendar.date(byAdding: .day, value: -1, to: earliestDate),
-        requestedDate <= fetchEnd
-      {
-        return requestedDate...fetchEnd
-      }
-      return requestedDate...requestedDate
-    }
-    let fetchStart = calendar.date(byAdding: .day, value: -30, to: requestedDate) ?? requestedDate
-    return fetchStart...requestedDate
   }
 
   // MARK: - Date range
@@ -374,7 +293,8 @@ extension CryptoPriceService {
     return dates
   }
 
-  // `fetchAndExtendCache(instrument:mapping:fetchInterval:dateString:)`
+  // `extendContiguously(instrument:mapping:tokenId:dateString:)`,
+  // `boundsKeys(tokenId:)`, `parseInterval(_:)`, `fetchWindowCoalesced(...)`,
   // and `fetchRange(instrument:mapping:from:to:)` live in
   // `CryptoPriceService+FetchRange.swift`, `mergeReturningDelta` lives
   // in `CryptoPriceService+Merge.swift`, and `NoOpTokenResolutionClient`
