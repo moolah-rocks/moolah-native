@@ -36,6 +36,11 @@ extension CryptoPriceService {
             return price
           }
         }
+      } catch is CancellationError {
+        // Cooperative cancellation must surface as `CancellationError`, not
+        // be wrapped into a provider outage — the coalescing owner cancels
+        // this shared task and aggregation callers special-case cancellation.
+        throw CancellationError()
       } catch CryptoPriceError.noProviderMapping {
         // Routing decision — this client has no symbol for the token
         // (e.g. USDT on Binance). Skip silently rather than attributing
@@ -84,6 +89,10 @@ extension CryptoPriceService {
           }
           return
         }
+      } catch is CancellationError {
+        // Surface cooperative cancellation unchanged rather than wrapping it
+        // into a provider outage. Mirrors `fetchAndExtendCache`.
+        throw CancellationError()
       } catch CryptoPriceError.noProviderMapping {
         // Routing decision — this client has no symbol for the token
         // (e.g. USDT on Binance). Skip silently rather than attributing

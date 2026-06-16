@@ -24,6 +24,12 @@ actor CryptoPriceService {
   /// Loaded token ids — set on first hydration so we don't re-read SQL when
   /// the cache is genuinely empty.
   var hydratedTokenIds: Set<String> = []
+  /// In-flight cache-extension fetches, keyed by token id, so concurrent
+  /// `price(...)` requests for the same token share one provider round-trip
+  /// instead of each issuing its own. The `id` tags the owning request so a
+  /// completing fetch only clears its own entry, never a successor's. See
+  /// `price(for:mapping:on:)`.
+  private var extensionTasks: [String: (id: UUID, task: Task<Decimal, Error>)] = [:]
   let database: any DatabaseWriter
   let logger = Logger(
     subsystem: "com.moolah.app", category: "CryptoPriceService")
@@ -151,13 +157,46 @@ actor CryptoPriceService {
     // each provider in order. Continues past providers that return
     // empty so a fallback chain (CoinGecko → CryptoCompare → Binance)
     // can collectively fill in the dates one of them has.
+    //
+    // Coalesce concurrent extensions for the same token: if a fetch is
+    // already in flight, await it and re-resolve from the freshly-extended
+    // cache rather than issuing a duplicate provider round-trip. Only fall
+    // through to our own fetch when the shared one didn't reach our date (a
+    // wider / older range), preserving each request's eventual coverage.
+    if let inFlight = extensionTasks[tokenId] {
+      _ = try? await inFlight.task.value
+      if let cached = lookupPrice(tokenId: tokenId, dateString: dateString) {
+        return cached
+      }
+      if let inRange = try inRangeFallback(tokenId: tokenId, dateString: dateString) {
+        return inRange
+      }
+    }
     let fetchInterval = extensionWindow(
       for: tokenId, requestedDate: date, dateString: dateString)
-    return try await fetchAndExtendCache(
-      instrument: instrument,
-      mapping: mapping,
-      fetchInterval: fetchInterval,
-      dateString: dateString)
+    let requestId = UUID()
+    let task = Task<Decimal, Error> { [self] in
+      try await self.fetchAndExtendCache(
+        instrument: instrument,
+        mapping: mapping,
+        fetchInterval: fetchInterval,
+        dateString: dateString)
+    }
+    extensionTasks[tokenId] = (requestId, task)
+    defer {
+      if extensionTasks[tokenId]?.id == requestId {
+        extensionTasks.removeValue(forKey: tokenId)
+      }
+    }
+    // Propagate the owner's cancellation into the shared fetch so a cancelled
+    // request doesn't block on a network round-trip it no longer needs. Any
+    // request still coalescing on this task observes the cancellation and
+    // re-fetches its own range above.
+    return try await withTaskCancellationHandler {
+      try await task.value
+    } onCancel: {
+      task.cancel()
+    }
   }
 
   /// Resolves the request from the in-memory cache when the requested
@@ -299,48 +338,9 @@ actor CryptoPriceService {
     return results
   }
 
-  // `currentPrices(for:)` (the live / spot endpoint) lives in
+  // `currentPrices(for:)` (the live / spot endpoint) and
+  // `prefetchLatest(for:)` (the live-tick writer) live in
   // `CryptoPriceService+Live.swift`.
-
-  // MARK: - Prefetch
-
-  func prefetchLatest(for registrations: [CryptoRegistration]) async {
-    let mappings = registrations.map(\.mapping)
-    let prices: [String: Decimal]
-    do {
-      prices = try await currentPrices(for: mappings)
-    } catch {
-      logger.warning(
-        "Prefetch failed (best-effort): \(error.localizedDescription, privacy: .public)"
-      )
-      return
-    }
-    // Tag the live tick as the local-yesterday calendar day; see
-    // `Shared/PriceCacheCap.swift`. The next forward `dailyPrices`
-    // extension overwrites this best-effort value with the finalised
-    // close.
-    let dateString = dateFormatter.string(
-      from: cappedToYesterday(now(), now: now, timeZone: timeZone))
-    for (tokenId, price) in prices {
-      let registration = registrations.first { $0.id == tokenId }
-      let symbol = registration?.instrument.ticker ?? registration?.instrument.name ?? ""
-      let delta = mergeReturningDelta(
-        tokenId: tokenId, symbol: symbol, newPrices: [dateString: price])
-      // Skip the disk write when the latest price is identical to the
-      // already-cached value — periodic "no change" polling would
-      // otherwise rewrite the partition on every tick.
-      guard !delta.isEmpty else { continue }
-      do {
-        try await persistDelta(tokenId: tokenId, deltaRecords: delta)
-      } catch {
-        logger.warning(
-          // Best-effort: continue the loop so a single bad token doesn't
-          // poison the rest of the prefetch.
-          "prefetchLatest: persistDelta failed for \(tokenId, privacy: .public): \(error.localizedDescription, privacy: .public)"
-        )
-      }
-    }
-  }
 }
 
 // MARK: - Cache lookup & merge
