@@ -5,14 +5,6 @@
 import CloudKit
 import Foundation
 import GRDB
-import OSLog
-
-/// File-scoped logger for the market-data factory wiring. A top-level
-/// `let` (not a `static` on the extension) so the `@Sendable`
-/// `usdtRateLookup` closure can capture it without crossing `ProfileSession`
-/// isolation. `Logger` is `Sendable`.
-private let factoriesLogger = Logger(
-  subsystem: "com.moolah.app", category: "ProfileSessionFactories")
 
 extension ProfileSession {
   // MARK: - Market Data Services
@@ -82,6 +74,17 @@ extension ProfileSession {
     let cryptoCompareClient = CryptoCompareClient(
       http: networking.client(forHost: "min-api.cryptocompare.com"),
       apiKeyProvider: { ProfileSession.resolveCryptoCompareApiKey() })
+    let coinGeckoClient = CoinGeckoClient(
+      apiKeyProvider: coinGeckoApiKeyProvider, networking: networking)
+    let stablecoinClient = StablecoinPriceClient()
+    // Binance prices are quoted in USDT; converting them to USD needs a
+    // USDT/USD rate. Resolve it through the same provider precedence the main
+    // chain uses, ending in the stablecoin peg — so a CryptoCompare outage
+    // falls to CoinGecko's real USDT price before assuming parity, and the $1
+    // last resort comes from the canonical peg rather than a literal here.
+    let usdtRateClients: [CryptoPriceClient] = [
+      cryptoCompareClient, coinGeckoClient, stablecoinClient,
+    ]
     let binanceClient = BinanceClient(
       http: networking.client(forHost: "api.binance.com"),
       usdtRateLookup: { date in
@@ -89,23 +92,15 @@ extension ProfileSession {
           instrumentId: "1:0xdac17f958d2ee523a2206206994597c13d831ec7",
           coingeckoId: "tether", cryptocompareSymbol: "USDT", binanceSymbol: nil
         )
-        do {
-          return try await cryptoCompareClient.dailyPrice(for: usdtMapping, on: date)
-        } catch {
-          factoriesLogger.warning(
-            "CryptoCompare USDT rate lookup failed; falling back to USDT=1: \(error.localizedDescription, privacy: .public)"
-          )
-          return Decimal(1)
-        }
+        return await CryptoRateLookup.firstAvailableRate(
+          for: usdtMapping, on: date, using: usdtRateClients, default: Decimal(1))
       })
     let priceClients: [CryptoPriceClient] = [
-      CoinGeckoClient(
-        apiKeyProvider: coinGeckoApiKeyProvider,
-        networking: networking),
+      coinGeckoClient,
       cryptoCompareClient,
       binanceClient,
       // Last-resort $1 fallback for canonical USDC/USDT only (peg).
-      StablecoinPriceClient(),
+      stablecoinClient,
     ]
 
     return CryptoPriceService(
