@@ -27,7 +27,7 @@ enum SyncProvider: String {
     case .coinGecko: return "CoinGecko"
     case .cryptoCompare: return "CryptoCompare"
     case .binance: return "Binance"
-    case .peggedStablecoin: return "Pegged stablecoin"
+    case .peggedStablecoin: return "Pegged Stablecoin"
     }
   }
 }

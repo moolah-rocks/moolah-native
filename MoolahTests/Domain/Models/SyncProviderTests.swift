@@ -28,7 +28,7 @@ struct SyncProviderTests {
 
   @Test("Pegged stablecoin provider has a user-facing display name")
   func peggedStablecoinDisplayName() {
-    #expect(SyncProvider.peggedStablecoin.displayName == "Pegged stablecoin")
+    #expect(SyncProvider.peggedStablecoin.displayName == "Pegged Stablecoin")
   }
 
   @Test("Pegged stablecoin is enumerated in allCases")

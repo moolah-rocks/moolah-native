@@ -7,6 +7,13 @@ import Foundation
 import GRDB
 import OSLog
 
+/// File-scoped logger for the market-data factory wiring. A top-level
+/// `let` (not a `static` on the extension) so the `@Sendable`
+/// `usdtRateLookup` closure can capture it without crossing `ProfileSession`
+/// isolation. `Logger` is `Sendable`.
+private let factoriesLogger = Logger(
+  subsystem: "com.moolah.app", category: "ProfileSessionFactories")
+
 extension ProfileSession {
   // MARK: - Market Data Services
 
@@ -14,7 +21,7 @@ extension ProfileSession {
   /// on: fiat exchange rates, stock prices, and crypto prices. Returned
   /// from `makeMarketDataServices` so `init` can assign each field in one
   /// step.
-  struct MarketDataServices {
+  struct MarketDataServices: Sendable {
     let exchangeRate: ExchangeRateService
     let stockPrice: StockPriceService
     let cryptoPrice: CryptoPriceService
@@ -85,6 +92,9 @@ extension ProfileSession {
         do {
           return try await cryptoCompareClient.dailyPrice(for: usdtMapping, on: date)
         } catch {
+          factoriesLogger.warning(
+            "CryptoCompare USDT rate lookup failed; falling back to USDT=1: \(error.localizedDescription, privacy: .public)"
+          )
           return Decimal(1)
         }
       })
