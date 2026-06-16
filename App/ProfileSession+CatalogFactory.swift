@@ -13,16 +13,16 @@ extension ProfileSession {
   /// `ProfileSession` so it can be cancelled on teardown.
   @MainActor
   static func makeCoinGeckoCatalog(
-    apiKey: String?,
+    coinGeckoApiKeyProvider: @Sendable @escaping () -> String?,
     networking: NetworkingServices
   ) -> (catalog: (any CoinGeckoCatalog)?, refreshTask: Task<Void, Never>?) {
     let directory = URL.moolahScopedApplicationSupport
       .appending(path: "InstrumentRegistry", directoryHint: .isDirectory)
     do {
-      let host = (apiKey ?? "").isEmpty ? "api.coingecko.com" : "pro-api.coingecko.com"
       let catalog = try SQLiteCoinGeckoCatalog.make(
         directory: directory,
-        http: networking.client(forHost: host))
+        apiKeyProvider: coinGeckoApiKeyProvider,
+        networking: networking)
       // `SQLiteCoinGeckoCatalog` is an actor, so `await catalog.refreshIfStale()`
       // hops to the catalog's executor regardless of the enclosing Task's
       // isolation — no `Task.detached` needed (CONCURRENCY_GUIDE §8).
@@ -50,17 +50,17 @@ extension ProfileSession {
   /// `bootstrapSyncCoordinator` path, and `currentUITestSeed()` reads only
   /// `CommandLine` / `ProcessInfo`.
   static func makeLookupCatalog(
-    apiKey: String?,
+    coinGeckoApiKeyProvider: @Sendable @escaping () -> String?,
     networking: NetworkingServices
   ) -> (any LocalContractResolver)? {
     guard currentUITestSeed() == nil else { return nil }
     let directory = URL.moolahScopedApplicationSupport
       .appending(path: "InstrumentRegistry", directoryHint: .isDirectory)
     do {
-      let host = (apiKey ?? "").isEmpty ? "api.coingecko.com" : "pro-api.coingecko.com"
       return try SQLiteCoinGeckoCatalog.make(
         directory: directory,
-        http: networking.client(forHost: host))
+        apiKeyProvider: coinGeckoApiKeyProvider,
+        networking: networking)
     } catch {
       Logger(subsystem: "com.moolah.app", category: "ProfileSession")
         .error(
