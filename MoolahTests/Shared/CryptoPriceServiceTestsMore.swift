@@ -67,10 +67,21 @@ struct CryptoPriceServiceTestsMore {
 
   @Test
   func prefetchUpdatesCacheForRegisteredItems() async throws {
-    let service = try makeService(prices: [
-      "1:native": ["2026-04-11": dec("1640.00")],
-      "0:native": ["2026-04-11": dec("67890.00")],
-    ])
+    // Pin `now` to 2026-04-12 so `prefetchLatest` tags the live tick as
+    // yesterday (2026-04-11), making `price(on: 2026-04-11)` a cache hit
+    // rather than a bounded backward-extension fetch. The bounded loop
+    // (introduced in the contiguous-extension fix) makes no progress when
+    // the client only knows 2026-04-11 but the current bounds start at
+    // 2026-06-16 (today's yesterday with wall-clock `now`) — so the test
+    // must pin `now` to align the prefetch date with the requested date.
+    let frozen = date("2026-04-12")
+    let service = try makeService(
+      prices: [
+        "1:native": ["2026-04-11": dec("1640.00")],
+        "0:native": ["2026-04-11": dec("67890.00")],
+      ],
+      now: { frozen }
+    )
     await service.prefetchLatest(for: [ethRegistration, btcRegistration])
     let ethPrice = try await service.price(
       for: ethInstrument, mapping: ethMapping, on: date("2026-04-11"))
