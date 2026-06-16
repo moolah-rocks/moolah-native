@@ -93,6 +93,8 @@ extension ProfileSession {
         http: networking.client(forHost: cgHost)),
       cryptoCompareClient,
       binanceClient,
+      // Last-resort $1 fallback for canonical USDC/USDT only (peg).
+      StablecoinPriceClient(),
     ]
 
     return CryptoPriceService(
