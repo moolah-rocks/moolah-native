@@ -34,6 +34,21 @@ enum ContiguousFetchPlanner {
     return nil  // filled in by later tasks
   }
 
+  /// Adds `days` calendar days to a `DateKey` (`Int32` yyyymmdd), crossing
+  /// month and year boundaries correctly. Never use raw `Int32 ± n` on a
+  /// `DateKey` — the encoding is not contiguous across month ends.
+  static func addingDays(_ days: Int, to key: Int32) -> Int32 {
+    let iso = DateKey.isoString(key)
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withFullDate]
+    formatter.timeZone = TimeZone.utc
+    guard let date = formatter.date(from: iso),
+      let shifted = Calendar.utc.date(byAdding: .day, value: days, to: date),
+      let result = DateKey.from(isoString: formatter.string(from: shifted))
+    else { return key }
+    return result
+  }
+
   private static func coldWindow(
     requested: Int32, today: Int32, windowDays: Int, forwardBuffer: Int
   ) -> ClosedRange<Int32>? {

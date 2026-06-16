@@ -16,4 +16,10 @@ import Testing
       windowDays: 30, forwardBuffer: 2)
     #expect(window == nil)
   }
+
+  @Test func addingDaysCrossesMonthBoundary() {
+    #expect(ContiguousFetchPlanner.addingDays(1, to: 20_240_131) == 20_240_201)
+    #expect(ContiguousFetchPlanner.addingDays(-1, to: 20_240_301) == 20_240_229)  // leap year
+    #expect(ContiguousFetchPlanner.addingDays(30, to: 20_240_101) == 20_240_131)
+  }
 }
