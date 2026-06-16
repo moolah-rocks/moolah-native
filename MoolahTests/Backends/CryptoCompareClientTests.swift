@@ -21,7 +21,7 @@ struct CryptoCompareClientTests {
   func dailyPricesURLIncludesSymbolAndDateRange() throws {
     let from = try date("2026-04-01")
     let to = try date("2026-04-10")
-    let url = CryptoCompareClient.histodayURL(symbol: "ETH", from: from, to: to)
+    let url = CryptoCompareClient.histodayURL(symbol: "ETH", from: from, to: to, apiKey: "")
     let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
     #expect(components.host == "min-api.cryptocompare.com")
     #expect(components.path == "/data/v2/histoday")
@@ -36,7 +36,7 @@ struct CryptoCompareClientTests {
 
   @Test
   func currentPricesURLIncludesMultipleSymbols() throws {
-    let url = CryptoCompareClient.priceMultiURL(symbols: ["ETH", "BTC"])
+    let url = CryptoCompareClient.priceMultiURL(symbols: ["ETH", "BTC"], apiKey: "")
     let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
     let items = try #require(components.queryItems)
     let queryItems = try Dictionary(
@@ -261,7 +261,9 @@ struct CryptoCompareClientTests {
     )
     let services = NetworkingServices(
       session: URLSession(configuration: .ephemeral))
-    let client = CryptoCompareClient(http: services.client(forHost: "min-api.cryptocompare.com"))
+    let client = CryptoCompareClient(
+      http: services.client(forHost: "min-api.cryptocompare.com"),
+      apiKeyProvider: { nil })
     await #expect(throws: CryptoPriceError.self) {
       try await client.dailyPrice(for: mapping, on: Date())
     }

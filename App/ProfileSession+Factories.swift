@@ -73,7 +73,8 @@ extension ProfileSession {
     let resolverApiKey = coinGeckoApiKey ?? ""
     let cgHost = resolverApiKey.isEmpty ? "api.coingecko.com" : "pro-api.coingecko.com"
     let cryptoCompareClient = CryptoCompareClient(
-      http: networking.client(forHost: "min-api.cryptocompare.com"))
+      http: networking.client(forHost: "min-api.cryptocompare.com"),
+      apiKeyProvider: { ProfileSession.resolveCryptoCompareApiKey() })
     let binanceClient = BinanceClient(
       http: networking.client(forHost: "api.binance.com"),
       usdtRateLookup: { date in

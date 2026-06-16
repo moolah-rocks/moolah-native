@@ -20,6 +20,18 @@ extension ProfileSession {
     return try? store.restoreString()
   }
 
+  /// Returns the live CryptoCompare API key from the keychain, or `nil` when
+  /// no key is configured. `nonisolated` so the `@Sendable` key-provider
+  /// closure passed to `CryptoCompareClient` can resolve it per request — a
+  /// key entered in Settings then takes effect on the next price fetch
+  /// without rebuilding the client. CryptoCompare's `min-api` host now 401s
+  /// keyless requests, so this key is what restores deep-history backfill.
+  nonisolated static func resolveCryptoCompareApiKey() -> String? {
+    let store = KeychainStore(
+      service: KeychainServices.apiKeys, account: "cryptocompare", synchronizable: true)
+    return try? store.restoreString()
+  }
+
   /// Output of `makeCryptoSyncWiring`. The discovery actor is plumbed
   /// out alongside the store so the Discovered Tokens inbox can drive
   /// `reResolve(_:chain:)` on the same actor instance the sync engine
