@@ -10,35 +10,49 @@ import Foundation
 /// `nil` means "the requested date is already inside `[earliest, latest]`"
 /// — the caller reads it via the prior-trading-day fallback, no fetch.
 enum ContiguousFetchPlanner {
+  /// Configuration shared across all window calculations for a given service.
+  struct Config {
+    /// Max span of a single window (≈30 days). Large enough to clear a
+    /// weekend/holiday run, small enough that a provider serves it wholesale.
+    var windowDays: Int
+    /// Days past `today` a forward window may reach (≈2). Providers tolerate
+    /// slight future dates and clamp, so this never withholds a
+    /// forward-timezone market's already-published close.
+    var forwardBuffer: Int
+  }
+
+  /// Returns the next fetch window to issue, or `nil` when the requested date
+  /// is already inside `[earliest, latest]` (read via prior-trading-day
+  /// fallback, no fetch needed).
+  ///
   /// - earliest/latest: current contiguous bounds as `DateKey`, or `nil`
   ///   when the series is empty (cold cache).
   /// - requested: the `DateKey` the caller needs.
-  /// - today: the `DateKey` for "now" (callers pass `now()`'s day). Forward
-  ///   windows may extend up to `today + forwardBuffer` — providers tolerate
-  ///   slight future dates and clamp, so this never withholds a
-  ///   forward-timezone market's already-published close.
-  /// - windowDays: max span of a single window (≈30). Large enough to clear
-  ///   a weekend/holiday run, small enough that a provider serves it whole.
-  /// - forwardBuffer: days past `today` a forward window may reach (≈2).
+  /// - today: the `DateKey` for "now" (callers pass `now()`'s day).
+  /// - config: window sizing and forward-buffer constants.
   static func nextWindow(
-    earliest: Int32?, latest: Int32?,
-    requested: Int32, today: Int32,
-    windowDays: Int, forwardBuffer: Int
+    earliest: Int32?,
+    latest: Int32?,
+    requested: Int32,
+    today: Int32,
+    config: Config
   ) -> ClosedRange<Int32>? {
     guard let earliest, let latest else {
-      return coldWindow(
-        requested: requested, today: today,
-        windowDays: windowDays, forwardBuffer: forwardBuffer)
+      return coldWindow(requested: requested, today: today, config: config)
     }
     if requested >= earliest && requested <= latest { return nil }
     if requested > latest {
-      let cap = min(requested, addingDays(forwardBuffer, to: today))
-      let upper = min(addingDays(windowDays, to: latest), cap)
+      let cap = min(requested, addingDays(config.forwardBuffer, to: today))
+      let upper = min(addingDays(config.windowDays, to: latest), cap)
       // Anchor at `latest` itself so a stale latest-day tick is overwritten.
       guard latest <= upper else { return nil }
       return latest...upper
     }
-    return nil  // filled in by Task 4 (backward branch)
+    // requested < earliest: backward branch
+    let lower = max(requested, addingDays(-config.windowDays, to: earliest))
+    let upper = addingDays(-1, to: earliest)
+    guard lower <= upper else { return nil }
+    return lower...upper
   }
 
   /// Adds `days` calendar days to a `DateKey` (`Int32` yyyymmdd), crossing
@@ -49,7 +63,8 @@ enum ContiguousFetchPlanner {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]
     formatter.timeZone = TimeZone.utc
-    guard let date = formatter.date(from: iso),
+    guard
+      let date = formatter.date(from: iso),
       let shifted = Calendar.utc.date(byAdding: .day, value: days, to: date),
       let result = DateKey.from(isoString: formatter.string(from: shifted))
     else { return key }
@@ -57,8 +72,13 @@ enum ContiguousFetchPlanner {
   }
 
   private static func coldWindow(
-    requested: Int32, today: Int32, windowDays: Int, forwardBuffer: Int
+    requested: Int32,
+    today: Int32,
+    config: Config
   ) -> ClosedRange<Int32>? {
-    return nil  // filled in by Task 4
+    let end = min(requested, addingDays(config.forwardBuffer, to: today))
+    let start = addingDays(-config.windowDays, to: end)
+    guard start <= end else { return nil }
+    return start...end
   }
 }
