@@ -6,9 +6,11 @@ struct CryptoCompareClient: CryptoPriceClient, Sendable {
   private static let baseURL =
     URL(string: "https://min-api.cryptocompare.com") ?? URL(fileURLWithPath: "/")
   private let http: RateLimitedHTTPClient
+  private let apiKeyProvider: @Sendable () -> String?
 
-  init(http: RateLimitedHTTPClient) {
+  init(http: RateLimitedHTTPClient, apiKeyProvider: @Sendable @escaping () -> String?) {
     self.http = http
+    self.apiKeyProvider = apiKeyProvider
   }
 
   func dailyPrice(for mapping: CryptoProviderMapping, on date: Date) async throws -> Decimal {
@@ -27,7 +29,9 @@ struct CryptoCompareClient: CryptoPriceClient, Sendable {
       throw CryptoPriceError.noProviderMapping(
         tokenId: mapping.instrumentId, provider: "CryptoCompare")
     }
-    let url = Self.histodayURL(symbol: symbol, from: range.lowerBound, to: range.upperBound)
+    let apiKey = apiKeyProvider() ?? ""
+    let url = Self.histodayURL(
+      symbol: symbol, from: range.lowerBound, to: range.upperBound, apiKey: apiKey)
     let (data, _) = try await http.data(for: URLRequest(url: url))
     return try Self.parseHistodayResponse(data)
   }
@@ -42,7 +46,8 @@ struct CryptoCompareClient: CryptoPriceClient, Sendable {
     )
     guard !symbolToMapping.isEmpty else { return [:] }
 
-    let url = Self.priceMultiURL(symbols: Array(symbolToMapping.keys))
+    let apiKey = apiKeyProvider() ?? ""
+    let url = Self.priceMultiURL(symbols: Array(symbolToMapping.keys), apiKey: apiKey)
     let (data, _) = try await http.data(for: URLRequest(url: url))
     let symbolPrices = try Self.parsePriceMultiResponse(data)
 
@@ -57,19 +62,28 @@ struct CryptoCompareClient: CryptoPriceClient, Sendable {
 
   // MARK: - URL builders (internal for testing)
 
-  static func histodayURL(symbol: String, from: Date, to: Date) -> URL {
+  /// `api_key` query item authenticating the request, or `nil` when no key
+  /// is configured. CryptoCompare's `min-api` host now rejects keyless
+  /// requests with HTTP 401, so a configured key is what restores access.
+  private static func authQueryItem(apiKey: String) -> URLQueryItem? {
+    apiKey.isEmpty ? nil : URLQueryItem(name: "api_key", value: apiKey)
+  }
+
+  static func histodayURL(symbol: String, from: Date, to: Date, apiKey: String) -> URL {
     let calendar = Calendar(identifier: .gregorian)
     let days = max(0, calendar.dateComponents([.day], from: from, to: to).day ?? 0)
     let toTimestamp = Int(to.timeIntervalSince1970)
     let pathURL = baseURL.appendingPathComponent("/data/v2/histoday")
     var components =
       URLComponents(url: pathURL, resolvingAgainstBaseURL: false) ?? URLComponents()
-    components.queryItems = [
+    var items: [URLQueryItem] = [
       URLQueryItem(name: "fsym", value: symbol),
       URLQueryItem(name: "tsym", value: "USD"),
       URLQueryItem(name: "limit", value: String(days)),
       URLQueryItem(name: "toTs", value: String(toTimestamp)),
     ]
+    if let auth = authQueryItem(apiKey: apiKey) { items.append(auth) }
+    components.queryItems = items
     return components.url ?? pathURL
   }
 
@@ -83,14 +97,16 @@ struct CryptoCompareClient: CryptoPriceClient, Sendable {
     return components.url ?? pathURL
   }
 
-  static func priceMultiURL(symbols: [String]) -> URL {
+  static func priceMultiURL(symbols: [String], apiKey: String) -> URL {
     let pathURL = baseURL.appendingPathComponent("/data/pricemulti")
     var components =
       URLComponents(url: pathURL, resolvingAgainstBaseURL: false) ?? URLComponents()
-    components.queryItems = [
+    var items: [URLQueryItem] = [
       URLQueryItem(name: "fsyms", value: symbols.joined(separator: ",")),
       URLQueryItem(name: "tsyms", value: "USD"),
     ]
+    if let auth = authQueryItem(apiKey: apiKey) { items.append(auth) }
+    components.queryItems = items
     return components.url ?? pathURL
   }
 
