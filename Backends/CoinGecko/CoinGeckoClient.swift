@@ -13,12 +13,28 @@ struct CoinGeckoClient: CryptoPriceClient, Sendable {
   /// CryptoCompare / Binance if a request 429s.
   private static let publicBaseURL =
     URL(string: "https://api.coingecko.com/api/v3") ?? URL(fileURLWithPath: "/")
-  private let http: RateLimitedHTTPClient
-  private let apiKey: String
+  /// Resolves the key per request (not once at construction) so a Pro key
+  /// entered in Settings flips both the request URL's host *and* the
+  /// rate-limit gate — looked up from `networking` for the same host — on
+  /// the next fetch. Reading the key once and binding `http` to one host at
+  /// init let the two diverge when the key changed mid-session.
+  private let apiKeyProvider: @Sendable () -> String?
+  private let networking: NetworkingServices
 
-  init(apiKey: String, http: RateLimitedHTTPClient) {
-    self.apiKey = apiKey
-    self.http = http
+  init(apiKeyProvider: @Sendable @escaping () -> String?, networking: NetworkingServices) {
+    self.apiKeyProvider = apiKeyProvider
+    self.networking = networking
+  }
+
+  /// The free public CoinGecko host. Used when no key is configured.
+  private static let publicHost = "api.coingecko.com"
+  /// The authenticated Pro host. Used whenever a key is configured.
+  private static let proHost = "pro-api.coingecko.com"
+
+  /// Picks the host that matches the key the URL builders target so the
+  /// rate-limit gate and the request URL never diverge.
+  private static func host(apiKey: String) -> String {
+    apiKey.isEmpty ? publicHost : proHost
   }
 
   /// Resolves the base URL by key presence: non-empty → Pro host,
@@ -49,8 +65,10 @@ struct CoinGeckoClient: CryptoPriceClient, Sendable {
     guard let coinId = mapping.coingeckoId else {
       throw CryptoPriceError.noProviderMapping(tokenId: mapping.instrumentId, provider: "CoinGecko")
     }
+    let apiKey = apiKeyProvider() ?? ""
     let url = Self.marketChartRangeURL(
       coinId: coinId, from: range.lowerBound, to: range.upperBound, apiKey: apiKey)
+    let http = networking.client(forHost: Self.host(apiKey: apiKey))
     let (data, _) = try await http.data(for: URLRequest(url: url))
     return try Self.parseMarketChartResponse(data)
   }
@@ -65,7 +83,9 @@ struct CoinGeckoClient: CryptoPriceClient, Sendable {
     )
     guard !idToMapping.isEmpty else { return [:] }
 
+    let apiKey = apiKeyProvider() ?? ""
     let url = Self.simplePriceURL(coinIds: Array(idToMapping.keys), apiKey: apiKey)
+    let http = networking.client(forHost: Self.host(apiKey: apiKey))
     let (data, _) = try await http.data(for: URLRequest(url: url))
     let coinPrices = try Self.parseSimplePriceResponse(data)
 
@@ -125,6 +145,22 @@ struct CoinGeckoClient: CryptoPriceClient, Sendable {
     var components =
       URLComponents(url: pathURL, resolvingAgainstBaseURL: false) ?? URLComponents()
     components.queryItems = authQueryItem(apiKey: apiKey).map { [$0] }
+    return components.url ?? pathURL
+  }
+
+  /// `/coins/list?include_platform=true` — the full coin catalog the
+  /// `SQLiteCoinGeckoCatalog` refresh downloads. Built here (rather than as
+  /// a hardcoded literal in the catalog) so host selection and the auth
+  /// query item stay in one tested place alongside the other endpoints.
+  static func coinsListURL(apiKey: String) -> URL {
+    let pathURL = baseURL(apiKey: apiKey).appendingPathComponent("coins/list")
+    var components =
+      URLComponents(url: pathURL, resolvingAgainstBaseURL: false) ?? URLComponents()
+    var items: [URLQueryItem] = [
+      URLQueryItem(name: "include_platform", value: "true")
+    ]
+    if let auth = authQueryItem(apiKey: apiKey) { items.append(auth) }
+    components.queryItems = items
     return components.url ?? pathURL
   }
 
