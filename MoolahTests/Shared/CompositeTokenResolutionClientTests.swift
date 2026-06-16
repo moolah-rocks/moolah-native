@@ -33,7 +33,7 @@ struct CompositeTokenResolutionClientTests {
     let client = CompositeTokenResolutionClient(
       coinListData: ccCoinList,
       exchangeInfoData: binanceInfo,
-      coinGeckoApiKey: nil
+      coinGeckoApiKeyProvider: { nil }
     )
 
     let result = try await client.resolve(
@@ -70,7 +70,7 @@ struct CompositeTokenResolutionClientTests {
     let client = CompositeTokenResolutionClient(
       coinListData: ccCoinList,
       exchangeInfoData: binanceInfo,
-      coinGeckoApiKey: nil
+      coinGeckoApiKeyProvider: { nil }
     )
 
     let result = try await client.resolve(
@@ -95,7 +95,7 @@ struct CompositeTokenResolutionClientTests {
     let client = CompositeTokenResolutionClient(
       coinListData: ccCoinList,
       exchangeInfoData: binanceInfo,
-      coinGeckoApiKey: nil
+      coinGeckoApiKeyProvider: { nil }
     )
 
     let result = try await client.resolve(
@@ -130,7 +130,7 @@ struct CompositeTokenResolutionClientTests {
     let client = CompositeTokenResolutionClient(
       coinListData: ccCoinList,
       exchangeInfoData: binanceInfo,
-      coinGeckoApiKey: nil
+      coinGeckoApiKeyProvider: { nil }
     )
 
     let result = try await client.resolve(
@@ -179,7 +179,7 @@ struct CompositeTokenResolutionClientTests {
     let client = CompositeTokenResolutionClient(
       coinListData: ccCoinList,
       exchangeInfoData: binanceInfo,
-      coinGeckoApiKey: nil
+      coinGeckoApiKeyProvider: { nil }
     )
 
     // The spam contract from the issue's repro wallet, sharing ticker
@@ -228,7 +228,7 @@ struct CompositeTokenResolutionClientTests {
     let client = CompositeTokenResolutionClient(
       coinListData: ccCoinList,
       exchangeInfoData: binanceInfo,
-      coinGeckoApiKey: nil
+      coinGeckoApiKeyProvider: { nil }
     )
 
     let eth = try await client.resolve(
@@ -296,7 +296,7 @@ final class PostConfirmBySymbolTests {
     let client = CompositeTokenResolutionClient(
       coinListData: ccCoinList,
       exchangeInfoData: binanceInfo,
-      coinGeckoApiKey: "",
+      coinGeckoApiKeyProvider: { "" },
       networking: makeNetworking()
     )
     let result = try await client.resolve(
@@ -340,7 +340,7 @@ final class PostConfirmBySymbolTests {
     let client = CompositeTokenResolutionClient(
       coinListData: ccCoinList,
       exchangeInfoData: binanceInfo,
-      coinGeckoApiKey: "",
+      coinGeckoApiKeyProvider: { "" },
       networking: makeNetworking()
     )
     let result = try await client.resolve(

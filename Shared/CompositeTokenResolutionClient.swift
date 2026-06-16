@@ -4,7 +4,13 @@ import Foundation
 /// to populate provider-specific identifiers for a token.
 struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
   private let networking: NetworkingServices
-  private let coinGeckoApiKey: String?
+  /// Resolves the CoinGecko key per request (not once at construction) so a
+  /// Pro key entered in Settings flips contract-lookup and asset-platforms
+  /// calls from the free public host to the Pro host on the next resolution
+  /// without rebuilding the client. An empty key (the default) still queries
+  /// the free public host — the CoinGecko step is best-effort, never gated
+  /// off by an empty key.
+  private let coinGeckoApiKeyProvider: @Sendable () -> String?
   /// Offline `(chainId, contract) → CoinGecko id` source, consulted before any
   /// network provider so a token already known to the bundled / cached catalog
   /// is priced immediately. `nil` disables the local-first path (e.g. tests).
@@ -16,11 +22,11 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
 
   init(
     networking: NetworkingServices,
-    coinGeckoApiKey: String? = nil,
+    coinGeckoApiKeyProvider: @Sendable @escaping () -> String? = { nil },
     localResolver: LocalContractResolver? = nil
   ) {
     self.networking = networking
-    self.coinGeckoApiKey = coinGeckoApiKey
+    self.coinGeckoApiKeyProvider = coinGeckoApiKeyProvider
     self.localResolver = localResolver
     self.preloadedCoinList = nil
     self.preloadedExchangeInfo = nil
@@ -32,12 +38,12 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
   init(
     coinListData: Data,
     exchangeInfoData: Data,
-    coinGeckoApiKey: String?,
+    coinGeckoApiKeyProvider: @Sendable @escaping () -> String?,
     networking: NetworkingServices = NetworkingServices(),
     localResolver: LocalContractResolver? = nil
   ) {
     self.networking = networking
-    self.coinGeckoApiKey = coinGeckoApiKey
+    self.coinGeckoApiKeyProvider = coinGeckoApiKeyProvider
     self.localResolver = localResolver
     self.preloadedCoinList = coinListData
     self.preloadedExchangeInfo = exchangeInfoData
@@ -117,14 +123,17 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
 
   /// Step 2: CoinGecko contract-based lookup (ERC-20s only). Runs before
   /// Binance so a CG-confirmed symbol can authorise the Binance pair
-  /// attribution (#790). An empty `apiKey` falls through to the free
-  /// public CoinGecko endpoint so users without a Pro key still get
-  /// tokens like USDC priced. Tests that pass `nil` for the key opt out
-  /// of CoinGecko entirely so they don't hit the network.
+  /// attribution (#790). An empty key (`""`) falls through to the free
+  /// public CoinGecko endpoint so users without a Pro key still get tokens
+  /// like USDC priced; a configured key targets the Pro host. A provider
+  /// returning `nil` opts out of CoinGecko entirely so tests that don't stub
+  /// the network don't reach for it. The live factories pass a provider that
+  /// coalesces a missing keychain entry to `""`, so production always runs
+  /// the free-tier path. Resolution is best-effort — any error is swallowed.
   private func resolveFromCoinGecko(
     chainId: Int, contractAddress: String, result: inout TokenResolutionResult
   ) async {
-    guard let apiKey = coinGeckoApiKey else { return }
+    guard let apiKey = coinGeckoApiKeyProvider() else { return }
     do {
       let platformMapping = try await fetchAssetPlatforms(apiKey: apiKey)
       guard let platformSlug = platformMapping[chainId] else { return }
