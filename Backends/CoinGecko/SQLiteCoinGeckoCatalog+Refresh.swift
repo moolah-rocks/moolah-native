@@ -28,10 +28,19 @@ extension SQLiteCoinGeckoCatalog {
       {
         return
       }
+      // Resolve the key per refresh so a Pro key entered in Settings flips
+      // the host (and the auth query item) on the next refresh. Both URLs
+      // and the rate-limit gate are derived from the same key, so they never
+      // diverge.
+      let apiKey = apiKeyProvider() ?? ""
+      let host = apiKey.isEmpty ? "api.coingecko.com" : "pro-api.coingecko.com"
+      let http = networking.client(forHost: host)
+      let coinsListURL = CoinGeckoClient.coinsListURL(apiKey: apiKey)
+      let assetPlatformsURL = CoinGeckoClient.assetPlatformsURL(apiKey: apiKey)
       async let coinsRequest = Self.fetchConditional(
-        http: http, url: Self.coinsListURL, ifNoneMatch: meta.coinsEtag)
+        http: http, url: coinsListURL, ifNoneMatch: meta.coinsEtag)
       async let platformsRequest = Self.fetchConditional(
-        http: http, url: Self.assetPlatformsURL, ifNoneMatch: meta.platformsEtag)
+        http: http, url: assetPlatformsURL, ifNoneMatch: meta.platformsEtag)
       let coinsResult = try await coinsRequest
       let platformsResult = try await platformsRequest
 
@@ -72,18 +81,6 @@ extension SQLiteCoinGeckoCatalog {
 // MARK: - Constants and fetch primitives
 
 extension SQLiteCoinGeckoCatalog {
-  static let coinsListURL: URL = {
-    guard
-      let url = URL(string: "https://api.coingecko.com/api/v3/coins/list?include_platform=true")
-    else { preconditionFailure("malformed CoinGecko coins-list URL — fix the literal") }
-    return url
-  }()
-
-  static let assetPlatformsURL: URL = {
-    guard let url = URL(string: "https://api.coingecko.com/api/v3/asset_platforms")
-    else { preconditionFailure("malformed CoinGecko asset-platforms URL — fix the literal") }
-    return url
-  }()
   /// 24-hour stale-fetch guard. Refresh callers are no-ops within this
   /// window even if the previous fetch returned 304.
   static let maxAge: TimeInterval = 24 * 3600

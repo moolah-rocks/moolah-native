@@ -17,7 +17,8 @@ final class SQLiteCoinGeckoCatalogSearchTests {
     try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
     catalog = try SQLiteCoinGeckoCatalog.make(
       directory: tempDir,
-      http: NetworkingServices().client(forHost: "api.coingecko.com"))
+      apiKeyProvider: { nil },
+      networking: NetworkingServices())
   }
 
   deinit {
