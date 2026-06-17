@@ -10,12 +10,15 @@ extension InstrumentRegistryRepository {
   /// provider key was supplied): their mapping gains the now-available
   /// ids without a network round-trip.
   ///
-  /// Each registration returned by `allCryptoRegistrations()` has at least
-  /// one provider field, so its on-chain identity was already
-  /// contract-confirmed at registration time. That makes it safe to
-  /// attribute a Binance `<TICKER>USDT` pair by the row's ticker here —
-  /// the spam-ticker hazard of #790 only applies to *unconfirmed* ERC-20
-  /// identities, which never reach this list.
+  /// Only rows whose identity is already contract-confirmed (at least one
+  /// resolved provider id) and that are not `.spam` are reconciled —
+  /// `allCryptoRegistrations()` also returns `.spam` / `.unpriced` stubs
+  /// with an all-nil mapping (e.g. a spam ERC-20 from discovery carrying a
+  /// copied ticker), and those must NOT have a Binance / CryptoCompare
+  /// symbol attributed from their unverified ticker. The Binance
+  /// `<TICKER>USDT` attribution is safe precisely because the surviving
+  /// rows already carry a contract-resolved provider id, so the ticker is
+  /// confirmed rather than user/spam-supplied — the #790 hazard.
   ///
   /// Merge-only: a populated column is never overwritten (enforced by
   /// `CryptoProviderMapping.merging`), and a row whose merged mapping is
@@ -48,6 +51,21 @@ extension InstrumentRegistryRepository {
     for registration in registrations {
       do {
         try Task.checkCancellation()
+        // #790: only re-detect rows whose identity is already
+        // contract-confirmed (>=1 resolved provider id). An all-nil mapping
+        // (e.g. a .spam/.unpriced stub from discovery carrying a copied
+        // ticker) must NOT get a Binance/CryptoCompare symbol attributed
+        // from its unverified ticker. Also skip .spam outright — there's
+        // nothing to gain reconciling a hidden token.
+        // #790: only re-detect rows whose identity is already
+        // contract-confirmed (>=1 resolved provider id). An all-nil mapping
+        // (e.g. a .spam/.unpriced stub from discovery carrying a copied
+        // ticker) must NOT get a Binance/CryptoCompare symbol attributed
+        // from its unverified ticker. Also skip .spam outright — there's
+        // nothing to gain reconciling a hidden token.
+        guard registration.mapping.hasProviderMapping,
+          registration.pricingStatus != .spam
+        else { continue }
         let merged = try await mergedMapping(for: registration, using: catalogs)
         guard merged != registration.mapping else { continue }
         try await registerCrypto(registration.instrument, mapping: merged)

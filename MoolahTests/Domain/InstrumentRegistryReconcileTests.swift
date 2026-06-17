@@ -235,4 +235,44 @@ struct InstrumentRegistryReconcileTests {
     try await Task.sleep(for: .milliseconds(50))
     #expect(hooks.changedIds.isEmpty)
   }
+
+  @Test("a .spam row with a copied ticker is never given a provider symbol (#790)")
+  func spamRowNotPoisoned() async throws {
+    let subject = try makeSubject()
+    let repo = subject.repo
+    let hooks = subject.hooks
+    // A spam ERC-20 impersonating Optimism: a different contract, but a
+    // copied "OP" ticker and an all-nil mapping persisted at .spam by the
+    // discovery actor. Reconcile must not attribute OPUSDT / OP from the
+    // unverified ticker — that's the #790 poisoning the contract-confirmed
+    // resolver path is built to prevent.
+    let fakeOp = Instrument.crypto(
+      chainId: 1, contractAddress: "0x000000000000000000000000000000000000dead",
+      symbol: "OP", name: "Optimism", decimals: 18)
+    try await repo.registerCrypto(
+      fakeOp,
+      mapping: CryptoProviderMapping(
+        instrumentId: fakeOp.id, coingeckoId: nil,
+        cryptocompareSymbol: nil, binanceSymbol: nil),
+      forcingStatus: .spam)
+    try await Task.sleep(for: .milliseconds(50))
+    hooks.changedIds.removeAll()
+
+    let catalogs = ProviderCatalogLookups(
+      cryptoCompare: StubCC(byContract: ["0x000000000000000000000000000000000000dead": "OP"]),
+      binance: StubBinance(pairs: ["OPUSDT"]),
+      coinGecko: StubCG())
+    await repo.reconcileProviderMappings(using: catalogs)
+
+    // The row is returned by allCryptoRegistrations() (it's .spam, so the
+    // Lookup guard does not drop it), so it must be explicitly skipped.
+    let reg = try await reg(byId: fakeOp.id, in: repo)
+    #expect(reg.mapping.coingeckoId == nil)
+    #expect(reg.mapping.cryptocompareSymbol == nil)
+    #expect(reg.mapping.binanceSymbol == nil)
+    #expect(reg.pricingStatus == .spam)
+
+    try await Task.sleep(for: .milliseconds(50))
+    #expect(hooks.changedIds.isEmpty)
+  }
 }
