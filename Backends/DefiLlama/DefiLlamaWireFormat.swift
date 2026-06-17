@@ -6,17 +6,30 @@ import Foundation
 enum DefiLlamaWireFormat {
   private static let base = URL(string: "https://coins.llama.fi") ?? URL(fileURLWithPath: "/")
 
-  /// `/chart/{coin}?start=&span=&period=1d` — a daily series covering
-  /// `[from, to]`. `span` is the inclusive day count plus a 2-day buffer so the
-  /// final day is always included (DefiLlama returns near-day points).
+  /// Points per UTC day requested from `/chart` (`period=12h`).
+  ///
+  /// We oversample at 12h rather than `period=1d` because DefiLlama snaps each
+  /// requested point to the nearest real observation (~00:00 / ~23:59). At `1d`
+  /// those near-midnight timestamps alias against UTC-day buckets — consecutive
+  /// points collide on one day and skip the next — silently dropping ~1 day in
+  /// 5, even for max-confidence liquid tokens. Two points per day guarantees at
+  /// least one lands in every UTC day, so `parseChart`'s last-per-day bucketing
+  /// is dense. Finer than 12h does not recover more (genuinely sparse history
+  /// stays sparse); 12h is the smallest period that closes the aliasing.
+  private static let chartPointsPerDay = 2
+
+  /// `/chart/{coin}?start=&span=&period=12h` — a 12-hourly series covering
+  /// `[from, to]`, bucketed back to one price per UTC day by `parseChart`.
+  /// `span` is the inclusive day count plus a 2-day buffer (so the final day is
+  /// always included), times `chartPointsPerDay`.
   static func chartURL(coinId: String, from: Date, to: Date) -> URL {
     let pathURL = base.appendingPathComponent("chart").appendingPathComponent(coinId)
     var components = URLComponents(url: pathURL, resolvingAgainstBaseURL: false) ?? URLComponents()
     let days = max(0, Int(to.timeIntervalSince(from) / 86_400)) + 1 + 2
     components.queryItems = [
       URLQueryItem(name: "start", value: String(Int(from.timeIntervalSince1970))),
-      URLQueryItem(name: "span", value: String(days)),
-      URLQueryItem(name: "period", value: "1d"),
+      URLQueryItem(name: "span", value: String(days * chartPointsPerDay)),
+      URLQueryItem(name: "period", value: "12h"),
     ]
     return components.url ?? pathURL
   }
