@@ -94,7 +94,7 @@ final class SQLiteCoinGeckoCatalogStorageTests {
     do {
       try await catalog.replaceAllForTesting(coins: withDuplicate, platforms: [])
       Issue.record("expected constraint failure")
-    } catch let SQLiteCoinGeckoCatalog.CatalogError.sqlite(message) {
+    } catch let CatalogError.sqlite(message) {
       // Extended result codes turn bare `step 19` into the specific
       // `SQLITE_CONSTRAINT_UNIQUE (2067)` plus the human-readable errmsg
       // "UNIQUE constraint failed: coin.coingecko_id". Without both pieces

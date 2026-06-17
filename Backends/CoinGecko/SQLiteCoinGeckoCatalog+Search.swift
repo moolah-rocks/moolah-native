@@ -21,11 +21,9 @@ extension SQLiteCoinGeckoCatalog {
     guard !trimmed.isEmpty, limit > 0 else { return [] }
 
     do {
-      let ranked = try Self.fetchRankedCoins(
-        database: database, query: trimmed, limit: limit)
+      let ranked = try fetchRankedCoins(query: trimmed, limit: limit)
       guard !ranked.isEmpty else { return [] }
-      let bindings = try Self.fetchPlatformBindings(
-        database: database, coingeckoIds: ranked.map(\.id))
+      let bindings = try fetchPlatformBindings(coingeckoIds: ranked.map(\.id))
       return ranked.map { row in
         CatalogEntry(
           coingeckoId: row.id,
@@ -50,64 +48,57 @@ extension SQLiteCoinGeckoCatalog {
     let name: String
   }
 
-  private static func fetchRankedCoins(
-    database: OpaquePointer?,
-    query: String,
-    limit: Int
-  ) throws -> [RankedCoin] {
-    let ftsQuery = ftsQueryString(for: query)
+  private func fetchRankedCoins(query: String, limit: Int) throws -> [RankedCoin] {
+    let ftsQuery = Self.ftsQueryString(for: query)
     var statement: OpaquePointer?
-    try prepare(
-      database: database,
-      sql: """
-        SELECT c.coingecko_id, c.symbol, c.name
-        FROM coin_fts JOIN coin c ON c.rowid = coin_fts.rowid
-        WHERE coin_fts MATCH ?
-        ORDER BY rank
-        LIMIT ?;
-        """,
+    try database.prepare(
+      """
+      SELECT c.coingecko_id, c.symbol, c.name
+      FROM coin_fts JOIN coin c ON c.rowid = coin_fts.rowid
+      WHERE coin_fts MATCH ?
+      ORDER BY rank
+      LIMIT ?;
+      """,
       into: &statement
     )
     defer { sqlite3_finalize(statement) }
-    try bind(statement, at: 1, to: ftsQuery)
-    try bind(statement, at: 2, to: limit)
+    try database.bind(statement, at: 1, to: ftsQuery)
+    try database.bind(statement, at: 2, to: limit)
     var rows: [RankedCoin] = []
     while sqlite3_step(statement) == SQLITE_ROW {
-      let id = readText(statement, column: 0) ?? ""
-      let symbol = readText(statement, column: 1) ?? ""
-      let name = readText(statement, column: 2) ?? ""
+      let id = database.readText(statement, column: 0) ?? ""
+      let symbol = database.readText(statement, column: 1) ?? ""
+      let name = database.readText(statement, column: 2) ?? ""
       rows.append(RankedCoin(id: id, symbol: symbol, name: name))
     }
     return rows
   }
 
-  private static func fetchPlatformBindings(
-    database: OpaquePointer?,
+  private func fetchPlatformBindings(
     coingeckoIds: [String]
   ) throws -> [String: [PlatformBinding]] {
     guard !coingeckoIds.isEmpty else { return [:] }
     let placeholders = Array(repeating: "?", count: coingeckoIds.count)
       .joined(separator: ", ")
     var statement: OpaquePointer?
-    try prepare(
-      database: database,
-      sql: """
-        SELECT cp.coingecko_id, cp.platform_slug, cp.contract_address, p.chain_id
-        FROM coin_platform cp
-        LEFT JOIN platform p ON p.slug = cp.platform_slug
-        WHERE cp.coingecko_id IN (\(placeholders));
-        """,
+    try database.prepare(
+      """
+      SELECT cp.coingecko_id, cp.platform_slug, cp.contract_address, p.chain_id
+      FROM coin_platform cp
+      LEFT JOIN platform p ON p.slug = cp.platform_slug
+      WHERE cp.coingecko_id IN (\(placeholders));
+      """,
       into: &statement
     )
     defer { sqlite3_finalize(statement) }
     for (offset, id) in coingeckoIds.enumerated() {
-      try bind(statement, at: Int32(offset + 1), to: id)
+      try database.bind(statement, at: Int32(offset + 1), to: id)
     }
     var bindingsById: [String: [PlatformBinding]] = [:]
     while sqlite3_step(statement) == SQLITE_ROW {
-      let coingeckoId = readText(statement, column: 0) ?? ""
-      let slug = readText(statement, column: 1) ?? ""
-      let contract = readText(statement, column: 2) ?? ""
+      let coingeckoId = database.readText(statement, column: 0) ?? ""
+      let slug = database.readText(statement, column: 1) ?? ""
+      let contract = database.readText(statement, column: 2) ?? ""
       let chainId: Int? =
         sqlite3_column_type(statement, 3) == SQLITE_NULL
         ? nil : Int(sqlite3_column_int64(statement, 3))

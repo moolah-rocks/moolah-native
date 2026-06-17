@@ -53,6 +53,7 @@ enum CatalogRefresh {
   ///
   /// Errors propagate; the caller leaves `last_fetched` untouched on failure.
   static func run(
+    isolation: isolated (any Actor)? = #isolation,
     database: CatalogDatabase,
     endpoints: [CatalogEndpoint],
     http: RateLimitedHTTPClient,

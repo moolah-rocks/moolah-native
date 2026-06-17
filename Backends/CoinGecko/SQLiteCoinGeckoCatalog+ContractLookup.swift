@@ -16,8 +16,7 @@ extension SQLiteCoinGeckoCatalog: LocalContractResolver {
     chainId: Int, contractAddress: String
   ) async -> LocalContractMatch? {
     do {
-      return try Self.fetchContractMatch(
-        database: database,
+      return try fetchContractMatch(
         chainId: chainId,
         contractAddress: contractAddress.lowercased())
     } catch {
@@ -27,33 +26,31 @@ extension SQLiteCoinGeckoCatalog: LocalContractResolver {
     }
   }
 
-  private static func fetchContractMatch(
-    database: OpaquePointer?,
+  private func fetchContractMatch(
     chainId: Int,
     contractAddress: String
   ) throws -> LocalContractMatch? {
     var statement: OpaquePointer?
-    try prepare(
-      database: database,
-      sql: """
-        SELECT c.coingecko_id, c.symbol, c.name
-        FROM coin_platform cp
-        JOIN platform p ON p.slug = cp.platform_slug
-        JOIN coin c ON c.coingecko_id = cp.coingecko_id
-        WHERE p.chain_id = ? AND cp.contract_address = ?
-        LIMIT 1;
-        """,
+    try database.prepare(
+      """
+      SELECT c.coingecko_id, c.symbol, c.name
+      FROM coin_platform cp
+      JOIN platform p ON p.slug = cp.platform_slug
+      JOIN coin c ON c.coingecko_id = cp.coingecko_id
+      WHERE p.chain_id = ? AND cp.contract_address = ?
+      LIMIT 1;
+      """,
       into: &statement
     )
     defer { sqlite3_finalize(statement) }
-    try bind(statement, at: 1, to: chainId)
-    try bind(statement, at: 2, to: contractAddress)
+    try database.bind(statement, at: 1, to: chainId)
+    try database.bind(statement, at: 2, to: contractAddress)
     guard sqlite3_step(statement) == SQLITE_ROW else { return nil }
-    let id = readText(statement, column: 0) ?? ""
+    let id = database.readText(statement, column: 0) ?? ""
     guard !id.isEmpty else { return nil }
     return LocalContractMatch(
       coingeckoId: id,
-      symbol: readText(statement, column: 1) ?? "",
-      name: readText(statement, column: 2) ?? "")
+      symbol: database.readText(statement, column: 1) ?? "",
+      name: database.readText(statement, column: 2) ?? "")
   }
 }
