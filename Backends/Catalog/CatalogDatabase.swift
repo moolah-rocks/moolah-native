@@ -89,7 +89,11 @@ final class CatalogDatabase {
 
   private static func connect(dbURL: URL) throws -> OpaquePointer {
     var handle: OpaquePointer?
-    let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+    // NOMUTEX (not FULLMUTEX): each provider catalog holds this connection
+    // inside its own actor, which already serialises every SQLite call, so
+    // SQLite's own per-connection mutex would be wasted contention
+    // (DATABASE_SCHEMA_GUIDE §5 Forbidden flags).
+    let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_NOMUTEX
     let result = sqlite3_open_v2(dbURL.path, &handle, flags, nil)
     guard result == SQLITE_OK, let handle else {
       throw CatalogError.sqlite("open failed: \(result)")
@@ -111,6 +115,9 @@ final class CatalogDatabase {
       "PRAGMA foreign_keys = ON;",
       "PRAGMA busy_timeout = 5000;",
       "PRAGMA synchronous = NORMAL;",
+      "PRAGMA temp_store = MEMORY;",
+      "PRAGMA cache_size = -8000;",
+      "PRAGMA optimize = 0x10002;",
     ] {
       let result = sqlite3_exec(handle, pragma, nil, nil, nil)
       if result != SQLITE_OK {
