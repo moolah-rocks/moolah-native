@@ -62,18 +62,24 @@ struct DefiLlamaClient: CryptoPriceClient, Sendable {
     let (data, _) = try await http.data(for: URLRequest(url: url))
     let prices = try DefiLlamaWireFormat.parseChart(data, confidenceFloor: confidenceFloor)
 
-    // Opportunistically refresh support from the live outcome. Keep the floor
-    // monotonic: a more recent window must never push the recorded earliest date
-    // forward, so take the min of any existing floor and this window's min.
-    // ISO `YYYY-MM-DD` strings compare chronologically.
-    let windowFloor = prices.keys.min()
-    let existingFloor = await supportCache?.support(for: mapping.instrumentId)?.earliestDate
-    let floor = [existingFloor, windowFloor].compactMap { $0 }.min()
-    await supportCache?.upsert(
-      instrumentId: mapping.instrumentId,
-      supported: !prices.isEmpty,
-      earliestDate: floor,
-      lastChecked: Date())
+    // Opportunistically promote support when the fetch returned prices.
+    // Only update the cache on a non-empty result so a legitimately empty
+    // window (e.g. deep-history before a token's first DEX liquidity, or a
+    // low-confidence read gated by the floor) does not demote a token that
+    // is genuinely supported. The `/prices/first` startup probe
+    // (`refreshSupport`) is the sole writer of `supported: false`.
+    // ISO `YYYY-MM-DD` strings compare chronologically, so taking the min
+    // keeps the recorded earliest date monotonically non-increasing.
+    if !prices.isEmpty {
+      let windowFloor = prices.keys.min()
+      let existingFloor = await supportCache?.support(for: mapping.instrumentId)?.earliestDate
+      let floor = [existingFloor, windowFloor].compactMap { $0 }.min()
+      await supportCache?.upsert(
+        instrumentId: mapping.instrumentId,
+        supported: true,
+        earliestDate: floor,
+        lastChecked: Date())
+    }
 
     return prices
   }

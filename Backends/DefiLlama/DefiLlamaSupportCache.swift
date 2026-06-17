@@ -49,11 +49,42 @@ actor DefiLlamaSupportCache {
 
   /// Re-probes DefiLlama support for `registrations` whose row is missing, older
   /// than 24h, or currently unsupported (so a token that gains liquidity later
-  /// is re-detected). One batched `/prices/first` call; `.spam` tokens and
-  /// tokens with no derivable coin id are skipped. Best-effort: a network
-  /// failure leaves all rows untouched (logged); cancellation returns early.
+  /// is re-detected). Coin ids are chunked into batches of 50 so the URL stays
+  /// within length limits for large token sets. `.spam` tokens and tokens with
+  /// no derivable coin id are skipped. Best-effort: a network failure leaves all
+  /// rows untouched (logged); cancellation returns early.
   func refreshSupport(for registrations: [CryptoRegistration], now: Date) async {
-    // Build the to-probe set: coinId → instrumentId.
+    let coinToInstrument = eligibleCoins(from: registrations, now: now)
+    guard !coinToInstrument.isEmpty else { return }
+    if Task.isCancelled { return }
+
+    let firstPoints: [String: DefiLlamaWireFormat.FirstPoint]
+    do {
+      firstPoints = try await fetchFirstPoints(for: coinToInstrument.keys.sorted())
+    } catch {
+      Self.log.error("refreshSupport failed: \(String(describing: error), privacy: .public)")
+      return  // leave rows untouched; next launch retries
+    }
+    if Task.isCancelled { return }
+
+    for (coinId, instrumentId) in coinToInstrument {
+      if let point = firstPoints[coinId] {
+        upsert(
+          instrumentId: instrumentId,
+          supported: true,
+          earliestDate: DefiLlamaWireFormat.isoDay(from: point.timestamp),
+          lastChecked: now)
+      } else {
+        upsert(instrumentId: instrumentId, supported: false, earliestDate: nil, lastChecked: now)
+      }
+    }
+  }
+
+  /// Returns the coinId → instrumentId map for tokens that need re-probing:
+  /// missing rows, stale rows (>24h), or unsupported tokens (may gain liquidity).
+  private func eligibleCoins(
+    from registrations: [CryptoRegistration], now: Date
+  ) -> [String: String] {
     var coinToInstrument: [String: String] = [:]
     for registration in registrations {
       guard registration.pricingStatus != .spam else { continue }
@@ -70,37 +101,29 @@ actor DefiLlamaSupportCache {
       else { continue }
       coinToInstrument[coinId] = instrumentId
     }
-    guard !coinToInstrument.isEmpty else { return }
-    if Task.isCancelled { return }
+    return coinToInstrument
+  }
 
-    let sortedCoinIds = coinToInstrument.keys.sorted()
-    let url = DefiLlamaWireFormat.firstURL(coinIds: sortedCoinIds)
-    let firstPoints: [String: DefiLlamaWireFormat.FirstPoint]
-    do {
-      let (data, _) = try await networking.client(forHost: "coins.llama.fi")
-        .data(for: URLRequest(url: url))
-      firstPoints = try DefiLlamaWireFormat.parseFirst(data)
-    } catch {
-      Self.log.error("refreshSupport failed: \(String(describing: error), privacy: .public)")
-      return  // leave rows untouched; next launch retries
+  /// Issues one `/prices/first` request per 50-coin batch (deterministic order:
+  /// `sortedCoinIds` must already be sorted). Merges all batch results into one
+  /// map. Throws on the first network or parse error — callers must not write
+  /// any rows when this throws (partial-failure safety).
+  private func fetchFirstPoints(
+    for sortedCoinIds: [String]
+  ) async throws -> [String: DefiLlamaWireFormat.FirstPoint] {
+    let batches = stride(from: 0, to: sortedCoinIds.count, by: 50).map {
+      Array(sortedCoinIds[$0..<min($0 + 50, sortedCoinIds.count)])
     }
-    if Task.isCancelled { return }
-
-    for (coinId, instrumentId) in coinToInstrument {
-      if let point = firstPoints[coinId] {
-        upsert(
-          instrumentId: instrumentId,
-          supported: true,
-          earliestDate: DefiLlamaWireFormat.isoDay(from: point.timestamp),
-          lastChecked: now)
-      } else {
-        upsert(
-          instrumentId: instrumentId,
-          supported: false,
-          earliestDate: nil,
-          lastChecked: now)
-      }
+    var firstPoints: [String: DefiLlamaWireFormat.FirstPoint] = [:]
+    let http = networking.client(forHost: "coins.llama.fi")
+    for batch in batches {
+      if Task.isCancelled { return firstPoints }
+      let url = DefiLlamaWireFormat.firstURL(coinIds: batch)
+      let (data, _) = try await http.data(for: URLRequest(url: url))
+      let batchPoints = try DefiLlamaWireFormat.parseFirst(data)
+      firstPoints.merge(batchPoints) { _, new in new }
     }
+    return firstPoints
   }
 
   // MARK: - Stored support query
