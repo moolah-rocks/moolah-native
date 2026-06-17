@@ -47,14 +47,29 @@ struct DefiLlamaClient: CryptoPriceClient, Sendable {
         tokenId: mapping.instrumentId, provider: "DefiLlama")
     }
 
+    // One support read serves both the unsupported short-circuit and the
+    // history-floor clamp below (and the promote-only update later).
+    let cached = await supportCache?.support(for: mapping.instrumentId)
+
     // Short-circuit a fresh "unsupported" verdict so we don't pay a round-trip
     // for a token DefiLlama is known not to price.
-    if let cached = await supportCache?.support(for: mapping.instrumentId),
-      !cached.supported,
+    if let cached, !cached.supported,
       Date().timeIntervalSince(cached.lastChecked) < Self.supportMaxAge
     {
       throw CryptoPriceError.noProviderMapping(
         tokenId: mapping.instrumentId, provider: "DefiLlama")
+    }
+
+    // History-floor clamp: when the whole requested window ends before the
+    // token's known first-liquidity date, DefiLlama has no data to return, so
+    // skip the round-trip and report an empty window. The contiguous-window
+    // backfill's no-progress guard then stops the backward walk. A token's
+    // first-liquidity date does not move, so this clamp applies regardless of
+    // the row's freshness. ISO `YYYY-MM-DD` strings compare chronologically.
+    if let floor = cached?.earliestDate,
+      DefiLlamaWireFormat.isoDay(from: range.upperBound.timeIntervalSince1970) < floor
+    {
+      return [:]
     }
 
     let url = DefiLlamaWireFormat.chartURL(
@@ -72,8 +87,7 @@ struct DefiLlamaClient: CryptoPriceClient, Sendable {
     // keeps the recorded earliest date monotonically non-increasing.
     if !prices.isEmpty {
       let windowFloor = prices.keys.min()
-      let existingFloor = await supportCache?.support(for: mapping.instrumentId)?.earliestDate
-      let floor = [existingFloor, windowFloor].compactMap { $0 }.min()
+      let floor = [cached?.earliestDate, windowFloor].compactMap { $0 }.min()
       await supportCache?.upsert(
         instrumentId: mapping.instrumentId,
         supported: true,
