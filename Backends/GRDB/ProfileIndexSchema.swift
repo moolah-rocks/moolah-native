@@ -28,6 +28,12 @@ import GRDB
 /// `v4_needs_push`                 — adds the local-only `needs_push`
 ///   dirty flag to the `profile` table (mirrors the per-profile v17
 ///   migration; issue #1081). See `ProfileIndexSchema+NeedsPush.swift`.
+/// `v5_deletion_journal`           — adds the `deletion_journal` table for
+///   durable CloudKit deletion intents (issue #1090). See
+///   `ProfileIndexSchema+DeletionJournal.swift`.
+/// `v6_purge_rate_caches`          — DELETE FROM all six rate-cache tables
+///   so gappy legacy rows are flushed before the contiguous-fill era. See
+///   `ProfileIndexSchema+PurgeRateCaches.swift`.
 ///
 /// Each migration body is registered here. Once shipped, migration IDs
 /// are frozen forever; splitting later is fine, merging post-ship is
@@ -41,7 +47,7 @@ enum ProfileIndexSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 5
+  static let version = 6
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -58,6 +64,7 @@ enum ProfileIndexSchema {
       migrate: createSharedInstrumentRegistryTables)
     migrator.registerMigration("v4_needs_push", migrate: addNeedsPush)
     migrator.registerMigration("v5_deletion_journal", migrate: addDeletionJournal)
+    migrator.registerMigration("v6_purge_rate_caches", migrate: purgeRateCaches)
 
     return migrator
   }
