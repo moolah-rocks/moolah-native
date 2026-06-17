@@ -30,6 +30,18 @@ struct CryptoProviderMapping: Codable, Sendable, Hashable, Identifiable {
     coingeckoId ?? cryptocompareSymbol ?? binanceSymbol ?? instrumentId
   }
 
+  /// Merge-only fill: each nil provider id is taken from `other`; a populated
+  /// column is never overwritten, and `instrumentId` is always kept. Used by
+  /// the startup re-detection pass to upgrade a stored mapping from the
+  /// provider caches without downgrading anything (#1140).
+  func merging(_ other: CryptoProviderMapping) -> CryptoProviderMapping {
+    CryptoProviderMapping(
+      instrumentId: instrumentId,
+      coingeckoId: coingeckoId ?? other.coingeckoId,
+      cryptocompareSymbol: cryptocompareSymbol ?? other.cryptocompareSymbol,
+      binanceSymbol: binanceSymbol ?? other.binanceSymbol)
+  }
+
   /// Built-in presets for common tokens.
   static let builtInPresets: [CryptoProviderMapping] =
     CryptoRegistration.builtInPresets.map(\.mapping)
