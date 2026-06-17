@@ -34,6 +34,13 @@ import GRDB
 /// `v6_purge_rate_caches`          — DELETE FROM all six rate-cache tables
 ///   so gappy legacy rows are flushed before the contiguous-fill era. See
 ///   `ProfileIndexSchema+PurgeRateCaches.swift`.
+/// `v7_purge_crypto_price_cache`   — DELETE FROM `crypto_price` +
+///   `crypto_token_meta` so the daily-gap rows cached before the DefiLlama
+///   12h-oversampling fix re-backfill densely. Both tables together: the
+///   cache bounds that drive `ContiguousFetchPlanner` live in
+///   `crypto_token_meta`, so dropping only the prices would leave the planner
+///   believing the gappy interior is covered. See
+///   `ProfileIndexSchema+PurgeCryptoPriceCache.swift`.
 ///
 /// Each migration body is registered here. Once shipped, migration IDs
 /// are frozen forever; splitting later is fine, merging post-ship is
@@ -47,7 +54,7 @@ enum ProfileIndexSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 6
+  static let version = 7
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -65,6 +72,8 @@ enum ProfileIndexSchema {
     migrator.registerMigration("v4_needs_push", migrate: addNeedsPush)
     migrator.registerMigration("v5_deletion_journal", migrate: addDeletionJournal)
     migrator.registerMigration("v6_purge_rate_caches", migrate: purgeRateCaches)
+    migrator.registerMigration(
+      "v7_purge_crypto_price_cache", migrate: purgeCryptoPriceCache)
 
     return migrator
   }
