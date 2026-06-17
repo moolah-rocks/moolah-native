@@ -50,13 +50,26 @@ final class CatalogDatabase {
     schemaStatements: [String]
   ) throws -> CatalogDatabase {
     if FileManager.default.fileExists(atPath: dbURL.path) {
-      let storedVersion = readSchemaVersion(dbURL: dbURL)
-      if storedVersion == schemaVersion {
-        return CatalogDatabase(handle: try connect(dbURL: dbURL))
+      // Open once and reuse the handle on the version-match path (mirrors
+      // `SQLiteCoinGeckoCatalog.open`'s `shouldClose` precedent) rather than
+      // opening a throwaway connection just to read the version.
+      let handle = try connect(dbURL: dbURL)
+      var shouldClose = true
+      defer { if shouldClose { sqlite3_close_v2(handle) } }
+
+      let database = CatalogDatabase(handle: handle)
+      // A missing/old `meta` shape (or any read failure) reads as `nil`,
+      // which never equals `schemaVersion`, so it falls through to recreate.
+      if (try? database.readSchemaVersion()) == schemaVersion {
+        shouldClose = false  // caller takes ownership of the live handle
+        return database
       }
-      // Mismatch (or unreadable meta): drop the file and its WAL sidecars,
-      // then recreate clean. `<db>-wal` / `<db>-shm` are produced by WAL
-      // mode and must go too so the recreated database starts empty.
+      // Mismatch: close the stale handle (via the defer), then drop the file
+      // and its WAL sidecars and recreate clean. `<db>-wal` / `<db>-shm` are
+      // produced by WAL mode and must go too so the database starts empty.
+      // `database` is dropped here while still owning `handle`; null it out
+      // first so its `deinit` does not double-close the defer-closed handle.
+      database.handle = nil
       try FileManager.default.removeItem(at: dbURL)
       try? FileManager.default.removeItem(at: URL(fileURLWithPath: dbURL.path + "-wal"))
       try? FileManager.default.removeItem(at: URL(fileURLWithPath: dbURL.path + "-shm"))
@@ -85,6 +98,25 @@ final class CatalogDatabase {
     // extended codes (e.g. `2067 SQLITE_CONSTRAINT_UNIQUE`) so log lines
     // pinpoint the actual failure mode.
     sqlite3_extended_result_codes(handle, 1)
+
+    // Per-connection PRAGMAs (DATABASE_SCHEMA_GUIDE §5). `foreign_keys` and
+    // `busy_timeout` do NOT persist in the file header, so they must be set
+    // on every open — not just at create time — or FK enforcement (e.g.
+    // CoinGecko's `ON DELETE CASCADE`) silently lapses on reopen. WAL is
+    // header-persistent but cheap to reassert. Best-effort: a PRAGMA that
+    // fails to apply degrades robustness but should not block opening an
+    // otherwise valid database.
+    for pragma in [
+      "PRAGMA journal_mode = WAL;",
+      "PRAGMA foreign_keys = ON;",
+      "PRAGMA busy_timeout = 5000;",
+      "PRAGMA synchronous = NORMAL;",
+    ] {
+      let result = sqlite3_exec(handle, pragma, nil, nil, nil)
+      if result != SQLITE_OK {
+        Self.log.error("PRAGMA failed (\(pragma, privacy: .public)): \(result)")
+      }
+    }
     return handle
   }
 
@@ -100,20 +132,6 @@ final class CatalogDatabase {
     return database
   }
 
-  /// Opens an existing file just long enough to read `meta.schema_version`.
-  /// A missing/old `meta` shape (or any read failure) is treated as a
-  /// mismatch so `open(…)` recreates the file rather than trusting a stale
-  /// or unrecognised schema. Returns `nil` on any failure.
-  private static func readSchemaVersion(dbURL: URL) -> Int? {
-    guard let handle = try? connect(dbURL: dbURL) else { return nil }
-    defer { sqlite3_close_v2(handle) }
-    let database = CatalogDatabase(handle: handle)
-    let version = try? database.readSchemaVersion()
-    // Prevent `deinit` from double-closing the handle owned by `defer`.
-    database.handle = nil
-    return version
-  }
-
   // MARK: - Engine-owned schema
 
   /// DDL for the engine-owned `meta` / `etag` bookkeeping tables every
@@ -121,10 +139,13 @@ final class CatalogDatabase {
   /// statements when calling `open(…)`. `etag` is keyed by endpoint so a
   /// provider can track conditional-request validators for several
   /// endpoints without per-provider columns.
+  ///
+  /// Connection PRAGMAs (`journal_mode`, `foreign_keys`, `busy_timeout`,
+  /// `synchronous`) are applied in `connect(dbURL:)` on every open — not
+  /// here — because the per-connection ones do not persist in the file
+  /// header and would otherwise lapse on reopen.
   static func baseSchemaStatements(schemaVersion: Int) -> [String] {
     [
-      "PRAGMA journal_mode = WAL;",
-      "PRAGMA foreign_keys = ON;",
       """
       CREATE TABLE meta (
         schema_version  INTEGER NOT NULL,
@@ -289,8 +310,10 @@ final class CatalogDatabase {
   // MARK: - Error messages
 
   /// Reads `sqlite3_errmsg(_:)` for the connection backing `statement`.
-  /// Empty/missing handle paths fall back to a sentinel so a throw site is
-  /// never silent — even a degraded message beats `step 19` alone.
+  /// Only a nil handle falls back to the sentinel; when a handle is present
+  /// `sqlite3_errmsg` always returns a non-null string (the literal
+  /// "not an error" if nothing failed), so a throw site is never silent —
+  /// even a degraded message beats `step 19` alone.
   private func errorMessage(statement: OpaquePointer?) -> String {
     errorMessage(database: statement.flatMap { sqlite3_db_handle($0) })
   }
