@@ -1,7 +1,6 @@
 // Shared/ExchangeRateService+Prefetch.swift
 
 import Foundation
-import GRDB
 
 // MARK: - ExchangeRateService prefetch
 
@@ -25,7 +24,6 @@ extension ExchangeRateService {
       }
     }
 
-    let calendar = Calendar(identifier: .gregorian)
     let target = cappedToYesterday(now(), now: now, timeZone: timeZone)
     let targetString = dateFormatter.string(from: target)
 
@@ -33,26 +31,10 @@ extension ExchangeRateService {
       return  // Already up to date
     }
 
-    let fetchFrom: Date
-    if let cache = caches[code],
-      let latestDate = dateFormatter.date(from: cache.latestDate),
-      latestDate <= target
-    {
-      fetchFrom = latestDate
-    } else if let thirtyDaysAgo = calendar.date(byAdding: .day, value: -30, to: target) {
-      fetchFrom = thirtyDaysAgo
-    } else {
-      fetchFrom = target
-    }
-
-    do {
-      try await fetchAndMerge(base: code, from: fetchFrom, to: target)
-    } catch {
-      // Prefetch is best-effort — log so disk-write failures (which would
-      // otherwise be conflated with expected network errors) are observable.
-      logger.warning(
-        "prefetchLatest: fetchAndMerge failed for base \(code, privacy: .public): \(error.localizedDescription, privacy: .public)"
-      )
-    }
+    // Extend toward `target` using bounded 30-day windows driven by
+    // `ContiguousFetchPlanner`. Uses the same fetch path as
+    // `fetchToCoverDate` to keep cache bounds contiguous. Errors are
+    // best-effort — log so disk-write failures are observable.
+    await fetchToCoverDate(base: code, date: target, dateString: targetString)
   }
 }
