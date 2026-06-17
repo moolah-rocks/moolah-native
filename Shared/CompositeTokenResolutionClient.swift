@@ -16,6 +16,16 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
   /// is priced immediately. `nil` disables the local-first path (e.g. tests).
   private let localResolver: LocalContractResolver?
 
+  /// Self-refreshing CryptoCompare coin-list cache, consulted in place of an
+  /// ad-hoc full coin-list download when present. `nil` falls back to the
+  /// preloaded-`Data` parse path (tests) or a live download (no preloaded
+  /// data) so existing behaviour is preserved.
+  private let cryptoCompareLookup: (any CryptoCompareSymbolLookup)?
+  /// Self-refreshing Binance USDT-pair cache, consulted in place of an ad-hoc
+  /// full `exchangeInfo` download when present. `nil` falls back to the
+  /// preloaded-`Data` parse path or a live download.
+  private let binanceLookup: (any BinancePairLookup)?
+
   // For testing: inject pre-parsed reference data
   private let preloadedCoinList: Data?
   private let preloadedExchangeInfo: Data?
@@ -23,11 +33,15 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
   init(
     networking: NetworkingServices,
     coinGeckoApiKeyProvider: @Sendable @escaping () -> String? = { nil },
-    localResolver: LocalContractResolver? = nil
+    localResolver: LocalContractResolver? = nil,
+    cryptoCompareLookup: (any CryptoCompareSymbolLookup)? = nil,
+    binanceLookup: (any BinancePairLookup)? = nil
   ) {
     self.networking = networking
     self.coinGeckoApiKeyProvider = coinGeckoApiKeyProvider
     self.localResolver = localResolver
+    self.cryptoCompareLookup = cryptoCompareLookup
+    self.binanceLookup = binanceLookup
     self.preloadedCoinList = nil
     self.preloadedExchangeInfo = nil
   }
@@ -45,6 +59,8 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
     self.networking = networking
     self.coinGeckoApiKeyProvider = coinGeckoApiKeyProvider
     self.localResolver = localResolver
+    self.cryptoCompareLookup = nil
+    self.binanceLookup = nil
     self.preloadedCoinList = coinListData
     self.preloadedExchangeInfo = exchangeInfoData
   }
@@ -70,9 +86,12 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
       return result
     }
 
-    let coinListData = try await fetchCoinListData()
+    // Fetch the coin list only when no CryptoCompare lookup is injected; the
+    // lookup is a self-refreshing cache that replaces the ad-hoc download. The
+    // preloaded-`Data` test init has no lookup, so it still parses `Data`.
+    let coinListData = cryptoCompareLookup == nil ? try await fetchCoinListData() : nil
 
-    resolveFromCryptoCompare(
+    await resolveFromCryptoCompare(
       coinListData: coinListData,
       contractAddress: contractAddress,
       symbol: symbol,
@@ -84,7 +103,7 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
         chainId: chainId, contractAddress: contractAddress, result: &result)
     }
 
-    postConfirmCryptoCompareBySymbol(
+    await postConfirmCryptoCompareBySymbol(
       coinListData: coinListData, isNative: isNative, result: &result)
 
     try await resolveBinancePair(
@@ -100,21 +119,38 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
   /// is untrusted for ERC-20s (a spam contract can claim any ticker), so
   /// a ticker-only fallback is intentionally excluded here.
   private func resolveFromCryptoCompare(
-    coinListData: Data,
+    coinListData: Data?,
     contractAddress: String?,
     symbol: String?,
     isNative: Bool,
     result: inout TokenResolutionResult
-  ) {
+  ) async {
     if isNative, let symbol {
-      let nativeSymbols = (try? CryptoCompareClient.parseNativeSymbols(coinListData)) ?? []
-      if nativeSymbols.contains(symbol.uppercased()) {
-        result.cryptocompareSymbol = symbol.uppercased()
-        result.resolvedSymbol = symbol.uppercased()
+      let upper = symbol.uppercased()
+      let matches: Bool
+      if let lookup = cryptoCompareLookup {
+        matches = await lookup.nativeSymbols().contains(upper)
+      } else if let coinListData {
+        let nativeSymbols = (try? CryptoCompareClient.parseNativeSymbols(coinListData)) ?? []
+        matches = nativeSymbols.contains(upper)
+      } else {
+        matches = false
+      }
+      if matches {
+        result.cryptocompareSymbol = upper
+        result.resolvedSymbol = upper
       }
     } else if let contractAddress {
-      let index = (try? CryptoCompareClient.parseCoinListResponse(coinListData)) ?? [:]
-      if let ccSymbol = index[contractAddress.lowercased()] {
+      let ccSymbol: String?
+      if let lookup = cryptoCompareLookup {
+        ccSymbol = await lookup.symbol(forContract: contractAddress)
+      } else if let coinListData {
+        let index = (try? CryptoCompareClient.parseCoinListResponse(coinListData)) ?? [:]
+        ccSymbol = index[contractAddress.lowercased()]
+      } else {
+        ccSymbol = nil
+      }
+      if let ccSymbol {
         result.cryptocompareSymbol = ccSymbol
         result.resolvedSymbol = ccSymbol
       }
@@ -162,13 +198,21 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
   /// branch because CoinGecko's contract lookup would not have set
   /// `result.resolvedSymbol` for the spam contract.
   private func postConfirmCryptoCompareBySymbol(
-    coinListData: Data, isNative: Bool, result: inout TokenResolutionResult
-  ) {
+    coinListData: Data?, isNative: Bool, result: inout TokenResolutionResult
+  ) async {
     guard !isNative, result.cryptocompareSymbol == nil,
       let confirmedSymbol = result.resolvedSymbol
     else { return }
-    let symbols = (try? CryptoCompareClient.parseCoinSymbols(coinListData)) ?? []
-    if symbols.contains(confirmedSymbol) {
+    let contains: Bool
+    if let lookup = cryptoCompareLookup {
+      contains = await lookup.allSymbols().contains(confirmedSymbol)
+    } else if let coinListData {
+      let symbols = (try? CryptoCompareClient.parseCoinSymbols(coinListData)) ?? []
+      contains = symbols.contains(confirmedSymbol)
+    } else {
+      contains = false
+    }
+    if contains {
       result.cryptocompareSymbol = confirmedSymbol
     }
   }
@@ -188,10 +232,16 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
       isNative ? (result.resolvedSymbol ?? inputSymbol) : result.resolvedSymbol
     guard let baseSymbol = pairSymbolBase?.uppercased(), !baseSymbol.isEmpty
     else { return }
-    let exchangeInfoData = try await fetchExchangeInfoData()
-    let pairs = try BinanceClient.parseExchangeInfoResponse(exchangeInfoData)
     let candidate = "\(baseSymbol)USDT"
-    if pairs.contains(candidate) {
+    let hasPair: Bool
+    if let lookup = binanceLookup {
+      hasPair = await lookup.hasUsdtPair(base: baseSymbol)
+    } else {
+      let exchangeInfoData = try await fetchExchangeInfoData()
+      let pairs = try BinanceClient.parseExchangeInfoResponse(exchangeInfoData)
+      hasPair = pairs.contains(candidate)
+    }
+    if hasPair {
       result.binanceSymbol = candidate
     }
   }
