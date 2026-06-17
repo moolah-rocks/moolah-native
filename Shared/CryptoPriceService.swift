@@ -31,7 +31,7 @@ actor CryptoPriceService {
   /// `internal` (not `private`) so `fetchWindowCoalesced` in
   /// `CryptoPriceService+FetchRange.swift` can read and mutate it from the
   /// sibling-file extension. It remains actor-isolated.
-  var extensionTasks: [String: (id: UUID, task: Task<Decimal, Error>)] = [:]
+  var extensionTasks: [String: (id: UUID, task: Task<Void, Error>)] = [:]
   let database: any DatabaseWriter
   let logger = Logger(
     subsystem: "com.moolah.app", category: "CryptoPriceService")
@@ -206,36 +206,22 @@ actor CryptoPriceService {
     // `price(for:mapping:on:)`. The result series below still walks the
     // caller-supplied range; today's slot fills via `lastKnownPrice`.
     let fetchUpperBound = cappedToYesterday(range.upperBound, now: now, timeZone: timeZone)
-    let rangeStart = dateFormatter.string(from: range.lowerBound)
-    let fetchEndString = dateFormatter.string(from: fetchUpperBound)
 
-    let gregorian = Calendar.utc
-    if let cache = caches[tokenId] {
-      if rangeStart < cache.earliestDate,
-        let earliestDate = dateFormatter.date(from: cache.earliestDate),
-        let fetchEnd = gregorian.date(byAdding: .day, value: -1, to: earliestDate),
-        range.lowerBound <= fetchEnd
-      {
-        // `fetchRange` builds `from...to` as a `ClosedRange` literal, so the
-        // same boundary-day inversion that traps `extensionWindow` (a
-        // noon-anchored `range.lowerBound` on the day immediately before
-        // `earliestDate`, where `fetchEnd` is midnight of that day) is
-        // guarded here too.
-        try await fetchRange(
-          instrument: instrument, mapping: mapping, from: range.lowerBound, to: fetchEnd)
-      }
-      // Forward extension overlaps the existing latest entry — same
-      // rationale as `extensionWindow`.
-      if fetchEndString > cache.latestDate,
-        let fetchStart = dateFormatter.date(from: cache.latestDate),
-        fetchStart <= fetchUpperBound
-      {
-        try await fetchRange(
-          instrument: instrument, mapping: mapping, from: fetchStart, to: fetchUpperBound)
-      }
-    } else if range.lowerBound <= fetchUpperBound {
-      try await fetchRange(
-        instrument: instrument, mapping: mapping, from: range.lowerBound, to: fetchUpperBound)
+    // Extend the cache contiguously toward both endpoints using the bounded
+    // planner loop (no-progress guard), so a horizon-restricted provider
+    // cannot jump `earliest`/`latest` over un-fetched days (the interior-gap
+    // bug). `coverRangeContiguously` lives in
+    // `CryptoPriceService+FetchRange.swift`.
+    if range.lowerBound <= fetchUpperBound,
+      let lowerKey = DateKey.from(isoString: dateFormatter.string(from: range.lowerBound)),
+      let upperKey = DateKey.from(isoString: dateFormatter.string(from: fetchUpperBound))
+    {
+      try await coverRangeContiguously(
+        instrument: instrument,
+        mapping: mapping,
+        tokenId: tokenId,
+        lowerKey: lowerKey,
+        upperKey: upperKey)
     }
 
     let dates = generateDateSeries(in: range)
@@ -266,7 +252,7 @@ actor CryptoPriceService {
 // MARK: - Cache lookup & merge
 
 extension CryptoPriceService {
-  /// Internal (not private) so `fetchAndExtendCache` in
+  /// Internal (not private) so `extendContiguously` in
   /// `CryptoPriceService+FetchRange.swift` can call it from the sibling
   /// extension — same actor isolation, just different file.
   func lookupPrice(tokenId: String, dateString: String) -> Decimal? {

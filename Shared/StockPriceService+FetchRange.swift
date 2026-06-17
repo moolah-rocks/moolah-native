@@ -25,7 +25,7 @@ extension StockPriceService {
       DateKey.from(isoString: dateFormatter.string(from: now())) ?? requestedKey
     let config = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
     var guardSteps = 0
-    while guardSteps < 64 {
+    while guardSteps < 250 {
       guardSteps += 1
       let bounds = boundsKeys(ticker: ticker)
       guard
@@ -45,6 +45,11 @@ extension StockPriceService {
       // No progress (bounds unchanged) means genuine no-more-data; stop and
       // let a later call re-query the boundary (recent data may publish later).
       if boundsKeys(ticker: ticker) == before { break }
+    }
+    if guardSteps >= 250 {
+      logger.warning(
+        "fetchToCoverDate: guard limit reached for ticker \(ticker, privacy: .public) on \(dateString, privacy: .public)"
+      )
     }
   }
 
@@ -74,7 +79,7 @@ extension StockPriceService {
     let rangeEnd = dateFormatter.string(from: fetchEnd)
     let cal = Calendar.utc
     guard let cache = caches[ticker] else {
-      return Self.chunked(fetchStart...fetchEnd, days: 30)
+      return ContiguousFetchPlanner.chunked(fetchStart...fetchEnd, days: 30)
     }
     var result: [ClosedRange<Date>] = []
     if rangeStart < cache.earliestDate,
@@ -82,35 +87,13 @@ extension StockPriceService {
       let backEnd = cal.date(byAdding: .day, value: -1, to: earliest),
       fetchStart <= backEnd
     {
-      result += Self.chunked(fetchStart...backEnd, days: 30)
+      result += ContiguousFetchPlanner.chunked(fetchStart...backEnd, days: 30)
     }
     if rangeEnd > cache.latestDate,
       let forwardStart = dateFormatter.date(from: cache.latestDate),
       forwardStart <= fetchEnd
     {
-      result += Self.chunked(forwardStart...fetchEnd, days: 30)
-    }
-    return result
-  }
-
-  /// Splits `range` into consecutive sub-ranges of at most `days` calendar
-  /// days (UTC). Used by `uncoveredSubRanges` to cap individual fetches so
-  /// a horizon-restricted provider cannot jump the cache bounds over a void.
-  static func chunked(_ range: ClosedRange<Date>, days: Int) -> [ClosedRange<Date>] {
-    let cal = Calendar.utc
-    var result: [ClosedRange<Date>] = []
-    var start = range.lowerBound
-    while start <= range.upperBound {
-      let end: Date
-      if let candidate = cal.date(byAdding: .day, value: days, to: start) {
-        end = min(candidate, range.upperBound)
-      } else {
-        end = range.upperBound
-      }
-      result.append(start...end)
-      guard let next = cal.date(byAdding: .day, value: 1, to: end) else { break }
-      if next > range.upperBound { break }
-      start = next
+      result += ContiguousFetchPlanner.chunked(forwardStart...fetchEnd, days: 30)
     }
     return result
   }

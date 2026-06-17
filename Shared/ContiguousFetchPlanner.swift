@@ -14,22 +14,40 @@ enum ContiguousFetchPlanner {
   struct Config {
     /// Max span of a single window (≈30 days). Large enough to clear a
     /// weekend/holiday run, small enough that a provider serves it wholesale.
-    var windowDays: Int
+    let windowDays: Int
     /// Days past `today` a forward window may reach (≈2). Providers tolerate
     /// slight future dates and clamp, so this never withholds a
     /// forward-timezone market's already-published close.
-    var forwardBuffer: Int
+    let forwardBuffer: Int
   }
+
+  /// Shared formatter for `addingDays` — `[.withFullDate]`, UTC. Hoisted to a
+  /// static so the hot per-window loop does not allocate an
+  /// `ISO8601DateFormatter` on every call. `ISO8601DateFormatter`'s
+  /// `date(from:)` / `string(from:)` are documented thread-safe and the
+  /// formatter is configured once and never mutated, so `nonisolated(unsafe)`
+  /// is sound here.
+  nonisolated(unsafe) private static let dateFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withFullDate]
+    formatter.timeZone = TimeZone.utc
+    return formatter
+  }()
 
   /// Returns the next fetch window to issue, or `nil` when the requested date
   /// is already inside `[earliest, latest]` (read via prior-trading-day
   /// fallback, no fetch needed).
   ///
-  /// - earliest/latest: current contiguous bounds as `DateKey`, or `nil`
-  ///   when the series is empty (cold cache).
-  /// - requested: the `DateKey` the caller needs.
-  /// - today: the `DateKey` for "now" (callers pass `now()`'s day).
-  /// - config: window sizing and forward-buffer constants.
+  /// - Parameters:
+  ///   - earliest: current contiguous lower bound as `DateKey`, or `nil`
+  ///     when the series is empty (cold cache).
+  ///   - latest: current contiguous upper bound as `DateKey`, or `nil`
+  ///     when the series is empty (cold cache).
+  ///   - requested: the `DateKey` the caller needs.
+  ///   - today: the `DateKey` for "now" (callers pass `now()`'s day).
+  ///   - config: window sizing and forward-buffer constants.
+  /// - Returns: the next fetch window as a `ClosedRange<Int32>`, or `nil`
+  ///   when the requested date is already inside `[earliest, latest]`.
   static func nextWindow(
     earliest: Int32?,
     latest: Int32?,
@@ -60,14 +78,34 @@ enum ContiguousFetchPlanner {
   /// `DateKey` — the encoding is not contiguous across month ends.
   static func addingDays(_ days: Int, to key: Int32) -> Int32 {
     let iso = DateKey.isoString(key)
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withFullDate]
-    formatter.timeZone = TimeZone.utc
     guard
-      let date = formatter.date(from: iso),
+      let date = dateFormatter.date(from: iso),
       let shifted = Calendar.utc.date(byAdding: .day, value: days, to: date),
-      let result = DateKey.from(isoString: formatter.string(from: shifted))
+      let result = DateKey.from(isoString: dateFormatter.string(from: shifted))
     else { return key }
+    return result
+  }
+
+  /// Splits `range` into consecutive sub-ranges of at most `days` calendar
+  /// days (UTC). Used by the price/rate services' `uncoveredSubRanges` to
+  /// cap individual fetches so a horizon-restricted provider cannot jump the
+  /// cache bounds over a void.
+  static func chunked(_ range: ClosedRange<Date>, days: Int) -> [ClosedRange<Date>] {
+    let cal = Calendar.utc
+    var result: [ClosedRange<Date>] = []
+    var start = range.lowerBound
+    while start <= range.upperBound {
+      let end: Date
+      if let candidate = cal.date(byAdding: .day, value: days, to: start) {
+        end = min(candidate, range.upperBound)
+      } else {
+        end = range.upperBound
+      }
+      result.append(start...end)
+      guard let next = cal.date(byAdding: .day, value: 1, to: end) else { break }
+      if next > range.upperBound { break }
+      start = next
+    }
     return result
   }
 

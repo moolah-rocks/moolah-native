@@ -5,15 +5,16 @@ import Testing
 
 @testable import Moolah
 
-/// Regression cover for the inverted-range trap in
-/// `CryptoPriceService.extensionWindow`. The backward extension built
-/// `requestedDate...fetchEnd`, where `fetchEnd` is midnight of
-/// (`earliestDate` − 1) while `requestedDate` is a noon-anchored day
-/// token from the daily-balance walk. When the requested day is exactly
-/// that boundary day, `requestedDate` (noon) > `fetchEnd` (midnight of the
-/// same calendar day), so the `ClosedRange` initializer trapped
-/// (`EXC_BREAKPOINT`) — crashing on launch for any profile whose chart
-/// history reaches the day before a crypto price cache begins.
+/// Regression cover for the inverted-range trap in the crypto cache
+/// backward-extension path. The extension built `requestedDate...fetchEnd`,
+/// where `fetchEnd` is midnight of (`earliestDate` − 1) while
+/// `requestedDate` is a noon-anchored day token from the daily-balance walk.
+/// When the requested day is exactly that boundary day, `requestedDate`
+/// (noon) > `fetchEnd` (midnight of the same calendar day), so the
+/// `ClosedRange` initializer trapped (`EXC_BREAKPOINT`) — crashing on launch
+/// for any profile whose chart history reaches the day before a crypto price
+/// cache begins. The bounded `extendContiguously` /
+/// `ContiguousFetchPlanner`-driven path no longer builds such a range.
 @Suite("CryptoPriceService — boundary range")
 struct CryptoPriceServiceBoundaryRangeTests {
   private let ethInstrument = Instrument.crypto(
