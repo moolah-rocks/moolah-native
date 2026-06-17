@@ -76,37 +76,73 @@ extension ExchangeRateService {
   }
 }
 
-// MARK: - Sub-range chunking for rates(from:to:in:)
+// MARK: - Contiguous range extension for rates(from:to:in:)
 
 extension ExchangeRateService {
-  /// Returns the uncovered sub-ranges of `[fetchStart, fetchEnd]` not
-  /// already in the cache, split into at most 30-day windows. No single
-  /// fetch can span an un-served interior, keeping the cache bounds
-  /// contiguous and preventing a horizon-restricted provider from jumping
-  /// `latest` over un-fetched days.
-  func uncoveredSubRanges(
-    base: String, fetchStart: Date, fetchEnd: Date
-  ) -> [ClosedRange<Date>] {
-    let rangeStart = dateFormatter.string(from: fetchStart)
-    let rangeEnd = dateFormatter.string(from: fetchEnd)
-    let cal = Calendar.utc
-    guard let cache = caches[base] else {
-      return ContiguousFetchPlanner.chunked(fetchStart...fetchEnd, days: 30)
+  /// Covers `[lowerKey, upperKey]` contiguously by running the bounded
+  /// planner loop toward each endpoint with a no-progress guard. Unlike a
+  /// precomputed chunk list (which fetches every window upfront and so can
+  /// leave an interior gap when a horizon-restricted provider serves only a
+  /// recent subset), this stops a direction the moment a window yields no
+  /// boundary progress — keeping `[earliest, latest]` contiguous exactly as
+  /// the single-rate `fetchToCoverDate` does. Used by
+  /// `rates(from:to:in:)`.
+  ///
+  /// Errors are swallowed (FX falls back to cached on failure), mirroring
+  /// the existing `fetchToCoverDate` contract. `CancellationError` is
+  /// re-thrown to preserve cooperative-cancellation semantics.
+  func coverRangeContiguously(
+    base: String,
+    lowerKey: Int32,
+    upperKey: Int32
+  ) async throws {
+    let todayKey =
+      DateKey.from(isoString: dateFormatter.string(from: now())) ?? upperKey
+    let config = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
+    // Cover the forward endpoint first, then the backward one. Each call
+    // anchors at the live cache bounds, so order does not create a gap.
+    for requestedKey in [upperKey, lowerKey] {
+      var guardSteps = 0
+      while guardSteps < 250 {
+        guardSteps += 1
+        let bounds = boundsKeys(base: base)
+        guard
+          let window = ContiguousFetchPlanner.nextWindow(
+            earliest: bounds.earliest,
+            latest: bounds.latest,
+            requested: requestedKey,
+            today: todayKey,
+            config: config)
+        else { break }  // endpoint now in range
+        let before = bounds
+        let fetchStart =
+          dateFormatter.date(from: DateKey.isoString(window.lowerBound))
+          ?? dateFormatter.date(from: DateKey.isoString(requestedKey))
+          ?? now()
+        let fetchEnd =
+          dateFormatter.date(from: DateKey.isoString(window.upperBound))
+          ?? dateFormatter.date(from: DateKey.isoString(requestedKey))
+          ?? now()
+        do {
+          try await fetchAndMerge(base: base, from: fetchStart, to: fetchEnd)
+        } catch is CancellationError {
+          throw CancellationError()
+        } catch {
+          // Fetch failed — provider errors are swallowed; caller falls back to cached.
+          logger.warning(
+            "coverRangeContiguously window failed for base \(base, privacy: .public): \(error.localizedDescription, privacy: .public)"
+          )
+          break
+        }
+        // No progress (bounds unchanged) means genuine no-more-data; stop and
+        // let a later call re-query the boundary (data may publish later).
+        if boundsKeys(base: base) == before { break }
+      }
+      if guardSteps >= 250 {
+        logger.warning(
+          "coverRangeContiguously: guard limit reached for base \(base, privacy: .public)"
+        )
+      }
     }
-    var result: [ClosedRange<Date>] = []
-    if rangeStart < cache.earliestDate,
-      let earliest = dateFormatter.date(from: cache.earliestDate),
-      let backEnd = cal.date(byAdding: .day, value: -1, to: earliest),
-      fetchStart <= backEnd
-    {
-      result += ContiguousFetchPlanner.chunked(fetchStart...backEnd, days: 30)
-    }
-    if rangeEnd > cache.latestDate,
-      let forwardStart = dateFormatter.date(from: cache.latestDate),
-      forwardStart <= fetchEnd
-    {
-      result += ContiguousFetchPlanner.chunked(forwardStart...fetchEnd, days: 30)
-    }
-    return result
   }
 }

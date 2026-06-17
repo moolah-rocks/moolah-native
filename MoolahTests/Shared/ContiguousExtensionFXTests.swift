@@ -135,22 +135,40 @@ struct ContiguousExtensionFXTests {
 
   // MARK: - Range contiguity
 
-  /// A `rates(from:to:in:)` range request using a horizon-restricted client
-  /// must not create an interior hole larger than a long weekend.
+  /// A `rates(from:to:in:)` range request spanning a forward-horizon hole must
+  /// not create an interior gap larger than a long weekend.
+  ///
+  /// Trigger sequence (mirrors `farBackSeedThenTodayRequestLeavesOnlyWeekendGaps`
+  /// but via the range API instead of the single-rate API):
+  ///   1. Seed far-back date (2024-07-12) using an all-serving client so the
+  ///      cache has earliest≈2024-06-12, latest=2024-07-12.
+  ///   2. Request rangeStart…today with a horizon-restricted client
+  ///      (serves only the past 365 days, i.e. ≥ 2025-06-17).
+  ///      Old logic: `uncoveredSubRanges` precomputes ALL forward chunks
+  ///      from 2024-07-12 to 2026-06-16 upfront. The horizon client
+  ///      returns data starting at 2025-06-17; a later chunk that lands in
+  ///      the served window advances `latest` past earlier empty chunks,
+  ///      leaving an interior void of ~339 days.
+  ///      New logic: `coverRangeContiguously` steps one window at a time
+  ///      anchored at the live bounds; a window that returns no data stops
+  ///      the loop, so no jump occurs.
   @Test
-  func rangeRequestLeavesOnlyWeekendGaps() async throws {
+  func rangeRequestLeavesNoInteriorGap() async throws {
     let today = utcDay("2026-06-17")
     let database = try ProfileIndexDatabase.openInMemory()
 
-    // Seed today's data so the cache has a recent bound.
+    // Step 1: Seed a far-back date so the cache has latest ≈ 2024-07-12.
     let seeder = makeService(
       client: AllServingWeekdayRateClient(),
       database: database,
       now: today
     )
-    _ = try? await seeder.rate(from: .USD, to: .AUD, on: today)
+    _ = try? await seeder.rate(from: .USD, to: .AUD, on: utcDay("2024-07-12"))
 
-    // Request a range far back using a horizon-restricted client.
+    // Step 2: Request rangeStart…today using a horizon-restricted client.
+    // Old uncoveredSubRanges path precomputes all chunks; a later chunk that
+    // returns data jumps `latest` past earlier empty chunks, creating an
+    // ~11-month interior void.
     let service = makeService(
       client: WeekdayHorizonRateClient(today: today, horizonDays: 365),
       database: database,
