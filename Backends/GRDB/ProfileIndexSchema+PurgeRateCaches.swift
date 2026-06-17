@@ -3,6 +3,23 @@
 import Foundation
 import GRDB
 
+// MARK: - v6 migration body
+//
+// Empties all six rate-cache tables in the profile-index database —
+// `crypto_price`, `crypto_token_meta`, `stock_price`,
+// `stock_ticker_meta`, `exchange_rate`, `exchange_rate_meta`.
+//
+// Why a one-shot purge: the caches were built by the pre-contiguous fetch
+// logic, which could leave arbitrary gaps between the recorded
+// `earliest_date` and `latest_date` bounds. Those bounds are now trusted as
+// contiguous by the fixed `ContiguousFetchPlanner`-driven services, so stale
+// gappy rows must be wiped before the new logic takes over.
+//
+// The tables are local, derived, and un-synced — safe to truncate. They
+// re-warm automatically as the price services serve requests.
+// `DATABASE_SCHEMA_GUIDE.md §9`'s "rate caches kept forever" retention rule
+// is unaffected — only the *rows* are purged, not the tables themselves.
+
 extension ProfileIndexSchema {
   /// Body of the `v6_purge_rate_caches` migration.
   ///

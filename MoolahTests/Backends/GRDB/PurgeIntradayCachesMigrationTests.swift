@@ -50,7 +50,7 @@ struct PurgeIntradayCachesMigrationTests {
         "stock_price", "stock_ticker_meta",
         "crypto_price", "crypto_token_meta",
       ] {
-        let count = try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM \(table)") ?? -1
+        let count = try Table(table).fetchCount(database)
         #expect(count == 0, "expected \(table) to be empty after v7, got \(count)")
       }
     }

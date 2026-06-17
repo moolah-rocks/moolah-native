@@ -47,7 +47,7 @@ struct PurgeRateCachesMigrationTests {
         "stock_price", "stock_ticker_meta",
         "exchange_rate", "exchange_rate_meta",
       ] {
-        let count = try Int.fetchOne(database, sql: "SELECT COUNT(*) FROM \(table)") ?? -1
+        let count = try Table(table).fetchCount(database)
         #expect(
           count == 0, "expected \(table) to be empty after v6_purge_rate_caches, got \(count)")
       }
