@@ -87,8 +87,8 @@ enum ContiguousFetchPlanner {
   }
 
   /// Splits `range` into consecutive sub-ranges of at most `days` calendar
-  /// days (UTC). Used by the price/rate services' `uncoveredSubRanges` to
-  /// cap individual fetches so a horizon-restricted provider cannot jump the
+  /// days (UTC). Used by the exchange-rate and stock-price services to cap
+  /// individual fetches so a horizon-restricted provider cannot jump the
   /// cache bounds over a void.
   static func chunked(_ range: ClosedRange<Date>, days: Int) -> [ClosedRange<Date>] {
     let cal = Calendar.utc

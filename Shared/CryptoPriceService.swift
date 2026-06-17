@@ -38,11 +38,11 @@ actor CryptoPriceService {
 
   // `dateFormatter`, `now`, and `timeZone` are `internal` (not `private`)
   // because the warm path in `CryptoPriceService+FetchRange.swift`
-  // (`warmRange` and its `uncoveredSubRanges` helper) reuses the same
-  // ISO day formatting, injected clock, and zone the in-file
-  // cache-extension decision uses, so the sibling-file extension must see
-  // them. They remain actor-isolated; the access modifier is internal so
-  // the sibling-file extension can read them.
+  // (`warmRange` and its bounded-window loop) reuses the same ISO day
+  // formatting, injected clock, and zone the in-file cache-extension
+  // decision uses, so the sibling-file extension must see them. They
+  // remain actor-isolated; the access modifier is internal so the
+  // sibling-file extension can read them.
   let dateFormatter: ISO8601DateFormatter
   private let resolutionClient: TokenResolutionClient
   /// Injected clock so tests can pin "today" deterministically.
