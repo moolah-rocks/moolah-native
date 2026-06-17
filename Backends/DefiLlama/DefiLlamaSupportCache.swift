@@ -42,6 +42,69 @@ actor DefiLlamaSupportCache {
     database.close()
   }
 
+  // MARK: - refreshSupport
+
+  /// 24h staleness window for re-probing (matches `CatalogRefresh.defaultMaxAge`).
+  private static let maxAge: TimeInterval = 24 * 3600
+
+  /// Re-probes DefiLlama support for `registrations` whose row is missing, older
+  /// than 24h, or currently unsupported (so a token that gains liquidity later
+  /// is re-detected). One batched `/prices/first` call; `.spam` tokens and
+  /// tokens with no derivable coin id are skipped. Best-effort: a network
+  /// failure leaves all rows untouched (logged); cancellation returns early.
+  func refreshSupport(for registrations: [CryptoRegistration], now: Date) async {
+    // Build the to-probe set: coinId → instrumentId.
+    var coinToInstrument: [String: String] = [:]
+    for registration in registrations {
+      guard registration.pricingStatus != .spam else { continue }
+      let instrumentId = registration.instrument.id
+      if let existing = support(for: instrumentId),
+        existing.supported,
+        now.timeIntervalSince(existing.lastChecked) < Self.maxAge
+      {
+        continue  // fresh + supported → skip
+      }
+      guard
+        let coinId = DefiLlamaCoinID.make(
+          instrumentId: instrumentId, coingeckoId: registration.mapping.coingeckoId)
+      else { continue }
+      coinToInstrument[coinId] = instrumentId
+    }
+    guard !coinToInstrument.isEmpty else { return }
+    if Task.isCancelled { return }
+
+    let sortedCoinIds = coinToInstrument.keys.sorted()
+    let url = DefiLlamaWireFormat.firstURL(coinIds: sortedCoinIds)
+    let firstPoints: [String: DefiLlamaWireFormat.FirstPoint]
+    do {
+      let (data, _) = try await networking.client(forHost: "coins.llama.fi")
+        .data(for: URLRequest(url: url))
+      firstPoints = try DefiLlamaWireFormat.parseFirst(data)
+    } catch {
+      Self.log.error("refreshSupport failed: \(String(describing: error), privacy: .public)")
+      return  // leave rows untouched; next launch retries
+    }
+    if Task.isCancelled { return }
+
+    for (coinId, instrumentId) in coinToInstrument {
+      if let point = firstPoints[coinId] {
+        upsert(
+          instrumentId: instrumentId,
+          supported: true,
+          earliestDate: DefiLlamaWireFormat.isoDay(from: point.timestamp),
+          lastChecked: now)
+      } else {
+        upsert(
+          instrumentId: instrumentId,
+          supported: false,
+          earliestDate: nil,
+          lastChecked: now)
+      }
+    }
+  }
+
+  // MARK: - Stored support query
+
   /// The stored support row for `instrumentId`, or `nil` if never probed.
   /// Infallible: a read failure logs and returns `nil` (treated as "unknown").
   func support(for instrumentId: String) -> DefiLlamaSupport? {
