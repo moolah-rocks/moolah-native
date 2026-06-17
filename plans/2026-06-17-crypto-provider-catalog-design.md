@@ -115,21 +115,32 @@ addresses come from the authoritative token lists / CoinGecko platform map —
 - `cryptocompare_symbol`: symbol listed in the CC coinlist → use it.
 
 **Transient-failure safety (hard requirements from the issue):**
-- A CryptoCompare key is **required** at run time — without it we cannot
-  *confirm* CC availability, so we must not record "CC absent".
-- Each provider lookup is classified `present` / `definitively-absent` /
-  `unknown`. `unknown` = the *catalog download* for that provider returned
-  HTTP ≠ 200, `Response: "Error"`, `Type: 99` (rate limit), or
-  network/timeout.
-- **Merge-only / additive:** the script reads the committed generated file and
-  merges. A confirmed `present` adds/upgrades a column; a confirmed
-  `definitively-absent` may clear *only* if previously sourced from the same
-  run's confirmed data; an `unknown` **always preserves** the committed value.
-- **Fail loudly:** if a provider's *catalog download itself* fails, exit
-  non-zero and **write nothing** (no partial table). A successful download
-  where an individual token is merely missing is a normal `definitively-absent`,
-  not a failure.
-- **Idempotent:** re-running with the same upstream data produces no diff.
+- A CryptoCompare key is **required to be configured** at run time (the script
+  aborts before any download if `CRYPTOCOMPARE_API_KEY` is unset) — without a
+  key we could never *confirm* CC availability, so we must not run a CC-blind
+  pass that records "CC absent".
+- Each provider catalog download succeeds or fails as a whole. A provider is
+  `available` (HTTP 200, parseable) or `unavailable` (HTTP ≠ 200,
+  `Response: "Error"`, `Type: 99` rate-limit, network/timeout, unparseable).
+- **Merge-only / additive (never drops):** the script reads the committed
+  generated catalog and merges per column. From an `available` provider a
+  token is `present` (add/upgrade the column) or `absent` (leave the column
+  as-is — we never *clear* a committed column, only fill/upgrade). An
+  `unavailable` provider contributes nothing, so every committed column it
+  would touch is preserved unchanged. The written table is therefore always a
+  superset-merge of the committed table — it can never drop a symbol.
+- **Fail loudly, but never destructively:** because the write is provably
+  additive, the script always writes the merged superset (so a keyless
+  Binance/CoinGecko upgrade is never lost just because CC is rate-limited).
+  It then **exits non-zero** if *any* provider was `unavailable`, printing a
+  loud per-provider warning. Exit 0 only when all three downloaded cleanly.
+- **CI gates on exit code:** the weekly workflow opens a PR only when the
+  script exits 0 **and** produced a diff. A rate-limited week → non-zero exit
+  → no auto-PR (the incomplete run never lands unattended). An operator
+  running manually may still inspect and commit a non-zero (CC-unavailable)
+  run, since the diff is guaranteed additive.
+- **Idempotent:** re-running with the same upstream data (after `just format`)
+  produces no diff.
 
 **Output:** `Shared/CryptoImport/BundledCryptoProviderCatalog.swift`
 (generated, DO-NOT-EDIT header, same style as
@@ -195,9 +206,11 @@ price fetch (existing, unchanged)
 
 - **Reconciliation**: best-effort; per-instrument failures logged and skipped;
   cancellation returns immediately. A missing/empty catalog is a no-op.
-- **Vendor script**: download failure → non-zero exit, no write. Per-token
-  provider absence → recorded as absent (a normal outcome). Rate-limit /
-  network on a provider catalog → loud failure (we cannot trust partial data).
+- **Vendor script**: missing CC key → abort before any download. A provider
+  catalog download failure → that provider contributes nothing (committed
+  columns preserved), the merged superset is still written, and the script
+  exits non-zero with a loud warning. Per-token absence from an `available`
+  provider → the column is left as committed (we fill/upgrade, never clear).
 - **Merge semantics**: never downgrade a populated stored column from an
   `unknown` result — both in the script (vs committed file) and in
   reconciliation (vs stored row).
@@ -218,6 +231,32 @@ price fetch (existing, unchanged)
   (present / absent / rate-limited Type 99) → assert the merge preserves the
   committed mapping on `unknown` and only writes on confirmed results, and that
   a re-run is a no-op.
+
+## Relationship to the existing catalog infrastructure
+
+The app already ships a self-refreshing **CoinGecko** catalog —
+`SQLiteCoinGeckoCatalog` (an on-disk `catalog.sqlite`) refreshed every 24h via
+ETag-conditional GETs against `/coins/list` + `/asset_platforms`, exposed
+offline through `LocalContractResolver` (`(chainId, contract) → coingeckoId`)
+and consulted local-first by `CompositeTokenResolutionClient`. There is **no**
+equivalent for CryptoCompare or Binance: `fetchCoinListData()` pulls the CC
+`/data/all/coinlist` on demand and discards it (no URLCache, no table), and
+the Binance pair is resolved live per registration.
+
+This places the new work precisely: `coingeckoId` is already locally
+resolvable, so the bundled `CryptoProviderCatalog`'s distinct value is the
+**`binance_symbol` / `cryptocompare_symbol` layer** (deep, keyless history)
+plus the **re-detection** the CoinGecko catalog does not perform — provider
+ids on a registered token are resolved once and never revisited. The new
+catalog still carries `coingeckoId` (harmless, merge-only, useful for fresh
+seeding), but the columns that actually fix #1140 are the other two.
+
+**Future direction (not this change):** because a self-refreshing catalog
+pattern already exists, the "complete supported-token list" vision (Option B)
+could alternatively be realised as a runtime-refreshed Binance/CC cache that
+reconciliation reads — extending the 24h `refreshIfStale()` model rather than
+shipping a static resource. The `CryptoProviderCatalog` protocol seam admits
+either; Option A ships now.
 
 ## Known constraints
 
