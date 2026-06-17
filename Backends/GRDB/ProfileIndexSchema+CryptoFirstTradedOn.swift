@@ -1,5 +1,3 @@
-// Backends/GRDB/ProfileIndexSchema+CryptoFirstTradedOn.swift
-
 import Foundation
 import GRDB
 
