@@ -1,4 +1,3 @@
-// Backends/CoinGecko/CoinGeckoCatalogSchema.swift
 import Foundation
 
 /// Single source of truth for the CoinGecko-catalogue SQLite schema.
@@ -6,38 +5,35 @@ import Foundation
 /// implementation drops and recreates the file rather than running a
 /// migration.
 ///
+/// The engine-owned `meta` / `etag` bookkeeping tables and the connection
+/// PRAGMAs are provided by `CatalogDatabase.baseSchemaStatements(_:)`; this
+/// type contributes only the CoinGecko-specific `coin` / `coin_platform` /
+/// `platform` tables, the `coin_fts` virtual table and its sync triggers,
+/// and the contract-lookup index. `schemaStatements(schemaVersion:)`
+/// composes the engine base first, then the CoinGecko tables.
+///
 /// Retention: this is a derived cache of the public CoinGecko catalogue.
 /// The whole table contents are replaced atomically on every successful
-/// refresh (bounded by `maxAge` = 24 h in `SQLiteCoinGeckoCatalog`), and
-/// on a schema-version mismatch the entire SQLite file is dropped and
-/// recreated clean. The source of truth is the live CoinGecko API, so
-/// no per-row TTL or scheduled purge migration is needed —
-/// `replaceAll` and the drop-and-recreate path together bound staleness.
+/// refresh (bounded by `maxAge` = 24 h in `CatalogRefresh`), and on a
+/// schema-version mismatch the entire SQLite file is dropped and recreated
+/// clean. The source of truth is the live CoinGecko API, so no per-row TTL
+/// or scheduled purge migration is needed — `replaceAll` and the
+/// drop-and-recreate path together bound staleness.
 enum CoinGeckoCatalogSchema {
-  static let version: Int = 1
+  static let version: Int = 2
 
-  static let statements: [String] = [
-    "PRAGMA journal_mode = WAL;",
-    "PRAGMA foreign_keys = ON;",
-
-    """
-    CREATE TABLE meta (
-      schema_version  INTEGER NOT NULL,
-      last_fetched    REAL,
-      coins_etag      TEXT,
-      platforms_etag  TEXT
-    );
-    """,
-
-    "INSERT INTO meta (schema_version) VALUES (\(version));",
-
+  /// CoinGecko-specific tables, FTS index, and triggers. `coin`,
+  /// `coin_platform`, and `platform` are `STRICT`; the FTS5 virtual table
+  /// `coin_fts` and its triggers cannot be `STRICT` (FTS5 does not support
+  /// it), so they remain plain.
+  static let coinGeckoStatements: [String] = [
     """
     CREATE TABLE coin (
       rowid          INTEGER PRIMARY KEY,
       coingecko_id   TEXT NOT NULL UNIQUE,
       symbol         TEXT NOT NULL,
       name           TEXT NOT NULL
-    );
+    ) STRICT;
     """,
 
     """
@@ -47,7 +43,7 @@ enum CoinGeckoCatalogSchema {
       contract_address TEXT NOT NULL,
       PRIMARY KEY (coingecko_id, platform_slug),
       FOREIGN KEY (coingecko_id) REFERENCES coin(coingecko_id) ON DELETE CASCADE
-    );
+    ) STRICT;
     """,
 
     """
@@ -60,7 +56,7 @@ enum CoinGeckoCatalogSchema {
       slug      TEXT PRIMARY KEY,
       chain_id  INTEGER,
       name      TEXT NOT NULL
-    );
+    ) STRICT;
     """,
 
     """
@@ -93,6 +89,12 @@ enum CoinGeckoCatalogSchema {
     END;
     """,
   ]
+
+  /// Full DDL for a fresh catalog file: the engine-owned `meta` / `etag`
+  /// tables (which MUST come first) followed by the CoinGecko tables.
+  static func schemaStatements(schemaVersion: Int) -> [String] {
+    CatalogDatabase.baseSchemaStatements(schemaVersion: schemaVersion) + coinGeckoStatements
+  }
 
   /// Built-in priority order for picking a coin's preferred chain when it
   /// is listed on multiple platforms. Slugs not in this list fall through
