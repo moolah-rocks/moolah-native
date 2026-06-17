@@ -49,17 +49,22 @@ final class ProfileSession: Identifiable {
   let exchangeRateService: ExchangeRateService
   let stockPriceService: StockPriceService
   let cryptoPriceService: CryptoPriceService
-  let instrumentRegistry: (any InstrumentRegistryRepository)?
-  let cryptoTokenStore: CryptoTokenStore?
-  let instrumentSearchService: InstrumentSearchService?
-  let coinGeckoCatalog: (any CoinGeckoCatalog)?
+  // Assigned once in `finishInit` (not the main `init` body) to keep `init`
+  // within the `function_body_length` budget — same pattern as
+  // `accountGroupStore` / `cryptoSyncStore` below. `private(set) var` rather
+  // than `let` because Swift can't prove a `let` is set in a method `init`
+  // calls.
+  private(set) var instrumentRegistry: (any InstrumentRegistryRepository)?
+  private(set) var cryptoTokenStore: CryptoTokenStore?
+  private(set) var instrumentSearchService: InstrumentSearchService?
+  private(set) var coinGeckoCatalog: (any CoinGeckoCatalog)?
   /// Self-refreshing CryptoCompare / Binance token caches the resolution
   /// client reads from. Exposed so PR2's preset reconciliation can reach the
   /// same warm cache instances. `nil` when cache construction failed (or under
   /// UI testing, where overrides supply the resolver directly).
-  let cryptoCompareCache: CryptoCompareTokenCache?
-  let binanceCache: BinanceTokenCache?
-  let tokenResolutionClient: (any TokenResolutionClient)?
+  private(set) var cryptoCompareCache: CryptoCompareTokenCache?
+  private(set) var binanceCache: BinanceTokenCache?
+  private(set) var tokenResolutionClient: (any TokenResolutionClient)?
   /// Orchestrator for crypto-wallet auto-import. `nil` when the profile
   /// has no `instrumentRegistry` (preview / degraded launches). Set
   /// once in `finishInit` after `init` returns; effectively `let` from
@@ -194,6 +199,8 @@ final class ProfileSession: Identifiable {
     )
     self.backend = backend
 
+    // Built here (it needs the init-locals `services` / `resolvedNetworking` /
+    // `syncCoordinator`) but assigned in `finishInit` — see its declarations.
     let registryWiring = Self.makeRegistryWiring(
       backend: backend,
       cryptoPriceService: services.cryptoPrice,
@@ -202,20 +209,15 @@ final class ProfileSession: Identifiable {
       networking: resolvedNetworking,
       sharedRegistryStore: syncCoordinator?.sharedRegistryStore
     )
-    self.instrumentRegistry = registryWiring.registry
-    self.cryptoTokenStore = registryWiring.cryptoTokenStore
-    self.instrumentSearchService = registryWiring.searchService
-    self.coinGeckoCatalog = registryWiring.coinGeckoCatalog
-    self.cryptoCompareCache = registryWiring.cryptoCompareCache
-    self.binanceCache = registryWiring.binanceCache
-    self.tokenResolutionClient = registryWiring.tokenResolutionClient
-    self.catalogRefreshTask = registryWiring.catalogRefreshTask
-    self.cacheRefreshTasks = registryWiring.cacheRefreshTasks
     let stores = Self.makeDomainStores(profile: profile, backend: backend)
-    (authStore, accountStore, categoryStore, earmarkStore) =
-      (stores.auth, stores.account, stores.category, stores.earmark)
-    (transactionStore, analysisStore, investmentStore, reportingStore) =
-      (stores.transaction, stores.analysis, stores.investment, stores.reporting)
+    self.authStore = stores.auth
+    self.accountStore = stores.account
+    self.categoryStore = stores.category
+    self.earmarkStore = stores.earmark
+    self.transactionStore = stores.transaction
+    self.analysisStore = stores.analysis
+    self.investmentStore = stores.investment
+    self.reportingStore = stores.reporting
     // CSV import: ImportStore owns the pipeline orchestration; the
     // staging store lives per-profile on disk so pending/failed files
     // follow the profile across app restarts.
@@ -227,7 +229,7 @@ final class ProfileSession: Identifiable {
     self.folderScanner = importPipeline.scanner
     self.folderWatcher = importPipeline.watcher
 
-    finishInit()
+    finishInit(registryWiring: registryWiring)
   }
 
   /// Tail of the initialiser. Wires
@@ -242,7 +244,18 @@ final class ProfileSession: Identifiable {
   /// without an explicit reload step. The session needs no reference
   /// to `SyncCoordinator` here — apply drives GRDB writes and the
   /// observation streams take it from there.
-  private func finishInit() {
+  private func finishInit(registryWiring: RegistryWiring) {
+    // MUST run before `makeCryptoSyncWiring` / `seedBuiltInCryptoPresets`
+    // below, which read `instrumentRegistry`.
+    self.instrumentRegistry = registryWiring.registry
+    self.cryptoTokenStore = registryWiring.cryptoTokenStore
+    self.instrumentSearchService = registryWiring.searchService
+    self.coinGeckoCatalog = registryWiring.coinGeckoCatalog
+    self.cryptoCompareCache = registryWiring.cryptoCompareCache
+    self.binanceCache = registryWiring.binanceCache
+    self.tokenResolutionClient = registryWiring.tokenResolutionClient
+    self.catalogRefreshTask = registryWiring.catalogRefreshTask
+    self.cacheRefreshTasks = registryWiring.cacheRefreshTasks
     // AccountGroupStore is constructed here (rather than the main
     // `init` body) so the init stays within the
     // `function_body_length` budget — same pattern as `cryptoSyncStore`
