@@ -160,4 +160,56 @@ final class DefiLlamaClientTests {
     _ = try await client.dailyPrices(for: wethMapping, in: day...day)
     #expect(await cache.support(for: wethMapping.instrumentId)?.supported == true)
   }
+
+  @Test("a window entirely before the cached floor returns empty with no network call")
+  func clampBelowFloor() async throws {
+    let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("dl-floor-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+    let networking = makeNetworking()
+    let cache = try DefiLlamaSupportCache.make(directory: tempDir, networking: networking)
+    // Supported token whose first-liquidity floor is 2021-01-01.
+    await cache.upsert(
+      instrumentId: wethMapping.instrumentId, supported: true, earliestDate: "2021-01-01",
+      lastChecked: Date())
+    let hitFlag = LockedBox(false)
+    let coinId = "ethereum:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    StubURLProtocol.handlers["coins.llama.fi:/chart/\(coinId)"] = { _ in
+      hitFlag.set(true)
+      return (HTTPURLResponse.ok(etag: ""), Data("{\"coins\":{}}".utf8))
+    }
+    let client = DefiLlamaClient(networking: networking, supportCache: cache)
+    // A window wholly in 2019 — entirely before the 2021-01-01 floor.
+    let from = Date(timeIntervalSince1970: 1_546_300_800)  // 2019-01-01
+    let to = Date(timeIntervalSince1970: 1_548_979_200)  // 2019-02-01
+    let prices = try await client.dailyPrices(for: wethMapping, in: from...to)
+    #expect(prices.isEmpty)
+    #expect(hitFlag.get() == false)  // pre-liquidity window clamped; no network call
+  }
+
+  @Test("a window whose upperBound equals the floor still fetches (strict boundary)")
+  func clampExactFloorBoundaryFetches() async throws {
+    let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("dl-floor-eq-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+    let networking = makeNetworking()
+    let cache = try DefiLlamaSupportCache.make(directory: tempDir, networking: networking)
+    await cache.upsert(
+      instrumentId: wethMapping.instrumentId, supported: true, earliestDate: "2021-01-01",
+      lastChecked: Date())
+    let hitFlag = LockedBox(false)
+    let coinId = "ethereum:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    StubURLProtocol.handlers["coins.llama.fi:/chart/\(coinId)"] = { _ in
+      hitFlag.set(true)
+      return (HTTPURLResponse.ok(etag: ""), Data("{\"coins\":{}}".utf8))
+    }
+    let client = DefiLlamaClient(networking: networking, supportCache: cache)
+    // upperBound lands exactly on the floor day — the clamp is strict (`<`),
+    // so this must NOT be clamped; the floor day itself may carry data.
+    let floorDay = Date(timeIntervalSince1970: 1_609_459_200)  // 2021-01-01 UTC
+    _ = try await client.dailyPrices(for: wethMapping, in: floorDay...floorDay)
+    #expect(hitFlag.get() == true)  // boundary day fetches, never clamped
+  }
 }
