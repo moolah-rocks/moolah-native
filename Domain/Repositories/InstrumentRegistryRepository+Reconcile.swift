@@ -57,12 +57,6 @@ extension InstrumentRegistryRepository {
         // ticker) must NOT get a Binance/CryptoCompare symbol attributed
         // from its unverified ticker. Also skip .spam outright — there's
         // nothing to gain reconciling a hidden token.
-        // #790: only re-detect rows whose identity is already
-        // contract-confirmed (>=1 resolved provider id). An all-nil mapping
-        // (e.g. a .spam/.unpriced stub from discovery carrying a copied
-        // ticker) must NOT get a Binance/CryptoCompare symbol attributed
-        // from its unverified ticker. Also skip .spam outright — there's
-        // nothing to gain reconciling a hidden token.
         guard registration.mapping.hasProviderMapping,
           registration.pricingStatus != .spam
         else { continue }
