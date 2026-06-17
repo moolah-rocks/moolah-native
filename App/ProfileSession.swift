@@ -53,6 +53,12 @@ final class ProfileSession: Identifiable {
   let cryptoTokenStore: CryptoTokenStore?
   let instrumentSearchService: InstrumentSearchService?
   let coinGeckoCatalog: (any CoinGeckoCatalog)?
+  /// Self-refreshing CryptoCompare / Binance token caches the resolution
+  /// client reads from. Exposed so PR2's preset reconciliation can reach the
+  /// same warm cache instances. `nil` when cache construction failed (or under
+  /// UI testing, where overrides supply the resolver directly).
+  let cryptoCompareCache: CryptoCompareTokenCache?
+  let binanceCache: BinanceTokenCache?
   let tokenResolutionClient: (any TokenResolutionClient)?
   /// Orchestrator for crypto-wallet auto-import. `nil` when the profile
   /// has no `instrumentRegistry` (preview / degraded launches). Set
@@ -94,6 +100,13 @@ final class ProfileSession: Identifiable {
   /// `cleanupSync(coordinator:)` if the session is torn down before the
   /// refresh completes. Module-internal for the sync-cleanup extension.
   var catalogRefreshTask: Task<Void, Never>?
+  /// Background task handles for the once-per-session CryptoCompare / Binance
+  /// `refreshIfStale()` kick-offs. Tracked as siblings to `catalogRefreshTask`
+  /// so they can be cancelled in `cleanupSync(coordinator:)` if the session is
+  /// torn down before the refresh completes. Empty when cache construction
+  /// failed (or under UI testing). Module-internal for the sync-cleanup
+  /// extension.
+  var cacheRefreshTasks: [Task<Void, Never>] = []
   /// Background task handle for the most recent `PRAGMA optimize` kick-off.
   /// Tracked so we can cancel any pending optimize on session teardown
   /// (per `guides/CONCURRENCY_GUIDE.md` §8 — fire-and-forget tasks must
@@ -193,17 +206,16 @@ final class ProfileSession: Identifiable {
     self.cryptoTokenStore = registryWiring.cryptoTokenStore
     self.instrumentSearchService = registryWiring.searchService
     self.coinGeckoCatalog = registryWiring.coinGeckoCatalog
+    self.cryptoCompareCache = registryWiring.cryptoCompareCache
+    self.binanceCache = registryWiring.binanceCache
     self.tokenResolutionClient = registryWiring.tokenResolutionClient
     self.catalogRefreshTask = registryWiring.catalogRefreshTask
+    self.cacheRefreshTasks = registryWiring.cacheRefreshTasks
     let stores = Self.makeDomainStores(profile: profile, backend: backend)
-    self.authStore = stores.auth
-    self.accountStore = stores.account
-    self.categoryStore = stores.category
-    self.earmarkStore = stores.earmark
-    self.transactionStore = stores.transaction
-    self.analysisStore = stores.analysis
-    self.investmentStore = stores.investment
-    self.reportingStore = stores.reporting
+    (authStore, accountStore, categoryStore, earmarkStore) =
+      (stores.auth, stores.account, stores.category, stores.earmark)
+    (transactionStore, analysisStore, investmentStore, reportingStore) =
+      (stores.transaction, stores.analysis, stores.investment, stores.reporting)
     // CSV import: ImportStore owns the pipeline orchestration; the
     // staging store lives per-profile on disk so pending/failed files
     // follow the profile across app restarts.

@@ -1,7 +1,8 @@
 import Foundation
 
 // Sync teardown and the `updateProfile` mutator. Reaches the session's
-// module-internal task state (`catalogRefreshTask`, `setUpTask`, etc.) —
+// module-internal task state (`catalogRefreshTask`, `cacheRefreshTasks`,
+// `setUpTask`, etc.) —
 // those properties are deliberately module-internal in
 // `ProfileSession.swift` so this file can manage their lifecycle.
 
@@ -16,6 +17,10 @@ extension ProfileSession {
   func cleanupSync(coordinator _: SyncCoordinator?) {
     catalogRefreshTask?.cancel()
     catalogRefreshTask = nil
+    for task in cacheRefreshTasks {
+      task.cancel()
+    }
+    cacheRefreshTasks.removeAll()
     cryptoSyncStore?.cancelTimer()
     pragmaOptimizeTask?.cancel()
     pragmaOptimizeTask = nil

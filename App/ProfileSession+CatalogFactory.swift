@@ -37,6 +37,74 @@ extension ProfileSession {
     }
   }
 
+  /// Builds the per-profile CryptoCompare coin-list cache and kicks off a
+  /// background `refreshIfStale()` so the SQLite snapshot is brought up to
+  /// date once per session without blocking init. Opens `cryptocompare.sqlite`
+  /// in the same `InstrumentRegistry` directory as the CoinGecko catalog.
+  /// Returns `(nil, nil)` (and logs) when the SQLite file can't be opened —
+  /// the caller treats that as a degraded resolution path. The returned
+  /// `refreshTask` handle is stored on `ProfileSession` so it can be cancelled
+  /// on teardown. The CryptoCompare key is resolved per refresh through
+  /// `resolveCryptoCompareApiKey()` so a key entered in Settings takes effect
+  /// on the next refresh without rebuilding the session.
+  @MainActor
+  static func makeCryptoCompareCache(
+    networking: NetworkingServices
+  ) -> (cache: CryptoCompareTokenCache?, refreshTask: Task<Void, Never>?) {
+    let directory = URL.moolahScopedApplicationSupport
+      .appending(path: "InstrumentRegistry", directoryHint: .isDirectory)
+    do {
+      let cache = try CryptoCompareTokenCache.make(
+        directory: directory,
+        apiKeyProvider: { ProfileSession.resolveCryptoCompareApiKey() },
+        networking: networking)
+      // `CryptoCompareTokenCache` is an actor, so `await cache.refreshIfStale()`
+      // hops to the cache's executor regardless of the enclosing Task's
+      // isolation — no `Task.detached` needed (CONCURRENCY_GUIDE §8).
+      let refreshTask = Task(priority: .background) { [cache] in
+        await cache.refreshIfStale()
+      }
+      return (cache, refreshTask)
+    } catch {
+      Logger(subsystem: "com.moolah.app", category: "ProfileSession")
+        .error("CryptoCompare cache init failed: \(error.localizedDescription, privacy: .public)")
+      return (nil, nil)
+    }
+  }
+
+  /// Builds the per-profile Binance USDT-pair cache and kicks off a background
+  /// `refreshIfStale()` so the SQLite snapshot is brought up to date once per
+  /// session without blocking init. Opens `binance.sqlite` in the same
+  /// `InstrumentRegistry` directory as the CoinGecko catalog. Returns
+  /// `(nil, nil)` (and logs) when the SQLite file can't be opened — the caller
+  /// treats that as a degraded resolution path. The returned `refreshTask`
+  /// handle is stored on `ProfileSession` so it can be cancelled on teardown.
+  /// Binance's `exchangeInfo` endpoint is keyless, so — unlike the CryptoCompare
+  /// cache — there is no API key to resolve.
+  @MainActor
+  static func makeBinanceCache(
+    networking: NetworkingServices
+  ) -> (cache: BinanceTokenCache?, refreshTask: Task<Void, Never>?) {
+    let directory = URL.moolahScopedApplicationSupport
+      .appending(path: "InstrumentRegistry", directoryHint: .isDirectory)
+    do {
+      let cache = try BinanceTokenCache.make(
+        directory: directory,
+        networking: networking)
+      // `BinanceTokenCache` is an actor, so `await cache.refreshIfStale()`
+      // hops to the cache's executor regardless of the enclosing Task's
+      // isolation — no `Task.detached` needed (CONCURRENCY_GUIDE §8).
+      let refreshTask = Task(priority: .background) { [cache] in
+        await cache.refreshIfStale()
+      }
+      return (cache, refreshTask)
+    } catch {
+      Logger(subsystem: "com.moolah.app", category: "ProfileSession")
+        .error("Binance cache init failed: \(error.localizedDescription, privacy: .public)")
+      return (nil, nil)
+    }
+  }
+
   /// Opens a read-only handle to the shared CoinGecko catalog for offline
   /// `(chain, contract) → CoinGecko id` resolution by the discovery token
   /// resolver. Unlike `makeCoinGeckoCatalog` it starts no `refreshIfStale()`

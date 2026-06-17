@@ -106,11 +106,15 @@ actor CryptoCompareTokenCache: RefreshableCatalog {
     return result
   }
 
-  /// Downloads the coin list once when the cache is empty. A no-op when warm
-  /// (`refreshIfStale` itself short-circuits within `maxAge`, but the count
-  /// check avoids even reading `last_fetched` on the hot path). Infallible:
-  /// a read failure is logged and treated as "empty", so the subsequent query
-  /// degrades to an empty answer rather than throwing.
+  /// Downloads the coin list once when the cache is EMPTY (count == 0); a
+  /// non-empty cache is a no-op, *even when stale* (older than `maxAge`). This
+  /// only guarantees a cold cache is populated on first use — it does NOT
+  /// refresh a warm-but-stale snapshot. Bringing a stale (non-empty, >24h)
+  /// cache up to date is the wiring layer's job: `ProfileSession` fires a
+  /// background `refreshIfStale()` once per session at start-up. The count
+  /// check here also avoids even reading `last_fetched` on the hot path.
+  /// Infallible: a read failure is logged and treated as "empty", so the
+  /// subsequent query degrades to an empty answer rather than throwing.
   private func loadIfEmpty() async {
     let count: Int
     do {
