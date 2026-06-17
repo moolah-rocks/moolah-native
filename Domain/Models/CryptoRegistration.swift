@@ -109,8 +109,8 @@ struct CryptoRegistration: Codable, Sendable, Hashable, Identifiable {
       instrument: .crypto(
         chainId: 137, contractAddress: nil, symbol: "MATIC", name: "Polygon", decimals: 18),
       mapping: CryptoProviderMapping(
-        instrumentId: "137:native", coingeckoId: "matic-network",
-        cryptocompareSymbol: "MATIC", binanceSymbol: "MATICUSDT"
+        instrumentId: "137:native", coingeckoId: "polygon-ecosystem-token",
+        cryptocompareSymbol: "MATIC", binanceSymbol: "POLUSDT"
       )
     ),
     CryptoRegistration(

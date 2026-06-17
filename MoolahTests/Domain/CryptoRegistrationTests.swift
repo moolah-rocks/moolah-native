@@ -12,6 +12,18 @@ struct CryptoRegistrationTests {
     }
   }
 
+  /// The Polygon native preset must carry the post-rebrand provider ids: the
+  /// MATIC→POL migration retired the `matic-network` CoinGecko id (now dead on
+  /// CoinGecko and DefiLlama) and halted Binance's `MATICUSDT` pair (now
+  /// `POLUSDT`). Pin the live ids so a regression to the stale ones is caught.
+  @Test
+  func polygonPresetUsesPostRebrandProviderIds() throws {
+    let polygon = try #require(
+      CryptoRegistration.builtInPresets.first { $0.instrument.id == "137:native" })
+    #expect(polygon.mapping.coingeckoId == "polygon-ecosystem-token")
+    #expect(polygon.mapping.binanceSymbol == "POLUSDT")
+  }
+
   @Test
   func legacyRegistrationDecodesAsPriced() throws {
     let json = Data(
