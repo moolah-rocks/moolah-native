@@ -64,37 +64,12 @@ actor CryptoCompareTokenCache: RefreshableCatalog {
     database.close()
   }
 
-  // MARK: - Query API
+  // MARK: - Query support
   //
-  // Each query calls `loadIfEmpty()` first so a cold cache downloads once on
-  // demand; a warm cache is a no-op. Lookups degrade to empty rather than
-  // throwing — token resolution treats an unavailable cache as "no answer".
-
-  /// The CryptoCompare symbol registered for `address` (matched
-  /// case-insensitively against the lowercased contract column), or `nil`.
-  /// Infallible by design — any SQLite failure is logged and swallowed to
-  /// `nil`, mirroring `SQLiteCoinGeckoCatalog.localContractMatch`.
-  func symbol(forContract address: String) async -> String? {
-    await loadIfEmpty()
-    do {
-      return try fetchSymbol(forContract: address.lowercased())
-    } catch {
-      Self.log.error("symbol(forContract:) failed: \(String(describing: error), privacy: .public)")
-      return nil
-    }
-  }
-
-  /// Symbols listed without a contract address (native / chain-agnostic).
-  func nativeSymbols() async -> Set<String> {
-    await loadIfEmpty()
-    return symbols(matching: "SELECT symbol FROM cc_coin WHERE contract_address IS NULL;")
-  }
-
-  /// Every distinct symbol present in the cached coin list.
-  func allSymbols() async -> Set<String> {
-    await loadIfEmpty()
-    return symbols(matching: "SELECT DISTINCT symbol FROM cc_coin;")
-  }
+  // Each query (in the `CryptoCompareSymbolLookup` conformance below) calls
+  // `loadIfEmpty()` first so a cold cache downloads once on demand; a warm
+  // cache is a no-op. Lookups degrade to empty rather than throwing — token
+  // resolution treats an unavailable cache as "no answer".
 
   private func fetchSymbol(forContract address: String) throws -> String? {
     var statement: OpaquePointer?
@@ -148,5 +123,35 @@ actor CryptoCompareTokenCache: RefreshableCatalog {
     }
     guard count == 0 else { return }
     await refreshIfStale()
+  }
+}
+
+// MARK: - CryptoCompareSymbolLookup
+
+extension CryptoCompareTokenCache: CryptoCompareSymbolLookup {
+  /// The CryptoCompare symbol registered for `address` (matched
+  /// case-insensitively against the lowercased contract column), or `nil`.
+  /// Infallible by design — any SQLite failure is logged and swallowed to
+  /// `nil`, mirroring `SQLiteCoinGeckoCatalog.localContractMatch`.
+  func symbol(forContract address: String) async -> String? {
+    await loadIfEmpty()
+    do {
+      return try fetchSymbol(forContract: address.lowercased())
+    } catch {
+      Self.log.error("symbol(forContract:) failed: \(String(describing: error), privacy: .public)")
+      return nil
+    }
+  }
+
+  /// Symbols listed without a contract address (native / chain-agnostic).
+  func nativeSymbols() async -> Set<String> {
+    await loadIfEmpty()
+    return symbols(matching: "SELECT symbol FROM cc_coin WHERE contract_address IS NULL;")
+  }
+
+  /// Every distinct symbol present in the cached coin list.
+  func allSymbols() async -> Set<String> {
+    await loadIfEmpty()
+    return symbols(matching: "SELECT DISTINCT symbol FROM cc_coin;")
   }
 }

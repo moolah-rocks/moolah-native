@@ -58,21 +58,6 @@ actor BinanceTokenCache: RefreshableCatalog {
   // rather than throwing — token resolution treats an unavailable cache as
   // "no Binance pair known".
 
-  /// Whether Binance lists an active `<symbol>USDT` trading pair for `symbol`
-  /// (matched case-insensitively by uppercasing the base before composing the
-  /// pair symbol). Infallible by design — any SQLite failure is logged and
-  /// swallowed to `false`.
-  func hasUsdtPair(base symbol: String) async -> Bool {
-    await loadIfEmpty()
-    let pairSymbol = "\(symbol.uppercased())USDT"
-    do {
-      return try fetchHasPair(pairSymbol)
-    } catch {
-      Self.log.error("hasUsdtPair(base:) failed: \(String(describing: error), privacy: .public)")
-      return false
-    }
-  }
-
   /// Every active USDT trading-pair symbol present in the cache.
   func usdtPairs() async -> Set<String> {
     await loadIfEmpty()
@@ -123,5 +108,24 @@ actor BinanceTokenCache: RefreshableCatalog {
     }
     guard count == 0 else { return }
     await refreshIfStale()
+  }
+}
+
+// MARK: - BinancePairLookup
+
+extension BinanceTokenCache: BinancePairLookup {
+  /// Whether Binance lists an active `<symbol>USDT` trading pair for `symbol`
+  /// (matched case-insensitively by uppercasing the base before composing the
+  /// pair symbol). Infallible by design — any SQLite failure is logged and
+  /// swallowed to `false`.
+  func hasUsdtPair(base symbol: String) async -> Bool {
+    await loadIfEmpty()
+    let pairSymbol = "\(symbol.uppercased())USDT"
+    do {
+      return try fetchHasPair(pairSymbol)
+    } catch {
+      Self.log.error("hasUsdtPair(base:) failed: \(String(describing: error), privacy: .public)")
+      return false
+    }
   }
 }
