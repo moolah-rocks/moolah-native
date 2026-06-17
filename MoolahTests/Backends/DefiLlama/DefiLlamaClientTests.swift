@@ -114,6 +114,31 @@ final class DefiLlamaClientTests {
     #expect(hitFlag.get() == false)  // never went to the network
   }
 
+  @Test("empty /chart response does not demote a previously-supported token")
+  func emptyResponseDoesNotDemoteSupport() async throws {
+    let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("dl-demote-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+    let networking = makeNetworking()
+    let cache = try DefiLlamaSupportCache.make(directory: tempDir, networking: networking)
+    // Pre-seed the token as supported so we can detect an accidental demotion.
+    await cache.upsert(
+      instrumentId: wethMapping.instrumentId, supported: true, earliestDate: "2020-01-01",
+      lastChecked: Date(timeIntervalSince1970: 0))
+    let coinId = "ethereum:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"
+    // Stub /chart to return an empty coins map (e.g. pre-liquidity window or
+    // all-low-confidence read). An empty result must NOT demote the token.
+    StubURLProtocol.handlers["coins.llama.fi:/chart/\(coinId)"] = { _ in
+      (HTTPURLResponse.ok(etag: ""), Data("{\"coins\":{}}".utf8))
+    }
+    let client = DefiLlamaClient(networking: networking, supportCache: cache)
+    let day = Date(timeIntervalSince1970: 1_704_067_200)
+    _ = try await client.dailyPrices(for: wethMapping, in: day...day)
+    // Row must still be supported — never demoted by an empty live result.
+    #expect(await cache.support(for: wethMapping.instrumentId)?.supported == true)
+  }
+
   @Test("a successful fetch records support in the cache")
   func recordsSupportOnSuccess() async throws {
     let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
