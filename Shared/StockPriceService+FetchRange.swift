@@ -64,37 +64,59 @@ extension StockPriceService {
   }
 }
 
-// MARK: - Sub-range chunking for prices(ticker:in:)
+// MARK: - Contiguous range extension for prices(ticker:in:)
 
 extension StockPriceService {
-  /// Returns the uncovered sub-ranges of `[fetchStart, fetchEnd]` not
-  /// already in the cache, split into at most 30-day windows. No single
-  /// fetch can span an un-served interior, keeping the cache bounds
-  /// contiguous and preventing a horizon-restricted provider from jumping
-  /// `latest` over un-fetched days.
-  func uncoveredSubRanges(
-    ticker: String, fetchStart: Date, fetchEnd: Date
-  ) -> [ClosedRange<Date>] {
-    let rangeStart = dateFormatter.string(from: fetchStart)
-    let rangeEnd = dateFormatter.string(from: fetchEnd)
-    let cal = Calendar.utc
-    guard let cache = caches[ticker] else {
-      return ContiguousFetchPlanner.chunked(fetchStart...fetchEnd, days: 30)
+  /// Covers `[lowerKey, upperKey]` contiguously by running the bounded
+  /// planner loop toward each endpoint with a no-progress guard. Unlike a
+  /// precomputed chunk list (which fetches every window upfront and so can
+  /// leave an interior gap when a horizon-restricted provider serves only a
+  /// recent subset), this stops a direction the moment a window yields no
+  /// boundary progress — keeping `[earliest, latest]` contiguous exactly as
+  /// the single-price `fetchToCoverDate` does. Used by
+  /// `prices(ticker:in:)`.
+  func coverRangeContiguously(
+    ticker: String,
+    lowerKey: Int32,
+    upperKey: Int32
+  ) async throws {
+    let todayKey =
+      DateKey.from(isoString: dateFormatter.string(from: now())) ?? upperKey
+    let config = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
+    // Cover the forward endpoint first, then the backward one. Each call
+    // anchors at the live cache bounds, so order does not create a gap.
+    for requestedKey in [upperKey, lowerKey] {
+      var guardSteps = 0
+      while guardSteps < 250 {
+        guardSteps += 1
+        let bounds = boundsKeys(ticker: ticker)
+        guard
+          let window = ContiguousFetchPlanner.nextWindow(
+            earliest: bounds.earliest,
+            latest: bounds.latest,
+            requested: requestedKey,
+            today: todayKey,
+            config: config)
+        else { break }  // endpoint now in range
+        let before = bounds
+        let fetchStart =
+          dateFormatter.date(from: DateKey.isoString(window.lowerBound))
+          ?? dateFormatter.date(from: DateKey.isoString(requestedKey))
+          ?? now()
+        let fetchEnd =
+          dateFormatter.date(from: DateKey.isoString(window.upperBound))
+          ?? dateFormatter.date(from: DateKey.isoString(requestedKey))
+          ?? now()
+        try await fetchAndMerge(ticker: ticker, from: fetchStart, to: fetchEnd)
+        // No progress (bounds unchanged) means genuine no-more-data; stop and
+        // let a later call re-query the boundary (data may publish later).
+        if boundsKeys(ticker: ticker) == before { break }
+      }
+      if guardSteps >= 250 {
+        logger.warning(
+          "coverRangeContiguously: guard limit reached for ticker \(ticker, privacy: .public)"
+        )
+      }
     }
-    var result: [ClosedRange<Date>] = []
-    if rangeStart < cache.earliestDate,
-      let earliest = dateFormatter.date(from: cache.earliestDate),
-      let backEnd = cal.date(byAdding: .day, value: -1, to: earliest),
-      fetchStart <= backEnd
-    {
-      result += ContiguousFetchPlanner.chunked(fetchStart...backEnd, days: 30)
-    }
-    if rangeEnd > cache.latestDate,
-      let forwardStart = dateFormatter.date(from: cache.latestDate),
-      forwardStart <= fetchEnd
-    {
-      result += ContiguousFetchPlanner.chunked(forwardStart...fetchEnd, days: 30)
-    }
-    return result
   }
 }
