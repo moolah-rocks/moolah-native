@@ -107,45 +107,8 @@ actor ExchangeRateService {
     throw ExchangeRateError.noRateAvailable(base: base, quote: quote, date: dateString)
   }
 
-  /// Extends the cached range toward `date`, fetching only the gap between
-  /// the requested date and the existing `[earliestDate, latestDate]`
-  /// window. `rate()` short-circuits in-range requests before calling
-  /// this, so we only ever extend the boundary. The forward branch
-  /// overlaps the existing latest entry by one day so a stale value
-  /// (e.g. an intraday partial bar persisted by an older build) is
-  /// overwritten by the next finalised close — `mergeReturningDelta`
-  /// is a no-op when the re-fetched value matches what's cached.
-  /// Errors are swallowed; callers fall back to cached rates when the
-  /// fetch fails. `date` is already capped at yesterday by `rate()`.
-  private func fetchToCoverDate(base: String, date: Date, dateString: String) async {
-    let calendar = Calendar(identifier: .gregorian)
-    do {
-      if let cache = caches[base] {
-        if dateString > cache.latestDate,
-          let fetchStart = dateFormatter.date(from: cache.latestDate),
-          fetchStart <= date
-        {
-          try await fetchInChunks(base: base, from: fetchStart, to: date)
-        } else if dateString < cache.earliestDate,
-          let earliestDate = dateFormatter.date(from: cache.earliestDate),
-          let fetchEnd = calendar.date(byAdding: .day, value: -1, to: earliestDate)
-        {
-          try await fetchInChunks(base: base, from: date, to: fetchEnd)
-        }
-      } else if let fetchStart = calendar.date(byAdding: .day, value: -30, to: date) {
-        // Cold cache: fetch a month-wide surrounding range so we pick up
-        // at least one trading day alongside the requested date.
-        try await fetchInChunks(base: base, from: fetchStart, to: date)
-      }
-    } catch {
-      // Fetch failed — proceed to fallback lookup. Logged so disk-write
-      // failures (which would otherwise be silently swallowed alongside
-      // expected network 404s) are still observable.
-      logger.warning(
-        "fetchToCoverDate failed for base \(base, privacy: .public) on \(dateString, privacy: .public): \(error.localizedDescription, privacy: .public)"
-      )
-    }
-  }
+  // `fetchToCoverDate(base:date:dateString:)` lives in
+  // `ExchangeRateService+FetchRange.swift`.
 
   /// See `Shared/PriceCacheCap.swift` for the rationale.
   private func cappedDate(_ date: Date) -> Date {
@@ -171,27 +134,16 @@ actor ExchangeRateService {
     // `rate()`. The result series below still walks the caller-supplied
     // range; today's slot fills via `lastKnownRate` carry-forward.
     let fetchUpperBound = cappedDate(range.upperBound)
-    let rangeStart = dateFormatter.string(from: range.lowerBound)
-    let fetchEndString = dateFormatter.string(from: fetchUpperBound)
 
-    let gregorian = Calendar(identifier: .gregorian)
-    if let cache = caches[base] {
-      if rangeStart < cache.earliestDate,
-        let earliestDate = dateFormatter.date(from: cache.earliestDate),
-        let fetchEnd = gregorian.date(byAdding: .day, value: -1, to: earliestDate)
-      {
-        try await fetchInChunks(base: base, from: range.lowerBound, to: fetchEnd)
+    // Fetch only the uncovered sub-ranges, chunked into ≤30-day windows so
+    // a horizon-restricted provider cannot jump `latest` over un-fetched days.
+    // `uncoveredSubRanges` lives in `ExchangeRateService+FetchRange.swift`.
+    if range.lowerBound <= fetchUpperBound {
+      let subRanges = uncoveredSubRanges(
+        base: base, fetchStart: range.lowerBound, fetchEnd: fetchUpperBound)
+      for sub in subRanges {
+        try await fetchAndMerge(base: base, from: sub.lowerBound, to: sub.upperBound)
       }
-      // Forward extension overlaps the existing latest entry — same
-      // rationale as `fetchToCoverDate`.
-      if fetchEndString > cache.latestDate,
-        let fetchStart = dateFormatter.date(from: cache.latestDate),
-        fetchStart <= fetchUpperBound
-      {
-        try await fetchInChunks(base: base, from: fetchStart, to: fetchUpperBound)
-      }
-    } else if range.lowerBound <= fetchUpperBound {
-      try await fetchInChunks(base: base, from: range.lowerBound, to: fetchUpperBound)
     }
 
     // Build result series
@@ -260,19 +212,8 @@ actor ExchangeRateService {
     return dates
   }
 
-  private func fetchInChunks(base: String, from: Date, to: Date) async throws {
-    let calendar = Calendar(identifier: .gregorian)
-    var chunkStart = from
-    while chunkStart <= to {
-      let nextYear = calendar.date(byAdding: .year, value: 1, to: chunkStart) ?? to
-      let chunkEnd = min(nextYear, to)
-      try await fetchAndMerge(base: base, from: chunkStart, to: chunkEnd)
-      guard let next = calendar.date(byAdding: .day, value: 1, to: chunkEnd) else { break }
-      chunkStart = next
-    }
-  }
-
-  // internal: called from `ExchangeRateService+Prefetch.swift` and tests.
+  // `fetchAndMerge` is internal: called from `ExchangeRateService+Prefetch.swift`,
+  // `ExchangeRateService+FetchRange.swift`, and tests.
   func fetchAndMerge(base: String, from: Date, to: Date) async throws {
     let fetched = try await client.fetchRates(base: base, from: from, to: to)
     // Frankfurter (and the chunked extension call sites in this service)

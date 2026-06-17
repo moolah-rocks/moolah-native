@@ -44,7 +44,7 @@ struct ContiguousExtensionFXTests {
         let weekday = cal.component(.weekday, from: day)
         // weekday 1 = Sunday, 7 = Saturday
         if day >= cutoff && weekday != 1 && weekday != 7 {
-          out[fmt.string(from: day)] = ["AUD": Decimal(string: "1.5")!]
+          out[fmt.string(from: day)] = ["AUD": 1.5]
         }
         guard let next = cal.date(byAdding: .day, value: 1, to: day) else { break }
         day = next
@@ -67,7 +67,7 @@ struct ContiguousExtensionFXTests {
       while day <= to {
         let weekday = cal.component(.weekday, from: day)
         if weekday != 1 && weekday != 7 {
-          out[fmt.string(from: day)] = ["AUD": Decimal(string: "1.5")!]
+          out[fmt.string(from: day)] = ["AUD": 1.5]
         }
         guard let next = cal.date(byAdding: .day, value: 1, to: day) else { break }
         day = next
