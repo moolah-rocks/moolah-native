@@ -41,6 +41,10 @@ import GRDB
 ///   `crypto_token_meta`, so dropping only the prices would leave the planner
 ///   believing the gappy interior is covered. See
 ///   `ProfileIndexSchema+PurgeCryptoPriceCache.swift`.
+/// `v8_crypto_first_traded_on`     — adds `crypto_token_meta.first_traded_on`
+///   (nullable ISO YYYY-MM-DD) for confirmed cross-provider first-trade dates.
+///   NULL means "not yet confirmed". Pre-first-trade prices are valued at $0
+///   (.knownZero). See `ProfileIndexSchema+CryptoFirstTradedOn.swift`.
 ///
 /// Each migration body is registered here. Once shipped, migration IDs
 /// are frozen forever; splitting later is fine, merging post-ship is
@@ -54,7 +58,7 @@ enum ProfileIndexSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 7
+  static let version = 8
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -74,6 +78,8 @@ enum ProfileIndexSchema {
     migrator.registerMigration("v6_purge_rate_caches", migrate: purgeRateCaches)
     migrator.registerMigration(
       "v7_purge_crypto_price_cache", migrate: purgeCryptoPriceCache)
+    migrator.registerMigration(
+      "v8_crypto_first_traded_on", migrate: addCryptoFirstTradedOn)
 
     return migrator
   }
