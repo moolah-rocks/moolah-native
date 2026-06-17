@@ -1,280 +1,248 @@
-# Pre-shipped crypto provider mappings + re-detection — design
+# Self-refreshing provider token-list caches + re-detection — design
 
 Issue: [#1140](https://github.com/moolah-rocks/moolah-native/issues/1140)
-Date: 2026-06-17
+Date: 2026-06-17 (revised — supersedes the bundled-catalog / vendoring approach)
 
 ## Problem
 
 Several real, actively-traded tokens are registered with **only** a
 `coingecko_id` and no `cryptocompare_symbol` / `binance_symbol`. CoinGecko's
-free tier hard-refuses historical data older than 365 days (`error 10012`),
-so those tokens cannot backfill pre-365-day history and the monthly Income &
-Expense table renders the affected financial months as "—" (a single
-un-priceable `.priced` leg blanks the whole month, per strict Rule 11 /
-#1077).
+free tier hard-refuses historical data older than 365 days (`error 10012`), so
+those tokens cannot backfill pre-365-day history and the monthly Income &
+Expense table renders the affected months as "—" (one un-priceable `.priced`
+leg blanks the whole month, strict Rule 11 / #1077).
 
-Confirmed gaps (CoinGecko-only today, but a keyless deep-history source
-exists):
+Confirmed gaps (CoinGecko-only today; a keyless Binance pair exists):
 
-| Token | Available elsewhere |
+| Token | Provider available elsewhere |
 |---|---|
 | RPL (Rocket Pool) | Binance `RPLUSDT` (keyless), verified `2024-07-12` close `$16.14` |
 | ILV (Illuvium) | Binance `ILVUSDT` (keyless) |
 | IMX (Immutable X) | Binance `IMXUSDT` (keyless) |
-| AVAIL | no Binance pair — needs CoinGecko Pro or CryptoCompare |
-| STRK (Starknet) | (probe — Binance/CC) |
-| HEX | CoinGecko-only, $0 market cap — included for probing, not reclassified |
+| STRK (Starknet) | Binance `STRKUSDT` (keyless) |
+| AVAIL | CryptoCompare only (no Binance pair) |
+| HEX | CoinGecko-only ($0 mkt cap) — probed, not reclassified |
 
-Root cause: provider IDs are resolved **only once, at registration time**.
-When these instruments were registered the Binance/CryptoCompare lookup wasn't
-completed, so only the CoinGecko id was populated — and there is no mechanism
-to upgrade a mapping later when a token gains support from another provider.
+**Two root causes, both addressed here:**
+
+1. **Provider ids are resolved once, at registration time, and never
+   revisited.** `CompositeTokenResolutionClient` runs CryptoCompare + CoinGecko
+   + Binance resolution when a token is first registered. A token registered
+   before a provider listed it (or before resolution reached that provider)
+   stays partially mapped forever. There is no re-detection.
+2. **Only CoinGecko's token list is cached.** `SQLiteCoinGeckoCatalog` keeps a
+   self-refreshing on-disk cache (`catalog.sqlite`, 24h, ETag). CryptoCompare's
+   `/data/all/coinlist` and Binance's `/api/v3/exchangeInfo` are **re-downloaded
+   in full on every single token resolution** and then discarded — expensive,
+   not reusable, and impossible to reconcile against later.
 
 ## Goals
 
-1. **Pre-ship full provider mappings** for a curated set of known tokens so
-   they carry the right `binance_symbol` / `coingecko_id` /
-   `cryptocompare_symbol` — preferring the keyless Binance path for deep
-   history where a pair exists.
-2. **Re-detect expanded provider support**: when a newer mapping table ships
-   in an app update, already-registered instruments whose stored mapping is
-   incomplete get upgraded automatically (merge-only).
-3. **Script-driven, transient-safe vendoring** that probes the providers and
-   regenerates the table without ever losing a committed mapping on a
-   rate-limit / network failure.
+1. **Generalize the self-refreshing token-list cache** so all three providers
+   (CoinGecko, CryptoCompare, Binance) share one well-tested SQLite caching
+   engine — different URL + parse + schema only (DRY; the user's explicit ask).
+2. **Cache CryptoCompare and Binance token lists** on disk like CoinGecko's,
+   and route `CompositeTokenResolutionClient` through the caches instead of
+   ad-hoc per-resolution downloads (a refactor with no change to the resolution
+   *result*).
+3. **Re-detect expanded provider support**: a startup reconciliation pass
+   re-resolves each already-registered crypto token against the (cached) lists
+   and **merge-only** upgrades its provider mapping — fixing #1140 and keeping
+   mappings fresh as the caches refresh, with no app update or vendoring step.
 
 ## Non-goals
 
-- Reclassifying HEX (or any token) to `.unpriced` / `.spam`. HEX is included
-  in the curated universe for probing only.
-- Online re-resolution for tokens **absent** from the catalog. Those keep
-  today's behaviour (online resolution at registration time).
-- Per-token live provider probing. The script downloads each provider's full
-  catalog **once** and resolves locally (CryptoCompare's free key is ~100
-  calls/month — a single bulk call is the only affordable shape).
-- Changing the 8 hand-coded `builtInPresets` (native BTC/ETH/MATIC + OP/UNI/
-  ENS). Natives have no ERC-20 contract and cannot come from token lists, so
-  they stay hand-curated for fresh-profile seeding.
+- Vendoring scripts, a bundled static Swift catalog, or a weekly CI auto-PR
+  (the earlier approach — fully dropped in favour of runtime caches).
+- Reclassifying HEX (or any token) to `.unpriced` / `.spam`.
+- Changing the existing 8 `builtInPresets` (offline seeding for native BTC/ETH/
+  MATIC + OP/UNI/ENS, #791) — they stay as-is.
+- Changing the resolution *algorithm* in PR1 (same inputs → same mapping); only
+  the data source moves from live to cached.
+
+## Delivery: two stacked PRs
+
+- **PR1 — Refactor + new caches (no bug-behaviour change).** Extract the shared
+  caching engine, refactor CoinGecko onto it, add CryptoCompare + Binance
+  caches, route resolution through the caches. Pure refactor + new capability;
+  the #1140 symptom is untouched.
+- **PR2 (stacked on PR1) — Re-detection.** The startup reconciliation pass that
+  re-resolves registered tokens from the caches and merge-only upgrades them.
+  This is the change that closes #1140.
+
+---
 
 ## Architecture
 
-Three artifacts plus one behaviour change. Each has a single responsibility
-and a clean interface.
+### Shared caching engine (PR1)
 
-### 1. `CryptoProviderCatalog` — bundled provider-ID lookup (new)
+A provider-agnostic, SQLite-backed, self-refreshing cache extracted from the
+proven `SQLiteCoinGeckoCatalog` machinery. Three collaborating pieces:
 
-A protocol so the storage strategy can change without touching consumers
-(this is the "design for B" hook):
+**(a) `CatalogSQLite` — shared raw-SQLite helpers.** The `exec` / `prepare` /
+`bind` / `step` / `readText` / `scalarInt` / `rollback` / `errorMessage`
+statics currently in `SQLiteCoinGeckoCatalog+SQLite.swift`, lifted to a
+provider-neutral namespace so all three caches share one implementation.
 
-```swift
-protocol CryptoProviderCatalog: Sendable {
-  /// The pre-known provider mapping for an instrument id
-  /// ("chainId:address" / "chainId:native"), or nil when the token is not
-  /// in the bundled catalog.
-  func mapping(for instrumentId: String) -> CryptoProviderMapping?
-}
-```
+**(b) `RefreshableCatalogStore` — file lifecycle + refresh orchestration.**
+Owns one `<dir>/<name>.sqlite`:
+- Open / bootstrap from a supplied `(schemaVersion, schemaDDL)`; on a
+  `meta.schema_version` mismatch, **drop the file and recreate clean** (the
+  retention policy the schema guide permits for network-derived caches).
+- WAL + extended result codes.
+- A generic `refreshIfStale` driven by a descriptor: a 24h `maxAge` staleness
+  gate; for each configured endpoint an ETag conditional GET
+  (`fetchConditional`, reused verbatim — `.ok(Data, etag)` / `.notModified`);
+  collect outcomes; hand them to the provider's `apply(database:outcomes:)` for
+  an atomic table replace; persist `last_fetched` + per-endpoint etags. Network
+  failure logs and leaves `last_fetched` untouched so the next launch retries
+  (existing graceful-degradation contract preserved).
 
-- **Now (Option A):** `BundledCryptoProviderCatalog` — backed by a generated
-  Swift `static let` dictionary literal keyed by `instrumentId`. The curated
-  universe is tens-to-low-hundreds of entries (~tens of KB), lazily
-  initialised once. Negligible device memory.
-- **Later (Option B), no consumer rework:** a `ResourceCryptoProviderCatalog`
-  reading a bundled JSON resource (all CoinGecko tokens on supported chains
-  with ≥1 provider listing), parsed lazily during reconciliation and released
-  after — never resident for the process lifetime. Swap the conformer; the
-  reconciliation pass is unchanged.
+**(c) `ProviderCatalog` descriptor** (the per-provider strategy): supplies
+`name`, `schemaVersion`, `schemaDDL`, the endpoint URL builder(s) + etag meta
+keys, and `apply(database:outcomes:)` (parse wire → rows → replace tables).
+Each concrete cache also exposes its own typed query methods over the store.
 
-`instrumentId` fully encodes chain + address (`Instrument.crypto` builds
-`"\(chainId):\(address.lowercased())"` or `"\(chainId):native"`), so it is a
-sufficient key — no separate chain/contract columns needed.
+### The three caches (PR1)
 
-### 2. Extended vendoring — `scripts/vendor-token-registry.sh`
+| Cache | Endpoint(s) | Tables | Query surface |
+|---|---|---|---|
+| `CoinGeckoTokenCache` (refactor of `SQLiteCoinGeckoCatalog`) | `/coins/list?include_platform=true` + `/asset_platforms` | `coin`, `coin_platform`, `platform`, `coin_fts` | `search` (FTS), `localContractMatch` |
+| `CryptoCompareTokenCache` (new) | `/data/all/coinlist` | `cc_coin(symbol, contract_address?)` | `symbol(forContract:)`, `nativeSymbols()`, `allSymbols()` |
+| `BinanceTokenCache` (new) | `/api/v3/exchangeInfo` | `binance_pair(symbol)` (USDT/TRADING) | `hasUsdtPair(base:)` / `usdtPairs()` |
 
-A second generation pass appended to the existing address-registry pass (the
-two share the curated token universe so they can never drift):
+All conform to a small `RefreshableCatalog` protocol (`refreshIfStale()`), and
+keep `STRICT` tables per the schema guide (FTS5 excepted). Each lives at its own
+`<name>.sqlite` under the existing InstrumentRegistry support directory, so a
+single provider's schema bump drops only that provider's file.
 
-**Download full provider catalogs once:**
-- Binance `GET /api/v3/exchangeInfo` → all trading symbols (keyless).
-- CoinGecko `GET /api/v3/coins/list?include_platform=true` → id + per-chain
-  contract addresses (keyless).
-- CryptoCompare `GET /data/all/coinlist` → all symbols.
-  **Requires `CRYPTOCOMPARE_API_KEY`** (verified: returns HTTP 401 "API key
-  required" without one).
+CryptoCompare's cache must hold a key to refresh (`/data/all/coinlist` is
+401-without-key, verified). When unkeyed or rate-limited, `refreshIfStale`
+degrades to the stale snapshot exactly like CoinGecko's already does — no
+exception path.
 
-**Curated universe** = the protected-symbol token set the script already
-builds for `CanonicalTokenRegistry`, extended with the gap tokens
-(RPL, ILV, IMX, AVAIL, STRK, HEX) added to `PROTECTED`. Their contract
-addresses come from the authoritative token lists / CoinGecko platform map —
-**never hand-typed** (a wrong address would pin a spam contract).
+### Resolution rewire (PR1)
 
-**Resolve each token locally (by intersection):**
-- `coingecko_id`: match the token's contract address against the CoinGecko
-  platform map for its chain (most reliable). Native tokens match by id.
-- `binance_symbol`: `"\(SYMBOL)USDT"` present in `exchangeInfo` → use it.
-- `cryptocompare_symbol`: symbol listed in the CC coinlist → use it.
+`CompositeTokenResolutionClient.fetchCoinListData()` /
+`fetchExchangeInfoData()` stop doing ad-hoc full downloads and instead read
+from `CryptoCompareTokenCache` / `BinanceTokenCache`. To preserve today's
+correctness on a cold cache, each cache does a **fetch-on-miss**: if it has no
+snapshot yet it performs the same one-shot download it does today, stores it,
+and serves — so the first resolution is no slower than now and every subsequent
+one is free. The resolution algorithm (local-first, contract-gated Binance
+attribution per #790, by-symbol post-confirm) is **unchanged**; only the bytes'
+origin changes. The preloaded-`Data` test seams remain for unit tests.
 
-**Transient-failure safety (hard requirements from the issue):**
-- A CryptoCompare key is **required to be configured** at run time (the script
-  aborts before any download if `CRYPTOCOMPARE_API_KEY` is unset) — without a
-  key we could never *confirm* CC availability, so we must not run a CC-blind
-  pass that records "CC absent".
-- Each provider catalog download succeeds or fails as a whole. A provider is
-  `available` (HTTP 200, parseable) or `unavailable` (HTTP ≠ 200,
-  `Response: "Error"`, `Type: 99` rate-limit, network/timeout, unparseable).
-- **Merge-only / additive (never drops):** the script reads the committed
-  generated catalog and merges per column. From an `available` provider a
-  token is `present` (add/upgrade the column) or `absent` (leave the column
-  as-is — we never *clear* a committed column, only fill/upgrade). An
-  `unavailable` provider contributes nothing, so every committed column it
-  would touch is preserved unchanged. The written table is therefore always a
-  superset-merge of the committed table — it can never drop a symbol.
-- **Fail loudly, but never destructively:** because the write is provably
-  additive, the script always writes the merged superset (so a keyless
-  Binance/CoinGecko upgrade is never lost just because CC is rate-limited).
-  It then **exits non-zero** if *any* provider was `unavailable`, printing a
-  loud per-provider warning. Exit 0 only when all three downloaded cleanly.
-- **CI gates on exit code:** the weekly workflow opens a PR only when the
-  script exits 0 **and** produced a diff. A rate-limited week → non-zero exit
-  → no auto-PR (the incomplete run never lands unattended). An operator
-  running manually may still inspect and commit a non-zero (CC-unavailable)
-  run, since the diff is guaranteed additive.
-- **Idempotent:** re-running with the same upstream data (after `just format`)
-  produces no diff.
+### Re-detection reconciliation (PR2)
 
-**Output:** `Shared/CryptoImport/BundledCryptoProviderCatalog.swift`
-(generated, DO-NOT-EDIT header, same style as
-`CanonicalTokenRegistry+Bundled.swift`). Not wired into `just generate` — it
-hits live network APIs and would break offline/CI builds. Run manually or via
-the weekly CI job below.
-
-### 3. Weekly CI workflow
-
-`.github/workflows/vendor-token-registry.yml`, scheduled weekly (plus manual
-`workflow_dispatch`):
-- Runs the script with `CRYPTOCOMPARE_API_KEY` from repo secrets.
-- If the script produces a diff, opens a PR with `gh pr create`.
-- A rate-limited / failed-download week produces **no diff** (merge-only) or a
-  **non-zero exit** (loud failure) — never a destructive PR. By construction a
-  bad week is a no-op.
-
-### 4. Startup reconciliation pass — the re-detection behaviour
-
-A new repository method, run at session startup alongside
+A new repository method run at session startup alongside
 `registerBuiltInPresetsIfMissing`:
 
 ```swift
-extension InstrumentRegistryRepository {
-  /// Upgrade already-registered crypto instruments' provider mappings from
-  /// the bundled catalog, merge-only. A catalog id fills a nil/missing
-  /// stored column; a populated stored column is never downgraded. Idempotent.
-  func reconcileProviderMappings(using catalog: any CryptoProviderCatalog) async
-}
+func reconcileProviderMappings(using catalogs: ProviderCatalogLookups) async
 ```
 
-- Iterates registered crypto instruments; for each, looks up the catalog and,
-  if it carries a provider id the stored row lacks, upgrades via the existing
-  `upsertCrypto` → `mergeResolvedFields` path (already merge-only: a non-nil
-  incoming column overwrites, nil never downgrades — see
-  `GRDBInstrumentRegistryRepository+Upsert.swift`).
-- Skips instruments already fully covered (no write, no sync churn).
-- Best-effort + cancellation-aware, mirroring
-  `registerBuiltInPresetsIfMissing`.
+`resolver.resolve()` cannot be reused directly: its local-first path
+**early-returns** on a cached CoinGecko contract match
+(`CompositeTokenResolutionClient.swift:63-71`) and never reaches the Binance /
+CryptoCompare steps — exactly the providers re-detection needs to fill. Instead,
+reconciliation reads the caches directly through the **same per-provider
+attribution helpers** the resolution client uses (extracted in PR1 so there is
+one spam-safe implementation, not two):
 
-This fixes the existing Real Profile on next launch (RPL/ILV/IMX gain
-`binance_symbol` → keyless deep history → months stop rendering "—") and gives
-automatic re-detection whenever a newer catalog ships.
+For each registered crypto instrument (`allCryptoRegistrations()`, ≥1 mapping
+field ⇒ its identity was already contract-confirmed at registration, so
+attributing a Binance pair by its ticker is safe re #790):
+- `binanceSymbol` (if nil): `BinanceTokenCache.hasUsdtPair(base: ticker)` →
+  `"\(ticker)USDT"`.
+- `cryptocompareSymbol` (if nil): ERC-20 → `CryptoCompareTokenCache.symbol(forContract:)`;
+  native → `nativeSymbols()` membership; else by-symbol post-confirm against
+  `allSymbols()`.
+- `coingeckoId` (if nil): `CoinGeckoTokenCache.localContractMatch`.
+
+Then **merge-only** combine with the stored mapping
+(`CryptoProviderMapping.merging`, never downgrades) and write **only** when
+something changed (no sync churn). Best-effort, cancellation-aware, mirroring
+the preset seeder. Result: an RPL registered coingecko-only gains `binanceSymbol`
+(and `cryptocompareSymbol` once the CC cache is keyed) on the next launch, and
+stays current as the caches refresh.
+
+`ProviderCatalogLookups` is a small Sendable bundle of the three caches' query
+seams, so reconciliation is unit-testable with in-memory stubs.
 
 ## Data flow
 
 ```
-vendor script (CI weekly / manual)
-  └─ download Binance + CoinGecko + CryptoCompare full catalogs
-  └─ resolve curated universe locally (merge-only, transient-safe)
-  └─ emit BundledCryptoProviderCatalog.swift  ──► committed via PR
-
 app launch (ProfileSession)
-  └─ registerBuiltInPresetsIfMissing()   (existing — fresh-profile seeding)
-  └─ reconcileProviderMappings(using: BundledCryptoProviderCatalog())  (new)
-        └─ per registered crypto instrument: merge-only upgrade from catalog
+  ├─ each cache.refreshIfStale()  (background; 24h ETag conditional GET)
+  ├─ registerBuiltInPresetsIfMissing()              (existing, unchanged)
+  └─ reconcileProviderMappings(using: catalogs)     (PR2)
+        └─ per registered token: cache attribution → merge-only upgrade
+
+token registration (existing)
+  └─ CompositeTokenResolutionClient.resolve()
+        └─ reads CryptoCompare / Binance / CoinGecko caches (fetch-on-miss)
 
 price fetch (existing, unchanged)
-  └─ mapping now carries binance_symbol → keyless Binance deep history
+  └─ mapping now carries binanceSymbol → keyless Binance deep history
 ```
 
 ## Error handling
 
-- **Reconciliation**: best-effort; per-instrument failures logged and skipped;
-  cancellation returns immediately. A missing/empty catalog is a no-op.
-- **Vendor script**: missing CC key → abort before any download. A provider
-  catalog download failure → that provider contributes nothing (committed
-  columns preserved), the merged superset is still written, and the script
-  exits non-zero with a loud warning. Per-token absence from an `available`
-  provider → the column is left as committed (we fill/upgrade, never clear).
-- **Merge semantics**: never downgrade a populated stored column from an
-  `unknown` result — both in the script (vs committed file) and in
-  reconciliation (vs stored row).
+- **Cache refresh**: network failure → logged, `last_fetched` untouched, stale
+  snapshot served (existing CoinGecko contract). CC unkeyed/rate-limited → same.
+- **Cache fetch-on-miss**: a failed cold fetch behaves like today's failed live
+  fetch (resolution degrades for that provider), never crashes.
+- **Reconciliation**: per-token failures logged and skipped; cancellation
+  returns immediately; merge-only never downgrades a stored column.
+- **Schema-version mismatch**: drop-and-recreate the single provider's file.
 
 ## Testing
 
-- **Catalog lookup**: `BundledCryptoProviderCatalog.mapping(for:)` returns the
-  expected mapping for a known id and nil for an unknown id.
-- **Reconciliation contract test** (against `CloudKitBackend` + in-memory
-  GRDB):
-  - registered token with partial mapping (coingecko-only) + catalog with
-    binance/cc → upgraded, merge-only.
-  - registered token with a *fuller* stored mapping than the catalog →
-    untouched (no downgrade, no spurious write/sync).
-  - token absent from catalog → untouched.
-  - idempotent: second run produces no further change.
-- **Script classification self-test**: golden fixture JSON for each provider
-  (present / absent / rate-limited Type 99) → assert the merge preserves the
-  committed mapping on `unknown` and only writes on confirmed results, and that
-  a re-run is a no-op.
+- **Shared engine**: open/bootstrap, schema-version-mismatch drop-and-recreate,
+  WAL, ETag 200/304 paths, maxAge staleness gate, graceful degradation on
+  network error (last_fetched preserved). Reuse the `StubURLProtocol` +
+  temp-directory patterns from `SQLiteCoinGeckoCatalogRefreshTests`.
+- **CoinGecko refactor**: the existing `SQLiteCoinGeckoCatalog*Tests` must keep
+  passing (behaviour-preserving refactor — the regression guard).
+- **CryptoCompareTokenCache / BinanceTokenCache**: parse + store + query
+  (contract→symbol, native symbols, USDT pairs), fetch-on-miss, refresh ETag.
+- **Resolution rewire**: existing `CompositeTokenResolutionClientTests` pass
+  with cache-backed sources; add a test that a warm cache serves without a
+  second network hit.
+- **Reconciliation (PR2)**: against `CloudKitBackend` + in-memory GRDB —
+  partial mapping upgraded; fuller stored mapping untouched (no downgrade, no
+  write); token absent from caches untouched; idempotent (second run no-op).
 
-## Relationship to the existing catalog infrastructure
+## Relationship to the existing infrastructure
 
-The app already ships a self-refreshing **CoinGecko** catalog —
-`SQLiteCoinGeckoCatalog` (an on-disk `catalog.sqlite`) refreshed every 24h via
-ETag-conditional GETs against `/coins/list` + `/asset_platforms`, exposed
-offline through `LocalContractResolver` (`(chainId, contract) → coingeckoId`)
-and consulted local-first by `CompositeTokenResolutionClient`. There is **no**
-equivalent for CryptoCompare or Binance: `fetchCoinListData()` pulls the CC
-`/data/all/coinlist` on demand and discards it (no URLCache, no table), and
-the Binance pair is resolved live per registration.
-
-This places the new work precisely: `coingeckoId` is already locally
-resolvable, so the bundled `CryptoProviderCatalog`'s distinct value is the
-**`binance_symbol` / `cryptocompare_symbol` layer** (deep, keyless history)
-plus the **re-detection** the CoinGecko catalog does not perform — provider
-ids on a registered token are resolved once and never revisited. The new
-catalog still carries `coingeckoId` (harmless, merge-only, useful for fresh
-seeding), but the columns that actually fix #1140 are the other two.
-
-**Future direction (not this change):** because a self-refreshing catalog
-pattern already exists, the "complete supported-token list" vision (Option B)
-could alternatively be realised as a runtime-refreshed Binance/CC cache that
-reconciliation reads — extending the 24h `refreshIfStale()` model rather than
-shipping a static resource. The `CryptoProviderCatalog` protocol seam admits
-either; Option A ships now.
+`SQLiteCoinGeckoCatalog` is the template this generalizes — it already does
+file lifecycle, 24h ETag refresh, drop-and-recreate, offline contract lookup,
+and FTS search with raw SQLite on an actor (deliberately not GRDB: it is a
+network-derived cache whose retention policy is drop-and-recreate, which the
+profile DB forbids — see `DATABASE_SCHEMA_GUIDE.md`). The refactor lifts its
+reusable machinery into the shared engine and adds two siblings; it does not
+change its retention model, file location convention, or actor isolation.
 
 ## Known constraints
 
-- The provided CryptoCompare key is a free-tier key (~100 calls/month) and was
-  already over its monthly limit at design time. The single-bulk-call design
-  fits within the cap once it resets; until then the CC path can only be
-  exercised via the script's fixture self-test, not live. This is exactly why
-  the transient-safety requirements are load-bearing.
+- The supplied CryptoCompare key is free-tier (~100 calls/month) and was over
+  its monthly cap at design time. The cache needs only **one bulk call per 24h**
+  (vs today's call-per-resolution), so caching *reduces* CC usage dramatically.
+  Until the cap resets the CC cache serves stale/empty and `cryptocompareSymbol`
+  fills in on a later refresh — merge-only reconciliation never regresses.
 
 ## Decisions log
 
-- Upgrade path: add a reconciliation pass reading from the catalog (not just
-  fresh-profile seeding) — fixes existing profiles.
-- HEX: included in the curated universe for probing; **not** reclassified.
-- Codegen wiring: generated Swift file, manual run + weekly CI auto-PR; **not**
-  part of `just generate`.
-- Token scope: reuse the `CanonicalTokenRegistry` universe + gap tokens.
-- Manifest source: download full provider catalogs, resolve locally; **not**
-  sourced from the Real Profile.
-- Catalog: Option A (curated Swift literal) now, behind a `CryptoProviderCatalog`
-  protocol so Option B (resource-backed complete list) is a drop-in later.
+- Full pivot to runtime self-refreshing caches; vendoring/CI/bundled-catalog
+  dropped.
+- Generalize all three providers (CoinGecko refactor + CryptoCompare + Binance)
+  onto one shared caching engine.
+- Re-detection reads the caches via the shared per-provider attribution helpers
+  extracted from the resolution client (its `resolve()` early-returns on a local
+  match and can't be reused wholesale), so the spam-safe attribution is shared,
+  not duplicated.
+- Cold-cache correctness via fetch-on-miss (first resolution no slower than
+  today; thereafter free).
+- Ship as two stacked PRs: refactor first, re-detection second.
+- HEX: not reclassified.
