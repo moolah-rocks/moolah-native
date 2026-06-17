@@ -14,6 +14,7 @@ struct SyncProviderTests {
     #expect(SyncProvider.coinGecko.rawValue == "coinGecko")
     #expect(SyncProvider.cryptoCompare.rawValue == "cryptoCompare")
     #expect(SyncProvider.binance.rawValue == "binance")
+    #expect(SyncProvider.defiLlama.rawValue == "defiLlama")
   }
 
   @Test("Display names are the user-facing brand strings")
@@ -24,6 +25,7 @@ struct SyncProviderTests {
     #expect(SyncProvider.coinGecko.displayName == "CoinGecko")
     #expect(SyncProvider.cryptoCompare.displayName == "CryptoCompare")
     #expect(SyncProvider.binance.displayName == "Binance")
+    #expect(SyncProvider.defiLlama.displayName == "DefiLlama")
   }
 
   @Test("Pegged stablecoin provider has a user-facing display name")
