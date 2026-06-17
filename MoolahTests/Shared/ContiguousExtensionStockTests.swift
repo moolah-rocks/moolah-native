@@ -8,17 +8,6 @@ import Testing
 
 @Suite
 struct ContiguousExtensionStockTests {
-  /// Parses a `YYYY-MM-DD` string to a midnight-UTC `Date`. Shared by all
-  /// tests in this suite to keep date construction readable.
-  private func utcDay(_ string: String) -> Date {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withFullDate]
-    formatter.timeZone = .utc
-    guard let date = formatter.date(from: string) else {
-      fatalError("Could not parse ISO date: \(string)")
-    }
-    return date
-  }
 
   /// Serves a daily price for every weekday in the requested range that is
   /// within `horizonDays` of `today`; older days and weekends return empty.

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import Moolah
@@ -109,5 +110,52 @@ struct ContiguousFetchPlannerTests {
       today: 20_240_215,
       config: Self.defaultConfig)
     #expect(win == 20_240_118...20_240_217)  // end=today+buffer=Feb17, back 30 = Jan18
+  }
+
+  // MARK: - chunked
+
+  /// Midnight-UTC anchor for `YYYY-MM-DD`.
+  private func day(_ string: String) -> Date {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withFullDate]
+    formatter.timeZone = .utc
+    return formatter.date(from: string) ?? Date(timeIntervalSince1970: 0)
+  }
+
+  @Test
+  func chunkedSplitsLongRangeIntoBoundedWindows() {
+    // 2024-01-01 … 2024-03-31 (91 days) at ≤30-day windows. Each window spans
+    // 30 day-components ([Jan1…Jan31], [Feb1…Mar2], [Mar3…Mar31]) → 3
+    // sub-ranges, consecutive and non-overlapping.
+    let chunks = ContiguousFetchPlanner.chunked(
+      day("2024-01-01")...day("2024-03-31"), days: 30)
+    #expect(chunks.count == 3)
+    #expect(chunks.first?.lowerBound == day("2024-01-01"))
+    #expect(chunks.last?.upperBound == day("2024-03-31"))
+    let cal = Calendar.utc
+    for chunk in chunks {
+      let span = cal.dateComponents([.day], from: chunk.lowerBound, to: chunk.upperBound).day ?? 0
+      #expect(span <= 30)
+    }
+    // Each chunk starts the day after the previous one ends (contiguous, no gap).
+    for idx in 1..<chunks.count {
+      let prevEnd = chunks[idx - 1].upperBound
+      let expectedStart = cal.date(byAdding: .day, value: 1, to: prevEnd)
+      #expect(chunks[idx].lowerBound == expectedStart)
+    }
+  }
+
+  @Test
+  func chunkedShortRangeIsSingleWindow() {
+    let chunks = ContiguousFetchPlanner.chunked(
+      day("2024-01-01")...day("2024-01-10"), days: 30)
+    #expect(chunks == [day("2024-01-01")...day("2024-01-10")])
+  }
+
+  @Test
+  func chunkedSingleDayRangeIsSingleWindow() {
+    let chunks = ContiguousFetchPlanner.chunked(
+      day("2024-01-01")...day("2024-01-01"), days: 30)
+    #expect(chunks == [day("2024-01-01")...day("2024-01-01")])
   }
 }

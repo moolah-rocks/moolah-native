@@ -6,18 +6,6 @@ import Testing
 
 @Suite
 struct ContiguousExtensionCryptoTests {
-  /// Parses a `YYYY-MM-DD` string to a midnight-UTC `Date`. Shared by all
-  /// tests in this suite to keep date construction readable.
-  private func utcDay(_ string: String) -> Date {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withFullDate]
-    formatter.timeZone = .utc
-    guard let date = formatter.date(from: string) else {
-      fatalError("Could not parse ISO date: \(string)")
-    }
-    return date
-  }
-
   /// Serves a daily price for every day in the requested range that is
   /// within `horizonDays` of `today`; older days return empty (mimics
   /// CoinGecko free tier's 365-day refusal collapsing to empty).
@@ -159,8 +147,20 @@ struct ContiguousExtensionCryptoTests {
   // MARK: - Range contiguity
 
   /// A `prices(in:)` range request using a horizon-restricted client must not
-  /// create an interior hole. The fix chunks the backward `uncoveredSubRanges`
-  /// entry into bounded 30-day windows so the bounds never span un-fetched days.
+  /// create an interior hole. Old logic: `prices(in:)` issued unbounded
+  /// forward/backward fetches; a horizon client returning only recent data
+  /// would jump `latest` (or `earliest`) over un-served days, leaving a void.
+  /// New logic: both forward and backward extensions go through
+  /// `uncoveredSubRanges` which chunks into ≤30-day windows.
+  ///
+  /// Trigger sequence (forward extension variant, mirrors `farBackRequestLeavesNoInteriorGap`):
+  ///   1. Seed far-back data so cache has latest ≈ 2024-07-12.
+  ///   2. Request `rangeStart...today` with a horizon client (only serves ≥ 2025-06-17).
+  ///      Old logic: `prices(in:)` computes forward sub-range [latest...fetchUpperBound]
+  ///      in one unbounded call. Provider returns 2025-06-17…today; merge jumps
+  ///      `latest` to today leaving an ~11-month void.
+  ///      New logic: `uncoveredSubRanges` chunks the forward span into ≤30-day
+  ///      windows, so bounds only advance across actually-returned data.
   @Test
   func rangeRequestLeavesNoInteriorGap() async throws {
     let today = utcDay("2026-06-17")
@@ -168,14 +168,14 @@ struct ContiguousExtensionCryptoTests {
     let instrument = makeTestInstrument(address: "0xrange", symbol: "RNG")
     let mapping = makeMapping(for: instrument, binanceSymbol: "RNGUSDT")
 
-    // Seed recent block so the cache has latest ≈ today.
+    // Step 1: Seed a far-back date so the cache has latest ≈ 2024-07-12.
     let seeder = makeService(clients: [AllServingClient()], database: database, now: today)
-    _ = try? await seeder.price(for: instrument, mapping: mapping, on: today)
+    _ = try? await seeder.price(for: instrument, mapping: mapping, on: utcDay("2024-07-12"))
 
-    // Now request a range spanning far back using the horizon-restricted client.
-    // Old logic: prices(in:) issues one unbounded backward fetch [rangeStart...earliest-1];
-    // HorizonClient returns only ≥ 2025-06-17, leaving a void before that.
-    // New logic: backward extension is split into ≤30-day windows, so no interior gap forms.
+    // Step 2: Request rangeStart...today using a horizon-restricted client.
+    // Old logic emits an unbounded forward fetch [2024-07-12…today]; the
+    // horizon client returns data from 2025-06-17 onward; merge jumps
+    // `latest` to today leaving an ~11-month void inside the range.
     let service = makeService(
       clients: [HorizonClient(today: today, horizonDays: 365)],
       database: database,

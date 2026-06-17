@@ -33,8 +33,9 @@ extension ExchangeRateService {
 
     // Extend toward `target` using bounded 30-day windows driven by
     // `ContiguousFetchPlanner`. Uses the same fetch path as
-    // `fetchToCoverDate` to keep cache bounds contiguous. Errors are
-    // best-effort — log so disk-write failures are observable.
-    await fetchToCoverDate(base: code, date: target, dateString: targetString)
+    // `fetchToCoverDate` to keep cache bounds contiguous. Best-effort:
+    // `fetchToCoverDate` only throws on cooperative cancellation, which is
+    // benign here (prefetch is fire-and-forget); swallow it with `try?`.
+    try? await fetchToCoverDate(base: code, date: target, dateString: targetString)
   }
 }

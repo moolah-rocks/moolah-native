@@ -92,7 +92,7 @@ actor ExchangeRateService {
     }
 
     // Out of cached range — extend toward the requested date.
-    await fetchToCoverDate(base: base, date: date, dateString: dateString)
+    try await fetchToCoverDate(base: base, date: date, dateString: dateString)
 
     // Exact hit after fetch?
     if let cached = lookupRate(base: base, quote: quote, dateString: dateString) {

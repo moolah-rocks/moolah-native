@@ -11,17 +11,18 @@ enum StockPriceError: Error, Equatable {
 
 actor StockPriceService {
   private let client: StockPriceClient
-  // `caches` is accessed by the merge extension in
-  // `StockPriceService+Merge.swift` (which defines
-  // `mergeReturningDelta(ticker:instrument:newPrices:)`, called from this
-  // file), so it is `internal` rather than `private`. It remains
-  // actor-isolated; the access modifier is internal only so the
-  // sibling-file extension can see it.
-  var caches: [String: StockPriceCache] = [:]
-  /// Loaded tickers — set on first hydration so we don't re-read SQL when
-  /// the cache is genuinely empty.
   private var hydratedTickers: Set<String> = []
   private let database: any DatabaseWriter
+
+  // MARK: - Cross-extension internals
+  // `caches`, `dateFormatter`, `now`, `timeZone`, and `logger` are accessed
+  // by the merge extension in `StockPriceService+Merge.swift` (which defines
+  // `mergeReturningDelta(ticker:instrument:newPrices:)`, called from this
+  // file) and by the bounded-extension / chunking extension in
+  // `StockPriceService+FetchRange.swift`, so they are `internal` rather than
+  // `private`. They remain actor-isolated; the access modifier is internal
+  // only so the sibling-file extensions can see them.
+  var caches: [String: StockPriceCache] = [:]
   let dateFormatter: ISO8601DateFormatter
   /// Injected clock so tests can pin "today" deterministically.
   let now: @Sendable () -> Date
@@ -29,7 +30,7 @@ actor StockPriceService {
   /// Production defaults to `TimeZone.current`; tests asserting on a
   /// specific `YYYY-MM-DD` label pin to `UTC`.
   let timeZone: TimeZone
-  private let logger = Logger(
+  let logger = Logger(
     subsystem: "com.moolah.app", category: "StockPriceService")
 
   init(

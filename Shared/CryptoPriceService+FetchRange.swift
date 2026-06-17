@@ -13,10 +13,10 @@ extension CryptoPriceService {
   /// when no progress was made (provider genuinely has no data for this
   /// window), or when a provider error occurs on every window attempt.
   ///
-  /// Unlike the old unbounded `extensionWindow`, a horizon-restricted
-  /// provider (e.g. CoinGecko free tier: 365 days) causes the loop to stop
-  /// at the edge of its coverage window rather than jumping `latest` all
-  /// the way to the requested date and leaving a void.
+  /// Unlike an unbounded extension, a horizon-restricted provider (e.g.
+  /// CoinGecko free tier: 365 days) causes the loop to stop at the edge of
+  /// its coverage window rather than jumping `latest` all the way to the
+  /// requested date and leaving a void.
   func extendContiguously(
     instrument: Instrument,
     mapping: CryptoProviderMapping,
@@ -29,7 +29,7 @@ extension CryptoPriceService {
     let config = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
     var lastFetchError: (any Error)?
     var guardSteps = 0
-    while guardSteps < 64 {
+    while guardSteps < 250 {
       guardSteps += 1
       let bounds = boundsKeys(tokenId: tokenId)
       guard
@@ -63,8 +63,71 @@ extension CryptoPriceService {
       // let a later call re-query the boundary (recent data may publish later).
       if boundsKeys(tokenId: tokenId) == before { break }
     }
+    if guardSteps >= 250 {
+      logger.warning(
+        "extendContiguously: guard limit reached for \(tokenId, privacy: .public) on \(dateString, privacy: .public)"
+      )
+    }
     return try resolveAfterExtension(
       tokenId: tokenId, dateString: dateString, fetchError: lastFetchError)
+  }
+
+  /// Covers `[lowerKey, upperKey]` contiguously by running the bounded
+  /// planner loop toward each endpoint with a no-progress guard. Unlike a
+  /// precomputed chunk list (which fetches every window upfront and so can
+  /// leave an interior gap when a horizon-restricted provider serves only a
+  /// recent subset), this stops a direction the moment a window yields no
+  /// boundary progress — keeping `[earliest, latest]` contiguous exactly as
+  /// the single-price `extendContiguously` does. Used by
+  /// `prices(for:mapping:in:)`.
+  func coverRangeContiguously(
+    instrument: Instrument,
+    mapping: CryptoProviderMapping,
+    tokenId: String,
+    lowerKey: Int32,
+    upperKey: Int32
+  ) async throws {
+    let todayKey =
+      DateKey.from(isoString: dateFormatter.string(from: now())) ?? upperKey
+    let config = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
+    // Cover the forward endpoint first, then the backward one. Each call
+    // anchors at the live cache bounds, so order does not create a gap.
+    for requestedKey in [upperKey, lowerKey] {
+      var guardSteps = 0
+      while guardSteps < 250 {
+        guardSteps += 1
+        let bounds = boundsKeys(tokenId: tokenId)
+        guard
+          let window = ContiguousFetchPlanner.nextWindow(
+            earliest: bounds.earliest,
+            latest: bounds.latest,
+            requested: requestedKey,
+            today: todayKey,
+            config: config)
+        else { break }  // endpoint now in range
+        let before = bounds
+        let fetchInterval = parseInterval(
+          DateKey.isoString(window.lowerBound)...DateKey.isoString(window.upperBound))
+        do {
+          try await fetchWindowCoalesced(
+            instrument: instrument, mapping: mapping, fetchInterval: fetchInterval)
+        } catch is CancellationError {
+          throw CancellationError()
+        } catch {
+          // Provider chain fully failed for this window; stop this direction
+          // and fall through to the result series (cached data is used).
+          break
+        }
+        // No progress (bounds unchanged) means genuine no-more-data; stop and
+        // let a later call re-query the boundary (data may publish later).
+        if boundsKeys(tokenId: tokenId) == before { break }
+      }
+      if guardSteps >= 250 {
+        logger.warning(
+          "coverRangeContiguously: guard limit reached for \(tokenId, privacy: .public)"
+        )
+      }
+    }
   }
 
   /// Final resolution after the bounded extension loop exits: checks cached
@@ -123,17 +186,23 @@ extension CryptoPriceService {
   ) async throws {
     let tokenId = instrument.id
     if let inFlight = extensionTasks[tokenId] {
-      _ = try? await inFlight.task.value
+      do {
+        try await inFlight.task.value
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
+        // Owner's provider error; the no-progress guard in
+        // `extendContiguously` handles it.
+      }
       return
     }
     let requestId = UUID()
-    let task = Task<Decimal, Error> { [self] in
+    let task = Task<Void, Error> { [self] in
       try await self.fetchRange(
         instrument: instrument,
         mapping: mapping,
         from: fetchInterval.lowerBound,
         to: fetchInterval.upperBound)
-      return 0
     }
     extensionTasks[tokenId] = (requestId, task)
     defer {
@@ -242,11 +311,13 @@ extension CryptoPriceService {
 
   /// The sub-ranges of `range` not already covered by the token's cache,
   /// chunked into at most 30-day windows so no single fetch spans an
-  /// un-served interior. Mirrors the backward/forward extension decision in
-  /// `prices(for:mapping:in:)` — including its boundary-day inversion
-  /// guards (`range.lowerBound <= backEnd` and `forwardStart <=
-  /// fetchUpperBound`) so a noon-anchored day token immediately adjacent
-  /// to a cache bound never builds an inverted `ClosedRange`.
+  /// un-served interior. Boundary-day inversion guards
+  /// (`range.lowerBound <= backEnd` and `forwardStart <= fetchUpperBound`)
+  /// ensure a noon-anchored day token immediately adjacent to a cache bound
+  /// never builds an inverted `ClosedRange`. Used by `warmRange`, which
+  /// intentionally fills every uncovered sub-range (it backfills holes); the
+  /// contiguity-preserving `prices(for:mapping:in:)` path uses
+  /// `coverRangeContiguously` instead.
   private func uncoveredSubRanges(
     tokenId: String, range: ClosedRange<Date>
   ) -> [ClosedRange<Date>] {
@@ -256,7 +327,7 @@ extension CryptoPriceService {
     let fetchEndString = dateFormatter.string(from: fetchUpperBound)
     let gregorian = Calendar.utc
     guard let cache = caches[tokenId] else {
-      return Self.chunked(range.lowerBound...fetchUpperBound, days: 30)
+      return ContiguousFetchPlanner.chunked(range.lowerBound...fetchUpperBound, days: 30)
     }
     var result: [ClosedRange<Date>] = []
     if rangeStart < cache.earliestDate,
@@ -264,35 +335,13 @@ extension CryptoPriceService {
       let backEnd = gregorian.date(byAdding: .day, value: -1, to: earliest),
       range.lowerBound <= backEnd
     {
-      result += Self.chunked(range.lowerBound...backEnd, days: 30)
+      result += ContiguousFetchPlanner.chunked(range.lowerBound...backEnd, days: 30)
     }
     if fetchEndString > cache.latestDate,
       let forwardStart = dateFormatter.date(from: cache.latestDate),
       forwardStart <= fetchUpperBound
     {
-      result += Self.chunked(forwardStart...fetchUpperBound, days: 30)
-    }
-    return result
-  }
-
-  /// Splits `range` into consecutive sub-ranges of at most `days` calendar
-  /// days (UTC). Used by `uncoveredSubRanges` to cap individual fetches so
-  /// a horizon-restricted provider cannot jump the cache bounds over a void.
-  static func chunked(_ range: ClosedRange<Date>, days: Int) -> [ClosedRange<Date>] {
-    let cal = Calendar.utc
-    var result: [ClosedRange<Date>] = []
-    var start = range.lowerBound
-    while start <= range.upperBound {
-      let end: Date
-      if let candidate = cal.date(byAdding: .day, value: days, to: start) {
-        end = min(candidate, range.upperBound)
-      } else {
-        end = range.upperBound
-      }
-      result.append(start...end)
-      guard let next = cal.date(byAdding: .day, value: 1, to: end) else { break }
-      if next > range.upperBound { break }
-      start = next
+      result += ContiguousFetchPlanner.chunked(forwardStart...fetchUpperBound, days: 30)
     }
     return result
   }
