@@ -135,15 +135,17 @@ actor ExchangeRateService {
     // range; today's slot fills via `lastKnownRate` carry-forward.
     let fetchUpperBound = cappedDate(range.upperBound)
 
-    // Fetch only the uncovered sub-ranges, chunked into ≤30-day windows so
-    // a horizon-restricted provider cannot jump `latest` over un-fetched days.
-    // `uncoveredSubRanges` lives in `ExchangeRateService+FetchRange.swift`.
-    if range.lowerBound <= fetchUpperBound {
-      let subRanges = uncoveredSubRanges(
-        base: base, fetchStart: range.lowerBound, fetchEnd: fetchUpperBound)
-      for sub in subRanges {
-        try await fetchAndMerge(base: base, from: sub.lowerBound, to: sub.upperBound)
-      }
+    // Cover the requested range contiguously using bounded 30-day windows
+    // driven by `ContiguousFetchPlanner`. Unlike a precomputed chunk list,
+    // the loop anchors each window at the live cache bounds and stops as
+    // soon as a window yields no progress — preventing a horizon-restricted
+    // provider from jumping `latest` over un-fetched interior days.
+    // `coverRangeContiguously` lives in `ExchangeRateService+FetchRange.swift`.
+    if range.lowerBound <= fetchUpperBound,
+      let lowerKey = DateKey.from(isoString: dateFormatter.string(from: range.lowerBound)),
+      let upperKey = DateKey.from(isoString: dateFormatter.string(from: fetchUpperBound))
+    {
+      try await coverRangeContiguously(base: base, lowerKey: lowerKey, upperKey: upperKey)
     }
 
     // Build result series
