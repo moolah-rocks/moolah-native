@@ -108,14 +108,16 @@ actor StockPriceService {
       return buildResultSeries(ticker: ticker, in: range)
     }
 
-    // Fetch uncovered sub-ranges using bounded 30-day windows so a
-    // horizon-restricted provider cannot advance bounds over un-fetched days.
-    let subRanges = uncoveredSubRanges(
-      ticker: ticker,
-      fetchStart: range.lowerBound,
-      fetchEnd: fetchUpperBound)
-    for sub in subRanges {
-      try await fetchAndMerge(ticker: ticker, from: sub.lowerBound, to: sub.upperBound)
+    // Cover the requested range contiguously using bounded 30-day windows
+    // driven by `ContiguousFetchPlanner`. Unlike a precomputed chunk list,
+    // the loop anchors each window at the live cache bounds and stops as
+    // soon as a window yields no progress — preventing a horizon-restricted
+    // provider from jumping `latest` over un-fetched interior days.
+    if let lowerKey = DateKey.from(isoString: dateFormatter.string(from: range.lowerBound)),
+      let upperKey = DateKey.from(isoString: dateFormatter.string(from: fetchUpperBound))
+    {
+      try await coverRangeContiguously(
+        ticker: ticker, lowerKey: lowerKey, upperKey: upperKey)
     }
 
     return buildResultSeries(ticker: ticker, in: range)

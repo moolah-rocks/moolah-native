@@ -131,29 +131,40 @@ struct ContiguousExtensionStockTests {
 
   // MARK: - Range contiguity
 
-  /// A `prices(ticker:in:)` range request using a horizon-restricted client
-  /// must not create an interior hole larger than a long weekend.
+  /// A `prices(ticker:in:)` range request spanning a forward-horizon hole must
+  /// not create an interior gap larger than a long weekend.
+  ///
+  /// Trigger sequence (mirrors `farBackSeedThenTodayRequestLeavesOnlyWeekendGaps`
+  /// but via the range API instead of the single-price API):
+  ///   1. Seed far-back date (2024-07-12) using an all-serving client so the
+  ///      cache has earliest≈2024-06-12, latest=2024-07-12.
+  ///   2. Request rangeStart…today with a horizon-restricted client
+  ///      (serves only the past 365 days, i.e. ≥ 2025-06-17).
+  ///      Old logic: `uncoveredSubRanges` precomputes ALL forward chunks
+  ///      from 2024-07-12 to 2026-06-16 upfront. The horizon client
+  ///      returns data starting at 2025-06-17; the chunks that span
+  ///      2025-06-17 advance `latest` past the immediately-preceding empty
+  ///      chunks, leaving an interior void of ~339 days.
+  ///      New logic: `coverRangeContiguously` steps one window at a time
+  ///      anchored at the live bounds; a window that returns no data stops
+  ///      the loop, so no jump occurs.
   @Test
-  func rangeRequestLeavesOnlyWeekendGaps() async throws {
+  func rangeRequestLeavesNoInteriorGap() async throws {
     let today = utcDay("2026-06-17")
     let database = try ProfileIndexDatabase.openInMemory()
 
-    // Seed today's data so the cache has a recent bound.
+    // Step 1: Seed a far-back date so the cache has latest ≈ 2024-07-12.
     let seeder = makeService(
       client: AllServingWeekdayClient(),
       database: database,
       now: today
     )
-    _ = try? await seeder.price(ticker: "BHP.AX", on: today)
+    _ = try? await seeder.price(ticker: "BHP.AX", on: utcDay("2024-07-12"))
 
-    // Request a range far back using a horizon-restricted client.
-    // Old logic emits one large backward fetch [2024-01-01 … earliest-1];
-    // the horizon client returns nothing for dates before 2025-06-17.
-    // Since backward fetch returns empty for the pre-horizon range, the
-    // bounds don't advance backward — so this test may trivially pass for
-    // the backward direction. The main regression to prevent is a forward
-    // extension creating an interior gap, which this test catches when
-    // combined with farBackSeedThenTodayRequestLeavesOnlyWeekendGaps.
+    // Step 2: Request rangeStart…today using a horizon-restricted client.
+    // Old uncoveredSubRanges path precomputes all chunks; a later chunk that
+    // returns data jumps `latest` past earlier empty chunks, creating an
+    // ~11-month interior void.
     let service = makeService(
       client: WeekdayHorizonClient(today: today, horizonDays: 365),
       database: database,
