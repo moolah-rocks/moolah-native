@@ -67,18 +67,46 @@ enum CatalogRefresh {
       return
     }
 
+    // Read each endpoint's stored validator on the caller's isolation FIRST,
+    // before opening the task group: `database` is non-Sendable and must
+    // never cross into the concurrent fetches. Only `http` (Sendable) and
+    // the plain `key` / `url` / `ifNoneMatch` strings do.
+    let requests = endpoints.map { endpoint in
+      (key: endpoint.key, url: endpoint.url, ifNoneMatch: database.readEtag(key: endpoint.key))
+    }
+
+    // Fetch all endpoints concurrently (restores the per-provider `async let`
+    // fan-out the generic engine replaced), collecting one
+    // `(key, outcome)` per endpoint. The Sendable `CatalogFetchOutcome` is
+    // all that comes back out of the group.
+    let outcomes = try await withThrowingTaskGroup(
+      of: (String, CatalogFetchOutcome).self
+    ) { group in
+      for request in requests {
+        group.addTask {
+          let outcome = try await fetchConditional(
+            http: http, url: request.url, ifNoneMatch: request.ifNoneMatch)
+          return (request.key, outcome)
+        }
+      }
+      var collected: [(String, CatalogFetchOutcome)] = []
+      for try await result in group {
+        collected.append(result)
+      }
+      return collected
+    }
+
+    // Back on the caller's isolation: build the changed-bodies dict and the
+    // fresh etags, apply, then persist. `writeLastFetched` runs LAST so a
+    // thrown fetch error above leaves `last_fetched` untouched (the next
+    // launch retries).
     var bodies: [String: Data] = [:]
     var freshEtags: [String: String?] = [:]
-    for endpoint in endpoints {
-      let outcome = try await fetchConditional(
-        http: http,
-        url: endpoint.url,
-        ifNoneMatch: database.readEtag(key: endpoint.key)
-      )
+    for (key, outcome) in outcomes {
       switch outcome {
       case let .ok(data, etag):
-        bodies[endpoint.key] = data
-        freshEtags[endpoint.key] = etag
+        bodies[key] = data
+        freshEtags[key] = etag
       case .notModified:
         break
       }
