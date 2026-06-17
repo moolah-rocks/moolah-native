@@ -77,3 +77,47 @@ struct CryptoProviderMappingTests {
     }
   }
 }
+
+@Suite("CryptoProviderMapping.merging")
+struct CryptoProviderMappingMergingTests {
+  @Test("fills nil columns from other, never downgrades populated ones")
+  func mergeFillsNilsOnly() {
+    let stored = CryptoProviderMapping(
+      instrumentId: "1:0xrpl", coingeckoId: "rocket-pool",
+      cryptocompareSymbol: nil, binanceSymbol: nil)
+    let extra = CryptoProviderMapping(
+      instrumentId: "1:0xrpl", coingeckoId: "WRONG",
+      cryptocompareSymbol: "RPL", binanceSymbol: "RPLUSDT")
+    let merged = stored.merging(extra)
+    #expect(merged.coingeckoId == "rocket-pool")
+    #expect(merged.cryptocompareSymbol == "RPL")
+    #expect(merged.binanceSymbol == "RPLUSDT")
+    #expect(merged.instrumentId == "1:0xrpl")
+  }
+
+  @Test("no-op merge equals self")
+  func noOp() {
+    let full = CryptoProviderMapping(
+      instrumentId: "1:0xrpl", coingeckoId: "rocket-pool",
+      cryptocompareSymbol: "RPL", binanceSymbol: "RPLUSDT")
+    #expect(
+      full.merging(
+        .init(
+          instrumentId: "1:0xrpl", coingeckoId: nil,
+          cryptocompareSymbol: nil, binanceSymbol: nil)) == full)
+  }
+
+  @Test("does not mutate instrumentId even if other differs")
+  func keepsOwnInstrumentId() {
+    let stored = CryptoProviderMapping(
+      instrumentId: "1:0xrpl", coingeckoId: nil,
+      cryptocompareSymbol: nil, binanceSymbol: "RPLUSDT")
+    let other = CryptoProviderMapping(
+      instrumentId: "999:0xother", coingeckoId: "rocket-pool",
+      cryptocompareSymbol: "RPL", binanceSymbol: "WRONGUSDT")
+    let merged = stored.merging(other)
+    #expect(merged.instrumentId == "1:0xrpl")
+    #expect(merged.binanceSymbol == "RPLUSDT")  // own populated value kept
+    #expect(merged.coingeckoId == "rocket-pool")  // nil filled from other
+  }
+}
