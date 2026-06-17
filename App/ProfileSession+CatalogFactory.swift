@@ -5,6 +5,16 @@ import GRDB
 import OSLog
 
 extension ProfileSession {
+  /// Shared on-disk location for the CoinGecko catalog and the CryptoCompare /
+  /// Binance token caches — a single `InstrumentRegistry` directory under the
+  /// app-group container so every catalog/cache `.sqlite` lives together.
+  /// `nonisolated` so `makeLookupCatalog` (which also runs off `@MainActor`)
+  /// can read it.
+  nonisolated private static var instrumentRegistryDirectory: URL {
+    URL.moolahScopedApplicationSupport
+      .appending(path: "InstrumentRegistry", directoryHint: .isDirectory)
+  }
+
   /// Builds the per-profile CoinGecko catalog and kicks off a background
   /// `refreshIfStale()` so the SQLite snapshot is brought up to date once per
   /// session without blocking init. Returns `(nil, nil)` (and logs) when the
@@ -16,8 +26,7 @@ extension ProfileSession {
     coinGeckoApiKeyProvider: @Sendable @escaping () -> String?,
     networking: NetworkingServices
   ) -> (catalog: (any CoinGeckoCatalog)?, refreshTask: Task<Void, Never>?) {
-    let directory = URL.moolahScopedApplicationSupport
-      .appending(path: "InstrumentRegistry", directoryHint: .isDirectory)
+    let directory = Self.instrumentRegistryDirectory
     do {
       let catalog = try SQLiteCoinGeckoCatalog.make(
         directory: directory,
@@ -51,8 +60,7 @@ extension ProfileSession {
   static func makeCryptoCompareCache(
     networking: NetworkingServices
   ) -> (cache: CryptoCompareTokenCache?, refreshTask: Task<Void, Never>?) {
-    let directory = URL.moolahScopedApplicationSupport
-      .appending(path: "InstrumentRegistry", directoryHint: .isDirectory)
+    let directory = Self.instrumentRegistryDirectory
     do {
       let cache = try CryptoCompareTokenCache.make(
         directory: directory,
@@ -85,8 +93,7 @@ extension ProfileSession {
   static func makeBinanceCache(
     networking: NetworkingServices
   ) -> (cache: BinanceTokenCache?, refreshTask: Task<Void, Never>?) {
-    let directory = URL.moolahScopedApplicationSupport
-      .appending(path: "InstrumentRegistry", directoryHint: .isDirectory)
+    let directory = Self.instrumentRegistryDirectory
     do {
       let cache = try BinanceTokenCache.make(
         directory: directory,
@@ -122,8 +129,7 @@ extension ProfileSession {
     networking: NetworkingServices
   ) -> (any LocalContractResolver)? {
     guard currentUITestSeed() == nil else { return nil }
-    let directory = URL.moolahScopedApplicationSupport
-      .appending(path: "InstrumentRegistry", directoryHint: .isDirectory)
+    let directory = Self.instrumentRegistryDirectory
     do {
       return try SQLiteCoinGeckoCatalog.make(
         directory: directory,
