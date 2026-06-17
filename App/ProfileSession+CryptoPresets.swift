@@ -26,8 +26,27 @@ extension ProfileSession {
       await registry.registerBuiltInPresetsIfMissing()
       guard !Task.isCancelled else { return }
       await self.reconcileFromCaches(registry: registry)
+      guard !Task.isCancelled else { return }
+      await self.probeDefiLlamaSupport(registry: registry)
     }
     crossStoreUpdateTasks.append(task)
+  }
+
+  /// Batched DefiLlama support probe: refreshes the local support cache for the
+  /// profile's registered tokens so the `DefiLlamaClient` can short-circuit
+  /// known-unsupported tokens and bound backfills at each token's history floor
+  /// (#1140 follow-on). Best-effort; skipped if the cache failed to open.
+  private func probeDefiLlamaSupport(
+    registry: any InstrumentRegistryRepository
+  ) async {
+    guard let defiLlamaSupportCache else { return }
+    let registrations: [CryptoRegistration]
+    do {
+      registrations = try await registry.allCryptoRegistrations()
+    } catch {
+      return  // best-effort; next launch retries
+    }
+    await defiLlamaSupportCache.refreshSupport(for: registrations, now: Date())
   }
 
   /// Re-detection pass: upgrade already-registered tokens (e.g.

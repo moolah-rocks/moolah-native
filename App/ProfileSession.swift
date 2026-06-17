@@ -64,6 +64,7 @@ final class ProfileSession: Identifiable {
   /// UI testing, where overrides supply the resolver directly).
   private(set) var cryptoCompareCache: CryptoCompareTokenCache?
   private(set) var binanceCache: BinanceTokenCache?
+  private(set) var defiLlamaSupportCache: DefiLlamaSupportCache?
   private(set) var tokenResolutionClient: (any TokenResolutionClient)?
   /// Orchestrator for crypto-wallet auto-import. `nil` when the profile
   /// has no `instrumentRegistry` (preview / degraded launches). Set
@@ -190,6 +191,7 @@ final class ProfileSession: Identifiable {
     self.exchangeRateService = services.exchangeRate
     self.stockPriceService = services.stockPrice
     self.cryptoPriceService = services.cryptoPrice
+    self.defiLlamaSupportCache = services.defiLlamaSupportCache
 
     let backend = Self.makeBackend(
       profile: profile,

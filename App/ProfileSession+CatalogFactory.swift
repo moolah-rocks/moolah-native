@@ -112,6 +112,30 @@ extension ProfileSession {
     }
   }
 
+  /// Opens the local DefiLlama per-token support cache in the shared
+  /// `InstrumentRegistry` directory. Unlike the list caches it starts no
+  /// background `refreshIfStale()` — the startup probe in
+  /// `seedBuiltInCryptoPresets` refreshes it from the registered token set.
+  /// Returns `nil` (and logs) on open failure; the `DefiLlamaClient` then runs
+  /// without short-circuit/floor optimisations but still prices live.
+  ///
+  /// Not `@MainActor`: `makeMarketDataServices` (its caller) runs both on the
+  /// `@MainActor` `ProfileSession.init` path and the non-isolated app-boot
+  /// `bootstrapSyncCoordinator` path, and no `Task` is spawned here.
+  static func makeDefiLlamaSupportCache(
+    networking: NetworkingServices
+  ) -> DefiLlamaSupportCache? {
+    do {
+      return try DefiLlamaSupportCache.make(
+        directory: Self.instrumentRegistryDirectory, networking: networking)
+    } catch {
+      Logger(subsystem: "com.moolah.app", category: "ProfileSession")
+        .error(
+          "DefiLlama support cache init failed: \(error.localizedDescription, privacy: .public)")
+      return nil
+    }
+  }
+
   /// Opens a read-only handle to the shared CoinGecko catalog for offline
   /// `(chain, contract) → CoinGecko id` resolution by the discovery token
   /// resolver. Unlike `makeCoinGeckoCatalog` it starts no `refreshIfStale()`
