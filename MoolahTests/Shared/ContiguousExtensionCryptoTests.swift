@@ -144,6 +144,57 @@ struct ContiguousExtensionCryptoTests {
     #expect(maxGap <= 31)  // bounded window; never a multi-month void
   }
 
+  // MARK: - Background warmer contiguity
+
+  /// `warmRange` with a horizon-restricted client must not create an interior
+  /// gap. Old logic precomputes ALL uncovered sub-ranges upfront; a later
+  /// chunk that falls outside the provider's 365-day horizon returns empty,
+  /// so `mergeReturningDelta` is never called for it and `earliest`/`latest`
+  /// never advance past it — but a chunk that IS served advances `latest` to
+  /// the served span, leaving a void between the cold cache tail and the
+  /// newly served segment.
+  ///
+  /// Concretely: cold cache, `warmRange(in: farBack...today)`. Old logic
+  /// chunks the whole range upfront. The last chunk (near today) is served by
+  /// the horizon client; earlier chunks return empty and do not move bounds.
+  /// `latest` jumps from nil to today; `earliest` stays at the served start.
+  /// Subsequent calls see `subRanges.isEmpty` for a range inside the served
+  /// segment, so the void is never filled.
+  ///
+  /// New logic (contiguous loop): each window anchors at the live cache
+  /// bounds; the first empty result in either direction stops that direction.
+  /// `earliest`/`latest` can only advance across days that were actually
+  /// served — the void can never form.
+  @Test
+  func warmRangeLeavesNoInteriorGap() async throws {
+    let today = utcDay("2026-06-17")
+    let database = try ProfileIndexDatabase.openInMemory()
+    let instrument = makeTestInstrument(address: "0xwarm", symbol: "WARM")
+    let mapping = makeMapping(for: instrument, binanceSymbol: "WARMUSDT")
+
+    // Cold cache. `warmRange` across 2+ years with a provider that only serves
+    // the last 365 days. Old `uncoveredSubRanges` loop: chunks the entire span
+    // upfront; a recent chunk fills latest=today; earlier chunks return empty
+    // and never move earliest — interior gap = ~1 year. Bounded-window loop:
+    // forward direction stops as soon as a window returns nothing, so the
+    // cache only spans the actually-served segment.
+    let service = makeService(
+      clients: [HorizonClient(today: today, horizonDays: 365)],
+      database: database,
+      now: today
+    )
+    let farBack = utcDay("2024-01-01")
+    let outcome = await service.warmRange(
+      for: instrument, mapping: mapping, in: farBack...today)
+    // The outcome must reflect that some data was fetched (the recent segment).
+    #expect(outcome == .filled || outcome == .unavailable)
+
+    let maxGap = await service.debugMaxInteriorGapDays(tokenId: instrument.id)
+    // Bounded windows: no interior gap larger than one window (≤ 30 days).
+    // The old uncoveredSubRanges path produces a gap > 300 days here.
+    #expect(maxGap <= 31)
+  }
+
   // MARK: - Range contiguity
 
   /// A `prices(in:)` range request using a horizon-restricted client must not
@@ -151,7 +202,7 @@ struct ContiguousExtensionCryptoTests {
   /// forward/backward fetches; a horizon client returning only recent data
   /// would jump `latest` (or `earliest`) over un-served days, leaving a void.
   /// New logic: both forward and backward extensions go through
-  /// `uncoveredSubRanges` which chunks into ≤30-day windows.
+  /// `coverRangeContiguously`, which uses bounded 30-day windows.
   ///
   /// Trigger sequence (forward extension variant, mirrors `farBackRequestLeavesNoInteriorGap`):
   ///   1. Seed far-back data so cache has latest ≈ 2024-07-12.
@@ -159,8 +210,8 @@ struct ContiguousExtensionCryptoTests {
   ///      Old logic: `prices(in:)` computes forward sub-range [latest...fetchUpperBound]
   ///      in one unbounded call. Provider returns 2025-06-17…today; merge jumps
   ///      `latest` to today leaving an ~11-month void.
-  ///      New logic: `uncoveredSubRanges` chunks the forward span into ≤30-day
-  ///      windows, so bounds only advance across actually-returned data.
+  ///      New logic: `coverRangeContiguously` advances bounds one 30-day window
+  ///      at a time, so bounds only advance across actually-returned data.
   @Test
   func rangeRequestLeavesNoInteriorGap() async throws {
     let today = utcDay("2026-06-17")

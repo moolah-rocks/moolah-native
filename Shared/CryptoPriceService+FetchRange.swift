@@ -5,18 +5,12 @@ import Foundation
 // MARK: - Contiguous bounded extension (single price)
 
 extension CryptoPriceService {
-  /// Extends the cache contiguously toward `dateString` using bounded
-  /// 30-day windows driven by `ContiguousFetchPlanner`. Each iteration
-  /// fetches one window anchored at the current cache boundary, so the
-  /// cache never jumps its bounds over un-fetched interior days (the
-  /// interior-gap bug fixed here). The loop exits when the date is covered,
-  /// when no progress was made (provider genuinely has no data for this
-  /// window), or when a provider error occurs on every window attempt.
-  ///
-  /// Unlike an unbounded extension, a horizon-restricted provider (e.g.
-  /// CoinGecko free tier: 365 days) causes the loop to stop at the edge of
-  /// its coverage window rather than jumping `latest` all the way to the
-  /// requested date and leaving a void.
+  /// Extends the cache contiguously toward `dateString` using bounded 30-day
+  /// windows driven by `ContiguousFetchPlanner`, anchored at the current cache
+  /// boundary. The loop exits when the date is covered, when no progress was
+  /// made (provider genuinely has no data for this window — horizon-restricted
+  /// providers stop here rather than jumping `latest` over a void), or when a
+  /// provider error occurs on every window attempt.
   func extendContiguously(
     instrument: Instrument,
     mapping: CryptoProviderMapping,
@@ -72,14 +66,10 @@ extension CryptoPriceService {
       tokenId: tokenId, dateString: dateString, fetchError: lastFetchError)
   }
 
-  /// Covers `[lowerKey, upperKey]` contiguously by running the bounded
-  /// planner loop toward each endpoint with a no-progress guard. Unlike a
-  /// precomputed chunk list (which fetches every window upfront and so can
-  /// leave an interior gap when a horizon-restricted provider serves only a
-  /// recent subset), this stops a direction the moment a window yields no
-  /// boundary progress — keeping `[earliest, latest]` contiguous exactly as
-  /// the single-price `extendContiguously` does. Used by
-  /// `prices(for:mapping:in:)`.
+  /// Covers `[lowerKey, upperKey]` contiguously: bounded planner loop toward
+  /// each endpoint with a no-progress guard — stops a direction the moment a
+  /// window yields no boundary progress so a horizon-restricted provider
+  /// cannot leave an interior gap. Used by `prices(for:mapping:in:)`.
   func coverRangeContiguously(
     instrument: Instrument,
     mapping: CryptoProviderMapping,
@@ -90,8 +80,7 @@ extension CryptoPriceService {
     let todayKey =
       DateKey.from(isoString: dateFormatter.string(from: now())) ?? upperKey
     let config = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
-    // Cover the forward endpoint first, then the backward one. Each call
-    // anchors at the live cache bounds, so order does not create a gap.
+    // Forward first, then backward; each window anchors at the live cache bounds.
     for requestedKey in [upperKey, lowerKey] {
       var guardSteps = 0
       while guardSteps < 250 {
@@ -114,13 +103,10 @@ extension CryptoPriceService {
         } catch is CancellationError {
           throw CancellationError()
         } catch {
-          // Provider chain fully failed for this window; stop this direction
-          // and fall through to the result series (cached data is used).
+          // Provider chain failed; stop this direction (cached data is used).
           break
         }
-        // No progress (bounds unchanged) means genuine no-more-data; stop and
-        // let a later call re-query the boundary (data may publish later).
-        if boundsKeys(tokenId: tokenId) == before { break }
+        if boundsKeys(tokenId: tokenId) == before { break }  // no progress — stop
       }
       if guardSteps >= 250 {
         logger.warning(
@@ -191,8 +177,7 @@ extension CryptoPriceService {
       } catch is CancellationError {
         throw CancellationError()
       } catch {
-        // Owner's provider error; the no-progress guard in
-        // `extendContiguously` handles it.
+        // Owner's provider error; the no-progress guard handles it.
       }
       return
     }
@@ -221,12 +206,9 @@ extension CryptoPriceService {
 // MARK: - Provider fallback for a date range
 
 extension CryptoPriceService {
-  /// Runs the provider fallback chain
-  /// (CoinGecko → CryptoCompare → Binance) for a date range, tolerating
-  /// per-provider failures and only throwing when every client errored.
-  /// It is `internal` (not `private`) because it is called from
-  /// `prices(for:mapping:in:)` in `CryptoPriceService.swift`; it remains
-  /// actor-isolated.
+  /// Runs the provider fallback chain for a date range, tolerating per-provider
+  /// failures and only throwing when every client errored. `internal` (called
+  /// from `prices(for:mapping:in:)` in `CryptoPriceService.swift`).
   func fetchRange(
     instrument: Instrument, mapping: CryptoProviderMapping, from: Date, to: Date
   ) async throws {
@@ -271,12 +253,12 @@ extension CryptoPriceService {
 // MARK: - Background warming
 
 extension CryptoPriceService {
-  /// Background-warm a token's prices over `range`, fetching only the
-  /// sub-ranges the in-memory/on-disk cache does not already cover.
-  /// Unlike `fetchRange`, surfaces a provider `RateLimitGateError.cooldown`
-  /// deadline (so a background warmer can sleep precisely) instead of
-  /// wrapping it into a `WalletSyncError`. Idempotent: an already-covered
-  /// range fetches nothing and returns `.filled`. See issue #1075.
+  /// Background-warm a token's prices over `range` using the same contiguous
+  /// bounded-window loop as `coverRangeContiguously`. Covers both endpoints,
+  /// anchoring each window at the live cache bounds and stopping the moment a
+  /// window returns no new data — preventing interior gaps from horizon-
+  /// restricted providers. Surfaces `RateLimitGateError.cooldown` so
+  /// `CryptoPriceWarmer` can sleep precisely. Idempotent. See issue #1075.
   func warmRange(
     for instrument: Instrument,
     mapping: CryptoProviderMapping,
@@ -290,60 +272,87 @@ extension CryptoPriceService {
         )
       }
     }
-    let subRanges = uncoveredSubRanges(tokenId: tokenId, range: range)
-    if subRanges.isEmpty { return .filled }
+    let fetchUpperBound = cappedToYesterday(range.upperBound, now: now, timeZone: timeZone)
+    guard range.lowerBound <= fetchUpperBound else { return .filled }
+    guard
+      let upperKey = DateKey.from(isoString: dateFormatter.string(from: fetchUpperBound)),
+      let lowerKey = DateKey.from(isoString: dateFormatter.string(from: range.lowerBound))
+    else { return .unavailable }
+    let todayKey =
+      DateKey.from(isoString: dateFormatter.string(from: now())) ?? upperKey
+    let config = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
 
-    var soonestCooldown: Date?
+    // Fast-path: if both endpoints are already within the cached range, there
+    // is nothing to fetch. Mirrors the old `subRanges.isEmpty` early exit.
+    let existingBounds = boundsKeys(tokenId: tokenId)
+    if let earliest = existingBounds.earliest, let latest = existingBounds.latest,
+      lowerKey >= earliest, upperKey <= latest
+    {
+      return .filled
+    }
+
     var filledAny = false
-    for sub in subRanges {
-      switch await fetchSubRangeWarming(instrument: instrument, mapping: mapping, range: sub) {
-      case .filled:
-        filledAny = true
-      case .cooledDown(let until):
-        soonestCooldown = soonestCooldown.map { min($0, until) } ?? until
-      case .unavailable:
-        continue
+    // Cover forward endpoint first, then backward — mirrors `coverRangeContiguously`.
+    for requestedKey in [upperKey, lowerKey] {
+      let step = await warmStep(
+        instrument: instrument,
+        mapping: mapping,
+        requestedKey: requestedKey,
+        todayKey: todayKey,
+        config: config)
+      switch step {
+      case .filled: filledAny = true
+      case .cooledDown: return step
+      case .unavailable: continue
       }
     }
-    if let soonestCooldown { return .cooledDown(until: soonestCooldown) }
     return filledAny ? .filled : .unavailable
   }
 
-  /// The sub-ranges of `range` not already covered by the token's cache,
-  /// chunked into at most 30-day windows so no single fetch spans an
-  /// un-served interior. Boundary-day inversion guards
-  /// (`range.lowerBound <= backEnd` and `forwardStart <= fetchUpperBound`)
-  /// ensure a noon-anchored day token immediately adjacent to a cache bound
-  /// never builds an inverted `ClosedRange`. Used by `warmRange`, which
-  /// intentionally fills every uncovered sub-range (it backfills holes); the
-  /// contiguity-preserving `prices(for:mapping:in:)` path uses
-  /// `coverRangeContiguously` instead.
-  private func uncoveredSubRanges(
-    tokenId: String, range: ClosedRange<Date>
-  ) -> [ClosedRange<Date>] {
-    let fetchUpperBound = cappedToYesterday(range.upperBound, now: now, timeZone: timeZone)
-    guard range.lowerBound <= fetchUpperBound else { return [] }
-    let rangeStart = dateFormatter.string(from: range.lowerBound)
-    let fetchEndString = dateFormatter.string(from: fetchUpperBound)
-    let gregorian = Calendar.utc
-    guard let cache = caches[tokenId] else {
-      return ContiguousFetchPlanner.chunked(range.lowerBound...fetchUpperBound, days: 30)
+  /// Contiguous bounded-window loop toward `requestedKey`, anchored at the
+  /// live cache bounds. Returns `.filled` if any window filled data,
+  /// `.cooledDown` on a provider rate limit, or `.unavailable` when no window
+  /// served data (provider horizon reached). Used by `warmRange`.
+  private func warmStep(
+    instrument: Instrument,
+    mapping: CryptoProviderMapping,
+    requestedKey: Int32,
+    todayKey: Int32,
+    config: ContiguousFetchPlanner.Config
+  ) async -> WarmOutcome {
+    let tokenId = instrument.id
+    var guardSteps = 0
+    var filledAny = false
+    warmLoop: while guardSteps < 250 {
+      guardSteps += 1
+      let bounds = boundsKeys(tokenId: tokenId)
+      guard
+        let window = ContiguousFetchPlanner.nextWindow(
+          earliest: bounds.earliest,
+          latest: bounds.latest,
+          requested: requestedKey,
+          today: todayKey,
+          config: config)
+      else { break warmLoop }  // endpoint already covered
+      let before = bounds
+      let fetchInterval = parseInterval(
+        DateKey.isoString(window.lowerBound)...DateKey.isoString(window.upperBound))
+      switch await fetchSubRangeWarming(
+        instrument: instrument, mapping: mapping, range: fetchInterval)
+      {
+      case .filled:
+        filledAny = true
+      case .cooledDown(let until):
+        return .cooledDown(until: until)
+      case .unavailable:
+        break warmLoop
+      }
+      if boundsKeys(tokenId: tokenId) == before { break warmLoop }
     }
-    var result: [ClosedRange<Date>] = []
-    if rangeStart < cache.earliestDate,
-      let earliest = dateFormatter.date(from: cache.earliestDate),
-      let backEnd = gregorian.date(byAdding: .day, value: -1, to: earliest),
-      range.lowerBound <= backEnd
-    {
-      result += ContiguousFetchPlanner.chunked(range.lowerBound...backEnd, days: 30)
+    if guardSteps >= 250 {
+      logger.warning("warmRange: guard limit reached for \(tokenId, privacy: .public)")
     }
-    if fetchEndString > cache.latestDate,
-      let forwardStart = dateFormatter.date(from: cache.latestDate),
-      forwardStart <= fetchUpperBound
-    {
-      result += ContiguousFetchPlanner.chunked(forwardStart...fetchUpperBound, days: 30)
-    }
-    return result
+    return filledAny ? .filled : .unavailable
   }
 
   /// Runs the provider fallback chain for one sub-range, surfacing the
