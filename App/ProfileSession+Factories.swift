@@ -19,6 +19,7 @@ extension ProfileSession {
     let cryptoPrice: CryptoPriceService
     let yahooPriceFetcher: any YahooFinancePriceFetcher
     let coinGeckoApiKeyProvider: @Sendable () -> String?
+    let defiLlamaSupportCache: DefiLlamaSupportCache?
   }
 
   /// Builds the fiat/stock/crypto market-data services used throughout the
@@ -40,6 +41,7 @@ extension ProfileSession {
     // resolver can price a known token offline (see `makeLookupCatalog`).
     let lookupCatalog = Self.makeLookupCatalog(
       coinGeckoApiKeyProvider: cgKeyProvider, networking: networking)
+    let defiLlamaSupportCache = Self.makeDefiLlamaSupportCache(networking: networking)
     return MarketDataServices(
       exchangeRate: ExchangeRateService(
         client: FrankfurterClient(
@@ -48,9 +50,11 @@ extension ProfileSession {
       stockPrice: StockPriceService(client: yahooClient, database: database),
       cryptoPrice: Self.makeCryptoPriceService(
         coinGeckoApiKeyProvider: cgKeyProvider, database: database, networking: networking,
+        defiLlamaSupportCache: defiLlamaSupportCache,
         localResolver: lookupCatalog),
       yahooPriceFetcher: yahooClient,
-      coinGeckoApiKeyProvider: cgKeyProvider
+      coinGeckoApiKeyProvider: cgKeyProvider,
+      defiLlamaSupportCache: defiLlamaSupportCache
     )
   }
 
@@ -64,6 +68,7 @@ extension ProfileSession {
     coinGeckoApiKeyProvider: @Sendable @escaping () -> String?,
     database: any DatabaseWriter,
     networking: NetworkingServices,
+    defiLlamaSupportCache: DefiLlamaSupportCache?,
     localResolver: (any LocalContractResolver)? = nil
   ) -> CryptoPriceService {
     // `CoinGeckoClient` resolves the key per request: an empty key targets
@@ -95,7 +100,10 @@ extension ProfileSession {
         return await CryptoRateLookup.firstAvailableRate(
           for: usdtMapping, on: date, using: usdtRateClients, default: Decimal(1))
       })
+    let defiLlamaClient = DefiLlamaClient(
+      networking: networking, supportCache: defiLlamaSupportCache)
     let priceClients: [CryptoPriceClient] = [
+      defiLlamaClient,
       coinGeckoClient,
       cryptoCompareClient,
       binanceClient,
