@@ -89,8 +89,9 @@ struct PositionsChart: View {
     } else {
       let mode: PositionsChartMode =
         (selection == nil) ? .aggregate : .perInstrument
+      let showBaseline = PositionsChartBaselineResolver.showsBaseline(points: points, mode: mode)
       let rows = PositionsChartBaselineResolver.resolve(
-        points: points, mode: mode, showBaseline: input.showsCostBaseline)
+        points: points, mode: mode, showBaseline: showBaseline)
       Chart {
         ForEach(rows, id: \.date) { row in
           chartMarks(for: row)
@@ -124,7 +125,8 @@ struct PositionsChart: View {
       .accessibilityChartDescriptor(self)
 
       PositionsChartLegendRow(
-        rows: rows, mode: mode, gainLossOpacity: Self.gainLossOpacity)
+        rows: rows, mode: mode, gainLossOpacity: Self.gainLossOpacity,
+        showBaseline: showBaseline)
     }
   }
 
@@ -251,13 +253,19 @@ extension PositionsChart: AXChartDescriptorRepresentable {
     let dateLabels = points.map { $0.date.formatted(.dateTime.month(.abbreviated).day().year()) }
     let valueDoubles = points.map { Double(truncating: $0.value as NSDecimalNumber) }
 
+    // Derive the chart mode from whether a specific instrument is selected,
+    // then let the data decide whether a baseline is meaningful. This mirrors
+    // the data-driven decision in `chartBody` so VoiceOver and the visual chart
+    // agree: when the series carries no cost/contribution data (e.g. a wallet
+    // of transfer-in / airdrop tokens), neither the chart nor the AX descriptor
+    // exposes a phantom zero baseline.
+    let mode: PositionsChartMode = selection == nil ? .aggregate : .perInstrument
+    let showBaseline = PositionsChartBaselineResolver.showsBaseline(points: points, mode: mode)
+
     // Pair each point with its baseline (or nil); drop nil-baseline rows
     // before they reach the AX descriptor so VoiceOver doesn't speak NaN.
-    // Gate entirely on `showsCostBaseline`: when the account has no cost basis
-    // (e.g. transfer-in / airdrop tokens), suppress the baseline series so
-    // VoiceOver doesn't announce a phantom zero baseline.
     let baselinePairs: [(label: String, value: Double)] =
-      input.showsCostBaseline
+      showBaseline
       ? points.compactMap { point in
         let baseline: Decimal? =
           selection == nil ? point.contributions : point.cost
@@ -281,7 +289,7 @@ extension PositionsChart: AXChartDescriptorRepresentable {
     )
 
     var series: [AXDataSeriesDescriptor] = [valueSeries]
-    if input.showsCostBaseline {
+    if showBaseline {
       let baselineName = selection == nil ? "Invested amount" : "Cost basis"
       let baselineSeries = AXDataSeriesDescriptor(
         name: baselineName, isContinuous: true,

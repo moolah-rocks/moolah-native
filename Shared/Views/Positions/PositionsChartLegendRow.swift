@@ -11,14 +11,21 @@ struct PositionsChartLegendRow: View {
   /// preview at the same time as the chart, keeping the legend an
   /// accurate visual sample of the chart fill.
   let gainLossOpacity: Double
+  /// When `false`, the chart is rendering a value-only series (e.g. a wallet
+  /// of transfer-in or airdrop tokens). The dashed baseline item and the
+  /// Profit/Loss swatch are omitted so the legend accurately reflects what
+  /// the chart shows. When `true`, the full three-item legend renders.
+  let showBaseline: Bool
 
   var body: some View {
     let baselineLabel = (mode == .aggregate) ? "Invested amount" : "Cost basis"
     let unavailable = rows.last?.legendUnavailable == true
     HStack(spacing: 16) {
       PositionsChartLegendItem(color: .accentColor, label: "Value", dashed: false)
-      PositionsChartLegendItem(color: .secondary, label: baselineLabel, dashed: true)
-      ProfitLossLegendSwatch(unavailable: unavailable, opacity: gainLossOpacity)
+      if showBaseline {
+        PositionsChartLegendItem(color: .secondary, label: baselineLabel, dashed: true)
+        ProfitLossLegendSwatch(unavailable: unavailable, opacity: gainLossOpacity)
+      }
       Spacer()
     }
     .font(.caption2)

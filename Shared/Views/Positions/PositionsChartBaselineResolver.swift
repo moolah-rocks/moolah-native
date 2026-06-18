@@ -6,6 +6,20 @@ import Foundation
 /// the data-shape tests can exercise the rendering decisions
 /// without spinning up a view harness.
 enum PositionsChartBaselineResolver {
+  /// `true` iff the series carries a non-zero baseline to plot for `mode`
+  /// (aggregate → `point.contributions`; per-instrument → `point.cost`).
+  ///
+  /// `false` for a wallet of transfer-in/airdrop tokens whose baseline is
+  /// uniformly zero/absent — plotting a zero baseline would misleadingly
+  /// render the whole holding as gain.
+  static func showsBaseline(points: [HistoricalValueSeries.Point], mode: PositionsChartMode) -> Bool
+  {
+    points.contains { point in
+      let baseline: Decimal? = (mode == .aggregate) ? point.contributions : point.cost
+      return (baseline ?? 0) != 0
+    }
+  }
+
   /// Turns a `[HistoricalValueSeries.Point]` into the per-row rendering inputs
   /// the chart consumes.
   ///

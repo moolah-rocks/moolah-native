@@ -119,4 +119,54 @@ struct PositionsChartDataTests {
     #expect(resolved.map(\.value) == [500, 600], "value series is preserved")
     #expect(resolved.map(\.baseline) == [nil, nil], "baseline remains suppressed")
   }
+
+  // MARK: - showsBaseline(points:mode:)
+
+  @Test("showsBaseline aggregate: true when contributions has a non-zero value")
+  func showsBaselineAggregateTrueWhenContributionsNonZero() throws {
+    let points = try [
+      point(day: 0, value: 1_100, cost: 800, contributions: nil),
+      point(day: 1, value: 1_200, cost: 900, contributions: 1_000),
+    ]
+    #expect(
+      PositionsChartBaselineResolver.showsBaseline(points: points, mode: .aggregate),
+      "aggregate mode returns true when at least one point has non-zero contributions"
+    )
+  }
+
+  @Test("showsBaseline aggregate: false when all contributions are nil or zero")
+  func showsBaselineAggregateFalseWhenContributionsAllNilOrZero() throws {
+    let points = try [
+      point(day: 0, value: 500, cost: 0, contributions: nil),
+      point(day: 1, value: 600, cost: 0, contributions: 0),
+    ]
+    #expect(
+      !PositionsChartBaselineResolver.showsBaseline(points: points, mode: .aggregate),
+      "aggregate mode returns false when all contributions are nil or zero"
+    )
+  }
+
+  @Test("showsBaseline perInstrument: true when cost has a non-zero value")
+  func showsBaselinePerInstrumentTrueWhenCostNonZero() throws {
+    let points = try [
+      point(day: 0, value: 850, cost: 800, contributions: nil),
+      point(day: 1, value: 900, cost: 800, contributions: nil),
+    ]
+    #expect(
+      PositionsChartBaselineResolver.showsBaseline(points: points, mode: .perInstrument),
+      "perInstrument mode returns true when at least one point has non-zero cost"
+    )
+  }
+
+  @Test("showsBaseline perInstrument: false when all cost values are zero")
+  func showsBaselinePerInstrumentFalseWhenCostAllZero() throws {
+    let points = try [
+      point(day: 0, value: 500, cost: 0, contributions: nil),
+      point(day: 1, value: 600, cost: 0, contributions: nil),
+    ]
+    #expect(
+      !PositionsChartBaselineResolver.showsBaseline(points: points, mode: .perInstrument),
+      "perInstrument mode returns false when all cost values are zero"
+    )
+  }
 }
