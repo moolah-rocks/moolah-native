@@ -47,15 +47,19 @@ extension CryptoPriceService {
         lastFetchError = error
         break
       }
-      if let cached = lookupPrice(tokenId: tokenId, dateString: dateString) {
-        return cached
-      }
-      if let inRange = try inRangeFallback(tokenId: tokenId, dateString: dateString) {
-        return inRange
+      if let hit = try midLoopCacheHit(tokenId: tokenId, dateString: dateString) {
+        return hit
       }
       // No progress (bounds unchanged) means genuine no-more-data; stop and
       // let a later call re-query the boundary (recent data may publish later).
-      if boundsKeys(tokenId: tokenId) == before { break }
+      if boundsKeys(tokenId: tokenId) == before {
+        let wasBackward = before.earliest.map { requestedKey < $0 } ?? false
+        if wasBackward {
+          try await confirmFirstTradedOnIfExhausted(
+            tokenId: tokenId, lastFetchError: lastFetchError)
+        }
+        break
+      }
     }
     if guardSteps >= 250 {
       logger.warning(
@@ -77,48 +81,21 @@ extension CryptoPriceService {
     lowerKey: Int32,
     upperKey: Int32
   ) async throws {
-    let todayKey =
-      DateKey.from(isoString: dateFormatter.string(from: now())) ?? upperKey
-    let config = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
     var lastFetchError: (any Error)?
     // Forward first, then backward; each window anchors at the live cache bounds.
     for requestedKey in [upperKey, lowerKey] {
-      var guardSteps = 0
-      while guardSteps < 250 {
-        guardSteps += 1
-        let bounds = boundsKeys(tokenId: tokenId)
-        guard
-          let window = ContiguousFetchPlanner.nextWindow(
-            earliest: bounds.earliest,
-            latest: bounds.latest,
-            requested: requestedKey,
-            today: todayKey,
-            config: config)
-        else { break }  // endpoint now in range
-        let before = bounds
-        let fetchInterval = parseInterval(
-          DateKey.isoString(window.lowerBound)...DateKey.isoString(window.upperBound))
-        do {
-          try await fetchWindowCoalesced(
-            instrument: instrument, mapping: mapping, fetchInterval: fetchInterval)
-        } catch is CancellationError {
-          throw CancellationError()
-        } catch {
-          // Provider chain failed; capture error and stop this direction.
-          lastFetchError = error
-          break
-        }
-        if boundsKeys(tokenId: tokenId) == before { break }  // no progress — stop
-      }
-      if guardSteps >= 250 {
-        logger.warning(
-          "coverRangeContiguously: guard limit reached for \(tokenId, privacy: .public)"
-        )
-      }
+      try await extendOneDirection(
+        instrument: instrument,
+        mapping: mapping,
+        tokenId: tokenId,
+        requestedKey: requestedKey,
+        lastFetchError: &lastFetchError)
     }
     // Surface the last provider error if any endpoint is still uncovered —
     // mirrors resolveAfterExtension so prices(in:) matches price(on:)'s contract.
     if let lastFetchError {
+      let todayKey = DateKey.from(isoString: dateFormatter.string(from: now())) ?? upperKey
+      let config = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
       let bounds = boundsKeys(tokenId: tokenId)
       let stillUncovered = [upperKey, lowerKey].contains { key in
         ContiguousFetchPlanner.nextWindow(
@@ -129,6 +106,61 @@ extension CryptoPriceService {
           config: config) != nil
       }
       if stillUncovered { throw lastFetchError }
+    }
+  }
+
+  /// Runs the bounded planner loop for one direction (forward or backward)
+  /// within `coverRangeContiguously`. Stops when `requestedKey` is in range,
+  /// when no progress is made, or on a provider error. `config` and `todayKey`
+  /// are derived from the service's injected clock using the same constants
+  /// as `extendContiguously` and `coverRangeContiguously`.
+  private func extendOneDirection(
+    instrument: Instrument,
+    mapping: CryptoProviderMapping,
+    tokenId: String,
+    requestedKey: Int32,
+    lastFetchError: inout (any Error)?
+  ) async throws {
+    let config = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
+    let todayKey = DateKey.from(isoString: dateFormatter.string(from: now())) ?? requestedKey
+    var guardSteps = 0
+    while guardSteps < 250 {
+      guardSteps += 1
+      let bounds = boundsKeys(tokenId: tokenId)
+      guard
+        let window = ContiguousFetchPlanner.nextWindow(
+          earliest: bounds.earliest,
+          latest: bounds.latest,
+          requested: requestedKey,
+          today: todayKey,
+          config: config)
+      else { break }  // endpoint now in range
+      let before = bounds
+      let fetchInterval = parseInterval(
+        DateKey.isoString(window.lowerBound)...DateKey.isoString(window.upperBound))
+      do {
+        try await fetchWindowCoalesced(
+          instrument: instrument, mapping: mapping, fetchInterval: fetchInterval)
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
+        // Provider chain failed; capture error and stop this direction.
+        lastFetchError = error
+        break
+      }
+      if boundsKeys(tokenId: tokenId) == before {
+        let wasBackward = before.earliest.map { requestedKey < $0 } ?? false
+        if wasBackward {
+          try await confirmFirstTradedOnIfExhausted(
+            tokenId: tokenId, lastFetchError: lastFetchError)
+        }
+        break
+      }
+    }
+    if guardSteps >= 250 {
+      logger.warning(
+        "coverRangeContiguously: guard limit reached for \(tokenId, privacy: .public)"
+      )
     }
   }
 
@@ -154,6 +186,39 @@ extension CryptoPriceService {
       throw fetchError
     }
     throw CryptoPriceError.noPriceAvailable(tokenId: tokenId, date: dateString)
+  }
+
+  /// Returns the first in-cache price for `dateString` found by exact lookup
+  /// or in-range fallback, or `nil` when neither is available. Used by
+  /// `extendContiguously`'s mid-loop early-exit check to avoid redundant
+  /// window fetches after each successful window advances the cache bounds.
+  private func midLoopCacheHit(tokenId: String, dateString: String) throws -> Decimal? {
+    if let cached = lookupPrice(tokenId: tokenId, dateString: dateString) {
+      return cached
+    }
+    return try inRangeFallback(tokenId: tokenId, dateString: dateString)
+  }
+
+  /// Sets `caches[tokenId].firstTradedOn` to `earliestDate` and persists it
+  /// when a backward window walk terminated on no-progress with no operational
+  /// failure and `firstTradedOn` has not yet been confirmed. Idempotent:
+  /// skipped when `firstTradedOn` is already set or `earliestDate` is empty.
+  ///
+  /// Call only after a backward window exits with `boundsKeys == before` and
+  /// *before* re-reading bounds: bounds haven't moved, so the current
+  /// `earliestDate` is the confirmed floor.
+  private func confirmFirstTradedOnIfExhausted(
+    tokenId: String,
+    lastFetchError: (any Error)?
+  ) async throws {
+    guard lastFetchError == nil,
+      var cache = caches[tokenId],
+      cache.firstTradedOn == nil,
+      !cache.earliestDate.isEmpty
+    else { return }
+    cache.firstTradedOn = cache.earliestDate
+    caches[tokenId] = cache
+    try await persistFirstTradedOn(tokenId: tokenId, date: cache.earliestDate)
   }
 
   /// Returns the current cache bounds for `tokenId` as `DateKey` (`Int32`

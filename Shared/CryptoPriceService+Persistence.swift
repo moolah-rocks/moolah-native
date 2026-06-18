@@ -50,6 +50,29 @@ extension CryptoPriceService {
     hydratedTokenIds.insert(tokenId)
   }
 
+  /// Writes the confirmed first-trade date to the `crypto_token_meta` row for
+  /// `tokenId`, carrying the existing symbol, earliest, and latest from cache
+  /// so the `INSERT OR REPLACE` does not clobber them.
+  ///
+  /// `persistFirstTradedOn` is separate from `persistDelta` to avoid the cost
+  /// of a redundant meta write on every delta flush: it runs only once, after
+  /// the backward walk exhaustion. Callers must have already updated
+  /// `caches[tokenId].firstTradedOn` before calling this.
+  func persistFirstTradedOn(tokenId: String, date: String) async throws {
+    guard let cache = caches[tokenId] else { return }
+    let meta = CryptoTokenMetaRecord(
+      tokenId: tokenId,
+      symbol: cache.symbol,
+      earliestDate: cache.earliestDate,
+      latestDate: cache.latestDate,
+      firstTradedOn: date
+    )
+    try await database.write { database in
+      try meta.insert(database, onConflict: .replace)
+      try database.notifyRateCacheChange(.cryptoPrice)
+    }
+  }
+
   /// Persists the rows produced by `mergeReturningDelta` for `tokenId`
   /// plus the latest meta-bounds, all in a single transaction.
   ///
