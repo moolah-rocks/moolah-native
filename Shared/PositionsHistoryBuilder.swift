@@ -46,7 +46,6 @@ struct PositionsHistoryBuilder: Sendable {
     range: PositionsTimeRange,
     now: Date = Date()
   ) async -> HistoricalValueSeries {
-    let calendar = Calendar(identifier: .gregorian)
     let sortedTxns =
       transactions
       .filter { $0.legs.contains(where: { $0.accountId.map { accountIds.contains($0) } ?? false }) }
@@ -58,8 +57,8 @@ struct PositionsHistoryBuilder: Sendable {
     }
 
     let cutoff = range.cutoff(from: now) ?? firstTxnDate
-    let start = calendar.startOfDay(for: max(cutoff, firstTxnDate))
-    let endDay = calendar.startOfDay(for: now)
+    let start = Calendar.utc.startOfDay(for: max(cutoff, firstTxnDate))
+    let endDay = Calendar.utc.startOfDay(for: now)
     guard endDay >= start else {
       return HistoricalValueSeries(
         hostCurrency: hostCurrency, total: [], perInstrument: [:])
@@ -67,7 +66,7 @@ struct PositionsHistoryBuilder: Sendable {
 
     let context = BuildContext(
       sortedTxns: sortedTxns, accountIds: accountIds,
-      hostCurrency: hostCurrency, calendar: calendar)
+      hostCurrency: hostCurrency)
     var state = BuildState()
     do {
       try await preFoldHistory(before: start, context: context, state: &state)
@@ -91,7 +90,7 @@ struct PositionsHistoryBuilder: Sendable {
       let cancelled = await emitDailyPoints(
         for: day, hostCurrency: hostCurrency, state: &state)
       if cancelled { return state.series(hostCurrency: hostCurrency) }
-      guard let next = calendar.date(byAdding: .day, value: 1, to: day) else { break }
+      guard let next = Calendar.utc.date(byAdding: .day, value: 1, to: day) else { break }
       day = next
     }
 
@@ -119,7 +118,7 @@ struct PositionsHistoryBuilder: Sendable {
     state: inout BuildState
   ) async throws {
     while state.txnIndex < context.sortedTxns.count
-      && context.calendar.startOfDay(for: context.sortedTxns[state.txnIndex].date) < start
+      && Calendar.utc.startOfDay(for: context.sortedTxns[state.txnIndex].date) < start
     {
       try await apply(
         transaction: context.sortedTxns[state.txnIndex],
@@ -138,7 +137,7 @@ struct PositionsHistoryBuilder: Sendable {
     state: inout BuildState
   ) async throws {
     while state.txnIndex < context.sortedTxns.count
-      && context.calendar.startOfDay(for: context.sortedTxns[state.txnIndex].date) == day
+      && Calendar.utc.startOfDay(for: context.sortedTxns[state.txnIndex].date) == day
     {
       try await apply(
         transaction: context.sortedTxns[state.txnIndex],
@@ -155,7 +154,6 @@ struct PositionsHistoryBuilder: Sendable {
     let sortedTxns: [Transaction]
     let accountIds: Set<UUID>
     let hostCurrency: Instrument
-    let calendar: Calendar
   }
 
   /// Emit one point per held instrument on `day` and, when every conversion
@@ -171,6 +169,12 @@ struct PositionsHistoryBuilder: Sendable {
     var aggOK = true
     var anyHeld = false
 
+    // `day` is UTC midnight — used for iteration, comparison, and conversion
+    // key lookups. `pointDate` is noon UTC — a zone-invariant positioning
+    // token for the chart axis (the ±12 h margin keeps the civil month stable
+    // even when a downstream read uses a non-UTC calendar).
+    let pointDate = Calendar.utc.date(byAdding: .hour, value: 12, to: day) ?? day
+
     // Host-currency legs are excluded from `quantities` in `apply()`, so every
     // instrument here is a non-host investment instrument and always requires
     // a conversion call.
@@ -184,7 +188,7 @@ struct PositionsHistoryBuilder: Sendable {
       if let value {
         state.perInstrument[instrument.id, default: []].append(
           HistoricalValueSeries.Point(
-            date: day, value: value, cost: cost, contributions: nil))
+            date: pointDate, value: value, cost: cost, contributions: nil))
         aggValue += value
         aggCost += cost
       } else {
@@ -195,7 +199,7 @@ struct PositionsHistoryBuilder: Sendable {
     if anyHeld && aggOK {
       state.total.append(
         HistoricalValueSeries.Point(
-          date: day, value: aggValue, cost: aggCost,
+          date: pointDate, value: aggValue, cost: aggCost,
           contributions: state.contributions))
     }
     return false
