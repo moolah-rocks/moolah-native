@@ -18,17 +18,32 @@ struct PositionsAssemblerE2ETests {
   let btc = Instrument.crypto(
     chainId: 1, contractAddress: nil, symbol: "BTC", name: "Bitcoin", decimals: 8)
 
-  /// Returns a Date at noon UTC, N days before today.
+  /// A fixed "now" anchored at noon UTC on 2026-06-01. All date helpers and
+  /// `assemble(…, now:)` calls use this value so the tests are deterministic
+  /// regardless of the CI runner's local timezone or wall-clock date.
+  private let fixedNow: Date = {
+    var components = DateComponents()
+    components.year = 2026
+    components.month = 6
+    components.day = 1
+    components.hour = 12
+    components.minute = 0
+    components.second = 0
+    guard let date = Calendar.utc.date(from: components) else {
+      fatalError("Could not construct fixedNow")
+    }
+    return date
+  }()
+
+  /// Returns a Date at noon UTC, N days before `fixedNow`.
   ///
   /// Noon UTC matches the canonical day-token used throughout the codebase
   /// (`FinancialMonth.date(forKey:)` anchors at noon UTC) and ensures
   /// `Calendar.startOfDay` groups the transaction under the expected day
   /// regardless of the host machine's local timezone.
   private func noonUTCDaysAgo(_ n: Int) -> Date {
-    var cal = Calendar(identifier: .gregorian)
-    cal.timeZone = TimeZone(identifier: "UTC") ?? .current
-    let today = cal.startOfDay(for: Date())
-    guard let offset = cal.date(byAdding: .day, value: -n, to: today) else {
+    let startOfFixedNow = Calendar.utc.startOfDay(for: fixedNow)
+    guard let offset = Calendar.utc.date(byAdding: .day, value: -n, to: startOfFixedNow) else {
       fatalError("Could not offset date by \(-n) days")
     }
     return offset.addingTimeInterval(12 * 3600)
@@ -109,7 +124,8 @@ struct PositionsAssemblerE2ETests {
       context: context,
       valuedRows: singlePosition(instrument: btc, qty: qty, rate: rate),
       transactions: transactions,
-      range: .threeMonths
+      range: .threeMonths,
+      now: fixedNow
     )
 
     let series = try #require(input.historicalValue, "historicalValue must be non-nil")
@@ -153,7 +169,8 @@ struct PositionsAssemblerE2ETests {
       context: context,
       valuedRows: singlePosition(instrument: btc, qty: totalQty, rate: rate),
       transactions: transactions,
-      range: .threeMonths
+      range: .threeMonths,
+      now: fixedNow
     )
 
     let series = try #require(input.historicalValue, "historicalValue must be non-nil")
@@ -205,7 +222,8 @@ struct PositionsAssemblerE2ETests {
       context: context,
       valuedRows: singlePosition(instrument: btc, qty: totalQty, rate: rate),
       transactions: transactions,
-      range: .threeMonths
+      range: .threeMonths,
+      now: fixedNow
     )
 
     let series = try #require(input.historicalValue, "historicalValue must be non-nil")

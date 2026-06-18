@@ -1,56 +1,16 @@
-// swiftlint:disable multiline_arguments
-//
 // `costBasisSnapshot` passes enough labelled parameters to trigger
 // multiline_arguments; scoped to this file rather than reformatting
 // every call site.
+// swiftlint:disable multiline_arguments
 
 import Foundation
 import OSLog
-
-/// The fixed "who / where / how" inputs to `MultiInstrumentPositionsAssembler
-/// .assemble(context:valuedRows:transactions:range:)`. Grouping them lets the
-/// call site stay below SwiftLint's five-parameter limit while keeping
-/// every field named and documented.
-struct PositionsAssemblyContext: Sendable {
-  /// Display label passed through to `PositionsViewInput.title`.
-  let title: String
-  /// The host (reporting) currency for all monetary outputs.
-  let hostCurrency: Instrument
-  /// The account UUIDs whose legs drive cost-basis classification and
-  /// history-builder netting.
-  let accountIds: Set<UUID>
-  /// Maps instrument id → canonical asset key for cross-chain rollup.
-  /// Empty (the default) means no rollup — each position stands alone.
-  let assetKeysByInstrumentId: [String: String]
-  /// Account-level performance numbers, if available. Non-nil triggers the
-  /// three-tile performance strip in `PositionsView`.
-  let performance: AccountPerformance?
-  /// `true` for investment-account hosts, where the full surface renders
-  /// even with no open positions. Other callers pass `false` (the default).
-  let alwaysShowsFullSurface: Bool
-
-  init(
-    title: String,
-    hostCurrency: Instrument,
-    accountIds: Set<UUID>,
-    assetKeysByInstrumentId: [String: String] = [:],
-    performance: AccountPerformance? = nil,
-    alwaysShowsFullSurface: Bool = false
-  ) {
-    self.title = title
-    self.hostCurrency = hostCurrency
-    self.accountIds = accountIds
-    self.assetKeysByInstrumentId = assetKeysByInstrumentId
-    self.performance = performance
-    self.alwaysShowsFullSurface = alwaysShowsFullSurface
-  }
-}
 
 /// Store-independent helper that owns the cost-basis-snapshot and history-
 /// assembly logic for multi-instrument positions views.
 ///
 /// Call `fetchTransactions(repository:accountIds:)` to load all relevant
-/// transactions, then `assemble(context:valuedRows:transactions:range:)` to
+/// transactions, then `assemble(context:valuedRows:transactions:range:now:)` to
 /// produce the `PositionsViewInput` the view layer needs. Separating fetch
 /// from assembly lets callers supply a pre-fetched slice (e.g. a group-level
 /// merge) without duplicating the cost-basis engine or history builder.
@@ -93,16 +53,19 @@ struct MultiInstrumentPositionsAssembler: Sendable {
   /// `PositionsHistoryBuilder` handles the same set. Instruments whose
   /// classification fails are **omitted** (cost unavailable, not zero) per
   /// `guides/INSTRUMENT_CONVERSION_GUIDE.md` Rule 11.
+  ///
+  /// Throws `CancellationError` via `Task.checkCancellation()` so a cancelled
+  /// task never produces a partial cost-basis snapshot.
   func costBasisSnapshot(
     transactions: [Transaction],
     accountIds: Set<UUID>,
     hostCurrency: Instrument
-  ) async -> [String: Decimal] {
+  ) async throws -> [String: Decimal] {
     var engine = CostBasisEngine()
     var instrumentsWithFailedClassification: Set<String> = []
     let sorted = transactions.sorted { $0.date < $1.date }
     for txn in sorted {
-      guard !Task.isCancelled else { break }
+      try Task.checkCancellation()
       let scopedLegs = txn.legs.filter {
         $0.accountId.map { accountIds.contains($0) } ?? false
       }
@@ -122,6 +85,8 @@ struct MultiInstrumentPositionsAssembler: Sendable {
             instrument: sell.instrument, quantity: sell.quantity,
             proceedsPerUnit: sell.proceedsPerUnit, date: txn.date)
         }
+      } catch is CancellationError {
+        throw CancellationError()
       } catch {
         logger.warning(
           "Failed to classify txn \(txn.id, privacy: .public) for cost basis: \(error.localizedDescription, privacy: .public)"
@@ -145,16 +110,44 @@ struct MultiInstrumentPositionsAssembler: Sendable {
 
   /// Builds the full `PositionsViewInput`: overlays cost basis on `valuedRows`,
   /// builds the history series, and sets `hasAnyHistoricalActivity`.
+  ///
+  /// **Invariant (caller's responsibility):** every non-nil
+  /// `valuedRows[i].value.instrument` must equal `context.hostCurrency`. The
+  /// four production call sites guarantee this via `PositionsValuator`; no
+  /// runtime assertion is added here to avoid trapping in production on
+  /// unexpected data.
+  ///
+  /// The cost-basis snapshot and the history series are computed concurrently
+  /// (they are independent of each other). If the snapshot is cancelled, the
+  /// method returns a minimal input with `historicalValue: nil` rather than
+  /// propagating the cancellation — the history series result is still valid.
   func assemble(
     context: PositionsAssemblyContext,
     valuedRows: [ValuedPosition],
     transactions: [Transaction],
-    range: PositionsTimeRange
+    range: PositionsTimeRange,
+    now: Date = Date()
   ) async -> PositionsViewInput {
-    let costSnapshot = await costBasisSnapshot(
+    async let snapshotTask = costBasisSnapshot(
       transactions: transactions,
       accountIds: context.accountIds,
       hostCurrency: context.hostCurrency)
+    let series = await PositionsHistoryBuilder(conversionService: conversionService).build(
+      transactions: transactions, accountIds: context.accountIds,
+      hostCurrency: context.hostCurrency, range: range, now: now)
+    let costSnapshot: [String: Decimal]
+    do {
+      costSnapshot = try await snapshotTask
+    } catch {
+      return PositionsViewInput(
+        title: context.title,
+        hostCurrency: context.hostCurrency,
+        positions: valuedRows,
+        historicalValue: nil,
+        assetKeysByInstrumentId: context.assetKeysByInstrumentId,
+        performance: context.performance,
+        alwaysShowsFullSurface: context.alwaysShowsFullSurface)
+    }
     let rowsWithCost = valuedRows.map { row in
       ValuedPosition(
         instrument: row.instrument, quantity: row.quantity, unitPrice: row.unitPrice,
@@ -163,9 +156,6 @@ struct MultiInstrumentPositionsAssembler: Sendable {
         },
         value: row.value)
     }
-    let series = await PositionsHistoryBuilder(conversionService: conversionService).build(
-      transactions: transactions, accountIds: context.accountIds,
-      hostCurrency: context.hostCurrency, range: range)
     return PositionsViewInput(
       title: context.title,
       hostCurrency: context.hostCurrency,

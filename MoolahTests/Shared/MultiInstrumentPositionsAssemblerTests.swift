@@ -138,7 +138,7 @@ struct MultiInstrumentPositionsAssemblerTests {
   // The test asserts BOTH properties: bad instrument absent AND good instrument
   // present with the correct exact host-currency cost.
   @Test
-  func costBasisOmitsUnclassifiableInstrument() async {
+  func costBasisOmitsUnclassifiableInstrument() async throws {
     // BTC→AUD conversion fails; LTC→AUD and AUD→AUD always succeed.
     let service = FailingConversionService(
       rates: [ltc.id: Decimal(100)],
@@ -168,7 +168,7 @@ struct MultiInstrumentPositionsAssemblerTests {
       ),
     ]
 
-    let snapshot = await assembler.costBasisSnapshot(
+    let snapshot = try await assembler.costBasisSnapshot(
       transactions: txns, accountIds: [accountA], hostCurrency: aud)
 
     // ETH classification failed (because the BTC fee conversion throws) →
