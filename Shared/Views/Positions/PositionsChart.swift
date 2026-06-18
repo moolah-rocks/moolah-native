@@ -89,7 +89,8 @@ struct PositionsChart: View {
     } else {
       let mode: PositionsChartMode =
         (selection == nil) ? .aggregate : .perInstrument
-      let rows = PositionsChartBaselineResolver.resolve(points: points, mode: mode)
+      let rows = PositionsChartBaselineResolver.resolve(
+        points: points, mode: mode, showBaseline: input.showsCostBaseline)
       Chart {
         ForEach(rows, id: \.date) { row in
           chartMarks(for: row)
@@ -252,15 +253,21 @@ extension PositionsChart: AXChartDescriptorRepresentable {
 
     // Pair each point with its baseline (or nil); drop nil-baseline rows
     // before they reach the AX descriptor so VoiceOver doesn't speak NaN.
-    let baselinePairs: [(label: String, value: Double)] = points.compactMap { point in
-      let baseline: Decimal? =
-        selection == nil ? point.contributions : point.cost
-      guard let baseline else { return nil }
-      return (
-        point.date.formatted(.dateTime.month(.abbreviated).day().year()),
-        Double(truncating: baseline as NSDecimalNumber)
-      )
-    }
+    // Gate entirely on `showsCostBaseline`: when the account has no cost basis
+    // (e.g. transfer-in / airdrop tokens), suppress the baseline series so
+    // VoiceOver doesn't announce a phantom zero baseline.
+    let baselinePairs: [(label: String, value: Double)] =
+      input.showsCostBaseline
+      ? points.compactMap { point in
+        let baseline: Decimal? =
+          selection == nil ? point.contributions : point.cost
+        guard let baseline else { return nil }
+        return (
+          point.date.formatted(.dateTime.month(.abbreviated).day().year()),
+          Double(truncating: baseline as NSDecimalNumber)
+        )
+      }
+      : []
 
     let allValues = valueDoubles + baselinePairs.map(\.value)
     let minVal = allValues.min() ?? 0
@@ -272,11 +279,16 @@ extension PositionsChart: AXChartDescriptorRepresentable {
         AXDataPoint(x: date, y: val)
       }
     )
-    let baselineName = selection == nil ? "Invested amount" : "Cost basis"
-    let baselineSeries = AXDataSeriesDescriptor(
-      name: baselineName, isContinuous: true,
-      dataPoints: baselinePairs.map { AXDataPoint(x: $0.label, y: $0.value) }
-    )
+
+    var series: [AXDataSeriesDescriptor] = [valueSeries]
+    if input.showsCostBaseline {
+      let baselineName = selection == nil ? "Invested amount" : "Cost basis"
+      let baselineSeries = AXDataSeriesDescriptor(
+        name: baselineName, isContinuous: true,
+        dataPoints: baselinePairs.map { AXDataPoint(x: $0.label, y: $0.value) }
+      )
+      series.append(baselineSeries)
+    }
 
     let summary: String? =
       points.isEmpty
@@ -290,7 +302,7 @@ extension PositionsChart: AXChartDescriptorRepresentable {
       yTitle: "Value (\(input.hostCurrency.id))",
       yMin: minVal,
       yMax: max(minVal + 1, maxVal),
-      series: [valueSeries, baselineSeries]
+      series: series
     )
   }
 
