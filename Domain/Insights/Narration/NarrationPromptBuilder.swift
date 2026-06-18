@@ -37,6 +37,9 @@ extension NarrationPromptBuilder {
     • Use ONLY the figures provided verbatim in the prompt. Do not invent, recompute, \
     round, or approximate any number. Every figure you write must appear exactly in \
     the supplied facts.
+    • Write every amount exactly as supplied — keep its digits and currency symbol \
+    (for example "$50,000"). Never spell a number out in words ("fifty thousand \
+    dollars") or convert it to any other form.
     • Do not quote fact labels verbatim. Weave the numbers into natural prose. Omit any \
     statistical or technical fact — z-scores, p-values, counts of months, direction \
     labels — those are evidence for you, not for the user.
