@@ -106,8 +106,8 @@ struct PositionsViewInput: Sendable, Hashable {
 
   /// `true` iff the chart container is rendered at all. A non-empty
   /// aggregate historical series is sufficient — the chart shows at minimum
-  /// a value line (cost/gain-loss overlay is separately gated on
-  /// `showsCostBaseline`).
+  /// a value line (the cost/gain-loss overlay is separately gated by the
+  /// data-driven `PositionsChartBaselineResolver.showsBaseline(points:mode:)`).
   ///
   /// This is intentionally more permissive than `showsPLPill`, which
   /// additionally requires `totalValue` to be non-nil and at least one
@@ -116,13 +116,6 @@ struct PositionsViewInput: Sendable, Hashable {
     guard let series = historicalValue else { return false }
     return !series.total.isEmpty
   }
-
-  /// `true` iff at least one current position carries a cost basis. Drives
-  /// whether the chart renders the cost/contributions baseline and gain/loss
-  /// shading. When `false` (e.g. a wallet of transfer-in or airdrop tokens),
-  /// the chart shows the value line only — a zero-cost baseline would
-  /// misleadingly render the entire holding as gain.
-  var showsCostBaseline: Bool { positions.contains(where: { $0.hasCostBasis }) }
 
   /// `true` iff the all-positions chart line should render. False when any
   /// row's current value is unavailable — partial historical totals would be

@@ -32,8 +32,10 @@ struct PositionsViewInputChartTests {
   // Previously "chartHiddenWithoutAnyCostBasis" — the product decision in Task 7
   // relaxed this: a non-empty series is now sufficient to show the chart even
   // when no position carries a cost basis (e.g. transfer-in / airdrop wallets).
-  // The chart renders value-only; `showsCostBaseline` separately gates the
-  // cost/gain-loss overlay, and `showsPLPill` remains gated on cost basis.
+  // The chart renders value-only; the baseline is now data-driven via
+  // `PositionsChartBaselineResolver.showsBaseline(points:mode:)` — `showsCostBaseline`
+  // has been removed from `PositionsViewInput`. `showsPLPill` remains gated on
+  // cost basis.
   @Test("showsChart is true for held non-host positions with a series but no cost basis")
   func chartVisibleWithoutAnyCostBasis() {
     let point = HistoricalValueSeries.Point(
@@ -50,10 +52,6 @@ struct PositionsViewInputChartTests {
     )
     #expect(input.showsChart, "non-empty series justifies chart even without cost basis")
     #expect(!input.showsPLPill, "P&L pill still requires at least one cost-bearing position")
-    #expect(
-      !input.showsCostBaseline,
-      "cost baseline suppressed — a zero-cost baseline would misleadingly render the whole holding as gain"
-    )
   }
 
   @Test("showsAggregateChart is false when any row's value is nil")
@@ -175,49 +173,4 @@ struct PositionsViewInputChartTests {
     #expect(!input.showsChart)
   }
 
-  @Test("showsCostBaseline is true when at least one position carries a cost basis")
-  func costBaselineVisibleWhenCostBasisPresent() {
-    let point = HistoricalValueSeries.Point(
-      date: fixedTestDate, value: 60, cost: 50, contributions: 50)
-    let input = PositionsViewInput(
-      title: "x", hostCurrency: aud,
-      positions: [
-        ValuedPosition(
-          instrument: bhp, quantity: 1, unitPrice: nil,
-          costBasis: amount(50), value: amount(60))
-      ],
-      historicalValue: HistoricalValueSeries(
-        hostCurrency: aud, total: [point], perInstrument: [:])
-    )
-    #expect(input.showsCostBaseline)
-  }
-
-  @Test("showsCostBaseline is false when no position carries a cost basis")
-  func costBaselineHiddenWhenNoCostBasis() {
-    let point = HistoricalValueSeries.Point(
-      date: fixedTestDate, value: 100, cost: 0, contributions: nil)
-    let input = PositionsViewInput(
-      title: "x", hostCurrency: aud,
-      positions: [
-        ValuedPosition(
-          instrument: bhp, quantity: 1, unitPrice: nil,
-          costBasis: nil, value: amount(100))
-      ],
-      historicalValue: HistoricalValueSeries(
-        hostCurrency: aud, total: [point], perInstrument: [:])
-    )
-    #expect(!input.showsCostBaseline)
-  }
-
-  @Test("showsCostBaseline is false when positions is empty")
-  func costBaselineHiddenWhenPositionsEmpty() {
-    let point = HistoricalValueSeries.Point(
-      date: fixedTestDate, value: 100, cost: 0, contributions: nil)
-    let input = PositionsViewInput(
-      title: "x", hostCurrency: aud, positions: [],
-      historicalValue: HistoricalValueSeries(
-        hostCurrency: aud, total: [point], perInstrument: [:])
-    )
-    #expect(!input.showsCostBaseline)
-  }
 }
