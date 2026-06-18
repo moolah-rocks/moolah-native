@@ -28,9 +28,11 @@ enum ConversionFailureClassifier {
 
   private static func isTransient(_ error: WalletSyncError) -> Bool {
     switch error.kind {
-    case .network, .rateLimited:
+    case .network, .rateLimited, .providerMalformedResponse:
+      // .providerMalformedResponse is transient: the provider could have had
+      // the data but glitched (e.g. a bad JSON payload). Retrying may succeed.
       return true
-    case .missingApiKey, .invalidApiKey, .providerMalformedResponse:
+    case .missingApiKey, .invalidApiKey:
       return false
     }
   }

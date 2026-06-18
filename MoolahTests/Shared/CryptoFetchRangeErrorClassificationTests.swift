@@ -33,7 +33,7 @@ struct CryptoFetchRangeErrorClassificationTests {
     return result
   }
 
-  @Test("a missing-API-key-only window does not surface a transient failure")
+  @Test("a missing-API-key-only window does not throw (structural skip)")
   func missingKeyIsStructural() async throws {
     let client = FixedCryptoPriceClient(
       prices: [:],
@@ -43,28 +43,17 @@ struct CryptoFetchRangeErrorClassificationTests {
     )
     let service = try makeService(clients: [client])
 
-    // A missing-API-key error is structural — fetchRange should NOT throw
-    // a transient error (the provider can't contribute, like noProviderMapping).
-    // Either it returns without throwing, or if it does throw, the error
-    // must be non-transient per ConversionFailureClassifier.
-    do {
-      try await service.fetchRange(
-        instrument: ethInstrument,
-        mapping: ethMapping,
-        from: date("2024-01-01"),
-        to: date("2024-01-07")
-      )
-      // No throw: structural-only failures → no transient outage reported. ✓
-    } catch {
-      // If it throws, it must classify as NON-transient (structural).
-      #expect(
-        !ConversionFailureClassifier.isTransient(error),
-        "missing-API-key error must not be classified as transient, got: \(error)"
-      )
-    }
+    // A missing-API-key error is structural — fetchRange must NOT throw at all.
+    // The provider is skipped (like noProviderMapping); no transient outage reported.
+    try await service.fetchRange(
+      instrument: ethInstrument,
+      mapping: ethMapping,
+      from: date("2024-01-01"),
+      to: date("2024-01-07")
+    )
   }
 
-  @Test("an invalid-API-key-only window does not surface a transient failure")
+  @Test("an invalid-API-key-only window does not throw (structural skip)")
   func invalidKeyIsStructural() async throws {
     let client = FixedCryptoPriceClient(
       prices: [:],
@@ -74,20 +63,13 @@ struct CryptoFetchRangeErrorClassificationTests {
     )
     let service = try makeService(clients: [client])
 
-    do {
-      try await service.fetchRange(
-        instrument: ethInstrument,
-        mapping: ethMapping,
-        from: date("2024-01-01"),
-        to: date("2024-01-07")
-      )
-      // No throw: structural-only failures → no transient outage reported. ✓
-    } catch {
-      #expect(
-        !ConversionFailureClassifier.isTransient(error),
-        "invalid-API-key error must not be classified as transient, got: \(error)"
-      )
-    }
+    // An invalid-API-key error is structural — fetchRange must NOT throw at all.
+    try await service.fetchRange(
+      instrument: ethInstrument,
+      mapping: ethMapping,
+      from: date("2024-01-01"),
+      to: date("2024-01-07")
+    )
   }
 
   @Test("a rate-limited window surfaces a transient failure")
@@ -139,6 +121,35 @@ struct CryptoFetchRangeErrorClassificationTests {
       #expect(
         ConversionFailureClassifier.isTransient(error),
         "network error must be classified as transient, got: \(error)"
+      )
+    }
+  }
+
+  @Test("a malformed-response-only window surfaces a transient failure (not structural skip)")
+  func malformedResponseIsOperational() async throws {
+    let client = FixedCryptoPriceClient(
+      prices: [:],
+      shouldFail: true,
+      failureError: WalletSyncError.providerMalformedResponse(stage: "parse"),
+      syncProvider: .coinGecko
+    )
+    let service = try makeService(clients: [client])
+
+    // A malformed response means the provider could have had data but glitched —
+    // fetchRange MUST throw so a later task cannot conclude "no data" and value
+    // the token at $0. With the bug (isTransient predicate) it silently returns.
+    do {
+      try await service.fetchRange(
+        instrument: ethInstrument,
+        mapping: ethMapping,
+        from: date("2024-01-01"),
+        to: date("2024-01-07")
+      )
+      Issue.record("Expected fetchRange to throw for a malformed-response error")
+    } catch {
+      #expect(
+        ConversionFailureClassifier.isTransient(error),
+        "malformed-response error must be classified as transient, got: \(error)"
       )
     }
   }

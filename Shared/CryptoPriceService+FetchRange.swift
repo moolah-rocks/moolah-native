@@ -253,11 +253,13 @@ extension CryptoPriceService {
         // a non-existent outage to a provider that's behaving as designed.
         continue
       } catch let walletError as WalletSyncError
-        where !ConversionFailureClassifier.isTransient(walletError)
+        where walletError.kind == .missingApiKey || walletError.kind == .invalidApiKey
       {
-        // Structural failure (e.g. missing/invalid API key) — provider cannot
-        // contribute, analogous to noProviderMapping. Do not treat this as a
-        // transient network outage; skip to the next client.
+        // Structural failure — the provider definitively cannot contribute
+        // (no API key, or key rejected). Analogous to noProviderMapping.
+        // Do NOT treat as a transient outage; skip to the next client.
+        // Note: .providerMalformedResponse, .rateLimited, and .network all
+        // fall through to the operational capture path below.
         continue
       } catch {
         operationalError = error
@@ -266,10 +268,10 @@ extension CryptoPriceService {
       }
     }
     if let error = operationalError {
-      // Rethrow an existing WalletSyncError unchanged to preserve its
-      // classification; wrap everything else as a network error.
+      // Rethrow an existing WalletSyncError unchanged — it already carries
+      // its provider and kind; re-attributing would clobber the source.
       if let walletError = error as? WalletSyncError {
-        throw walletError.attributed(to: operationalProvider ?? walletError.provider ?? .coinGecko)
+        throw walletError
       }
       throw WalletSyncError(
         provider: operationalProvider,
