@@ -10,13 +10,13 @@ struct PositionsHistoryBuilderTests {
   let cba = Instrument.stock(ticker: "CBA.AX", exchange: "ASX", name: "CBA")
   let accountId = UUID()
 
-  /// Day 0 = 2026-01-01.
+  /// Day 0 = 2026-01-01. Uses `Calendar.utc` so the result is zone-invariant.
   private func date(daysAfterEpoch days: Int) -> Date {
     var components = DateComponents()
     components.year = 2026
     components.month = 1
     components.day = 1 + days
-    guard let result = Calendar(identifier: .gregorian).date(from: components) else {
+    guard let result = Calendar.utc.date(from: components) else {
       fatalError("Could not construct date \(days) days after 2026-01-01")
     }
     return result
@@ -86,11 +86,14 @@ struct PositionsHistoryBuilderTests {
     // point reflects the cumulative cost basis at that date — exact step
     // function: 4_000 from day 1, 6_500 from day 10 onwards.
     let bhpSeries = series.series(forInstrumentIds: [bhp.id])
-    let calendar = Calendar(identifier: .gregorian)
     let day5 = try #require(
-      bhpSeries.first { calendar.isDate($0.date, inSameDayAs: date(daysAfterEpoch: 5)) })
+      bhpSeries.first {
+        Calendar.utc.isDate($0.date, inSameDayAs: date(daysAfterEpoch: 5))
+      })
     let day20 = try #require(
-      bhpSeries.first { calendar.isDate($0.date, inSameDayAs: date(daysAfterEpoch: 20)) })
+      bhpSeries.first {
+        Calendar.utc.isDate($0.date, inSameDayAs: date(daysAfterEpoch: 20))
+      })
     #expect(day5.cost == 4_000)
     #expect(day20.cost == 6_500)
   }
@@ -185,8 +188,13 @@ struct PositionsHistoryBuilderTests {
       hostCurrency: aud, range: .oneMonth, now: now
     )
     let cutoff = try #require(PositionsTimeRange.oneMonth.cutoff(from: now))
-    let cutoffDay = Calendar(identifier: .gregorian).startOfDay(for: cutoff)
-    #expect(oneMonth.totalSeries.allSatisfy { $0.date >= cutoffDay })
+    let cutoffDay = Calendar.utc.startOfDay(for: cutoff)
+    // Points are anchored at noon UTC; compare by start-of-day so the noon
+    // offset does not falsely fail the >= check against a midnight cutoff.
+    #expect(
+      oneMonth.totalSeries.allSatisfy {
+        Calendar.utc.startOfDay(for: $0.date) >= cutoffDay
+      })
   }
 
   /// Locks in Rule 5 of `guides/INSTRUMENT_CONVERSION_GUIDE.md`: every
