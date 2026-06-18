@@ -50,3 +50,4 @@ tools/test-plugin/node_modules/
 # macOS
 .DS_Store
 *.swp
+sdd/
