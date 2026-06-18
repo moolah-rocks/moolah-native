@@ -26,6 +26,7 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
   let title: String
   let conversionService: (any InstrumentConversionService)?
   let registrationsVersion: Int
+  let accountIds: [UUID]
 
   @Environment(ProfileSession.self) private var session: ProfileSession?
 
@@ -81,8 +82,10 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       } transactions: {
         content
       }
-      .task(id: PositionsTaskKey(positions: positions, registrationsVersion: registrationsVersion))
-      {
+      .task(
+        id: PositionsTaskKey(
+          positions: positions, registrationsVersion: registrationsVersion, range: positionsRange)
+      ) {
         await valuatePositions()
       }
     } else {
@@ -118,6 +121,14 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       )
     }
     guard !Task.isCancelled else { return }
+    if !accountIds.isEmpty, let repository = session?.backend.transactions {
+      await buildHistoryInput(
+        conversionService: conversionService,
+        rows: rows,
+        assetKeys: assetKeys,
+        repository: repository)
+      return
+    }
     positionsInput = PositionsViewInput(
       title: title,
       hostCurrency: hostCurrency,
@@ -126,14 +137,49 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       assetKeysByInstrumentId: assetKeys
     )
   }
+
+  private func buildHistoryInput(
+    conversionService: any InstrumentConversionService,
+    rows: [ValuedPosition],
+    assetKeys: [String: String],
+    repository: any TransactionRepository
+  ) async {
+    let assembler = MultiInstrumentPositionsAssembler(conversionService: conversionService)
+    let txns: [Transaction]
+    do {
+      txns = try await assembler.fetchTransactions(
+        repository: repository, accountIds: Set(accountIds))
+    } catch is CancellationError {
+      return
+    } catch {
+      Self.logger.warning(
+        "history txn fetch failed: \(error.localizedDescription, privacy: .public)")
+      txns = []
+    }
+    guard !Task.isCancelled else { return }
+    let context = PositionsAssemblyContext(
+      title: title,
+      hostCurrency: hostCurrency,
+      accountIds: Set(accountIds),
+      assetKeysByInstrumentId: assetKeys,
+      performance: nil,
+      alwaysShowsFullSurface: false)
+    positionsInput = await assembler.assemble(
+      context: context,
+      valuedRows: rows,
+      transactions: txns,
+      range: positionsRange)
+  }
 }
 
 /// Composite id for the positions-valuation `.task(id:)`. Re-fires when
-/// the positions list changes OR when the crypto-registry version bumps
-/// (spam flip in preferences). Issue #790.
+/// the positions list changes, the crypto-registry version bumps
+/// (spam flip in preferences), or the selected time range changes.
+/// Issue #790.
 private struct PositionsTaskKey: Hashable {
   let positions: [Position]
   let registrationsVersion: Int
+  let range: PositionsTimeRange
 }
 
 extension View {
@@ -145,7 +191,8 @@ extension View {
     hostCurrency: Instrument,
     title: String,
     conversionService: (any InstrumentConversionService)?,
-    registrationsVersion: Int = 0
+    registrationsVersion: Int = 0,
+    accountIds: [UUID] = []
   ) -> some View {
     modifier(
       MultiInstrumentPositionsSplitModifier(
@@ -153,7 +200,8 @@ extension View {
         hostCurrency: hostCurrency,
         title: title,
         conversionService: conversionService,
-        registrationsVersion: registrationsVersion))
+        registrationsVersion: registrationsVersion,
+        accountIds: accountIds))
   }
 }
 
