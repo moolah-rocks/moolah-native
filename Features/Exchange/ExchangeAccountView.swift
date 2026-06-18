@@ -39,7 +39,8 @@ struct ExchangeAccountView: View {
         hostCurrency: account.instrument,
         title: account.name,
         conversionService: conversionService,
-        registrationsVersion: session.cryptoTokenStore?.registrationsVersion ?? 0)
+        registrationsVersion: session.cryptoTokenStore?.registrationsVersion ?? 0,
+        accountIds: [account.id])
     }
   }
 

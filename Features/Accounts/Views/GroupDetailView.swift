@@ -62,7 +62,8 @@ struct GroupDetailView: View {
       positions: aggregatedPositions,
       hostCurrency: context.displayInstrument,
       title: context.displayName,
-      conversionService: conversionService
+      conversionService: conversionService,
+      accountIds: context.accountIds
     )
   }
 }
