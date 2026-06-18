@@ -230,8 +230,8 @@ extension CryptoPriceService {
   ) async throws {
     let tokenId = instrument.id
     let symbol = instrument.ticker ?? instrument.name
-    var lastError: (any Error)?
-    var lastProvider: SyncProvider?
+    var operationalError: (any Error)?
+    var operationalProvider: SyncProvider?
     for client in clients {
       do {
         let fetched = try await client.dailyPrices(for: mapping, in: from...to)
@@ -252,15 +252,27 @@ extension CryptoPriceService {
         // (e.g. USDT on Binance). Skip silently rather than attributing
         // a non-existent outage to a provider that's behaving as designed.
         continue
+      } catch let walletError as WalletSyncError
+        where !ConversionFailureClassifier.isTransient(walletError)
+      {
+        // Structural failure (e.g. missing/invalid API key) — provider cannot
+        // contribute, analogous to noProviderMapping. Do not treat this as a
+        // transient network outage; skip to the next client.
+        continue
       } catch {
-        lastError = error
-        lastProvider = client.syncProvider
+        operationalError = error
+        operationalProvider = client.syncProvider
         continue
       }
     }
-    if let error = lastError {
+    if let error = operationalError {
+      // Rethrow an existing WalletSyncError unchanged to preserve its
+      // classification; wrap everything else as a network error.
+      if let walletError = error as? WalletSyncError {
+        throw walletError.attributed(to: operationalProvider ?? walletError.provider ?? .coinGecko)
+      }
       throw WalletSyncError(
-        provider: lastProvider,
+        provider: operationalProvider,
         kind: .network(underlyingDescription: String(describing: error)))
     }
   }
