@@ -236,9 +236,17 @@ actor FullConversionService: InstrumentConversionService {
         // requested target instrument without a provider call.
         return .knownZero(targetInstrument: instrument)
       }
+      // `.priced` crypto: a date before the token's first confirmed trade has
+      // no market value yet. Map `beforeFirstTrade` to `.knownZero` so
+      // aggregation sites keep the day in the net-worth chart (contributing $0)
+      // rather than dropping it. All other errors still propagate per Rule 11.
+      do {
+        return .value(try await convertAmount(amount, to: instrument, on: date))
+      } catch CryptoPriceError.beforeFirstTrade {
+        return .knownZero(targetInstrument: instrument)
+      }
     }
-    let converted = try await convertAmount(amount, to: instrument, on: date)
-    return .value(converted)
+    return .value(try await convertAmount(amount, to: instrument, on: date))
   }
 
   /// Invalidate any cached state held about `instrument`. Drops every
