@@ -108,6 +108,78 @@ struct PositionsHistoryBuilderMultiAccountTests {
     }
   }
 
+  /// Locks in that the multi-account builder uses each day's own rate, not
+  /// today's rate (Rule 5 of `guides/INSTRUMENT_CONVERSION_GUIDE.md`).
+  ///
+  /// Uses `DateBasedFixedConversionService` with DIFFERENT per-day rates so a
+  /// regression that swapped `on: day` for `on: Date()` would produce three
+  /// equal values (all at the "today" rate) instead of the three distinct
+  /// values this test asserts.
+  ///
+  /// Rate keys use the same local-timezone `Calendar(identifier: .gregorian)`
+  /// the builder uses for its `startOfDay` computation — following the
+  /// precedent of `PositionsHistoryBuilderTests.valueSeriesUsesPerDayRate` —
+  /// so the `rateDate <= queryDate` comparison in
+  /// `DateBasedFixedConversionService` always aligns regardless of the CI
+  /// runner's local timezone.
+  @Test("each day's value uses that day's rate across multiple accounts")
+  func dateDependentConversionProducesCorrectValues() async {
+    // Construct rate keys using the same local calendar the builder uses for
+    // its day-start queries so keys align precisely in every timezone.
+    let localCalendar = Calendar(identifier: .gregorian)
+    func localDate(daysAfterEpoch days: Int) -> Date {
+      var components = DateComponents()
+      components.year = 2026
+      components.month = 1
+      components.day = 1 + days
+      guard let result = localCalendar.date(from: components) else {
+        fatalError("Could not construct local date \(days) days after 2026-01-01")
+      }
+      return result
+    }
+
+    // Account A buys 1 BTC on day 1; account B buys 1 BTC on day 1.
+    // Group total = 2 BTC; each day has its own rate.
+    let txns = [
+      Transaction(
+        date: localDate(daysAfterEpoch: 1),
+        legs: [
+          TransactionLeg(accountId: accountA, instrument: btc, quantity: 1, type: .trade),
+          TransactionLeg(accountId: accountA, instrument: aud, quantity: -10_000, type: .trade),
+        ]
+      ),
+      Transaction(
+        date: localDate(daysAfterEpoch: 1),
+        legs: [
+          TransactionLeg(accountId: accountB, instrument: btc, quantity: 1, type: .trade),
+          TransactionLeg(accountId: accountB, instrument: aud, quantity: -10_000, type: .trade),
+        ]
+      ),
+    ]
+    let service = DateBasedFixedConversionService(rates: [
+      localDate(daysAfterEpoch: 1): [btc.id: Decimal(10_000)],
+      localDate(daysAfterEpoch: 2): [btc.id: Decimal(20_000)],
+      localDate(daysAfterEpoch: 3): [btc.id: Decimal(30_000)],
+    ])
+    let builder = PositionsHistoryBuilder(conversionService: service)
+    let now = localDate(daysAfterEpoch: 3)
+    let series = await builder.build(
+      transactions: txns,
+      accountIds: Set([accountA, accountB]),
+      hostCurrency: aud,
+      range: .threeMonths,
+      now: now
+    )
+
+    // Three points (days 1, 2, 3). Group holds 2 BTC on each day, but
+    // the value steps up with each day's rate. A regression to "always use
+    // today's rate" would produce three identical values of 2 × 30_000 = 60_000.
+    #expect(series.totalSeries.count == 3)
+    #expect(series.totalSeries[0].value == 2 * Decimal(10_000))
+    #expect(series.totalSeries[1].value == 2 * Decimal(20_000))
+    #expect(series.totalSeries[2].value == 2 * Decimal(30_000))
+  }
+
   /// The single-account convenience overload still produces the same series
   /// as calling the set-based API with a single-element set.
   @Test("single-account convenience overload matches set-based API with singleton set")

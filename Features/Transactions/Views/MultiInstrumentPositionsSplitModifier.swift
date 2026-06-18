@@ -126,7 +126,8 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
         conversionService: conversionService,
         rows: rows,
         assetKeys: assetKeys,
-        repository: repository)
+        repository: repository
+      )
       return
     }
     positionsInput = PositionsViewInput(
@@ -139,16 +140,17 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
   }
 
   private func buildHistoryInput(
-    conversionService: any InstrumentConversionService,
+    conversionService service: any InstrumentConversionService,
     rows: [ValuedPosition],
     assetKeys: [String: String],
     repository: any TransactionRepository
   ) async {
-    let assembler = MultiInstrumentPositionsAssembler(conversionService: conversionService)
+    let accountIdSet = Set(accountIds)
+    let assembler = MultiInstrumentPositionsAssembler(conversionService: service)
     let txns: [Transaction]
     do {
       txns = try await assembler.fetchTransactions(
-        repository: repository, accountIds: Set(accountIds))
+        repository: repository, accountIds: accountIdSet)
     } catch is CancellationError {
       return
     } catch {
@@ -160,7 +162,7 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
     let context = PositionsAssemblyContext(
       title: title,
       hostCurrency: hostCurrency,
-      accountIds: Set(accountIds),
+      accountIds: accountIdSet,
       assetKeysByInstrumentId: assetKeys,
       performance: nil,
       alwaysShowsFullSurface: false)

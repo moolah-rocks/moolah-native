@@ -76,12 +76,12 @@ extension InvestmentStore {
       range: range)
   }
 
-  // MARK: - Forwarding wrappers
+  // MARK: - Convenience fetch
 
-  /// Single-account forwarding wrapper for `MultiInstrumentPositionsAssembler
-  /// .fetchTransactions(repository:accountIds:)`. Retained because
-  /// `refreshPositionTrackedPerformance` in `InvestmentStore+Positions.swift`
-  /// calls this method with a single `UUID`.
+  /// Single-account convenience that delegates to
+  /// `MultiInstrumentPositionsAssembler.fetchTransactions(repository:accountIds:)`.
+  /// Used by `refreshPositionTrackedPerformance` in
+  /// `InvestmentStore+Positions.swift`, which supplies a single `UUID`.
   func fetchAllTransactions(
     repository: TransactionRepository,
     accountId: UUID

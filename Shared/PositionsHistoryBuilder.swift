@@ -99,7 +99,6 @@ struct PositionsHistoryBuilder: Sendable {
   }
 
   /// Single-account convenience overload. Forwards to the `Set<UUID>` version.
-  @concurrent
   func build(
     transactions: [Transaction],
     accountId: UUID,
