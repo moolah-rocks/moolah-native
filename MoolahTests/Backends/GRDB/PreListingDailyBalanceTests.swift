@@ -275,35 +275,41 @@ struct PreListingDailyBalanceTests {
   @Test("firstTradedOn boundary does not drift when asserted across UTC-negative zones")
   func firstTradedOnBoundaryIsZoneInvariant() async throws {
     let database = try ProfileIndexDatabase.openInMemory()
-    let utcZone = try #require(TimeZone(identifier: "UTC"))
     let frozen = try isoDate("2026-01-01")
-
-    let cryptoClient = FixedCryptoPriceClient(prices: [
-      "1:0xairdrop": ["2024-10-01": dec("50.00")]
-    ])
-    let cryptoService = CryptoPriceService(
-      clients: [cryptoClient],
-      database: database,
-      now: { frozen },
-      timeZone: utcZone)
-
-    var series = SortedDateSeries<Decimal>()
-    if let key = DateKey.from(isoString: "2024-10-01") {
-      series.upsert(dec("50.00"), forKey: key)
-    }
-    await cryptoService.injectCacheForTesting(
-      CryptoPriceCache(
-        tokenId: "1:0xairdrop", symbol: "DROP",
-        earliestDate: "2024-10-01", latestDate: "2024-10-01",
-        prices: series, firstTradedOn: "2024-10-01"))
-
     let registration = CryptoRegistration(
       instrument: airdropInstrument, mapping: airdropMapping, pricingStatus: .priced)
 
-    let preBoundary = try isoDate("2024-09-30").addingTimeInterval(12 * 60 * 60)
-    let onBoundary = try isoDate("2024-10-01").addingTimeInterval(12 * 60 * 60)
+    // Noon-UTC day tokens: zone-invariant by construction — all three timezones
+    // must produce the same "2024-09-30" / "2024-10-01" date string.
+    let preBoundary = try noonUTCDate(year: 2024, month: 9, day: 30)
+    let onBoundary = try noonUTCDate(year: 2024, month: 10, day: 1)
 
     for zoneId in ["America/Los_Angeles", "UTC", "Australia/Brisbane"] {
+      // Construct a FRESH service for each zone so that the service's internal
+      // date formatter is initialised with the per-iteration timezone. This is
+      // what proves the boundary does not shift: if the formatter were not
+      // UTC-anchored, the LA service would misread "2024-09-30 noon UTC" as
+      // "2024-09-29" and the knownZero/priced verdict would flip.
+      let zone = try #require(TimeZone(identifier: zoneId))
+      let cryptoClient = FixedCryptoPriceClient(prices: [
+        "1:0xairdrop": ["2024-10-01": dec("50.00")]
+      ])
+      let cryptoService = CryptoPriceService(
+        clients: [cryptoClient],
+        database: database,
+        now: { frozen },
+        timeZone: zone)
+
+      var series = SortedDateSeries<Decimal>()
+      if let key = DateKey.from(isoString: "2024-10-01") {
+        series.upsert(dec("50.00"), forKey: key)
+      }
+      await cryptoService.injectCacheForTesting(
+        CryptoPriceCache(
+          tokenId: "1:0xairdrop", symbol: "DROP",
+          earliestDate: "2024-10-01", latestDate: "2024-10-01",
+          prices: series, firstTradedOn: "2024-10-01"))
+
       let preLookup = try await cryptoService.priceLookup(for: registration, on: preBoundary)
       let onLookup = try await cryptoService.priceLookup(for: registration, on: onBoundary)
       #expect(
