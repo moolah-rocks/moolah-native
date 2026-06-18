@@ -43,15 +43,22 @@ enum PositionsTimeRange: Hashable, Sendable, CaseIterable, Identifiable {
 
   /// First date inside the range, given a `now` reference. `nil` for `.all`
   /// (caller treats as "from the earliest available data point").
+  ///
+  /// Uses the LOCAL Gregorian calendar — this is a now-relative range boundary
+  /// ("the user's year to date", "3 months ago from now"), not a timezoneless
+  /// carrier. Local calendar is correct here; see DATE_TIME_GUIDE.md §Local vs UTC.
+  /// The builder's day-bucketing (PositionsHistoryBuilder) uses Calendar.utc
+  /// separately — those are distinct concerns.
   func cutoff(from now: Date) -> Date? {
+    let calendar = Calendar(identifier: .gregorian)
     switch self {
-    case .oneMonth: return Calendar.utc.date(byAdding: .month, value: -1, to: now)
-    case .threeMonths: return Calendar.utc.date(byAdding: .month, value: -3, to: now)
-    case .sixMonths: return Calendar.utc.date(byAdding: .month, value: -6, to: now)
+    case .oneMonth: return calendar.date(byAdding: .month, value: -1, to: now)
+    case .threeMonths: return calendar.date(byAdding: .month, value: -3, to: now)
+    case .sixMonths: return calendar.date(byAdding: .month, value: -6, to: now)
     case .ytd:
-      let comps = Calendar.utc.dateComponents([.year], from: now)
-      return Calendar.utc.date(from: comps)
-    case .oneYear: return Calendar.utc.date(byAdding: .year, value: -1, to: now)
+      let comps = calendar.dateComponents([.year], from: now)
+      return calendar.date(from: comps)
+    case .oneYear: return calendar.date(byAdding: .year, value: -1, to: now)
     case .all: return nil
     }
   }
