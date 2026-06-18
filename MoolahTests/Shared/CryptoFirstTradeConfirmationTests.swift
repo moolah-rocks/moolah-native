@@ -102,11 +102,12 @@ struct CryptoFirstTradeConfirmationTests {
       failureError: rateLimitError,
       syncProvider: .binance)
 
-    // Put the failing client second: the data client serves data on/after floor
-    // (returning empty for pre-floor windows); the failing client then throws,
-    // making the whole window an operational failure.
+    // Put the failing client first: it throws on every request regardless of
+    // date, so the backward-walk window is guaranteed to hit an operational
+    // error before the data client is ever consulted. This is unambiguous —
+    // the test does not rely on a specific client ordering to surface the error.
     let service = try makeService(
-      clients: [dataClient, failingClient],
+      clients: [failingClient, dataClient],
       database: database,
       now: { frozen })
 
