@@ -41,7 +41,7 @@ struct PositionsHistoryBuilder: Sendable {
   @concurrent
   func build(
     transactions: [Transaction],
-    accountId: UUID,
+    accountIds: Set<UUID>,
     hostCurrency: Instrument,
     range: PositionsTimeRange,
     now: Date = Date()
@@ -49,7 +49,7 @@ struct PositionsHistoryBuilder: Sendable {
     let calendar = Calendar(identifier: .gregorian)
     let sortedTxns =
       transactions
-      .filter { $0.legs.contains(where: { $0.accountId == accountId }) }
+      .filter { $0.legs.contains(where: { $0.accountId.map { accountIds.contains($0) } ?? false }) }
       .sorted { $0.date < $1.date }
 
     guard let firstTxnDate = sortedTxns.first?.date else {
@@ -66,7 +66,7 @@ struct PositionsHistoryBuilder: Sendable {
     }
 
     let context = BuildContext(
-      sortedTxns: sortedTxns, accountId: accountId,
+      sortedTxns: sortedTxns, accountIds: accountIds,
       hostCurrency: hostCurrency, calendar: calendar)
     var state = BuildState()
     do {
@@ -98,6 +98,20 @@ struct PositionsHistoryBuilder: Sendable {
     return state.series(hostCurrency: hostCurrency)
   }
 
+  /// Single-account convenience overload. Forwards to the `Set<UUID>` version.
+  @concurrent
+  func build(
+    transactions: [Transaction],
+    accountId: UUID,
+    hostCurrency: Instrument,
+    range: PositionsTimeRange,
+    now: Date = Date()
+  ) async -> HistoricalValueSeries {
+    await build(
+      transactions: transactions, accountIds: [accountId],
+      hostCurrency: hostCurrency, range: range, now: now)
+  }
+
   /// Pre-fold any transactions strictly before `start` so the snapshot at
   /// `start` already reflects historical buys.
   private func preFoldHistory(
@@ -110,7 +124,7 @@ struct PositionsHistoryBuilder: Sendable {
     {
       try await apply(
         transaction: context.sortedTxns[state.txnIndex],
-        accountId: context.accountId,
+        accountIds: context.accountIds,
         hostCurrency: context.hostCurrency,
         state: &state
       )
@@ -129,7 +143,7 @@ struct PositionsHistoryBuilder: Sendable {
     {
       try await apply(
         transaction: context.sortedTxns[state.txnIndex],
-        accountId: context.accountId,
+        accountIds: context.accountIds,
         hostCurrency: context.hostCurrency,
         state: &state
       )
@@ -140,7 +154,7 @@ struct PositionsHistoryBuilder: Sendable {
   /// Immutable inputs threaded through `build`'s per-day loop.
   private struct BuildContext {
     let sortedTxns: [Transaction]
-    let accountId: UUID
+    let accountIds: Set<UUID>
     let hostCurrency: Instrument
     let calendar: Calendar
   }
@@ -252,11 +266,13 @@ struct PositionsHistoryBuilder: Sendable {
   /// conversion errors set the sticky latch and stay swallowed.
   private func apply(
     transaction: Transaction,
-    accountId: UUID,
+    accountIds: Set<UUID>,
     hostCurrency: Instrument,
     state: inout BuildState
   ) async throws {
-    let accountLegs = transaction.legs.filter { $0.accountId == accountId }
+    let accountLegs = transaction.legs.filter {
+      $0.accountId.map { accountIds.contains($0) } ?? false
+    }
     for leg in accountLegs where leg.instrument != hostCurrency {
       state.quantities[leg.instrument, default: 0] += leg.quantity
     }
@@ -290,10 +306,17 @@ struct PositionsHistoryBuilder: Sendable {
     }
 
     // Contributions fold (sticky latch — see BuildState docs).
+    // A flow counts for the group only if the transaction touches exactly
+    // one member of `accountIds` (single member → external counterpart).
+    // Touching ≥2 members means an internal transfer → excluded.
     guard let running = state.contributions else { return }
+    let membersTouched = Set(transaction.legs.compactMap(\.accountId)).intersection(accountIds)
+    guard membersTouched.count == 1, let member = membersTouched.first else {
+      return
+    }
     do {
       let amounts = try await AccountCashFlows.flowAmounts(
-        for: transaction, accountId: accountId,
+        for: transaction, accountId: member,
         hostCurrency: hostCurrency, service: conversionService
       )
       if !amounts.isEmpty {
