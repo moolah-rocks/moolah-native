@@ -49,7 +49,8 @@ extension CryptoPriceService {
         symbol: symbol,
         earliestDate: earliest,
         latestDate: latest,
-        prices: series
+        prices: series,
+        firstTradedOn: nil
       )
     }
 

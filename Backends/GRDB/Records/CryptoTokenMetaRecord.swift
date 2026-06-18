@@ -24,6 +24,7 @@ struct CryptoTokenMetaRecord {
     case symbol
     case earliestDate = "earliest_date"
     case latestDate = "latest_date"
+    case firstTradedOn = "first_traded_on"
   }
 
   // `CodingKeys` is required (not redundant with `Columns`): GRDB's
@@ -35,6 +36,7 @@ struct CryptoTokenMetaRecord {
     case symbol
     case earliestDate = "earliest_date"
     case latestDate = "latest_date"
+    case firstTradedOn = "first_traded_on"
   }
 
   var tokenId: String
@@ -43,6 +45,9 @@ struct CryptoTokenMetaRecord {
   var symbol: String
   var earliestDate: String
   var latestDate: String
+  /// Confirmed cross-provider first-trade date for this token (`YYYY-MM-DD`).
+  /// `nil` means the date has not yet been confirmed.
+  var firstTradedOn: String?
 }
 
 extension CryptoTokenMetaRecord: Codable {}
