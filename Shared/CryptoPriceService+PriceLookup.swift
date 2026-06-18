@@ -31,11 +31,18 @@ extension CryptoPriceService {
     case .unpriced, .spam:
       return .knownZero
     case .priced:
-      let rate = try await price(
-        for: registration.instrument,
-        mapping: registration.mapping,
-        on: date)
-      return .priced(rate)
+      do {
+        let rate = try await price(
+          for: registration.instrument,
+          mapping: registration.mapping,
+          on: date)
+        return .priced(rate)
+      } catch CryptoPriceError.beforeFirstTrade {
+        // The token had no market price before its first confirmed trade date.
+        // Return .knownZero so aggregation sites can value the holding as $0
+        // (ATO-correct for pre-listing airdrops) rather than dropping the day.
+        return .knownZero
+      }
     }
   }
 }

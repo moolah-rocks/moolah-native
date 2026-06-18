@@ -151,6 +151,13 @@ actor CryptoPriceService {
       return cached
     }
 
+    // Fast-path: if the confirmed first-trade date is known and the requested
+    // date is strictly before it, the token had no market price on this date.
+    // Throw `.beforeFirstTrade` so the priceLookup seam can map it to .knownZero.
+    if let floor = caches[tokenId]?.firstTradedOn, dateString < floor {
+      throw CryptoPriceError.beforeFirstTrade(tokenId: tokenId, date: dateString)
+    }
+
     if let inRange = try inRangeFallback(tokenId: tokenId, dateString: dateString) {
       return inRange
     }

@@ -5,6 +5,10 @@ enum CryptoPriceError: Error, Equatable {
   case noPriceAvailable(tokenId: String, date: String)
   case noProviderMapping(tokenId: String, provider: String)
   case allProvidersFailed(tokenId: String)
+  /// Thrown when the requested date is strictly before the token's confirmed
+  /// first-trade date. The token had no market price on this date; callers
+  /// should treat the holding as worth $0 (ATO-correct for pre-listing airdrops).
+  case beforeFirstTrade(tokenId: String, date: String)
 }
 
 extension CryptoPriceError: LocalizedError {
@@ -16,6 +20,8 @@ extension CryptoPriceError: LocalizedError {
       return "No price source is configured for \(tokenId) (provider: \(provider))."
     case let .allProvidersFailed(tokenId):
       return "Unable to fetch a price for \(tokenId) from any source."
+    case let .beforeFirstTrade(tokenId, date):
+      return "\(tokenId) had not yet started trading on \(date); valued at $0."
     }
   }
 }

@@ -166,8 +166,11 @@ extension CryptoPriceService {
 
   /// Final resolution after the bounded extension loop exits: checks cached
   /// exact hit, prior-trading-day fallback, in-range fallback, and finally
-  /// re-throws the last provider error or `noPriceAvailable`. Extracted to
-  /// keep `extendContiguously`'s cyclomatic complexity in bounds.
+  /// re-throws the last provider error or `noPriceAvailable`. If the
+  /// backward walk just confirmed `firstTradedOn` (Task 4) and the requested
+  /// date is strictly before that floor, throws `beforeFirstTrade` instead so
+  /// the first request below a newly-confirmed floor is also caught correctly.
+  /// Extracted to keep `extendContiguously`'s cyclomatic complexity in bounds.
   private func resolveAfterExtension(
     tokenId: String,
     dateString: String,
@@ -181,6 +184,11 @@ extension CryptoPriceService {
     }
     if let inRange = try inRangeFallback(tokenId: tokenId, dateString: dateString) {
       return inRange
+    }
+    // If a backward walk just set firstTradedOn and the date is below the
+    // confirmed floor, report beforeFirstTrade rather than a generic miss.
+    if let floor = caches[tokenId]?.firstTradedOn, dateString < floor {
+      throw CryptoPriceError.beforeFirstTrade(tokenId: tokenId, date: dateString)
     }
     if let fetchError {
       throw fetchError
