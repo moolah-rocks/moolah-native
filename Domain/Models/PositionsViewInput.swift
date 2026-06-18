@@ -104,19 +104,25 @@ struct PositionsViewInput: Sendable, Hashable {
     return positions.contains(where: { $0.hasCostBasis })
   }
 
-  /// `true` iff the chart container is rendered at all. The aggregate
-  /// historical series must be non-empty. Beyond that, either:
-  /// - `shouldHide` is `true` (every remaining position is in
-  ///   `hostCurrency` or no positions remain — the historical series
-  ///   alone justifies the chart for a closed-out account), or
-  /// - at least one current position carries cost basis.
+  /// `true` iff the chart container is rendered at all. A non-empty
+  /// aggregate historical series is sufficient — the chart shows at minimum
+  /// a value line (cost/gain-loss overlay is separately gated on
+  /// `showsCostBaseline`).
   ///
   /// This is intentionally more permissive than `showsPLPill`, which
-  /// additionally requires `totalValue` to be non-nil.
+  /// additionally requires `totalValue` to be non-nil and at least one
+  /// cost-bearing position.
   var showsChart: Bool {
-    guard let series = historicalValue, !series.total.isEmpty else { return false }
-    return shouldHide || positions.contains(where: { $0.hasCostBasis })
+    guard let series = historicalValue else { return false }
+    return !series.total.isEmpty
   }
+
+  /// `true` iff at least one current position carries a cost basis. Drives
+  /// whether the chart renders the cost/contributions baseline and gain/loss
+  /// shading. When `false` (e.g. a wallet of transfer-in or airdrop tokens),
+  /// the chart shows the value line only — a zero-cost baseline would
+  /// misleadingly render the entire holding as gain.
+  var showsCostBaseline: Bool { positions.contains(where: { $0.hasCostBasis }) }
 
   /// `true` iff the all-positions chart line should render. False when any
   /// row's current value is unavailable — partial historical totals would be

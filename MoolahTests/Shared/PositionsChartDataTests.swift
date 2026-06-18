@@ -29,7 +29,7 @@ struct PositionsChartDataTests {
       point(day: 1, value: 1_150, cost: 800, contributions: 1_000),
     ]
     let resolved = PositionsChartBaselineResolver.resolve(
-      points: points, mode: .aggregate
+      points: points, mode: .aggregate, showBaseline: true
     )
     #expect(resolved.map(\.baseline) == [1_000, 1_000])
     #expect(resolved.map(\.gainSegment) == [100, 150])
@@ -44,7 +44,7 @@ struct PositionsChartDataTests {
       point(day: 1, value: 900, cost: 800, contributions: nil),
     ]
     let resolved = PositionsChartBaselineResolver.resolve(
-      points: points, mode: .perInstrument
+      points: points, mode: .perInstrument, showBaseline: true
     )
     #expect(resolved.map(\.baseline) == [800, 800])
     #expect(resolved.map(\.gainSegment) == [50, 100])
@@ -54,7 +54,7 @@ struct PositionsChartDataTests {
   func lossSegments() throws {
     let points = try [point(day: 0, value: 950, cost: 1_000, contributions: nil)]
     let resolved = PositionsChartBaselineResolver.resolve(
-      points: points, mode: .perInstrument
+      points: points, mode: .perInstrument, showBaseline: true
     )
     #expect(resolved[0].gainSegment == 0)
     #expect(resolved[0].lossSegment == 50)
@@ -67,7 +67,7 @@ struct PositionsChartDataTests {
       point(day: 1, value: 1_150, cost: 800, contributions: nil),
     ]
     let resolved = PositionsChartBaselineResolver.resolve(
-      points: points, mode: .aggregate
+      points: points, mode: .aggregate, showBaseline: true
     )
     #expect(resolved[0].baseline != nil)
     #expect(resolved[1].baseline == nil)
@@ -82,8 +82,41 @@ struct PositionsChartDataTests {
       point(day: 1, value: 1_150, cost: 800, contributions: nil),
     ]
     let resolved = PositionsChartBaselineResolver.resolve(
-      points: points, mode: .aggregate
+      points: points, mode: .aggregate, showBaseline: true
     )
     #expect(resolved.last?.legendUnavailable == true)
+  }
+
+  @Test("showBaseline:false suppresses baseline for all rows regardless of mode")
+  func showBaselineFalseSuppressesAllBaselines() throws {
+    let points = try [
+      point(day: 0, value: 1_100, cost: 800, contributions: 1_000),
+      point(day: 1, value: 1_200, cost: 850, contributions: 1_050),
+    ]
+    // Both aggregate and perInstrument modes should yield nil baseline when showBaseline is false.
+    for mode in [PositionsChartMode.aggregate, PositionsChartMode.perInstrument] {
+      let resolved = PositionsChartBaselineResolver.resolve(
+        points: points, mode: mode, showBaseline: false
+      )
+      #expect(resolved.map(\.baseline) == [nil, nil], "baseline should be nil for mode \(mode)")
+      #expect(resolved.map(\.gainSegment) == [0, 0], "gain should be zero for mode \(mode)")
+      #expect(resolved.map(\.lossSegment) == [0, 0], "loss should be zero for mode \(mode)")
+      #expect(
+        resolved.last?.legendUnavailable == true,
+        "last row legendUnavailable when baseline suppressed for mode \(mode)")
+    }
+  }
+
+  @Test("showBaseline:false renders value line even when cost data is present")
+  func showBaselineFalsePreservesValueLine() throws {
+    let points = try [
+      point(day: 0, value: 500, cost: 400, contributions: 450),
+      point(day: 1, value: 600, cost: 400, contributions: 450),
+    ]
+    let resolved = PositionsChartBaselineResolver.resolve(
+      points: points, mode: .aggregate, showBaseline: false
+    )
+    #expect(resolved.map(\.value) == [500, 600], "value series is preserved")
+    #expect(resolved.map(\.baseline) == [nil, nil], "baseline remains suppressed")
   }
 }
