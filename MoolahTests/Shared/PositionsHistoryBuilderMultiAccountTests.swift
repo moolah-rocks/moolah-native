@@ -11,13 +11,13 @@ struct PositionsHistoryBuilderMultiAccountTests {
   let accountA = UUID()
   let accountB = UUID()
 
-  /// Day 0 = 2026-01-01.
+  /// Day 0 = 2026-01-01. Uses `Calendar.utc` so the result is zone-invariant.
   private func date(daysAfterEpoch days: Int) -> Date {
     var components = DateComponents()
     components.year = 2026
     components.month = 1
     components.day = 1 + days
-    guard let result = Calendar(identifier: .gregorian).date(from: components) else {
+    guard let result = Calendar.utc.date(from: components) else {
       fatalError("Could not construct date \(days) days after 2026-01-01")
     }
     return result
