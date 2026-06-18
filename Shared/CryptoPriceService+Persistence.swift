@@ -42,7 +42,8 @@ extension CryptoPriceService {
         symbol: metaRecord.symbol,
         earliestDate: metaRecord.earliestDate,
         latestDate: metaRecord.latestDate,
-        prices: SortedDateSeries(sortedEntries: entries)
+        prices: SortedDateSeries(sortedEntries: entries),
+        firstTradedOn: metaRecord.firstTradedOn
       )
     }
     if let snapshot { caches[tokenId] = snapshot }
@@ -72,7 +73,8 @@ extension CryptoPriceService {
       tokenId: tokenId,
       symbol: cache.symbol,
       earliestDate: cache.earliestDate,
-      latestDate: cache.latestDate
+      latestDate: cache.latestDate,
+      firstTradedOn: cache.firstTradedOn
     )
     try await database.write { database in
       // GRDB caches the insert statement internally; no explicit cachedStatement needed.
