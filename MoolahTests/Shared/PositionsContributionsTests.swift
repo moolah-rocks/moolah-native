@@ -13,20 +13,24 @@ struct PositionsContributionsTests {
   let bhp = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
   let accountId = UUID()
 
-  /// Day 0 = 2026-01-01. `days` may exceed month length; calendar
-  /// arithmetic rolls over correctly. Optional `hour` lets callers
+  /// Day 0 = 2026-01-01 UTC midnight. `days` may exceed month length;
+  /// calendar arithmetic rolls over correctly. Optional `hour` lets callers
   /// produce non-midnight timestamps for Rule 5 / Rule 8 / Rule 10
   /// tests that need the conversion service to receive the original
   /// `transaction.date` (not a `startOfDay`-truncated copy).
+  ///
+  /// Uses `Calendar.utc` so that dates produced here align with the
+  /// builder's UTC-midnight day boundaries (Point.date is anchored at
+  /// noon UTC; `startOfDay(for:)` on a noon-UTC point yields the same
+  /// UTC-midnight value as this helper).
   private func date(daysAfterEpoch days: Int, hour: Int = 0) throws -> Date {
-    let calendar = Calendar(identifier: .gregorian)
     var epoch = DateComponents()
     epoch.year = 2026
     epoch.month = 1
     epoch.day = 1
     epoch.hour = hour
-    let base = try #require(calendar.date(from: epoch))
-    return try #require(calendar.date(byAdding: .day, value: days, to: base))
+    let base = try #require(Calendar.utc.date(from: epoch))
+    return try #require(Calendar.utc.date(byAdding: .day, value: days, to: base))
   }
 
   private func buy(
@@ -117,8 +121,10 @@ struct PositionsContributionsTests {
       hostCurrency: aud, range: .threeMonths,
       now: try date(daysAfterEpoch: 5)
     )
-    let day1 = try #require(series.totalSeries.first { $0.date == day1Date })
-    let day3 = try #require(series.totalSeries.first { $0.date == day3Date })
+    let day1 = try #require(
+      series.totalSeries.first { Calendar.utc.startOfDay(for: $0.date) == day1Date })
+    let day3 = try #require(
+      series.totalSeries.first { Calendar.utc.startOfDay(for: $0.date) == day3Date })
     #expect(day1.contributions == 1_000)
     #expect(day3.contributions == 1_500)
   }
@@ -138,7 +144,8 @@ struct PositionsContributionsTests {
       hostCurrency: aud, range: .threeMonths,
       now: try date(daysAfterEpoch: 5)
     )
-    let day3 = try #require(series.totalSeries.first { $0.date == day3Date })
+    let day3 = try #require(
+      series.totalSeries.first { Calendar.utc.startOfDay(for: $0.date) == day3Date })
     #expect(day3.contributions == 1_200)
   }
 
@@ -184,7 +191,8 @@ struct PositionsContributionsTests {
       hostCurrency: aud, range: .threeMonths,
       now: try date(daysAfterEpoch: 12)
     )
-    let day1 = try #require(series.totalSeries.first { $0.date == day1Date })
+    let day1 = try #require(
+      series.totalSeries.first { Calendar.utc.startOfDay(for: $0.date) == day1Date })
     #expect(day1.contributions == Decimal(1_500))
   }
 
@@ -248,13 +256,14 @@ struct PositionsContributionsTests {
       now: try date(daysAfterEpoch: 5)
     )
     let day1Date = try date(daysAfterEpoch: 1)
-    let day1 = try #require(series.totalSeries.first { $0.date == day1Date })
+    let day1 = try #require(
+      series.totalSeries.first { Calendar.utc.startOfDay(for: $0.date) == day1Date })
     #expect(day1.contributions == 1_000)
     // Sticky-latch invariant: no aggregate point on or after day 3
     // carries a populated `contributions`, regardless of whether the
     // point actually emits (USD position blocks emission via the
     // value-conversion path).
-    for point in series.totalSeries where point.date >= day3 {
+    for point in series.totalSeries where Calendar.utc.startOfDay(for: point.date) >= day3 {
       #expect(point.contributions == nil)
     }
   }
