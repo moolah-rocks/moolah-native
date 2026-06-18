@@ -164,11 +164,13 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       assetKeysByInstrumentId: assetKeys,
       performance: nil,
       alwaysShowsFullSurface: false)
-    positionsInput = await assembler.assemble(
+    let input = await assembler.assemble(
       context: context,
       valuedRows: rows,
       transactions: txns,
       range: positionsRange)
+    guard !Task.isCancelled else { return }
+    positionsInput = input
   }
 }
 
