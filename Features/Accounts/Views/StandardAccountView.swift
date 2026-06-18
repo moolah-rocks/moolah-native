@@ -45,7 +45,8 @@ struct StandardAccountView: View {
       positions: positions,
       hostCurrency: account.instrument,
       title: account.name,
-      conversionService: conversionService)
+      conversionService: conversionService,
+      accountIds: [account.id])
   }
 }
 

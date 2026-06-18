@@ -49,7 +49,8 @@ struct CryptoWalletAccountView: View {
         conversionService: conversionService,
         // Drives a re-fire of the per-row valuator when the user marks
         // a token as `.spam` from preferences — issue #790.
-        registrationsVersion: session.cryptoTokenStore?.registrationsVersion ?? 0)
+        registrationsVersion: session.cryptoTokenStore?.registrationsVersion ?? 0,
+        accountIds: [account.id])
     }
   }
 
