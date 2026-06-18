@@ -10,16 +10,18 @@ struct MultiInstrumentPositionsAssemblerTests {
     chainId: 1, contractAddress: nil, symbol: "BTC", name: "Bitcoin", decimals: 8)
   let eth = Instrument.crypto(
     chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+  let ltc = Instrument.crypto(
+    chainId: 2, contractAddress: nil, symbol: "LTC", name: "Litecoin", decimals: 8)
   let accountA = UUID()
   let accountB = UUID()
 
-  /// Day 0 = 2026-01-01.
+  /// Day 0 = 2026-01-01. Uses `Calendar.utc` so the result is zone-invariant.
   private func date(daysAfterEpoch days: Int) -> Date {
     var components = DateComponents()
     components.year = 2026
     components.month = 1
     components.day = 1 + days
-    guard let result = Calendar(identifier: .gregorian).date(from: components) else {
+    guard let result = Calendar.utc.date(from: components) else {
       fatalError("Could not construct date \(days) days after 2026-01-01")
     }
     return result
@@ -75,6 +77,9 @@ struct MultiInstrumentPositionsAssemblerTests {
     #expect(input.historicalValue != nil)
     #expect(input.showsChart == true)
     #expect(input.showsPLPill == true)
+    // The seeded buy was 1 BTC for 50_000 AUD, so the applied cost basis
+    // quantity must equal exactly 50_000.
+    #expect(input.positions.first?.costBasis?.quantity == 50_000)
   }
 
   // hasAnyTradeLeg is true when any account in the set has a non-host trade leg,
@@ -124,33 +129,43 @@ struct MultiInstrumentPositionsAssemblerTests {
     )
   }
 
-  // costBasisSnapshot omits an instrument whose classification fails
-  // (unavailable, not zero — Rule 11).
+  // costBasisSnapshot omits an instrument whose classification fails while
+  // keeping cleanly-classifiable instruments (Rule 11 — unavailable, not zero).
   //
-  // Setup: BTC buys fiat-paired (classifiable). ETH buys fiat-paired but
-  // with a BTC-denominated fee whose conversion fails — the classifier throws,
-  // so ETH is added to the failed-classification set and dropped from the
-  // snapshot.
+  // Setup: LTC buy is fiat-paired (classifiable, no failing legs). ETH buy has
+  // a BTC-denominated fee whose conversion fails — the classifier throws, so
+  // ETH is added to the failed-classification set and dropped from the snapshot.
+  // The test asserts BOTH properties: bad instrument absent AND good instrument
+  // present with the correct exact host-currency cost.
   @Test
   func costBasisOmitsUnclassifiableInstrument() async {
-    // BTC→AUD conversion fails; AUD→AUD identity is always free.
+    // BTC→AUD conversion fails; LTC→AUD and AUD→AUD always succeed.
     let service = FailingConversionService(
-      rates: [:],
+      rates: [ltc.id: Decimal(100)],
       failingInstrumentIds: [btc.id])
     let assembler = MultiInstrumentPositionsAssembler(conversionService: service)
 
     let txns = [
+      // LTC fiat buy — cleanly classifiable (no BTC legs).
+      // 5 LTC × 100 AUD/LTC = 500 AUD cost basis.
+      Transaction(
+        date: date(daysAfterEpoch: 1),
+        legs: [
+          TransactionLeg(accountId: accountA, instrument: ltc, quantity: 5, type: .trade),
+          TransactionLeg(accountId: accountA, instrument: aud, quantity: -500, type: .trade),
+        ]
+      ),
       // ETH fiat buy with a BTC fee. The fee conversion (BTC→AUD) fails,
       // so `classify` throws and ETH is marked as unclassifiable.
       Transaction(
-        date: date(daysAfterEpoch: 1),
+        date: date(daysAfterEpoch: 2),
         legs: [
           TransactionLeg(accountId: accountA, instrument: eth, quantity: 10, type: .trade),
           TransactionLeg(accountId: accountA, instrument: aud, quantity: -20_000, type: .trade),
           // BTC-denominated exchange fee — convert(BTC→AUD) will throw.
           TransactionLeg(accountId: accountA, instrument: btc, quantity: -1, type: .expense),
         ]
-      )
+      ),
     ]
 
     let snapshot = await assembler.costBasisSnapshot(
@@ -159,5 +174,8 @@ struct MultiInstrumentPositionsAssemblerTests {
     // ETH classification failed (because the BTC fee conversion throws) →
     // omitted per Rule 11.
     #expect(snapshot[eth.id] == nil, "ETH should be omitted when its classification fails")
+    // LTC classification succeeded → present with the exact cost.
+    #expect(snapshot[ltc.id] != nil, "LTC should be present: its classification succeeded")
+    #expect(snapshot[ltc.id] == 500, "LTC cost basis should equal 500 AUD (5 × 100)")
   }
 }
