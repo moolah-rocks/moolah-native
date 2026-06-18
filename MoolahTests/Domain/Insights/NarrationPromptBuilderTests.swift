@@ -44,6 +44,16 @@ struct NarrationPromptBuilderTests {
   }
 
   @Test
+  func instructionsForbidSpellingAmountsInWords() {
+    let req = NarrationRequest.singleInsight(
+      title: "Net worth crossed $50,000",
+      facts: [InsightFact("Now", "$50,000")])
+    let built = NarrationPromptBuilder.build(req)
+    #expect(built.instructions.localizedCaseInsensitiveContains("never spell"))
+    #expect(built.instructions.localizedCaseInsensitiveContains("currency symbol"))
+  }
+
+  @Test
   func instructionsRequireOmittingStatisticalFacts() {
     let req = NarrationRequest.singleInsight(
       title: "Test",
