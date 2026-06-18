@@ -174,6 +174,93 @@ struct PreListingDailyBalanceTests {
     #expect(oct01.balance.quantity == 1200, "2024-10-01: 300 + 150 + 750 = 1200 AUD")
   }
 
+  // MARK: - FullConversionService.convertResult end-to-end test
+
+  /// `FullConversionService.convertResult` must return `.knownZero` for a
+  /// `.priced` crypto token on dates strictly before `firstTradedOn`, and
+  /// `.value` with the market price on dates on/after the floor.
+  ///
+  /// This pins the production seam: `convertResult` calls `convertAmount`
+  /// which propagates `CryptoPriceError.beforeFirstTrade` from
+  /// `CryptoPriceService.price(for:mapping:on:)`. Without the
+  /// `catch CryptoPriceError.beforeFirstTrade` block in `convertResult`,
+  /// the call throws rather than returning `.knownZero` — this test
+  /// is RED before Fix A and GREEN after.
+  ///
+  /// Zone-invariance: 2024-09-30 noon UTC → `.knownZero`;
+  /// 2024-10-01 noon UTC → `.value`. The boundary must not shift a day
+  /// in UTC-negative zones (both tokens are noon-UTC so their ISO date
+  /// strings are always "2024-09-30" / "2024-10-01" regardless of the
+  /// ambient timezone).
+  @Test("convertResult maps beforeFirstTrade to knownZero in FullConversionService")
+  func fullConversionServiceConvertResultMapsBeforeFirstTradeToKnownZero() async throws {
+    let database = try ProfileIndexDatabase.openInMemory()
+    let frozen = try isoDate("2026-01-01")
+
+    // Client that knows prices only on/after the firstTrade floor.
+    let priceClient = FixedCryptoPriceClient(
+      prices: ["1:0xairdrop": ["2024-10-01": dec("50.00")]],
+      syncProvider: .coinGecko
+    )
+    let cryptoService = CryptoPriceService(
+      clients: [priceClient],
+      database: database,
+      now: { frozen }
+    )
+
+    // Inject cache metadata so CryptoPriceService knows the firstTradedOn floor
+    // without a network round-trip. Prices on/after the floor are served by the
+    // client above; the cache primes the floor sentinel so `price(for:mapping:on:)`
+    // throws `beforeFirstTrade` for any date strictly before "2024-10-01".
+    var series = SortedDateSeries<Decimal>()
+    if let key = DateKey.from(isoString: "2024-10-01") {
+      series.upsert(dec("50.00"), forKey: key)
+    }
+    await cryptoService.injectCacheForTesting(
+      CryptoPriceCache(
+        tokenId: "1:0xairdrop", symbol: "DROP",
+        earliestDate: "2024-10-01", latestDate: "2024-10-01",
+        prices: series, firstTradedOn: "2024-10-01"))
+
+    let exchangeService = ExchangeRateService(
+      client: FixedRateClient(rates: [:]),
+      database: database
+    )
+    let stockService = StockPriceService(client: FixedStockPriceClient(), database: database)
+    let registration = CryptoRegistration(
+      instrument: airdropInstrument, mapping: airdropMapping, pricingStatus: .priced)
+    let conversionService = FullConversionService(
+      exchangeRates: exchangeService,
+      stockPrices: stockService,
+      cryptoPrices: cryptoService,
+      cryptoRegistrations: { [registration] }
+    )
+
+    let amount = InstrumentAmount(quantity: dec("10"), instrument: airdropInstrument)
+
+    // Pre-floor (noon UTC on 2024-09-30): must return .knownZero, not throw.
+    let preBoundary = try noonUTCDate(year: 2024, month: 9, day: 30)
+    let preResult = try await conversionService.convertResult(
+      amount, to: stableInstrument, on: preBoundary)
+    #expect(
+      preResult == .knownZero(targetInstrument: stableInstrument),
+      "2024-09-30 (before firstTradedOn) must yield .knownZero, got \(preResult)")
+
+    // On-floor (noon UTC on 2024-10-01): must return .value with the market price.
+    // The client has a price of 50.00 for "2024-10-01"; USD→USD, no FX conversion.
+    // Expected: 10 DROP × 50 USD = 500 USD. Assert quantity sign/magnitude, not
+    // currency symbol (locale-fragile).
+    let onBoundary = try noonUTCDate(year: 2024, month: 10, day: 1)
+    let onResult = try await conversionService.convertResult(
+      amount, to: stableInstrument, on: onBoundary)
+    guard case let .value(converted) = onResult else {
+      Issue.record("2024-10-01 (on firstTradedOn) must yield .value, got \(onResult)")
+      return
+    }
+    #expect(converted.instrument == stableInstrument)
+    #expect(converted.quantity == dec("500"), "10 DROP × 50 USD/DROP = 500 USD")
+  }
+
   // MARK: - Zone-invariance test
 
   /// Zone-invariance: the pre-listing boundary (2024-09-30 → `.knownZero`,
