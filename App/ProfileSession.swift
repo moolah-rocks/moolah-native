@@ -262,7 +262,14 @@ final class ProfileSession: Identifiable {
     // `init` body) so the init stays within the
     // `function_body_length` budget — same pattern as `cryptoSyncStore`
     // / `cryptoTokenDiscovery` below.
-    self.accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
+    // `instrumentChanges` wires the shared registry's change stream as a
+    // cross-connection refresh backstop: an in-app profile import writes
+    // the `account_group` rows through its own `DatabaseQueue`, which the
+    // open session's `observeAll()` never sees — without this the sidebar's
+    // groups stay missing until a restart (same pattern as `AccountStore`).
+    self.accountGroupStore = AccountGroupStore(
+      repository: backend.accountGroups,
+      instrumentChanges: backend.instrumentChangeObserver)
     self.groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)
     // InsightStore is wired here (not in `makeDomainStores`) because it reads
     // `accountGroupStore`, which is itself constructed in `finishInit` — by
