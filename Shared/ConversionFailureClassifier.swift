@@ -43,6 +43,11 @@ enum ConversionFailureClassifier {
       return true
     case .noProviderMapping:
       return false
+    case .beforeFirstTrade:
+      // Structural: the token had no market price before its first trade date.
+      // Caught upstream at the priceLookup seam and converted to .knownZero;
+      // the switch must stay exhaustive and classify it correctly.
+      return false
     }
   }
 
