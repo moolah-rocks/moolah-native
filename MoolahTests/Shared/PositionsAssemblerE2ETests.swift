@@ -14,7 +14,10 @@ import Testing
 struct PositionsAssemblerE2ETests {
   /// Host (reporting) currency.
   let aud = Instrument.AUD
-  /// Crypto token — chainId 1, id "1:native".
+  /// Crypto token — chainId 1, id "1:native". This suite tests single-account
+  /// or same-token-group scenarios; ETH is absent here so the id "1:native" is
+  /// unambiguous. Tests that mix BTC and ETH must give ETH a distinct
+  /// contractAddress so the two ids don't collide in instrument dictionaries.
   let btc = Instrument.crypto(
     chainId: 1, contractAddress: nil, symbol: "BTC", name: "Bitcoin", decimals: 8)
 

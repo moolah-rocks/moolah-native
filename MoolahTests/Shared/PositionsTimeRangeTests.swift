@@ -50,6 +50,37 @@ struct PositionsTimeRangeTests {
     #expect(abs(cutoff.timeIntervalSince(expected)) < 1)
   }
 
+  // `PositionsTimeRange.cutoff` uses the LOCAL Gregorian calendar (no explicit
+  // timezone — system local). This test asserts that the YTD cutoff is exactly
+  // local midnight on January 1 of the reference year. It deliberately does NOT
+  // equal UTC midnight Jan 1 unless the runner's local timezone happens to be
+  // UTC. Both the `now` construction and the component extraction use the same
+  // local calendar, which is the same calendar `cutoff(from:)` uses internally.
+  @Test("YTD cutoff is local midnight Jan 1, matching the local Gregorian calendar")
+  func ytdCutoffIsLocalMidnightJan1() throws {
+    let localCalendar = Calendar(identifier: .gregorian)  // system local timezone
+
+    var components = DateComponents()
+    components.year = 2026
+    components.month = 6
+    components.day = 15
+    components.hour = 10
+    let now = try #require(localCalendar.date(from: components))
+    let cutoff = try #require(PositionsTimeRange.ytd.cutoff(from: now))
+
+    // The cutoff must be exactly local midnight on 2026-01-01.
+    // The same local calendar is used for both `now` and the assertion so
+    // the test is zone-stable on any CI runner timezone.
+    let cutoffComponents = localCalendar.dateComponents(
+      [.year, .month, .day, .hour, .minute, .second], from: cutoff)
+    #expect(cutoffComponents.year == 2026)
+    #expect(cutoffComponents.month == 1)
+    #expect(cutoffComponents.day == 1)
+    #expect(cutoffComponents.hour == 0)
+    #expect(cutoffComponents.minute == 0)
+    #expect(cutoffComponents.second == 0)
+  }
+
   @Test("allCases includes all 6 picker entries in order")
   func allCasesOrder() {
     #expect(

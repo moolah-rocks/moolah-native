@@ -34,9 +34,13 @@ struct PositionsHistoryBuilderZoneTests {
 
   @Test("emitted point dates report April 2026 in every timezone")
   func pointDatesAreZoneInvariant() async throws {
-    // Transaction on 2026-04-15 — mid-month to avoid any ±1-day zone drift
-    // crossing a month boundary. The chart axis labels months, so month
-    // stability is the invariant that matters.
+    // Transaction on 2026-04-15 — mid-month is essential here. A first-of-month
+    // date at midnight UTC (e.g. 2026-04-01T00:00:00Z) drifts into March 31 in
+    // UTC-negative zones such as America/Los_Angeles. Mid-month dates are stable
+    // across all real-world zones because ±14 h of offset cannot cross a month
+    // boundary that is at least 14 days away. This confirms the noon-UTC anchor
+    // in the builder works for the case (month boundary) that matters for the
+    // chart axis; see DATE_TIME_GUIDE.md §4 and §6.
     var txnComponents = DateComponents()
     txnComponents.year = 2026
     txnComponents.month = 4
