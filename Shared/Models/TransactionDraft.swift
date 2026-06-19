@@ -1,8 +1,3 @@
-// Reason: convenience initialisers pass multi-field LegDraft / TransactionLeg
-// values inline; pinning each field to its own line trades readability for a
-// rule conformance that adds nothing here.
-// swiftlint:disable multiline_arguments
-
 import Foundation
 
 /// A value type that captures transaction form state and encapsulates
@@ -162,7 +157,9 @@ extension TransactionDraft {
         type: leg.type,
         accountId: leg.accountId,
         amountText: Self.displayText(
-          quantity: leg.quantity, type: leg.type, decimals: leg.instrument.decimals),
+          quantity: leg.quantity,
+          type: leg.type,
+          decimals: leg.instrument.decimals),
         categoryId: leg.categoryId,
         categoryText: "",
         earmarkId: leg.earmarkId,
@@ -217,8 +214,12 @@ extension TransactionDraft {
       legDrafts: [
         LegDraft(
           legId: nil,
-          type: .income, accountId: nil, amountText: "0",
-          categoryId: nil, categoryText: "", earmarkId: earmarkId,
+          type: .income,
+          accountId: nil,
+          amountText: "0",
+          categoryId: nil,
+          categoryText: "",
+          earmarkId: earmarkId,
           instrument: instrument)
       ],
       relevantLegIndex: 0,
@@ -239,8 +240,12 @@ extension TransactionDraft {
       legDrafts: [
         LegDraft(
           legId: nil,
-          type: .expense, accountId: accountId, amountText: "0",
-          categoryId: nil, categoryText: "", earmarkId: nil,
+          type: .expense,
+          accountId: accountId,
+          amountText: "0",
+          categoryId: nil,
+          categoryText: "",
+          earmarkId: nil,
           instrument: instrument)
       ],
       relevantLegIndex: 0,
@@ -366,8 +371,12 @@ extension TransactionDraft {
     legDrafts.append(
       LegDraft(
         legId: nil,
-        type: .expense, accountId: defaultAccountId, amountText: "0",
-        categoryId: nil, categoryText: "", earmarkId: nil,
+        type: .expense,
+        accountId: defaultAccountId,
+        amountText: "0",
+        categoryId: nil,
+        categoryText: "",
+        earmarkId: nil,
         instrument: instrument
       ))
   }

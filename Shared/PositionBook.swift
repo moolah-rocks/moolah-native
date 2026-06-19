@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import Foundation
 import OSLog
 
@@ -125,7 +123,9 @@ struct PositionBook: Equatable, Sendable {
     for leg in txn.legs {
       let isInvestment = leg.accountId.map(investmentAccountIds.contains) ?? false
       apply(
-        leg, sign: sign, isInvestmentAccount: isInvestment,
+        leg,
+        sign: sign,
+        isInvestmentAccount: isInvestment,
         asStartingBalance: asStartingBalance)
     }
   }
