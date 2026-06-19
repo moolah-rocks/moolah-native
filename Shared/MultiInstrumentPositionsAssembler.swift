@@ -1,8 +1,3 @@
-// `costBasisSnapshot` passes enough labelled parameters to trigger
-// multiline_arguments; scoped to this file rather than reformatting
-// every call site.
-// swiftlint:disable multiline_arguments
-
 import Foundation
 import OSLog
 
@@ -34,7 +29,8 @@ struct MultiInstrumentPositionsAssembler: Sendable {
     while true {
       let result = try await repository.fetch(
         filter: TransactionFilter(accountIds: accountIds),
-        page: page, pageSize: 200
+        page: page,
+        pageSize: 200
       )
       try Task.checkCancellation()
       all.append(contentsOf: result.transactions)
@@ -72,18 +68,24 @@ struct MultiInstrumentPositionsAssembler: Sendable {
       guard !scopedLegs.isEmpty else { continue }
       do {
         let classification = try await TradeEventClassifier.classify(
-          legs: scopedLegs, on: txn.date,
-          hostCurrency: hostCurrency, conversionService: conversionService
+          legs: scopedLegs,
+          on: txn.date,
+          hostCurrency: hostCurrency,
+          conversionService: conversionService
         )
         for buy in classification.buys {
           engine.processBuy(
-            instrument: buy.instrument, quantity: buy.quantity,
-            costPerUnit: buy.costPerUnit, date: txn.date)
+            instrument: buy.instrument,
+            quantity: buy.quantity,
+            costPerUnit: buy.costPerUnit,
+            date: txn.date)
         }
         for sell in classification.sells {
           _ = engine.processSell(
-            instrument: sell.instrument, quantity: sell.quantity,
-            proceedsPerUnit: sell.proceedsPerUnit, date: txn.date)
+            instrument: sell.instrument,
+            quantity: sell.quantity,
+            proceedsPerUnit: sell.proceedsPerUnit,
+            date: txn.date)
         }
       } catch is CancellationError {
         throw CancellationError()
@@ -133,8 +135,11 @@ struct MultiInstrumentPositionsAssembler: Sendable {
       accountIds: context.accountIds,
       hostCurrency: context.hostCurrency)
     let series = await PositionsHistoryBuilder(conversionService: conversionService).build(
-      transactions: transactions, accountIds: context.accountIds,
-      hostCurrency: context.hostCurrency, range: range, now: now)
+      transactions: transactions,
+      accountIds: context.accountIds,
+      hostCurrency: context.hostCurrency,
+      range: range,
+      now: now)
     let costSnapshot: [String: Decimal]
     do {
       costSnapshot = try await snapshotTask
@@ -150,7 +155,9 @@ struct MultiInstrumentPositionsAssembler: Sendable {
     }
     let rowsWithCost = valuedRows.map { row in
       ValuedPosition(
-        instrument: row.instrument, quantity: row.quantity, unitPrice: row.unitPrice,
+        instrument: row.instrument,
+        quantity: row.quantity,
+        unitPrice: row.unitPrice,
         costBasis: costSnapshot[row.instrument.id].map {
           InstrumentAmount(quantity: $0, instrument: context.hostCurrency)
         },

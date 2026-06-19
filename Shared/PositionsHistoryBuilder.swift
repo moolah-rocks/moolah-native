@@ -1,8 +1,3 @@
-// Reason: the apply() call sites and the per-day point emission both
-// pass enough labelled parameters to trigger multiline_arguments;
-// scoped to this file rather than reformatting every call site.
-// swiftlint:disable multiline_arguments
-
 import Foundation
 import OSLog
 
@@ -65,7 +60,8 @@ struct PositionsHistoryBuilder: Sendable {
     }
 
     let context = BuildContext(
-      sortedTxns: sortedTxns, accountIds: accountIds,
+      sortedTxns: sortedTxns,
+      accountIds: accountIds,
       hostCurrency: hostCurrency)
     var state = BuildState()
     do {
@@ -106,8 +102,11 @@ struct PositionsHistoryBuilder: Sendable {
     now: Date = Date()
   ) async -> HistoricalValueSeries {
     await build(
-      transactions: transactions, accountIds: [accountId],
-      hostCurrency: hostCurrency, range: range, now: now)
+      transactions: transactions,
+      accountIds: [accountId],
+      hostCurrency: hostCurrency,
+      range: range,
+      now: now)
   }
 
   /// Pre-fold any transactions strictly before `start` so the snapshot at
@@ -184,11 +183,17 @@ struct PositionsHistoryBuilder: Sendable {
       let cost = state.engine.openLots(for: instrument)
         .reduce(Decimal(0)) { $0 + $1.remainingCost }
       let value = await convertValue(
-        qty: qty, instrument: instrument, hostCurrency: hostCurrency, on: day)
+        qty: qty,
+        instrument: instrument,
+        hostCurrency: hostCurrency,
+        on: day)
       if let value {
         state.perInstrument[instrument.id, default: []].append(
           HistoricalValueSeries.Point(
-            date: pointDate, value: value, cost: cost, contributions: nil))
+            date: pointDate,
+            value: value,
+            cost: cost,
+            contributions: nil))
         aggValue += value
         aggCost += cost
       } else {
@@ -199,7 +204,9 @@ struct PositionsHistoryBuilder: Sendable {
     if anyHeld && aggOK {
       state.total.append(
         HistoricalValueSeries.Point(
-          date: pointDate, value: aggValue, cost: aggCost,
+          date: pointDate,
+          value: aggValue,
+          cost: aggCost,
           contributions: state.contributions))
     }
     return false
@@ -261,11 +268,8 @@ struct PositionsHistoryBuilder: Sendable {
   /// Their contribution is captured by the cost basis via
   /// `TradeEventClassifier`.
   ///
-  /// Contributions are folded via `AccountCashFlows.flowAmounts(for:)`
-  /// — the same boundary-crossing predicate the
-  /// `AccountPerformanceCalculator` tile path uses, so the chart and
-  /// the tile cannot disagree on a per-flow basis. Throws
-  /// `CancellationError` (and only `CancellationError`); general
+  /// Contributions are folded via `foldContributions(transaction:accountIds:hostCurrency:state:)`.
+  /// Throws `CancellationError` (and only `CancellationError`); general
   /// conversion errors set the sticky latch and stay swallowed.
   private func apply(
     transaction: Transaction,
@@ -282,18 +286,24 @@ struct PositionsHistoryBuilder: Sendable {
 
     do {
       let classification = try await TradeEventClassifier.classify(
-        legs: accountLegs, on: transaction.date,
-        hostCurrency: hostCurrency, conversionService: conversionService
+        legs: accountLegs,
+        on: transaction.date,
+        hostCurrency: hostCurrency,
+        conversionService: conversionService
       )
       for buy in classification.buys {
         state.engine.processBuy(
-          instrument: buy.instrument, quantity: buy.quantity,
-          costPerUnit: buy.costPerUnit, date: transaction.date)
+          instrument: buy.instrument,
+          quantity: buy.quantity,
+          costPerUnit: buy.costPerUnit,
+          date: transaction.date)
       }
       for sell in classification.sells {
         _ = state.engine.processSell(
-          instrument: sell.instrument, quantity: sell.quantity,
-          proceedsPerUnit: sell.proceedsPerUnit, date: transaction.date)
+          instrument: sell.instrument,
+          quantity: sell.quantity,
+          proceedsPerUnit: sell.proceedsPerUnit,
+          date: transaction.date)
       }
     } catch is CancellationError {
       throw CancellationError()
@@ -308,10 +318,35 @@ struct PositionsHistoryBuilder: Sendable {
       )
     }
 
-    // Contributions fold (sticky latch — see BuildState docs).
-    // A flow counts for the group only if the transaction touches exactly
-    // one member of `accountIds` (single member → external counterpart).
-    // Touching ≥2 members means an internal transfer → excluded.
+    try await foldContributions(
+      transaction: transaction,
+      accountIds: accountIds,
+      hostCurrency: hostCurrency,
+      state: &state)
+  }
+
+}
+
+// MARK: - Contributions folding
+
+extension PositionsHistoryBuilder {
+  /// Fold cash-flow contributions for one transaction into the running total
+  /// (sticky latch — see `BuildState` docs).
+  ///
+  /// A flow counts for the group only if the transaction touches exactly one
+  /// member of `accountIds` (single member → external counterpart). Touching
+  /// ≥2 members means an internal transfer → excluded. Uses
+  /// `AccountCashFlows.flowAmounts(for:)` — the same boundary-crossing
+  /// predicate `AccountPerformanceCalculator` uses, so the chart and the tile
+  /// cannot disagree on a per-flow basis. Throws `CancellationError` (and
+  /// only `CancellationError`); general conversion errors latch
+  /// `state.contributions` to `nil` and stay swallowed.
+  private func foldContributions(
+    transaction: Transaction,
+    accountIds: Set<UUID>,
+    hostCurrency: Instrument,
+    state: inout BuildState
+  ) async throws {
     guard let running = state.contributions else { return }
     let membersTouched = Set(transaction.legs.compactMap(\.accountId)).intersection(accountIds)
     guard membersTouched.count == 1, let member = membersTouched.first else {
@@ -319,8 +354,10 @@ struct PositionsHistoryBuilder: Sendable {
     }
     do {
       let amounts = try await AccountCashFlows.flowAmounts(
-        for: transaction, accountId: member,
-        hostCurrency: hostCurrency, service: conversionService
+        for: transaction,
+        accountId: member,
+        hostCurrency: hostCurrency,
+        service: conversionService
       )
       if !amounts.isEmpty {
         state.contributions = running + amounts.reduce(0, +)
