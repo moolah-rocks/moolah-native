@@ -1,10 +1,3 @@
-// Reason: Swift Charts mark APIs (`AreaMark`, `LineMark`,
-// `AxisMarks`, `AXDataSeriesDescriptor`, etc.) take long labelled
-// argument lists where SwiftLint's multi-line arguments rule fights
-// the natural call-site shape. Disabling at file scope rather than
-// reformatting every Charts call site to one-arg-per-line.
-// swiftlint:disable multiline_arguments
-
 import Accessibility
 import Charts
 import SwiftUI
@@ -125,7 +118,9 @@ struct PositionsChart: View {
       .accessibilityChartDescriptor(self)
 
       PositionsChartLegendRow(
-        rows: rows, mode: mode, gainLossOpacity: Self.gainLossOpacity,
+        rows: rows,
+        mode: mode,
+        gainLossOpacity: Self.gainLossOpacity,
         showBaseline: showBaseline)
     }
   }
@@ -261,41 +256,27 @@ extension PositionsChart: AXChartDescriptorRepresentable {
     // exposes a phantom zero baseline.
     let mode: PositionsChartMode = selection == nil ? .aggregate : .perInstrument
     let showBaseline = PositionsChartBaselineResolver.showsBaseline(points: points, mode: mode)
-
-    // Pair each point with its baseline (or nil); drop nil-baseline rows
-    // before they reach the AX descriptor so VoiceOver doesn't speak NaN.
-    let baselinePairs: [(label: String, value: Double)] =
-      showBaseline
-      ? points.compactMap { point in
-        let baseline: Decimal? =
-          selection == nil ? point.contributions : point.cost
-        guard let baseline else { return nil }
-        return (
-          point.date.formatted(.dateTime.month(.abbreviated).day().year()),
-          Double(truncating: baseline as NSDecimalNumber)
-        )
-      }
-      : []
+    let baselinePairs = baselinePairs(points: points, showBaseline: showBaseline)
 
     let allValues = valueDoubles + baselinePairs.map(\.value)
     let minVal = allValues.min() ?? 0
     let maxVal = allValues.max() ?? max(minVal + 1, 1)
 
     let valueSeries = AXDataSeriesDescriptor(
-      name: "Value", isContinuous: true,
+      name: "Value",
+      isContinuous: true,
       dataPoints: zip(dateLabels, valueDoubles).map { date, val in
         AXDataPoint(x: date, y: val)
       }
     )
-
     var series: [AXDataSeriesDescriptor] = [valueSeries]
     if showBaseline {
-      let baselineName = selection == nil ? "Invested amount" : "Cost basis"
-      let baselineSeries = AXDataSeriesDescriptor(
-        name: baselineName, isContinuous: true,
-        dataPoints: baselinePairs.map { AXDataPoint(x: $0.label, y: $0.value) }
-      )
-      series.append(baselineSeries)
+      series.append(
+        AXDataSeriesDescriptor(
+          name: selection == nil ? "Invested amount" : "Cost basis",
+          isContinuous: true,
+          dataPoints: baselinePairs.map { AXDataPoint(x: $0.label, y: $0.value) }
+        ))
     }
 
     let summary: String? =
@@ -312,6 +293,24 @@ extension PositionsChart: AXChartDescriptorRepresentable {
       yMax: max(minVal + 1, maxVal),
       series: series
     )
+  }
+
+  /// Pair each point with its baseline (or nil); drop nil-baseline rows
+  /// before they reach the AX descriptor so VoiceOver doesn't speak NaN.
+  @MainActor
+  private func baselinePairs(
+    points: [HistoricalValueSeries.Point], showBaseline: Bool
+  ) -> [(label: String, value: Double)] {
+    guard showBaseline else { return [] }
+    return points.compactMap { point in
+      let baseline: Decimal? =
+        selection == nil ? point.contributions : point.cost
+      guard let baseline else { return nil }
+      return (
+        point.date.formatted(.dateTime.month(.abbreviated).day().year()),
+        Double(truncating: baseline as NSDecimalNumber)
+      )
+    }
   }
 
   private struct ChartSnapshot: @unchecked Sendable {
@@ -337,16 +336,23 @@ private func previewChartInput(days: Int, base: Decimal, step: Decimal, cost: De
   let points: [HistoricalValueSeries.Point] = (0..<days).map { offset in
     let date = calendar.date(byAdding: .day, value: -(days - 1) + offset, to: now) ?? now
     return HistoricalValueSeries.Point(
-      date: date, value: base + Decimal(offset) * step, cost: cost,
+      date: date,
+      value: base + Decimal(offset) * step,
+      cost: cost,
       contributions: nil)
   }
   let series = HistoricalValueSeries(
-    hostCurrency: aud, total: points, perInstrument: [bhp.id: points])
+    hostCurrency: aud,
+    total: points,
+    perInstrument: [bhp.id: points])
   return PositionsViewInput(
-    title: "Brokerage", hostCurrency: aud,
+    title: "Brokerage",
+    hostCurrency: aud,
     positions: [
       ValuedPosition(
-        instrument: bhp, quantity: 100, unitPrice: nil,
+        instrument: bhp,
+        quantity: 100,
+        unitPrice: nil,
         costBasis: InstrumentAmount(quantity: cost, instrument: aud),
         value: InstrumentAmount(quantity: points.last?.value ?? 0, instrument: aud))
     ],
@@ -364,15 +370,15 @@ private func previewChartInput(days: Int, base: Decimal, step: Decimal, cost: De
 }
 
 #Preview("Chart - filtered to instrument") {
-  let bhp = AssetHolding(
-    id: "ASX:BHP.AX", kind: .stock, name: "BHP", displayLabel: "BHP.AX", decimals: 0,
-    currencyCode: nil, chainId: nil, exchange: "ASX", quantity: 100, unitPrice: nil,
-    costBasis: nil, value: nil, contributingInstrumentIds: ["ASX:BHP.AX"],
-    contributingChainIds: [])
+  let bhp = PositionSelection(
+    id: "ASX:BHP.AX",
+    kind: .stock,
+    displayLabel: "BHP.AX",
+    instrumentIds: ["ASX:BHP.AX"])
   return PositionsChart(
     input: previewChartInput(days: 30, base: 4_500, step: 25, cost: 4_000),
     range: .constant(.oneMonth),
-    selection: .constant(bhp.positionSelection)
+    selection: .constant(bhp)
   )
   .frame(width: 600, height: 320)
   .padding()
