@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import Foundation
 import OSLog
 import os
@@ -86,11 +84,15 @@ extension ImportStore {
   func tokenize(_ data: Data) throws -> [[String]] {
     let tokenizeSignpost = OSSignpostID(log: Signposts.importPipeline)
     os_signpost(
-      .begin, log: Signposts.importPipeline, name: "tokenize",
+      .begin,
+      log: Signposts.importPipeline,
+      name: "tokenize",
       signpostID: tokenizeSignpost)
     defer {
       os_signpost(
-        .end, log: Signposts.importPipeline, name: "tokenize",
+        .end,
+        log: Signposts.importPipeline,
+        name: "tokenize",
         signpostID: tokenizeSignpost)
     }
     do {
@@ -114,7 +116,8 @@ extension ImportStore {
   ) async throws -> ParseOutcome {
     let parser = registry.select(for: headers)
     let profileForOverride = try? await preExistingProfile(
-      parserIdentifier: parser.identifier, headers: headers,
+      parserIdentifier: parser.identifier,
+      headers: headers,
       forcedAccountId: source.forcedAccountId)
     let dateFormatOverride = profileForOverride?.dateFormatRawValue
       .flatMap(GenericBankCSVParser.DateFormat.fromRawValue)
@@ -137,7 +140,8 @@ extension ImportStore {
     }()
 
     let records = try runParse(
-      parser: parser, rows: rows,
+      parser: parser,
+      rows: rows,
       columnMappingOverride: columnMappingOverride,
       dateFormatOverride: dateFormatOverride)
     let candidates = records.compactMap { record -> ParsedTransaction? in
@@ -188,7 +192,8 @@ extension ImportStore {
     }
     let existingPage = try await backend.transactions.fetch(
       filter: TransactionFilter(accountId: accountId),
-      page: 0, pageSize: 1000)
+      page: 0,
+      pageSize: 1000)
     return CSVDeduplicator.filter(
       candidates,
       against: existingPage.transactions,

@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 // Needs Setup / Failed Files panel for the Recently Added screen, with its
@@ -64,8 +62,10 @@ struct RecentlyAddedPendingRow: View {
         // don't wipe user-entered form state. Held in @State for stability
         // across sheet dismiss/show cycles.
         setupStore = CSVImportSetupStore(
-          pending: file, backend: backend,
-          importStore: importStore, staging: staging)
+          pending: file,
+          backend: backend,
+          importStore: importStore,
+          staging: staging)
       }
       .buttonStyle(.borderless)
       Button("Dismiss") {

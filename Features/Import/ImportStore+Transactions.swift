@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import Foundation
 import OSLog
 
@@ -102,13 +100,15 @@ extension ImportStore {
         instrument: cash.instrument,
         quantity: -abs(cash.quantity),
         type: .transfer,
-        categoryId: nil, earmarkId: nil),
+        categoryId: nil,
+        earmarkId: nil),
       TransactionLeg(
         accountId: toAccountId,
         instrument: destinationInstrument,
         quantity: abs(cash.quantity),
         type: .transfer,
-        categoryId: nil, earmarkId: nil),
+        categoryId: nil,
+        earmarkId: nil),
     ]
   }
 
