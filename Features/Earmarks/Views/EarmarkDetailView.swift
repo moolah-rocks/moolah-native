@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 struct EarmarkDetailView: View {
@@ -206,18 +204,26 @@ private func seedEarmarkDetailPreview(
   _ = try? await backend.earmarks.create(earmark)
   _ = try? await backend.transactions.create(
     Transaction(
-      date: Date(), payee: "Flight Booking",
+      date: Date(),
+      payee: "Flight Booking",
       legs: [
         TransactionLeg(
-          accountId: accountId, instrument: .AUD, quantity: -50.23, type: .expense,
+          accountId: accountId,
+          instrument: .AUD,
+          quantity: -50.23,
+          type: .expense,
           earmarkId: earmark.id)
       ]))
   _ = try? await backend.transactions.create(
     Transaction(
-      date: Date().addingTimeInterval(-86400), payee: "Savings Transfer",
+      date: Date().addingTimeInterval(-86400),
+      payee: "Savings Transfer",
       legs: [
         TransactionLeg(
-          accountId: accountId, instrument: .AUD, quantity: 500, type: .income,
+          accountId: accountId,
+          instrument: .AUD,
+          quantity: 500,
+          type: .income,
           earmarkId: earmark.id)
       ]))
   // No `earmarkStore.load()` — the reactive store subscribes in init.

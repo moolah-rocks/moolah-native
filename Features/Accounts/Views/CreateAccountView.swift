@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 struct CreateAccountView: View {
@@ -135,7 +133,8 @@ struct CreateAccountView: View {
     InstrumentPickerField(label: "Currency", kinds: [.fiatCurrency], selection: $currency)
 
     TextField(
-      "Initial Balance", value: $balanceDecimal,
+      "Initial Balance",
+      value: $balanceDecimal,
       format: .number.precision(.fractionLength(currency.decimals))
     )
     .monospacedDigit()
@@ -214,7 +213,8 @@ struct CreateAccountView: View {
 
   private func submitCrypto() async {
     let logic = CryptoAccountCreationLogic(
-      accountStore: accountStore, cryptoSyncStore: cryptoSyncStore,
+      accountStore: accountStore,
+      cryptoSyncStore: cryptoSyncStore,
       accountInstrument: instrument)
     let outcome = await logic.submit(
       name: name, chain: cryptoChain, walletAddressInput: cryptoWalletAddress)

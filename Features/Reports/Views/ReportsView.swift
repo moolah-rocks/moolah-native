@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 /// Main Reports view displaying income and expense breakdown by category.
@@ -171,26 +169,38 @@ private func seedReportsPreview(
   _ = try? await backend.categories.create(Category(id: ids.rentId, name: "Rent"))
   _ = try? await backend.transactions.create(
     Transaction(
-      date: Date(), payee: "Employer",
+      date: Date(),
+      payee: "Employer",
       legs: [
         TransactionLeg(
-          accountId: account.id, instrument: .AUD, quantity: 4500, type: .income,
+          accountId: account.id,
+          instrument: .AUD,
+          quantity: 4500,
+          type: .income,
           categoryId: ids.salaryId)
       ]))
   _ = try? await backend.transactions.create(
     Transaction(
-      date: Date().addingTimeInterval(-86400), payee: "Supermarket",
+      date: Date().addingTimeInterval(-86400),
+      payee: "Supermarket",
       legs: [
         TransactionLeg(
-          accountId: account.id, instrument: .AUD, quantity: -220, type: .expense,
+          accountId: account.id,
+          instrument: .AUD,
+          quantity: -220,
+          type: .expense,
           categoryId: ids.groceriesId)
       ]))
   _ = try? await backend.transactions.create(
     Transaction(
-      date: Date().addingTimeInterval(-2 * 86400), payee: "Landlord",
+      date: Date().addingTimeInterval(-2 * 86400),
+      payee: "Landlord",
       legs: [
         TransactionLeg(
-          accountId: account.id, instrument: .AUD, quantity: -1800, type: .expense,
+          accountId: account.id,
+          instrument: .AUD,
+          quantity: -1800,
+          type: .expense,
           categoryId: ids.rentId)
       ]))
 }
