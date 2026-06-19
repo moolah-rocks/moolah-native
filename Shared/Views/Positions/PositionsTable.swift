@@ -1,8 +1,3 @@
-// Reason: AssetHolding preview literals and the Table column builders span
-// many labelled arguments; the multiline_arguments rule fires on every such
-// call site in this file.
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 /// Responsive table of `AssetHolding`s. On wide layouts (macOS, regular iOS
@@ -271,40 +266,62 @@ private func mixedPositionsInput() -> PositionsViewInput {
   let bhp = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
   let cba = Instrument.stock(ticker: "CBA.AX", exchange: "ASX", name: "CBA")
   let eth = Instrument.crypto(
-    chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    chainId: 1,
+    contractAddress: nil,
+    symbol: "ETH",
+    name: "Ethereum",
+    decimals: 18)
   let ethOptimism = Instrument.crypto(
-    chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    chainId: 10,
+    contractAddress: nil,
+    symbol: "ETH",
+    name: "Ethereum",
+    decimals: 18)
   let aud = Instrument.AUD
   return PositionsViewInput(
-    title: "Brokerage", hostCurrency: aud,
-    positions: [
-      ValuedPosition(
-        instrument: bhp, quantity: 250,
-        unitPrice: InstrumentAmount(quantity: 45.30, instrument: aud),
-        costBasis: InstrumentAmount(quantity: 10_125, instrument: aud),
-        value: InstrumentAmount(quantity: 11_325, instrument: aud)),
-      ValuedPosition(
-        instrument: cba, quantity: 80,
-        unitPrice: InstrumentAmount(quantity: 120, instrument: aud),
-        costBasis: InstrumentAmount(quantity: 9_000, instrument: aud),
-        value: InstrumentAmount(quantity: 9_600, instrument: aud)),
-      ValuedPosition(
-        instrument: eth, quantity: 2.45,
-        unitPrice: InstrumentAmount(quantity: 4_000, instrument: aud),
-        costBasis: InstrumentAmount(quantity: 7_500, instrument: aud),
-        value: InstrumentAmount(quantity: 9_800, instrument: aud)),
-      ValuedPosition(
-        instrument: ethOptimism, quantity: 1.10,
-        unitPrice: InstrumentAmount(quantity: 4_000, instrument: aud),
-        costBasis: InstrumentAmount(quantity: 3_500, instrument: aud),
-        value: InstrumentAmount(quantity: 4_400, instrument: aud)),
-      ValuedPosition(
-        instrument: aud, quantity: 2_480,
-        unitPrice: nil, costBasis: nil,
-        value: InstrumentAmount(quantity: 2_480, instrument: aud)),
-    ],
+    title: "Brokerage",
+    hostCurrency: aud,
+    positions: mixedPreviewPositions(
+      bhp: bhp, cba: cba, eth: eth, ethOptimism: ethOptimism, aud: aud),
     historicalValue: nil,
     assetKeysByInstrumentId: ["1:native": "ethereum", "10:native": "ethereum"])
+}
+
+private func mixedPreviewPositions(
+  bhp: Instrument, cba: Instrument, eth: Instrument, ethOptimism: Instrument, aud: Instrument
+) -> [ValuedPosition] {
+  [
+    ValuedPosition(
+      instrument: bhp,
+      quantity: 250,
+      unitPrice: InstrumentAmount(quantity: 45.30, instrument: aud),
+      costBasis: InstrumentAmount(quantity: 10_125, instrument: aud),
+      value: InstrumentAmount(quantity: 11_325, instrument: aud)),
+    ValuedPosition(
+      instrument: cba,
+      quantity: 80,
+      unitPrice: InstrumentAmount(quantity: 120, instrument: aud),
+      costBasis: InstrumentAmount(quantity: 9_000, instrument: aud),
+      value: InstrumentAmount(quantity: 9_600, instrument: aud)),
+    ValuedPosition(
+      instrument: eth,
+      quantity: 2.45,
+      unitPrice: InstrumentAmount(quantity: 4_000, instrument: aud),
+      costBasis: InstrumentAmount(quantity: 7_500, instrument: aud),
+      value: InstrumentAmount(quantity: 9_800, instrument: aud)),
+    ValuedPosition(
+      instrument: ethOptimism,
+      quantity: 1.10,
+      unitPrice: InstrumentAmount(quantity: 4_000, instrument: aud),
+      costBasis: InstrumentAmount(quantity: 3_500, instrument: aud),
+      value: InstrumentAmount(quantity: 4_400, instrument: aud)),
+    ValuedPosition(
+      instrument: aud,
+      quantity: 2_480,
+      unitPrice: nil,
+      costBasis: nil,
+      value: InstrumentAmount(quantity: 2_480, instrument: aud)),
+  ]
 }
 
 #Preview("PositionsTable - mixed wide") {
@@ -320,8 +337,11 @@ private func mixedPositionsInput() -> PositionsViewInput {
     hostCurrency: aud,
     positions: [
       ValuedPosition(
-        instrument: bhp, quantity: 250,
-        unitPrice: nil, costBasis: nil, value: nil)
+        instrument: bhp,
+        quantity: 250,
+        unitPrice: nil,
+        costBasis: nil,
+        value: nil)
     ],
     historicalValue: nil
   )

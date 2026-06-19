@@ -1,9 +1,3 @@
-// swiftlint:disable multiline_arguments
-//
-// Previews and inline view-builder layouts construct PositionsViewInput
-// across multiple lines for readability; the rule fires on every such
-// call site in this file.
-
 import SwiftUI
 
 /// Unified container for displaying positions across the app. Composes a
@@ -60,18 +54,22 @@ private func defaultPreviewPositions() -> [ValuedPosition] {
   let aud = Instrument.AUD
   return [
     ValuedPosition(
-      instrument: bhp, quantity: 250,
+      instrument: bhp,
+      quantity: 250,
       unitPrice: InstrumentAmount(quantity: 45.30, instrument: aud),
       costBasis: InstrumentAmount(quantity: 10_125, instrument: aud),
       value: InstrumentAmount(quantity: 11_325, instrument: aud)),
     ValuedPosition(
-      instrument: cba, quantity: 80,
+      instrument: cba,
+      quantity: 80,
       unitPrice: InstrumentAmount(quantity: 120, instrument: aud),
       costBasis: InstrumentAmount(quantity: 9_000, instrument: aud),
       value: InstrumentAmount(quantity: 9_600, instrument: aud)),
     ValuedPosition(
-      instrument: aud, quantity: 2_480,
-      unitPrice: nil, costBasis: nil,
+      instrument: aud,
+      quantity: 2_480,
+      unitPrice: nil,
+      costBasis: nil,
       value: InstrumentAmount(quantity: 2_480, instrument: aud)),
   ]
 }
@@ -96,12 +94,16 @@ private func defaultPreviewPositions() -> [ValuedPosition] {
       hostCurrency: .AUD,
       positions: [
         ValuedPosition(
-          instrument: .USD, quantity: 100,
-          unitPrice: nil, costBasis: nil,
+          instrument: .USD,
+          quantity: 100,
+          unitPrice: nil,
+          costBasis: nil,
           value: InstrumentAmount(quantity: 152, instrument: .AUD)),
         ValuedPosition(
-          instrument: .AUD, quantity: 1_000,
-          unitPrice: nil, costBasis: nil,
+          instrument: .AUD,
+          quantity: 1_000,
+          unitPrice: nil,
+          costBasis: nil,
           value: InstrumentAmount(quantity: 1_000, instrument: .AUD)),
       ],
       historicalValue: nil
@@ -119,8 +121,11 @@ private func defaultPreviewPositions() -> [ValuedPosition] {
       hostCurrency: .AUD,
       positions: [
         ValuedPosition(
-          instrument: bhp, quantity: 250,
-          unitPrice: nil, costBasis: nil, value: nil)
+          instrument: bhp,
+          quantity: 250,
+          unitPrice: nil,
+          costBasis: nil,
+          value: nil)
       ],
       historicalValue: nil
     ),
@@ -150,16 +155,22 @@ private func withChartPreviewInput() -> PositionsViewInput {
   let points: [HistoricalValueSeries.Point] = (0..<60).map { offset in
     let date = calendar.date(byAdding: .day, value: -59 + offset, to: now) ?? now
     return HistoricalValueSeries.Point(
-      date: date, value: 10_000 + Decimal(offset) * 25, cost: 9_500,
+      date: date,
+      value: 10_000 + Decimal(offset) * 25,
+      cost: 9_500,
       contributions: nil)
   }
   let series = HistoricalValueSeries(
-    hostCurrency: aud, total: points, perInstrument: [bhp.id: points])
+    hostCurrency: aud,
+    total: points,
+    perInstrument: [bhp.id: points])
   return PositionsViewInput(
-    title: "Brokerage", hostCurrency: aud,
+    title: "Brokerage",
+    hostCurrency: aud,
     positions: [
       ValuedPosition(
-        instrument: bhp, quantity: 100,
+        instrument: bhp,
+        quantity: 100,
         unitPrice: InstrumentAmount(quantity: (points.last?.value ?? 0) / 100, instrument: aud),
         costBasis: InstrumentAmount(quantity: 9_500, instrument: aud),
         value: InstrumentAmount(quantity: points.last?.value ?? 0, instrument: aud))
@@ -172,35 +183,38 @@ private func withChartPreviewInput() -> PositionsViewInput {
     .frame(width: 720, height: 640)
 }
 
-#Preview("With performance tiles") {
+private func performanceTilesPreviewInput() -> PositionsViewInput {
   let bhp = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
   let aud = Instrument.AUD
-  return PositionsView(
-    input: PositionsViewInput(
-      title: "Brokerage",
-      hostCurrency: aud,
-      positions: [
-        ValuedPosition(
-          instrument: bhp, quantity: 250,
-          unitPrice: InstrumentAmount(quantity: 45.30, instrument: aud),
-          costBasis: InstrumentAmount(quantity: 10_125, instrument: aud),
-          value: InstrumentAmount(quantity: 11_325, instrument: aud)),
-        ValuedPosition(
-          instrument: aud, quantity: 2_480,
-          unitPrice: nil, costBasis: nil,
-          value: InstrumentAmount(quantity: 2_480, instrument: aud)),
-      ],
-      historicalValue: nil,
-      performance: AccountPerformance(
+  return PositionsViewInput(
+    title: "Brokerage",
+    hostCurrency: aud,
+    positions: [
+      ValuedPosition(
+        instrument: bhp,
+        quantity: 250,
+        unitPrice: InstrumentAmount(quantity: 45.30, instrument: aud),
+        costBasis: InstrumentAmount(quantity: 10_125, instrument: aud),
+        value: InstrumentAmount(quantity: 11_325, instrument: aud)),
+      ValuedPosition(
         instrument: aud,
-        currentValue: InstrumentAmount(quantity: 13_805, instrument: aud),
-        totalContributions: InstrumentAmount(quantity: 12_605, instrument: aud),
-        profitLoss: InstrumentAmount(quantity: 1_200, instrument: aud),
-        profitLossPercent: Decimal(string: "0.0952"),
-        annualisedReturn: Decimal(string: "0.0833"),
-        firstFlowDate: Calendar.current.date(byAdding: .year, value: -2, to: Date()))
-    ),
-    range: .constant(.threeMonths)
-  )
-  .frame(width: 720, height: 480)
+        quantity: 2_480,
+        unitPrice: nil,
+        costBasis: nil,
+        value: InstrumentAmount(quantity: 2_480, instrument: aud)),
+    ],
+    historicalValue: nil,
+    performance: AccountPerformance(
+      instrument: aud,
+      currentValue: InstrumentAmount(quantity: 13_805, instrument: aud),
+      totalContributions: InstrumentAmount(quantity: 12_605, instrument: aud),
+      profitLoss: InstrumentAmount(quantity: 1_200, instrument: aud),
+      profitLossPercent: Decimal(string: "0.0952"),
+      annualisedReturn: Decimal(string: "0.0833"),
+      firstFlowDate: Calendar.current.date(byAdding: .year, value: -2, to: Date())))
+}
+
+#Preview("With performance tiles") {
+  PositionsView(input: performanceTilesPreviewInput(), range: .constant(.threeMonths))
+    .frame(width: 720, height: 480)
 }
