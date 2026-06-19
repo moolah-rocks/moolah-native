@@ -10,12 +10,6 @@
 // with no behaviour of their own. See `guides/UI_GUIDE.md` §3 for the
 // per-leaf-leaf-view pattern these implement.
 
-// Reason: SwiftUI declarative chains and the Transaction-leg seeding
-// helpers at the bottom wrap arguments across multiple lines for
-// readability; enforcing the rule would fight the formatter and the
-// SwiftUI idiom without improving clarity.
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 /// Detail view for bank, asset, and other non-investment, non-crypto
@@ -83,13 +77,15 @@ private func seedStandardAccountPreview(
 ) async {
   _ = try? await backend.transactions.create(
     Transaction(
-      date: Date(), payee: "Woolworths",
+      date: Date(),
+      payee: "Woolworths",
       legs: [
         TransactionLeg(accountId: accountId, instrument: .AUD, quantity: -50.23, type: .expense)
       ]))
   _ = try? await backend.transactions.create(
     Transaction(
-      date: Date().addingTimeInterval(-86400), payee: "Employer",
+      date: Date().addingTimeInterval(-86400),
+      payee: "Employer",
       legs: [
         TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 3500, type: .income)
       ]))
@@ -99,7 +95,10 @@ private func seedStandardAccountPreview(
 #Preview {
   let accountId = UUID()
   let account = Account(
-    id: accountId, name: "Checking", type: .bank, instrument: .AUD,
+    id: accountId,
+    name: "Checking",
+    type: .bank,
+    instrument: .AUD,
     positions: [Position(instrument: .AUD, quantity: 3449.77)])
   let backend = PreviewBackend.create()
   let store = TransactionStore(
