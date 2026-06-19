@@ -110,9 +110,8 @@ actor DataExporter {
       investmentValues: investmentValues)
   }
 
-  /// Fetch every earmark plus its budget items, keyed by earmark id. Pulled
-  /// out of `downloadAllStages` so the earmarks stage closure stays a single
-  /// call, keeping that orchestration method focused on the per-stage fan-out.
+  /// Fetch every earmark together with its budget items, returned as a
+  /// parallel pair keyed by earmark id.
   private func downloadEarmarksWithBudgets() async throws -> (
     [Earmark], [UUID: [EarmarkBudgetItem]]
   ) {
