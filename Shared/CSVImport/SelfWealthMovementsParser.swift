@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import Foundation
 
 /// Parser for SelfWealth's "Movements" report — positions and trades only.
@@ -79,8 +77,12 @@ struct SelfWealthMovementsParser: CSVParser, Sendable {
       throw CSVParserError.headerMismatch
     }
     return Columns(
-      tradeDate: tradeDate, action: action, reference: reference, code: code,
-      name: findOptional("name"), units: units,
+      tradeDate: tradeDate,
+      action: action,
+      reference: reference,
+      code: code,
+      name: findOptional("name"),
+      units: units,
       consideration: findOptional("consideration"),
       brokerage: findOptional("brokerage"))
   }
@@ -124,8 +126,13 @@ struct SelfWealthMovementsParser: CSVParser, Sendable {
     }
 
     let context = RowContext(
-      row: row, rowIndex: rowIndex, columns: columns, date: date,
-      code: code, units: units, reference: reference,
+      row: row,
+      rowIndex: rowIndex,
+      columns: columns,
+      date: date,
+      code: code,
+      units: units,
+      reference: reference,
       rawDescription: "\(action) \(code) \(name)".trimmingCharacters(in: .whitespaces))
 
     switch action.lowercased() {
@@ -144,7 +151,8 @@ struct SelfWealthMovementsParser: CSVParser, Sendable {
     let brokerageField = SelfWealthCSVParsing.safe(context.row, context.columns.brokerage)
     guard let consideration = SelfWealthCSVParsing.parseDecimal(considerationField) else {
       throw CSVParserError.malformedRow(
-        index: context.rowIndex, reason: "invalid consideration: \(considerationField)",
+        index: context.rowIndex,
+        reason: "invalid consideration: \(considerationField)",
         row: context.row)
     }
     let brokerage = SelfWealthCSVParsing.parseDecimal(brokerageField) ?? 0
@@ -153,24 +161,35 @@ struct SelfWealthMovementsParser: CSVParser, Sendable {
 
     var legs = [
       ParsedLeg(
-        accountId: nil, instrument: .AUD, quantity: cashAmount,
-        type: .trade, isInstrumentPlaceholder: true),
+        accountId: nil,
+        instrument: .AUD,
+        quantity: cashAmount,
+        type: .trade,
+        isInstrumentPlaceholder: true),
       ParsedLeg(
-        accountId: nil, instrument: stockInstrument,
+        accountId: nil,
+        instrument: stockInstrument,
         quantity: isBuy ? context.units : -context.units,
-        type: .trade, isInstrumentPlaceholder: false),
+        type: .trade,
+        isInstrumentPlaceholder: false),
     ]
     if brokerage > 0 {
       legs.append(
         ParsedLeg(
-          accountId: nil, instrument: .AUD, quantity: -brokerage,
-          type: .expense, isInstrumentPlaceholder: true))
+          accountId: nil,
+          instrument: .AUD,
+          quantity: -brokerage,
+          type: .expense,
+          isInstrumentPlaceholder: true))
     }
     return .transaction(
       ParsedTransaction(
-        date: context.date, legs: legs, rawRow: context.row,
+        date: context.date,
+        legs: legs,
+        rawRow: context.row,
         rawDescription: context.rawDescription,
-        rawAmount: cashAmount, rawBalance: nil,
+        rawAmount: cashAmount,
+        rawBalance: nil,
         bankReference: context.reference.isEmpty ? nil : context.reference))
   }
 
@@ -193,9 +212,12 @@ struct SelfWealthMovementsParser: CSVParser, Sendable {
       isInstrumentPlaceholder: false)
     return .transaction(
       ParsedTransaction(
-        date: context.date, legs: [leg], rawRow: context.row,
+        date: context.date,
+        legs: [leg],
+        rawRow: context.row,
         rawDescription: context.rawDescription,
-        rawAmount: signedUnits, rawBalance: nil,
+        rawAmount: signedUnits,
+        rawBalance: nil,
         bankReference: context.reference.isEmpty ? nil : context.reference))
   }
 }

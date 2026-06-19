@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import Foundation
 import os
 
@@ -81,12 +79,7 @@ actor DataExporter {
     let (earmarks, budgets) = try await runStage(
       "earmarks", signpost: "export.earmarks", signpostID: signpostID
     ) {
-      let earmarks = try await backend.earmarks.fetchAll()
-      var budgets: [UUID: [EarmarkBudgetItem]] = [:]
-      for earmark in earmarks {
-        budgets[earmark.id] = try await backend.earmarks.fetchBudget(earmarkId: earmark.id)
-      }
-      return (earmarks, budgets)
+      try await downloadEarmarksWithBudgets()
     }
 
     progress(.downloading(step: "transactions"))
@@ -108,9 +101,27 @@ actor DataExporter {
     }
 
     return StagedDownloads(
-      accounts: accounts, accountGroups: accountGroups, categories: categories,
-      earmarks: earmarks, earmarkBudgets: budgets,
-      transactions: transactions, investmentValues: investmentValues)
+      accounts: accounts,
+      accountGroups: accountGroups,
+      categories: categories,
+      earmarks: earmarks,
+      earmarkBudgets: budgets,
+      transactions: transactions,
+      investmentValues: investmentValues)
+  }
+
+  /// Fetch every earmark plus its budget items, keyed by earmark id. Pulled
+  /// out of `downloadAllStages` so the earmarks stage closure stays a single
+  /// call, keeping that orchestration method focused on the per-stage fan-out.
+  private func downloadEarmarksWithBudgets() async throws -> (
+    [Earmark], [UUID: [EarmarkBudgetItem]]
+  ) {
+    let earmarks = try await backend.earmarks.fetchAll()
+    var budgets: [UUID: [EarmarkBudgetItem]] = [:]
+    for earmark in earmarks {
+      budgets[earmark.id] = try await backend.earmarks.fetchBudget(earmarkId: earmark.id)
+    }
+    return (earmarks, budgets)
   }
 
   private func buildExportedData(

@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import Foundation
 
 /// Parser for SelfWealth's "Cash Report" — pure cash-flow ledger.
@@ -113,7 +111,8 @@ struct SelfWealthCashReportParser: CSVParser, Sendable {
 
     let isDividend =
       Self.dividendRegex.regex.firstMatch(
-        in: comment, options: [],
+        in: comment,
+        options: [],
         range: NSRange(comment.startIndex..., in: comment)) != nil
     let bankReference: String? = isDividend ? comment : nil
 
@@ -131,8 +130,12 @@ struct SelfWealthCashReportParser: CSVParser, Sendable {
 
     return .transaction(
       ParsedTransaction(
-        date: date, legs: [leg], rawRow: row,
-        rawDescription: comment, rawAmount: amount, rawBalance: balance,
+        date: date,
+        legs: [leg],
+        rawRow: row,
+        rawDescription: comment,
+        rawAmount: amount,
+        rawBalance: balance,
         bankReference: bankReference))
   }
 

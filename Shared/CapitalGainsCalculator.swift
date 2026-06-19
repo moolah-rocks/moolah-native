@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import Foundation
 
 /// Input type: a transaction's legs with its date.
@@ -54,20 +52,25 @@ enum CapitalGainsCalculator {
 
     for transaction in sorted {
       let classification = try await TradeEventClassifier.classify(
-        legs: transaction.legs, on: transaction.date,
+        legs: transaction.legs,
+        on: transaction.date,
         hostCurrency: profileCurrency,
         conversionService: conversionService
       )
       for buy in classification.buys {
         engine.processBuy(
-          instrument: buy.instrument, quantity: buy.quantity,
-          costPerUnit: buy.costPerUnit, date: transaction.date)
+          instrument: buy.instrument,
+          quantity: buy.quantity,
+          costPerUnit: buy.costPerUnit,
+          date: transaction.date)
       }
       for sell in classification.sells {
         let inRange = sellDateRange.map { $0.contains(transaction.date) } ?? true
         let events = engine.processSell(
-          instrument: sell.instrument, quantity: sell.quantity,
-          proceedsPerUnit: sell.proceedsPerUnit, date: transaction.date)
+          instrument: sell.instrument,
+          quantity: sell.quantity,
+          proceedsPerUnit: sell.proceedsPerUnit,
+          date: transaction.date)
         if inRange { allEvents.append(contentsOf: events) }
       }
     }
