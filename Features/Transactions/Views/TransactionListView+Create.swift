@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 extension TransactionListView {
@@ -30,7 +28,10 @@ extension TransactionListView {
         payee: "",
         legs: [
           TransactionLeg(
-            accountId: nil, instrument: instrument, quantity: 0, type: .income,
+            accountId: nil,
+            instrument: instrument,
+            quantity: 0,
+            type: .income,
             earmarkId: earmarkId)
         ]
       )

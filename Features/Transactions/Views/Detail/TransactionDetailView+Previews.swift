@@ -1,10 +1,3 @@
-// swift-format wraps `TransactionLeg(...)` calls with one argument per line
-// inside these previews; SwiftLint's multiline_arguments rule (which
-// expects "all on one line OR one per line including the first") then
-// trips on the formatter's chosen style. The formatter wins per project
-// policy (.swift-format is the layout source of truth), so suppress here.
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 @MainActor
@@ -46,23 +39,33 @@ private func previewStore() -> TransactionStore {
   }
 }
 
+private func customTransaction(accountId1: UUID, accountId2: UUID) -> Transaction {
+  Transaction(
+    date: Date(),
+    payee: "Split Purchase",
+    legs: [
+      TransactionLeg(
+        accountId: accountId1,
+        instrument: .AUD,
+        quantity: -30.00,
+        type: .expense,
+        categoryId: nil),
+      TransactionLeg(
+        accountId: accountId2,
+        instrument: .AUD,
+        quantity: -20.00,
+        type: .expense,
+        categoryId: nil),
+    ]
+  )
+}
+
 #Preview("Custom Transaction") {
   let accountId1 = UUID()
   let accountId2 = UUID()
   return NavigationStack {
     TransactionDetailView(
-      transaction: Transaction(
-        date: Date(),
-        payee: "Split Purchase",
-        legs: [
-          TransactionLeg(
-            accountId: accountId1, instrument: .AUD, quantity: -30.00, type: .expense,
-            categoryId: nil),
-          TransactionLeg(
-            accountId: accountId2, instrument: .AUD, quantity: -20.00, type: .expense,
-            categoryId: nil),
-        ]
-      ),
+      transaction: customTransaction(accountId1: accountId1, accountId2: accountId2),
       accounts: Accounts(from: [
         Account(id: accountId1, name: "Checking", type: .bank, instrument: .AUD),
         Account(id: accountId2, name: "Credit Card", type: .creditCard, instrument: .AUD),
@@ -87,7 +90,10 @@ private func previewStore() -> TransactionStore {
         date: Date(),
         legs: [
           TransactionLeg(
-            accountId: nil, instrument: .AUD, quantity: 500, type: .income,
+            accountId: nil,
+            instrument: .AUD,
+            quantity: 500,
+            type: .income,
             earmarkId: earmarkId)
         ]
       ),
