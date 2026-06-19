@@ -1,8 +1,3 @@
-// swiftlint:disable multiline_arguments
-// Reason: swift-format wraps long os_signpost and resolveProfile calls in
-// ways the multiline_arguments rule disagrees with; matching the existing
-// disable+reason pattern from MoolahApp+Setup.swift.
-
 import Foundation
 import ImportExtensionKit
 import OSLog
@@ -29,11 +24,15 @@ extension ImportStore {
   ) async throws -> ImportSessionResult {
     let pipelineSignpost = OSSignpostID(log: Signposts.importPipeline)
     os_signpost(
-      .begin, log: Signposts.importPipeline, name: "ingestWeb",
+      .begin,
+      log: Signposts.importPipeline,
+      name: "ingestWeb",
       signpostID: pipelineSignpost)
     defer {
       os_signpost(
-        .end, log: Signposts.importPipeline, name: "ingestWeb",
+        .end,
+        log: Signposts.importPipeline,
+        name: "ingestWeb",
         signpostID: pipelineSignpost)
     }
 
@@ -91,13 +90,15 @@ extension ImportStore {
       guard let date = Self.parseWebDate(row.date) else {
         throw IngestError.parse(
           .malformedRow(
-            index: rowIndex, reason: "invalid date: \(row.date)",
+            index: rowIndex,
+            reason: "invalid date: \(row.date)",
             row: Self.rawRow(from: row)))
       }
       guard let amount = Self.parseWebAmount(row.amount) else {
         throw IngestError.parse(
           .malformedRow(
-            index: rowIndex, reason: "invalid amount: \(row.amount)",
+            index: rowIndex,
+            reason: "invalid amount: \(row.amount)",
             row: Self.rawRow(from: row)))
       }
       let balance = row.balance.flatMap { Self.parseWebAmount($0) }

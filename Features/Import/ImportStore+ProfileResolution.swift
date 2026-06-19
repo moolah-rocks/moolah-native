@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import Foundation
 
 // Profile-matching and column-mapping-rebuild helpers for `ImportStore`.
@@ -73,7 +71,8 @@ extension ImportStore {
     for profile in candidateProfiles {
       let page = try await backend.transactions.fetch(
         filter: TransactionFilter(accountId: profile.accountId),
-        page: 0, pageSize: 1000)
+        page: 0,
+        pageSize: 1000)
       existingByAccount[profile.accountId] = page.transactions
     }
     let matcherInput = MatcherInput(

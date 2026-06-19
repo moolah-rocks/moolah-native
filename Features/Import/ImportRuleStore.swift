@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import Foundation
 import OSLog
 import Observation
@@ -237,8 +235,10 @@ final class ImportRuleStore {
             date: transaction.date,
             legs: transaction.legs.map {
               ParsedLeg(
-                accountId: $0.accountId, instrument: $0.instrument,
-                quantity: $0.quantity, type: $0.type)
+                accountId: $0.accountId,
+                instrument: $0.instrument,
+                quantity: $0.quantity,
+                type: $0.type)
             },
             rawRow: [],
             rawDescription: origin.rawDescription,
@@ -293,8 +293,10 @@ final class ImportRuleStore {
           date: transaction.date,
           legs: transaction.legs.map {
             ParsedLeg(
-              accountId: $0.accountId, instrument: $0.instrument,
-              quantity: $0.quantity, type: $0.type)
+              accountId: $0.accountId,
+              instrument: $0.instrument,
+              quantity: $0.quantity,
+              type: $0.type)
           },
           rawRow: [],
           rawDescription: origin.rawDescription,
