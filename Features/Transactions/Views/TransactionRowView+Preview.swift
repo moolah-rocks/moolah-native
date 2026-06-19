@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 // File-private namespace satisfies the SwiftLint `file_name` rule which
@@ -13,13 +11,19 @@ private struct PreviewData {
   let groceriesId = UUID()
   let holidayFundId = UUID()
   let scam = Instrument.crypto(
-    chainId: 1, contractAddress: "0xdeadbeef", symbol: "SCAM",
-    name: "Scam Token", decimals: 18)
+    chainId: 1,
+    contractAddress: "0xdeadbeef",
+    symbol: "SCAM",
+    name: "Scam Token",
+    decimals: 18)
 
   var accounts: Accounts {
     Accounts(from: [
       Account(
-        id: savingsId, name: "Savings", type: .bank, instrument: .AUD,
+        id: savingsId,
+        name: "Savings",
+        type: .bank,
+        instrument: .AUD,
         positions: [Position(instrument: .AUD, quantity: 5000)])
     ])
   }
@@ -63,12 +67,17 @@ private func previewRow(
   pendingPayId: Transaction.ID? = nil
 ) -> TransactionRowView {
   let transaction = Transaction(
-    id: id, date: date, payee: payee ?? "",
-    recurPeriod: recurPeriod, recurEvery: recurEvery,
+    id: id,
+    date: date,
+    payee: payee ?? "",
+    recurPeriod: recurPeriod,
+    recurEvery: recurEvery,
     legs: legs)
   return TransactionRowView(
     transaction: transaction,
-    accounts: data.accounts, categories: data.categories, earmarks: data.earmarks,
+    accounts: data.accounts,
+    categories: data.categories,
+    earmarks: data.earmarks,
     displayAmounts: displayAmounts,
     balance: InstrumentAmount(quantity: balance, instrument: .AUD),
     scopeReferenceInstrument: scopeReferenceInstrument,
@@ -89,7 +98,10 @@ private func simplePreviewSpecs(data: PreviewData) -> [PreviewRowSpec] {
       payee: "Woolworths",
       legs: [
         TransactionLeg(
-          accountId: data.sourceId, instrument: .AUD, quantity: -50.23, type: .expense,
+          accountId: data.sourceId,
+          instrument: .AUD,
+          quantity: -50.23,
+          type: .expense,
           categoryId: data.groceriesId)
       ],
       displayAmounts: [InstrumentAmount(quantity: -50.23, instrument: .AUD)],
@@ -98,7 +110,10 @@ private func simplePreviewSpecs(data: PreviewData) -> [PreviewRowSpec] {
       payee: "Employer Pty Ltd",
       legs: [
         TransactionLeg(
-          accountId: data.sourceId, instrument: .AUD, quantity: 3500, type: .income,
+          accountId: data.sourceId,
+          instrument: .AUD,
+          quantity: 3500,
+          type: .income,
           earmarkId: data.holidayFundId)
       ],
       displayAmounts: [InstrumentAmount(quantity: 3500, instrument: .AUD)],
@@ -112,7 +127,8 @@ private func simplePreviewSpecs(data: PreviewData) -> [PreviewRowSpec] {
           accountId: data.savingsId, instrument: .AUD, quantity: 1000, type: .transfer),
       ],
       displayAmounts: [InstrumentAmount(quantity: -1000, instrument: .AUD)],
-      balance: -2449.77, accountContext: data.sourceId),
+      balance: -2449.77,
+      accountContext: data.sourceId),
     PreviewRowSpec(
       payee: "Rent Split",
       legs: [
@@ -122,7 +138,8 @@ private func simplePreviewSpecs(data: PreviewData) -> [PreviewRowSpec] {
           accountId: data.savingsId, instrument: .AUD, quantity: 500, type: .transfer),
       ],
       displayAmounts: [InstrumentAmount(quantity: -500, instrument: .AUD)],
-      balance: -1449.77, accountContext: data.sourceId),
+      balance: -1449.77,
+      accountContext: data.sourceId),
   ]
 }
 
@@ -143,7 +160,8 @@ private func tradePreviewSpecs(data: PreviewData) -> [PreviewRowSpec] {
         InstrumentAmount(quantity: 950, instrument: .AUD),
         InstrumentAmount(quantity: -50, instrument: .AUD),
       ],
-      balance: -2499.77, accountContext: data.sourceId),
+      balance: -2499.77,
+      accountContext: data.sourceId),
     PreviewRowSpec(
       payee: "",
       legs: [
@@ -156,7 +174,8 @@ private func tradePreviewSpecs(data: PreviewData) -> [PreviewRowSpec] {
         InstrumentAmount(quantity: -100, instrument: .AUD),
         InstrumentAmount(quantity: 1_000_000, instrument: data.scam),
       ],
-      balance: -1_549.77, accountContext: data.sourceId),
+      balance: -1_549.77,
+      accountContext: data.sourceId),
   ]
 }
 
@@ -165,8 +184,11 @@ private func tradePreviewSpecs(data: PreviewData) -> [PreviewRowSpec] {
   return List {
     ForEach(Array(previewRowSpecs(data: data).enumerated()), id: \.offset) { _, spec in
       previewRow(
-        data: data, payee: spec.payee, legs: spec.legs,
-        displayAmounts: spec.displayAmounts, balance: spec.balance,
+        data: data,
+        payee: spec.payee,
+        legs: spec.legs,
+        displayAmounts: spec.displayAmounts,
+        balance: spec.balance,
         accountContext: spec.accountContext)
     }
   }
@@ -177,7 +199,8 @@ private func tradePreviewSpecs(data: PreviewData) -> [PreviewRowSpec] {
 private func overdueScheduledRow(data: PreviewData) -> TransactionRowView {
   let overdueDate = Calendar.current.date(byAdding: .day, value: -3, to: Date()) ?? Date()
   return previewRow(
-    data: data, payee: "Rent",
+    data: data,
+    payee: "Rent",
     legs: [
       TransactionLeg(
         accountId: data.sourceId, instrument: .AUD, quantity: -2000, type: .expense)
@@ -185,7 +208,8 @@ private func overdueScheduledRow(data: PreviewData) -> TransactionRowView {
     displayAmounts: [InstrumentAmount(quantity: -2000, instrument: .AUD)],
     balance: 1000,
     date: overdueDate,
-    recurPeriod: .month, recurEvery: 1,
+    recurPeriod: .month,
+    recurEvery: 1,
     isOverdue: true,
     onPay: {})
 }
@@ -193,14 +217,16 @@ private func overdueScheduledRow(data: PreviewData) -> TransactionRowView {
 @MainActor
 private func dueTodayScheduledRow(data: PreviewData) -> TransactionRowView {
   previewRow(
-    data: data, payee: "Internet",
+    data: data,
+    payee: "Internet",
     legs: [
       TransactionLeg(
         accountId: data.sourceId, instrument: .AUD, quantity: -150, type: .expense)
     ],
     displayAmounts: [InstrumentAmount(quantity: -150, instrument: .AUD)],
     balance: 850,
-    recurPeriod: .month, recurEvery: 1,
+    recurPeriod: .month,
+    recurEvery: 1,
     isDueToday: true,
     onPay: {})
 }
@@ -208,14 +234,16 @@ private func dueTodayScheduledRow(data: PreviewData) -> TransactionRowView {
 @MainActor
 private func payAffordanceScheduledRow(data: PreviewData) -> TransactionRowView {
   previewRow(
-    data: data, payee: "Phone",
+    data: data,
+    payee: "Phone",
     legs: [
       TransactionLeg(
         accountId: data.sourceId, instrument: .AUD, quantity: -75, type: .expense)
     ],
     displayAmounts: [InstrumentAmount(quantity: -75, instrument: .AUD)],
     balance: 775,
-    recurPeriod: .month, recurEvery: 1,
+    recurPeriod: .month,
+    recurEvery: 1,
     onPay: {})
 }
 
@@ -224,14 +252,17 @@ private func payingScheduledRow(
   data: PreviewData, pendingId: UUID
 ) -> TransactionRowView {
   previewRow(
-    data: data, id: pendingId, payee: "Insurance",
+    data: data,
+    id: pendingId,
+    payee: "Insurance",
     legs: [
       TransactionLeg(
         accountId: data.sourceId, instrument: .AUD, quantity: -200, type: .expense)
     ],
     displayAmounts: [InstrumentAmount(quantity: -200, instrument: .AUD)],
     balance: 575,
-    recurPeriod: .month, recurEvery: 1,
+    recurPeriod: .month,
+    recurEvery: 1,
     onPay: {},
     pendingPayId: pendingId)
 }

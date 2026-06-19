@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 struct TransactionFilterView: View {
@@ -249,7 +247,10 @@ struct TransactionFilterView: View {
 
   let accounts = Accounts(from: [
     Account(
-      id: accountId, name: "Checking", type: .bank, instrument: .AUD,
+      id: accountId,
+      name: "Checking",
+      type: .bank,
+      instrument: .AUD,
       positions: [Position(instrument: .AUD, quantity: 2449.77)]
     )
   ])

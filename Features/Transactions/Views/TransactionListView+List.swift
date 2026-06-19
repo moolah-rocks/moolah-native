@@ -1,7 +1,3 @@
-// Multi-argument SwiftUI modifier chains here require wrapping
-// that would otherwise trip multiline_arguments.
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 extension TransactionListView {
@@ -264,9 +260,13 @@ extension TransactionListView {
   private func transactionRow(for entry: TransactionWithBalance) -> some View {
     let scheduled = scheduledRowConfig(for: entry)
     TransactionRowView(
-      transaction: entry.transaction, accounts: accounts,
-      categories: categories, earmarks: earmarks, displayAmounts: entry.displayAmounts,
-      balance: entry.balance, scopeReferenceInstrument: scopeReferenceInstrument,
+      transaction: entry.transaction,
+      accounts: accounts,
+      categories: categories,
+      earmarks: earmarks,
+      displayAmounts: entry.displayAmounts,
+      balance: entry.balance,
+      scopeReferenceInstrument: scopeReferenceInstrument,
       hideEarmark: filter.earmarkId != nil,
       accountContext: accountContext(for: entry.transaction),
       isOverdue: scheduled?.isOverdue ?? false,

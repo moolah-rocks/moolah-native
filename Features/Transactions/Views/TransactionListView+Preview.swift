@@ -1,8 +1,3 @@
-// Reason: SwiftUI declarative chains (List, ForEach, modifier groups) wrap
-// arguments across multiple lines for readability; enforcing the rule would
-// fight the formatter and the SwiftUI idiom without improving clarity.
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 @MainActor
@@ -14,13 +9,15 @@ private func seedTransactionListPreview(
 ) async {
   _ = try? await backend.transactions.create(
     Transaction(
-      date: Date(), payee: "Woolworths",
+      date: Date(),
+      payee: "Woolworths",
       legs: [
         TransactionLeg(accountId: accountId, instrument: .AUD, quantity: -50.23, type: .expense)
       ]))
   _ = try? await backend.transactions.create(
     Transaction(
-      date: Date().addingTimeInterval(-86400), payee: "Employer",
+      date: Date().addingTimeInterval(-86400),
+      payee: "Employer",
       legs: [
         TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 3500, type: .income)
       ]))
@@ -34,18 +31,27 @@ private func seedTransactionListPreview(
   await store.load(filter: TransactionFilter(accountId: accountId))
 }
 
+private func previewAccounts(checkingId: UUID, savingsId: UUID) -> Accounts {
+  Accounts(from: [
+    Account(
+      id: checkingId,
+      name: "Checking",
+      type: .bank,
+      instrument: .AUD,
+      positions: [Position(instrument: .AUD, quantity: 2449.77)]),
+    Account(
+      id: savingsId,
+      name: "Savings",
+      type: .bank,
+      instrument: .AUD,
+      positions: [Position(instrument: .AUD, quantity: 5000)]),
+  ])
+}
+
 #Preview {
   let accountId = UUID()
   let savingsId = UUID()
-  let account = Account(
-    id: accountId, name: "Checking", type: .bank, instrument: .AUD,
-    positions: [Position(instrument: .AUD, quantity: 2449.77)])
-  let accounts = Accounts(from: [
-    account,
-    Account(
-      id: savingsId, name: "Savings", type: .bank, instrument: .AUD,
-      positions: [Position(instrument: .AUD, quantity: 5000)]),
-  ])
+  let accounts = previewAccounts(checkingId: accountId, savingsId: savingsId)
   let backend = PreviewBackend.create()
   let store = TransactionStore(
     repository: backend.transactions,
@@ -53,14 +59,19 @@ private func seedTransactionListPreview(
     targetInstrument: .AUD)
   return NavigationStack {
     TransactionListView(
-      title: account.name, filter: TransactionFilter(accountId: accountId),
-      accounts: accounts, categories: Categories(from: []),
+      title: "Checking",
+      filter: TransactionFilter(accountId: accountId),
+      accounts: accounts,
+      categories: Categories(from: []),
       earmarks: Earmarks(from: []),
       transactionStore: store)
   }
   .previewProfileEnvironment()
   .task {
     await seedTransactionListPreview(
-      backend: backend, accountId: accountId, savingsId: savingsId, store: store)
+      backend: backend,
+      accountId: accountId,
+      savingsId: savingsId,
+      store: store)
   }
 }

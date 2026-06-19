@@ -1,5 +1,3 @@
-// swiftlint:disable multiline_arguments
-
 import SwiftUI
 
 struct UpcomingView: View {
@@ -83,20 +81,30 @@ private func previewSeedTransactions(
 
   _ = try? await backend.transactions.create(
     Transaction(
-      date: overdue, payee: "Rent",
-      recurPeriod: .month, recurEvery: 1,
+      date: overdue,
+      payee: "Rent",
+      recurPeriod: .month,
+      recurEvery: 1,
       legs: [
         TransactionLeg(
-          accountId: accountId, instrument: .AUD, quantity: -2000, type: .expense,
+          accountId: accountId,
+          instrument: .AUD,
+          quantity: -2000,
+          type: .expense,
           categoryId: categoryId)
       ]))
   _ = try? await backend.transactions.create(
     Transaction(
-      date: upcoming, payee: "Internet",
-      recurPeriod: .month, recurEvery: 1,
+      date: upcoming,
+      payee: "Internet",
+      recurPeriod: .month,
+      recurEvery: 1,
       legs: [
         TransactionLeg(
-          accountId: accountId, instrument: .AUD, quantity: -150, type: .expense,
+          accountId: accountId,
+          instrument: .AUD,
+          quantity: -150,
+          type: .expense,
           categoryId: categoryId)
       ]))
   await store.load(filter: TransactionFilter(scheduled: .scheduledOnly))
@@ -107,7 +115,10 @@ private func previewSeedTransactions(
   let categoryId = UUID()
   let accounts = Accounts(from: [
     Account(
-      id: accountId, name: "Checking", type: .bank, instrument: .AUD,
+      id: accountId,
+      name: "Checking",
+      type: .bank,
+      instrument: .AUD,
       positions: [Position(instrument: .AUD, quantity: 2449.77)])
   ])
   let categories = Categories(from: [
@@ -120,8 +131,10 @@ private func previewSeedTransactions(
     targetInstrument: .AUD)
   return NavigationStack {
     UpcomingView(
-      accounts: accounts, categories: categories,
-      earmarks: Earmarks(from: []), transactionStore: store)
+      accounts: accounts,
+      categories: categories,
+      earmarks: Earmarks(from: []),
+      transactionStore: store)
   }
   .previewProfileEnvironment()
   .task {
