@@ -8,8 +8,13 @@ struct MultiInstrumentPositionsAssemblerTests {
   let aud = Instrument.AUD
   let btc = Instrument.crypto(
     chainId: 1, contractAddress: nil, symbol: "BTC", name: "Bitcoin", decimals: 8)
+  // ETH uses a distinct contractAddress so its id "1:0x…0eee" differs from
+  // BTC's "1:native" — without this, both would share the id "1:native" and
+  // map to the same slot in any [instrumentId: …] dictionary.
   let eth = Instrument.crypto(
-    chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    chainId: 1,
+    contractAddress: "0x0000000000000000000000000000000000000eee",
+    symbol: "ETH", name: "Ethereum", decimals: 18)
   let ltc = Instrument.crypto(
     chainId: 2, contractAddress: nil, symbol: "LTC", name: "Litecoin", decimals: 8)
   let accountA = UUID()

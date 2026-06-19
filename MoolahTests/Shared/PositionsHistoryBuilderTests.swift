@@ -115,7 +115,9 @@ struct PositionsHistoryBuilderTests {
       now: date(daysAfterEpoch: 5)
     )
     // From day 2 onwards CBA is held; every aggregate point that includes
-    // CBA must be skipped.
+    // CBA must be skipped. Points are noon-UTC, so a day-1 noon point is
+    // correctly < day-2 midnight (the date(daysAfterEpoch:) helper returns
+    // midnight UTC, and noon < midnight+24h), making the < comparison safe.
     #expect(series.totalSeries.allSatisfy { $0.date < self.date(daysAfterEpoch: 2) })
     // Per-instrument BHP still has full daily coverage.
     #expect(series.series(forInstrumentIds: [bhp.id]).count == 5)
