@@ -12,13 +12,16 @@ extension GRDBAnalysisRepository {
 
   // MARK: - SQL fetches
 
-  /// Loads every account id whose `type = 'investment'` AND whose
-  /// `valuation_mode = 'recordedValue'`. The Swift assembly walks
-  /// per-day deltas and folds in snapshot values for these accounts;
-  /// trades-mode investment accounts are intentionally excluded
-  /// because their per-day value comes from a different path and they
-  /// have no snapshot fold to apply — including them here would
-  /// overwrite their daily balance with a stale or missing snapshot.
+  /// Loads every account id of an investment-like `type`
+  /// (`investmentLikeTypesSQLList`) whose `valuation_mode =
+  /// 'recordedValue'`. The Swift assembly walks per-day deltas and
+  /// folds in snapshot values for these accounts; trades-mode
+  /// investment accounts are intentionally excluded because their
+  /// per-day value comes from a different path and they have no
+  /// snapshot fold to apply — including them here would overwrite their
+  /// daily balance with a stale or missing snapshot. Classifying by the
+  /// investment-like type set (not the literal `type = 'investment'`)
+  /// keeps crypto/exchange accounts out of the bank-balance sum.
   /// Reading the column directly off the `account` table avoids
   /// redundantly carrying the full account row across the snapshot
   /// boundary.
@@ -27,7 +30,8 @@ extension GRDBAnalysisRepository {
       database,
       sql: """
         SELECT id FROM account
-        WHERE type = 'investment' AND valuation_mode = 'recordedValue'
+        WHERE type IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
+          AND valuation_mode = 'recordedValue'
         """)
     var ids = Set<UUID>()
     ids.reserveCapacity(rows.count)
@@ -39,15 +43,21 @@ extension GRDBAnalysisRepository {
     return ids
   }
 
-  /// Loads every account id whose `type = 'investment'` AND whose
-  /// `valuation_mode = 'calculatedFromTrades'`. The trades-mode fold
+  /// Loads every account id of an investment-like `type`
+  /// (`investmentLikeTypesSQLList`) whose `valuation_mode =
+  /// 'calculatedFromTrades'` — the manual investment accounts the
+  /// migration flipped, plus crypto wallets and exchange accounts,
+  /// which are created in trades mode. The trades-mode fold
   /// (`applyTradesModePositionValuations`) walks per-day position
   /// deltas for these accounts and valuates the cumulative positions
   /// against the conversion service on the day's date. Recorded-value
   /// investment accounts are intentionally excluded — they contribute
-  /// via the snapshot fold instead. Reading the column directly off
-  /// the `account` table avoids carrying the full account row across
-  /// the position-row boundary.
+  /// via the snapshot fold instead. Classifying by the investment-like
+  /// type set (not the literal `type = 'investment'`) is what keeps
+  /// crypto/exchange market value out of the bank-balance sum and in
+  /// the investments total. Reading the column directly off the
+  /// `account` table avoids carrying the full account row across the
+  /// position-row boundary.
   static func fetchTradesModeInvestmentAccountIds(
     database: Database
   ) throws -> Set<UUID> {
@@ -55,7 +65,8 @@ extension GRDBAnalysisRepository {
       database,
       sql: """
         SELECT id FROM account
-        WHERE type = 'investment' AND valuation_mode = 'calculatedFromTrades'
+        WHERE type IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
+          AND valuation_mode = 'calculatedFromTrades'
         """)
     var ids = Set<UUID>()
     ids.reserveCapacity(rows.count)
