@@ -165,7 +165,7 @@ struct AnalysisView: View {
   /// the Monthly Income & Expense table is tapped.
   private func monthTransactionsList(_ month: MonthlyIncomeExpense) -> some View {
     TransactionListView(
-      title: month.start.formatted(.dateTime.month(.wide).year()),
+      title: month.monthLabel,
       filter: month.transactionsFilter,
       accounts: accountStore.accounts,
       categories: categoryStore.categories,
