@@ -15,16 +15,15 @@ import GRDB
 /// Per-row conversion runs in Swift so the per-day rate-cache
 /// equivalence (Rule 5 of `INSTRUMENT_CONVERSION_GUIDE.md`) holds.
 ///
-/// **Investment-transfer split.** Transfers into investment accounts
-/// route to `earmarkedIncome` (positive) and `earmarkedExpense`
-/// (negative, sign-flipped on the way in). The CloudKit reference
-/// (`applyTransferLeg`) splits by sign at the leg level, so the SQL
-/// splits the SUM by sign — collapsing both directions would mis-count
-/// any day with both a deposit and a withdrawal. Pinned by
+/// **Column assignment.** `income`/`trade` legs feed the income column,
+/// `expense`/`transfer` legs the expense column. Because both legs of a
+/// transfer or trade share a column, their opposite signs cancel — a
+/// plain transfer nets to zero, a trade/FX conversion to its realised
+/// gain — so transfers never inflate the totals. Pinned by
 /// `AnalysisIncomeExpenseTests.investmentTransferClassification`.
 extension GRDBAnalysisRepository {
   /// One row of the SQL aggregation that drives `fetchIncomeAndExpense`.
-  /// Each row carries six conditional sums for one `(day, instrument)`
+  /// Each row carries four conditional sums for one `(day, instrument)`
   /// tuple. `day` is the ISO-8601 `YYYY-MM-DD` string returned by
   /// `DATE(t.date)` — parsed in Swift on the way out of the read
   /// closure so the `Database` reference doesn't escape into the
@@ -32,19 +31,19 @@ extension GRDBAnalysisRepository {
   struct IncomeAndExpenseRow: Sendable {
     let day: String
     let instrumentId: String
+    /// Available-funds base income: income/trade legs on current
+    /// accounts, minus the earmark amount of any income/trade earmark leg.
     let incomeQty: Int64
+    /// Available-funds base expense: expense/transfer legs on current
+    /// accounts, minus the earmark amount of any expense/transfer earmark
+    /// leg.
     let expenseQty: Int64
-    let earmarkedIncomeQty: Int64
-    let earmarkedExpenseQty: Int64
-    /// Sum of positive transfer-leg quantities into investment
-    /// accounts — routes to `earmarkedIncome` after conversion.
-    let investmentTransferInQty: Int64
-    /// Sum of negative transfer-leg quantities into investment
-    /// accounts — sign-flipped to positive and routed to
-    /// `earmarkedExpense` after conversion. Stored as the raw negative
-    /// SUM here so the signed-amount addition into `earmarkedProfit`
-    /// doesn't need a second column.
-    let investmentTransferOutQty: Int64
+    /// Investment layer, income side: income/trade legs on
+    /// investment-like accounts.
+    let investmentIncomeQty: Int64
+    /// Investment layer, expense side: expense/transfer legs on
+    /// investment-like accounts.
+    let investmentExpenseQty: Int64
   }
 
   /// Pair of SQL output rows and the instrument lookup. The lookup is
@@ -87,9 +86,9 @@ extension GRDBAnalysisRepository {
     var end: Date
     var income: InstrumentAmount
     var expense: InstrumentAmount
-    var earmarkedIncome: InstrumentAmount
-    var earmarkedExpense: InstrumentAmount
-    var earmarkedProfit: InstrumentAmount
+    var investmentIncome: InstrumentAmount
+    var investmentExpense: InstrumentAmount
+    var investmentProfit: InstrumentAmount
   }
 
   /// Bundle of converted per-row sums fed into a month bucket, so the
@@ -98,13 +97,11 @@ extension GRDBAnalysisRepository {
     let day: Date
     let income: InstrumentAmount
     let expense: InstrumentAmount
-    let earmarkedIncome: InstrumentAmount
-    let earmarkedExpense: InstrumentAmount
-    let investmentTransferIn: InstrumentAmount
-    let investmentTransferOut: InstrumentAmount
+    let investmentIncome: InstrumentAmount
+    let investmentExpense: InstrumentAmount
   }
 
-  /// Walks the SQL aggregation rows, converts each row's six sums to
+  /// Walks the SQL aggregation rows, converts each row's four sums to
   /// the profile instrument on the row's own day, and accumulates
   /// into per-financial-month buckets. Conversion runs outside the
   /// `database.read` closure (in this async helper) so the `Database`
@@ -121,13 +118,10 @@ extension GRDBAnalysisRepository {
   /// is rethrown immediately and never folded into the
   /// conversion-failure path.
   ///
-  /// **Investment-transfer fold-in.** Each row's
-  /// `investmentTransferInQty` (always positive) folds into
-  /// `earmarkedIncome` directly. `investmentTransferOutQty` (always
-  /// negative or zero) is sign-flipped before adding to
-  /// `earmarkedExpense` — preserving the CloudKit `applyTransferLeg`
-  /// semantics byte-for-byte. Both raw signed transfer sums also
-  /// accumulate into `earmarkedProfit`.
+  /// Each row carries four already-signed sums (base income/expense and
+  /// the investment-layer income/expense); the fold simply accumulates
+  /// them, with `investmentProfit` as the signed sum of the two
+  /// investment columns.
   @concurrent
   static func assembleIncomeAndExpense(
     aggregation: IncomeAndExpenseAggregation,
@@ -239,7 +233,7 @@ extension GRDBAnalysisRepository {
     }
   }
 
-  /// Converts each of the six per-row sums to the profile instrument
+  /// Converts each of the four per-row sums to the profile instrument
   /// on the row's `day`. Same-instrument rows incur zero
   /// conversion-service calls: zero-value columns short-circuit in
   /// `convertedQuantityIfNonZero` before reaching the conversion
@@ -264,17 +258,15 @@ extension GRDBAnalysisRepository {
       day: day,
       income: try await convert(row.incomeQty),
       expense: try await convert(row.expenseQty),
-      earmarkedIncome: try await convert(row.earmarkedIncomeQty),
-      earmarkedExpense: try await convert(row.earmarkedExpenseQty),
-      investmentTransferIn: try await convert(row.investmentTransferInQty),
-      investmentTransferOut: try await convert(row.investmentTransferOutQty))
+      investmentIncome: try await convert(row.investmentIncomeQty),
+      investmentExpense: try await convert(row.investmentExpenseQty))
   }
 
   /// Skip the conversion call when the storage value is zero — every
   /// CASE branch of the SQL emits `0` for non-matching legs, so most
   /// rows have several zero-value columns. Skipping the call keeps
   /// the conversion-service hit count tied to the row count rather
-  /// than six-times the row count, preserving the per-row counter
+  /// than four-times the row count, preserving the per-row counter
   /// invariants asserted by `GRDBIncomeAndExpenseAssembleTests`.
   private static func convertedQuantityIfNonZero(
     storageValue: Int64,
@@ -306,27 +298,20 @@ extension GRDBAnalysisRepository {
       end: day,
       income: .zero(instrument: instrument),
       expense: .zero(instrument: instrument),
-      earmarkedIncome: .zero(instrument: instrument),
-      earmarkedExpense: .zero(instrument: instrument),
-      earmarkedProfit: .zero(instrument: instrument))
+      investmentIncome: .zero(instrument: instrument),
+      investmentExpense: .zero(instrument: instrument),
+      investmentProfit: .zero(instrument: instrument))
   }
 
-  /// Apply one converted row's six sums into a month bucket.
+  /// Apply one converted row's four sums into a month bucket.
   ///
-  /// Investment-transfer routing matches the CloudKit
-  /// `applyTransferLeg` semantics byte-for-byte:
-  /// - positive transfers (`investmentTransferIn`) add directly to
-  ///   `earmarkedIncome`;
-  /// - negative transfers (`investmentTransferOut`, stored as the raw
-  ///   negative sum) are sign-flipped to a positive contribution to
-  ///   `earmarkedExpense`;
-  /// - both raw transfer sums add to `earmarkedProfit`.
-  ///
-  /// Non-transfer earmarked income/expense legs flow through with
-  /// their original sign, matching `applyByType`'s expense branch
-  /// (refunds with positive `expenseQty` reduce the negative expense
-  /// total — see
-  /// `AnalysisIncomeExpenseTests.expenseRefundsReduceTotal`).
+  /// `income`/`expense` are the available-funds base (the SQL has already
+  /// folded in the earmark reserve adjustment, so a refund — a
+  /// positive-quantity `.expense` leg — still reduces the negative expense
+  /// total; see `AnalysisIncomeExpenseTests.expenseRefundsReduceTotal`).
+  /// `investmentIncome`/`investmentExpense` are the investment layer.
+  /// Both legs of a transfer/trade already carry their own sign in the
+  /// SQL sums, so they net within their column with no extra handling.
   private static func applyConvertedRow(
     _ row: ConvertedRowSums,
     into bucket: inout MonthBucket
@@ -335,14 +320,9 @@ extension GRDBAnalysisRepository {
     bucket.end = max(bucket.end, row.day)
     bucket.income += row.income
     bucket.expense += row.expense
-    bucket.earmarkedIncome += row.earmarkedIncome + row.investmentTransferIn
-    let investmentExpense = InstrumentAmount(
-      quantity: -row.investmentTransferOut.quantity,
-      instrument: row.investmentTransferOut.instrument)
-    bucket.earmarkedExpense += row.earmarkedExpense + investmentExpense
-    bucket.earmarkedProfit +=
-      row.earmarkedIncome + row.earmarkedExpense
-      + row.investmentTransferIn + row.investmentTransferOut
+    bucket.investmentIncome += row.investmentIncome
+    bucket.investmentExpense += row.investmentExpense
+    bucket.investmentProfit += row.investmentIncome + row.investmentExpense
   }
 
   /// Emits one `MonthlyIncomeExpense` per non-empty bucket and sorts
@@ -367,9 +347,9 @@ extension GRDBAnalysisRepository {
           income: bucket.income,
           expense: bucket.expense,
           profit: bucket.income + bucket.expense,
-          earmarkedIncome: bucket.earmarkedIncome,
-          earmarkedExpense: bucket.earmarkedExpense,
-          earmarkedProfit: bucket.earmarkedProfit,
+          investmentIncome: bucket.investmentIncome,
+          investmentExpense: bucket.investmentExpense,
+          investmentProfit: bucket.investmentProfit,
           hasUnavailableData: incompleteMonths.contains(month)))
     }
     return results.sorted { $0.month > $1.month }

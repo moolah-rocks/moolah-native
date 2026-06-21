@@ -224,8 +224,8 @@ enum InsightTestSupport {
       income: income,
       expense: expense,
       profit: income + expense,
-      earmarkedIncome: zero,
-      earmarkedExpense: zero,
-      earmarkedProfit: zero)
+      investmentIncome: zero,
+      investmentExpense: zero,
+      investmentProfit: zero)
   }
 }

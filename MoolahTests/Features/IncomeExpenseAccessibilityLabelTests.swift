@@ -17,8 +17,8 @@ struct IncomeExpenseAccessibilityLabelTests {
     start: Date = Date(timeIntervalSince1970: 1_704_067_200),  // 2024-01-01
     income: Decimal,
     expense: Decimal,
-    earmarkedIncome: Decimal = 0,
-    earmarkedExpense: Decimal = 0
+    investmentIncome: Decimal = 0,
+    investmentExpense: Decimal = 0
   ) -> MonthlyIncomeExpense {
     MonthlyIncomeExpense(
       month: month,
@@ -27,9 +27,9 @@ struct IncomeExpenseAccessibilityLabelTests {
       income: amount(income),
       expense: amount(expense),
       profit: amount(income - expense),
-      earmarkedIncome: amount(earmarkedIncome),
-      earmarkedExpense: amount(earmarkedExpense),
-      earmarkedProfit: amount(earmarkedIncome - earmarkedExpense)
+      investmentIncome: amount(investmentIncome),
+      investmentExpense: amount(investmentExpense),
+      investmentProfit: amount(investmentIncome - investmentExpense)
     )
   }
 
@@ -40,7 +40,7 @@ struct IncomeExpenseAccessibilityLabelTests {
     ]
 
     let label = IncomeExpenseTableCard.accessibilityLabel(
-      for: data[0], in: data, includeEarmarks: false)
+      for: data[0], in: data, includeInvestments: false)
 
     // Must mention every column so VoiceOver reads the whole row.
     #expect(label.contains("Income"))
@@ -55,18 +55,18 @@ struct IncomeExpenseAccessibilityLabelTests {
     #expect(label.contains(data[0].profit.formatted))
   }
 
-  @Test("includeEarmarks switches to earmark-inclusive totals")
+  @Test("includeInvestments switches to earmark-inclusive totals")
   func usesEarmarkTotalsWhenIncluded() {
     let data = [
       monthData(
         month: "202401", income: Decimal(5000), expense: Decimal(3000),
-        earmarkedIncome: Decimal(1000), earmarkedExpense: Decimal(500))
+        investmentIncome: Decimal(1000), investmentExpense: Decimal(500))
     ]
 
     let withEarmarks = IncomeExpenseTableCard.accessibilityLabel(
-      for: data[0], in: data, includeEarmarks: true)
+      for: data[0], in: data, includeInvestments: true)
     let withoutEarmarks = IncomeExpenseTableCard.accessibilityLabel(
-      for: data[0], in: data, includeEarmarks: false)
+      for: data[0], in: data, includeInvestments: false)
 
     // Earmark-inclusive label should show totalIncome/totalExpense, not the plain values.
     #expect(withEarmarks.contains(data[0].totalIncome.formatted))
@@ -85,10 +85,10 @@ struct IncomeExpenseAccessibilityLabelTests {
 
     // Row at index 1 should include cumulative total 2000 + 500 = 2500.
     let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
-      in: data, includeEarmarks: false)
+      in: data, includeInvestments: false)
     let cumulative = try #require(column[1])
     let label = IncomeExpenseTableCard.accessibilityLabel(
-      for: data[1], in: data, includeEarmarks: false)
+      for: data[1], in: data, includeInvestments: false)
 
     #expect(label.contains(cumulative.formatted))
   }
@@ -105,7 +105,7 @@ struct IncomeExpenseAccessibilityLabelTests {
     ]
 
     let label = IncomeExpenseTableCard.accessibilityLabel(
-      for: data[2], in: data, includeEarmarks: false)
+      for: data[2], in: data, includeInvestments: false)
 
     // Its own income/expense/savings are still announced...
     #expect(label.contains("Income"))
@@ -128,9 +128,9 @@ struct IncomeExpenseAccessibilityLabelTests {
       income: amount(0),
       expense: amount(0),
       profit: amount(0),
-      earmarkedIncome: amount(0),
-      earmarkedExpense: amount(0),
-      earmarkedProfit: amount(0),
+      investmentIncome: amount(0),
+      investmentExpense: amount(0),
+      investmentProfit: amount(0),
       hasUnavailableData: true)
   }
 }

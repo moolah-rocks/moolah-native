@@ -135,13 +135,11 @@ struct GRDBIncomeExpenseConversionTests {
     #expect(month.income.instrument == .defaultTestInstrument)
   }
 
-  @Test("investment-account transfer with negative quantity routes to earmarkedExpense")
+  @Test("investment withdrawal: investment leg to investment layer, bank leg to base")
   func investmentTransferNegativeRoutesToEarmarkedExpense() async throws {
-    // A transfer leg into an investment account with a negative
-    // quantity (a withdrawal) must surface as earmarkedExpense — the
-    // CloudKit `applyTransferLeg` helper sign-flips the negative
-    // amount to a positive earmarkedExpense entry. Pin the
-    // SQL-driven path matches that contract.
+    // Transfers land in the expense column (both legs), so a withdrawal
+    // splits across layers by account: the investment-side leg into the
+    // investment layer, the bank-side leg into the available-funds base.
     let day = try AnalysisTestHelpers.utcDate(year: 2025, month: 7, day: 10, hour: 12)
     let conversion = DateBasedFixedConversionService(rates: [:])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
@@ -170,18 +168,20 @@ struct GRDBIncomeExpenseConversionTests {
     let data = try await backend.analysis.fetchIncomeAndExpense(monthEnd: 25, after: nil)
 
     let month = try #require(data.first)
-    // Bank-side leg is a non-investment transfer — does not contribute.
-    // Investment-side leg quantity = -20, sign-flipped on the way into
-    // earmarkedExpense per the CloudKit `applyTransferLeg` semantics.
-    #expect(month.earmarkedExpense.quantity == 20)
-    #expect(month.earmarkedIncome.quantity == 0)
+    // Investment-side leg (-20) → investment layer; bank-side leg (+20) →
+    // base. With investments included they net to zero.
+    #expect(month.investmentExpense.quantity == -20)
+    #expect(month.investmentIncome.quantity == 0)
+    #expect(month.expense.quantity == 20)
+    #expect(month.totalExpense.quantity == 0)
   }
 
-  @Test("investment-account transfer with positive quantity routes to earmarkedIncome")
+  @Test("investment deposit: investment leg to investment layer, bank leg to base")
   func investmentTransferPositiveRoutesToEarmarkedIncome() async throws {
     // Sister test of `investmentTransferNegativeRoutesToEarmarkedExpense`
-    // — a deposit into the investment account (positive quantity) must
-    // contribute to `earmarkedIncome`, with no `earmarkedExpense` entry.
+    // — a deposit's bank-side leg lowers the available-funds base while
+    // the investment-side leg lands in the investment layer; they net to
+    // zero with investments included (only own money moved).
     let day = try AnalysisTestHelpers.utcDate(year: 2025, month: 7, day: 11, hour: 12)
     let conversion = DateBasedFixedConversionService(rates: [:])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
@@ -210,7 +210,11 @@ struct GRDBIncomeExpenseConversionTests {
     let data = try await backend.analysis.fetchIncomeAndExpense(monthEnd: 25, after: nil)
 
     let month = try #require(data.first)
-    #expect(month.earmarkedIncome.quantity == 50)
-    #expect(month.earmarkedExpense.quantity == 0)
+    // Investment-side leg (+50) → investment layer; bank-side leg (-50) →
+    // base. With investments included they net to zero.
+    #expect(month.investmentExpense.quantity == 50)
+    #expect(month.investmentIncome.quantity == 0)
+    #expect(month.expense.quantity == -50)
+    #expect(month.totalExpense.quantity == 0)
   }
 }

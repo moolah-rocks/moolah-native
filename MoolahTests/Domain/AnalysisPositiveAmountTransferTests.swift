@@ -88,14 +88,20 @@ struct AnalysisPositiveAmountTransferTests {
     #expect(!data.isEmpty)
     let month = data[0]
 
-    // Positive amount from investment: profit contribution = +5000 -> earmarkedIncome
-    #expect(month.earmarkedIncome.quantity == 50)
-    #expect(month.earmarkedExpense.quantity == 0)
-    #expect(month.earmarkedProfit.quantity == 50)
+    // Transfers go to the expense column. The checking leg (-50) is base
+    // expense; the investment leg (+50) is investment expense. The
+    // investment layer's profit rises by 50 (the asset grew), the base
+    // falls by 50 (cash left), and the whole picture nets to zero.
+    #expect(month.income.quantity == 0)
+    #expect(month.expense.quantity == -50)
+    #expect(month.investmentIncome.quantity == 0)
+    #expect(month.investmentExpense.quantity == 50)
+    #expect(month.investmentProfit.quantity == 50)
+    #expect(month.totalProfit.quantity == 0)
   }
 
-  @Test("income/expense earmarkedProfit matches server formula for mixed transfers")
-  func earmarkedProfitMatchesServer() async throws {
+  @Test("income/expense investmentProfit matches server formula for mixed transfers")
+  func investmentProfitMatchesServer() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let checking = Account(
       id: UUID(), name: "Checking", type: .bank, instrument: .defaultTestInstrument)
@@ -112,19 +118,17 @@ struct AnalysisPositiveAmountTransferTests {
     let data = try await backend.analysis.fetchIncomeAndExpense(monthEnd: 25, after: nil)
     let month = data[0]
 
-    // Server earmarkedProfit formula: sum(amount when from_inv) + sum(-amount when to_inv)
-    // = (-500 + 3000) + -(-1000) = 2500 + 1000 = 3500 cents = 35.00
-    #expect(month.earmarkedProfit.quantity == 35)
+    // Transfers all land in the expense column (both legs), so they net by
+    // sign within the investment layer rather than splitting income/expense.
+    // Investment legs: +10 (deposit) -5 (withdrawal) +30 (dividend) = +35.
+    #expect(month.investmentIncome.quantity == 0)
+    #expect(month.investmentExpense.quantity == 35)
+    #expect(month.investmentProfit.quantity == 35)
 
-    // Breakdown:
-    // Deposit (to_inv, -1000): profitContribution = +1000 -> earmarkedIncome
-    // Withdrawal (from_inv, -500): profitContribution = -500 -> earmarkedExpense
-    // Dividend (from_inv, +3000): profitContribution = +3000 -> earmarkedIncome
-    #expect(month.earmarkedIncome.quantity == 40)
-    #expect(month.earmarkedExpense.quantity == 5)
-
-    // earmarkedProfit is computed independently (not derived from earmarked±)
-    #expect(month.earmarkedProfit.quantity == 35)
+    // Current (checking) legs: -10 +5 -30 = -35 → base expense; the whole
+    // picture (base + investments) nets to zero (only own money moved).
+    #expect(month.expense.quantity == -35)
+    #expect(month.totalProfit.quantity == 0)
   }
 
   @Test("dailyBalances excludes nil-accountId legs from balance")

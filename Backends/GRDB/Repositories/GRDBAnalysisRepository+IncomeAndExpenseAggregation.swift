@@ -6,24 +6,63 @@ import GRDB
 /// point. The Swift assembly path (the per-row conversion +
 /// month-bucket fold) lives in `+IncomeAndExpense.swift`.
 extension GRDBAnalysisRepository {
+  /// Comma-separated, SQL-quoted list of the `AccountType` raw values
+  /// that are investment-like (`AccountType.isInvestmentLike`), e.g.
+  /// `'investment', 'crypto', 'exchange'`. Derived from
+  /// `AccountType.allCases`, so adding a new investment-like account
+  /// type updates every aggregation (and its plan-pinning mirror) from
+  /// this one place — there is nothing to keep in sync.
+  ///
+  /// Safe to interpolate directly into SQL: every element is a
+  /// compile-time enum raw value, never user input, so there is no
+  /// injection surface. Exposed (not file-private) so tests can
+  /// reference the same value rather than duplicating the literal.
+  static let investmentLikeTypesSQLList: String =
+    AccountType.allCases
+    .filter(\.isInvestmentLike)
+    .map { "'\($0.rawValue)'" }
+    .joined(separator: ", ")
+
   /// Runs the per-(day, instrument) conditional-sum aggregation
   /// pinned by
   /// `AnalysisAggregationPlanPinningTests.fetchIncomeAndExpenseUsesTypeAccountIndex`.
   ///
-  /// **LEFT JOIN account.** The transfer branches read `account.type`
-  /// to detect investment-account legs (`a.type` is NULL for
-  /// nil-`account_id` legs). `income_qty` / `expense_qty` require
-  /// `a.type IS NOT NULL` to mirror CloudKit `applyByType`'s
-  /// `hasAccount` guard but DO NOT exclude investment accounts — a
-  /// dividend (`.income` on a brokerage) or a brokerage fee
-  /// (`.expense` on a brokerage) lands in the main totals. The
-  /// `a.type = 'investment'` predicate only narrows the
-  /// `investment_transfer_*` columns.
+  /// **LEFT JOIN account.** Every branch reads `account.type` to split
+  /// legs by where the money lives (`a.type` is NULL for
+  /// nil-`account_id` legs).
   ///
-  /// **Why six aggregates in one query.** A single pass over the leg
-  /// index keeps all six sums consistent with one MVCC snapshot —
-  /// six independent queries could surface inconsistent totals if a
-  /// writer commits between them.
+  /// **Column assignment by leg type.** `income` and `trade` legs land in
+  /// the Income column; `expense` and `transfer` legs land in the Expense
+  /// column; `openingBalance` is excluded. Putting *both* legs of a
+  /// transfer (or trade) in the same column means their opposite signs
+  /// cancel, so a transfer between two accounts never inflates a column —
+  /// it nets to zero (plain transfer) or to the realised gain (a trade /
+  /// FX conversion priced at each leg's own day-rate). Trades are treated
+  /// as income (you expect to gain), transfers as expense.
+  ///
+  /// - `income_qty` / `expense_qty` are the **available-funds base** (the
+  ///   figure shown with the investments toggle off). Per leg this is
+  ///   `(current-account amount) − (earmark amount)`: a current-account
+  ///   leg counts (`+`), and every earmark leg subtracts its amount
+  ///   (`−`) — so earmark reserve movements are *always* applied. A leg
+  ///   on both a current account and an earmark nets to zero (cash
+  ///   arrived but is reserved), and an account-less earmark leg flips
+  ///   sign (setting money aside reads as a reduction, releasing it as a
+  ///   gain). Investment-account legs are excluded here.
+  /// - `investment_income_qty` / `investment_expense_qty` are the
+  ///   **investment layer** added by the "Include Investments" toggle:
+  ///   all legs on investment-like accounts (dividends, staking, token
+  ///   unlocks, fees, plus the investment side of contributions /
+  ///   withdrawals / trades).
+  ///
+  /// The investment-like set comes from `AccountType.isInvestmentLike`
+  /// via `investmentLikeTypesSQLList`, so every investment-like account
+  /// type is treated the same way.
+  ///
+  /// **Why four aggregates in one query.** A single pass over the leg
+  /// index keeps all four sums consistent with one MVCC snapshot —
+  /// separate queries could surface inconsistent totals if a writer
+  /// commits between them.
   static func fetchIncomeAndExpenseAggregation(
     database: any DatabaseReader,
     instruments: [String: Instrument],
@@ -49,10 +88,8 @@ extension GRDBAnalysisRepository {
       instrumentId: instrumentId,
       incomeQty: row["income_qty"] ?? 0,
       expenseQty: row["expense_qty"] ?? 0,
-      earmarkedIncomeQty: row["earmarked_income_qty"] ?? 0,
-      earmarkedExpenseQty: row["earmarked_expense_qty"] ?? 0,
-      investmentTransferInQty: row["investment_transfer_in_qty"] ?? 0,
-      investmentTransferOutQty: row["investment_transfer_out_qty"] ?? 0)
+      investmentIncomeQty: row["investment_income_qty"] ?? 0,
+      investmentExpenseQty: row["investment_expense_qty"] ?? 0)
   }
 }
 
@@ -66,26 +103,30 @@ private let incomeAndExpenseAggregationSQL = """
   SELECT
       DATE(t.date)         AS day,
       leg.instrument_id    AS instrument_id,
-      SUM(CASE WHEN leg.type = 'income'
-                AND a.type IS NOT NULL
-               THEN leg.quantity ELSE 0 END)        AS income_qty,
-      SUM(CASE WHEN leg.type = 'expense'
-                AND a.type IS NOT NULL
-               THEN leg.quantity ELSE 0 END)        AS expense_qty,
-      SUM(CASE WHEN leg.earmark_id IS NOT NULL
-                AND leg.type = 'income'
-               THEN leg.quantity ELSE 0 END)        AS earmarked_income_qty,
-      SUM(CASE WHEN leg.earmark_id IS NOT NULL
-                AND leg.type = 'expense'
-               THEN leg.quantity ELSE 0 END)        AS earmarked_expense_qty,
-      SUM(CASE WHEN leg.type = 'transfer'
-                AND a.type = 'investment'
-                AND leg.quantity > 0
-               THEN leg.quantity ELSE 0 END)        AS investment_transfer_in_qty,
-      SUM(CASE WHEN leg.type = 'transfer'
-                AND a.type = 'investment'
-                AND leg.quantity < 0
-               THEN leg.quantity ELSE 0 END)        AS investment_transfer_out_qty
+      SUM(
+          (CASE WHEN leg.type IN ('income', 'trade')
+                 AND a.type IS NOT NULL
+                 AND a.type NOT IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
+                THEN leg.quantity ELSE 0 END)
+        - (CASE WHEN leg.type IN ('income', 'trade')
+                 AND leg.earmark_id IS NOT NULL
+                THEN leg.quantity ELSE 0 END)
+      )                                              AS income_qty,
+      SUM(
+          (CASE WHEN leg.type IN ('expense', 'transfer')
+                 AND a.type IS NOT NULL
+                 AND a.type NOT IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
+                THEN leg.quantity ELSE 0 END)
+        - (CASE WHEN leg.type IN ('expense', 'transfer')
+                 AND leg.earmark_id IS NOT NULL
+                THEN leg.quantity ELSE 0 END)
+      )                                              AS expense_qty,
+      SUM(CASE WHEN leg.type IN ('income', 'trade')
+                AND a.type IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
+               THEN leg.quantity ELSE 0 END)        AS investment_income_qty,
+      SUM(CASE WHEN leg.type IN ('expense', 'transfer')
+                AND a.type IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
+               THEN leg.quantity ELSE 0 END)        AS investment_expense_qty
   FROM transaction_leg leg
   JOIN "transaction"    t ON leg.transaction_id = t.id
   LEFT JOIN account     a ON leg.account_id = a.id
