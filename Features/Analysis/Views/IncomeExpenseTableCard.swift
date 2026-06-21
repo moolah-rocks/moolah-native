@@ -2,6 +2,10 @@ import SwiftUI
 
 struct IncomeExpenseTableCard: View {
   let data: [MonthlyIncomeExpense]
+  /// Invoked when a month row is tapped, to drill into that month's
+  /// transactions. Defaults to a no-op so previews and any non-navigating
+  /// host render without wiring it.
+  var onSelectMonth: (MonthlyIncomeExpense) -> Void = { _ in }
 
   private static let initialVisibleCount = 6
   private static let loadMoreCount = 6
@@ -88,36 +92,14 @@ struct IncomeExpenseTableCard: View {
 
   private func dataRow(for item: MonthlyIncomeExpense) -> some View {
     VStack(spacing: 0) {
-      HStack(spacing: 12) {
-        VStack(alignment: .leading, spacing: 2) {
-          HStack(spacing: 4) {
-            Text(Self.monthLabel(for: item))
-              .font(.body)
-              .monospacedDigit()
-            if item.hasUnavailableData {
-              // Visual hint that the row's prices are still loading. The row's
-              // combined a11y label already announces this, so hide it here.
-              Image(systemName: "clock")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            }
-          }
-          Text(monthsAgoLabel(for: item))
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .monospacedDigit()
-        }
-        .frame(minWidth: monthColumnMinWidth, alignment: .leading)
-        amountColumns(for: item)
-        cumulativeCell(for: item)
-          .frame(minWidth: totalColumnMinWidth, alignment: .trailing)
+      Button {
+        onSelectMonth(item)
+      } label: {
+        rowContent(for: item)
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
-      .accessibilityElement(children: .combine)
-      .accessibilityLabel(
-        Self.accessibilityLabel(for: item, in: data, includeInvestments: includeInvestments))
+      .buttonStyle(.plain)
+      .accessibilityIdentifier(UITestIdentifiers.IncomeExpenseTable.row(item.month))
+      .accessibilityHint("Shows this month's transactions")
       Divider()
     }
     .onAppear {
@@ -125,6 +107,40 @@ struct IncomeExpenseTableCard: View {
         visibleCount += Self.loadMoreCount
       }
     }
+  }
+
+  private func rowContent(for item: MonthlyIncomeExpense) -> some View {
+    HStack(spacing: 12) {
+      VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 4) {
+          Text(Self.monthLabel(for: item))
+            .font(.body)
+            .monospacedDigit()
+          if item.hasUnavailableData {
+            // Visual hint that the row's prices are still loading. The row's
+            // combined a11y label already announces this, so hide it here.
+            Image(systemName: "clock")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .accessibilityHidden(true)
+          }
+        }
+        Text(monthsAgoLabel(for: item))
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .monospacedDigit()
+      }
+      .frame(minWidth: monthColumnMinWidth, alignment: .leading)
+      amountColumns(for: item)
+      cumulativeCell(for: item)
+        .frame(minWidth: totalColumnMinWidth, alignment: .trailing)
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 8)
+    .contentShape(Rectangle())
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(
+      Self.accessibilityLabel(for: item, in: data, includeInvestments: includeInvestments))
   }
 
   /// Income, expense, and savings columns. When the month's prices are still

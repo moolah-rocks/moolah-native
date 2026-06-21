@@ -16,6 +16,10 @@ struct AnalysisView: View {
   /// cycle (focus write → focus-dependent body invalidation → rewrite → …).
   var onNavigate: (SidebarSelection) -> Void = { _ in }
   @State private var selectedUpcomingTransaction: Transaction?
+  /// The month whose transactions are being drilled into from the
+  /// Monthly Income & Expense table. Non-nil pushes the month's
+  /// transaction list onto the navigation stack.
+  @State private var selectedMonth: MonthlyIncomeExpense?
 
   var body: some View {
     ScrollView {
@@ -46,6 +50,9 @@ struct AnalysisView: View {
       transactionStore: transactionStore,
       showRecurrence: true
     )
+    .navigationDestination(item: $selectedMonth) { month in
+      monthTransactionsList(month)
+    }
     .profileNavigationTitle("Analysis")
     .focusedSceneValue(\.newTransactionAction, createNewScheduledTransaction)
     .focusedSceneValue(
@@ -154,6 +161,19 @@ struct AnalysisView: View {
     }
   }
 
+  /// Transaction list for a single financial month, pushed when a row of
+  /// the Monthly Income & Expense table is tapped.
+  private func monthTransactionsList(_ month: MonthlyIncomeExpense) -> some View {
+    TransactionListView(
+      title: month.start.formatted(.dateTime.month(.wide).year()),
+      filter: month.transactionsFilter,
+      accounts: accountStore.accounts,
+      categories: categoryStore.categories,
+      earmarks: earmarkStore.earmarks,
+      transactionStore: transactionStore
+    )
+  }
+
   @ViewBuilder
   private func contentView(store: AnalysisStore) -> some View {
     VStack(spacing: 20) {
@@ -193,7 +213,9 @@ struct AnalysisView: View {
           transactionStore: transactionStore,
           selectedTransaction: $selectedUpcomingTransaction
         )
-        IncomeExpenseTableCard(data: store.displayedIncomeAndExpense)
+        IncomeExpenseTableCard(
+          data: store.displayedIncomeAndExpense,
+          onSelectMonth: { selectedMonth = $0 })
       }
     #else
       UpcomingTransactionsCard(

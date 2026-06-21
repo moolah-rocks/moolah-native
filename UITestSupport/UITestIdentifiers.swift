@@ -36,6 +36,17 @@ public enum UITestIdentifiers {
     public static let spamToggleButton = "transactionlist.toolbar.spamToggle"
   }
 
+  // MARK: - IncomeExpenseTable
+
+  public enum IncomeExpenseTable {
+    /// Tappable row of the Monthly Income & Expense table, keyed by the
+    /// financial-month "YYYYMM" string. Tapping drills into that month's
+    /// transactions.
+    public static func row(_ month: String) -> String {
+      "incomeexpensetable.row.\(month)"
+    }
+  }
+
   // MARK: - RecentlyAdded
 
   public enum RecentlyAdded {
