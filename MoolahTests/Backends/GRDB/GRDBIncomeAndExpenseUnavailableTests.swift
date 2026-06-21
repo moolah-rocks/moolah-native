@@ -29,8 +29,7 @@ struct GRDBIncomeAndExpenseUnavailableTests {
     .init(
       day: day, instrumentId: Self.usd,
       incomeQty: incomeQty, expenseQty: 0,
-      earmarkedIncomeQty: 0, earmarkedExpenseQty: 0,
-      investmentTransferInQty: 0, investmentTransferOutQty: 0)
+      investmentIncomeQty: 0, investmentExpenseQty: 0)
   }
 
   private func aggregation(

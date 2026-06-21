@@ -33,6 +33,18 @@ enum AccountType: String, Codable, Sendable, CaseIterable {
     }
   }
 
+  /// Whether this type holds investments rather than day-to-day
+  /// spending money — investment brokerages, crypto wallets, and
+  /// centralised exchanges. Derived from ``bucket`` so the
+  /// classification has a single source of truth (and a new
+  /// `AccountType` case is forced to pick a bucket, which decides this
+  /// too). Analysis aggregations use this to route investment-account
+  /// activity into the earmarked totals rather than the headline
+  /// income/expense figures.
+  var isInvestmentLike: Bool {
+    bucket == .investments
+  }
+
   /// Human-readable type label shown in account creation, edit, and
   /// sidebar grouping UI.
   var displayName: String {

@@ -37,18 +37,15 @@ struct GRDBIncomeAndExpenseAssembleTests {
       .init(
         day: "2025-01-15", instrumentId: usd,
         incomeQty: 100, expenseQty: 0,
-        earmarkedIncomeQty: 0, earmarkedExpenseQty: 0,
-        investmentTransferInQty: 0, investmentTransferOutQty: 0),
+        investmentIncomeQty: 0, investmentExpenseQty: 0),
       .init(
         day: "2025-01-16", instrumentId: usd,
         incomeQty: 200, expenseQty: 0,
-        earmarkedIncomeQty: 0, earmarkedExpenseQty: 0,
-        investmentTransferInQty: 0, investmentTransferOutQty: 0),
+        investmentIncomeQty: 0, investmentExpenseQty: 0),
       .init(
         day: "2025-01-17", instrumentId: usd,
         incomeQty: 300, expenseQty: 0,
-        earmarkedIncomeQty: 0, earmarkedExpenseQty: 0,
-        investmentTransferInQty: 0, investmentTransferOutQty: 0),
+        investmentIncomeQty: 0, investmentExpenseQty: 0),
     ]
     let instrumentMap: [String: Instrument] = [usd: .fiat(code: usd)]
     return .init(rows: rows, instrumentMap: instrumentMap)
@@ -211,13 +208,11 @@ struct GRDBIncomeAndExpenseAssembleTests {
         .init(
           day: dayOneString, instrumentId: usd,
           incomeQty: scaledHundred, expenseQty: 0,
-          earmarkedIncomeQty: 0, earmarkedExpenseQty: 0,
-          investmentTransferInQty: 0, investmentTransferOutQty: 0),
+          investmentIncomeQty: 0, investmentExpenseQty: 0),
         .init(
           day: dayTwoString, instrumentId: usd,
           incomeQty: scaledHundred, expenseQty: 0,
-          earmarkedIncomeQty: 0, earmarkedExpenseQty: 0,
-          investmentTransferInQty: 0, investmentTransferOutQty: 0),
+          investmentIncomeQty: 0, investmentExpenseQty: 0),
       ],
       instrumentMap: [usd: .fiat(code: usd)])
     let handlers = GRDBAnalysisRepository.IncomeAndExpenseHandlers(

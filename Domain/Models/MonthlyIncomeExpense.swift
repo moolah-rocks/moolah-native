@@ -13,12 +13,20 @@ struct MonthlyIncomeExpense: Sendable, Identifiable, Hashable {
   /// Last transaction date in this financial month (for display)
   let end: Date
 
-  // --- Non-earmarked income & expenses ---
+  // --- Available-funds base (always includes earmark reserve movements) ---
 
-  /// Total income (excluding earmarked income) in cents
+  /// Income tracking available (spendable) funds: income legs on a
+  /// spending account (bank / credit card / asset), with earmark reserve
+  /// movements always applied. Setting money aside reads as a reduction,
+  /// releasing it as a gain, and a spending-account leg that is also
+  /// earmarked nets to zero (the cash arrived but is reserved). Excludes
+  /// investment accounts — those are added via `investmentIncome`.
   let income: InstrumentAmount
 
-  /// Total expenses (excluding earmarked expenses) in cents
+  /// Expenses tracking available funds: expense legs on a spending
+  /// account, with earmark reserve movements always applied — so a
+  /// bank-paid-but-earmarked bill (e.g. a pre-funded tax payment) nets to
+  /// zero. Excludes investment accounts.
   let expense: InstrumentAmount
 
   /// Profit = income + expense (can be negative). Expenses are stored as
@@ -26,16 +34,23 @@ struct MonthlyIncomeExpense: Sendable, Identifiable, Hashable {
   /// sum of the two signed amounts rather than a subtraction.
   let profit: InstrumentAmount
 
-  // --- Earmarked income & expenses ---
+  // --- Investment layer (added by the "Include Investments" toggle) ---
 
-  /// Income allocated to earmarks (including investment contributions)
-  let earmarkedIncome: InstrumentAmount
+  /// Investment-side income: income legs on investment / crypto /
+  /// exchange accounts (dividends, staking, airdrops, token unlocks) and
+  /// contributions transferred into investment accounts. Added to
+  /// `income` for the toggle-on (cash + investments) view.
+  let investmentIncome: InstrumentAmount
 
-  /// Expenses paid from earmarks (including investment withdrawals)
-  let earmarkedExpense: InstrumentAmount
+  /// Investment-side expenses: expense legs on investment / crypto /
+  /// exchange accounts (brokerage / exchange / network fees) and
+  /// withdrawals transferred out of investment accounts. Added to
+  /// `expense` for the toggle-on view.
+  let investmentExpense: InstrumentAmount
 
-  /// Earmarked profit = earmarkedIncome - earmarkedExpense
-  let earmarkedProfit: InstrumentAmount
+  /// Investment profit = investmentIncome + investmentExpense (signed
+  /// sum). Added to `profit` for the toggle-on savings figure.
+  let investmentProfit: InstrumentAmount
 
   /// True when one or more rows in this month could not be priced due to a
   /// transient conversion error (e.g. crypto prices not yet warmed). The
@@ -53,9 +68,9 @@ struct MonthlyIncomeExpense: Sendable, Identifiable, Hashable {
     income: InstrumentAmount,
     expense: InstrumentAmount,
     profit: InstrumentAmount,
-    earmarkedIncome: InstrumentAmount,
-    earmarkedExpense: InstrumentAmount,
-    earmarkedProfit: InstrumentAmount,
+    investmentIncome: InstrumentAmount,
+    investmentExpense: InstrumentAmount,
+    investmentProfit: InstrumentAmount,
     hasUnavailableData: Bool = false
   ) {
     self.month = month
@@ -64,9 +79,9 @@ struct MonthlyIncomeExpense: Sendable, Identifiable, Hashable {
     self.income = income
     self.expense = expense
     self.profit = profit
-    self.earmarkedIncome = earmarkedIncome
-    self.earmarkedExpense = earmarkedExpense
-    self.earmarkedProfit = earmarkedProfit
+    self.investmentIncome = investmentIncome
+    self.investmentExpense = investmentExpense
+    self.investmentProfit = investmentProfit
     self.hasUnavailableData = hasUnavailableData
   }
 }
@@ -79,9 +94,9 @@ extension MonthlyIncomeExpense: Codable {
     case income
     case expense
     case profit
-    case earmarkedIncome
-    case earmarkedExpense
-    case earmarkedProfit
+    case investmentIncome
+    case investmentExpense
+    case investmentProfit
     case hasUnavailableData
   }
 
@@ -93,9 +108,9 @@ extension MonthlyIncomeExpense: Codable {
     income = try container.decode(InstrumentAmount.self, forKey: .income)
     expense = try container.decode(InstrumentAmount.self, forKey: .expense)
     profit = try container.decode(InstrumentAmount.self, forKey: .profit)
-    earmarkedIncome = try container.decode(InstrumentAmount.self, forKey: .earmarkedIncome)
-    earmarkedExpense = try container.decode(InstrumentAmount.self, forKey: .earmarkedExpense)
-    earmarkedProfit = try container.decode(InstrumentAmount.self, forKey: .earmarkedProfit)
+    investmentIncome = try container.decode(InstrumentAmount.self, forKey: .investmentIncome)
+    investmentExpense = try container.decode(InstrumentAmount.self, forKey: .investmentExpense)
+    investmentProfit = try container.decode(InstrumentAmount.self, forKey: .investmentProfit)
     hasUnavailableData =
       (try container.decodeIfPresent(Bool.self, forKey: .hasUnavailableData)) ?? false
   }
@@ -108,26 +123,26 @@ extension MonthlyIncomeExpense: Codable {
     try container.encode(income, forKey: .income)
     try container.encode(expense, forKey: .expense)
     try container.encode(profit, forKey: .profit)
-    try container.encode(earmarkedIncome, forKey: .earmarkedIncome)
-    try container.encode(earmarkedExpense, forKey: .earmarkedExpense)
-    try container.encode(earmarkedProfit, forKey: .earmarkedProfit)
+    try container.encode(investmentIncome, forKey: .investmentIncome)
+    try container.encode(investmentExpense, forKey: .investmentExpense)
+    try container.encode(investmentProfit, forKey: .investmentProfit)
     try container.encode(hasUnavailableData, forKey: .hasUnavailableData)
   }
 }
 
 extension MonthlyIncomeExpense {
-  /// Compute total income (including earmarks)
+  /// Total income including the investment layer (cash + investments).
   var totalIncome: InstrumentAmount {
-    income + earmarkedIncome
+    income + investmentIncome
   }
 
-  /// Compute total expenses (including earmarks)
+  /// Total expenses including the investment layer.
   var totalExpense: InstrumentAmount {
-    expense + earmarkedExpense
+    expense + investmentExpense
   }
 
-  /// Compute total profit (including earmarks)
+  /// Total profit including the investment layer.
   var totalProfit: InstrumentAmount {
-    profit + earmarkedProfit
+    profit + investmentProfit
   }
 }

@@ -16,8 +16,8 @@ struct IncomeExpenseCumulativeSavingsTests {
     month: String,
     income: Decimal,
     expense: Decimal,
-    earmarkedIncome: Decimal = 0,
-    earmarkedExpense: Decimal = 0
+    investmentIncome: Decimal = 0,
+    investmentExpense: Decimal = 0
   ) -> MonthlyIncomeExpense {
     MonthlyIncomeExpense(
       month: month,
@@ -26,9 +26,9 @@ struct IncomeExpenseCumulativeSavingsTests {
       income: amount(income),
       expense: amount(expense),
       profit: amount(income - expense),
-      earmarkedIncome: amount(earmarkedIncome),
-      earmarkedExpense: amount(earmarkedExpense),
-      earmarkedProfit: amount(earmarkedIncome - earmarkedExpense)
+      investmentIncome: amount(investmentIncome),
+      investmentExpense: amount(investmentExpense),
+      investmentProfit: amount(investmentIncome - investmentExpense)
     )
   }
 
@@ -41,7 +41,7 @@ struct IncomeExpenseCumulativeSavingsTests {
     ]
 
     let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
-      in: data, includeEarmarks: false)
+      in: data, includeInvestments: false)
 
     let first = try #require(column[0])
     #expect(first.quantity == Decimal(2000))  // 5000 - 3000
@@ -56,7 +56,7 @@ struct IncomeExpenseCumulativeSavingsTests {
     ]
 
     let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
-      in: data, includeEarmarks: false)
+      in: data, includeInvestments: false)
 
     // (5000 - 3000) + (4000 - 3500) = 2000 + 500 = 2500
     let second = try #require(column[1])
@@ -72,28 +72,28 @@ struct IncomeExpenseCumulativeSavingsTests {
     ]
 
     let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
-      in: data, includeEarmarks: false)
+      in: data, includeInvestments: false)
 
     // 2000 + 500 + 2500 = 5000
     let last = try #require(column[2])
     #expect(last.quantity == Decimal(5000))
   }
 
-  @Test("includeEarmarks uses totalProfit instead of profit")
-  func includeEarmarksUsesTotalProfit() throws {
+  @Test("includeInvestments uses totalProfit instead of profit")
+  func includeInvestmentsUsesTotalProfit() throws {
     let data = [
       monthData(
         month: "202604", income: Decimal(5000), expense: Decimal(3000),
-        earmarkedIncome: Decimal(1000), earmarkedExpense: Decimal(500)),
+        investmentIncome: Decimal(1000), investmentExpense: Decimal(500)),
       monthData(
         month: "202603", income: Decimal(4000), expense: Decimal(3500),
-        earmarkedIncome: Decimal(200), earmarkedExpense: Decimal(100)),
+        investmentIncome: Decimal(200), investmentExpense: Decimal(100)),
     ]
 
     let withoutEarmarks = try #require(
-      IncomeExpenseTableCard.cumulativeSavingsColumn(in: data, includeEarmarks: false)[1])
+      IncomeExpenseTableCard.cumulativeSavingsColumn(in: data, includeInvestments: false)[1])
     let withEarmarks = try #require(
-      IncomeExpenseTableCard.cumulativeSavingsColumn(in: data, includeEarmarks: true)[1])
+      IncomeExpenseTableCard.cumulativeSavingsColumn(in: data, includeInvestments: true)[1])
 
     // Without: (5000-3000) + (4000-3500) = 2500
     #expect(withoutEarmarks.quantity == Decimal(2500))
@@ -108,7 +108,7 @@ struct IncomeExpenseCumulativeSavingsTests {
     ]
 
     let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
-      in: data, includeEarmarks: false)
+      in: data, includeInvestments: false)
 
     let only = try #require(column[0])
     #expect(only.quantity == Decimal(1000))
@@ -122,7 +122,7 @@ struct IncomeExpenseCumulativeSavingsTests {
     ]
 
     let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
-      in: data, includeEarmarks: false)
+      in: data, includeInvestments: false)
 
     let first = try #require(column[0])
     let second = try #require(column[1])

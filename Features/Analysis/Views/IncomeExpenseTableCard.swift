@@ -6,7 +6,7 @@ struct IncomeExpenseTableCard: View {
   private static let initialVisibleCount = 6
   private static let loadMoreCount = 6
 
-  @State private var includeEarmarks = false
+  @State private var includeInvestments = true
   @State private var visibleCount = IncomeExpenseTableCard.initialVisibleCount
 
   @ScaledMetric private var monthColumnMinWidth: CGFloat = 120
@@ -20,7 +20,7 @@ struct IncomeExpenseTableCard: View {
           .font(.title2)
           .fontWeight(.semibold)
 
-        Toggle("Include Earmarks", isOn: $includeEarmarks)
+        Toggle("Include Investments", isOn: $includeInvestments)
           .toggleStyle(.switch)
           .font(.caption)
           .fixedSize()
@@ -117,7 +117,7 @@ struct IncomeExpenseTableCard: View {
       .padding(.vertical, 8)
       .accessibilityElement(children: .combine)
       .accessibilityLabel(
-        Self.accessibilityLabel(for: item, in: data, includeEarmarks: includeEarmarks))
+        Self.accessibilityLabel(for: item, in: data, includeInvestments: includeInvestments))
       Divider()
     }
     .onAppear {
@@ -163,20 +163,20 @@ struct IncomeExpenseTableCard: View {
   }
 
   private func income(for item: MonthlyIncomeExpense) -> InstrumentAmount {
-    includeEarmarks ? item.totalIncome : item.income
+    includeInvestments ? item.totalIncome : item.income
   }
 
   private func expense(for item: MonthlyIncomeExpense) -> InstrumentAmount {
-    includeEarmarks ? item.totalExpense : item.expense
+    includeInvestments ? item.totalExpense : item.expense
   }
 
   private func profit(for item: MonthlyIncomeExpense) -> InstrumentAmount {
-    includeEarmarks ? item.totalProfit : item.profit
+    includeInvestments ? item.totalProfit : item.profit
   }
 
   private func cumulativeSavingsValue(for item: MonthlyIncomeExpense) -> InstrumentAmount? {
     guard let index = data.firstIndex(where: { $0.id == item.id }) else { return nil }
-    return Self.cumulativeSavingsColumn(in: data, includeEarmarks: includeEarmarks)[index]
+    return Self.cumulativeSavingsColumn(in: data, includeInvestments: includeInvestments)[index]
   }
 
   /// Running cumulative savings aligned 1:1 with `data` (most-recent-first).
@@ -187,7 +187,7 @@ struct IncomeExpenseTableCard: View {
   /// their real running total.
   nonisolated static func cumulativeSavingsColumn(
     in data: [MonthlyIncomeExpense],
-    includeEarmarks: Bool
+    includeInvestments: Bool
   ) -> [InstrumentAmount?] {
     let instrument = data.first?.income.instrument ?? .AUD
     var running = InstrumentAmount.zero(instrument: instrument)
@@ -199,7 +199,7 @@ struct IncomeExpenseTableCard: View {
       if unavailableReached {
         column.append(nil)
       } else {
-        running += includeEarmarks ? month.totalProfit : month.profit
+        running += includeInvestments ? month.totalProfit : month.profit
         column.append(running)
       }
     }
@@ -212,22 +212,22 @@ struct IncomeExpenseTableCard: View {
   nonisolated static func accessibilityLabel(
     for item: MonthlyIncomeExpense,
     in data: [MonthlyIncomeExpense],
-    includeEarmarks: Bool
+    includeInvestments: Bool
   ) -> String {
     let month = Self.monthLabel(for: item)
     if item.hasUnavailableData {
       return "\(month): data unavailable, prices still loading"
     }
-    let income = includeEarmarks ? item.totalIncome : item.income
-    let expense = includeEarmarks ? item.totalExpense : item.expense
-    let profit = includeEarmarks ? item.totalProfit : item.profit
+    let income = includeInvestments ? item.totalIncome : item.income
+    let expense = includeInvestments ? item.totalExpense : item.expense
+    let profit = includeInvestments ? item.totalProfit : item.profit
     let base =
       "\(month). Income \(income.formatted). Expense \(expense.formatted). Savings \(profit.formatted)."
     // The cumulative column is nil-from-the-first-unavailable-month, so an
     // available row that follows an unavailable one has no real running total.
     // Announce that rather than the misleading number a plain reduce would give.
     let index = data.firstIndex { $0.id == item.id }
-    let column = Self.cumulativeSavingsColumn(in: data, includeEarmarks: includeEarmarks)
+    let column = Self.cumulativeSavingsColumn(in: data, includeInvestments: includeInvestments)
     guard let index, let total = column[index] else {
       return base + " Total savings unavailable."
     }
@@ -254,27 +254,27 @@ private enum IncomeExpenseTableCardPreviewData {
   private static func month(
     _ key: String,
     days: ClosedRange<Int>,
-    plain: (income: Decimal, expense: Decimal),
-    earmarked: (income: Decimal, expense: Decimal) = (0, 0),
+    base: (income: Decimal, expense: Decimal),
+    investments: (income: Decimal, expense: Decimal) = (0, 0),
     hasUnavailableData: Bool = false
   ) -> MonthlyIncomeExpense {
     MonthlyIncomeExpense(
       month: key,
       start: Date().addingTimeInterval(-86400 * Double(days.upperBound)),
       end: Date().addingTimeInterval(-86400 * Double(days.lowerBound)),
-      income: aud(plain.income),
-      expense: aud(plain.expense),
-      profit: aud(plain.income - plain.expense),
-      earmarkedIncome: aud(earmarked.income),
-      earmarkedExpense: aud(earmarked.expense),
-      earmarkedProfit: aud(earmarked.income - earmarked.expense),
+      income: aud(base.income),
+      expense: aud(base.expense),
+      profit: aud(base.income - base.expense),
+      investmentIncome: aud(investments.income),
+      investmentExpense: aud(investments.expense),
+      investmentProfit: aud(investments.income - investments.expense),
       hasUnavailableData: hasUnavailableData)
   }
 
   static let sample: [MonthlyIncomeExpense] = [
-    month("202604", days: 0...30, plain: (5000, 3000), earmarked: (500, 200)),
-    month("202603", days: 31...60, plain: (4800, 3200), earmarked: (400, 250)),
-    month("202602", days: 61...90, plain: (0, 0), hasUnavailableData: true),
+    month("202604", days: 0...30, base: (5000, 3000), investments: (500, 200)),
+    month("202603", days: 31...60, base: (4800, 3200), investments: (400, 250)),
+    month("202602", days: 61...90, base: (0, 0), hasUnavailableData: true),
   ]
 }
 

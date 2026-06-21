@@ -25,9 +25,9 @@ struct IncomeExpenseUnavailableTests {
       income: amount(income),
       expense: amount(expense),
       profit: amount(income - expense),
-      earmarkedIncome: amount(0),
-      earmarkedExpense: amount(0),
-      earmarkedProfit: amount(0),
+      investmentIncome: amount(0),
+      investmentExpense: amount(0),
+      investmentProfit: amount(0),
       hasUnavailableData: hasUnavailableData
     )
   }
@@ -43,7 +43,7 @@ struct IncomeExpenseUnavailableTests {
     ]
 
     let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
-      in: data, includeEarmarks: false)
+      in: data, includeInvestments: false)
 
     #expect(column.count == 3)
     #expect(column[0]?.quantity == Decimal(10))
@@ -60,7 +60,7 @@ struct IncomeExpenseUnavailableTests {
     ]
 
     let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
-      in: data, includeEarmarks: false)
+      in: data, includeInvestments: false)
 
     #expect(column[0]?.quantity == Decimal(2000))  // 5000 - 3000
     #expect(column[1]?.quantity == Decimal(2500))  // + (4000 - 3500)
@@ -76,7 +76,7 @@ struct IncomeExpenseUnavailableTests {
     ]
 
     let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
-      in: data, includeEarmarks: false)
+      in: data, includeInvestments: false)
 
     var running = Decimal(0)
     for (index, item) in data.enumerated() {
@@ -93,7 +93,7 @@ struct IncomeExpenseUnavailableTests {
     ]
 
     let column = IncomeExpenseTableCard.cumulativeSavingsColumn(
-      in: data, includeEarmarks: false)
+      in: data, includeInvestments: false)
 
     #expect(column[0] == nil)
     #expect(column[1] == nil)
@@ -108,7 +108,7 @@ struct IncomeExpenseUnavailableTests {
     ]
 
     let label = IncomeExpenseTableCard.accessibilityLabel(
-      for: data[0], in: data, includeEarmarks: false)
+      for: data[0], in: data, includeInvestments: false)
 
     let month = IncomeExpenseTableCard.monthLabel(for: data[0])
     #expect(label == "\(month): data unavailable, prices still loading")
@@ -121,7 +121,7 @@ struct IncomeExpenseUnavailableTests {
     ]
 
     let label = IncomeExpenseTableCard.accessibilityLabel(
-      for: data[0], in: data, includeEarmarks: false)
+      for: data[0], in: data, includeInvestments: false)
 
     #expect(label.contains("Income"))
     #expect(label.contains(data[0].income.formatted))

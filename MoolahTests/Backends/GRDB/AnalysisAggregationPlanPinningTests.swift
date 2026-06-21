@@ -249,52 +249,17 @@ struct AnalysisAggregationPlanPinningTests {
     // `account` for the investment-account routing.
     //
     // Like `fetchCategoryBalances`, we do NOT assert
-    // `USING COVERING INDEX`. The composite `leg_analysis_by_type_account`
-    // covers `(type, account_id, instrument_id, transaction_id, quantity)`
-    // — but the SQL also references `earmark_id` in two CASE branches
-    // (`earmarked_income_qty` / `earmarked_expense_qty`), and that column
-    // is not in the index. SQLite must therefore fetch the leg's base row
-    // to read `earmark_id`, flipping the plan from `USING COVERING INDEX`
-    // to plain `USING INDEX`. Adding `earmark_id` to the composite would
-    // bloat every leg row to recover a single `LEFT JOIN account`-free
-    // covering scan; the perf-critical signal is "no full table scan on
-    // leg or transaction or account", and the bare `SCAN leg` (without
-    // `USING ...`) is what `planHasFullTableScanOf` catches.
+    // `USING COVERING INDEX`. Every CASE branch reads `a.type` from the
+    // `LEFT JOIN account`, so the plan is driven by a leg-side index plus
+    // a PK lookup into `account`; the perf-critical signal is "no full
+    // table scan on leg, transaction, or account", and the bare
+    // `SCAN leg` (without `USING ...`) is what `planHasFullTableScanOf`
+    // catches.
+    //
+    // `incomeAndExpenseMirrorSQL` references the production constant
+    // directly so the mirror can never drift from the real query.
     let detail = try planDetail(
-      database,
-      query: """
-        SELECT
-            DATE(t.date)         AS day,
-            leg.instrument_id    AS instrument_id,
-            SUM(CASE WHEN leg.type = 'income'
-                      AND a.type IS NOT NULL
-                     THEN leg.quantity ELSE 0 END)        AS income_qty,
-            SUM(CASE WHEN leg.type = 'expense'
-                      AND a.type IS NOT NULL
-                     THEN leg.quantity ELSE 0 END)        AS expense_qty,
-            SUM(CASE WHEN leg.earmark_id IS NOT NULL
-                      AND leg.type = 'income'
-                     THEN leg.quantity ELSE 0 END)        AS earmarked_income_qty,
-            SUM(CASE WHEN leg.earmark_id IS NOT NULL
-                      AND leg.type = 'expense'
-                     THEN leg.quantity ELSE 0 END)        AS earmarked_expense_qty,
-            SUM(CASE WHEN leg.type = 'transfer'
-                      AND a.type = 'investment'
-                      AND leg.quantity > 0
-                     THEN leg.quantity ELSE 0 END)        AS investment_transfer_in_qty,
-            SUM(CASE WHEN leg.type = 'transfer'
-                      AND a.type = 'investment'
-                      AND leg.quantity < 0
-                     THEN leg.quantity ELSE 0 END)        AS investment_transfer_out_qty
-        FROM transaction_leg leg
-        JOIN "transaction"    t ON leg.transaction_id = t.id
-        LEFT JOIN account     a ON leg.account_id = a.id
-        WHERE t.recur_period IS NULL
-          AND (? IS NULL OR t.date >= ?)
-        GROUP BY day, leg.instrument_id
-        ORDER BY day ASC
-        """,
-      arguments: [Date?.none, Date?.none])
+      database, query: incomeAndExpenseMirrorSQL, arguments: [Date?.none, Date?.none])
     // At least one of the leg-side analysis indexes must drive the read
     // — the WHERE has no leg-side equality predicate, so the planner
     // typically chooses the type-account composite or a partial index
@@ -360,3 +325,46 @@ struct AnalysisAggregationPlanPinningTests {
     #expect(!detail.contains("SCAN \"transaction\""))
   }
 }
+
+/// Mirror of the `fetchIncomeAndExpense` aggregation SQL, kept at file
+/// scope so the plan-pinning test body stays within the function-length
+/// limit. The investment-like list comes straight from the production
+/// constant (`AccountType.isInvestmentLike`), so the mirror can never
+/// drift from the real query when an investment-like account type is
+/// added.
+private let incomeAndExpenseMirrorSQL = """
+  SELECT
+      DATE(t.date)         AS day,
+      leg.instrument_id    AS instrument_id,
+      SUM(
+          (CASE WHEN leg.type IN ('income', 'trade')
+                 AND a.type IS NOT NULL
+                 AND a.type NOT IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
+                THEN leg.quantity ELSE 0 END)
+        - (CASE WHEN leg.type IN ('income', 'trade')
+                 AND leg.earmark_id IS NOT NULL
+                THEN leg.quantity ELSE 0 END)
+      )                                              AS income_qty,
+      SUM(
+          (CASE WHEN leg.type IN ('expense', 'transfer')
+                 AND a.type IS NOT NULL
+                 AND a.type NOT IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
+                THEN leg.quantity ELSE 0 END)
+        - (CASE WHEN leg.type IN ('expense', 'transfer')
+                 AND leg.earmark_id IS NOT NULL
+                THEN leg.quantity ELSE 0 END)
+      )                                              AS expense_qty,
+      SUM(CASE WHEN leg.type IN ('income', 'trade')
+                AND a.type IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
+               THEN leg.quantity ELSE 0 END)        AS investment_income_qty,
+      SUM(CASE WHEN leg.type IN ('expense', 'transfer')
+                AND a.type IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
+               THEN leg.quantity ELSE 0 END)        AS investment_expense_qty
+  FROM transaction_leg leg
+  JOIN "transaction"    t ON leg.transaction_id = t.id
+  LEFT JOIN account     a ON leg.account_id = a.id
+  WHERE t.recur_period IS NULL
+    AND (? IS NULL OR t.date >= ?)
+  GROUP BY day, leg.instrument_id
+  ORDER BY day ASC
+  """

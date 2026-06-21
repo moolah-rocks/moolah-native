@@ -129,16 +129,19 @@ struct AnalysisIncomeExpenseTests {
     #expect(!data.isEmpty, "Should have at least one month")
     let month = data[0]
 
-    // Bank->Investment transfer: both legs counted in leg-based model
-    #expect(month.earmarkedIncome.quantity == 6)
-    // Investment->Bank transfer: both legs counted
-    #expect(month.earmarkedExpense.quantity == 3)
-    // Regular income/expense should be zero
+    // Transfers go to the expense column (both legs), so they net by sign.
+    // Bank legs (current): -5 + 2 = -3 → base expense.
+    #expect(month.expense.quantity == -3)
+    // Investment legs: +5 -2 -1 +1 = +3 → investment expense.
+    #expect(month.investmentExpense.quantity == 3)
+    // Nothing lands in the income column.
     #expect(month.income.quantity == 0)
-    #expect(month.expense.quantity == 0)
+    #expect(month.investmentIncome.quantity == 0)
+    // Whole picture: current↔investment moves net to zero.
+    #expect(month.totalExpense.quantity == 0)
   }
 
-  @Test("earmarked income without accountId excluded from balance, included in earmarked")
+  @Test("account-less earmark income is excluded from headline and negated in earmarked")
   func nullAccountIdEarmarkedHandling() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let account = Account(
@@ -160,7 +163,9 @@ struct AnalysisIncomeExpenseTests {
             quantity: 10, type: .income)
         ]))
 
-    // Earmarked income with nil accountId (matches server's null-accountId earmark transactions)
+    // Account-less earmark income (+5) sets money aside for later, which
+    // reduces available funds now. Earmarks are always folded into the
+    // base, so it lowers income by 5.
     _ = try await backend.transactions.create(
       Transaction(
         date: today, payee: "Gift",
@@ -175,10 +180,10 @@ struct AnalysisIncomeExpenseTests {
     #expect(!data.isEmpty)
     let month = data[0]
 
-    // Income only includes legs with accountId (matching server's account_id IS NOT NULL).
-    #expect(month.income.quantity == 10)
-    // Earmarked income is tracked separately (regardless of accountId)
-    #expect(month.earmarkedIncome.quantity == 5)
+    // Available funds = salary (10) − amount set aside (5) = 5.
+    #expect(month.income.quantity == 5)
+    #expect(month.investmentIncome.quantity == 0)
+    #expect(month.totalIncome.quantity == 5)
   }
 
   @Test("expense refunds (positive quantity) reduce expense total, not increase it")
@@ -251,7 +256,7 @@ struct AnalysisIncomeExpenseTests {
     accounts: ClassificationAccounts,
     date: Date
   ) async throws {
-    // Bank -> Investment (should be earmarkedIncome)
+    // Bank -> Investment (should be investmentIncome)
     _ = try await backend.transactions.create(
       Transaction(
         date: date, payee: "Invest",
@@ -263,7 +268,7 @@ struct AnalysisIncomeExpenseTests {
             accountId: accounts.investmentA.id, instrument: .defaultTestInstrument,
             quantity: 5, type: .transfer),
         ]))
-    // Investment -> Bank (should be earmarkedExpense)
+    // Investment -> Bank (should be investmentExpense)
     _ = try await backend.transactions.create(
       Transaction(
         date: date, payee: "Withdraw",

@@ -135,11 +135,11 @@ struct DomainModelsTests {
       income: InstrumentAmount(quantity: Decimal(100000) / 100, instrument: .defaultTestInstrument),
       expense: InstrumentAmount(quantity: Decimal(50000) / 100, instrument: .defaultTestInstrument),
       profit: InstrumentAmount(quantity: Decimal(50000) / 100, instrument: .defaultTestInstrument),
-      earmarkedIncome: InstrumentAmount(
+      investmentIncome: InstrumentAmount(
         quantity: Decimal(20000) / 100, instrument: .defaultTestInstrument),
-      earmarkedExpense: InstrumentAmount(
+      investmentExpense: InstrumentAmount(
         quantity: Decimal(10000) / 100, instrument: .defaultTestInstrument),
-      earmarkedProfit: InstrumentAmount(
+      investmentProfit: InstrumentAmount(
         quantity: Decimal(10000) / 100, instrument: .defaultTestInstrument)
     )
 
@@ -155,11 +155,11 @@ struct DomainModelsTests {
       income: InstrumentAmount(quantity: Decimal(100000) / 100, instrument: .defaultTestInstrument),
       expense: InstrumentAmount(quantity: Decimal(50000) / 100, instrument: .defaultTestInstrument),
       profit: InstrumentAmount(quantity: Decimal(50000) / 100, instrument: .defaultTestInstrument),
-      earmarkedIncome: InstrumentAmount(
+      investmentIncome: InstrumentAmount(
         quantity: Decimal(20000) / 100, instrument: .defaultTestInstrument),
-      earmarkedExpense: InstrumentAmount(
+      investmentExpense: InstrumentAmount(
         quantity: Decimal(10000) / 100, instrument: .defaultTestInstrument),
-      earmarkedProfit: InstrumentAmount(
+      investmentProfit: InstrumentAmount(
         quantity: Decimal(10000) / 100, instrument: .defaultTestInstrument)
     )
 
@@ -175,11 +175,11 @@ struct DomainModelsTests {
       income: InstrumentAmount(quantity: Decimal(100000) / 100, instrument: .defaultTestInstrument),
       expense: InstrumentAmount(quantity: Decimal(50000) / 100, instrument: .defaultTestInstrument),
       profit: InstrumentAmount(quantity: Decimal(50000) / 100, instrument: .defaultTestInstrument),
-      earmarkedIncome: InstrumentAmount(
+      investmentIncome: InstrumentAmount(
         quantity: Decimal(20000) / 100, instrument: .defaultTestInstrument),
-      earmarkedExpense: InstrumentAmount(
+      investmentExpense: InstrumentAmount(
         quantity: Decimal(10000) / 100, instrument: .defaultTestInstrument),
-      earmarkedProfit: InstrumentAmount(
+      investmentProfit: InstrumentAmount(
         quantity: Decimal(10000) / 100, instrument: .defaultTestInstrument)
     )
 

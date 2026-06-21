@@ -17,9 +17,9 @@ struct AnalysisUnavailableFlagTests {
       income: .zero(instrument: .defaultTestInstrument),
       expense: .zero(instrument: .defaultTestInstrument),
       profit: .zero(instrument: .defaultTestInstrument),
-      earmarkedIncome: .zero(instrument: .defaultTestInstrument),
-      earmarkedExpense: .zero(instrument: .defaultTestInstrument),
-      earmarkedProfit: .zero(instrument: .defaultTestInstrument)
+      investmentIncome: .zero(instrument: .defaultTestInstrument),
+      investmentExpense: .zero(instrument: .defaultTestInstrument),
+      investmentProfit: .zero(instrument: .defaultTestInstrument)
     )
     #expect(item.hasUnavailableData == false)
   }
@@ -33,9 +33,9 @@ struct AnalysisUnavailableFlagTests {
       income: .zero(instrument: .defaultTestInstrument),
       expense: .zero(instrument: .defaultTestInstrument),
       profit: .zero(instrument: .defaultTestInstrument),
-      earmarkedIncome: .zero(instrument: .defaultTestInstrument),
-      earmarkedExpense: .zero(instrument: .defaultTestInstrument),
-      earmarkedProfit: .zero(instrument: .defaultTestInstrument),
+      investmentIncome: .zero(instrument: .defaultTestInstrument),
+      investmentExpense: .zero(instrument: .defaultTestInstrument),
+      investmentProfit: .zero(instrument: .defaultTestInstrument),
       hasUnavailableData: true
     )
     #expect(item.hasUnavailableData == true)
@@ -50,9 +50,9 @@ struct AnalysisUnavailableFlagTests {
       income: .zero(instrument: .defaultTestInstrument),
       expense: .zero(instrument: .defaultTestInstrument),
       profit: .zero(instrument: .defaultTestInstrument),
-      earmarkedIncome: .zero(instrument: .defaultTestInstrument),
-      earmarkedExpense: .zero(instrument: .defaultTestInstrument),
-      earmarkedProfit: .zero(instrument: .defaultTestInstrument),
+      investmentIncome: .zero(instrument: .defaultTestInstrument),
+      investmentExpense: .zero(instrument: .defaultTestInstrument),
+      investmentProfit: .zero(instrument: .defaultTestInstrument),
       hasUnavailableData: true
     )
     let data = try JSONEncoder().encode(original)
@@ -69,9 +69,9 @@ struct AnalysisUnavailableFlagTests {
       income: .zero(instrument: .defaultTestInstrument),
       expense: .zero(instrument: .defaultTestInstrument),
       profit: .zero(instrument: .defaultTestInstrument),
-      earmarkedIncome: .zero(instrument: .defaultTestInstrument),
-      earmarkedExpense: .zero(instrument: .defaultTestInstrument),
-      earmarkedProfit: .zero(instrument: .defaultTestInstrument),
+      investmentIncome: .zero(instrument: .defaultTestInstrument),
+      investmentExpense: .zero(instrument: .defaultTestInstrument),
+      investmentProfit: .zero(instrument: .defaultTestInstrument),
       hasUnavailableData: false
     )
     let data = try JSONEncoder().encode(original)
@@ -89,9 +89,9 @@ struct AnalysisUnavailableFlagTests {
       income: .zero(instrument: .defaultTestInstrument),
       expense: .zero(instrument: .defaultTestInstrument),
       profit: .zero(instrument: .defaultTestInstrument),
-      earmarkedIncome: .zero(instrument: .defaultTestInstrument),
-      earmarkedExpense: .zero(instrument: .defaultTestInstrument),
-      earmarkedProfit: .zero(instrument: .defaultTestInstrument),
+      investmentIncome: .zero(instrument: .defaultTestInstrument),
+      investmentExpense: .zero(instrument: .defaultTestInstrument),
+      investmentProfit: .zero(instrument: .defaultTestInstrument),
       hasUnavailableData: true
     )
     let encoded = try JSONEncoder().encode(original)
