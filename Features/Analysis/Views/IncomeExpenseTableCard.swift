@@ -251,7 +251,7 @@ struct IncomeExpenseTableCard: View {
   }
 
   nonisolated static func monthLabel(for item: MonthlyIncomeExpense) -> String {
-    item.start.formatted(.dateTime.month(.abbreviated).year())
+    item.monthLabel
   }
 
   private func monthsAgoLabel(for item: MonthlyIncomeExpense) -> String {

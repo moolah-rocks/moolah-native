@@ -155,3 +155,39 @@ extension MonthlyIncomeExpense {
     profit + investmentProfit
   }
 }
+
+extension MonthlyIncomeExpense {
+  /// Display label naming the calendar month(s) the row's transactions
+  /// span. A financial month with a non-month-end cutoff straddles two
+  /// calendar months, so when `start` and `end` fall in different months
+  /// the label names both — "Apr – May 2026", or "Dec 2025 – Jan 2026"
+  /// across a year boundary; a single-month span is just "May 2026".
+  ///
+  /// UTC-anchored: `start`/`end` are midnight-UTC day tokens, so a local
+  /// formatter would drift a day-1 date into the previous month in
+  /// negative-UTC zones. Component extraction and month-name formatting
+  /// both pin to UTC.
+  var monthLabel: String {
+    let calendar = Calendar.utc
+    let startMonth = calendar.component(.month, from: start)
+    let startYear = calendar.component(.year, from: start)
+    let endMonth = calendar.component(.month, from: end)
+    let endYear = calendar.component(.year, from: end)
+
+    if startYear == endYear, startMonth == endMonth {
+      return "\(Self.monthName(start)) \(startYear)"
+    }
+    if startYear == endYear {
+      return "\(Self.monthName(start)) – \(Self.monthName(end)) \(endYear)"
+    }
+    return "\(Self.monthName(start)) \(startYear) – \(Self.monthName(end)) \(endYear)"
+  }
+
+  /// Localized abbreviated month name for `date`, pinned to UTC so a
+  /// midnight-UTC day token names the correct month in every zone.
+  private static func monthName(_ date: Date) -> String {
+    var style = Date.FormatStyle.dateTime.month(.abbreviated)
+    style.timeZone = .gmt
+    return date.formatted(style)
+  }
+}
