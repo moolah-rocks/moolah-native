@@ -122,6 +122,13 @@ git -C <repo> branch -D <local-branch>
 
 Safe because: the work is on `origin/<branch>` and tied to the PR. If a follow-up is needed, re-create the worktree off the remote branch (`git -C <repo> worktree add --no-track .claude/worktrees/<name> <branch> origin/<branch>`).
 
+**Cleaning up the worktree you're *currently in*.** `git worktree remove` refuses to delete the worktree that is the session's current directory — so if you landed the PR from the active worktree, you must leave it first with `ExitWorktree`, which returns the session to the original checkout:
+
+- **Worktree created by `EnterWorktree`** (the usual case for a task you started in a worktree): call `ExitWorktree` with `action: "remove"` — it leaves *and* deletes the worktree and its branch in one step. Done.
+- **Worktree you entered via `EnterWorktree`'s `path:`, or created manually with `git worktree add`:** `ExitWorktree` will *not* delete it (it only removes worktrees it created). Call `ExitWorktree` with `action: "keep"` to return to the original directory, then run the `git worktree remove` / `branch -D` above from there.
+
+Don't try to `git worktree remove` the current worktree by absolute path without exiting first — git rejects removing the checkout the session occupies.
+
 **Skip cleanup only when:**
 
 - There are uncommitted or unpushed changes in the worktree (nothing to recover from if you delete it).
