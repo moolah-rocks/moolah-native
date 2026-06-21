@@ -195,19 +195,21 @@ struct DailyBalancesPlanPinningTests {
     let database = try makeDatabase()
     // Mirrors the per-account id loader driven by
     // `GRDBAnalysisRepository.fetchInvestmentAccountIds`. The
-    // production SQL filters on `type = 'investment'` AND
-    // `valuation_mode = 'recordedValue'` so the snapshot fold only
-    // applies to recorded-value investment accounts. The
-    // `account_by_type` index keys on `(type)` and serves the
-    // selective `type = 'investment'` predicate; the
-    // `valuation_mode` predicate filters the candidate rows post-seek.
-    // SQLite emits `SEARCH account USING INDEX account_by_type` for
-    // this shape, which is *not* a full table scan.
+    // production SQL filters on an investment-like `type`
+    // (`investmentLikeTypesSQLList`) AND `valuation_mode =
+    // 'recordedValue'` so the snapshot fold only applies to
+    // recorded-value investment-like accounts. The `account_by_type`
+    // index keys on `(type)` and serves the selective type `IN` list
+    // via per-value index seeks; the `valuation_mode` predicate filters
+    // the candidate rows post-seek. SQLite emits `SEARCH account USING
+    // INDEX account_by_type` for this shape, which is *not* a full
+    // table scan.
     let detail = try planDetail(
       database,
       query: """
         SELECT id FROM account
-        WHERE type = 'investment' AND valuation_mode = 'recordedValue'
+        WHERE type IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
+          AND valuation_mode = 'recordedValue'
         """)
     #expect(detail.contains("SEARCH account USING INDEX account_by_type"))
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "account"))
@@ -218,18 +220,20 @@ struct DailyBalancesPlanPinningTests {
     let database = try makeDatabase()
     // Mirrors the per-account id loader driven by
     // `GRDBAnalysisRepository.fetchTradesModeInvestmentAccountIds`. The
-    // production SQL filters on `type = 'investment'` AND
-    // `valuation_mode = 'calculatedFromTrades'`. The `account_by_type`
-    // index keys on `(type)` and serves the selective `type =
-    // 'investment'` predicate; the `valuation_mode` predicate filters
-    // the candidate rows post-seek. SQLite emits `SEARCH account USING
-    // INDEX account_by_type` for this shape, which is *not* a full
-    // table scan.
+    // production SQL filters on an investment-like `type`
+    // (`investmentLikeTypesSQLList`) AND `valuation_mode =
+    // 'calculatedFromTrades'`. The `account_by_type` index keys on
+    // `(type)` and serves the selective type `IN` list via per-value
+    // index seeks; the `valuation_mode` predicate filters the candidate
+    // rows post-seek. SQLite emits `SEARCH account USING INDEX
+    // account_by_type` for this shape, which is *not* a full table
+    // scan.
     let detail = try planDetail(
       database,
       query: """
         SELECT id FROM account
-        WHERE type = 'investment' AND valuation_mode = 'calculatedFromTrades'
+        WHERE type IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
+          AND valuation_mode = 'calculatedFromTrades'
         """)
     #expect(detail.contains("SEARCH account USING INDEX account_by_type"))
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "account"))
