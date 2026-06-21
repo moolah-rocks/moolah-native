@@ -4,25 +4,24 @@
 
 **`main` is protected and does not accept direct pushes.** All changes must land via a pull request.
 
-- **Default to a worktree.** Never make changes directly on the `main` checkout. At the start of any task that modifies files, create a git worktree on a feature branch (see the `superpowers:using-git-worktrees` skill). `.worktrees/` is gitignored.
+- **Default to a worktree, created with `EnterWorktree(name: <branch>)`.** Never make changes directly on the `main` checkout. At the start of any task that modifies files, create a worktree with **`EnterWorktree(name: <branch>)`** — it sets everything up for you (carries the gitignored `.env` over from the main checkout, rebases onto the default branch, and switches the session in). **Never** create worktrees with raw `git worktree add`, and never hand-copy `.env`. Clean up a finished worktree (PR on automerge) with **`ExitWorktree(action: "remove")`** — add `discard_changes: true` if it balks at the gitignored `.env`.
 - **Ship via PR.** Push the feature branch and open a pull request with `gh pr create`. Do not attempt `git push origin main` — it will be rejected by branch protection.
 - **Exceptions:** Read-only inspection and investigation can happen on the `main` checkout without a worktree. If you're unsure whether a task will require edits, create the worktree up front.
 
-### `EnterWorktree` refuses to nest — `ExitWorktree` first
+### Already in a worktree? `EnterWorktree` refuses to nest — `ExitWorktree` first
 
-`EnterWorktree` fails with "Already in a worktree session" if the session is **already** inside a worktree (common when a previous task's worktree is still active, or a new task arrives in an existing worktree). It refuses to create or enter a nested worktree.
+`EnterWorktree` fails with "Already in a worktree session" if the session is **already** inside a worktree (common when a previous task's worktree is still active, or a new task arrives in an existing worktree). To start a *different* worktree, return to the `main` checkout first, then create the new one:
 
-`ExitWorktree` is **not** limited to worktrees created by `EnterWorktree` in the current session — calling it returns the session to the original `main` checkout regardless, leaving the old worktree's branch and files intact on disk. So the reliable sequence when you need a *different* worktree than the one you're in:
+1. `ExitWorktree` — `action: "keep"` to preserve the current worktree (its branch and files stay on disk), or `action: "remove"` if its work is done. Either way the session returns to the `main` checkout.
+2. `EnterWorktree(name: <branch>)` — creates the new worktree and switches the session into it.
 
-1. Create the new worktree up front with `git -C <repo> worktree add --no-track .claude/worktrees/<name> -b <branch> origin/main` (the manual fallback; do this *before* exiting so the old worktree's context is still available while you set up).
-2. `ExitWorktree` with `action: "keep"` — returns the session to the `main` checkout without disturbing the old worktree.
-3. `EnterWorktree` with `path:` pointing at the worktree you just created — the session switches into it cleanly.
-
-Do **not** try to operate on a second worktree purely via absolute paths while the session CWD is stuck in the first one: skill, plan, and memory resolution all key off the session CWD, so they will silently target the wrong tree.
+Do **not** reach for a raw `git worktree add` (+ `EnterWorktree(path:)`) to dodge the nesting restriction — that bypasses the setup the worktree tools do for you. And do **not** operate on a second worktree purely via absolute paths while the session CWD is stuck in the first one: skill, plan, and memory resolution all key off the session CWD, so they will silently target the wrong tree.
 
 ### Stacked-PR worktrees: don't accidentally push into the parent PR
 
-When you create a worktree branched off another PR's head (e.g. stacking a fix-up PR on top of an open PR), `git worktree add -b <new-local> <remote-tracking-branch>` silently sets the new local branch to **track the parent's remote branch**. A subsequent `git push -u origin <new-local>` then pushes your commits *into the parent PR's branch* — overwriting or extending the wrong PR. This has happened; recovery requires a force-push to restore the parent.
+`EnterWorktree(name:)` branches off the default branch, and the `landing-prs` skill handles stacking by retargeting a child PR to `main` once its parent merges — prefer that. The footgun below applies only if you deliberately use a raw `git worktree add` off another PR's head.
+
+When you create such a worktree (e.g. stacking a fix-up PR on top of an open PR), `git worktree add -b <new-local> <remote-tracking-branch>` silently sets the new local branch to **track the parent's remote branch**. A subsequent `git push -u origin <new-local>` then pushes your commits *into the parent PR's branch* — overwriting or extending the wrong PR. This has happened; recovery requires a force-push to restore the parent.
 
 To prevent it:
 
