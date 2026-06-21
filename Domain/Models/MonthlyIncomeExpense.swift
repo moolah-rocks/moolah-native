@@ -131,6 +131,15 @@ extension MonthlyIncomeExpense: Codable {
 }
 
 extension MonthlyIncomeExpense {
+  /// Filter selecting this financial month's transactions, for drilling
+  /// into a row of the Monthly Income & Expense table. Spans the month's
+  /// actual transaction-date range (`start...end`) — the same instants
+  /// that produced the row's totals — so it captures exactly those
+  /// transactions without re-deriving the financial-month boundary.
+  var transactionsFilter: TransactionFilter {
+    TransactionFilter(dateRange: start...end)
+  }
+
   /// Total income including the investment layer (cash + investments).
   var totalIncome: InstrumentAmount {
     income + investmentIncome
