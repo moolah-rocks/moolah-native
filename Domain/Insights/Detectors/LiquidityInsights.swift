@@ -14,7 +14,7 @@ enum LiquidityInsights {
     context: InsightContext,
     warnBelowMonths: Double = 6
   ) -> [Insight] {
-    guard let liquid = InsightAggregates.latestActual(dailyBalances)?.balance,
+    guard let liquid = InsightAggregates.latestActual(dailyBalances)?.availableFunds,
       liquid.quantity > 0,
       let net = InsightAggregates.averageMonthlyNet(monthly, context: context),
       net < 0
@@ -38,7 +38,7 @@ enum LiquidityInsights {
         surprise: short ? 0.7 : 0.35,
         monetaryImpact: InstrumentAmount(quantity: -burn, instrument: context.reportingCurrency),
         facts: [
-          InsightFact("Liquid cash", context.formatted(liquid)),
+          InsightFact("Available funds", context.formatted(liquid)),
           InsightFact("Monthly burn", context.formatted(burn)),
           InsightFact("Runway", monthsText(months)),
         ],
@@ -56,7 +56,7 @@ enum LiquidityInsights {
     context: InsightContext,
     multiple: Decimal = 3
   ) -> [Insight] {
-    guard let liquid = InsightAggregates.latestActual(dailyBalances)?.balance,
+    guard let liquid = InsightAggregates.latestActual(dailyBalances)?.availableFunds,
       liquid.quantity > 0,
       let spend = InsightAggregates.averageMonthlySpend(monthly, context: context),
       spend > 0
@@ -65,6 +65,10 @@ enum LiquidityInsights {
     let cushion = spend * multiple
     guard liquid.quantity > cushion else { return [] }
     let excess = liquid.quantity - cushion
+    // Surface the buffer's basis — `multiple` months of average spending — so
+    // the fact (and the narration built from it) explains the dollar figure
+    // rather than asserting it bare.
+    let bufferLabel = "Suggested buffer (\(multiple) months' spending)"
 
     return [
       Insight(
@@ -77,8 +81,9 @@ enum LiquidityInsights {
         surprise: 0.45,
         monetaryImpact: InstrumentAmount(quantity: excess, instrument: context.reportingCurrency),
         facts: [
-          InsightFact("Liquid cash", context.formatted(liquid)),
-          InsightFact("Suggested buffer", context.formatted(cushion)),
+          InsightFact("Available funds", context.formatted(liquid)),
+          InsightFact("Average monthly spend", context.formatted(spend)),
+          InsightFact(bufferLabel, context.formatted(cushion)),
           InsightFact("Idle excess", context.formatted(excess)),
         ],
         references: InsightReferences(instrumentIds: [context.reportingCurrency.id]),
@@ -86,19 +91,22 @@ enum LiquidityInsights {
     ]
   }
 
-  /// Both liquidity insights tell a story about the same liquid-balance
+  /// Both liquidity insights tell a story about the same available-funds
   /// series — runway is that line sloping down, idle cash is it sitting high —
   /// so they share one chart, anchored at the latest actual reading the
-  /// runway/cushion maths is computed from. The fallback to `nil` (sparse
-  /// data) is deliberately silent: a missing companion graph is a smaller row,
-  /// not an error worth surfacing.
+  /// runway/cushion maths is computed from. The chart plots `availableFunds`
+  /// (net of earmarks) to match the figures the facts now report. The
+  /// fallback to `nil` (sparse data) is deliberately silent: a missing
+  /// companion graph is a smaller row, not an error worth surfacing.
   private static func balanceChart(
     _ dailyBalances: [DailyBalance], context: InsightContext
   ) -> InsightChart? {
     InsightChartBuilders.balanceForecast(
       dailyBalances,
       reportingCurrency: context.reportingCurrency,
-      highlight: InsightAggregates.latestActual(dailyBalances)?.date)
+      highlight: InsightAggregates.latestActual(dailyBalances)?.date,
+      value: \.availableFunds,
+      seriesLabel: "Available funds")
   }
 
   private static func monthsText(_ months: Double) -> String {
