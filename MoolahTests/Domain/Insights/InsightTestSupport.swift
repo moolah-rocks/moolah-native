@@ -81,14 +81,24 @@ enum InsightTestSupport {
   /// negative is the forecast tail in the future. `total` sets both
   /// current-funds balance and net worth; `forecast` flags a projected day.
   static func balance(offsetDays days: Int, total: Decimal, forecast: Bool) -> DailyBalance {
+    balance(offsetDays: days, total: total, earmarked: 0, forecast: forecast)
+  }
+
+  /// A `DailyBalance` offset from `now` with an explicit earmarked amount, so
+  /// `availableFunds` (= `total - earmarked`) differs from the current-funds
+  /// balance. Used to prove the liquidity detectors and chart read available
+  /// funds rather than gross balance.
+  static func balance(
+    offsetDays days: Int, total: Decimal, earmarked: Decimal, forecast: Bool
+  ) -> DailyBalance {
     let value = amount(total)
-    let zero = amount(0)
+    let marked = amount(earmarked)
     return DailyBalance(
       date: daysAgo(days),
       balance: value,
-      earmarked: zero,
-      availableFunds: value,
-      investments: zero,
+      earmarked: marked,
+      availableFunds: value - marked,
+      investments: amount(0),
       investmentValue: nil,
       netWorth: value,
       bestFit: nil,

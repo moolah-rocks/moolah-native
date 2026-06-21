@@ -7,22 +7,29 @@ enum InsightChartBuilders {
   /// Minimum points before a series is worth drawing.
   private static let minimumPoints = 2
 
-  private static func point(from balance: DailyBalance) -> InsightChart.Point {
-    InsightChart.Point(date: balance.date, value: balance.balance.doubleValue)
-  }
-
-  /// Daily current-funds balance: the actual tail solid, the forecast tail
+  /// Daily balance forecast: the actual tail solid, the forecast tail
   /// dashed, with `highlight` marking the trough or projected month-end day.
   /// The two tails are joined at the boundary so the projection continues the
   /// actual line rather than starting from zero.
+  ///
+  /// `value` selects which monetary field to plot — `\.balance` (gross
+  /// current funds, the default the cash-flow forecast insights use) or
+  /// `\.availableFunds` (net of earmarks, what the liquidity insights use so
+  /// the line matches their facts). `seriesLabel` names the solid actual
+  /// series accordingly.
   static func balanceForecast(
     _ balances: [DailyBalance],
     reportingCurrency: Instrument,
-    highlight: Date?
+    highlight: Date?,
+    value: KeyPath<DailyBalance, InstrumentAmount> = \.balance,
+    seriesLabel: String = "Balance"
   ) -> InsightChart? {
     let ordered = balances.sorted { $0.date < $1.date }
     guard ordered.count >= minimumPoints else { return nil }
 
+    let point = { (balance: DailyBalance) in
+      InsightChart.Point(date: balance.date, value: balance[keyPath: value].doubleValue)
+    }
     let actual = ordered.filter { !$0.isForecast }
     let forecast = ordered.filter(\.isForecast)
     var series: [InsightChart.Series] = []
@@ -30,25 +37,25 @@ enum InsightChartBuilders {
       series.append(
         InsightChart.Series(
           id: "actual",
-          label: "Balance",
+          label: seriesLabel,
           role: .primary,
-          points: actual.map(point(from:))))
+          points: actual.map(point)))
     }
     if !forecast.isEmpty {
       // Prepend the last actual point so the dashed projection visually
       // continues from the solid line.
-      let bridge = actual.last.map { [point(from: $0)] } ?? []
+      let bridge = actual.last.map { [point($0)] } ?? []
       series.append(
         InsightChart.Series(
           id: "projected",
           label: "Projected",
           role: .projected,
-          points: bridge + forecast.map(point(from:))))
+          points: bridge + forecast.map(point)))
     }
     guard !series.isEmpty else { return nil }
 
     let highlightPoint = highlight.flatMap { date in
-      ordered.first { $0.date == date }.map(point(from:))
+      ordered.first { $0.date == date }.map(point)
     }
     return InsightChart(
       kind: .line,

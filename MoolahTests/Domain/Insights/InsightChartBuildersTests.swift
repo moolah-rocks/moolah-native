@@ -135,16 +135,16 @@ struct InsightChartBuildersTests {
   }
 
   private func balance(
-    _ day: Int, total: Decimal, forecast: Bool, netWorth: Decimal? = nil
+    _ day: Int, total: Decimal, forecast: Bool, netWorth: Decimal? = nil, earmarked: Decimal = 0
   ) -> DailyBalance {
     let amount = InstrumentAmount(quantity: total, instrument: currency)
-    let zero = InstrumentAmount.zero(instrument: currency)
+    let marked = InstrumentAmount(quantity: earmarked, instrument: currency)
     return DailyBalance(
       date: InsightTestSupport.date(2026, 6, day),
       balance: amount,
-      earmarked: zero,
-      availableFunds: amount,
-      investments: zero,
+      earmarked: marked,
+      availableFunds: amount - marked,
+      investments: InstrumentAmount.zero(instrument: currency),
       investmentValue: nil,
       netWorth: InstrumentAmount(quantity: netWorth ?? total, instrument: currency),
       bestFit: nil,
@@ -206,6 +206,41 @@ struct InsightChartBuildersTests {
     // Bridge: last actual (day 2 = 900) prepended, then day 3 (400), day 4 (700).
     #expect(projected.points.count == 3)
     #expect(projected.points.first?.value == 900)
+  }
+
+  @Test
+  func balanceForecastDefaultsToCurrentFundsSeries() throws {
+    // $1000 gross, $400 earmarked → $600 available. The default builder
+    // plots gross current funds and labels the series "Balance".
+    let balances = [
+      balance(1, total: 1000, forecast: false, earmarked: 400),
+      balance(2, total: 900, forecast: false, earmarked: 400),
+    ]
+    let chart = try #require(
+      InsightChartBuilders.balanceForecast(
+        balances, reportingCurrency: currency, highlight: InsightTestSupport.date(2026, 6, 1)))
+    let actual = try #require(chart.series.first { $0.role == .primary })
+    #expect(actual.label == "Balance")
+    #expect(actual.points.map(\.value) == [1000, 900])
+    #expect(chart.highlight?.value == 1000)
+  }
+
+  @Test
+  func balanceForecastPlotsAvailableFundsWhenRequested() throws {
+    // Same fixture; selecting `availableFunds` plots gross minus earmarked
+    // ($600, $500) under an "Available funds" series label.
+    let balances = [
+      balance(1, total: 1000, forecast: false, earmarked: 400),
+      balance(2, total: 900, forecast: false, earmarked: 400),
+    ]
+    let chart = try #require(
+      InsightChartBuilders.balanceForecast(
+        balances, reportingCurrency: currency, highlight: InsightTestSupport.date(2026, 6, 1),
+        value: \.availableFunds, seriesLabel: "Available funds"))
+    let actual = try #require(chart.series.first { $0.role == .primary })
+    #expect(actual.label == "Available funds")
+    #expect(actual.points.map(\.value) == [600, 500])
+    #expect(chart.highlight?.value == 600)
   }
 
   @Test
