@@ -43,19 +43,12 @@ extension AnalysisStore {
   }
 
   /// Force a reload in response to a price-cache rate tick (a background
-  /// warm landed new crypto prices). Coalesces bursts: if a reload is
-  /// already running, run exactly one more when it finishes. See #1075.
+  /// warm landed new crypto prices). Routes through `loadAll(force:)`,
+  /// which single-flights and coalesces: if a load is already running
+  /// (including the view's initial load), this becomes one trailing
+  /// reconcile pass rather than a concurrent recompute. See #1163, #1075.
   func reloadForRateTick() async {
-    if rateTickReloadInFlight {
-      rateTickReloadPending = true
-      return
-    }
-    rateTickReloadInFlight = true
-    defer { rateTickReloadInFlight = false }
-    repeat {
-      rateTickReloadPending = false
-      await loadAll(force: true)
-    } while rateTickReloadPending
+    await loadAll(force: true)
   }
 
   /// Test-only: yields a tick after every consumed rate-stream emission

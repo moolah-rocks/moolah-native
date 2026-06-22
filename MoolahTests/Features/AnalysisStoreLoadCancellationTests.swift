@@ -39,4 +39,33 @@ struct AnalysisStoreLoadCancellationTests {
     #expect(store.error == nil)
     #expect(!store.isLoading)
   }
+
+  /// A rate tick that coalesces into a pending reconcile while the initial
+  /// load is in flight must NOT run after the owning task is cancelled.
+  /// Without the `Task.isCancelled` guard in `loadAll`'s coalescing loop,
+  /// the trailing reconcile would issue a second wasted fetch on a
+  /// torn-down view and restamp `lastLoadedAt`. See #1163.
+  @Test
+  func cancellationDuringInitialLoadSkipsCoalescedReconcile() async throws {
+    let repository = GatedCountingAnalysisRepository()
+    let store = AnalysisStore(
+      repository: repository, conversionService: StubConversionService(),
+      defaults: try makeDefaults())
+
+    let task = Task { @MainActor in await store.loadAll() }
+    await repository.waitUntilFetchStarted()
+    // A rate tick lands during the in-flight initial load → coalesced into
+    // a single pending reconcile pass.
+    await store.reloadForRateTick()
+    // The view tears down before the initial load completes.
+    task.cancel()
+    await repository.releaseAll()
+    await task.value
+
+    // Only the initial fetch ran; the coalesced reconcile was skipped.
+    let count = await repository.loadAllCount
+    #expect(count == 1)
+    #expect(store.error == nil)
+    #expect(!store.isLoading)
+  }
 }
