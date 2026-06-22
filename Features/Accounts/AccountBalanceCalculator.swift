@@ -105,6 +105,13 @@ struct AccountBalanceCalculator {
   ) async throws -> InstrumentAmount {
     var total = InstrumentAmount.zero(instrument: target)
     let date = Date()
+    // recordedValue snapshots keep their existing `convertAmount` semantics
+    // (throw on failure, throw on knownZero). Every other account's
+    // cross-instrument positions accumulate into one flat batch resolved by a
+    // single `convertResultBatch`. Same-instrument positions sum inline
+    // (Rule 8). A `.failure` outcome rethrows so the whole total is marked
+    // unavailable (Rule 11); `.knownZero` contributes zero (#790).
+    var requests: [BatchConversionRequest] = []
     for account in accounts {
       if account.type == .investment, account.valuationMode == .recordedValue {
         let snapshot =
@@ -123,13 +130,17 @@ struct AccountBalanceCalculator {
         if position.amount.instrument == target {
           total += position.amount
         } else {
-          let result = try await conversionService.convertResult(
-            position.amount, to: target, on: date)
-          if case .value(let converted) = result {
-            total += converted
-          }
+          requests.append(
+            BatchConversionRequest(amount: position.amount, target: target, date: date))
         }
-        try Task.checkCancellation()
+      }
+    }
+    let outcomes = try await conversionService.convertResultBatch(requests)
+    for outcome in outcomes {
+      switch outcome {
+      case .value(let converted): total += converted
+      case .knownZero: break
+      case .failure(let error): throw error
       }
     }
     return total
@@ -160,18 +171,28 @@ struct AccountBalanceCalculator {
     if account.type == .investment, account.valuationMode == .recordedValue {
       return investmentValue ?? .zero(instrument: account.instrument)
     }
-    var total = InstrumentAmount.zero(instrument: account.instrument)
+    let target = account.instrument
+    var total = InstrumentAmount.zero(instrument: target)
+    // Sum same-instrument positions inline (Rule 8 fast path); batch the
+    // rest into a single `convertResultBatch`. A `.failure` outcome rethrows
+    // so the caller marks the balance unavailable (Rule 11); `.knownZero`
+    // contributes nothing (#790).
+    var requests: [BatchConversionRequest] = []
     for position in account.positions {
-      if position.amount.instrument == account.instrument {
+      if position.amount.instrument == target {
         total += position.amount
       } else {
-        let result = try await conversionService.convertResult(
-          position.amount, to: account.instrument, on: date)
-        if case .value(let converted) = result {
-          total += converted
-        }
+        requests.append(
+          BatchConversionRequest(amount: position.amount, target: target, date: date))
       }
-      try Task.checkCancellation()
+    }
+    let outcomes = try await conversionService.convertResultBatch(requests)
+    for outcome in outcomes {
+      switch outcome {
+      case .value(let converted): total += converted
+      case .knownZero: break
+      case .failure(let error): throw error
+      }
     }
     return total
   }
@@ -186,16 +207,42 @@ struct AccountBalanceCalculator {
     balances: [UUID: InstrumentAmount],
     on date: Date
   ) async -> (InstrumentAmount, Bool) {
-    var total = InstrumentAmount.zero(instrument: targetInstrument)
+    // Collect one request per account, bailing if any account is missing
+    // from `balances` (same as the serial guard). Resolve all in one
+    // `convertResultBatch`; any `.failure` marks the whole aggregate
+    // unavailable — an inaccurate aggregate is worse than no aggregate.
+    var requests: [BatchConversionRequest] = []
+    requests.reserveCapacity(list.count)
     for account in list {
       guard let balance = balances[account.id] else {
         return (.zero(instrument: targetInstrument), false)
       }
-      do {
-        let converted = try await conversionService.convertAmount(
-          balance, to: targetInstrument, on: date)
-        total += converted
-      } catch {
+      requests.append(
+        BatchConversionRequest(amount: balance, target: targetInstrument, date: date))
+    }
+    let outcomes: [BatchConversionOutcome]
+    do {
+      outcomes = try await conversionService.convertResultBatch(requests)
+    } catch {
+      // Cancellation: caller re-checks `Task.isCancelled` and short-circuits.
+      return (.zero(instrument: targetInstrument), false)
+    }
+    var total = InstrumentAmount.zero(instrument: targetInstrument)
+    for (account, outcome) in zip(list, outcomes) {
+      switch outcome {
+      case .value(let converted): total += converted
+      case .knownZero:
+        // Unreachable today: each request converts a per-account display
+        // balance, which is always fiat / the profile currency and so can't
+        // resolve to a `.knownZero` (.unpriced / .spam) crypto source. Guard
+        // it anyway — a future account type with a crypto display instrument
+        // would land here, and silently folding it to zero would understate
+        // the aggregate. Mark the total unavailable instead (#790).
+        assertionFailure(
+          "Aggregate display balance resolved to .knownZero for \(account.name); "
+            + "display balances are expected to be fiat / profile currency.")
+        return (.zero(instrument: targetInstrument), false)
+      case .failure(let error):
         logger.warning(
           "Aggregate conversion failed for \(account.name): \(error.localizedDescription)")
         return (.zero(instrument: targetInstrument), false)

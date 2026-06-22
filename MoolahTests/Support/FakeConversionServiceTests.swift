@@ -221,6 +221,11 @@ struct FakeConversionServiceTests {
     }
     #expect(second == InstrumentAmount(quantity: 7, instrument: aud))
 
+    // Only the `.value` element advances the counter; the `.failure` element
+    // does not. This pins the counting invariant migrated sites rely on (a
+    // failed element is not counted as a conversion).
+    #expect(failing.convertAmountCallCount == 1)
+
     // Cancellation is task-wide: it rethrows, never a per-element outcome.
     let cancelling = FakeConversionService.perCall { _ in .failure(CancellationError()) }
     await #expect(throws: CancellationError.self) {
