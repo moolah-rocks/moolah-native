@@ -31,9 +31,17 @@ struct InstrumentConversionServiceCryptoTests {
   ) throws -> FullConversionService {
     let database = try ProfileIndexDatabase.openInMemory()
     let cryptoClient = FixedCryptoPriceClient(prices: cryptoPrices)
+    let registrations = providerMappings.map { mapping in
+      CryptoRegistration(
+        instrument: Self.instrument(forMappingId: mapping.instrumentId),
+        mapping: mapping)
+    }
+    let registrationsById = Dictionary(
+      uniqueKeysWithValues: registrations.map { ($0.id, $0) })
     let cryptoService = CryptoPriceService(
       clients: [cryptoClient],
-      database: database
+      database: database,
+      metadataLookup: { registrationsById[$0] }
     )
     let exchangeClient = FixedRateClient(rates: exchangeRates)
     let exchangeService = ExchangeRateService(
@@ -41,16 +49,10 @@ struct InstrumentConversionServiceCryptoTests {
       database: database
     )
     let stockService = StockPriceService(client: FixedStockPriceClient(), database: database)
-    let registrations = providerMappings.map { mapping in
-      CryptoRegistration(
-        instrument: Self.instrument(forMappingId: mapping.instrumentId),
-        mapping: mapping)
-    }
     return FullConversionService(
       exchangeRates: exchangeService,
       stockPrices: stockService,
-      cryptoPrices: cryptoService,
-      cryptoRegistrations: { registrations }
+      cryptoPrices: cryptoService
     )
   }
 
@@ -243,22 +245,25 @@ struct InstrumentConversionServiceCryptoTests {
       prices: ["1:native": ["2026-04-10": dec("1623.45")]]
     )
     let database = try ProfileIndexDatabase.openInMemory()
+    let source = MutableRegistrationsSource()
+    // Read the actor live per lookup so a registration set after construction
+    // is picked up on the next conversion (mirrors the old per-conversion
+    // closure read). A failed lookup is not cached, so a later set resolves.
     let cryptoService = CryptoPriceService(
       clients: [cryptoClient],
-      database: database
+      database: database,
+      metadataLookup: { id in await source.current().first { $0.id == id } }
     )
     let exchangeService = ExchangeRateService(
       client: FixedRateClient(rates: [:]),
       database: database
     )
     let stockService = StockPriceService(client: FixedStockPriceClient(), database: database)
-    let source = MutableRegistrationsSource()
 
     let service = FullConversionService(
       exchangeRates: exchangeService,
       stockPrices: stockService,
-      cryptoPrices: cryptoService,
-      cryptoRegistrations: { await source.current() }
+      cryptoPrices: cryptoService
     )
 
     await #expect(throws: (any Error).self) {

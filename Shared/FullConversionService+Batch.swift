@@ -3,10 +3,11 @@
 import Foundation
 
 extension FullConversionService {
-  /// Optimised batch override. Fetches `cryptoRegistrations()` once, then:
+  /// Optimised batch override:
   ///
   /// 1. Classifies each request via `convertResultDecision` — same-instrument
-  ///    `.value` and crypto `.knownZero` resolve synchronously with no key.
+  ///    `.value` and crypto `.knownZero` resolve with no key (crypto status is
+  ///    a cached metadata point-lookup through the `PriceSource` resolver).
   /// 2. Collects the distinct `RateCacheKey`s of the remaining
   ///    `.convert` requests, resolves the cache misses concurrently through
   ///    a bounded (≤16 in-flight) throwing task group over `computeUnitFactor`
@@ -25,7 +26,6 @@ extension FullConversionService {
     // Cancellation is task-wide: bail before any work if already cancelled
     // (the task group below also surfaces a mid-flight cancellation).
     try Task.checkCancellation()
-    let registrations = try await cryptoRegistrations()
 
     // Classify each request once, in order, computing the `RateCacheKey`
     // (and its resolution context) exactly once per `.convert` request so
@@ -37,8 +37,7 @@ extension FullConversionService {
     plans.reserveCapacity(requests.count)
     var missingContexts: [RateCacheKey: KeyContext] = [:]
     for request in requests {
-      let decision = convertResultDecision(
-        request.amount, to: request.target, registrations: registrations)
+      let decision = await convertResultDecision(request.amount, to: request.target)
       switch decision {
       case .value, .knownZero:
         plans.append(RequestPlan(decision: decision, context: nil))

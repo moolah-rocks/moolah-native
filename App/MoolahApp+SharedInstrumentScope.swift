@@ -57,10 +57,17 @@ extension MoolahApp {
     marketData: ProfileSession.MarketDataServices
   ) {
     let database = setup.manager.profileIndexDatabase
+    // Build the registry first so its indexed `cryptoRegistration(byId:)`
+    // point lookup can be injected as the `CryptoPriceService` metadata plug.
+    // The conversion layer then self-resolves crypto mappings / pricing status
+    // through the price service instead of scanning the registry.
+    let registry = makeSharedInstrumentRegistry(database: database)
     return (
-      registry: makeSharedInstrumentRegistry(database: database),
+      registry: registry,
       marketData: ProfileSession.makeMarketDataServices(
-        database: database, networking: networking)
+        database: database,
+        networking: networking,
+        cryptoMetadataLookup: { id in try await registry.cryptoRegistration(byId: id) })
     )
   }
 

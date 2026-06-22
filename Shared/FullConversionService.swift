@@ -10,8 +10,12 @@ actor FullConversionService: InstrumentConversionService {
   private let exchangeRates: ExchangeRateService
   private let stockPrices: StockPriceService
   private let cryptoPrices: CryptoPriceService?
-  // internal (not private) so FullConversionService+Batch.swift can reach it.
-  let cryptoRegistrations: @Sendable () async throws -> [CryptoRegistration]
+  /// Per-instrument pricing resolver. Dispatches on `Instrument.kind` to a
+  /// `PriceSource` that knows the instrument's unit price, its native quote
+  /// currency, and its pricing status — the single surface the generic
+  /// `factor` / `priceIn` algorithm and `convertResultDecision` consult,
+  /// replacing the old per-kind helper switch.
+  private let priceSources: PriceSourceResolver
   private let logger = Logger(subsystem: "com.moolah.app", category: "CurrencyConversion")
   /// Database used by `observeRates()` to watch the live price-cache
   /// tables. Optional so existing test fixtures that don't observe
@@ -74,30 +78,20 @@ actor FullConversionService: InstrumentConversionService {
   /// repeated identical calls collapse to a single cache entry.
   var cachedRateCountForTesting: Int { rateCache.count }
 
-  /// - Parameter cryptoRegistrations: Closure invoked on each crypto
-  ///   conversion to obtain the current set of crypto registrations. Tokens
-  ///   registered via `CryptoPriceService` after service construction become
-  ///   resolvable on the next conversion without rebuilding the service.
-  ///   Errors thrown by the closure (e.g. registry read failures) propagate
-  ///   through `convert(_:from:to:on:)` rather than collapsing silently to an
-  ///   empty mapping table — see `guides/INSTRUMENT_CONVERSION_GUIDE.md`
-  ///   Rule 11.
-  ///
-  ///   Returning the full `CryptoRegistration` (rather than just its
-  ///   `mapping`) is required so `convertResult(...)` can honour the
-  ///   `pricingStatus` (`.priced` / `.unpriced` / `.spam`) per the
-  ///   discriminated `CryptoPriceLookup` flow.
+  /// Crypto registration metadata (mapping + `pricingStatus`) is resolved by
+  /// `CryptoPriceService` itself, via the keyed `metadataLookup` plug injected
+  /// at its construction — no conversion code path scans the registry here.
   init(
     exchangeRates: ExchangeRateService,
     stockPrices: StockPriceService,
     cryptoPrices: CryptoPriceService? = nil,
-    cryptoRegistrations: @Sendable @escaping () async throws -> [CryptoRegistration] = { [] },
     database: (any DatabaseWriter)? = nil
   ) {
     self.exchangeRates = exchangeRates
     self.stockPrices = stockPrices
     self.cryptoPrices = cryptoPrices
-    self.cryptoRegistrations = cryptoRegistrations
+    self.priceSources = PriceSourceResolver(
+      stockPrices: stockPrices, cryptoPrices: cryptoPrices)
     self.database = database
     self.errorChannel = database == nil ? nil : ObservationErrorChannel()
   }
@@ -153,54 +147,57 @@ actor FullConversionService: InstrumentConversionService {
     return factor
   }
 
-  // internal (not private) so FullConversionService+Batch.swift can reach it.
+  /// Computes the per-unit `source → target` factor as a precision-safe
+  /// `(multiplier, divisor)` pair (division deferred to `convert`). Selects a
+  /// single *common quote* both operands are priced into — the target fiat,
+  /// else the source fiat, else USD — and prices each operand into it via
+  /// `priceIn`. This one rule reproduces every prior per-kind case exactly,
+  /// including FX direction and the exact-round-trip property: routing
+  /// `fiat↔crypto` / `fiat↔stock` through the fiat operand (never USD) keeps
+  /// `300_000 JPY → ETH` at `1 ETH = 300_000 JPY` returning exactly `1`.
+  ///
+  /// internal (not private) so FullConversionService+Batch.swift can reach it.
   func computeUnitFactor(
     from source: Instrument,
     to target: Instrument,
     on date: Date
   ) async throws -> UnitFactor {
-    switch (source.kind, target.kind) {
-    case (.fiatCurrency, .fiatCurrency):
-      let rate = try await exchangeRates.rate(from: source, to: target, on: date)
-      return UnitFactor(multiplier: rate, divisor: Decimal(1))
-
-    case (.stock, .fiatCurrency):
-      let perUnit = try await convertStockToFiat(
-        Decimal(1), stock: source, fiat: target, on: date)
-      return UnitFactor(multiplier: perUnit, divisor: Decimal(1))
-
-    case (.cryptoToken, .fiatCurrency):
-      let perUnit = try await convertCryptoToFiat(
-        Decimal(1), crypto: source, fiat: target, on: date)
-      return UnitFactor(multiplier: perUnit, divisor: Decimal(1))
-
-    case (.fiatCurrency, .cryptoToken):
-      // Defer division so `300_000 JPY → ETH` at `1 ETH = 300_000 JPY`
-      // yields exactly `Decimal(1)` instead of `0.999…`.
-      let oneUnitInFiat = try await convertCryptoToFiat(
-        Decimal(1), crypto: target, fiat: source, on: date)
-      return UnitFactor(multiplier: Decimal(1), divisor: oneUnitInFiat)
-
-    case (.cryptoToken, .cryptoToken):
-      // Same precision concern: keep numerator and denominator separate
-      // so `(quantity * sourceUsdPrice) / targetUsdPrice` matches the
-      // original closed form.
-      let sourceUsdPrice = try await cryptoUsdPrice(for: source, on: date)
-      let targetUsdPrice = try await cryptoUsdPrice(for: target, on: date)
-      return UnitFactor(multiplier: sourceUsdPrice, divisor: targetUsdPrice)
-
-    case (.stock, .cryptoToken):
-      // `result = quantity * stockUsdValueAt1 / cryptoUsdPrice(target)`.
-      let stockUsdValueAt1 = try await convertStockToFiat(
-        Decimal(1), stock: source, fiat: Instrument.USD, on: date)
-      let targetUsdPrice = try await cryptoUsdPrice(for: target, on: date)
-      return UnitFactor(multiplier: stockUsdValueAt1, divisor: targetUsdPrice)
-
-    case (.cryptoToken, .stock),
-      (.fiatCurrency, .stock),
-      (.stock, .stock):
+    // any → stock is unsupported (unchanged precondition).
+    guard target.kind != .stock else {
       throw ConversionError.unsupportedConversion(from: source.id, to: target.id)
     }
+    if source == target { return UnitFactor(multiplier: Decimal(1), divisor: Decimal(1)) }
+    if source.kind == .fiatCurrency, target.kind == .fiatCurrency {
+      // Direct Frankfurter pair — never USD-triangulated.
+      let rate = try await exchangeRates.rate(from: source, to: target, on: date)
+      return UnitFactor(multiplier: rate, divisor: Decimal(1))
+    }
+    let common: Instrument =
+      target.kind == .fiatCurrency
+      ? target
+      : source.kind == .fiatCurrency ? source : .USD
+    let multiplier = try await priceIn(source, quotedIn: common, on: date)
+    let divisor = try await priceIn(target, quotedIn: common, on: date)
+    return UnitFactor(multiplier: multiplier, divisor: divisor)
+  }
+
+  /// Value of one unit of `instrument` expressed in `common`. Fiat resolves
+  /// through the direct exchange-rate pair; stock / crypto price in their
+  /// native quote (stock: listing currency; crypto: USD) and FX-convert to
+  /// `common` only when it differs.
+  private func priceIn(
+    _ instrument: Instrument,
+    quotedIn common: Instrument,
+    on date: Date
+  ) async throws -> Decimal {
+    if instrument == common { return Decimal(1) }
+    if instrument.kind == .fiatCurrency {
+      return try await exchangeRates.rate(from: instrument, to: common, on: date)
+    }
+    let quote = try await priceSources.source(for: instrument).quote(on: date)
+    if quote.nativeQuote == common { return quote.perUnit }
+    let fxRate = try await exchangeRates.rate(from: quote.nativeQuote, to: common, on: date)
+    return quote.perUnit * fxRate
   }
 
   func convertAmount(
@@ -232,10 +229,7 @@ actor FullConversionService: InstrumentConversionService {
     to instrument: Instrument,
     on date: Date
   ) async throws -> ConversionResult {
-    let registrations = try await cryptoRegistrations()
-    switch convertResultDecision(
-      amount, to: instrument, registrations: registrations)
-    {
+    switch await convertResultDecision(amount, to: instrument) {
     case .value(let amount):
       return .value(amount)
     case .knownZero:
@@ -253,11 +247,11 @@ actor FullConversionService: InstrumentConversionService {
     }
   }
 
-  /// The synchronous, no-provider-call part of the `convertResult`
-  /// decision, shared by `convertResult` and `convertResultBatch` so the
-  /// same-instrument / known-zero classification cannot drift between
-  /// them. `registrations` is the already-fetched crypto registration set
-  /// (fetched once per call / batch).
+  /// The no-provider-call part of the `convertResult` decision, shared by
+  /// `convertResult` and `convertResultBatch` so the same-instrument /
+  /// known-zero classification cannot drift between them. Crypto pricing
+  /// status is read through the source's `PriceSource` (a cached metadata
+  /// point-lookup — never a network call), so no registry scan happens here.
   ///
   /// `.convert` means the request needs a unit-factor resolution (and, for
   /// `.priced` crypto, may still resolve to `.knownZero` if it predates the
@@ -273,19 +267,21 @@ actor FullConversionService: InstrumentConversionService {
   // internal (not private) so FullConversionService+Batch.swift can reach it.
   func convertResultDecision(
     _ amount: InstrumentAmount,
-    to instrument: Instrument,
-    registrations: [CryptoRegistration]
-  ) -> ConvertResultDecision {
+    to instrument: Instrument
+  ) async -> ConvertResultDecision {
     if amount.instrument == instrument {
       return .value(amount)
     }
-    if amount.instrument.kind == .cryptoToken,
-      let registration = registrations.first(where: { $0.id == amount.instrument.id }),
-      registration.pricingStatus != .priced
-    {
-      // `.unpriced` and `.spam` resolve to a clean zero in the requested
-      // target instrument without a provider call.
-      return .knownZero
+    if amount.instrument.kind == .cryptoToken {
+      // `pricingStatus` ignores the date for crypto (registration status is
+      // date-independent); a missing registration reports `.priced` so the
+      // error surfaces later at price-fetch time rather than masquerading as
+      // a clean zero here. `.unpriced` / `.spam` resolve to a zero in the
+      // requested target instrument without a provider call.
+      let status =
+        (try? await priceSources.source(for: amount.instrument)
+          .pricingStatus(on: Date())) ?? .priced
+      if status != .priced { return .knownZero }
     }
     return .convert
   }
@@ -340,61 +336,6 @@ actor FullConversionService: InstrumentConversionService {
       return AsyncStream { $0.finish() }
     }
     return errorChannel.stream
-  }
-
-  // MARK: - Stock helpers
-
-  private func convertStockToFiat(
-    _ quantity: Decimal, stock: Instrument, fiat: Instrument, on date: Date
-  ) async throws -> Decimal {
-    guard let ticker = stock.ticker else {
-      throw ConversionError.unsupportedConversion(from: stock.id, to: fiat.id)
-    }
-    let pricePerShare = try await stockPrices.price(ticker: ticker, on: date)
-    let listingInstrument = try await stockPrices.instrument(for: ticker)
-    let valueInListingCurrency = quantity * pricePerShare
-
-    if listingInstrument.id == fiat.id {
-      return valueInListingCurrency
-    }
-
-    let rate = try await exchangeRates.rate(from: listingInstrument, to: fiat, on: date)
-    return valueInListingCurrency * rate
-  }
-
-  // MARK: - Crypto helpers
-
-  private func convertCryptoToFiat(
-    _ quantity: Decimal, crypto: Instrument, fiat: Instrument, on date: Date
-  ) async throws -> Decimal {
-    let usdPrice = try await cryptoUsdPrice(for: crypto, on: date)
-    let usdValue = quantity * usdPrice
-    if fiat.id == "USD" { return usdValue }
-    let fiatRate = try await exchangeRates.rate(
-      from: Instrument.USD, to: fiat, on: date
-    )
-    return usdValue * fiatRate
-  }
-
-  private func cryptoUsdPrice(for instrument: Instrument, on date: Date) async throws -> Decimal {
-    guard let cryptoPrices else {
-      throw ConversionError.noCryptoPriceService
-    }
-    let registrations = try await cryptoRegistrations()
-    // Canonical wrapped-native tokens (WETH, WMATIC, …) have no price
-    // feed of their own but are 1:1 redeemable for the chain's native
-    // asset, so price them via the native registration. The match is an
-    // exact `(chainId, contractAddress)` trust-list lookup — never by
-    // symbol — so a spoofed look-alike cannot inherit the native price.
-    let lookupId =
-      WrappedNativeContracts.nativePricingInstrumentId(
-        chainId: instrument.chainId, contractAddress: instrument.contractAddress)
-      ?? instrument.id
-    guard let registration = registrations.first(where: { $0.id == lookupId }) else {
-      throw ConversionError.noProviderMapping(instrumentId: instrument.id)
-    }
-    return try await cryptoPrices.price(
-      for: registration.instrument, mapping: registration.mapping, on: date)
   }
 
 }

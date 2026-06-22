@@ -96,4 +96,35 @@ struct ProfileSessionTests {
     // Store exists and starts empty (registrations load on demand).
     #expect(session.cryptoTokenStore?.registrations.isEmpty == true)
   }
+
+  /// The preview/legacy fallback path (`ProfileSession` built without a
+  /// `SyncCoordinator`) must resolve crypto registrations from its
+  /// per-profile registry through the conversion path — equivalent to the
+  /// previous `cryptoRegistrations: { registry.allCryptoRegistrations() }`
+  /// wiring. The fallback `CryptoPriceService`'s metadata lookup is late-bound
+  /// to that registry in `makeCloudKitBackend`. Proven network-free: a token
+  /// registered with `.spam` status must short-circuit `convertResult` to
+  /// `.knownZero` (which only happens if the status was resolved from the
+  /// registry). With an unbound/nil lookup the status would default to
+  /// `.priced` and the call would instead attempt a price fetch.
+  @Test("fallback session resolves crypto registry status through conversion")
+  func fallbackSessionResolvesCryptoRegistryStatus() async throws {
+    let containerManager = try ProfileContainerManager.forTesting()
+    let profile = Profile(label: "iCloud", currencyCode: "AUD", financialYearStartMonth: 7)
+    let session = try ProfileSession(profile: profile, containerManager: containerManager)
+
+    let eth = Instrument.crypto(
+      chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    let mapping = CryptoProviderMapping(
+      instrumentId: eth.id, coingeckoId: "ethereum",
+      cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT")
+    let registry = try #require(session.instrumentRegistry)
+    try await registry.registerCrypto(eth, mapping: mapping, forcingStatus: .spam)
+
+    let amount = InstrumentAmount(quantity: dec("1"), instrument: eth)
+    let result = try await session.backend.conversionService.convertResult(
+      amount, to: profile.instrument, on: Date())
+
+    #expect(result == .knownZero(targetInstrument: profile.instrument))
+  }
 }

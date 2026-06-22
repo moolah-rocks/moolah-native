@@ -39,17 +39,18 @@ struct ConvertCacheInvalidationTests {
     await toggle.setPrices(["1:native": ["2026-04-10": dec("1623.45")]])
 
     let database = try ProfileIndexDatabase.openInMemory()
+    let registration = ethRegistration()
+    let registrationsById = [registration.id: registration]
     let cryptoService = CryptoPriceService(
-      clients: [toggle], database: database)
+      clients: [toggle], database: database,
+      metadataLookup: { registrationsById[$0] })
     let exchangeService = ExchangeRateService(
       client: FixedRateClient(rates: [:]), database: database)
     let stockService = StockPriceService(client: FixedStockPriceClient(), database: database)
-    let registration = ethRegistration()
     let service = FullConversionService(
       exchangeRates: exchangeService,
       stockPrices: stockService,
-      cryptoPrices: cryptoService,
-      cryptoRegistrations: { [registration] }
+      cryptoPrices: cryptoService
     )
 
     // First conversion populates the cache.
@@ -81,17 +82,19 @@ struct ConvertCacheInvalidationTests {
   @Test
   func invalidateCacheForFiatInstrumentIsNoOp() async throws {
     let database = try ProfileIndexDatabase.openInMemory()
+    let registration = ethRegistration()
+    let registrationsById = [registration.id: registration]
     let cryptoService = CryptoPriceService(
       clients: [FixedCryptoPriceClient(prices: ["1:native": ["2026-04-10": dec("1623.45")]])],
-      database: database)
+      database: database,
+      metadataLookup: { registrationsById[$0] })
     let exchangeService = ExchangeRateService(
       client: FixedRateClient(rates: [:]), database: database)
     let stockService = StockPriceService(client: FixedStockPriceClient(), database: database)
     let service = FullConversionService(
       exchangeRates: exchangeService,
       stockPrices: stockService,
-      cryptoPrices: cryptoService,
-      cryptoRegistrations: { [self.ethRegistration()] }
+      cryptoPrices: cryptoService
     )
 
     // Warm the crypto cache.

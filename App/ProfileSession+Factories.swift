@@ -7,6 +7,48 @@ import Foundation
 import GRDB
 
 extension ProfileSession {
+  /// Keyed plug the crypto price service uses to self-resolve a crypto
+  /// instrument's `CryptoRegistration` (mapping + `pricingStatus`) by id.
+  typealias CryptoMetadataLookup = @Sendable (String) async throws -> CryptoRegistration?
+
+  /// Late-bindable `CryptoMetadataLookup`. On the preview/legacy fallback path
+  /// the `CryptoPriceService` is constructed (in `makeMarketDataServices`)
+  /// before the per-profile instrument registry exists (built downstream in
+  /// `makeCloudKitBackend`), so the registry-backed lookup is rotated in once
+  /// the registry is available — mirroring how the registry's own sync hooks
+  /// are attached after construction. Until bound it resolves `nil` (no crypto
+  /// registration), and `makeCloudKitBackend` always binds it synchronously
+  /// before any conversion runs. The shared (production) scope does not use
+  /// this — it injects its registry-backed closure directly, since the shared
+  /// registry is built alongside the shared `CryptoPriceService`.
+  final class LateBoundCryptoMetadataLookup: @unchecked Sendable {
+    private let lock = NSLock()
+    private var resolver: CryptoMetadataLookup?
+
+    func bind(_ resolver: @escaping CryptoMetadataLookup) {
+      lock.lock()
+      defer { lock.unlock() }
+      self.resolver = resolver
+    }
+
+    /// The closure to hand to `CryptoPriceService.metadataLookup`. Reads the
+    /// bound resolver under the lock on each call so a registration added to
+    /// the registry after binding is still picked up live.
+    var lookup: CryptoMetadataLookup {
+      { [self] id in
+        let resolver = withLock { self.resolver }
+        guard let resolver else { return nil }
+        return try await resolver(id)
+      }
+    }
+
+    private func withLock<T>(_ body: () -> T) -> T {
+      lock.lock()
+      defer { lock.unlock() }
+      return body()
+    }
+  }
+
   // MARK: - Market Data Services
 
   /// Bundle of the external market-data services a profile session depends
@@ -26,9 +68,17 @@ extension ProfileSession {
   /// profile session. Standalone helper so `ProfileSession.init` can build
   /// and assign the trio in one step. Each rate service persists to the
   /// supplied per-profile `database`.
+  /// - Parameter cryptoMetadataLookup: Keyed plug the `CryptoPriceService`
+  ///   uses to self-resolve a crypto instrument's registration (mapping +
+  ///   `pricingStatus`) by id. Production passes the shared instrument
+  ///   registry's `cryptoRegistration(byId:)` so the conversion layer never
+  ///   scans the registry. Defaults to a nil lookup for preview / legacy
+  ///   callers (whose fallback registry holds no crypto registrations) —
+  ///   matching the prior empty-array behaviour.
   static func makeMarketDataServices(
     database: any DatabaseWriter,
-    networking: NetworkingServices
+    networking: NetworkingServices,
+    cryptoMetadataLookup: @escaping CryptoMetadataLookup = { _ in nil }
   ) -> MarketDataServices {
     let yahooClient = YahooFinanceClient(
       http: networking.client(forHost: "query2.finance.yahoo.com"))
@@ -51,7 +101,8 @@ extension ProfileSession {
       cryptoPrice: Self.makeCryptoPriceService(
         coinGeckoApiKeyProvider: cgKeyProvider, database: database, networking: networking,
         defiLlamaSupportCache: defiLlamaSupportCache,
-        localResolver: lookupCatalog),
+        localResolver: lookupCatalog,
+        metadataLookup: cryptoMetadataLookup),
       yahooPriceFetcher: yahooClient,
       coinGeckoApiKeyProvider: cgKeyProvider,
       defiLlamaSupportCache: defiLlamaSupportCache
@@ -69,7 +120,8 @@ extension ProfileSession {
     database: any DatabaseWriter,
     networking: NetworkingServices,
     defiLlamaSupportCache: DefiLlamaSupportCache?,
-    localResolver: (any LocalContractResolver)? = nil
+    localResolver: (any LocalContractResolver)? = nil,
+    metadataLookup: @escaping CryptoMetadataLookup = { _ in nil }
   ) -> CryptoPriceService {
     // `CoinGeckoClient` resolves the key per request: an empty key targets
     // the free public host; a configured key targets the Pro host with
@@ -119,18 +171,25 @@ extension ProfileSession {
         // Coalesce a missing keychain entry to `""` so the resolver always
         // runs the free-tier CoinGecko path (it treats `nil` as opt-out).
         coinGeckoApiKeyProvider: { coinGeckoApiKeyProvider() ?? "" },
-        localResolver: localResolver)
+        localResolver: localResolver),
+      metadataLookup: metadataLookup
     )
   }
 
   // MARK: - Backend
 
   /// Builds the CloudKit `BackendProvider` for the profile.
+  ///
+  /// - Parameter fallbackMetadataLookup: On the preview/legacy fallback path,
+  ///   the box whose registry-backed resolver `makeCloudKitBackend` binds once
+  ///   the per-profile registry is built. `nil` on the shared path (and for
+  ///   callers that don't need crypto self-resolution).
   static func makeBackend(
     profile: Profile,
     syncCoordinator: SyncCoordinator? = nil,
     services: MarketDataServices,
-    database: any DatabaseWriter
+    database: any DatabaseWriter,
+    fallbackMetadataLookup: LateBoundCryptoMetadataLookup? = nil
   ) -> BackendProvider {
     makeCloudKitBackend(
       profile: profile,
@@ -139,7 +198,8 @@ extension ProfileSession {
         exchangeRates: services.exchangeRate,
         stockPrices: services.stockPrice,
         cryptoPrices: services.cryptoPrice),
-      database: database)
+      database: database,
+      fallbackMetadataLookup: fallbackMetadataLookup)
   }
 
   // MARK: - Domain Stores

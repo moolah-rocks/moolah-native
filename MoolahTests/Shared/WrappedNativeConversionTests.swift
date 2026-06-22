@@ -33,23 +33,28 @@ struct WrappedNativeConversionTests {
     providerMappings: [CryptoProviderMapping]
   ) throws -> FullConversionService {
     let database = try ProfileIndexDatabase.openInMemory()
-    let cryptoService = CryptoPriceService(
-      clients: [FixedCryptoPriceClient(prices: cryptoPrices)],
-      database: database)
-    let exchangeService = ExchangeRateService(
-      client: FixedRateClient(rates: [:]), database: database)
-    let stockService = StockPriceService(
-      client: FixedStockPriceClient(), database: database)
     let registrations = providerMappings.map { mapping in
       CryptoRegistration(
         instrument: Self.instrument(forMappingId: mapping.instrumentId),
         mapping: mapping)
     }
+    // Registrations are keyed by the *native* id (`"<chain>:native"`); the
+    // WETH lookup is redirected to native by `CryptoPriceService`, so the
+    // dictionary keys line up for the redirected resolve.
+    let registrationsById = Dictionary(
+      uniqueKeysWithValues: registrations.map { ($0.id, $0) })
+    let cryptoService = CryptoPriceService(
+      clients: [FixedCryptoPriceClient(prices: cryptoPrices)],
+      database: database,
+      metadataLookup: { registrationsById[$0] })
+    let exchangeService = ExchangeRateService(
+      client: FixedRateClient(rates: [:]), database: database)
+    let stockService = StockPriceService(
+      client: FixedStockPriceClient(), database: database)
     return FullConversionService(
       exchangeRates: exchangeService,
       stockPrices: stockService,
-      cryptoPrices: cryptoService,
-      cryptoRegistrations: { registrations })
+      cryptoPrices: cryptoService)
   }
 
   private static func instrument(forMappingId id: String) -> Instrument {

@@ -8,18 +8,20 @@ import Testing
 struct FullConversionErrorPropagationTests {
   struct FakeRegistryError: Error {}
 
-  /// When the `cryptoRegistrations` closure throws (e.g. registry read
-  /// failure), the error must propagate through `convert(_:from:to:on:)` for a
-  /// crypto conversion rather than being silently collapsed to an empty
-  /// mapping table — which would masquerade as a spurious
-  /// `noProviderMapping` error and violate Rule 11 of
-  /// `guides/INSTRUMENT_CONVERSION_GUIDE.md`.
+  /// When the crypto metadata lookup throws (e.g. registry read failure), the
+  /// error must propagate through `convert(_:from:to:on:)` for a crypto
+  /// conversion rather than being silently collapsed to a missing-mapping —
+  /// which would masquerade as a spurious `noProviderMapping` error and
+  /// violate Rule 11 of `guides/INSTRUMENT_CONVERSION_GUIDE.md`. The throw is
+  /// rethrown by `CryptoPriceService.registration(for:)` at price time,
+  /// surfacing exactly as the old registry-closure throw did.
   @Test
   func cryptoConversionPropagatesRegistryError() async throws {
     let database = try ProfileIndexDatabase.openInMemory()
     let cryptoService = CryptoPriceService(
       clients: [FixedCryptoPriceClient()],
-      database: database
+      database: database,
+      metadataLookup: { _ in throw FakeRegistryError() }
     )
     let exchangeService = ExchangeRateService(
       client: FixedRateClient(rates: [:]),
@@ -30,10 +32,7 @@ struct FullConversionErrorPropagationTests {
     let service = FullConversionService(
       exchangeRates: exchangeService,
       stockPrices: stockService,
-      cryptoPrices: cryptoService,
-      cryptoRegistrations: { () async throws -> [CryptoRegistration] in
-        throw FakeRegistryError()
-      }
+      cryptoPrices: cryptoService
     )
 
     let eth = Instrument.crypto(
