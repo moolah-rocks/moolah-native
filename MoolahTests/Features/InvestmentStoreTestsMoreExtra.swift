@@ -39,7 +39,7 @@ struct InvestmentStoreTestsMoreExtra {
     let accountId = UUID()
     let (backend, _) = try TestBackend.create()
     let store = InvestmentStore(
-      repository: backend.investments, conversionService: FixedConversionService())
+      repository: backend.investments, conversionService: FakeConversionService.fixedRates([:]))
     let date = makeDate(year: 2024, month: 3, day: 15)
     let amount = InstrumentAmount(quantity: Decimal(5000), instrument: .USD)
 
@@ -61,7 +61,7 @@ struct InvestmentStoreTestsMoreExtra {
     let store = InvestmentStore(
       repository: backend.investments,
       transactionRepository: repo,
-      conversionService: FixedConversionService()
+      conversionService: FakeConversionService.fixedRates([:])
     )
 
     let task = Task { @MainActor in
@@ -109,7 +109,7 @@ struct InvestmentStoreTestsMoreExtra {
       in: database,
       instrument: .USD)
     let store = InvestmentStore(
-      repository: backend.investments, conversionService: FixedConversionService())
+      repository: backend.investments, conversionService: FakeConversionService.fixedRates([:]))
 
     await store.loadValues(accountId: audAccount)
     #expect(store.values.count == 1)
@@ -132,7 +132,7 @@ struct InvestmentStoreTestsMoreExtra {
       investmentValues: makeValues(accountId: accountId, count: 450), in: database
     )
     let store = InvestmentStore(
-      repository: backend.investments, conversionService: FixedConversionService())
+      repository: backend.investments, conversionService: FakeConversionService.fixedRates([:]))
 
     // Run loadValues inside a task we cancel before it runs. The
     // cancellation flag is inherited, so the guard after the first
@@ -174,7 +174,7 @@ struct InvestmentStoreTestsMoreExtra {
     let store = InvestmentStore(
       repository: backend.investments,
       transactionRepository: backend.transactions,
-      conversionService: FixedConversionService())
+      conversionService: FakeConversionService.fixedRates([:]))
 
     let task = Task { @MainActor in
       await store.loadPositions(accountId: accountId)

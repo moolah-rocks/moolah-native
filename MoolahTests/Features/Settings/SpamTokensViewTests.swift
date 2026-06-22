@@ -18,7 +18,7 @@ struct SpamTokensViewTests {
   private struct Fixture {
     let store: CryptoTokenStore
     let registry: GRDBInstrumentRegistryRepository
-    let conversionService: RecordingConversionService
+    let conversionService: FakeConversionService
   }
 
   private func makeFixture() async throws -> Fixture {
@@ -27,7 +27,7 @@ struct SpamTokensViewTests {
     let registry = GRDBInstrumentRegistryRepository(database: database)
     let priceService = CryptoPriceService(
       clients: [FixedCryptoPriceClient()], database: database)
-    let conversionService = RecordingConversionService()
+    let conversionService = FakeConversionService.passthrough
     let store = CryptoTokenStore(
       registry: registry,
       cryptoPriceService: priceService,

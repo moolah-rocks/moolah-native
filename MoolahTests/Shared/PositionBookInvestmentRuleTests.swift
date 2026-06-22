@@ -41,7 +41,7 @@ struct PositionBookInvestmentRuleTests {
       ]),
       investmentAccountIds: [investmentAccount])
 
-    let conversion = FixedConversionService()
+    let conversion = FakeConversionService.fixedRates([:])
 
     let result = try await book.dailyBalance(
       on: date,
@@ -76,7 +76,7 @@ struct PositionBookInvestmentRuleTests {
       ]),
       investmentAccountIds: [investmentAccount])
 
-    let conversion = FixedConversionService()
+    let conversion = FakeConversionService.fixedRates([:])
 
     let result = try await book.dailyBalance(
       on: date,
@@ -103,7 +103,7 @@ struct PositionBookInvestmentRuleTests {
       ]),
       investmentAccountIds: [investmentAccount])
 
-    let conversion = FixedConversionService()
+    let conversion = FakeConversionService.fixedRates([:])
 
     let result = try await book.dailyBalance(
       on: date,
@@ -147,7 +147,7 @@ struct PositionBookInvestmentRuleTests {
     #expect(book.accountsFromTransfers[investmentAccount]?[aud] == 1_000)
     #expect(book.accounts[investmentAccount]?[aud] == 1_000)
 
-    let conversion = FixedConversionService()
+    let conversion = FakeConversionService.fixedRates([:])
     let result = try await book.dailyBalance(
       on: date,
       context: PositionBook.BalanceContext(
@@ -205,7 +205,7 @@ struct PositionBookInvestmentRuleTests {
       ]),
       investmentAccountIds: [investmentAccount])
 
-    let conversion = FixedConversionService()
+    let conversion = FakeConversionService.fixedRates([:])
 
     let allLegs = try await book.dailyBalance(
       on: date,

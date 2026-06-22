@@ -24,7 +24,7 @@ struct TransactionStoreCategoryFilterTests {
     TestBackend.seed(transactions: transactions, in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 

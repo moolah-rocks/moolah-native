@@ -20,7 +20,7 @@ struct AccountGroupStoreMutationsTests {
   ) async throws -> (AccountStore, AccountGroupStore) {
     TestBackend.seed(accounts: seedAccounts, in: database)
     let accountStore = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     let groupStore = AccountGroupStore(repository: backend.accountGroups)
     try await groupStore.waitForFirstEmission()

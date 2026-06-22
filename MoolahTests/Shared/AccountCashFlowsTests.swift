@@ -35,7 +35,7 @@ struct AccountCashFlowsTests {
         )
       ]
     )
-    let service = FixedConversionService(rates: [:])
+    let service = FakeConversionService.fixedRates([:])
     let amounts = try await AccountCashFlows.flowAmounts(
       for: txn, accountId: accountId, hostCurrency: aud, service: service
     )
@@ -49,7 +49,7 @@ struct AccountCashFlowsTests {
     let day10 = try date(daysAfterEpoch: 10)
     let day0Rate = try #require(Decimal(string: "1.50"))
     let day10Rate = try #require(Decimal(string: "1.40"))
-    let service = DateBasedFixedConversionService(rates: [
+    let service = FakeConversionService.dateRates([
       day0: [usd.id: day0Rate],
       day10: [usd.id: day10Rate],
     ])
@@ -71,15 +71,13 @@ struct AccountCashFlowsTests {
 
   @Test("boundary-crossing host-currency leg returns the leg quantity (Rule 8 fast path)")
   func boundaryCrossingHostCurrencyLegFastPath() async throws {
-    // ThrowingCountingConversionService.calls counts every convert(...) call;
+    // FakeConversionService.perCall: callCount counts every convert(...) call;
     // the helper hits the fast path for host-currency legs and never calls
-    // through, so .calls must remain zero. The outcome closure returning
+    // through, so callCount must remain zero. The outcome closure returning
     // .success(0) is intentionally wrong-shaped — if the fast path regresses
     // and convert(...) is invoked, the assertion `amounts == [250]` will
     // fail (amounts would be `[0]`), pinpointing the regression.
-    let counter = ThrowingCountingConversionService(
-      outcome: { _ in .success(0) }
-    )
+    let counter = FakeConversionService.perCall { _ in .success(0) }
     let txn = Transaction(
       date: try date(daysAfterEpoch: 1),
       legs: [
@@ -95,7 +93,7 @@ struct AccountCashFlowsTests {
       for: txn, accountId: accountId, hostCurrency: aud, service: counter
     )
     #expect(amounts == [250])
-    #expect(counter.calls == 0)
+    #expect(counter.callCount == 0)
   }
 
   @Test("boundary-crossing foreign-currency leg converts on transaction.date")
@@ -104,7 +102,7 @@ struct AccountCashFlowsTests {
     let day5 = try date(daysAfterEpoch: 5)
     let day0Rate = try #require(Decimal(string: "1.50"))
     let day5Rate = try #require(Decimal(string: "1.40"))
-    let service = DateBasedFixedConversionService(rates: [
+    let service = FakeConversionService.dateRates([
       day0: [usd.id: day0Rate],
       day5: [usd.id: day5Rate],
     ])
@@ -137,7 +135,7 @@ struct AccountCashFlowsTests {
         TransactionLeg(accountId: accountId, instrument: aud, quantity: -4_000, type: .trade),
       ]
     )
-    let service = FixedConversionService(rates: [:])
+    let service = FakeConversionService.fixedRates([:])
     let amounts = try await AccountCashFlows.flowAmounts(
       for: txn, accountId: accountId, hostCurrency: aud, service: service
     )
@@ -160,7 +158,7 @@ struct AccountCashFlowsTests {
         ),
       ]
     )
-    let service = FixedConversionService(rates: [:])
+    let service = FakeConversionService.fixedRates([:])
     let amounts = try await AccountCashFlows.flowAmounts(
       for: txn, accountId: accountId, hostCurrency: aud, service: service
     )
@@ -172,12 +170,12 @@ struct AccountCashFlowsTests {
   @Test("conversion failure on first qualifying leg rethrows; later legs are not converted")
   func conversionFailureStopsOnFirstError() async throws {
     let bhp = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
-    // ThrowingCountingConversionService: outcome closure receives the
+    // FakeConversionService.perCall: outcome closure receives the
     // 0-based call index so we can fail the first call and verify
-    // subsequent calls never happen (calls counter is checked below).
-    let counter = ThrowingCountingConversionService(
-      outcome: { _ in .failure(ConversionTestError.unavailable) }
-    )
+    // subsequent calls never happen (callCount is checked below).
+    let counter = FakeConversionService.perCall { _ in
+      .failure(ConversionTestError.unavailable)
+    }
     let txn = Transaction(
       date: try date(daysAfterEpoch: 0),
       legs: [
@@ -194,7 +192,7 @@ struct AccountCashFlowsTests {
     } catch is ConversionTestError {
       // expected
     }
-    #expect(counter.calls == 1)  // first call threw; helper bailed
+    #expect(counter.callCount == 1)  // first call threw; helper bailed
   }
 
   // MARK: - Cancellation propagates
@@ -208,9 +206,7 @@ struct AccountCashFlowsTests {
         TransactionLeg(accountId: otherAccountId, instrument: aud, quantity: -100, type: .expense),
       ]
     )
-    let service = ThrowingCountingConversionService(
-      outcome: { _ in .failure(CancellationError()) }
-    )
+    let service = FakeConversionService.perCall { _ in .failure(CancellationError()) }
     do {
       _ = try await AccountCashFlows.flowAmounts(
         for: txn, accountId: accountId, hostCurrency: aud, service: service

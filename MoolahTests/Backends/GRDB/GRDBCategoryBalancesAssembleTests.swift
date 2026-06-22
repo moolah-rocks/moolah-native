@@ -9,7 +9,7 @@ import Testing
 /// accumulates totals per category.
 ///
 /// These tests drive the static helper directly with an injected
-/// throwing conversion service (`ThrowingCountingConversionService` from
+/// throwing conversion service (`FakeConversionService.perCall` from
 /// `MoolahTests/Support/`) so the per-row error contract required by
 /// `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11 is captured by a unit test
 /// (no GRDB stack needed). A future refactor that collapses the per-row
@@ -45,7 +45,7 @@ struct GRDBCategoryBalancesAssembleTests {
   @Test("handleConversionFailure invoked once per failing row before rethrow")
   func handleConversionFailureFiresPerRow() async throws {
     let aggregation = makeAggregation()
-    let conversionService = ThrowingCountingConversionService { index in
+    let conversionService = FakeConversionService.perCall { index in
       .failure(CallbackError(index: index))
     }
     let failures = FailureLog()
@@ -70,13 +70,13 @@ struct GRDBCategoryBalancesAssembleTests {
     // out — a refactor to "log once at the outer catch" would only fire
     // once and break this assertion.
     #expect(failures.snapshot() == [0, 1, 2])
-    #expect(conversionService.calls == 3)
+    #expect(conversionService.callCount == 3)
   }
 
   @Test("loop processes all rows even when the first row fails")
   func loopContinuesAfterFirstFailure() async throws {
     let aggregation = makeAggregation()
-    let conversionService = ThrowingCountingConversionService { index in
+    let conversionService = FakeConversionService.perCall { index in
       index == 0 ? .failure(CallbackError(index: index)) : .success(0)
     }
     let visited = FailureLog()
@@ -101,13 +101,13 @@ struct GRDBCategoryBalancesAssembleTests {
     // throw. A refactor that breaks early would log [0] and call the
     // service once, not three times.
     #expect(visited.snapshot() == [0])
-    #expect(conversionService.calls == 3)
+    #expect(conversionService.callCount == 3)
   }
 
   @Test("CancellationError rethrown immediately without invoking handleConversionFailure")
   func cancellationErrorIsNotFoldedIntoConversionFailureLog() async throws {
     let aggregation = makeAggregation()
-    let conversionService = ThrowingCountingConversionService { index in
+    let conversionService = FakeConversionService.perCall { index in
       index == 0 ? .failure(CancellationError()) : .success(0)
     }
     let visited = FailureLog()
@@ -129,6 +129,6 @@ struct GRDBCategoryBalancesAssembleTests {
     // never fired, and the loop short-circuited on the first row
     // (no further conversion calls beyond the cancelled one).
     #expect(visited.snapshot().isEmpty)
-    #expect(conversionService.calls == 1)
+    #expect(conversionService.callCount == 1)
   }
 }

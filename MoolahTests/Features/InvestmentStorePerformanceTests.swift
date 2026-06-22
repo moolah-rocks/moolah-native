@@ -94,7 +94,7 @@ struct InvestmentStorePerformanceTests {
     let aud = Instrument.AUD
     let usd = Instrument.USD
     let (backend, _) = try TestBackend.create()
-    let conversion = FailingConversionService(failingInstrumentIds: [usd.id])
+    let conversion = FakeConversionService.failingInstruments([usd.id])
     let store = InvestmentStore(
       repository: backend.investments,
       transactionRepository: backend.transactions,
@@ -107,7 +107,7 @@ struct InvestmentStorePerformanceTests {
       account, openingBalance: InstrumentAmount(quantity: 0, instrument: aud))
 
     // Cross-account USD transfer in — calculator must convert USD → AUD.
-    // FailingConversionService throws on USD, so compute() throws and the
+    // FakeConversionService.failingInstruments throws on USD, so compute() throws and the
     // store sets accountPerformance = nil + records the error.
     let cashAccount = UUID()
     _ = try await backend.transactions.create(

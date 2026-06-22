@@ -40,7 +40,7 @@ struct PositionsHistoryBuilderTests {
       buy(instrument: bhp, qty: 100, fiat: 4_000, daysAfterEpoch: 1),
       buy(instrument: cba, qty: 50, fiat: 5_000, daysAfterEpoch: 2),
     ]
-    let service = FixedConversionService(rates: [
+    let service = FakeConversionService.fixedRates([
       bhp.id: Decimal(50),
       cba.id: Decimal(110),
     ])
@@ -73,7 +73,7 @@ struct PositionsHistoryBuilderTests {
       buy(instrument: bhp, qty: 100, fiat: 4_000, daysAfterEpoch: 1),
       buy(instrument: bhp, qty: 50, fiat: 2_500, daysAfterEpoch: 10),
     ]
-    let service = FixedConversionService(rates: [bhp.id: Decimal(50)])
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 30)
 
@@ -104,9 +104,9 @@ struct PositionsHistoryBuilderTests {
       buy(instrument: bhp, qty: 100, fiat: 4_000, daysAfterEpoch: 1),
       buy(instrument: cba, qty: 50, fiat: 5_000, daysAfterEpoch: 2),
     ]
-    let service = FailingConversionService(
-      rates: [bhp.id: Decimal(50)],
-      failingInstrumentIds: [cba.id]
+    let service = FakeConversionService.failingInstruments(
+      [cba.id],
+      rates: [bhp.id: Decimal(50)]
     )
     let builder = PositionsHistoryBuilder(conversionService: service)
     let series = await builder.build(
@@ -127,7 +127,7 @@ struct PositionsHistoryBuilderTests {
   func preFoldHistoricalCostBasis() async throws {
     // Buy on day 0 (well before the .oneMonth cutoff for now=day 200).
     let txns = [buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 0)]
-    let service = FixedConversionService(rates: [bhp.id: Decimal(60)])
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(60)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 200)
     let series = await builder.build(
@@ -149,7 +149,7 @@ struct PositionsHistoryBuilderTests {
       buy(instrument: bhp, qty: 100, fiat: 4_000, daysAfterEpoch: 1),
       buy(instrument: bhp, qty: 50, fiat: 2_500, daysAfterEpoch: 1),  // same day
     ]
-    let service = FixedConversionService(rates: [bhp.id: Decimal(50)])
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 5)
 
@@ -167,7 +167,7 @@ struct PositionsHistoryBuilderTests {
 
   @Test("empty transactions input returns an empty series")
   func emptyTransactions() async {
-    let service = FixedConversionService(rates: [:])
+    let service = FakeConversionService.fixedRates([:])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let series = await builder.build(
       transactions: [], accountId: accountId,
@@ -182,7 +182,7 @@ struct PositionsHistoryBuilderTests {
     let txns = [
       buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 0)
     ]
-    let service = FixedConversionService(rates: [bhp.id: Decimal(60)])
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(60)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 200)
     let oneMonth = await builder.build(
@@ -210,7 +210,7 @@ struct PositionsHistoryBuilderTests {
     // Single buy on day 1; rate steps day-by-day so each daily point
     // exercises a different conversion rate.
     let txns = [buy(instrument: bhp, qty: 100, fiat: 4_000, daysAfterEpoch: 1)]
-    let service = DateBasedFixedConversionService(rates: [
+    let service = FakeConversionService.dateRates([
       date(daysAfterEpoch: 1): [bhp.id: Decimal(50)],
       date(daysAfterEpoch: 2): [bhp.id: Decimal(60)],
       date(daysAfterEpoch: 3): [bhp.id: Decimal(70)],

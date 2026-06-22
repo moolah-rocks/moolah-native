@@ -18,7 +18,7 @@ struct TransactionStoreSuggestionReadPathTests {
   private func makeStore(backend: CloudKitBackend) -> TransactionStore {
     TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument,
       transferSuggestions: backend.transferSuggestions)
   }
@@ -180,7 +180,7 @@ struct TransactionStoreSuggestionReadPathTests {
     // No `transferSuggestions:` argument → no coordinator wired.
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     await store.mergeSuggestedTransfer(outgoing)

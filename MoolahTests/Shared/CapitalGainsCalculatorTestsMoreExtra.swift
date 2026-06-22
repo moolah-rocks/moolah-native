@@ -44,7 +44,7 @@ struct CapitalGainsCalculatorTestsMoreExtra {
     // gain = 4000 − 3000 = 1000.
     // Mistake (`Date()` ≈ today, > date(365)) → proceeds 10 AUD, gain ≈ −2990.
     // Mistake (`buyTx.date`=date(0)) → 1:1 fallback, proceeds 1 AUD, gain = −2999.
-    let service = DateBasedFixedConversionService(rates: [
+    let service = FakeConversionService.dateRates([
       date(100): [eth.id: 4000, uni.id: 8],
       date(365): [eth.id: 10, uni.id: dec("0.01")],
     ])
@@ -104,7 +104,7 @@ struct CapitalGainsCalculatorTestsMoreExtra {
 
     func invalidateCache(for instrument: Instrument) async {}
 
-    // No-op observation stubs — see `FixedConversionService.observeRates`
+    // No-op observation stubs — see `FakeConversionService.observeRates`
     // for the rationale.
     nonisolated func observeRates() -> AsyncStream<Void> {
       AsyncStream { continuation in

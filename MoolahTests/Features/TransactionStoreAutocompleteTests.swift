@@ -114,7 +114,7 @@ struct TransactionStoreAutocompleteTests {
     TestBackend.seed(transactions: transactions, in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -133,7 +133,7 @@ struct TransactionStoreAutocompleteTests {
     // earlier saves before they run, but we don't burn wall-clock time.
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument,
       debounceInterval: .zero
     )
@@ -189,7 +189,7 @@ struct TransactionStoreAutocompleteTests {
 
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FailingConversionService(failingInstrumentIds: [usd.id]),
+      conversionService: FakeConversionService.failingInstruments([usd.id]),
       targetInstrument: aud
     )
 

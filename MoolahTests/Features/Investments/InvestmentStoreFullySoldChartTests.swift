@@ -20,7 +20,7 @@ struct InvestmentStoreFullySoldChartTests {
   /// the store + account ready for a `loadAndBuildPositionsInput` call.
   private func makeFullySoldAccount() async throws -> (InvestmentStore, Account) {
     let (backend, _) = try TestBackend.create()
-    let conversionService = FixedConversionService(rates: [bhp.id: Decimal(50)])
+    let conversionService = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
     let store = InvestmentStore(
       repository: backend.investments,
       transactionRepository: backend.transactions,

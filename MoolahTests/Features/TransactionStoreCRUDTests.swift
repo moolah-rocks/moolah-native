@@ -15,7 +15,7 @@ struct TransactionStoreCRUDTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -54,7 +54,7 @@ struct TransactionStoreCRUDTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     await store.load(filter: TransactionFilter(accountId: accountId))
@@ -103,7 +103,7 @@ struct TransactionStoreCRUDTests {
     TestBackend.seed(transactions: [transaction], in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -148,7 +148,7 @@ struct TransactionStoreCRUDTests {
     TestBackend.seed(transactions: [transaction], in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -168,7 +168,7 @@ struct TransactionStoreCRUDTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 

@@ -233,7 +233,7 @@ enum ProfileDataSyncHandlerTestSupport {
     database: any DatabaseWriter,
     instrument: Instrument
   ) throws -> ProfileGRDBRepositories {
-    let conversionService = FixedConversionService(rates: [:])
+    let conversionService = FakeConversionService.fixedRates([:])
     // Shared profile-index registry over its own in-memory DB —
     // mirrors production wiring; there is no per-profile `instrument`
     // table (dropped by `v10_drop_shared_instrument_legacy`).

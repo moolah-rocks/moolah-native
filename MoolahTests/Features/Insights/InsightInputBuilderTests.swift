@@ -151,8 +151,7 @@ struct InsightInputBuilderTests {
   @Test("scheduledBills drop a leg whose conversion fails")
   func scheduledBillsDropFailingConversion() async throws {
     // Fail every conversion off the AUD reporting currency.
-    let conversion = DateFailingConversionService(rates: [:], failingDates: [])
-    let alwaysFail = AlwaysFailingConversionService(inner: conversion)
+    let alwaysFail = FakeConversionService.alwaysThrows
     let backend = try CloudKitAnalysisTestBackend(conversionService: alwaysFail)
     let now = Date()
     let future = try AnalysisTestHelpers.addingDaysCurrentCalendar(14, to: now)
@@ -251,39 +250,4 @@ struct InsightInputBuilderTests {
     #expect(input.profitLoss.isEmpty)
     #expect(input.capitalGains.isEmpty)
   }
-}
-
-/// Conversion service that fails every cross-instrument conversion (and
-/// succeeds same-instrument), for exercising the Rule 11 drop path.
-struct AlwaysFailingConversionService: InstrumentConversionService {
-  let inner: DateFailingConversionService
-
-  func convert(
-    _ quantity: Decimal, from: Instrument, to: Instrument, on date: Date
-  ) async throws -> Decimal {
-    if from.id == to.id { return quantity }
-    throw DateFailingConversionError.unavailable(date: date)
-  }
-
-  func convertAmount(
-    _ amount: InstrumentAmount, to instrument: Instrument, on date: Date
-  ) async throws -> InstrumentAmount {
-    if amount.instrument == instrument { return amount }
-    throw DateFailingConversionError.unavailable(date: date)
-  }
-
-  func convertResult(
-    _ amount: InstrumentAmount, to instrument: Instrument, on date: Date
-  ) async throws -> ConversionResult {
-    if amount.instrument == instrument { return .value(amount) }
-    throw DateFailingConversionError.unavailable(date: date)
-  }
-
-  func invalidateCache(for instrument: Instrument) async {
-    await inner.invalidateCache(for: instrument)
-  }
-
-  func observeRates() -> AsyncStream<Void> { inner.observeRates() }
-
-  func observeErrors() -> AsyncStream<any Error> { inner.observeErrors() }
 }

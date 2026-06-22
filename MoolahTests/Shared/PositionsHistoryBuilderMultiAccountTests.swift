@@ -48,7 +48,7 @@ struct PositionsHistoryBuilderMultiAccountTests {
       buy(instrument: btc, qty: 1, fiat: 10_000, accountId: accountA, daysAfterEpoch: 1),
       buy(instrument: btc, qty: 2, fiat: 20_000, accountId: accountB, daysAfterEpoch: 1),
     ]
-    let service = FixedConversionService(rates: [btc.id: Decimal(15_000)])
+    let service = FakeConversionService.fixedRates([btc.id: Decimal(15_000)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 3)
     let series = await builder.build(
@@ -88,7 +88,7 @@ struct PositionsHistoryBuilderMultiAccountTests {
         TransactionLeg(accountId: accountB, instrument: btc, quantity: 1, type: .income),
       ]
     )
-    let service = FixedConversionService(rates: [btc.id: Decimal(12_000)])
+    let service = FakeConversionService.fixedRates([btc.id: Decimal(12_000)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 2)
     let series = await builder.build(
@@ -140,7 +140,7 @@ struct PositionsHistoryBuilderMultiAccountTests {
         ]
       ),
     ]
-    let service = DateBasedFixedConversionService(rates: [
+    let service = FakeConversionService.dateRates([
       date(daysAfterEpoch: 1): [btc.id: Decimal(10_000)],
       date(daysAfterEpoch: 2): [btc.id: Decimal(20_000)],
       date(daysAfterEpoch: 3): [btc.id: Decimal(30_000)],
@@ -171,7 +171,7 @@ struct PositionsHistoryBuilderMultiAccountTests {
     let txns = [
       buy(instrument: btc, qty: 5, fiat: 50_000, accountId: accountA, daysAfterEpoch: 1)
     ]
-    let service = FixedConversionService(rates: [btc.id: Decimal(11_000)])
+    let service = FakeConversionService.fixedRates([btc.id: Decimal(11_000)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 3)
 

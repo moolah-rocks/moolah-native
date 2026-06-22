@@ -47,7 +47,7 @@ struct CryptoSettingsCoinGeckoKeyTests {
     let store = CryptoTokenStore(
       registry: registry,
       cryptoPriceService: priceService,
-      conversionService: RecordingConversionService(),
+      conversionService: FakeConversionService.passthrough,
       apiKeyStore: coingeckoKeychain,
       alchemyKeyStore: alchemyKeychain,
       cryptocompareKeyStore: cryptocompareKeychain)

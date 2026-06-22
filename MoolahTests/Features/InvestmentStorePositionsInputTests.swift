@@ -65,9 +65,9 @@ struct InvestmentStorePositionsInputTests {
     try await registerCoingeckoOnly(eth, coingeckoId: "ethereum", in: backend)
     try await registerCoingeckoOnly(btc, coingeckoId: "bitcoin", in: backend)
 
-    // Use FixedConversionService so the swap-date rates are deterministic
+    // Use FakeConversionService so the swap-date rates are deterministic
     // (TestBackend's default conversion service may not have ETH/BTC fixtures).
-    let conversionService = FixedConversionService(rates: [
+    let conversionService = FakeConversionService.fixedRates([
       eth.id: Decimal(3_000),
       btc.id: Decimal(60_000),
     ])
@@ -134,7 +134,7 @@ struct InvestmentStorePositionsInputTests {
     // rather than a flat per-currency rate. The fold itself introduces no
     // conversions, so the held quantity is unaffected.
     let rateEffectiveFrom = Date(timeIntervalSinceNow: -86_400 * 365)
-    let conversionService = DateBasedFixedConversionService(rates: [
+    let conversionService = FakeConversionService.dateRates([
       rateEffectiveFrom: [
         ethMainnet.id: Decimal(3_000),
         ethOptimism.id: Decimal(3_000),

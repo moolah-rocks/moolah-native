@@ -17,7 +17,7 @@ struct AccountStoreApplyDeltaTests {
     _ = AccountStoreTestSupport.seedAccount(
       id: acctId, name: "Checking", balance: Decimal(100000) / 100, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.by(id: acctId) != nil },
@@ -41,7 +41,7 @@ struct AccountStoreApplyDeltaTests {
     _ = AccountStoreTestSupport.seedAccount(
       id: acctId, name: "Checking", balance: Decimal(100000) / 100, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.by(id: acctId) != nil },
@@ -68,7 +68,7 @@ struct AccountStoreApplyDeltaTests {
     _ = AccountStoreTestSupport.seedAccount(
       id: savingsId, name: "Savings", balance: Decimal(200000) / 100, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.count == 2 },
@@ -97,7 +97,7 @@ struct AccountStoreApplyDeltaTests {
     _ = AccountStoreTestSupport.seedAccount(
       id: checkingId, name: "Checking", balance: Decimal(100000) / 100, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.convertedCurrentTotal?.quantity == Decimal(100000) / 100 },
@@ -121,7 +121,7 @@ struct AccountStoreApplyDeltaTests {
     _ = AccountStoreTestSupport.seedAccount(
       id: acctId, name: "Checking", balance: Decimal(100000) / 100, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.by(id: acctId) != nil },
@@ -155,7 +155,7 @@ struct AccountStoreApplyDeltaTests {
     _ = AccountStoreTestSupport.seedAccount(
       id: acctId, name: "Checking", balance: Decimal(100000) / 100, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.by(id: acctId) != nil },

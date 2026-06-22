@@ -26,8 +26,8 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
       day: "2025-06-10", sampleDate: dayOne,
       accountId: accountId, instrumentId: "USD", type: "trade", qty: 1_000_000_000)
     // Rate available on day two only; day one fails.
-    let conversion = DateFailingConversionService(
-      rates: [
+    let conversion = FakeConversionService.dateRates(
+      [
         try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
           "USD": try AnalysisTestHelpers.decimal("1.5")
         ]
@@ -70,8 +70,7 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
     let row = GRDBAnalysisRepository.DailyBalanceAccountRow(
       day: "2025-06-10", sampleDate: day,
       accountId: accountId, instrumentId: "USD", type: "trade", qty: 1_000_000_000)
-    let conversion = DateFailingConversionService(
-      rates: [:], failingDates: [dayKey])
+    let conversion = FakeConversionService.dateRates([:], failingDates: [dayKey])
     // Pre-seed the day as if applyInvestmentValues had succeeded with
     // a recorded-value snapshot total of 100.
     var balances: [Date: DailyBalance] = [
@@ -106,12 +105,11 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
     let rowOne = GRDBAnalysisRepository.DailyBalanceAccountRow(
       day: "2025-06-10", sampleDate: dayOne,
       accountId: accountId, instrumentId: "USD", type: "trade", qty: 1_000_000_000)
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
-          "USD": try AnalysisTestHelpers.decimal("1.5")
-        ]
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
+        "USD": try AnalysisTestHelpers.decimal("1.5")
+      ]
+    ])
     // Simulate a snapshot-fold dropout on day 1: dailyBalances has
     // entries only for day 2 (day 1 was removed by an earlier fold).
     var balances: [Date: DailyBalance] = [
@@ -148,12 +146,11 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
     let prior = GRDBAnalysisRepository.DailyBalanceAccountRow(
       day: "2025-05-01", sampleDate: priorDay,
       accountId: accountId, instrumentId: "USD", type: "trade", qty: 1_000_000_000)
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
-          "USD": try AnalysisTestHelpers.decimal("1.5")
-        ]
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
+        "USD": try AnalysisTestHelpers.decimal("1.5")
+      ]
+    ])
     var balances: [Date: DailyBalance] = [
       dayKey: TradesModeFoldTestSupport.placeholderBalance(at: dayKey)
     ]
@@ -185,12 +182,11 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
     // trades-mode ids into BalanceContext.investmentAccountIds so
     // those positions are excluded from balance and contribute only
     // via investmentValue. This test pins that fix.
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
-          "USD": try AnalysisTestHelpers.decimal("1.5")
-        ]
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
+        "USD": try AnalysisTestHelpers.decimal("1.5")
+      ]
+    ])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
     let aud = Instrument.defaultTestInstrument
     let usd = Instrument.fiat(code: "USD")
@@ -252,7 +248,7 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
       let context = TradesModeFoldTestSupport.makeContext(
         tradesIds: [accountId],
         instrumentMap: [aud.id: aud],
-        conversionService: DateBasedFixedConversionService(rates: [:]))
+        conversionService: FakeConversionService.dateRates([:]))
       let handlers = TradesModeFoldTestSupport.makeHandlers { _, _ in }
       try await GRDBAnalysisRepository.applyTradesModePositionValuations(
         priorRows: [], postRows: [row],

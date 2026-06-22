@@ -14,7 +14,7 @@ import Testing
 /// per-month or per-range grouping) would silently pass against
 /// constant-rate fixtures.
 ///
-/// Uses `DateBasedFixedConversionService`, which returns a different
+/// Uses `FakeConversionService.dateRates`, which returns a different
 /// rate per calendar day, to detect such regressions.
 @Suite("GRDBAnalysisRepository income and expense — date-sensitive conversion")
 struct GRDBIncomeExpenseConversionTests {
@@ -33,8 +33,8 @@ struct GRDBIncomeExpenseConversionTests {
     // Seed at UTC midnight for each transaction's UTC calendar day so
     // `ratesAsOf`'s descending `<=` scan lands on the right rate per
     // parsed-day Date.
-    let conversion = DateBasedFixedConversionService(
-      rates: [
+    let conversion = FakeConversionService.dateRates(
+      [
         try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 0): [
           "USD": rateOne
         ],
@@ -87,8 +87,8 @@ struct GRDBIncomeExpenseConversionTests {
     let dayEur = try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 12, hour: 12)
     let usdRate = try AnalysisTestHelpers.decimal("1.5")
     let eurRate = try AnalysisTestHelpers.decimal("1.7")
-    let conversion = DateBasedFixedConversionService(
-      rates: [
+    let conversion = FakeConversionService.dateRates(
+      [
         try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 0): [
           "USD": usdRate, "EUR": eurRate,
         ],
@@ -141,7 +141,7 @@ struct GRDBIncomeExpenseConversionTests {
     // splits across layers by account: the investment-side leg into the
     // investment layer, the bank-side leg into the available-funds base.
     let day = try AnalysisTestHelpers.utcDate(year: 2025, month: 7, day: 10, hour: 12)
-    let conversion = DateBasedFixedConversionService(rates: [:])
+    let conversion = FakeConversionService.dateRates([:])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let bank = Account(
@@ -183,7 +183,7 @@ struct GRDBIncomeExpenseConversionTests {
     // the investment-side leg lands in the investment layer; they net to
     // zero with investments included (only own money moved).
     let day = try AnalysisTestHelpers.utcDate(year: 2025, month: 7, day: 11, hour: 12)
-    let conversion = DateBasedFixedConversionService(rates: [:])
+    let conversion = FakeConversionService.dateRates([:])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let bank = Account(

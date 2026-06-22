@@ -67,7 +67,7 @@ struct InstrumentLocalSyncQueueTests {
     let repo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .defaultTestInstrument,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
 
@@ -90,7 +90,7 @@ struct InstrumentLocalSyncQueueTests {
     let repo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .defaultTestInstrument,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
 
@@ -123,7 +123,7 @@ struct InstrumentLocalSyncQueueTests {
     let repo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .defaultTestInstrument,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
 
@@ -146,7 +146,7 @@ struct InstrumentLocalSyncQueueTests {
     let repo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .defaultTestInstrument,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
 
@@ -176,7 +176,7 @@ struct InstrumentLocalSyncQueueTests {
     let repo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .defaultTestInstrument,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
 
@@ -290,7 +290,7 @@ struct InstrumentLocalSyncQueueTests {
     let repo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .defaultTestInstrument,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
 

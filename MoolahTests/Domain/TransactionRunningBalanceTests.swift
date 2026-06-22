@@ -57,7 +57,7 @@ struct TransactionRunningBalanceTests {
       priorBalance: .zero(instrument: target),
       accountId: accountId,
       targetInstrument: target,
-      conversionService: FixedConversionService()
+      conversionService: FakeConversionService.fixedRates([:])
     )
 
     #expect(response.rows.count == 3)
@@ -81,7 +81,7 @@ struct TransactionRunningBalanceTests {
       priorBalance: .zero(instrument: target),
       accountId: accountId,
       targetInstrument: target,
-      conversionService: FailingConversionService(failingInstrumentIds: [foreign.id])
+      conversionService: FakeConversionService.failingInstruments([foreign.id])
     )
 
     #expect(response.rows.count == 1)
@@ -117,7 +117,7 @@ struct TransactionRunningBalanceTests {
       priorBalance: .zero(instrument: target),
       accountId: accountId,
       targetInstrument: target,
-      conversionService: FailingConversionService(failingInstrumentIds: [foreign.id])
+      conversionService: FakeConversionService.failingInstruments([foreign.id])
     )
 
     #expect(response.rows.count == 3)
@@ -151,7 +151,7 @@ struct TransactionRunningBalanceTests {
       priorBalance: .zero(instrument: target),
       accountId: accountId,
       targetInstrument: target,
-      conversionService: FailingConversionService(failingInstrumentIds: [foreign.id])
+      conversionService: FakeConversionService.failingInstruments([foreign.id])
     )
 
     #expect(response.rows.count == 3)
@@ -182,7 +182,7 @@ struct TransactionRunningBalanceTests {
       priorBalance: .zero(instrument: target),
       accountId: accountId,
       targetInstrument: target,
-      conversionService: FailingConversionService(failingInstrumentIds: [foreign.id])
+      conversionService: FakeConversionService.failingInstruments([foreign.id])
     )
 
     let error = try #require(response.firstConversionError)
@@ -216,7 +216,7 @@ struct TransactionRunningBalanceTests {
       priorBalance: .zero(instrument: target),
       accountId: accountId,
       targetInstrument: target,
-      conversionService: FixedConversionService(knownZeroInstrumentIds: [spam.id])
+      conversionService: FakeConversionService.fixedRates([:], knownZero: [spam.id])
     )
 
     #expect(response.rows.count == 3)
@@ -252,7 +252,7 @@ struct TransactionRunningBalanceTests {
       priorBalance: .zero(instrument: target),
       accountId: accountId,
       targetInstrument: target,
-      conversionService: FixedConversionService(knownZeroInstrumentIds: [spam.id])
+      conversionService: FakeConversionService.fixedRates([:], knownZero: [spam.id])
     )
 
     #expect(response.rows.count == 1)

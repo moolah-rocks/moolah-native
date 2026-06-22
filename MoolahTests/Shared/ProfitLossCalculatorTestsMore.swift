@@ -35,7 +35,7 @@ struct ProfitLossCalculatorTestsMore {
       ])
 
     // BHP $50/share (100 * 50 = 5000). CBA $120/share (50 * 120 = 6000).
-    let service = FixedConversionService(rates: ["ASX:BHP.AX": 50, "ASX:CBA.AX": 120])
+    let service = FakeConversionService.fixedRates(["ASX:BHP.AX": 50, "ASX:CBA.AX": 120])
     let results = try await ProfitLossCalculator.compute(
       transactions: [buyBHP, buyCBA],
       profileCurrency: aud,
@@ -80,7 +80,7 @@ struct ProfitLossCalculatorTestsMore {
           categoryId: nil, earmarkId: nil),
       ])
 
-    let service = FixedConversionService(rates: ["ASX:BHP.AX": 50, eth.id: 2500])
+    let service = FakeConversionService.fixedRates(["ASX:BHP.AX": 50, eth.id: 2500])
     let results = try await ProfitLossCalculator.compute(
       transactions: [buyBHP, buyETH],
       profileCurrency: aud,
@@ -124,7 +124,7 @@ struct ProfitLossCalculatorTestsMore {
       ])
 
     // 1 USD = 1.5 AUD, BHP now worth AUD 50/share.
-    let service = FixedConversionService(rates: [
+    let service = FakeConversionService.fixedRates([
       "USD": dec("1.5"),
       "ASX:BHP.AX": 50,
     ])
@@ -178,7 +178,7 @@ struct ProfitLossCalculatorTestsMore {
     //
     // Correct routing: totalInvested = 2000 × 1.5 = 3000; currentValue = 100 × 50 = 5000.
     // If dates were swapped: totalInvested = 2000 × 2.0 = 4000; currentValue = 100 × 30 = 3000.
-    let service = DateBasedFixedConversionService(rates: [
+    let service = FakeConversionService.dateRates([
       date(0): ["USD": dec("1.5"), "ASX:BHP.AX": 30],
       date(365): ["USD": dec("2.0"), "ASX:BHP.AX": 50],
     ])
@@ -219,7 +219,7 @@ struct ProfitLossCalculatorTestsMore {
     let results = try await ProfitLossCalculator.compute(
       transactions: [buyTx],
       profileCurrency: aud,
-      conversionService: FixedConversionService(rates: [:]),
+      conversionService: FakeConversionService.fixedRates([:]),
       asOfDate: date(0)
     )
     try #require(results.count == 1)
@@ -238,7 +238,7 @@ struct ProfitLossCalculatorTestsMore {
     let accountId = UUID()
     let tradeDate = date(0)
     let nextDay = date(1)
-    let service = DateBasedFixedConversionService(rates: [
+    let service = FakeConversionService.dateRates([
       tradeDate: ["USD": dec("1.5")],
       nextDay: ["USD": Decimal(2)],
     ])

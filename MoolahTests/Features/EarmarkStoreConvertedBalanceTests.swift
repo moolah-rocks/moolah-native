@@ -12,7 +12,7 @@ struct EarmarkStoreConvertedBalanceTests {
   func testConvertedTotalBalanceNilBeforeLoad() async throws {
     let (backend, _) = try TestBackend.create()
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     #expect(store.convertedTotalBalance == nil)
@@ -34,7 +34,7 @@ struct EarmarkStoreConvertedBalanceTests {
       amounts: [earmarkId: (saved: 500, spent: 0)],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     await expectEventually("converted total balance computed") {
@@ -65,7 +65,7 @@ struct EarmarkStoreConvertedBalanceTests {
       ],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     // Individual balances should reflect true values; the total should clamp
@@ -93,7 +93,7 @@ struct EarmarkStoreConvertedBalanceTests {
       amounts: [earmarkId: (saved: 500, spent: 0)],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.convertedTotalBalance?.quantity == 500 },
@@ -129,7 +129,7 @@ struct EarmarkStoreConvertedBalanceTests {
       amounts: [earmarkId: (saved: 500, spent: 0)],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     await expectEventually("per-earmark converted balance, saved, and spent settle") {
@@ -155,7 +155,7 @@ struct EarmarkStoreConvertedBalanceTests {
       amounts: [earmarkId: (saved: 500, spent: 0)],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.convertedBalance(for: earmarkId)?.quantity == 500 },
@@ -192,7 +192,7 @@ struct EarmarkStoreConvertedBalanceTests {
       amounts: [earmarkId: (saved: 500, spent: 0)],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     // Only wait for the earmark to be observed — `displayBalance` recomputes
     // from positions on demand, so it must not depend on the converted-balance
@@ -212,7 +212,7 @@ struct EarmarkStoreConvertedBalanceTests {
   func testDisplayBalanceReturnsZeroForUnknownEarmark() async throws {
     let (backend, _) = try TestBackend.create()
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     let balance = try await store.displayBalance(for: UUID())

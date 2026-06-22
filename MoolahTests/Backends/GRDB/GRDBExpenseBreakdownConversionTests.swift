@@ -14,7 +14,7 @@ import Testing
 /// (collapsing to per-month or per-range grouping) would silently pass
 /// against constant-rate fixtures.
 ///
-/// Uses `DateBasedFixedConversionService`, which returns a different rate
+/// Uses `FakeConversionService.dateRates`, which returns a different rate
 /// per calendar day, to detect such regressions.
 @Suite("GRDBAnalysisRepository expense breakdown — date-sensitive conversion")
 struct GRDBExpenseBreakdownConversionTests {
@@ -33,15 +33,14 @@ struct GRDBExpenseBreakdownConversionTests {
     // Seed at UTC midnight for each transaction's UTC calendar day so
     // `ratesAsOf`'s descending `<=` scan lands on the right rate per
     // parsed-day Date.
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 0): [
-          "USD": rateOne
-        ],
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 11, hour: 0): [
-          "USD": rateTwo
-        ],
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 0): [
+        "USD": rateOne
+      ],
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 11, hour: 0): [
+        "USD": rateTwo
+      ],
+    ])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let account = Account(
@@ -89,12 +88,11 @@ struct GRDBExpenseBreakdownConversionTests {
     // identical to per-leg conversion at this rate (same day = same rate).
     let day = try AnalysisTestHelpers.utcDate(year: 2025, month: 7, day: 5, hour: 12)
     let rate = try AnalysisTestHelpers.decimal("1.5")
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 7, day: 5, hour: 0): [
-          "USD": rate
-        ]
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 7, day: 5, hour: 0): [
+        "USD": rate
+      ]
+    ])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let account = Account(
@@ -136,7 +134,7 @@ struct GRDBExpenseBreakdownConversionTests {
     // refactor that re-introduces `account_id IS NOT NULL` to the
     // WHERE clause breaks this test instead of silently dropping rows.
     let day = try AnalysisTestHelpers.utcDate(year: 2025, month: 8, day: 12, hour: 12)
-    let conversion = DateBasedFixedConversionService(rates: [:])
+    let conversion = FakeConversionService.dateRates([:])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let category = Category(id: UUID(), name: "Travel")
@@ -180,11 +178,10 @@ struct GRDBExpenseBreakdownConversionTests {
       year: 2025, month: 1, day: 15, hour: 0)
     let junRateKey = try AnalysisTestHelpers.utcDate(
       year: 2025, month: 6, day: 15, hour: 0)
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        janRateKey: ["USD": janRate],
-        junRateKey: ["USD": junRate],
-      ])
+    let conversion = FakeConversionService.dateRates([
+      janRateKey: ["USD": janRate],
+      junRateKey: ["USD": junRate],
+    ])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let account = Account(

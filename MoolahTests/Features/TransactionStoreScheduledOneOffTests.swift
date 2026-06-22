@@ -25,7 +25,7 @@ struct TransactionStoreScheduledOneOffTests {
 
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 

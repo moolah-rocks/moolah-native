@@ -17,7 +17,7 @@ struct AccountStoreMutationsTests {
     _ = AccountStoreTestSupport.seedAccount(
       name: "Hidden", balance: Decimal(50000) / 100, isHidden: true, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     await expectEventually("only the visible account is current") {
@@ -33,7 +33,7 @@ struct AccountStoreMutationsTests {
     _ = AccountStoreTestSupport.seedAccount(
       name: "Hidden", balance: Decimal(50000) / 100, isHidden: true, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     try await store.waitForNextEmission(
@@ -56,7 +56,7 @@ struct AccountStoreMutationsTests {
       name: "Hidden", type: .investment, balance: Decimal(50000) / 100, isHidden: true,
       in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     await expectEventually("visible-only investment accounts count is 1") {
@@ -79,7 +79,7 @@ struct AccountStoreMutationsTests {
     _ = AccountStoreTestSupport.seedAccount(
       name: "Hidden", balance: Decimal(50000) / 100, isHidden: true, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     try await store.waitForNextEmission(
@@ -108,11 +108,11 @@ struct AccountStoreMutationsTests {
       name: "ETH Wallet", type: .crypto,
       valuationMode: .calculatedFromTrades, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     // Poll the asserted snapshot directly: the rate-tick recompute (which
-    // `FixedConversionService.observeRates()` fires synchronously on
+    // `FakeConversionService.observeRates()` fires synchronously on
     // subscription) can race the accounts observation, so an early tick can
     // land before `apply(accounts:)` has run. Polling the final condition
     // closes that window instead of reading once after a single emission.
@@ -127,7 +127,7 @@ struct AccountStoreMutationsTests {
   func testCreatePersistsInstrument() async throws {
     let (backend, _) = try TestBackend.create()
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForFirstEmission()
     let usdInstrument = Instrument.fiat(code: "USD")
@@ -156,7 +156,7 @@ struct AccountStoreMutationsTests {
   func testCreateEmptyInvestmentAccountPopulatesConvertedBalance() async throws {
     let (backend, _) = try TestBackend.create()
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForFirstEmission()
     let account = Account(
@@ -177,7 +177,7 @@ struct AccountStoreMutationsTests {
     let (backend, database) = try TestBackend.create()
     let original = AccountStoreTestSupport.seedAccount(name: "Savings", in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.by(id: original.id) != nil },
@@ -211,7 +211,7 @@ struct AccountStoreMutationsTests {
     let third = AccountStoreTestSupport.seedAccount(
       id: thirdId, name: "C", position: 2, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.count == 3 },
@@ -243,7 +243,7 @@ struct AccountStoreMutationsTests {
           isHidden: false),
       ])
     let store = AccountStore(
-      repository: repository, conversionService: FixedConversionService(),
+      repository: repository, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     await expectEventually("initial accounts observed in order") {
       store.accounts.ordered.map(\.name) == ["A", "B"]

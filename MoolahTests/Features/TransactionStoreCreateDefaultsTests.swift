@@ -17,7 +17,7 @@ struct TransactionStoreCreateDefaultsTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -39,7 +39,7 @@ struct TransactionStoreCreateDefaultsTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -60,7 +60,7 @@ struct TransactionStoreCreateDefaultsTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -84,7 +84,7 @@ struct TransactionStoreCreateDefaultsTests {
     // Use an error-injecting repository to force a failure
     let failingStore = TransactionStore(
       repository: FailingTransactionRepository(),
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -105,7 +105,7 @@ struct TransactionStoreCreateDefaultsTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -133,7 +133,7 @@ struct TransactionStoreCreateDefaultsTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -155,7 +155,7 @@ struct TransactionStoreCreateDefaultsTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -172,7 +172,7 @@ struct TransactionStoreCreateDefaultsTests {
   func testCreateDefaultScheduledReturnsNilOnFailure() async throws {
     let failingStore = TransactionStore(
       repository: FailingTransactionRepository(),
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 

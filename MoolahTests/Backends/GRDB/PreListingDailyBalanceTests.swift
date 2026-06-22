@@ -336,7 +336,7 @@ private struct PreListingConversionService: InstrumentConversionService {
   let airdropUSDPrice: Decimal
   let usdToAUD: Decimal
 
-  private let inner: FixedConversionService
+  private let inner: FakeConversionService
 
   init(
     airdropInstrumentId: String,
@@ -348,7 +348,7 @@ private struct PreListingConversionService: InstrumentConversionService {
     self.firstTradedOn = firstTradedOn
     self.airdropUSDPrice = airdropUSDPrice
     self.usdToAUD = usdToAUD
-    self.inner = FixedConversionService(rates: ["USD": usdToAUD])
+    self.inner = FakeConversionService.fixedRates(["USD": usdToAUD])
   }
 
   func convert(

@@ -37,7 +37,7 @@ struct TransactionStoreScheduledViewTests {
 
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     await store.load(filter: TransactionFilter(accountId: usdAccountId))
@@ -75,7 +75,7 @@ struct TransactionStoreScheduledViewTests {
 
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     await store.load(filter: TransactionFilter(accountId: revolutId))
@@ -122,7 +122,7 @@ struct TransactionStoreScheduledViewTests {
       in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     return ScheduledTestStoreFixture(store: store, backend: backend, database: database)
   }

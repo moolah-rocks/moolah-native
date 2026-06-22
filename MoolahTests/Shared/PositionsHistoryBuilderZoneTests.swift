@@ -64,7 +64,7 @@ struct PositionsHistoryBuilderZoneTests {
     nowComponents.hour = 12
     let now = try #require(Calendar.utc.date(from: nowComponents))
 
-    let service = FixedConversionService(rates: [btc.id: Decimal(50_000)])
+    let service = FakeConversionService.fixedRates([btc.id: Decimal(50_000)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let series = await builder.build(
       transactions: [txn],

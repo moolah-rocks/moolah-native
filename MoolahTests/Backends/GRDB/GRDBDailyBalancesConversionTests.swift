@@ -12,9 +12,9 @@ import Testing
 /// the right calendar day is fed into the `InstrumentConversionService`
 /// per day — a regression that converted every day at a single
 /// snapshot date (e.g. `Date()`) would silently pass against the
-/// constant-rate `FixedConversionService` used by other contract suites.
+/// constant-rate `FakeConversionService.fixedRates` used by other contract suites.
 ///
-/// Uses `DateBasedFixedConversionService`, which returns a different
+/// Uses `FakeConversionService.dateRates`, which returns a different
 /// rate per calendar day, to detect such regressions.
 @Suite("GRDBAnalysisRepository daily balances — date-sensitive conversion")
 struct GRDBDailyBalancesConversionTests {
@@ -32,15 +32,14 @@ struct GRDBDailyBalancesConversionTests {
 
     // Seed at UTC midnight for each day so `ratesAsOf`'s descending
     // `<=` scan lands on the right rate per parsed-day Date.
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 0): [
-          "USD": rateOne
-        ],
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 11, hour: 0): [
-          "USD": rateTwo
-        ],
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 0): [
+        "USD": rateOne
+      ],
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 11, hour: 0): [
+        "USD": rateTwo
+      ],
+    ])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let account = Account(
@@ -99,15 +98,14 @@ struct GRDBDailyBalancesConversionTests {
     let day = try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 12)
     let dayRate = try AnalysisTestHelpers.decimal("1.5")
     let nowRate = try AnalysisTestHelpers.decimal("3.0")
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
-          "USD": dayRate
-        ],
-        try AnalysisTestHelpers.utcDate(year: 2026, month: 1, day: 1, hour: 0): [
-          "USD": nowRate
-        ],
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
+        "USD": dayRate
+      ],
+      try AnalysisTestHelpers.utcDate(year: 2026, month: 1, day: 1, hour: 0): [
+        "USD": nowRate
+      ],
+    ])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let investmentAccount = Account(
@@ -155,12 +153,11 @@ struct GRDBDailyBalancesConversionTests {
     let day = try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 12)
     let usdRate = try AnalysisTestHelpers.decimal("1.5")
     let eurRate = try AnalysisTestHelpers.decimal("1.7")
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 0): [
-          "USD": usdRate, "EUR": eurRate,
-        ]
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 0): [
+        "USD": usdRate, "EUR": eurRate,
+      ]
+    ])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let usdAccount = Account(

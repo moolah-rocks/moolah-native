@@ -16,7 +16,7 @@ struct AccountStoreNewAccountDefaultTests {
     let (backend, _) = try TestBackend.create()
     let store = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     return (store, backend)
   }

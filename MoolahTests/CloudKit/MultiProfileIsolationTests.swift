@@ -36,12 +36,12 @@ struct MultiProfileIsolationTests {
     let backendA = CloudKitBackend(
       database: databaseA,
       instrument: .defaultTestInstrument, profileLabel: "A",
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentRegistry: GRDBInstrumentRegistryRepository(database: databaseA))
     let backendB = CloudKitBackend(
       database: databaseB,
       instrument: .defaultTestInstrument, profileLabel: "B",
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentRegistry: GRDBInstrumentRegistryRepository(database: databaseB))
 
     _ = try await backendA.categories.create(Moolah.Category(name: "A-Cat"))

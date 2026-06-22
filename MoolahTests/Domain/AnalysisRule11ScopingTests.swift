@@ -55,8 +55,8 @@ struct AnalysisRule11ScopingTests {
     let rate1 = try AnalysisTestHelpers.decimal("1.50")
     let rate3 = try AnalysisTestHelpers.decimal("1.40")
     // Rate available on day1 and day3; absent (throws) on day2.
-    let conversion = DateFailingConversionService(
-      rates: [
+    let conversion = FakeConversionService.dateRates(
+      [
         days.day1: ["USD": rate1],
         days.day3: ["USD": rate3],
       ],

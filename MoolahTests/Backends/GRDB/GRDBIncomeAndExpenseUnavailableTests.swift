@@ -11,7 +11,7 @@ import Testing
 /// still surfaces as a zeroed placeholder bucket rather than vanishing.
 ///
 /// Rows are made to fail deterministically with the index-keyed
-/// `ThrowingCountingConversionService`: the closure receives the
+/// `FakeConversionService.perCall`: the closure receives the
 /// conversion call index, and each row in the fixtures contributes
 /// exactly one non-zero column (so one conversion call per row, in row
 /// order). Failing on a chosen index therefore fails exactly that row.
@@ -57,7 +57,7 @@ struct GRDBIncomeAndExpenseUnavailableTests {
       row(day: "2025-01-20", incomeQty: 200),
     ])
     let transient = transientError()
-    let conversionService = ThrowingCountingConversionService { index in
+    let conversionService = FakeConversionService.perCall { index in
       index == 0 ? .failure(transient) : .success(200)
     }
 
@@ -82,7 +82,7 @@ struct GRDBIncomeAndExpenseUnavailableTests {
       row(day: "2025-03-25", incomeQty: 200),
     ])
     let transient = transientError()
-    let conversionService = ThrowingCountingConversionService { _ in
+    let conversionService = FakeConversionService.perCall { _ in
       .failure(transient)
     }
 
@@ -113,7 +113,7 @@ struct GRDBIncomeAndExpenseUnavailableTests {
       row(day: "2025-02-10", incomeQty: 100),
       row(day: "2025-02-20", incomeQty: 200),
     ])
-    let conversionService = ThrowingCountingConversionService { _ in .success(50) }
+    let conversionService = FakeConversionService.perCall { _ in .success(50) }
 
     let result = try await GRDBAnalysisRepository.assembleIncomeAndExpense(
       aggregation: aggregation,
@@ -131,7 +131,7 @@ struct GRDBIncomeAndExpenseUnavailableTests {
     let aggregation = aggregation([
       row(day: "2025-04-10", incomeQty: 100)
     ])
-    let conversionService = ThrowingCountingConversionService { _ in
+    let conversionService = FakeConversionService.perCall { _ in
       .failure(ConversionError.unsupportedConversion(from: "A", to: "B"))
     }
 

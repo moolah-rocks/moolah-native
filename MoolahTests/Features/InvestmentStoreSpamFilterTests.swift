@@ -67,9 +67,9 @@ struct InvestmentStoreSpamFilterTests {
           ]),
       ], in: database)
 
-    let conversion = FixedConversionService(
-      rates: [realOp.id: Decimal(5)],
-      knownZeroInstrumentIds: [spamOp.id])
+    let conversion = FakeConversionService.fixedRates(
+      [realOp.id: Decimal(5)],
+      knownZero: [spamOp.id])
     let store = InvestmentStore(
       repository: backend.investments,
       transactionRepository: backend.transactions,

@@ -26,7 +26,7 @@ struct TransactionStoreSyncRefreshTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     let filter = TransactionFilter(accountId: accountId)
@@ -65,7 +65,7 @@ struct TransactionStoreSyncRefreshTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     let filter = TransactionFilter(accountId: accountId)
@@ -103,7 +103,7 @@ struct TransactionStoreSyncRefreshTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -157,7 +157,7 @@ struct TransactionStoreSyncRefreshTests {
 
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     await store.load(filter: TransactionFilter(accountId: accountId))

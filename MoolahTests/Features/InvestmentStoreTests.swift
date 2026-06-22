@@ -34,7 +34,7 @@ struct InvestmentStoreTests {
       investmentValues: makeValues(accountId: accountId, count: 3), in: database
     )
     let store = InvestmentStore(
-      repository: backend.investments, conversionService: FixedConversionService())
+      repository: backend.investments, conversionService: FakeConversionService.fixedRates([:]))
 
     await store.loadValues(accountId: accountId)
 
@@ -51,7 +51,7 @@ struct InvestmentStoreTests {
       investmentValues: makeValues(accountId: accountId, count: 5), in: database
     )
     let store = InvestmentStore(
-      repository: backend.investments, conversionService: FixedConversionService())
+      repository: backend.investments, conversionService: FakeConversionService.fixedRates([:]))
 
     await store.loadValues(accountId: accountId)
     #expect(store.values.count == 5)
@@ -66,7 +66,7 @@ struct InvestmentStoreTests {
     let accountId = UUID()
     let (backend, _) = try TestBackend.create()
     let store = InvestmentStore(
-      repository: backend.investments, conversionService: FixedConversionService())
+      repository: backend.investments, conversionService: FakeConversionService.fixedRates([:]))
 
     let date = makeDate(year: 2024, month: 3, day: 15)
     let amount = InstrumentAmount(
@@ -94,7 +94,7 @@ struct InvestmentStoreTests {
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(investmentValues: initialValues, in: database)
     let store = InvestmentStore(
-      repository: backend.investments, conversionService: FixedConversionService())
+      repository: backend.investments, conversionService: FakeConversionService.fixedRates([:]))
 
     await store.loadValues(accountId: accountId)
     #expect(store.values.count == 1)
@@ -124,7 +124,7 @@ struct InvestmentStoreTests {
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(investmentValues: initialValues, in: database)
     let store = InvestmentStore(
-      repository: backend.investments, conversionService: FixedConversionService())
+      repository: backend.investments, conversionService: FakeConversionService.fixedRates([:]))
 
     await store.loadValues(accountId: accountId)
     #expect(store.values.count == 1)
@@ -155,7 +155,7 @@ struct InvestmentStoreTests {
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(investmentValues: initialValues, in: database)
     let store = InvestmentStore(
-      repository: backend.investments, conversionService: FixedConversionService())
+      repository: backend.investments, conversionService: FakeConversionService.fixedRates([:]))
 
     await store.loadValues(accountId: accountId)
     #expect(store.values.count == 1)
@@ -168,7 +168,7 @@ struct InvestmentStoreTests {
   func testRemoveNonExistent() async throws {
     let (backend, _) = try TestBackend.create()
     let store = InvestmentStore(
-      repository: backend.investments, conversionService: FixedConversionService())
+      repository: backend.investments, conversionService: FakeConversionService.fixedRates([:]))
 
     await store.removeValue(accountId: UUID(), date: Date())
 

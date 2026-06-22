@@ -49,7 +49,7 @@ struct AnlRepoSharedInstrumentResolutionTests {
     let repo = GRDBAnalysisRepository(
       database: perProfile,
       instrument: Instrument.fiat(code: "USD"),
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry)
 
     let categoryId = UUID()

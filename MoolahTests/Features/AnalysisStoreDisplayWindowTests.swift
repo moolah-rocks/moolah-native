@@ -135,7 +135,8 @@ struct AnalysisStoreCacheGateTests {
   func narrowingDoesNotRefetch() async throws {
     let repo = RecordingAnalysisRepository()
     let store = AnalysisStore(
-      repository: repo, conversionService: StubConversionService(), defaults: try makeDefaults())
+      repository: repo, conversionService: FakeConversionService.passthrough,
+      defaults: try makeDefaults())
     store.historyMonths = 12
     await store.loadAll()
     store.historyMonths = 3
@@ -147,7 +148,8 @@ struct AnalysisStoreCacheGateTests {
   func wideningRefetches() async throws {
     let repo = RecordingAnalysisRepository()
     let store = AnalysisStore(
-      repository: repo, conversionService: StubConversionService(), defaults: try makeDefaults())
+      repository: repo, conversionService: FakeConversionService.passthrough,
+      defaults: try makeDefaults())
     store.historyMonths = 12
     await store.loadAll()
     store.historyMonths = 60
@@ -159,7 +161,8 @@ struct AnalysisStoreCacheGateTests {
   func forecastChangeRefetches() async throws {
     let repo = RecordingAnalysisRepository()
     let store = AnalysisStore(
-      repository: repo, conversionService: StubConversionService(), defaults: try makeDefaults())
+      repository: repo, conversionService: FakeConversionService.passthrough,
+      defaults: try makeDefaults())
     store.historyMonths = 12
     store.forecastMonths = 1
     await store.loadAll()
@@ -172,7 +175,8 @@ struct AnalysisStoreCacheGateTests {
   func allRequestsNilWindow() async throws {
     let repo = RecordingAnalysisRepository()
     let store = AnalysisStore(
-      repository: repo, conversionService: StubConversionService(), defaults: try makeDefaults())
+      repository: repo, conversionService: FakeConversionService.passthrough,
+      defaults: try makeDefaults())
     store.historyMonths = 0
     await store.loadAll()
     #expect(await repo.lastAfter == nil)
@@ -191,7 +195,8 @@ struct AnalysisStoreCacheGateTests {
         totalExpenses: InstrumentAmount(quantity: -100, instrument: .defaultTestInstrument)),
     ])
     let store = AnalysisStore(
-      repository: repo, conversionService: StubConversionService(), defaults: try makeDefaults())
+      repository: repo, conversionService: FakeConversionService.passthrough,
+      defaults: try makeDefaults())
     store.historyMonths = 0  // All
     await store.loadAll()
     // All keeps both rows — if `displayed*` wrongly used forecastMonths (1) it would

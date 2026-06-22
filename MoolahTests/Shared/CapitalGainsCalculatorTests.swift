@@ -60,7 +60,7 @@ struct CapitalGainsCalculatorTests {
     let result = try await CapitalGainsCalculator.computeWithConversion(
       transactions: [buyTx, sellTx],
       profileCurrency: aud,
-      conversionService: FixedConversionService(rates: [:])
+      conversionService: FakeConversionService.fixedRates([:])
     )
 
     #expect(result.events.count == 1)
@@ -88,7 +88,7 @@ struct CapitalGainsCalculatorTests {
     let result = try await CapitalGainsCalculator.computeWithConversion(
       transactions: [buyTx],
       profileCurrency: aud,
-      conversionService: FixedConversionService(rates: [:])
+      conversionService: FakeConversionService.fixedRates([:])
     )
 
     #expect(result.events.isEmpty)
@@ -126,7 +126,7 @@ struct CapitalGainsCalculatorTests {
           categoryId: nil, earmarkId: nil),
       ])
 
-    let service = FixedConversionService(rates: [eth.id: 4000, uni.id: 8])
+    let service = FakeConversionService.fixedRates([eth.id: 4000, uni.id: 8])
     let result = try await CapitalGainsCalculator.computeWithConversion(
       transactions: [buyTx, swapTx],
       profileCurrency: aud,
@@ -169,14 +169,14 @@ struct CapitalGainsCalculatorTests {
     let allResult = try await CapitalGainsCalculator.computeWithConversion(
       transactions: [buyTx, sellTx],
       profileCurrency: aud,
-      conversionService: FixedConversionService(rates: [:])
+      conversionService: FakeConversionService.fixedRates([:])
     )
     #expect(allResult.events.count == 1)
 
     let earlyResult = try await CapitalGainsCalculator.computeWithConversion(
       transactions: [buyTx, sellTx],
       profileCurrency: aud,
-      conversionService: FixedConversionService(rates: [:]),
+      conversionService: FakeConversionService.fixedRates([:]),
       sellDateRange: date(0)...date(100)
     )
     // Sale on day 400 is outside the range
@@ -199,7 +199,7 @@ struct CapitalGainsCalculatorTests {
     let result = try await CapitalGainsCalculator.computeWithConversion(
       transactions: [buyBHP, buyCBA, sellBHP, sellCBA],
       profileCurrency: aud,
-      conversionService: FixedConversionService(rates: [:])
+      conversionService: FakeConversionService.fixedRates([:])
     )
 
     #expect(result.events.count == 2)
@@ -248,7 +248,7 @@ struct CapitalGainsCalculatorTests {
 
   /// Pins the contract that `computeWithConversion` looks up FX rates at
   /// each transaction's date — not at `Date()`. Uses
-  /// `DateBasedFixedConversionService` with two rate entries straddling
+  /// `FakeConversionService.dateRates` with two rate entries straddling
   /// the buy and sell dates so a wrong-date regression (e.g. passing
   /// `Date()` instead of `transaction.date` into `TradeEventClassifier`)
   /// converts both legs at the same rate and produces a zero gain — the
@@ -264,7 +264,7 @@ struct CapitalGainsCalculatorTests {
 
     // 1.5 AUD/USD at buy, 2.0 AUD/USD at sell. Different rates ⇒ a real
     // (non-zero) gain only when each leg converts at its own date.
-    let conversion = DateBasedFixedConversionService(rates: [
+    let conversion = FakeConversionService.dateRates([
       buyDate: ["USD": dec("1.5")],
       sellDate: ["USD": Decimal(2)],
     ])

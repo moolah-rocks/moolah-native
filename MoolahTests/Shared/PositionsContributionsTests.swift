@@ -94,7 +94,7 @@ struct PositionsContributionsTests {
       // balance alone with no holdings yields no aggregate output.
       buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
     ]
-    let service = FixedConversionService(rates: [bhp.id: Decimal(50)])
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let series = await builder.build(
       transactions: txns, accountId: accountId,
@@ -112,7 +112,7 @@ struct PositionsContributionsTests {
       buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
       transferIn(qty: 500, daysAfterEpoch: 3),
     ]
-    let service = FixedConversionService(rates: [bhp.id: Decimal(50)])
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let day1Date = try date(daysAfterEpoch: 1)
     let day3Date = try date(daysAfterEpoch: 3)
@@ -136,7 +136,7 @@ struct PositionsContributionsTests {
       buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
       transferOut(qty: 800, daysAfterEpoch: 3),
     ]
-    let service = FixedConversionService(rates: [bhp.id: Decimal(50)])
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let day3Date = try date(daysAfterEpoch: 3)
     let series = await builder.build(
@@ -156,7 +156,7 @@ struct PositionsContributionsTests {
       buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
       buy(instrument: bhp, qty: 5, fiat: 250, daysAfterEpoch: 3),
     ]
-    let service = FixedConversionService(rates: [bhp.id: Decimal(50)])
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let series = await builder.build(
       transactions: txns, accountId: accountId,
@@ -176,7 +176,7 @@ struct PositionsContributionsTests {
     // Two distinct rates: passing the wrong date would yield 1_400.
     let day0Rate = try #require(Decimal(string: "1.50"))
     let day10Rate = try #require(Decimal(string: "1.40"))
-    let service = DateBasedFixedConversionService(rates: [
+    let service = FakeConversionService.dateRates([
       day0: [usd.id: day0Rate, bhp.id: Decimal(50)],
       day10: [usd.id: day10Rate, bhp.id: Decimal(50)],
     ])
@@ -203,7 +203,7 @@ struct PositionsContributionsTests {
       buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
       transferIn(qty: 1_000, daysAfterEpoch: 5),
     ]
-    let service = FixedConversionService(rates: [bhp.id: Decimal(50)])
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     // now=day 50 with .oneMonth pushes the window cutoff to ~day 20,
     // so days 0/1/5 are all pre-window and the pre-fold path drives
@@ -220,7 +220,7 @@ struct PositionsContributionsTests {
   @Test("conversion failure makes contributions sticky-nil for all subsequent emitted points")
   func contributionsStickyLatchOnFailure() async throws {
     let usd = Instrument.USD
-    // FailingConversionService throws .unavailable for any conversion
+    // failingInstruments throws .instrumentUnavailable for any conversion
     // involving an id in `failingInstrumentIds`; same-instrument
     // conversions short-circuit (Rule 8 fast path) and never throw.
     // BHP rate is configured so the per-day BHP value-conversion
@@ -233,9 +233,9 @@ struct PositionsContributionsTests {
     // assertion is therefore: every emitted aggregate point on or
     // after the failure date carries `contributions == nil`,
     // regardless of how many actually emit.
-    let service = FailingConversionService(
-      rates: [bhp.id: Decimal(50)],
-      failingInstrumentIds: [usd.id]
+    let service = FakeConversionService.failingInstruments(
+      [usd.id],
+      rates: [bhp.id: Decimal(50)]
     )
     let day3 = try date(daysAfterEpoch: 3)
     let txns = try [
@@ -281,9 +281,7 @@ struct PositionsContributionsTests {
     //      that is the correct outcome here, because cancellation
     //      mid-pre-fold legitimately produces zero emitted points and
     //      the latch invariant is then trivially satisfied.
-    let service = ThrowingCountingConversionService(
-      outcome: { _ in .failure(CancellationError()) }
-    )
+    let service = FakeConversionService.perCall { _ in .failure(CancellationError()) }
     let txns = try [
       openingBalance(in: Instrument.USD, qty: 1_000, daysAfterEpoch: 0),
       buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),

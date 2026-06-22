@@ -18,7 +18,7 @@ struct ReportingStoreLoadCancellationTests {
     let store = ReportingStore(
       transactionRepository: FailingTransactionRepository(),
       analysisRepository: analysisRepository,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       profileCurrency: .defaultTestInstrument
     )
 

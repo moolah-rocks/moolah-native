@@ -27,7 +27,7 @@ struct TransactionStoreRunningBalanceTests {
     TestBackend.seed(transactions: [existing], in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -89,7 +89,7 @@ struct TransactionStoreRunningBalanceTests {
     TestBackend.seed(transactions: [salary, coffee], in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -114,7 +114,7 @@ struct TransactionStoreRunningBalanceTests {
     TestBackend.seed(transactions: [salary, coffee], in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 

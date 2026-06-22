@@ -13,7 +13,7 @@ struct TransactionReplaceRollbackTests {
     let txRepo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .AUD,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
     let existingId = UUID()
@@ -61,7 +61,7 @@ struct TransactionReplaceRollbackTests {
     let txRepo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .AUD,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
     let existingId = UUID()

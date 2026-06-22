@@ -17,7 +17,7 @@ struct AnalysisMultiInstrumentSmokeTests {
     let usdRate = try AnalysisTestHelpers.decimal("1.5")
     let eurRate = try AnalysisTestHelpers.decimal("1.7")
 
-    let conversion = FixedConversionService(rates: ["USD": usdRate, "EUR": eurRate])
+    let conversion = FakeConversionService.fixedRates(["USD": usdRate, "EUR": eurRate])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let day1 = try AnalysisTestHelpers.date(year: 2025, month: 5, day: 1)
@@ -73,7 +73,7 @@ struct AnalysisMultiInstrumentSmokeTests {
     let rate2 = try AnalysisTestHelpers.decimal("1.5")
     let rate3 = try AnalysisTestHelpers.decimal("1.6")
 
-    let conversion = DateBasedFixedConversionService(rates: [
+    let conversion = FakeConversionService.dateRates([
       day1: ["USD": rate1],
       day2: ["USD": rate2],
       day3: ["USD": rate3],
@@ -122,7 +122,7 @@ struct AnalysisMultiInstrumentSmokeTests {
   func forecastFromMultiCurrencyActuals() async throws {
     let usd = Instrument.fiat(code: "USD")
     let rate = try AnalysisTestHelpers.decimal("1.5")
-    let conversion = FixedConversionService(rates: ["USD": rate])
+    let conversion = FakeConversionService.fixedRates(["USD": rate])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let today = AnalysisTestHelpers.calendar.startOfDay(for: Date())

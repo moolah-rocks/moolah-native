@@ -17,7 +17,7 @@ struct RepositorySyncCascadeTests {
     return GRDBTransactionRepository(
       database: database,
       defaultInstrument: .AUD,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
   }

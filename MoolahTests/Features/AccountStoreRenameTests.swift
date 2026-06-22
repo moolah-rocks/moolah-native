@@ -13,7 +13,7 @@ struct AccountStoreRenameTests {
     let original = AccountStoreTestSupport.seedAccount(
       name: "Old", type: .bank, balance: 0, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.by(id: original.id) != nil },
@@ -36,7 +36,7 @@ struct AccountStoreRenameTests {
     let original = AccountStoreTestSupport.seedAccount(
       name: "Old", type: .bank, balance: 0, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.by(id: original.id) != nil },
@@ -60,7 +60,7 @@ struct AccountStoreRenameTests {
     let original = AccountStoreTestSupport.seedAccount(
       name: "Old", type: .bank, balance: 0, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.by(id: original.id) != nil },
@@ -82,7 +82,7 @@ struct AccountStoreRenameTests {
     let original = AccountStoreTestSupport.seedAccount(
       name: "Stable", type: .bank, balance: 0, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.by(id: original.id) != nil },
@@ -103,7 +103,7 @@ struct AccountStoreRenameTests {
   func renameOfUnknownIdReturnsNil() async throws {
     let (backend, _) = try TestBackend.create()
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForFirstEmission()
 

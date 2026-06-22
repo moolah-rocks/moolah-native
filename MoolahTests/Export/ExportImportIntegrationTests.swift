@@ -82,7 +82,7 @@ struct ExportImportIntegrationTests {
       database: database,
       instrument: instrument,
       profileLabel: label,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentRegistry: registry
     )
   }

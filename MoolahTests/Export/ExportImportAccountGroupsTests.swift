@@ -93,7 +93,7 @@ struct ExportImportAccountGroupsTests {
 
     let cloudBackend = CloudKitBackend(
       database: freshDatabase, instrument: instrument, profileLabel: "Test Profile",
-      conversionService: FixedConversionService(), instrumentRegistry: registry)
+      conversionService: FakeConversionService.fixedRates([:]), instrumentRegistry: registry)
 
     // Groups come back ordered by position, with all fields intact.
     let groups = try await cloudBackend.accountGroups.fetchAll()

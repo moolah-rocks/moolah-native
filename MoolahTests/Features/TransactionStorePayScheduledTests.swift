@@ -29,7 +29,7 @@ struct TransactionStorePayScheduledTests {
     TestBackend.seed(transactions: [scheduled], in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -98,7 +98,7 @@ struct TransactionStorePayScheduledTests {
     TestBackend.seed(transactions: [scheduled], in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -138,7 +138,7 @@ struct TransactionStorePayScheduledTests {
     TestBackend.seed(transactions: [scheduled], in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -187,7 +187,7 @@ struct TransactionStorePayScheduledTests {
     TestBackend.seed(transactions: [scheduled], in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -214,7 +214,7 @@ struct TransactionStorePayScheduledTests {
     TestBackend.seed(transactions: [scheduled], in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 

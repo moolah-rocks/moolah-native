@@ -25,7 +25,7 @@ struct AnalysisStoreLoadCancellationTests {
   func cancelledLoadAllDoesNotSurfaceCancellationError() async throws {
     let repository = GatedAnalysisRepository()
     let store = AnalysisStore(
-      repository: repository, conversionService: StubConversionService(),
+      repository: repository, conversionService: FakeConversionService.passthrough,
       defaults: try makeDefaults())
 
     let task = Task { @MainActor in
@@ -49,7 +49,7 @@ struct AnalysisStoreLoadCancellationTests {
   func cancellationDuringInitialLoadSkipsCoalescedReconcile() async throws {
     let repository = GatedCountingAnalysisRepository()
     let store = AnalysisStore(
-      repository: repository, conversionService: StubConversionService(),
+      repository: repository, conversionService: FakeConversionService.passthrough,
       defaults: try makeDefaults())
 
     let task = Task { @MainActor in await store.loadAll() }

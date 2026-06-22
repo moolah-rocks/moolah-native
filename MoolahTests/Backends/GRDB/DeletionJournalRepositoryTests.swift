@@ -76,7 +76,7 @@ struct DeletionJournalRepositoryTests {
     GRDBTransactionRepository(
       database: database,
       defaultInstrument: .AUD,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: try SharedRegistryTestSupport.makeSharedRegistry(),
       instrumentRegistrar: try SharedRegistryTestSupport.makeSharedRegistry())
   }

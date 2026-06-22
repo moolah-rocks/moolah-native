@@ -39,7 +39,7 @@ struct GRDBInstrumentRegistrationRollbackTests {
     let repo = GRDBTransactionRepository(
       database: perProfile,
       defaultInstrument: Instrument.fiat(code: "USD"),
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
 
@@ -148,7 +148,7 @@ struct GRDBCreatePathRegistersInstrumentTests {
     let repo = GRDBTransactionRepository(
       database: perProfile,
       defaultInstrument: Instrument.fiat(code: "USD"),
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
 
@@ -221,7 +221,7 @@ struct GRDBCreatePathRegistersInstrumentTests {
     let repo = GRDBTransactionRepository(
       database: perProfile,
       defaultInstrument: Instrument.fiat(code: "USD"),
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
 
@@ -267,7 +267,7 @@ struct GRDBCreatePathRegistersInstrumentTests {
     let repo = GRDBTransactionRepository(
       database: perProfile,
       defaultInstrument: Instrument.fiat(code: "AUD"),
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
 

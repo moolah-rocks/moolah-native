@@ -16,7 +16,7 @@ struct EarmarkStoreLoadTests {
       amounts: [earmark.id: (saved: 500, spent: 0)],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     await expectEventually("seeded earmark observed") {
@@ -38,7 +38,7 @@ struct EarmarkStoreLoadTests {
       ],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     await expectEventually("earmarks observed sorted by position") {
@@ -67,7 +67,7 @@ struct EarmarkStoreLoadTests {
       ],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     await expectEventually("both earmarks observed with default instrument") {

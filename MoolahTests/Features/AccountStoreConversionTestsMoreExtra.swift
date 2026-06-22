@@ -41,7 +41,7 @@ struct AccountStoreConversionTestsMoreExtra {
     ]
     TestBackend.seed(transactions: txns, in: database)
 
-    let counter = CountingConversionService(rates: [
+    let counter = FakeConversionService.fixedRates([
       "USD": dec("1.5"),
       "EUR": dec("2.0"),
     ])
@@ -58,9 +58,9 @@ struct AccountStoreConversionTestsMoreExtra {
     )
     await store.waitForPendingConversions()
 
-    let baseline = await counter.convertAmountCallCount
+    let baseline = counter.convertAmountCallCount
     let total = try await store.computeConvertedInvestmentTotal(in: aud)
-    let delta = await counter.convertAmountCallCount - baseline
+    let delta = counter.convertAmountCallCount - baseline
 
     // 100 USD * 1.5 + 50 EUR * 2.0 = 150 + 100 = 250 AUD.
     #expect(total == InstrumentAmount(quantity: Decimal(250), instrument: aud))
@@ -119,7 +119,7 @@ struct AccountStoreConversionTestsMoreExtra {
       ])
     TestBackend.seed(transactions: [audTx, usdTx], in: database)
 
-    let conversion = FixedConversionService(rates: [
+    let conversion = FakeConversionService.fixedRates([
       "AUD": dec("0.67"),
       "USD": dec("1.5"),
     ])
@@ -159,7 +159,7 @@ struct AccountStoreConversionTestsMoreExtra {
       ])
     TestBackend.seed(transactions: [rawTx], in: database)
 
-    let conversion = FixedConversionService(rates: [
+    let conversion = FakeConversionService.fixedRates([
       "AUD": dec("0.5")
     ])
     let store = AccountStore(
