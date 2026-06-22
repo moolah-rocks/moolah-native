@@ -202,9 +202,13 @@ struct PreListingDailyBalanceTests {
       prices: ["1:0xairdrop": ["2024-10-01": dec("50.00")]],
       syncProvider: .coinGecko
     )
+    let registration = CryptoRegistration(
+      instrument: airdropInstrument, mapping: airdropMapping, pricingStatus: .priced)
+    let registrationsById = [registration.id: registration]
     let cryptoService = CryptoPriceService(
       clients: [priceClient],
       database: database,
+      metadataLookup: { registrationsById[$0] },
       now: { frozen }
     )
 
@@ -227,13 +231,10 @@ struct PreListingDailyBalanceTests {
       database: database
     )
     let stockService = StockPriceService(client: FixedStockPriceClient(), database: database)
-    let registration = CryptoRegistration(
-      instrument: airdropInstrument, mapping: airdropMapping, pricingStatus: .priced)
     let conversionService = FullConversionService(
       exchangeRates: exchangeService,
       stockPrices: stockService,
-      cryptoPrices: cryptoService,
-      cryptoRegistrations: { [registration] }
+      cryptoPrices: cryptoService
     )
 
     let amount = InstrumentAmount(quantity: dec("10"), instrument: airdropInstrument)

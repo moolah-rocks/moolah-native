@@ -20,7 +20,8 @@ extension ProfileSession {
     profile: Profile,
     syncCoordinator: SyncCoordinator?,
     marketData: CloudKitMarketDataServices,
-    database: any DatabaseWriter
+    database: any DatabaseWriter,
+    fallbackMetadataLookup: LateBoundCryptoMetadataLookup? = nil
   ) -> BackendProvider {
     let zoneID = CKRecordZone.ID(
       zoneName: "profile-\(profile.id.uuidString)",
@@ -53,10 +54,19 @@ extension ProfileSession {
       registry = makeInstrumentRegistry(
         zoneID: zoneID, syncCoordinator: syncCoordinator)
     }
-    // CloudKit profiles need full stock+crypto conversion support. The
-    // closure reads the profile's registry on each conversion so
-    // registrations added at runtime become usable without rebuilding the
-    // service. See issue #102.
+    // Bind the fallback `CryptoPriceService`'s late-bound metadata lookup to
+    // this per-profile registry now that it exists. Restores equivalence with
+    // the previous `cryptoRegistrations: { registry.allCryptoRegistrations() }`
+    // wiring on the preview/legacy path, where the price service is built
+    // before the registry. No-op on the shared path (the shared service
+    // carries its own registry-backed lookup; the box is never consulted).
+    fallbackMetadataLookup?.bind { id in try await registry.cryptoRegistration(byId: id) }
+    // CloudKit profiles need full stock+crypto conversion support. Crypto
+    // mapping / pricing status is self-resolved by `CryptoPriceService` via
+    // its keyed `cryptoRegistration(byId:)` metadata plug (injected where the
+    // shared service is constructed — `makeSharedInstrumentScope`, or rotated
+    // in here on the fallback path), so the conversion layer no longer scans
+    // the registry. See issue #102.
     //
     // `observeRates()` watches the rate-cache tables for change ticks.
     // The shared price services live on the profile-index DB, so the
@@ -70,9 +80,6 @@ extension ProfileSession {
       exchangeRates: marketData.exchangeRates,
       stockPrices: marketData.stockPrices,
       cryptoPrices: marketData.cryptoPrices,
-      cryptoRegistrations: {
-        try await registry.allCryptoRegistrations()
-      },
       database: rateObservationDatabase
     )
     let hooks = grdbRepoHooks(zoneID: zoneID, syncCoordinator: syncCoordinator)

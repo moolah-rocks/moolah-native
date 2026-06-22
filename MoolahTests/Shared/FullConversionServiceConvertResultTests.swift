@@ -22,8 +22,8 @@ struct FullConversionServiceConvertResultTests {
     let service: FullConversionService
   }
 
-  /// Build a service whose `cryptoRegistrations` closure returns the
-  /// supplied list. The closure shape on `FullConversionService` carries
+  /// Build a service whose `CryptoPriceService` resolves the supplied
+  /// registrations via its keyed `metadataLookup` plug — carrying
   /// `pricingStatus` per registration so `convertResult` can dispatch
   /// `.priced` / `.knownZero` correctly.
   private func makeService(
@@ -33,9 +33,12 @@ struct FullConversionServiceConvertResultTests {
     registrations: [CryptoRegistration] = []
   ) throws -> Bundle {
     let database = try ProfileIndexDatabase.openInMemory()
+    let registrationsById = Dictionary(
+      uniqueKeysWithValues: registrations.map { ($0.id, $0) })
     let cryptoService = CryptoPriceService(
       clients: [FixedCryptoPriceClient(prices: cryptoPrices, shouldFail: shouldFail)],
-      database: database
+      database: database,
+      metadataLookup: { registrationsById[$0] }
     )
     let exchangeService = ExchangeRateService(
       client: FixedRateClient(rates: exchangeRates),
@@ -45,8 +48,7 @@ struct FullConversionServiceConvertResultTests {
     let service = FullConversionService(
       exchangeRates: exchangeService,
       stockPrices: stockService,
-      cryptoPrices: cryptoService,
-      cryptoRegistrations: { registrations }
+      cryptoPrices: cryptoService
     )
     return Bundle(service: service)
   }

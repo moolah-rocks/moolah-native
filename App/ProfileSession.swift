@@ -185,9 +185,15 @@ final class ProfileSession: Identifiable {
     // cache that profile B reads next. Falls back to per-profile
     // construction for legacy callers (preview / tests) that didn't
     // pass shared services through `SyncCoordinator.init`.
+    // `makeCloudKitBackend` binds the per-profile registry into this on the
+    // fallback path; see `LateBoundCryptoMetadataLookup`.
+    let fallbackMetadataLookup = LateBoundCryptoMetadataLookup()
     let services =
       syncCoordinator?.sharedMarketData
-      ?? Self.makeMarketDataServices(database: resolvedDatabase, networking: resolvedNetworking)
+      ?? Self.makeMarketDataServices(
+        database: resolvedDatabase,
+        networking: resolvedNetworking,
+        cryptoMetadataLookup: fallbackMetadataLookup.lookup)
     self.exchangeRateService = services.exchangeRate
     self.stockPriceService = services.stockPrice
     self.cryptoPriceService = services.cryptoPrice
@@ -197,7 +203,8 @@ final class ProfileSession: Identifiable {
       profile: profile,
       syncCoordinator: syncCoordinator,
       services: services,
-      database: resolvedDatabase
+      database: resolvedDatabase,
+      fallbackMetadataLookup: fallbackMetadataLookup
     )
     self.backend = backend
 

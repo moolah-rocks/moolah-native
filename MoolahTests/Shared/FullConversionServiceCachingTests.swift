@@ -41,9 +41,12 @@ struct FullConversionServiceCachingTests {
     // assertions below assume the cap resolves "yesterday" against the
     // same UTC calendar the fixtures use to derive their date keys.
     let utc = try #require(TimeZone(identifier: "UTC"))
+    let registrationsById = Dictionary(
+      uniqueKeysWithValues: registrations.map { ($0.id, $0) })
     let cryptoService = CryptoPriceService(
       clients: [FixedCryptoPriceClient(prices: cryptoPrices)],
       database: database,
+      metadataLookup: { registrationsById[$0] },
       timeZone: utc
     )
     let exchangeService = ExchangeRateService(
@@ -56,8 +59,7 @@ struct FullConversionServiceCachingTests {
     let service = FullConversionService(
       exchangeRates: exchangeService,
       stockPrices: stockService,
-      cryptoPrices: cryptoService,
-      cryptoRegistrations: { registrations }
+      cryptoPrices: cryptoService
     )
     return Bundle(service: service)
   }
