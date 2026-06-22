@@ -77,13 +77,41 @@ extension InvestmentStore {
   /// values. `.knownZero` positions drop out of `valuedPositions`
   /// entirely (issue #790).
   func valuatePositions(profileCurrency: Instrument, on date: Date) async {
+    // Phase 1 — accumulate one batch request per cross-instrument position;
+    // host-currency positions resolve inline (Rule 8 fast path) and never
+    // contribute a request. Phase 2 — one batched conversion (cancellation
+    // surfaces as a thrown `CancellationError`). Phase 3 — assemble each
+    // position's row and fold its outcome into the total / first failure.
+    var requests: [BatchConversionRequest] = []
+    requests.reserveCapacity(positions.count)
+    for position in positions where position.instrument.id != profileCurrency.id {
+      requests.append(
+        BatchConversionRequest(
+          amount: InstrumentAmount(
+            quantity: position.quantity, instrument: position.instrument),
+          target: profileCurrency,
+          date: date))
+    }
+
+    let outcomes: [BatchConversionOutcome]
+    do {
+      outcomes = try await conversionService.convertResultBatch(requests)
+    } catch {
+      // Cancellation is task-wide and not a failure: leave published state
+      // untouched so a re-run recomputes from scratch.
+      return
+    }
+
     var valued: [ValuedPosition] = []
     var total: Decimal = 0
     var firstFailure: Error?
-
+    var cursor = 0
     for position in positions {
-      let (entry, outcome) = await valuate(
-        position: position, profileCurrency: profileCurrency, on: date)
+      let isHostCurrency = position.instrument.id == profileCurrency.id
+      let resolved: BatchConversionOutcome? = isHostCurrency ? nil : outcomes[cursor]
+      if !isHostCurrency { cursor += 1 }
+      let (entry, outcome) = valuate(
+        position: position, profileCurrency: profileCurrency, outcome: resolved)
       if let entry { valued.append(entry) }
       switch outcome {
       case .success(let value):
@@ -157,10 +185,13 @@ extension InvestmentStore {
     case failure(Error)
   }
 
+  /// Assemble one position's `ValuedPosition` + `ValuationOutcome` from its
+  /// pre-resolved batch `outcome`. Pass `outcome: nil` for a host-currency
+  /// position (Rule 8 fast path) — it values 1:1 without a conversion.
   private func valuate(
-    position: Position, profileCurrency: Instrument, on date: Date
-  ) async -> (ValuedPosition?, ValuationOutcome) {
-    if position.instrument.id == profileCurrency.id {
+    position: Position, profileCurrency: Instrument, outcome: BatchConversionOutcome?
+  ) -> (ValuedPosition?, ValuationOutcome) {
+    guard let outcome else {
       let entry = ValuedPosition(
         instrument: position.instrument,
         quantity: position.quantity,
@@ -169,29 +200,23 @@ extension InvestmentStore {
         value: InstrumentAmount(quantity: position.quantity, instrument: profileCurrency))
       return (entry, .success(position.quantity))
     }
-    do {
-      let amount = InstrumentAmount(
-        quantity: position.quantity, instrument: position.instrument)
-      let result = try await conversionService.convertResult(
-        amount, to: profileCurrency, on: date)
-      switch result {
-      case .knownZero:
-        return (nil, .knownZero)
-      case .value(let converted):
-        let value = converted.quantity
-        let unit =
-          position.quantity == 0
-          ? nil
-          : InstrumentAmount(quantity: value / position.quantity, instrument: profileCurrency)
-        let entry = ValuedPosition(
-          instrument: position.instrument,
-          quantity: position.quantity,
-          unitPrice: unit,
-          costBasis: nil,
-          value: converted)
-        return (entry, .success(value))
-      }
-    } catch {
+    switch outcome {
+    case .knownZero:
+      return (nil, .knownZero)
+    case .value(let converted):
+      let value = converted.quantity
+      let unit =
+        position.quantity == 0
+        ? nil
+        : InstrumentAmount(quantity: value / position.quantity, instrument: profileCurrency)
+      let entry = ValuedPosition(
+        instrument: position.instrument,
+        quantity: position.quantity,
+        unitPrice: unit,
+        costBasis: nil,
+        value: converted)
+      return (entry, .success(value))
+    case .failure(let error):
       logger.warning(
         "Failed to valuate position \(position.instrument.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
       )

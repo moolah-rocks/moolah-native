@@ -24,35 +24,76 @@ extension EarmarkStore {
     -> ConvertedEarmarkTotals
   {
     let date = Date()
-    var balance = InstrumentAmount.zero(instrument: earmark.instrument)
-    var saved = InstrumentAmount.zero(instrument: earmark.instrument)
-    var spent = InstrumentAmount.zero(instrument: earmark.instrument)
-    for position in earmark.positions {
-      balance += try await convertPositionOrZero(
-        position.amount, to: earmark.instrument, on: date)
-    }
-    for position in earmark.savedPositions {
-      saved += try await convertPositionOrZero(
-        position.amount, to: earmark.instrument, on: date)
-    }
-    for position in earmark.spentPositions {
-      spent += try await convertPositionOrZero(
-        position.amount, to: earmark.instrument, on: date)
-    }
+    let target = earmark.instrument
+    // Same-instrument fast path (Rule 8): positions already in `target` are
+    // summed inline and never enter the batch. Each list keeps its inline
+    // total plus the count of cross-instrument requests it contributed, so
+    // its outcome slice sums back in the order Phase 1 appended them. A
+    // single `convertResultBatch` resolves all cross-instrument positions.
+    var requests: [BatchConversionRequest] = []
+    let (balanceInline, balanceCount) = accumulate(
+      earmark.positions, target: target, date: date, into: &requests)
+    let (savedInline, savedCount) = accumulate(
+      earmark.savedPositions, target: target, date: date, into: &requests)
+    let (spentInline, spentCount) = accumulate(
+      earmark.spentPositions, target: target, date: date, into: &requests)
+    let outcomes = try await conversionService.convertResultBatch(requests)
+
+    var cursor = 0
+    let balance = try sumOutcomes(
+      outcomes, range: &cursor, count: balanceCount, into: balanceInline)
+    let saved = try sumOutcomes(
+      outcomes, range: &cursor, count: savedCount, into: savedInline)
+    let spent = try sumOutcomes(
+      outcomes, range: &cursor, count: spentCount, into: spentInline)
     return ConvertedEarmarkTotals(balance: balance, saved: saved, spent: spent)
   }
 
-  /// Convert `amount` to `target` on `date`, folding `.knownZero` (an
-  /// `.unpriced` / `.spam` crypto source) to zero in `target`.
-  /// Issue #790.
-  func convertPositionOrZero(
-    _ amount: InstrumentAmount, to target: Instrument, on date: Date
-  ) async throws -> InstrumentAmount {
-    let result = try await conversionService.convertResult(
-      amount, to: target, on: date)
-    switch result {
-    case .value(let converted): return converted
-    case .knownZero: return .zero(instrument: target)
+  /// Split one position list into its same-instrument inline subtotal and the
+  /// cross-instrument requests appended to `requests`. Returns the inline
+  /// total (already in `target`) and the number of requests contributed, so
+  /// the caller can slice the matching outcomes back out in order.
+  private func accumulate(
+    _ positions: [Position],
+    target: Instrument,
+    date: Date,
+    into requests: inout [BatchConversionRequest]
+  ) -> (inline: InstrumentAmount, count: Int) {
+    var inline = InstrumentAmount.zero(instrument: target)
+    var count = 0
+    for position in positions {
+      if position.amount.instrument == target {
+        inline += position.amount
+      } else {
+        requests.append(
+          BatchConversionRequest(amount: position.amount, target: target, date: date))
+        count += 1
+      }
     }
+    return (inline, count)
+  }
+
+  /// Fold `count` outcomes starting at `cursor` (advanced in place) into
+  /// `inline` (the list's same-instrument subtotal, already in the target
+  /// instrument). Folds `.knownZero` (an `.unpriced` / `.spam` crypto source)
+  /// to zero (issue #790); rethrows the first `.failure` so a real provider
+  /// outage fails the whole earmark — we never display a partial earmark
+  /// balance under transient outage.
+  private func sumOutcomes(
+    _ outcomes: [BatchConversionOutcome],
+    range cursor: inout Int,
+    count: Int,
+    into inline: InstrumentAmount
+  ) throws -> InstrumentAmount {
+    var total = inline
+    for outcome in outcomes[cursor..<cursor + count] {
+      switch outcome {
+      case .value(let converted): total += converted
+      case .knownZero: break
+      case .failure(let error): throw error
+      }
+    }
+    cursor += count
+    return total
   }
 }

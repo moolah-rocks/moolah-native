@@ -276,6 +276,12 @@ final class FakeConversionService: InstrumentConversionService, Sendable {
         to: request.target, date: request.date)
       switch runOutcome(conversionRequest) {
       case .success(.value(let converted)):
+        // Mirror `convertResult`'s `.value` path: it also bumps
+        // `convertAmountCallCount` because the old doubles reached `.value`
+        // via `convertAmount`. Keeping the batch counting-equivalent to N
+        // serial `convertResult` calls is the invariant migrated sites rely
+        // on (e.g. the single-pass `convertAmountCallCount` delta assertion).
+        state.withLock { $0.convertAmountCallCount += 1 }
         outcomes.append(.value(converted))
       case .success(.knownZero(let targetInstrument)):
         outcomes.append(.knownZero(targetInstrument: targetInstrument))
