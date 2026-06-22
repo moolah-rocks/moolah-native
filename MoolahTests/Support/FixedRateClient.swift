@@ -20,9 +20,11 @@ struct FixedRateClient: ExchangeRateClient, Sendable {
     if shouldFail {
       throw URLError(.notConnectedToInternet)
     }
-    let calendar = Calendar(identifier: .gregorian)
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]
+    formatter.timeZone = TimeZone(identifier: "UTC") ?? .current
 
     var result: [String: [String: Decimal]] = [:]
     var current = from

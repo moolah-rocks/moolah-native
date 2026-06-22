@@ -1,5 +1,35 @@
 import Foundation
 
+/// One element of a batch conversion request: convert `amount` into
+/// `target` as of `date`. The trio mirrors the arguments of
+/// `convertResult(_:to:on:)` so a caller can build a flat request list
+/// and resolve it in a single `await`.
+struct BatchConversionRequest: Sendable {
+  let amount: InstrumentAmount
+  let target: Instrument
+  let date: Date
+}
+
+/// Per-element result of `convertResultBatch(_:)`. `.value` and
+/// `.knownZero(targetInstrument:)` mirror `ConversionResult` so callers
+/// reuse their Rule 11 folding; `.failure` carries the per-element error
+/// so a single bad request degrades only its own row / day rather than
+/// failing the whole batch.
+///
+/// Not `Equatable` — the `.failure` payload is `any Error`. Tests
+/// pattern-match instead.
+enum BatchConversionOutcome: Sendable {
+  /// A converted amount in the request's target instrument.
+  case value(InstrumentAmount)
+  /// The source resolved to a clean zero in `targetInstrument` (an
+  /// `.unpriced` / `.spam` token, or a `.priced` token before its first
+  /// trade). Contributes exactly zero — never a failure.
+  case knownZero(targetInstrument: Instrument)
+  /// A real provider failure for this element. The caller applies its
+  /// existing Rule 11 handling (log + drop the row / day, continue).
+  case failure(any Error)
+}
+
 /// Converts quantities between instruments. Phase 2: fiat-to-fiat only.
 /// Phase 3+ will add stock and crypto conversion paths.
 protocol InstrumentConversionService: Sendable {
@@ -32,6 +62,23 @@ protocol InstrumentConversionService: Sendable {
     to instrument: Instrument,
     on date: Date
   ) async throws -> ConversionResult
+
+  /// Convert a batch of `(amount, target, date)` requests in one `await`,
+  /// returning one `BatchConversionOutcome` per request in request order.
+  ///
+  /// Collapses N serial `convertResult` hops (per row / per day / per
+  /// instrument in a history walk) into a single call so a conformer can
+  /// overlap the underlying network fetches internally. The default
+  /// implementation (in this file) loops `convertResult`; conformers that
+  /// can dedup or parallelise — e.g. `FullConversionService` — override.
+  ///
+  /// Per-element failures surface as `.failure(error)`; only
+  /// **cancellation** propagates, as a thrown `CancellationError`
+  /// (cancellation is task-wide, not per-element). See
+  /// `guides/INSTRUMENT_CONVERSION_GUIDE.md` Rule 11.
+  func convertResultBatch(
+    _ requests: [BatchConversionRequest]
+  ) async throws -> [BatchConversionOutcome]
 
   /// Invalidate any cached state held about `instrument` (and any rate
   /// derived from it). Called when a user mutation changes
@@ -70,6 +117,38 @@ protocol InstrumentConversionService: Sendable {
   /// yielded once and then the stream completes. Mirrors the
   /// `AccountRepository.observeErrors()` contract.
   func observeErrors() -> AsyncStream<any Error>
+}
+
+extension InstrumentConversionService {
+  /// Default `convertResultBatch`: loops `convertResult` per request,
+  /// folding each into `.value` / `.knownZero` / `.failure`. Checks for
+  /// cancellation between elements and rethrows `CancellationError` so a
+  /// cancelled batch never returns partial outcomes. The single test
+  /// double and any conformer that does not override inherit this.
+  func convertResultBatch(
+    _ requests: [BatchConversionRequest]
+  ) async throws -> [BatchConversionOutcome] {
+    var outcomes: [BatchConversionOutcome] = []
+    outcomes.reserveCapacity(requests.count)
+    for request in requests {
+      try Task.checkCancellation()
+      do {
+        let result = try await convertResult(
+          request.amount, to: request.target, on: request.date)
+        switch result {
+        case .value(let amount):
+          outcomes.append(.value(amount))
+        case .knownZero(let targetInstrument):
+          outcomes.append(.knownZero(targetInstrument: targetInstrument))
+        }
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
+        outcomes.append(.failure(error))
+      }
+    }
+    return outcomes
+  }
 }
 
 enum ConversionError: Error, Equatable {

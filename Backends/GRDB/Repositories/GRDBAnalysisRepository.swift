@@ -177,17 +177,6 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
           Sibling days continue to render.
           """)
       })
-    // Pre-warm the conversions the per-day walk will perform, fanned out
-    // concurrently, so the network price fetches overlap and the conversion
-    // memo is populated before `assembleDailyBalances`'s serial walk hits
-    // them. Best-effort and result-neutral: the walk re-runs (and handles
-    // per Rule 11) anything that did not warm. Kept here rather than inside
-    // `assembleDailyBalances` so that helper's serial per-day conversion
-    // contract stays intact. See #1163.
-    let warmups = Self.collectConversionWarmups(
-      in: aggregation, profileInstrument: instrument)
-    await Self.prewarmConversions(warmups, to: instrument, using: conversionService)
-
     return try await Self.assembleDailyBalances(
       aggregation: aggregation,
       profileInstrument: instrument,

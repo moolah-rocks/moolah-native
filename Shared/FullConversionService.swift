@@ -10,7 +10,8 @@ actor FullConversionService: InstrumentConversionService {
   private let exchangeRates: ExchangeRateService
   private let stockPrices: StockPriceService
   private let cryptoPrices: CryptoPriceService?
-  private let cryptoRegistrations: @Sendable () async throws -> [CryptoRegistration]
+  // internal (not private) so FullConversionService+Batch.swift can reach it.
+  let cryptoRegistrations: @Sendable () async throws -> [CryptoRegistration]
   private let logger = Logger(subsystem: "com.moolah.app", category: "CurrencyConversion")
   /// Database used by `observeRates()` to watch the live price-cache
   /// tables. Optional so existing test fixtures that don't observe
@@ -36,24 +37,30 @@ actor FullConversionService: InstrumentConversionService {
   /// staleness model as the underlying services' in-memory caches —
   /// cleared by `invalidateCache(for:)` for entries mentioning the
   /// instrument.
-  private struct RateCacheKey: Hashable {
+  ///
+  /// internal (not private) so FullConversionService+Batch.swift can reach it.
+  struct RateCacheKey: Hashable {
     let fromId: String
     let toId: String
     let day: Date
   }
 
-  private struct UnitFactor {
+  // internal (not private) so FullConversionService+Batch.swift can reach it.
+  struct UnitFactor {
     let multiplier: Decimal
     let divisor: Decimal
   }
 
-  private var rateCache: [RateCacheKey: UnitFactor] = [:]
+  // internal (not private) so FullConversionService+Batch.swift can reach it.
+  var rateCache: [RateCacheKey: UnitFactor] = [:]
 
   /// UTC calendar — the underlying price services key their stored
   /// rates by UTC day, so the memo bucket must agree to avoid
   /// returning a stale rate across a UTC midnight boundary that's
   /// still "the same day" in the user's local timezone.
-  private let calendar: Calendar = {
+  ///
+  /// internal (not private) so FullConversionService+Batch.swift can reach it.
+  let calendar: Calendar = {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
     return calendar
@@ -146,7 +153,8 @@ actor FullConversionService: InstrumentConversionService {
     return factor
   }
 
-  private func computeUnitFactor(
+  // internal (not private) so FullConversionService+Batch.swift can reach it.
+  func computeUnitFactor(
     from source: Instrument,
     to target: Instrument,
     on date: Date
@@ -224,18 +232,15 @@ actor FullConversionService: InstrumentConversionService {
     to instrument: Instrument,
     on date: Date
   ) async throws -> ConversionResult {
-    if amount.instrument == instrument {
+    let registrations = try await cryptoRegistrations()
+    switch convertResultDecision(
+      amount, to: instrument, registrations: registrations)
+    {
+    case .value(let amount):
       return .value(amount)
-    }
-    if amount.instrument.kind == .cryptoToken {
-      let registrations = try await cryptoRegistrations()
-      if let registration = registrations.first(where: { $0.id == amount.instrument.id }),
-        registration.pricingStatus != .priced
-      {
-        // `.unpriced` and `.spam` resolve to a clean zero in the
-        // requested target instrument without a provider call.
-        return .knownZero(targetInstrument: instrument)
-      }
+    case .knownZero:
+      return .knownZero(targetInstrument: instrument)
+    case .convert:
       // `.priced` crypto: a date before the token's first confirmed trade has
       // no market value yet. Map `beforeFirstTrade` to `.knownZero` so
       // aggregation sites keep the day in the net-worth chart (contributing $0)
@@ -246,7 +251,43 @@ actor FullConversionService: InstrumentConversionService {
         return .knownZero(targetInstrument: instrument)
       }
     }
-    return .value(try await convertAmount(amount, to: instrument, on: date))
+  }
+
+  /// The synchronous, no-provider-call part of the `convertResult`
+  /// decision, shared by `convertResult` and `convertResultBatch` so the
+  /// same-instrument / known-zero classification cannot drift between
+  /// them. `registrations` is the already-fetched crypto registration set
+  /// (fetched once per call / batch).
+  ///
+  /// `.convert` means the request needs a unit-factor resolution (and, for
+  /// `.priced` crypto, may still resolve to `.knownZero` if it predates the
+  /// first trade — handled by the caller after the provider call).
+  ///
+  /// internal (not private) so FullConversionService+Batch.swift can reach it.
+  enum ConvertResultDecision {
+    case value(InstrumentAmount)
+    case knownZero
+    case convert
+  }
+
+  // internal (not private) so FullConversionService+Batch.swift can reach it.
+  func convertResultDecision(
+    _ amount: InstrumentAmount,
+    to instrument: Instrument,
+    registrations: [CryptoRegistration]
+  ) -> ConvertResultDecision {
+    if amount.instrument == instrument {
+      return .value(amount)
+    }
+    if amount.instrument.kind == .cryptoToken,
+      let registration = registrations.first(where: { $0.id == amount.instrument.id }),
+      registration.pricingStatus != .priced
+    {
+      // `.unpriced` and `.spam` resolve to a clean zero in the requested
+      // target instrument without a provider call.
+      return .knownZero
+    }
+    return .convert
   }
 
   /// Invalidate any cached state held about `instrument`. Drops every
