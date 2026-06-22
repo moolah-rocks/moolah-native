@@ -108,6 +108,23 @@ extension GRDBAnalysisRepository {
     }
   }
 
+  /// One parseable row paired with its parsed day, retained so the batch
+  /// outcome can rebuild its bucket (the day picks the financial month)
+  /// and failure context.
+  private struct ExpenseBreakdownParsedRow {
+    let row: ExpenseBreakdownRow
+    let day: Date
+  }
+
+  /// One parseable row's conversion plan: the parsed rows, the
+  /// index-aligned flat request list, and the day-strings that failed to
+  /// parse so the caller surfaces them before the batch.
+  private struct ExpenseBreakdownPlan {
+    let parsedRows: [ExpenseBreakdownParsedRow]
+    let requests: [BatchConversionRequest]
+    let unparseableDays: [String]
+  }
+
   /// Walks the SQL aggregation rows, converts each `(qty, instrument)`
   /// to the profile instrument on its own day, and buckets the results
   /// by `(financialMonth, categoryId)`. Conversion runs outside the
@@ -119,13 +136,17 @@ extension GRDBAnalysisRepository {
   /// specific `Logger` instance. `handlers.handleConversionFailure` is
   /// invoked once per failing row so each failure surfaces individually
   /// in diagnostics rather than being collapsed into the first failure
-  /// to escape — the loop continues processing remaining rows, then
+  /// to escape — the walk continues processing remaining rows, then
   /// re-throws the first failure after the walk so the function
   /// preserves its existing "throws on conversion error" contract while
   /// still delivering the per-row detail required by
   /// `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11. A `CancellationError` is
-  /// rethrown immediately and never folded into the conversion-failure
-  /// path.
+  /// rethrown immediately (it propagates straight out of the batch call)
+  /// and never folded into the conversion-failure path.
+  ///
+  /// All rows' `(qty, instrument, day)` conversions resolve in a single
+  /// `convertResultBatch(_:)`; the outcomes stay index-aligned with the
+  /// rows so the per-row failure callbacks still fire in row order.
   @concurrent
   static func assembleExpenseBreakdown(
     aggregation: ExpenseBreakdownAggregation,
@@ -134,6 +155,15 @@ extension GRDBAnalysisRepository {
     monthEnd: Int,
     handlers: ExpenseBreakdownHandlers
   ) async throws -> [ExpenseBreakdown] {
+    let plan = Self.planExpenseBreakdown(
+      aggregation: aggregation, profileInstrument: profileInstrument)
+    for dayString in plan.unparseableDays {
+      handlers.handleUnparseableDay(dayString)
+    }
+    // One batched conversion for every parseable row; `CancellationError`
+    // propagates straight out (never reaching the per-row failure path).
+    let outcomes = try await conversionService.convertResultBatch(plan.requests)
+
     var buckets: [String: [UUID?: InstrumentAmount]] = [:]
     var firstConversionError: Error?
     // Strict Rule 11 (#1077): a financial month with ANY transient
@@ -143,27 +173,18 @@ extension GRDBAnalysisRepository {
     // the income/expense aggregation, `ExpenseBreakdown` carries no
     // start/end, so a plain month set suffices (no day-range tracking).
     var incompleteMonths: Set<String> = []
-    for row in aggregation.rows {
-      guard let day = Self.parseDayString(row.day) else {
-        handlers.handleUnparseableDay(row.day)
-        continue
-      }
-      let instrument =
-        aggregation.instrumentMap[row.instrumentId]
-        ?? Instrument.fiat(code: row.instrumentId)
+    for (planned, outcome) in zip(plan.parsedRows, outcomes) {
+      let row = planned.row
+      let day = planned.day
       let amount: InstrumentAmount
-      do {
-        amount = try await Self.convertedQuantity(
-          storageValue: row.qty,
-          instrument: instrument,
-          to: profileInstrument,
-          on: day,
-          conversionService: conversionService)
-      } catch let cancel as CancellationError {
-        // Cooperative cancellation surfaces unchanged — never folded
-        // into the per-row conversion-failure log path.
-        throw cancel
-      } catch {
+      switch outcome {
+      case .value(let converted):
+        amount = converted
+      case .knownZero:
+        // Issue #790: an `.unpriced` / `.spam` source folds to zero in
+        // the profile instrument rather than failing the row.
+        amount = .zero(instrument: profileInstrument)
+      case .failure(let error):
         let context = ConversionFailureContext(
           day: row.day, categoryId: row.categoryId, instrumentId: row.instrumentId)
         handlers.handleConversionFailure(error, context)
@@ -196,6 +217,38 @@ extension GRDBAnalysisRepository {
       buckets,
       incompleteMonths: incompleteMonths,
       profileInstrument: profileInstrument)
+  }
+
+  /// Parse every row's day, resolve its source instrument, and build the
+  /// flat batch request list. Same-instrument rows still contribute a
+  /// request so the outcome list stays index-aligned with the rows; the
+  /// batch's same-instrument fast path resolves them to `.value` without
+  /// a conversion-service hit, matching `convertedQuantity`'s short
+  /// circuit.
+  private static func planExpenseBreakdown(
+    aggregation: ExpenseBreakdownAggregation,
+    profileInstrument: Instrument
+  ) -> ExpenseBreakdownPlan {
+    var parsedRows: [ExpenseBreakdownParsedRow] = []
+    var requests: [BatchConversionRequest] = []
+    var unparseableDays: [String] = []
+    for row in aggregation.rows {
+      guard let day = Self.parseDayString(row.day) else {
+        unparseableDays.append(row.day)
+        continue
+      }
+      let instrument =
+        aggregation.instrumentMap[row.instrumentId]
+        ?? Instrument.fiat(code: row.instrumentId)
+      parsedRows.append(ExpenseBreakdownParsedRow(row: row, day: day))
+      requests.append(
+        BatchConversionRequest(
+          amount: InstrumentAmount(storageValue: row.qty, instrument: instrument),
+          target: profileInstrument,
+          date: day))
+    }
+    return ExpenseBreakdownPlan(
+      parsedRows: parsedRows, requests: requests, unparseableDays: unparseableDays)
   }
 
   /// Emits one `ExpenseBreakdown` per non-empty `(month, category)` bucket

@@ -126,8 +126,8 @@ struct GRDBCategoryBalancesAssembleTests {
     }
 
     // CancellationError surfaced unchanged — the per-row failure log
-    // never fired, and the loop short-circuited on the first row
-    // (no further conversion calls beyond the cancelled one).
+    // never fired, and the batch rethrew CancellationError after the
+    // first element resolved; no further conversion calls issued.
     #expect(visited.snapshot().isEmpty)
     #expect(conversionService.callCount == 1)
   }
