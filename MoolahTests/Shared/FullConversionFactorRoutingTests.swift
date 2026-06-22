@@ -186,4 +186,42 @@ struct FullConversionFactorRoutingTests {
     let result = try await service.convert(Decimal(5), from: bhp, to: eth, on: day)
     #expect(result == (Decimal(5) * dec("84.00")) / dec("1623.45"))
   }
+
+  // MARK: - any → stock (unsupported)
+
+  @Test
+  func toStockTargetIsUnsupported() async throws {
+    let day = try date("2026-04-10")
+    // Converting *into* a stock has no defined route — `computeUnitFactor`
+    // rejects it up front regardless of the source kind.
+    let service = try makeService(
+      exchangeRates: ["2026-04-10": ["USD": dec("0.65")]])
+
+    await #expect(
+      throws: ConversionError.unsupportedConversion(from: aud.id, to: bhp.id)
+    ) {
+      _ = try await service.convert(Decimal(100), from: aud, to: bhp, on: day)
+    }
+  }
+
+  // MARK: - non-USD fiat → crypto (common quote is the source fiat, not USD)
+
+  @Test
+  func nonUsdFiatToCryptoRoutesThroughSourceFiat() async throws {
+    let day = try date("2026-04-10")
+    // AUD→ETH: target is crypto, source is fiat, so the common quote is the
+    // *source* fiat (AUD), never USD. The source leg is then `rate(AUD→AUD)=1`
+    // — no USD triangulation of the fiat operand — and the ETH leg is priced
+    // as cryptoUsd · rate(USD→AUD). Seed only USD→AUD (the ETH leg's FX hop);
+    // an AUD→USD bridge of the fiat operand would need USD→USD/AUD→USD rates
+    // that are absent, so the value below proves the fiat leg was the identity.
+    let service = try makeService(
+      cryptoPrices: ["1:native": ["2026-04-10": dec("1623.45")]],
+      exchangeRates: ["2026-04-10": ["AUD": dec("1.55")]],
+      providerMappings: [ethMapping()])
+
+    let result = try await service.convert(dec("3100"), from: aud, to: eth, on: day)
+    // factor = (1, cryptoUsd · rate(USD→AUD)); convert = 3100 / (1623.45 · 1.55).
+    #expect(result == dec("3100") / (dec("1623.45") * dec("1.55")))
+  }
 }

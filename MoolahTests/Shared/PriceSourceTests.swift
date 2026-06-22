@@ -75,7 +75,7 @@ struct PriceSourceTests {
   @Test("FiatPriceSource pricingStatus is .priced")
   func fiatSourcePricingStatusIsPriced() async throws {
     let source = FiatPriceSource(instrument: usd)
-    let status = try await source.pricingStatus(on: date("2026-04-10"))
+    let status = try await source.pricingStatus()
     #expect(status == .priced)
   }
 
@@ -100,7 +100,7 @@ struct PriceSourceTests {
   func stockSourcePricingStatusIsPriced() async throws {
     let stockService = try makeStockService(ticker: "BHP.AX", instrument: .AUD, prices: [:])
     let source = StockPriceSource(instrument: bhp, stockPrices: stockService)
-    let status = try await source.pricingStatus(on: date("2026-04-10"))
+    let status = try await source.pricingStatus()
     #expect(status == .priced)
   }
 
@@ -150,7 +150,7 @@ struct PriceSourceTests {
     }
     let cryptoService = try makeCryptoService(lookup: lookup)
     let source = CryptoPriceSource(instrument: eth, cryptoPrices: cryptoService)
-    let status = try await source.pricingStatus(on: date("2026-04-10"))
+    let status = try await source.pricingStatus()
     #expect(status == .priced)
   }
 
@@ -165,7 +165,7 @@ struct PriceSourceTests {
     }
     let cryptoService = try makeCryptoService(lookup: lookup)
     let source = CryptoPriceSource(instrument: eth, cryptoPrices: cryptoService)
-    let status = try await source.pricingStatus(on: date("2026-04-10"))
+    let status = try await source.pricingStatus()
     #expect(status == .unpriced)
   }
 
@@ -180,7 +180,7 @@ struct PriceSourceTests {
     }
     let cryptoService = try makeCryptoService(lookup: lookup)
     let source = CryptoPriceSource(instrument: eth, cryptoPrices: cryptoService)
-    let status = try await source.pricingStatus(on: date("2026-04-10"))
+    let status = try await source.pricingStatus()
     #expect(status == .spam)
   }
 
@@ -191,7 +191,7 @@ struct PriceSourceTests {
     let source = CryptoPriceSource(instrument: eth, cryptoPrices: cryptoService)
     // Missing registration must NOT throw from pricingStatus — it must return .priced
     // so the error surfaces later at price-fetch time.
-    let status = try await source.pricingStatus(on: date("2026-04-10"))
+    let status = try await source.pricingStatus()
     #expect(status == .priced)
   }
 
@@ -206,7 +206,7 @@ struct PriceSourceTests {
   @Test("CryptoPriceSource with nil cryptoPrices returns .priced for pricingStatus")
   func cryptoSourceNilCryptoPricesReturnsPriced() async throws {
     let source = CryptoPriceSource(instrument: eth, cryptoPrices: nil)
-    let status = try await source.pricingStatus(on: date("2026-04-10"))
+    let status = try await source.pricingStatus()
     #expect(status == .priced)
   }
 
@@ -238,7 +238,7 @@ struct PriceSourceTests {
     let resolver = PriceSourceResolver(stockPrices: stockService, cryptoPrices: nil)
     let source = resolver.source(for: bhp)
     // pricingStatus on a stock source is always .priced
-    let status = try await source.pricingStatus(on: date("2026-04-10"))
+    let status = try await source.pricingStatus()
     #expect(status == .priced)
   }
 
@@ -253,7 +253,7 @@ struct PriceSourceTests {
     let resolver = PriceSourceResolver(stockPrices: stockService, cryptoPrices: nil)
     let source = resolver.source(for: eth)
     // nil cryptoPrices → pricingStatus returns .priced (doesn't throw)
-    let status = try await source.pricingStatus(on: date("2026-04-10"))
+    let status = try await source.pricingStatus()
     #expect(status == .priced)
   }
 }

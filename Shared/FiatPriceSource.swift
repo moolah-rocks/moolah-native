@@ -1,5 +1,3 @@
-// Shared/FiatPriceSource.swift
-
 import Foundation
 
 /// `PriceSource` for fiat currency instruments. Fiat-to-fiat conversion is handled
@@ -14,7 +12,7 @@ extension FiatPriceSource: PriceSource {
     (perUnit: Decimal(1), nativeQuote: instrument)
   }
 
-  func pricingStatus(on date: Date) async throws -> TokenPricingStatus {
+  func pricingStatus() async throws -> TokenPricingStatus {
     .priced
   }
 }

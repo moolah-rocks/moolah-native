@@ -115,4 +115,22 @@ struct CryptoPriceServiceMetadataTests {
     _ = try await service.price(for: weth, on: date("2026-04-10"))
     #expect(await lookup.count == 2)  // wrapper re-resolved after native purge
   }
+
+  @Test
+  func purgeWrappedNativeEvictsNativeCache() async throws {
+    let lookup = RecordingLookup([
+      "1:native": CryptoRegistration(instrument: eth, mapping: ethMapping)
+    ])
+    let service = try makeService(
+      prices: ["1:native": ["2026-04-10": dec("1623.45")]], lookup: lookup)
+    // Prime WETH — `registration(for:)` co-stores the entry under BOTH the
+    // WETH id and the resolved native id (`1:native`).
+    _ = try await service.price(for: weth, on: date("2026-04-10"))
+    #expect(await lookup.count == 1)
+    // Purge the *wrapper* id; the co-stored native entry must cascade-evict so
+    // no stale `1:native` hit survives.
+    await service.purgeCache(instrumentId: weth.id)
+    _ = try await service.price(for: eth, on: date("2026-04-10"))
+    #expect(await lookup.count == 2)  // native re-resolved after wrapper purge
+  }
 }

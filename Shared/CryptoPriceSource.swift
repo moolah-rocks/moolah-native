@@ -1,11 +1,9 @@
-// Shared/CryptoPriceSource.swift
-
 import Foundation
 
 /// `PriceSource` for crypto token instruments. Prices are denominated in USD;
 /// `nativeQuote` is always `Instrument.USD`. `cryptoPrices` is optional to mirror
 /// `FullConversionService`'s optional crypto service: when nil, `quote(on:)` throws
-/// `ConversionError.noCryptoPriceService` and `pricingStatus(on:)` returns `.priced`
+/// `ConversionError.noCryptoPriceService` and `pricingStatus()` returns `.priced`
 /// (so requests proceed to the price call, where the error surfaces).
 struct CryptoPriceSource {
   let instrument: Instrument
@@ -27,11 +25,16 @@ extension CryptoPriceSource: PriceSource {
   /// the existing `FullConversionService.convertResultDecision` behaviour where
   /// an absent registration falls through to `.convert` and throws at the provider call.
   /// When `cryptoPrices` is nil, returns `.priced` for the same reason.
-  func pricingStatus(on date: Date) async throws -> TokenPricingStatus {
+  ///
+  /// Every other error (registry / DB read failure, `CancellationError`)
+  /// propagates rather than masquerading as `.priced` — it would otherwise be
+  /// swallowed here and re-thrown indistinguishably at price time, hiding a real
+  /// fault behind a `noProviderMapping`.
+  func pricingStatus() async throws -> TokenPricingStatus {
     guard let cryptoPrices else { return .priced }
     do {
       return try await cryptoPrices.registration(for: instrument).pricingStatus
-    } catch {
+    } catch ConversionError.noProviderMapping {
       // Missing registration → proceed; price call will surface the error.
       return .priced
     }

@@ -1,5 +1,3 @@
-// Shared/PriceSourceResolver.swift
-
 import Foundation
 
 /// Resolves a per-instrument `PriceSource` by dispatching on `Instrument.kind`.
