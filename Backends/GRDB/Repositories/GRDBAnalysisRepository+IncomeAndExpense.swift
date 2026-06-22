@@ -91,16 +91,6 @@ extension GRDBAnalysisRepository {
     var investmentProfit: InstrumentAmount
   }
 
-  /// Bundle of converted per-row sums fed into a month bucket, so the
-  /// bucket-update helper takes one parameter instead of many.
-  private struct ConvertedRowSums {
-    let day: Date
-    let income: InstrumentAmount
-    let expense: InstrumentAmount
-    let investmentIncome: InstrumentAmount
-    let investmentExpense: InstrumentAmount
-  }
-
   /// Walks the SQL aggregation rows, converts each row's four sums to
   /// the profile instrument on the row's own day, and accumulates
   /// into per-financial-month buckets. Conversion runs outside the
@@ -130,6 +120,16 @@ extension GRDBAnalysisRepository {
     monthEnd: Int,
     handlers: IncomeAndExpenseHandlers
   ) async throws -> [MonthlyIncomeExpense] {
+    let plan = Self.planIncomeAndExpense(
+      aggregation: aggregation, profileInstrument: profileInstrument)
+    for dayString in plan.unparseableDays {
+      handlers.handleUnparseableDay(dayString)
+    }
+    // One batched conversion for every parseable row's non-zero columns;
+    // `CancellationError` propagates straight out (never reaching the
+    // per-row failure path).
+    let outcomes = try await conversionService.convertResultBatch(plan.requests)
+
     var buckets: [String: MonthBucket] = [:]
     var firstConversionError: Error?
     // Strict Rule 11 (#1077): a financial month with ANY transient
@@ -137,26 +137,19 @@ extension GRDBAnalysisRepository {
     // rows in the month converted — and a month whose rows ALL skipped
     // still emits a zeroed placeholder bucket spanning the failing days.
     var unavailable = UnavailableMonthTracker()
-    for row in aggregation.rows {
-      guard let day = Self.parseDayString(row.day) else {
-        handlers.handleUnparseableDay(row.day)
-        continue
-      }
-      let instrument =
-        aggregation.instrumentMap[row.instrumentId]
-        ?? Instrument.fiat(code: row.instrumentId)
+    var cursor = 0
+    for planned in plan.parsedRows {
+      let row = planned.row
+      let day = planned.day
+      let slice = Array(outcomes[cursor..<cursor + planned.tags.count])
+      cursor += planned.tags.count
       let converted: ConvertedRowSums
       do {
-        converted = try await Self.convertRowSums(
-          row: row,
+        converted = try Self.assembleConvertedRowSums(
+          tags: planned.tags,
+          outcomes: slice,
           day: day,
-          instrument: instrument,
-          profileInstrument: profileInstrument,
-          conversionService: conversionService)
-      } catch let cancel as CancellationError {
-        // Cooperative cancellation surfaces unchanged — never folded
-        // into the per-row conversion-failure log path.
-        throw cancel
+          profileInstrument: profileInstrument)
       } catch {
         let context = IncomeAndExpenseFailureContext(
           day: row.day, instrumentId: row.instrumentId)
@@ -231,59 +224,6 @@ extension GRDBAnalysisRepository {
       }
       buckets[month] = bucket
     }
-  }
-
-  /// Converts each of the four per-row sums to the profile instrument
-  /// on the row's `day`. Same-instrument rows incur zero
-  /// conversion-service calls: zero-value columns short-circuit in
-  /// `convertedQuantityIfNonZero` before reaching the conversion
-  /// service, and non-zero same-instrument sums short-circuit in
-  /// `convertedQuantity` at the `instrument.id == target.id` guard.
-  private static func convertRowSums(
-    row: IncomeAndExpenseRow,
-    day: Date,
-    instrument: Instrument,
-    profileInstrument: Instrument,
-    conversionService: any InstrumentConversionService
-  ) async throws -> ConvertedRowSums {
-    func convert(_ value: Int64) async throws -> InstrumentAmount {
-      try await Self.convertedQuantityIfNonZero(
-        storageValue: value,
-        instrument: instrument,
-        profileInstrument: profileInstrument,
-        day: day,
-        conversionService: conversionService)
-    }
-    return ConvertedRowSums(
-      day: day,
-      income: try await convert(row.incomeQty),
-      expense: try await convert(row.expenseQty),
-      investmentIncome: try await convert(row.investmentIncomeQty),
-      investmentExpense: try await convert(row.investmentExpenseQty))
-  }
-
-  /// Skip the conversion call when the storage value is zero — every
-  /// CASE branch of the SQL emits `0` for non-matching legs, so most
-  /// rows have several zero-value columns. Skipping the call keeps
-  /// the conversion-service hit count tied to the row count rather
-  /// than four-times the row count, preserving the per-row counter
-  /// invariants asserted by `GRDBIncomeAndExpenseAssembleTests`.
-  private static func convertedQuantityIfNonZero(
-    storageValue: Int64,
-    instrument: Instrument,
-    profileInstrument: Instrument,
-    day: Date,
-    conversionService: any InstrumentConversionService
-  ) async throws -> InstrumentAmount {
-    if storageValue == 0 {
-      return .zero(instrument: profileInstrument)
-    }
-    return try await Self.convertedQuantity(
-      storageValue: storageValue,
-      instrument: instrument,
-      to: profileInstrument,
-      on: day,
-      conversionService: conversionService)
   }
 
   /// Build a fresh `MonthBucket` seeded with the row's day as both

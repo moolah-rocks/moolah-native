@@ -122,6 +122,44 @@ struct GRDBIncomeAndExpenseAssembleTests {
     #expect(conversionService.callCount == 3)
   }
 
+  @Test("multi-column row surfaces the first failing column's error after batching both columns")
+  func multiColumnRowSurfacesFirstColumnError() async throws {
+    // A single row carrying BOTH a non-zero income and a non-zero expense
+    // pins the batch semantics: every non-zero column is converted up
+    // front in one batch, and the row's reassembly surfaces the FIRST
+    // `.failure` in column order (income, index 0) as the row's error.
+    let usd = "USD"
+    let aggregation = GRDBAnalysisRepository.IncomeAndExpenseAggregation(
+      rows: [
+        .init(
+          day: "2025-01-15", instrumentId: usd,
+          incomeQty: 100, expenseQty: 200,
+          investmentIncomeQty: 0, investmentExpenseQty: 0)
+      ],
+      instrumentMap: [usd: .fiat(code: usd)])
+    // Index 0 (income) fails; index 1 (expense) succeeds. The surfaced
+    // error must be the income column's, proving column-order precedence.
+    let conversionService = FakeConversionService.perCall { index in
+      index == 0 ? .failure(CallbackError(index: index)) : .success(0)
+    }
+    let handlers = GRDBAnalysisRepository.IncomeAndExpenseHandlers(
+      handleUnparseableDay: { _ in }, handleConversionFailure: { _, _ in })
+
+    let thrown = await #expect(throws: CallbackError.self) {
+      _ = try await GRDBAnalysisRepository.assembleIncomeAndExpense(
+        aggregation: aggregation,
+        profileInstrument: .defaultTestInstrument,
+        conversionService: conversionService,
+        monthEnd: 25,
+        handlers: handlers)
+    }
+    // The income column (index 0) is the one whose error surfaces.
+    #expect(thrown == CallbackError(index: 0))
+    // Both non-zero columns were flattened into a single batch — the row
+    // is converted as a unit, not aborted at the first failing column.
+    #expect(conversionService.recordedBatches.last?.count == 2)
+  }
+
   @Test("transient conversion failures degrade per-row — no rethrow")
   func transientFailuresDoNotRethrow() async throws {
     let aggregation = makeAggregation()
@@ -260,8 +298,8 @@ struct GRDBIncomeAndExpenseAssembleTests {
     }
 
     // CancellationError surfaced unchanged — the per-row failure log
-    // never fired, and the loop short-circuited on the first row
-    // (no further conversion calls beyond the cancelled one).
+    // never fired, and the batch rethrew CancellationError after the
+    // first element resolved; no further conversion calls issued.
     #expect(visited.snapshot().isEmpty)
     #expect(conversionService.callCount == 1)
   }

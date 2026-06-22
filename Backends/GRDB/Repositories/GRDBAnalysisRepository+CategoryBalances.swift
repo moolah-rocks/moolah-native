@@ -186,6 +186,16 @@ extension GRDBAnalysisRepository {
     return SQLRequest<Row>(literal: literal)
   }
 
+  /// The batch plan for the category-balances walk: the rows that parsed
+  /// (retained so the index-aligned outcome can rebuild each bucket and
+  /// failure context), the flat request list, and the day-strings that
+  /// failed to parse so the caller surfaces them before the batch.
+  private struct CategoryBalancesPlan {
+    let parsedRows: [CategoryBalancesRow]
+    let requests: [BatchConversionRequest]
+    let unparseableDays: [String]
+  }
+
   /// Walks the SQL aggregation rows, converts each `(qty, instrument)`
   /// to the target instrument on its own day, and accumulates totals
   /// per `categoryId`. Conversion runs outside the `database.read`
@@ -195,13 +205,18 @@ extension GRDBAnalysisRepository {
   /// Mirrors `assembleExpenseBreakdown`'s per-row error contract:
   /// `handleUnparseableDay` and `handleConversionFailure` are invoked
   /// per failing row so each failure surfaces individually in
-  /// diagnostics; the loop continues processing remaining rows then
+  /// diagnostics; the walk continues processing remaining rows then
   /// re-throws the first conversion error after the walk so the
   /// function preserves its existing "throws on conversion error"
   /// contract while still delivering the per-row detail required by
   /// `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11. A `CancellationError` is
-  /// rethrown immediately and never folded into the
-  /// conversion-failure path.
+  /// rethrown immediately (it propagates straight out of the batch call)
+  /// and never folded into the conversion-failure path.
+  ///
+  /// All rows' `(qty, instrument, day)` conversions resolve in a single
+  /// `convertResultBatch(_:)` — the row order of the request list is
+  /// preserved in the outcomes, so the per-row failure callbacks still
+  /// fire in row order before the rethrow.
   @concurrent
   static func assembleCategoryBalances(
     aggregation: CategoryBalancesAggregation,
@@ -209,29 +224,27 @@ extension GRDBAnalysisRepository {
     conversionService: any InstrumentConversionService,
     handlers: CategoryBalancesHandlers
   ) async throws -> [UUID: InstrumentAmount] {
+    let plan = Self.planCategoryBalances(
+      aggregation: aggregation, targetInstrument: targetInstrument)
+    for dayString in plan.unparseableDays {
+      handlers.handleUnparseableDay(dayString)
+    }
+    // One batched conversion for every parseable row; `CancellationError`
+    // propagates straight out (never reaching the per-row failure path).
+    let outcomes = try await conversionService.convertResultBatch(plan.requests)
+
     var balances: [UUID: InstrumentAmount] = [:]
     var firstConversionError: Error?
-    for row in aggregation.rows {
-      guard let day = Self.parseDayString(row.day) else {
-        handlers.handleUnparseableDay(row.day)
-        continue
-      }
-      let instrument =
-        aggregation.instrumentMap[row.instrumentId]
-        ?? Instrument.fiat(code: row.instrumentId)
+    for (row, outcome) in zip(plan.parsedRows, outcomes) {
       let amount: InstrumentAmount
-      do {
-        amount = try await Self.convertedQuantity(
-          storageValue: row.qty,
-          instrument: instrument,
-          to: targetInstrument,
-          on: day,
-          conversionService: conversionService)
-      } catch let cancel as CancellationError {
-        // Cooperative cancellation surfaces unchanged — never folded
-        // into the per-row conversion-failure log path.
-        throw cancel
-      } catch {
+      switch outcome {
+      case .value(let converted):
+        amount = converted
+      case .knownZero:
+        // Issue #790: an `.unpriced` / `.spam` source folds to zero in
+        // the target rather than failing the row.
+        amount = .zero(instrument: targetInstrument)
+      case .failure(let error):
         let context = CategoryBalancesFailureContext(
           day: row.day,
           categoryId: row.categoryId,
@@ -252,5 +265,37 @@ extension GRDBAnalysisRepository {
       throw firstConversionError
     }
     return balances
+  }
+
+  /// Parse every row's day, resolve its source instrument, and build the
+  /// flat batch request list. Same-instrument rows still contribute a
+  /// request so the outcome list stays index-aligned with the rows; the
+  /// batch's same-instrument fast path resolves them to `.value` without
+  /// a conversion-service hit, matching `convertedQuantity`'s short
+  /// circuit.
+  private static func planCategoryBalances(
+    aggregation: CategoryBalancesAggregation,
+    targetInstrument: Instrument
+  ) -> CategoryBalancesPlan {
+    var parsedRows: [CategoryBalancesRow] = []
+    var requests: [BatchConversionRequest] = []
+    var unparseableDays: [String] = []
+    for row in aggregation.rows {
+      guard let day = Self.parseDayString(row.day) else {
+        unparseableDays.append(row.day)
+        continue
+      }
+      let instrument =
+        aggregation.instrumentMap[row.instrumentId]
+        ?? Instrument.fiat(code: row.instrumentId)
+      parsedRows.append(row)
+      requests.append(
+        BatchConversionRequest(
+          amount: InstrumentAmount(storageValue: row.qty, instrument: instrument),
+          target: targetInstrument,
+          date: day))
+    }
+    return CategoryBalancesPlan(
+      parsedRows: parsedRows, requests: requests, unparseableDays: unparseableDays)
   }
 }
