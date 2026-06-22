@@ -37,7 +37,7 @@ extension FullConversionService {
     plans.reserveCapacity(requests.count)
     var missingContexts: [RateCacheKey: KeyContext] = [:]
     for request in requests {
-      let decision = await convertResultDecision(request.amount, to: request.target)
+      let decision = try await convertResultDecision(request.amount, to: request.target)
       switch decision {
       case .value, .knownZero:
         plans.append(RequestPlan(decision: decision, context: nil))

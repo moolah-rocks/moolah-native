@@ -1,5 +1,3 @@
-// Shared/PriceSource.swift
-
 import Foundation
 
 /// Per-instrument pricing resolver. A `PriceSource` knows how to fetch both the
@@ -7,7 +5,7 @@ import Foundation
 ///
 /// The `quote(on:)` method returns both at once so stock sources — whose listing
 /// currency requires async I/O — can satisfy both without a separate sync property.
-/// `pricingStatus(on:)` lets callers short-circuit aggregation for tokens that are
+/// `pricingStatus()` lets callers short-circuit aggregation for tokens that are
 /// intentionally valued at zero (`.unpriced`, `.spam`) without touching a price
 /// provider.
 protocol PriceSource: Sendable {
@@ -17,9 +15,11 @@ protocol PriceSource: Sendable {
   /// - For crypto: `(usdPrice, .USD)`.
   func quote(on date: Date) async throws -> (perUnit: Decimal, nativeQuote: Instrument)
 
-  /// Returns the pricing status for the instrument on `date`. For fiat and stock
-  /// this is always `.priced`. For crypto it reflects the registration's
+  /// Returns the pricing status for the instrument. For fiat and stock this is
+  /// always `.priced`. For crypto it reflects the registration's
   /// `pricingStatus` — but a missing registration returns `.priced` rather than
-  /// throwing, so the error surfaces later at price-fetch time.
-  func pricingStatus(on date: Date) async throws -> TokenPricingStatus
+  /// throwing, so the error surfaces later at price-fetch time; any other error
+  /// (registry / DB failure, cancellation) propagates. Date-independent, so no
+  /// `date` parameter — registration status does not vary by day.
+  func pricingStatus() async throws -> TokenPricingStatus
 }

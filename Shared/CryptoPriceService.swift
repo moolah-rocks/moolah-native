@@ -118,14 +118,25 @@ actor CryptoPriceService {
     caches.removeValue(forKey: instrumentId)
     hydratedTokenIds.remove(instrumentId)
     metadataCache.removeValue(forKey: instrumentId)
-    // When a native-asset registration is purged, also evict any cached
-    // wrapped-native entry that was resolved to it (e.g. WETH→ETH). Without
-    // this, a subsequent WETH price lookup would return the stale cached
-    // mapping instead of re-resolving via the lookup closure.
+    // `registration(for:)` co-stores a wrapped-native token's registration
+    // under BOTH the wrapper's id and the resolved native lookup id, so a
+    // purge must evict both directions or a stale co-stored entry survives:
+    //  • purging a NATIVE id must also drop the wrapper entry resolved to it
+    //    (e.g. ETH purge → drop WETH), and
+    //  • purging a WRAPPER id must also drop the native entry it was stored
+    //    under (e.g. WETH purge → drop ETH).
+    // Without both, a subsequent lookup of the un-evicted side returns the
+    // stale cached mapping instead of re-resolving via the lookup closure.
     if let wrapperId = WrappedNativeContracts.canonicalWrappedInstrumentId(
       forChainId: chainId(fromCryptoId: instrumentId))
     {
       metadataCache.removeValue(forKey: wrapperId)
+    }
+    if let nativeId = WrappedNativeContracts.nativePricingInstrumentId(
+      chainId: chainId(fromCryptoId: instrumentId),
+      contractAddress: contractAddress(fromCryptoId: instrumentId))
+    {
+      metadataCache.removeValue(forKey: nativeId)
     }
     do {
       try await database.write { database in
@@ -156,6 +167,17 @@ actor CryptoPriceService {
     Int(id.prefix(while: { $0 != ":" }))
   }
 
+  /// Extracts the contract-address segment from a crypto instrument id of the
+  /// form `"<chainId>:<contractAddress>"`. Returns `nil` for a native id
+  /// (`"<chainId>:native"`) or an id without a `:` separator — matching the
+  /// `contractAddress == nil` shape of a native `Instrument`, so the value
+  /// round-trips through `WrappedNativeContracts.nativePricingInstrumentId`.
+  private func contractAddress(fromCryptoId id: String) -> String? {
+    guard let colon = id.firstIndex(of: ":") else { return nil }
+    let suffix = String(id[id.index(after: colon)...])
+    return suffix == "native" ? nil : suffix
+  }
+
   // MARK: - Single price
 
   /// Resolves the `CryptoRegistration` for `instrument` via the injected
@@ -166,6 +188,11 @@ actor CryptoPriceService {
   /// Throws `ConversionError.noProviderMapping` when the lookup returns
   /// `nil` for the resolved id — matching the error the caller expects when
   /// no provider mapping is registered for the instrument.
+  ///
+  /// No request coalescing: concurrent cache-miss callers for the same id may
+  /// each run the (idempotent) lookup once before the first stores its result.
+  /// An accepted trade-off — the lookup is cheap and side-effect-free, so the
+  /// duplicate work isn't worth a per-id in-flight task table.
   func registration(for instrument: Instrument) async throws -> CryptoRegistration {
     if let cached = metadataCache[instrument.id] { return cached }
     let lookupId =

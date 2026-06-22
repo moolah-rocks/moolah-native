@@ -49,13 +49,13 @@ actor FullConversionService: InstrumentConversionService {
     let day: Date
   }
 
-  // internal (not private) so FullConversionService+Batch.swift can reach it.
+  /// internal (not private) so FullConversionService+Batch.swift can reach it.
   struct UnitFactor {
     let multiplier: Decimal
     let divisor: Decimal
   }
 
-  // internal (not private) so FullConversionService+Batch.swift can reach it.
+  /// internal (not private) so FullConversionService+Batch.swift can reach it.
   var rateCache: [RateCacheKey: UnitFactor] = [:]
 
   /// UTC calendar — the underlying price services key their stored
@@ -195,7 +195,7 @@ actor FullConversionService: InstrumentConversionService {
       return try await exchangeRates.rate(from: instrument, to: common, on: date)
     }
     let quote = try await priceSources.source(for: instrument).quote(on: date)
-    if quote.nativeQuote == common { return quote.perUnit }
+    if quote.nativeQuote.id == common.id { return quote.perUnit }
     let fxRate = try await exchangeRates.rate(from: quote.nativeQuote, to: common, on: date)
     return quote.perUnit * fxRate
   }
@@ -229,7 +229,7 @@ actor FullConversionService: InstrumentConversionService {
     to instrument: Instrument,
     on date: Date
   ) async throws -> ConversionResult {
-    switch await convertResultDecision(amount, to: instrument) {
+    switch try await convertResultDecision(amount, to: instrument) {
     case .value(let amount):
       return .value(amount)
     case .knownZero:
@@ -264,23 +264,22 @@ actor FullConversionService: InstrumentConversionService {
     case convert
   }
 
-  // internal (not private) so FullConversionService+Batch.swift can reach it.
+  /// internal (not private) so FullConversionService+Batch.swift can reach it.
   func convertResultDecision(
     _ amount: InstrumentAmount,
     to instrument: Instrument
-  ) async -> ConvertResultDecision {
+  ) async throws -> ConvertResultDecision {
     if amount.instrument == instrument {
       return .value(amount)
     }
     if amount.instrument.kind == .cryptoToken {
-      // `pricingStatus` ignores the date for crypto (registration status is
-      // date-independent); a missing registration reports `.priced` so the
+      // `pricingStatus` is date-independent for crypto (registration status
+      // doesn't vary by day); a missing registration reports `.priced` so the
       // error surfaces later at price-fetch time rather than masquerading as
-      // a clean zero here. `.unpriced` / `.spam` resolve to a zero in the
-      // requested target instrument without a provider call.
-      let status =
-        (try? await priceSources.source(for: amount.instrument)
-          .pricingStatus(on: Date())) ?? .priced
+      // a clean zero here. A genuine registry / DB error (or cancellation)
+      // propagates rather than being swallowed. `.unpriced` / `.spam` resolve
+      // to a zero in the requested target instrument without a provider call.
+      let status = try await priceSources.source(for: amount.instrument).pricingStatus()
       if status != .priced { return .knownZero }
     }
     return .convert

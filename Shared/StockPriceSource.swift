@@ -1,5 +1,3 @@
-// Shared/StockPriceSource.swift
-
 import Foundation
 
 /// `PriceSource` for stock instruments. Resolves the per-share close price and the
@@ -20,7 +18,7 @@ extension StockPriceSource: PriceSource {
     return (perUnit: price, nativeQuote: listing)
   }
 
-  func pricingStatus(on date: Date) async throws -> TokenPricingStatus {
+  func pricingStatus() async throws -> TokenPricingStatus {
     .priced
   }
 }
