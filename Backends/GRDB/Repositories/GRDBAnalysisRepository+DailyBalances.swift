@@ -1,9 +1,13 @@
 import Foundation
 import GRDB
 
-/// Swift assembly helpers and shared types for `fetchDailyBalances`.
-/// Companion files split the workload further:
+/// Swift assembly orchestration for `fetchDailyBalances`. Companion files
+/// split the workload further:
+/// - `+DailyBalancesTypes.swift` holds the row, bundle, handler, and
+///   context types shared across the siblings.
 /// - `+DailyBalancesAggregation.swift` holds the four SQL fetches.
+/// - `+DailyBalancesPrewarm.swift` holds the concurrent conversion
+///   pre-warm that runs before the serial walk.
 /// - `+DailyBalancesInvestmentValues.swift` holds the per-day
 ///   recorded-value snapshot fold-in.
 /// - `+DailyBalancesTradesMode.swift` holds the per-day trades-mode

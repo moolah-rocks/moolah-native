@@ -1,9 +1,8 @@
 import Foundation
 
-/// Conversion pre-warm for `fetchDailyBalances`. Splits the warm-up
-/// collection and concurrent fan-out out of `+DailyBalances.swift` (sibling
-/// to `+DailyBalancesAggregation.swift`, `+DailyBalancesForecast.swift`,
-/// etc.).
+/// Conversion pre-warm for `fetchDailyBalances`: collects the distinct
+/// `(instrument, day-instant)` conversions the per-day walk will perform and
+/// resolves them concurrently before the serial walk runs.
 ///
 /// The per-day balance walk converts each held instrument to the profile
 /// instrument *serially*, awaiting one rate at a time — on a populated
@@ -25,11 +24,15 @@ extension GRDBAnalysisRepository {
   /// `PositionBook.dailyBalance`'s same-instrument fast path never
   /// converts it.
   ///
-  /// Over-approximates only harmlessly: an instrument whose post-cutoff
-  /// position lives solely on an investment account (so the walk reads it
-  /// via `accountsFromTransfers`, not the bank sum) may be warmed for a
-  /// day the walk skips — a wasted cache hit, never a wrong result.
-  /// Internal so `GRDBAnalysisPrewarmTests` can pin the running-union math.
+  /// Over-approximates only harmlessly — wasted warm-ups, never a missed
+  /// conversion that would change a result. Two known sources: an instrument
+  /// whose post-cutoff position lives solely on an investment account (the
+  /// walk reads it via `accountsFromTransfers`, not the bank sum, so some
+  /// days are skipped); and trades-mode account instruments, which the
+  /// separate `applyTradesModePositionValuations` fold converts at
+  /// `startOfDay(for: sampleDate)` rather than `sampleDate`, a memo key this
+  /// warm-up does not populate. Internal so `GRDBAnalysisPrewarmTests` can
+  /// pin the running-union math.
   static func collectConversionWarmups(
     priorAccountRows: [DailyBalanceAccountRow],
     priorEarmarkRows: [DailyBalanceEarmarkRow],
@@ -82,22 +85,28 @@ extension GRDBAnalysisRepository {
     using service: any InstrumentConversionService
   ) async {
     guard !warmups.isEmpty else { return }
+    // Bounded fan-out: enough in-flight conversions to overlap the
+    // per-(token, date) network price fetches, without flooding the
+    // provider hosts (the HTTP layer rate-limits per host) or spawning a
+    // task per day on a multi-year window. The conversion-service actor
+    // serialises the memo writes regardless, so a higher cap buys nothing.
     let maxConcurrent = 16
-    await withTaskGroup(of: Void.self) { group in
+    // A cancelled child rethrows `CancellationError` (see `warmOne`), which
+    // surfaces from `group.next()`, tears the group down, and propagates out
+    // — swallowed here because the pre-warm is best-effort: the serial walk
+    // re-runs and rethrows cancellation authoritatively.
+    try? await withThrowingTaskGroup(of: Void.self) { group in
       var next = 0
       let prime = min(maxConcurrent, warmups.count)
       while next < prime {
         let warmup = warmups[next]
-        group.addTask { await Self.warmOne(warmup, to: target, using: service) }
+        group.addTask { try await Self.warmOne(warmup, to: target, using: service) }
         next += 1
       }
-      while await group.next() != nil {
-        // Stop scheduling more warm-ups once the owning task is cancelled
-        // (the in-flight children drain at scope exit). The pre-warm is
-        // best-effort, so there's nothing to salvage by continuing.
-        guard !Task.isCancelled, next < warmups.count else { continue }
+      while try await group.next() != nil {
+        guard next < warmups.count else { continue }
         let warmup = warmups[next]
-        group.addTask { await Self.warmOne(warmup, to: target, using: service) }
+        group.addTask { try await Self.warmOne(warmup, to: target, using: service) }
         next += 1
       }
     }
@@ -107,8 +116,18 @@ extension GRDBAnalysisRepository {
     _ warmup: (instrument: Instrument, date: Date),
     to target: Instrument,
     using service: any InstrumentConversionService
-  ) async {
-    _ = try? await service.convertResult(
-      InstrumentAmount(quantity: 1, instrument: warmup.instrument), to: target, on: warmup.date)
+  ) async throws {
+    do {
+      _ = try await service.convertResult(
+        InstrumentAmount(quantity: 1, instrument: warmup.instrument), to: target, on: warmup.date)
+    } catch is CancellationError {
+      // Propagate cancellation so the group tears down promptly instead of
+      // running the remaining warm-ups for a torn-down load.
+      throw CancellationError()
+    } catch {
+      // Best-effort: a conversion that fails to warm is re-attempted — and
+      // its failure handled per the Rule 11 per-day contract — by the serial
+      // walk, so non-cancellation errors are intentionally discarded here.
+    }
   }
 }
