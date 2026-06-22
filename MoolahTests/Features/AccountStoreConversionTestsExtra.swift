@@ -129,7 +129,7 @@ struct AccountStoreConversionTestsExtra {
     TestBackend.seed(transactions: [audTx, usdTx], in: database)
 
     // 1 USD = 1.5 AUD
-    let conversion = FixedConversionService(rates: ["USD": dec("1.5")])
+    let conversion = FakeConversionService.fixedRates(["USD": dec("1.5")])
     let store = AccountStore(
       repository: backend.accounts, conversionService: conversion,
       targetInstrument: .AUD)

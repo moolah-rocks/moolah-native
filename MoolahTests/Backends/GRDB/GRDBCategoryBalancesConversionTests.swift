@@ -34,15 +34,14 @@ struct GRDBCategoryBalancesConversionTests {
     // Seed at UTC midnight for each transaction's UTC calendar day so
     // `ratesAsOf`'s descending `<=` scan lands on the right rate per
     // parsed-day Date.
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 0): [
-          "USD": rateOne
-        ],
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 11, hour: 0): [
-          "USD": rateTwo
-        ],
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 0): [
+        "USD": rateOne
+      ],
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 11, hour: 0): [
+        "USD": rateTwo
+      ],
+    ])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let account = Account(

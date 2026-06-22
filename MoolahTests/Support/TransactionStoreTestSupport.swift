@@ -78,12 +78,12 @@ enum TransactionStoreTestSupport {
     }
     let accountStore = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     let earmarkStore = EarmarkStore(
       repository: backend.earmarks,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     // `AccountStore` and `EarmarkStore` are both reactive — wait for an
@@ -110,7 +110,7 @@ enum TransactionStoreTestSupport {
     }
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     return Stores(transactions: store, accounts: accountStore, earmarks: earmarkStore)

@@ -28,7 +28,7 @@ struct CryptoTokenStoreTests {
     let store = CryptoTokenStore(
       registry: registry,
       cryptoPriceService: service,
-      conversionService: RecordingConversionService())
+      conversionService: FakeConversionService.passthrough)
     return (store, registry)
   }
 
@@ -78,7 +78,7 @@ struct CryptoTokenStoreTests {
     let store = CryptoTokenStore(
       registry: failing,
       cryptoPriceService: service,
-      conversionService: RecordingConversionService())
+      conversionService: FakeConversionService.passthrough)
     await store.loadRegistrations()
     #expect(store.error != nil)
     #expect(store.registrations.isEmpty)

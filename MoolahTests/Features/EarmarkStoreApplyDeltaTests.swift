@@ -22,7 +22,7 @@ struct EarmarkStoreApplyDeltaTests {
       amounts: [earmarkId: (saved: 500, spent: 0)],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.earmarks.by(id: earmarkId) != nil },
@@ -56,7 +56,7 @@ struct EarmarkStoreApplyDeltaTests {
       amounts: [earmarkId: (saved: 500, spent: 0)],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.earmarks.by(id: earmarkId) != nil },
@@ -96,7 +96,7 @@ struct EarmarkStoreApplyDeltaTests {
       ],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.earmarks.count == 2 },

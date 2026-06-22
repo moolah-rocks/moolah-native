@@ -21,7 +21,7 @@ struct TransactionStoreSpamFilterTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     return (backend, store)

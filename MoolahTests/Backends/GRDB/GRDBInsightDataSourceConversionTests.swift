@@ -35,8 +35,8 @@ struct GRDBInsightDataSourceConversionTests {
   func dailyTotalsConvertsPerDay() async throws {
     let dayOne = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 10)
     let dayTwo = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 11)
-    let conversion = DateBasedFixedConversionService(
-      rates: [
+    let conversion = FakeConversionService.dateRates(
+      [
         try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 10, hour: 0): ["USD": 1.5],
         try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 11, hour: 0): ["USD": 2.0],
       ])
@@ -61,8 +61,8 @@ struct GRDBInsightDataSourceConversionTests {
     let dayOne = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 10)
     let dayTwo = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 11)
     // dayOne rate: 1 USD → 1.5 AUD; dayTwo rate: 1 USD → 2.0 AUD.
-    let conversion = DateBasedFixedConversionService(
-      rates: [
+    let conversion = FakeConversionService.dateRates(
+      [
         try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 10, hour: 0): ["USD": 1.5],
         try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 11, hour: 0): ["USD": 2.0],
       ])

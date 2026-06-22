@@ -45,7 +45,7 @@ struct AccountStoreSyncRefreshTests {
   func convertedTotalRecomputesOnRateTick(table: String) async throws {
     // CRITICAL: this test MUST use the real GRDBInstrumentConversionService
     // (the one TestBackend.create() wires up — `FiatConversionService`
-    // backed by the in-memory GRDB queue). Substituting `FixedConversionService`
+    // backed by the in-memory GRDB queue). Substituting `FakeConversionService`
     // or any other test double makes the test vacuous: the stub's
     // observeRates() is a no-op AsyncStream that cannot signal a
     // cache-table write, so the test would pass for the wrong reason
@@ -145,7 +145,7 @@ struct AccountStoreSyncRefreshTests {
 
     let accountStore = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     // Wait for the seeded account to be visible before mutating.
@@ -156,7 +156,7 @@ struct AccountStoreSyncRefreshTests {
 
     let transactionStore = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     await transactionStore.load(filter: TransactionFilter(accountId: accountId))
@@ -234,7 +234,7 @@ struct AccountStoreSyncRefreshTests {
     let (backend, _) = try TestBackend.create()
     let store = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     let first = try await backend.accounts.create(
@@ -275,7 +275,7 @@ struct AccountStoreSyncRefreshTests {
     let (backend, _) = try TestBackend.create()
     let store = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     let account = try await backend.accounts.create(

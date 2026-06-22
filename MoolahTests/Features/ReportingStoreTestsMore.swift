@@ -80,7 +80,7 @@ struct ReportingStoreTestsMore {
     TestBackend.seed(transactions: [buyBHP, buyCBA], in: database)
 
     // BHP worth $50/share → 5000, CBA worth $120/share → 6000
-    let service = FixedConversionService(rates: ["ASX:BHP.AX": 50, "ASX:CBA.AX": 120])
+    let service = FakeConversionService.fixedRates(["ASX:BHP.AX": 50, "ASX:CBA.AX": 120])
     let store = ReportingStore(
       transactionRepository: backend.transactions,
       conversionService: service,
@@ -137,7 +137,7 @@ struct ReportingStoreTestsMore {
     ]
     TestBackend.seed(transactions: txns, in: database)
 
-    let service = FixedConversionService(rates: ["ASX:BHP.AX": 50, eth.id: 2500])
+    let service = FakeConversionService.fixedRates(["ASX:BHP.AX": 50, eth.id: 2500])
     let store = ReportingStore(
       transactionRepository: backend.transactions,
       conversionService: service,
@@ -189,7 +189,7 @@ struct ReportingStoreTestsMore {
     let store = ReportingStore(
       transactionRepository: backend.transactions,
       analysisRepository: backend.analysis,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       profileCurrency: .defaultTestInstrument
     )
 

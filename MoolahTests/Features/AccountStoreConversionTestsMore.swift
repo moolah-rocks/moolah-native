@@ -25,7 +25,7 @@ struct AccountStoreConversionTestsMore {
     )
     TestBackend.seed(transactions: [usdTx], in: database)
 
-    let conversion = FixedConversionService(rates: ["USD": dec("1.5")])
+    let conversion = FakeConversionService.fixedRates(["USD": dec("1.5")])
     let store = AccountStore(
       repository: backend.accounts, conversionService: conversion,
       targetInstrument: .AUD)
@@ -101,7 +101,7 @@ struct AccountStoreConversionTestsMore {
     TestBackend.seed(transactions: [audTx, mixedEurTx, mixedUsdTx], in: database)
 
     // USD conversions fail; AUD and EUR conversions succeed (1:1 fallback).
-    let conversion = FailingConversionService(failingInstrumentIds: ["USD"])
+    let conversion = FakeConversionService.failingInstruments(["USD"])
     let store = AccountStore(
       repository: backend.accounts,
       conversionService: conversion,
@@ -148,7 +148,7 @@ struct AccountStoreConversionTestsMore {
       ])
     TestBackend.seed(transactions: [audTx, eurTx], in: database)
 
-    let conversion = FailingConversionService(failingInstrumentIds: ["EUR"])
+    let conversion = FakeConversionService.failingInstruments(["EUR"])
     let store = AccountStore(
       repository: backend.accounts,
       conversionService: conversion,
@@ -164,7 +164,7 @@ struct AccountStoreConversionTestsMore {
     // Recover the conversion service and wait for the background retry
     // loop to succeed. `waitForPendingConversions()` returns when the loop
     // terminates, which happens on the first successful attempt.
-    await conversion.setFailing([])
+    conversion.setFailing([])
     await store.waitForPendingConversions()
 
     // 1000 AUD + 500 EUR (1:1 fallback) = 1500 AUD

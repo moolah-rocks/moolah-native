@@ -111,7 +111,7 @@ struct GRDBCreateManyTests {
     let txnRepo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .AUD,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
     let accountId = UUID()
@@ -173,7 +173,7 @@ struct GRDBCreateManyTests {
     let txnRepo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .AUD,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry,
       onRecordChanged: makeChangedHook(capture),
@@ -228,7 +228,7 @@ struct GRDBCreateManyTests {
     return GRDBTransactionRepository(
       database: database,
       defaultInstrument: .AUD,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry,
       onRecordChanged: makeChangedHook(capture),

@@ -43,7 +43,7 @@ struct GRDBForecastRule11Tests {
       leg: TransactionLeg(
         accountId: UUID(), instrument: unmapped, quantity: 1, type: .expense))
 
-    let conversion = FailingConversionService(failingInstrumentIds: [unmapped.id])
+    let conversion = FakeConversionService.failingInstruments([unmapped.id])
     let context = GRDBAnalysisRepository.DailyBalancesAssemblyContext(
       investmentAccountIds: [],
       tradesModeInvestmentAccountIds: [],
@@ -51,7 +51,7 @@ struct GRDBForecastRule11Tests {
       profileInstrument: aud,
       conversionService: conversion)
 
-    // Before the fix this threw `FailingConversionError.unavailable`
+    // Before the fix this threw `FakeConversionError.instrumentUnavailable`
     // out of `preConvertForecastInstances`; the contract is that it
     // returns normally (degraded) instead.
     let result = try await GRDBAnalysisRepository.generateForecast(

@@ -57,7 +57,7 @@ struct MultiInstrumentPositionsAssemblerTests {
       buyTransaction(
         instrument: btc, qty: 1, fiat: 50_000, accountId: accountA, daysAfterEpoch: 1)
     ]
-    let service = FixedConversionService(rates: [btc.id: Decimal(60_000)])
+    let service = FakeConversionService.fixedRates([btc.id: Decimal(60_000)])
     let assembler = MultiInstrumentPositionsAssembler(conversionService: service)
 
     let valuedRows = [
@@ -145,9 +145,9 @@ struct MultiInstrumentPositionsAssemblerTests {
   @Test
   func costBasisOmitsUnclassifiableInstrument() async throws {
     // BTC→AUD conversion fails; LTC→AUD and AUD→AUD always succeed.
-    let service = FailingConversionService(
-      rates: [ltc.id: Decimal(100)],
-      failingInstrumentIds: [btc.id])
+    let service = FakeConversionService.failingInstruments(
+      [btc.id],
+      rates: [ltc.id: Decimal(100)])
     let assembler = MultiInstrumentPositionsAssembler(conversionService: service)
 
     let txns = [

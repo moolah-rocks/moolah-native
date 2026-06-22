@@ -57,7 +57,7 @@ struct GRDBExpenseBreakdownUnavailableTests {
       row(day: "2025-01-20", categoryId: categoryB, qty: -200),
     ])
     let transient = transientError()
-    let conversionService = ThrowingCountingConversionService { index in
+    let conversionService = FakeConversionService.perCall { index in
       index == 0 ? .failure(transient) : .success(-200)
     }
 
@@ -86,7 +86,7 @@ struct GRDBExpenseBreakdownUnavailableTests {
       row(day: "2025-03-25", categoryId: UUID(), qty: -200),
     ])
     let transient = transientError()
-    let conversionService = ThrowingCountingConversionService { _ in
+    let conversionService = FakeConversionService.perCall { _ in
       .failure(transient)
     }
 
@@ -113,7 +113,7 @@ struct GRDBExpenseBreakdownUnavailableTests {
       row(day: "2025-02-10", categoryId: categoryA, qty: -100),
       row(day: "2025-02-20", categoryId: categoryB, qty: -200),
     ])
-    let conversionService = ThrowingCountingConversionService { _ in .success(-50) }
+    let conversionService = FakeConversionService.perCall { _ in .success(-50) }
 
     let result = try await GRDBAnalysisRepository.assembleExpenseBreakdown(
       aggregation: aggregation,
@@ -134,7 +134,7 @@ struct GRDBExpenseBreakdownUnavailableTests {
     let aggregation = aggregation([
       row(day: "2025-04-10", categoryId: UUID(), qty: -100)
     ])
-    let conversionService = ThrowingCountingConversionService { _ in
+    let conversionService = FakeConversionService.perCall { _ in
       .failure(ConversionError.unsupportedConversion(from: "A", to: "B"))
     }
 

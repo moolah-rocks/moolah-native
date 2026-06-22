@@ -38,7 +38,7 @@ enum SidebarDropDispatchTestSupport {
     TestBackend.seed(accounts: seedAccounts, in: database)
     let accountStore = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     let accountGroupStore = AccountGroupStore(repository: backend.accountGroups)
     let groupUIStateStore = GroupUIStateStore(repository: backend.groupUIState)

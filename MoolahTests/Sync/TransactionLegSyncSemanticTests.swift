@@ -19,7 +19,7 @@ struct TransactionLegSyncSemanticTests {
     let txnRepo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .defaultTestInstrument,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
     let legRepo = GRDBTransactionLegRepository(database: database)
@@ -69,7 +69,7 @@ struct TransactionLegSyncSemanticTests {
     let txnRepo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .defaultTestInstrument,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
     let legRepo = GRDBTransactionLegRepository(database: database)

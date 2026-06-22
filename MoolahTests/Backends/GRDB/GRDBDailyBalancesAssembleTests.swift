@@ -10,7 +10,7 @@ import Testing
 /// `PositionBook.dailyBalance(...)`.
 ///
 /// These tests drive the static helper directly with an injected
-/// throwing conversion service (`ThrowingCountingConversionService` from
+/// throwing conversion service (`FakeConversionService.perCall` from
 /// `MoolahTests/Support/`) so the per-day error contract required by
 /// `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11 is captured by a unit test
 /// (no GRDB stack needed).
@@ -79,7 +79,7 @@ struct GRDBDailyBalancesAssembleTests {
   @Test("handleConversionFailure invoked once per failing day; no rethrow")
   func handleConversionFailureFiresPerDay() async throws {
     let (aggregation, _) = try makeAggregation()
-    let conversionService = ThrowingCountingConversionService { index in
+    let conversionService = FakeConversionService.perCall { index in
       .failure(CallbackError(index: index))
     }
     let failures = FailureLog()
@@ -112,13 +112,13 @@ struct GRDBDailyBalancesAssembleTests {
     // position persists across days; `dailyBalance` calls the service
     // once per day's foreign-instrument bucket. Three days = three
     // calls.
-    #expect(conversionService.calls == 3)
+    #expect(conversionService.callCount == 3)
   }
 
   @Test("loop processes all days even when the first day fails")
   func loopContinuesAfterFirstFailure() async throws {
     let (aggregation, _) = try makeAggregation()
-    let conversionService = ThrowingCountingConversionService { index in
+    let conversionService = FakeConversionService.perCall { index in
       index == 0 ? .failure(CallbackError(index: index)) : .success(0)
     }
     let visited = FailureLog()
@@ -142,7 +142,7 @@ struct GRDBDailyBalancesAssembleTests {
     // throw. A refactor that breaks early would log [0] and call the
     // service once, not three times.
     #expect(visited.snapshot() == [0])
-    #expect(conversionService.calls == 3)
+    #expect(conversionService.callCount == 3)
     // Day 0 is omitted; days 1 and 2 surface even though their
     // conversion returned 0 (the success branch). bestFit fills in
     // because the result has ≥2 entries.
@@ -152,7 +152,7 @@ struct GRDBDailyBalancesAssembleTests {
   @Test("CancellationError rethrown immediately without invoking handleConversionFailure")
   func cancellationErrorIsNotFoldedIntoConversionFailureLog() async throws {
     let (aggregation, _) = try makeAggregation()
-    let conversionService = ThrowingCountingConversionService { index in
+    let conversionService = FakeConversionService.perCall { index in
       index == 0 ? .failure(CancellationError()) : .success(0)
     }
     let visited = FailureLog()
@@ -175,7 +175,7 @@ struct GRDBDailyBalancesAssembleTests {
     // never fired, and the loop short-circuited on the first day
     // (no further conversion calls beyond the cancelled one).
     #expect(visited.snapshot().isEmpty)
-    #expect(conversionService.calls == 1)
+    #expect(conversionService.callCount == 1)
   }
 
   @Test("snapshot fold drops the day from dailyBalances on per-day conversion failure")
@@ -193,8 +193,7 @@ struct GRDBDailyBalancesAssembleTests {
     var dailyBalances: [Date: DailyBalance] = [
       dayKey: makePlaceholderDailyBalance(on: dayKey)
     ]
-    let conversionService = DateFailingConversionService(
-      rates: [:], failingDates: [dayKey])
+    let conversionService = FakeConversionService.dateRates([:], failingDates: [dayKey])
     let captured = InvestmentValueFailureLog()
     let handlers = GRDBAnalysisRepository.DailyBalancesHandlers(
       handleUnparseableDay: { _ in },

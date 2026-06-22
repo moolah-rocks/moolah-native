@@ -70,7 +70,7 @@ struct MultiInstrumentPositionsCoverageTests {
       ]
     )
 
-    let service = FixedConversionService(rates: [btc.id: Decimal(20_000)])
+    let service = FakeConversionService.fixedRates([btc.id: Decimal(20_000)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 5)
     let series = await builder.build(
@@ -101,7 +101,8 @@ struct MultiInstrumentPositionsCoverageTests {
   // once ETH enters the portfolio), while the per-instrument series for a
   // fully-priced token (BTC) still charts those same days.
   //
-  // `FailingConversionService` marks ETH as permanently unavailable so no
+  // `FakeConversionService.failingInstruments` marks ETH as permanently
+  // unavailable so no
   // aggregate point ever emits after day 2 (when ETH is bought). BTC is
   // unaffected and produces a full per-instrument series for all days.
   @Test("partial price failure: aggregate suppressed; fully-priced instrument keeps all days")
@@ -126,9 +127,9 @@ struct MultiInstrumentPositionsCoverageTests {
       ),
     ]
     // ETH conversion always fails; BTC converts at a fixed rate.
-    let service = FailingConversionService(
-      rates: [btc.id: Decimal(20_000)],
-      failingInstrumentIds: [eth.id]
+    let service = FakeConversionService.failingInstruments(
+      [eth.id],
+      rates: [btc.id: Decimal(20_000)]
     )
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 4)
@@ -196,7 +197,7 @@ struct MultiInstrumentPositionsCoverageTests {
     _ = try await backend.transactions.create(transferIn)
 
     let rate: Decimal = 30_000
-    let conversionService = FixedConversionService(rates: [btc.id: rate])
+    let conversionService = FakeConversionService.fixedRates([btc.id: rate])
     let assembler = MultiInstrumentPositionsAssembler(conversionService: conversionService)
     let transactions = try await assembler.fetchTransactions(
       repository: backend.transactions, accountIds: [accountId])
@@ -252,7 +253,7 @@ struct MultiInstrumentPositionsCoverageTests {
         ]
       ),
     ]
-    let service = FixedConversionService(rates: [
+    let service = FakeConversionService.fixedRates([
       btc.id: rateBtc,
       eth.id: rateEth,
     ])

@@ -19,7 +19,7 @@ struct AnalysisStoreRateTickTests {
     let repository = CountingAnalysisRepository()
     let store = AnalysisStore(
       repository: repository,
-      conversionService: StubConversionService(),
+      conversionService: FakeConversionService.passthrough,
       defaults: try makeDefaults())
     await store.loadAll()  // initial load → count 1, cache populated
     let afterInitial = await repository.loadAllCount
@@ -32,7 +32,7 @@ struct AnalysisStoreRateTickTests {
   func burstCoalesces() async throws {
     let repository = GatedCountingAnalysisRepository()
     let store = AnalysisStore(
-      repository: repository, conversionService: StubConversionService(),
+      repository: repository, conversionService: FakeConversionService.passthrough,
       defaults: try makeDefaults())
     // Hold the first reload on the gated repository so the burst lands
     // while it is unambiguously in flight.
@@ -56,7 +56,7 @@ struct AnalysisStoreRateTickTests {
   func ticksDuringInitialLoadCoalesce() async throws {
     let repository = GatedCountingAnalysisRepository()
     let store = AnalysisStore(
-      repository: repository, conversionService: StubConversionService(),
+      repository: repository, conversionService: FakeConversionService.passthrough,
       defaults: try makeDefaults())
     // The view-initiated initial load is held at the gate, unambiguously
     // in flight. Rate ticks that land during it (the load fetching prices
@@ -79,7 +79,7 @@ struct AnalysisStoreRateTickTests {
   @Test("a rate-cache tick triggers a forced reload (initial tick ignored)")
   func rateTickDrivesReload() async throws {
     let repository = CountingAnalysisRepository()
-    let conversion = StubConversionService()  // emits an initial tick on subscribe
+    let conversion = FakeConversionService.passthrough  // emits an initial tick on subscribe
     let store = AnalysisStore(
       repository: repository, conversionService: conversion, defaults: try makeDefaults())
     // Single iterator over the store's deterministic observation-tick

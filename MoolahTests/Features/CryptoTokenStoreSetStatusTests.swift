@@ -32,7 +32,7 @@ struct CryptoTokenStoreSetStatusTests {
   private struct Fixture {
     let store: CryptoTokenStore
     let registry: GRDBInstrumentRegistryRepository
-    let conversionService: RecordingConversionService
+    let conversionService: FakeConversionService
   }
 
   /// Builds a fresh store backed by an in-memory GRDB database with
@@ -46,7 +46,7 @@ struct CryptoTokenStoreSetStatusTests {
     }
     let priceService = CryptoPriceService(
       clients: [FixedCryptoPriceClient()], database: database)
-    let conversionService = RecordingConversionService()
+    let conversionService = FakeConversionService.passthrough
     let store = CryptoTokenStore(
       registry: registry,
       cryptoPriceService: priceService,

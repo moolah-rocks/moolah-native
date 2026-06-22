@@ -32,7 +32,7 @@ struct TradeEventClassifierTests {
     let legs = [tradeLeg(aud, -4_000), tradeLeg(bhp, 100)]
     let result = try await TradeEventClassifier.classify(
       legs: legs, on: date, hostCurrency: aud,
-      conversionService: FixedConversionService(rates: [:]))
+      conversionService: FakeConversionService.fixedRates([:]))
     #expect(result.buys.count == 1)
     #expect(result.buys[0].instrument == bhp)
     #expect(result.buys[0].quantity == 100)
@@ -45,7 +45,7 @@ struct TradeEventClassifierTests {
     let legs = [tradeLeg(aud, 2_500), tradeLeg(bhp, -50)]
     let result = try await TradeEventClassifier.classify(
       legs: legs, on: date, hostCurrency: aud,
-      conversionService: FixedConversionService(rates: [:]))
+      conversionService: FakeConversionService.fixedRates([:]))
     #expect(result.sells.count == 1)
     #expect(result.sells[0].instrument == bhp)
     #expect(result.sells[0].quantity == 50)
@@ -55,7 +55,7 @@ struct TradeEventClassifierTests {
   @Test("non-fiat swap is priced via host-currency conversion")
   func swap() async throws {
     let legs = [tradeLeg(eth, -2), tradeLeg(btc, 0.1)]
-    let service = FixedConversionService(rates: [
+    let service = FakeConversionService.fixedRates([
       eth.id: Decimal(3_000),
       btc.id: Decimal(60_000),
     ])
@@ -83,7 +83,7 @@ struct TradeEventClassifierTests {
     ]
     let result = try await TradeEventClassifier.classify(
       legs: legs, on: date, hostCurrency: aud,
-      conversionService: FixedConversionService(rates: [:]))
+      conversionService: FakeConversionService.fixedRates([:]))
     #expect(result.buys.isEmpty)
     #expect(result.sells.isEmpty)
   }
@@ -93,7 +93,7 @@ struct TradeEventClassifierTests {
     let legs = [tradeLeg(aud, -4_000), tradeLeg(bhp, 0)]
     let result = try await TradeEventClassifier.classify(
       legs: legs, on: date, hostCurrency: aud,
-      conversionService: FixedConversionService(rates: [:]))
+      conversionService: FakeConversionService.fixedRates([:]))
     #expect(result.buys.isEmpty)
     #expect(result.sells.isEmpty)
   }
@@ -102,7 +102,7 @@ struct TradeEventClassifierTests {
   func fewerThanTwo() async throws {
     let result = try await TradeEventClassifier.classify(
       legs: [tradeLeg(aud, -100)], on: date, hostCurrency: aud,
-      conversionService: FixedConversionService(rates: [:]))
+      conversionService: FakeConversionService.fixedRates([:]))
     #expect(result.buys.isEmpty)
     #expect(result.sells.isEmpty)
   }
@@ -114,7 +114,7 @@ struct TradeEventClassifierTests {
     let legs = [tradeLeg(aud, -4_000), tradeLeg(bhp, 100), feeLeg(aud, -10)]
     let result = try await TradeEventClassifier.classify(
       legs: legs, on: date, hostCurrency: aud,
-      conversionService: FixedConversionService(rates: [:]))
+      conversionService: FakeConversionService.fixedRates([:]))
     try #require(result.buys.count == 1)
     #expect(result.buys[0].costPerUnit == Decimal(40) + Decimal(10) / Decimal(100))
     #expect(result.sells.isEmpty)
@@ -125,7 +125,7 @@ struct TradeEventClassifierTests {
     let legs = [tradeLeg(aud, 2_500), tradeLeg(bhp, -50), feeLeg(aud, -10)]
     let result = try await TradeEventClassifier.classify(
       legs: legs, on: date, hostCurrency: aud,
-      conversionService: FixedConversionService(rates: [:]))
+      conversionService: FakeConversionService.fixedRates([:]))
     try #require(result.sells.count == 1)
     #expect(result.sells[0].proceedsPerUnit == Decimal(50) - Decimal(10) / Decimal(50))
     #expect(result.buys.isEmpty)
@@ -139,7 +139,7 @@ struct TradeEventClassifierTests {
     ]
     let result = try await TradeEventClassifier.classify(
       legs: legs, on: date, hostCurrency: aud,
-      conversionService: FixedConversionService(rates: [:]))
+      conversionService: FakeConversionService.fixedRates([:]))
     try #require(result.buys.count == 1)
     #expect(result.buys[0].costPerUnit == Decimal(40) + Decimal(13) / Decimal(100))
   }
@@ -152,7 +152,7 @@ struct TradeEventClassifierTests {
     ]
     let result = try await TradeEventClassifier.classify(
       legs: legs, on: date, hostCurrency: aud,
-      conversionService: FixedConversionService(rates: [:]))
+      conversionService: FakeConversionService.fixedRates([:]))
     try #require(result.buys.count == 1)
     #expect(result.buys[0].costPerUnit == Decimal(40))
   }
@@ -165,7 +165,7 @@ struct TradeEventClassifierTests {
     // detectable rather than silent. (Wall-clock Date() at test-run time
     // > nextDay because `date` is a past fixture; see comment above.)
     let nextDay = date.addingTimeInterval(86_400)
-    let service = DateBasedFixedConversionService(rates: [
+    let service = FakeConversionService.dateRates([
       date: [usd.id: dec("1.5")],
       nextDay: [usd.id: Decimal(2)],
     ])
@@ -181,7 +181,7 @@ struct TradeEventClassifierTests {
 
   @Test("swap: fee splits evenly across both capital events")
   func swapSplitsFeeEvenlyAcrossEvents() async throws {
-    let service = FixedConversionService(rates: [
+    let service = FakeConversionService.fixedRates([
       eth.id: Decimal(3_000),
       btc.id: Decimal(60_000),
     ])
@@ -207,23 +207,23 @@ struct TradeEventClassifierTests {
 
   @Test("buy: host-currency fee skips the conversion service")
   func hostCurrencyFeeNeedsNoConversionLookup() async throws {
-    // RecordingConversionService records every convert() call without a
-    // same-instrument short-circuit. The pair-leg conversion (AUD→AUD,
-    // for the BHP capital leg) goes through the service unconditionally
-    // — the classifier does not fast-path the *pair* leg today — so the
-    // recorder sees that one call. The fee leg (also AUD on AUD-host)
-    // MUST be fast-pathed inside the classifier so the recorder sees
-    // exactly one call total. If the fast path is missing, the recorder
-    // sees two calls and `count == 1` catches it.
-    let service = RecordingConversionService()
+    // FakeConversionService records every convert() call that reaches its
+    // outcome closure. The pair-leg conversion (AUD→AUD, for the BHP
+    // capital leg) goes through the service — the classifier does not
+    // fast-path the *pair* leg today — so the recorder sees that one
+    // call. The fee leg (also AUD on AUD-host) MUST be fast-pathed inside
+    // the classifier so the recorder sees exactly one call total. If the
+    // fast path is missing, the recorder sees two calls and `count == 1`
+    // catches it.
+    let service = FakeConversionService.passthrough
     let legs = [tradeLeg(aud, -4_000), tradeLeg(bhp, 100), feeLeg(aud, -10)]
     let result = try await TradeEventClassifier.classify(
       legs: legs, on: date, hostCurrency: aud, conversionService: service)
     try #require(result.buys.count == 1)
     #expect(result.buys[0].costPerUnit == Decimal(40) + Decimal(10) / Decimal(100))
-    // RecordingConversionService returns input unchanged (1:1), so the
+    // passthrough returns input unchanged (1:1), so the
     // pair-leg conversion still produces -4 000.
-    #expect(service.calls.count == 1)
-    #expect(service.calls.first?.quantity == -4_000)
+    #expect(service.recordedCalls.count == 1)
+    #expect(service.recordedCalls.first?.quantity == -4_000)
   }
 }

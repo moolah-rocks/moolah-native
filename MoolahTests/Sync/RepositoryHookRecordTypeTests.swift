@@ -67,7 +67,7 @@ struct RepositoryHookRecordTypeTests {
     let txnRepo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .defaultTestInstrument,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry,
       onRecordChanged: makeChangedHook(capture),

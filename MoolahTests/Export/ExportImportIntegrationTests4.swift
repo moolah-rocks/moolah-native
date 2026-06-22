@@ -62,7 +62,7 @@ struct ExportImportIntegrationTests4 {
       database: freshDatabase,
       instrument: aud,
       profileLabel: profile.label,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentRegistry: registry
     )
 

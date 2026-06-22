@@ -10,7 +10,7 @@ struct EarmarkStoreMutationTests {
   func testCreateAddsEarmark() async throws {
     let (backend, _) = try TestBackend.create()
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForFirstEmission()
 
@@ -28,7 +28,7 @@ struct EarmarkStoreMutationTests {
   func testCreateReturnsNilOnFailure() async throws {
     let store = EarmarkStore(
       repository: FailingEarmarkRepository(),
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     let result = await store.create(Earmark(name: "Fails", instrument: .defaultTestInstrument))
@@ -41,7 +41,7 @@ struct EarmarkStoreMutationTests {
   func testCreateReloadsAfterSuccess() async throws {
     let (backend, _) = try TestBackend.create()
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForFirstEmission()
 
@@ -61,7 +61,7 @@ struct EarmarkStoreMutationTests {
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(earmarks: [earmark], in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.earmarks.by(id: earmark.id) != nil },
@@ -84,7 +84,7 @@ struct EarmarkStoreMutationTests {
   func testUpdateReturnsNilOnFailure() async throws {
     let store = EarmarkStore(
       repository: FailingEarmarkRepository(),
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     let result = await store.update(Earmark(name: "Fails", instrument: .defaultTestInstrument))
@@ -99,7 +99,7 @@ struct EarmarkStoreMutationTests {
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(earmarks: [earmark], in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.earmarks.by(id: earmark.id) != nil },

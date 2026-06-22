@@ -39,7 +39,7 @@ struct ProfitLossCalculatorTests {
       ])
 
     // BHP now worth $50/share
-    let service = FixedConversionService(rates: ["ASX:BHP.AX": 50])
+    let service = FakeConversionService.fixedRates(["ASX:BHP.AX": 50])
     let results = try await ProfitLossCalculator.compute(
       transactions: [buyTx],
       profileCurrency: aud,
@@ -85,7 +85,7 @@ struct ProfitLossCalculatorTests {
       ])
 
     // BHP now worth $50/share
-    let service = FixedConversionService(rates: ["ASX:BHP.AX": 50])
+    let service = FakeConversionService.fixedRates(["ASX:BHP.AX": 50])
     let results = try await ProfitLossCalculator.compute(
       transactions: [buyTx, sellTx],
       profileCurrency: aud,
@@ -130,7 +130,7 @@ struct ProfitLossCalculatorTests {
           categoryId: nil, earmarkId: nil),
       ])
 
-    let service = FixedConversionService(rates: [:])
+    let service = FakeConversionService.fixedRates([:])
     let results = try await ProfitLossCalculator.compute(
       transactions: [buyTx, sellTx],
       profileCurrency: aud,
@@ -157,7 +157,7 @@ struct ProfitLossCalculatorTests {
           categoryId: nil, earmarkId: nil)
       ])
 
-    let service = FixedConversionService(rates: [:])
+    let service = FakeConversionService.fixedRates([:])
     let results = try await ProfitLossCalculator.compute(
       transactions: [transaction],
       profileCurrency: aud,

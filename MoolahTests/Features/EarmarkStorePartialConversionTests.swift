@@ -51,7 +51,7 @@ struct EarmarkStorePartialConversionTests {
       ])
     TestBackend.seed(transactions: [healthyTx, mixedEurTx, mixedUsdTx], in: database)
 
-    let conversion = FailingConversionService(failingInstrumentIds: ["USD"])
+    let conversion = FakeConversionService.failingInstruments(["USD"])
     let store = EarmarkStore(
       repository: backend.earmarks,
       conversionService: conversion,
@@ -103,7 +103,7 @@ struct EarmarkStorePartialConversionTests {
       ])
     TestBackend.seed(transactions: [audTx, eurTx], in: database)
 
-    let conversion = FailingConversionService(failingInstrumentIds: ["EUR"])
+    let conversion = FakeConversionService.failingInstruments(["EUR"])
     let store = EarmarkStore(
       repository: backend.earmarks,
       conversionService: conversion,
@@ -126,7 +126,7 @@ struct EarmarkStorePartialConversionTests {
     // Recover the conversion service and wait for the retry loop to
     // succeed — `waitForPendingConversions()` returns when the loop
     // terminates on the first successful attempt.
-    await conversion.setFailing([])
+    conversion.setFailing([])
     await store.waitForPendingConversions()
 
     // 400 AUD + 200 EUR (1:1 fallback) = 600 AUD

@@ -24,7 +24,7 @@ struct InvestmentStoreSyncRefreshTests {
     let (backend, _) = try TestBackend.create()
     let store = InvestmentStore(
       repository: backend.investments,
-      conversionService: FixedConversionService())
+      conversionService: FakeConversionService.fixedRates([:]))
 
     // Activate the per-account subscription.
     store.setActiveAccount(accountId)
@@ -49,7 +49,7 @@ struct InvestmentStoreSyncRefreshTests {
     let (backend, _) = try TestBackend.create()
     let store = InvestmentStore(
       repository: backend.investments,
-      conversionService: FixedConversionService())
+      conversionService: FakeConversionService.fixedRates([:]))
 
     store.setActiveAccount(accountId)
     try await store.waitForFirstEmission()
@@ -83,7 +83,7 @@ struct InvestmentStoreSyncRefreshTests {
 
     let store = InvestmentStore(
       repository: backend.investments,
-      conversionService: FixedConversionService())
+      conversionService: FakeConversionService.fixedRates([:]))
 
     store.setActiveAccount(accountA)
     try await store.waitForNextEmission(

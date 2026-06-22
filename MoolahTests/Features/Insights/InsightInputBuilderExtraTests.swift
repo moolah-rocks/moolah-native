@@ -63,7 +63,7 @@ struct InsightInputBuilderExtraTests {
     //
     // scheduledBills must use Date() for conversion (Rule 6 — current rate for
     // a future obligation), so the result should reflect 1.5, not 3.0.
-    // DateBasedFixedConversionService picks the most-recent date <= requested,
+    // FakeConversionService.dateRates picks the most-recent date <= requested,
     // so conversion on Date() resolves the distantPast entry (1.5), while
     // conversion on the future transaction date would resolve the far-future
     // entry (3.0). The distinction proves the gate uses context.now and the
@@ -73,11 +73,10 @@ struct InsightInputBuilderExtraTests {
     let futureTransactionDate = try AnalysisTestHelpers.utcDate(year: 2027, month: 1, day: 1)
     let pastTransactionDate = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 14)
     // Rate effective from distantPast (< Date()) = 1.5; far-future = 3.0.
-    let conversionService = DateBasedFixedConversionService(
-      rates: [
-        Date.distantPast: ["USD": 1.5],
-        futureTransactionDate: ["USD": 3.0],
-      ])
+    let conversionService = FakeConversionService.dateRates([
+      Date.distantPast: ["USD": 1.5],
+      futureTransactionDate: ["USD": 3.0],
+    ])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversionService)
 
     // Future-dated bill: must appear, converted at current rate (1.5).

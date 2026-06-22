@@ -45,7 +45,7 @@ struct AccountPerformanceCalculatorTests {
       transactions: fixture.transactions,
       valuedPositions: fixture.valued,
       profileCurrency: aud,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       now: fixture.now
     )
     #expect(perf.currentValue == InstrumentAmount(quantity: 11_000, instrument: aud))
@@ -62,7 +62,7 @@ struct AccountPerformanceCalculatorTests {
       transactions: fixture.transactions,
       valuedPositions: fixture.valued,
       profileCurrency: aud,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       now: fixture.now
     )
     let percent = try #require(perf.profitLossPercent)
@@ -79,7 +79,7 @@ struct AccountPerformanceCalculatorTests {
       transactions: fixture.transactions,
       valuedPositions: fixture.valued,
       profileCurrency: aud,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       now: fixture.now
     )
     let annualised = try #require(perf.annualisedReturn)
@@ -114,7 +114,7 @@ struct AccountPerformanceCalculatorTests {
       transactions: [trade],
       valuedPositions: valued,
       profileCurrency: aud,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       now: now
     )
     #expect(perf.totalContributions == InstrumentAmount(quantity: 0, instrument: aud))
@@ -154,7 +154,7 @@ struct AccountPerformanceCalculatorTests {
       transactions: [transfer],
       valuedPositions: valued,
       profileCurrency: aud,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       now: now
     )
     #expect(perf.totalContributions == InstrumentAmount(quantity: 1_000, instrument: aud))
@@ -186,7 +186,7 @@ struct AccountPerformanceCalculatorTests {
       transactions: [dividend],
       valuedPositions: valued,
       profileCurrency: aud,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       now: now
     )
     #expect(perf.totalContributions == InstrumentAmount(quantity: 0, instrument: aud))
@@ -212,13 +212,13 @@ struct AccountPerformanceCalculatorTests {
         TransactionLeg(accountId: accountId, instrument: usd, quantity: 100, type: .transfer),
       ]
     )
-    let conversion = FailingConversionService(failingInstrumentIds: [usd.id])
+    let conversion = FakeConversionService.failingInstruments([usd.id])
     let valued = [
       ValuedPosition(
         instrument: usd, quantity: 100, unitPrice: nil, costBasis: nil,
         value: InstrumentAmount(quantity: 150, instrument: aud))
     ]
-    await #expect(throws: FailingConversionError.self) {
+    await #expect(throws: FakeConversionError.self) {
       _ = try await AccountPerformanceCalculator.compute(
         accountId: accountId,
         transactions: [txn],
@@ -256,7 +256,7 @@ struct AccountPerformanceCalculatorTests {
       transactions: [opening],
       valuedPositions: valued,
       profileCurrency: aud,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       now: now
     )
     #expect(perf.currentValue == nil)

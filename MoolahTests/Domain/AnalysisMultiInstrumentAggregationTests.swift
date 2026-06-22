@@ -15,7 +15,7 @@ struct AnalysisMultiInstrumentAggregationTests {
     // B: USD -50 -> -75 AUD (clamps to 0). Total = 50 (per-earmark, not global).
     let usd = Instrument.fiat(code: "USD")
     let rate = try AnalysisTestHelpers.decimal("1.5")
-    let conversion = FixedConversionService(rates: ["USD": rate])
+    let conversion = FakeConversionService.fixedRates(["USD": rate])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let bank = Account(
@@ -46,7 +46,7 @@ struct AnalysisMultiInstrumentAggregationTests {
   func multiCurrencyExpenseBreakdownAcrossMonths() async throws {
     let usd = Instrument.fiat(code: "USD")
     let rate = try AnalysisTestHelpers.decimal("1.5")
-    let conversion = FixedConversionService(rates: ["USD": rate])
+    let conversion = FakeConversionService.fixedRates(["USD": rate])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let account = Account(
@@ -92,7 +92,7 @@ struct AnalysisMultiInstrumentAggregationTests {
     // rate. Local-timezone dates would drift on positive-UTC runners
     // (AEST: `2025-05-10 00:00 local` is `2025-05-09 14:00 UTC`,
     // SQLite returns `2025-05-09`, the parsed UTC midnight is BEFORE
-    // the rate key and `DateBasedFixedConversionService` falls back to
+    // the rate key and `FakeConversionService.dateRates` falls back to
     // 1:1).
     let mayDate = try AnalysisTestHelpers.utcDate(year: 2025, month: 5, day: 10, hour: 12)
     let juneDate = try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 12)
@@ -101,7 +101,7 @@ struct AnalysisMultiInstrumentAggregationTests {
     let mayRate = try AnalysisTestHelpers.decimal("1.5")
     let juneRate = try AnalysisTestHelpers.decimal("2.0")
 
-    let conversion = DateBasedFixedConversionService(rates: [
+    let conversion = FakeConversionService.dateRates([
       mayRateKey: ["USD": mayRate],
       juneRateKey: ["USD": juneRate],
     ])
@@ -159,7 +159,7 @@ struct AnalysisMultiInstrumentAggregationTests {
     let day10RateKey = try AnalysisTestHelpers.utcDate(
       year: 2025, month: 9, day: 10, hour: 0)
 
-    let conversion = try DateBasedFixedConversionService(rates: [
+    let conversion = try FakeConversionService.dateRates([
       day1RateKey: [
         "USD": AnalysisTestHelpers.decimal("1.4"),
         "EUR": AnalysisTestHelpers.decimal("1.6"),
@@ -203,7 +203,7 @@ struct AnalysisMultiInstrumentAggregationTests {
   func categoryBalancesHonourTargetInstrument() async throws {
     let usd = Instrument.fiat(code: "USD")
     let audRate = try AnalysisTestHelpers.decimal("0.5")
-    let conversion = FixedConversionService(rates: ["AUD": audRate])
+    let conversion = FakeConversionService.fixedRates(["AUD": audRate])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
     let account = Account(
       id: UUID(), name: "Bank", type: .bank, instrument: .defaultTestInstrument)

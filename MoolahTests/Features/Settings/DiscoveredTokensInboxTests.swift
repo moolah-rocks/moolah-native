@@ -40,7 +40,7 @@ struct DiscoveredTokensInboxTests {
     let store = CryptoTokenStore(
       registry: registry,
       cryptoPriceService: priceService,
-      conversionService: RecordingConversionService())
+      conversionService: FakeConversionService.passthrough)
     let resolver = CountingRegistrationResolver()
     let discovery = CryptoTokenDiscoveryService(
       registry: registry, resolver: resolver)

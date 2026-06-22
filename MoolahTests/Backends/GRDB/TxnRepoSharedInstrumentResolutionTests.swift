@@ -51,7 +51,7 @@ struct TxnRepoSharedInstrumentResolutionTests {
     let repo = GRDBTransactionRepository(
       database: perProfile,
       defaultInstrument: Instrument.fiat(code: "USD"),
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
 
@@ -92,7 +92,7 @@ struct TxnRepoSharedInstrumentResolutionTests {
     let repo = GRDBTransactionRepository(
       database: perProfile,
       defaultInstrument: Instrument.fiat(code: "USD"),
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: AlwaysThrowingInstrumentMapResolver(),
       instrumentRegistrar: (try SharedRegistryTestSupport.makeSharedRegistry()))
 

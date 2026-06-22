@@ -101,7 +101,8 @@ struct AnalysisStoreUnavailableProjectionTests {
         totalExpenses: amt(Decimal(-50))),
     ])
     let store = AnalysisStore(
-      repository: repo, conversionService: StubConversionService(), defaults: try makeDefaults())
+      repository: repo, conversionService: FakeConversionService.passthrough,
+      defaults: try makeDefaults())
     store.historyMonths = 0  // All — keep both rows in the displayed window.
     await store.loadAll()
 
@@ -116,7 +117,8 @@ struct AnalysisStoreUnavailableProjectionTests {
         totalExpenses: amt(Decimal(-50)))
     ])
     let store = AnalysisStore(
-      repository: repo, conversionService: StubConversionService(), defaults: try makeDefaults())
+      repository: repo, conversionService: FakeConversionService.passthrough,
+      defaults: try makeDefaults())
     store.historyMonths = 0
     await store.loadAll()
 

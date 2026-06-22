@@ -37,7 +37,7 @@ struct ReportingStoreTests {
     )
     TestBackend.seed(transactions: [buyTx], in: database)
 
-    let service = FixedConversionService(rates: ["ASX:BHP.AX": 50])
+    let service = FakeConversionService.fixedRates(["ASX:BHP.AX": 50])
     let store = ReportingStore(
       transactionRepository: backend.transactions,
       conversionService: service,
@@ -97,7 +97,7 @@ struct ReportingStoreTests {
 
     let store = ReportingStore(
       transactionRepository: backend.transactions,
-      conversionService: FixedConversionService(rates: [:]),
+      conversionService: FakeConversionService.fixedRates([:]),
       profileCurrency: aud
     )
 
@@ -127,7 +127,7 @@ struct ReportingStoreTests {
 
     let store = ReportingStore(
       transactionRepository: backend.transactions,
-      conversionService: FixedConversionService(rates: [:]),
+      conversionService: FakeConversionService.fixedRates([:]),
       profileCurrency: aud
     )
 

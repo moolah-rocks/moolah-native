@@ -19,7 +19,7 @@ struct TransactionStoreManualMergeTests {
   private func makeStore(backend: CloudKitBackend) -> TransactionStore {
     TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument,
       transferSuggestions: backend.transferSuggestions)
   }
@@ -109,7 +109,7 @@ struct TransactionStoreManualMergeTests {
     // No `transferSuggestions:` argument → no coordinator wired.
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     await store.manualMerge(outgoing, incoming)

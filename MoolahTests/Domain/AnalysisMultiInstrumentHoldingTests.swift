@@ -23,7 +23,7 @@ struct AnalysisMultiInstrumentHoldingTests {
     let rate3 = try AnalysisTestHelpers.decimal("1.40")
     let tick = try AnalysisTestHelpers.decimal("0.01")
 
-    let conversion = DateBasedFixedConversionService(rates: [
+    let conversion = FakeConversionService.dateRates([
       day1: ["USD": rate1],
       day2: ["USD": rate2],
       day3: ["USD": rate3],
@@ -96,7 +96,7 @@ struct AnalysisMultiInstrumentHoldingTests {
     let rate3 = try AnalysisTestHelpers.decimal("1.7")
     let tick = try AnalysisTestHelpers.decimal("0.01")
 
-    let conversion = DateBasedFixedConversionService(rates: [
+    let conversion = FakeConversionService.dateRates([
       day1: ["USD": rate1],
       day2: ["USD": rate2],
       day3: ["USD": rate3],
@@ -155,7 +155,7 @@ struct AnalysisMultiInstrumentHoldingTests {
     // position-tracking total.
     let usd = Instrument.fiat(code: "USD")
     let rate = try AnalysisTestHelpers.decimal("1.5")
-    let conversion = FixedConversionService(rates: ["USD": rate])
+    let conversion = FakeConversionService.fixedRates(["USD": rate])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let bank = Account(

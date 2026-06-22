@@ -24,7 +24,7 @@ struct CryptoTokenStoreSpamInstrumentsTests {
     }
     let priceService = CryptoPriceService(
       clients: [FixedCryptoPriceClient()], database: database)
-    let conversionService = RecordingConversionService()
+    let conversionService = FakeConversionService.passthrough
     let store = CryptoTokenStore(
       registry: registry,
       cryptoPriceService: priceService,

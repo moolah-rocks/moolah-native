@@ -20,7 +20,7 @@ struct AccountStoreUpdateValuationTests {
       valuationMode: .recordedValue, in: database)
     let store = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.by(id: original.id) != nil },
@@ -47,7 +47,7 @@ struct AccountStoreUpdateValuationTests {
       valuationMode: .calculatedFromTrades, in: database)
     let store = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.by(id: original.id) != nil },

@@ -20,7 +20,7 @@ struct TransactionStoreLoadRaceTests {
     TestBackend.seed(transactions: transactions, in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -40,7 +40,7 @@ struct TransactionStoreLoadRaceTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -58,7 +58,7 @@ struct TransactionStoreLoadRaceTests {
     TestBackend.seed(transactions: transactions, in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -76,7 +76,7 @@ struct TransactionStoreLoadRaceTests {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -103,7 +103,7 @@ struct TransactionStoreLoadRaceTests {
     TestBackend.seed(transactions: transactions, in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -121,7 +121,7 @@ struct TransactionStoreLoadRaceTests {
   func failedLoadAllowsRetryOnRemount() async throws {
     let store = TransactionStore(
       repository: FailingTransactionRepository(),
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -144,7 +144,7 @@ struct TransactionStoreLoadRaceTests {
     let repo = FirstFetchGatedTransactionRepository()
     let store = TransactionStore(
       repository: repo,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     let filter = TransactionFilter(accountId: accountId)
@@ -174,7 +174,7 @@ struct TransactionStoreLoadRaceTests {
     let repo = FirstFetchGatedTransactionRepository()
     let store = TransactionStore(
       repository: repo,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
     let filter = TransactionFilter(accountId: accountId)

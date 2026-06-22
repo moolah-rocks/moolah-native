@@ -16,7 +16,7 @@ struct TransactionStoreLoadingTests {
     TestBackend.seed(transactions: transactions, in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -40,7 +40,7 @@ struct TransactionStoreLoadingTests {
     TestBackend.seed(transactions: transactions, in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument,
       pageSize: 3
     )
@@ -63,7 +63,7 @@ struct TransactionStoreLoadingTests {
     TestBackend.seed(transactions: transactions, in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument,
       pageSize: 10
     )
@@ -82,7 +82,7 @@ struct TransactionStoreLoadingTests {
     TestBackend.seed(transactions: transactions, in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument,
       pageSize: 10
     )
@@ -127,7 +127,7 @@ struct TransactionStoreLoadingTests {
     TestBackend.seed(transactions: transactions, in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -183,7 +183,7 @@ struct TransactionStoreLoadingTests {
     TestBackend.seed(transactions: transactions, in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -211,7 +211,7 @@ struct TransactionStoreLoadingTests {
     TestBackend.seed(transactions: transactions, in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument
     )
 
@@ -246,7 +246,7 @@ struct TransactionStoreLoadingTests {
     TestBackend.seed(transactions: transactions, in: database)
     let store = TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument,
       pageSize: 3
     )

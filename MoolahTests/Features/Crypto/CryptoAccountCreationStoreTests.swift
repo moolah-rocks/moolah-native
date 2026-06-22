@@ -68,7 +68,7 @@ struct CryptoAccountCreationStoreTests {
       clock: { Self.pinnedNow })
     let accountStore = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     return Fixture(
       accountStore: accountStore,

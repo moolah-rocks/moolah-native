@@ -28,7 +28,7 @@ struct ExchangeCreationHarness {
     let (backend, _) = try TestBackend.create()
     accountStore = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     if failingTokenStore {
       tokenStore = FailingExchangeTokenStore()

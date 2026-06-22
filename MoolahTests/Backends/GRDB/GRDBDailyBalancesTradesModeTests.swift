@@ -26,12 +26,11 @@ struct GRDBDailyBalancesTradesModeTests {
     let row = GRDBAnalysisRepository.DailyBalanceAccountRow(
       day: "2025-06-10", sampleDate: day,
       accountId: accountId, instrumentId: "USD", type: "trade", qty: 1_000_000_000)
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
-          "USD": try AnalysisTestHelpers.decimal("1.5")
-        ]
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
+        "USD": try AnalysisTestHelpers.decimal("1.5")
+      ]
+    ])
     var balances: [Date: DailyBalance] = [
       dayKey: TradesModeFoldTestSupport.placeholderBalance(at: dayKey)
     ]
@@ -67,12 +66,11 @@ struct GRDBDailyBalancesTradesModeTests {
     let rowB = GRDBAnalysisRepository.DailyBalanceAccountRow(
       day: "2025-06-10", sampleDate: day,
       accountId: bId, instrumentId: "USD", type: "trade", qty: 2_000_000_000)
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
-          "USD": try AnalysisTestHelpers.decimal("1.5")
-        ]
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
+        "USD": try AnalysisTestHelpers.decimal("1.5")
+      ]
+    ])
     var balances: [Date: DailyBalance] = [
       dayKey: TradesModeFoldTestSupport.placeholderBalance(at: dayKey)
     ]
@@ -101,12 +99,11 @@ struct GRDBDailyBalancesTradesModeTests {
     let row = GRDBAnalysisRepository.DailyBalanceAccountRow(
       day: "2025-06-10", sampleDate: day,
       accountId: tradesId, instrumentId: "USD", type: "trade", qty: 1_000_000_000)
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
-          "USD": try AnalysisTestHelpers.decimal("1.5")
-        ]
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
+        "USD": try AnalysisTestHelpers.decimal("1.5")
+      ]
+    ])
     // Pre-seed the day with a snapshot-fold contribution so the new
     // fold's add-not-overwrite contract is visible.
     var balances: [Date: DailyBalance] = [
@@ -164,11 +161,10 @@ struct GRDBDailyBalancesTradesModeTests {
     // turning the assertion below into a sharp signal.
     let midDay = try AnalysisTestHelpers.localDate(
       year: 2025, month: 6, day: 10, hour: 6)
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        dayKey: ["USD": try AnalysisTestHelpers.decimal("1.5")],
-        midDay: ["USD": try AnalysisTestHelpers.decimal("99.99")],
-      ])
+    let conversion = FakeConversionService.dateRates([
+      dayKey: ["USD": try AnalysisTestHelpers.decimal("1.5")],
+      midDay: ["USD": try AnalysisTestHelpers.decimal("99.99")],
+    ])
     var balances: [Date: DailyBalance] = [
       dayKey: TradesModeFoldTestSupport.placeholderBalance(at: dayKey)
     ]
@@ -200,7 +196,7 @@ struct GRDBDailyBalancesTradesModeTests {
       dayKey: TradesModeFoldTestSupport.placeholderBalance(at: dayKey)
     ]
     let originalBalance = balances[dayKey]
-    let conversion = DateBasedFixedConversionService(rates: [:])
+    let conversion = FakeConversionService.dateRates([:])
     let context = TradesModeFoldTestSupport.makeContext(
       tradesIds: [], instrumentMap: [:], conversionService: conversion)
     let handlers = TradesModeFoldTestSupport.makeHandlers { _, _ in }
@@ -217,7 +213,7 @@ struct GRDBDailyBalancesTradesModeTests {
     let accountId = UUID()
     var balances: [Date: DailyBalance] = [:]
     let usd = Instrument.fiat(code: "USD")
-    let conversion = DateBasedFixedConversionService(rates: [:])
+    let conversion = FakeConversionService.dateRates([:])
     let context = TradesModeFoldTestSupport.makeContext(
       tradesIds: [accountId],
       instrumentMap: ["USD": usd],
@@ -250,12 +246,11 @@ struct GRDBDailyBalancesTradesModeTests {
     let tradeRow = GRDBAnalysisRepository.DailyBalanceAccountRow(
       day: "2025-06-10", sampleDate: day,
       accountId: accountId, instrumentId: "USD", type: "trade", qty: 1_000_000_000)
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
-          "USD": try AnalysisTestHelpers.decimal("1.5")
-        ]
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
+        "USD": try AnalysisTestHelpers.decimal("1.5")
+      ]
+    ])
     var balances: [Date: DailyBalance] = [
       dayKey: TradesModeFoldTestSupport.placeholderBalance(at: dayKey)
     ]
@@ -287,12 +282,11 @@ struct GRDBDailyBalancesTradesModeTests {
     let sell = GRDBAnalysisRepository.DailyBalanceAccountRow(
       day: "2025-06-10", sampleDate: day,
       accountId: accountId, instrumentId: "USD", type: "trade", qty: -1_000_000_000)
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
-          "USD": try AnalysisTestHelpers.decimal("1.5")
-        ]
-      ])
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 1, day: 1, hour: 0): [
+        "USD": try AnalysisTestHelpers.decimal("1.5")
+      ]
+    ])
     var balances: [Date: DailyBalance] = [
       dayKey: TradesModeFoldTestSupport.placeholderBalance(at: dayKey)
     ]

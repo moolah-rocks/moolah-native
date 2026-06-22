@@ -284,7 +284,7 @@ struct GRDBInsightDataSourceTests {
   @Test("a leg whose conversion fails is dropped and counted, siblings survive")
   func conversionFailureDropsLeg() async throws {
     let failDay = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 10, hour: 0)
-    let conversion = DateFailingConversionService(rates: [:], failingDates: [failDay])
+    let conversion = FakeConversionService.dateRates([:], failingDates: [failDay])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
     let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
     let usd = Instrument.fiat(code: "USD")

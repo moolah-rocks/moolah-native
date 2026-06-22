@@ -8,9 +8,9 @@ import Testing
 /// be converted to the host currency on its own snapshot date, not on
 /// today's rate.
 ///
-/// `FixedConversionService` ignores its `on:` parameter, so it cannot
-/// catch a regression that swaps `on: date` for `on: Date()`. These
-/// tests use `DateBasedFixedConversionService` (rate keyed by date) so
+/// `FakeConversionService.fixedRates` ignores its `on:` parameter, so it
+/// cannot catch a regression that swaps `on: date` for `on: Date()`. These
+/// tests use `FakeConversionService.dateRates` (rate keyed by date) so
 /// a future refactor that drops the snapshot date fails loudly.
 @Suite("InvestmentStore.aggregateDailyBalances conversion date")
 @MainActor
@@ -32,7 +32,7 @@ struct InvestmentStoreDailyBalanceDateTests {
     let (backend, _) = try TestBackend.create(instrument: aud)
     let store = InvestmentStore(
       repository: backend.investments,
-      conversionService: DateBasedFixedConversionService(rates: [
+      conversionService: FakeConversionService.dateRates([
         date1: [usd.id: dec("1.5")],
         date2: [usd.id: dec("1.8")],
       ]))
@@ -68,7 +68,7 @@ struct InvestmentStoreDailyBalanceDateTests {
     let (backend, _) = try TestBackend.create(instrument: aud)
     let store = InvestmentStore(
       repository: backend.investments,
-      conversionService: DateBasedFixedConversionService(rates: [
+      conversionService: FakeConversionService.dateRates([
         buyDate: [usd.id: dec("1.5")],
         cashFlowDate: [usd.id: dec("2.0")],
       ]))

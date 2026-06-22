@@ -13,7 +13,7 @@ struct AccountStoreLoadingTests {
     _ = AccountStoreTestSupport.seedAccount(
       name: "Checking", balance: Decimal(100000) / 100, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     await expectEventually("seeded account populates the store") {
@@ -29,7 +29,7 @@ struct AccountStoreLoadingTests {
     _ = AccountStoreTestSupport.seedAccount(
       name: "A2", type: .asset, balance: Decimal(20000) / 100, position: 1, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     await expectEventually("accounts settle sorted by position") {
@@ -58,7 +58,7 @@ struct AccountStoreLoadingTests {
       in: database)
 
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     // currentTotal = 100000 + 500000 - 50000 = 550000 (hidden excluded)
@@ -89,7 +89,7 @@ struct AccountStoreLoadingTests {
       in: database)
 
     // 1 USD = 2 AUD — simple test rate
-    let conversion = FixedConversionService(rates: ["USD": 2])
+    let conversion = FakeConversionService.fixedRates(["USD": 2])
     let store = AccountStore(
       repository: backend.accounts, conversionService: conversion, targetInstrument: aud)
 

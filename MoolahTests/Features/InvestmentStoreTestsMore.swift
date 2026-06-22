@@ -49,7 +49,7 @@ struct InvestmentStoreTestsMore {
       ], in: database)
 
     let store = InvestmentStore(
-      repository: backend.investments, conversionService: FixedConversionService())
+      repository: backend.investments, conversionService: FakeConversionService.fixedRates([:]))
     await store.loadDailyBalances(
       accountId: accountId, hostCurrency: .defaultTestInstrument)
 
@@ -88,8 +88,8 @@ struct InvestmentStoreTestsMore {
           ]),
       ], in: database)
 
-    // 1 USD = 1.5 AUD via FixedConversionService.
-    let conversion = FixedConversionService(rates: ["USD": dec("1.5")])
+    // 1 USD = 1.5 AUD via FakeConversionService.
+    let conversion = FakeConversionService.fixedRates(["USD": dec("1.5")])
     let store = InvestmentStore(
       repository: backend.investments, conversionService: conversion)
 
@@ -131,8 +131,7 @@ struct InvestmentStoreTestsMore {
     // instrument number.
     let store = InvestmentStore(
       repository: backend.investments,
-      conversionService: FailingConversionService(
-        failingInstrumentIds: [usd.id]))
+      conversionService: FakeConversionService.failingInstruments([usd.id]))
 
     await store.loadDailyBalances(accountId: accountId, hostCurrency: aud)
 
@@ -150,7 +149,7 @@ struct InvestmentStoreTestsMore {
       investmentValues: makeValues(accountId: accountId, count: 3), in: database
     )
     let store = InvestmentStore(
-      repository: backend.investments, conversionService: FixedConversionService())
+      repository: backend.investments, conversionService: FakeConversionService.fixedRates([:]))
 
     await store.loadValues(accountId: accountId)
     store.selectedPeriod = .all

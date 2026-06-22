@@ -9,7 +9,7 @@ struct BalanceCalculatorValuationModeTests {
   @Test("recordedValue + snapshot → balance = snapshot")
   func recordedWithSnapshot() async throws {
     let calculator = AccountBalanceCalculator(
-      conversionService: FixedConversionService(), targetInstrument: .AUD)
+      conversionService: FakeConversionService.fixedRates([:]), targetInstrument: .AUD)
     let account = Account(
       name: "B", type: .investment, instrument: .AUD,
       valuationMode: .recordedValue)
@@ -22,7 +22,7 @@ struct BalanceCalculatorValuationModeTests {
   @Test("recordedValue + missing snapshot → balance = zero (NOT positions sum)")
   func recordedWithoutSnapshotIsZero() async throws {
     let calculator = AccountBalanceCalculator(
-      conversionService: FixedConversionService(), targetInstrument: .AUD)
+      conversionService: FakeConversionService.fixedRates([:]), targetInstrument: .AUD)
     var account = Account(
       name: "B", type: .investment, instrument: .AUD,
       valuationMode: .recordedValue)
@@ -35,7 +35,7 @@ struct BalanceCalculatorValuationModeTests {
   @Test("calculatedFromTrades → positions sum (snapshot ignored)")
   func calculatedSumsPositionsIgnoringSnapshot() async throws {
     let calculator = AccountBalanceCalculator(
-      conversionService: FixedConversionService(), targetInstrument: .AUD)
+      conversionService: FakeConversionService.fixedRates([:]), targetInstrument: .AUD)
     var account = Account(
       name: "B", type: .investment, instrument: .AUD,
       valuationMode: .calculatedFromTrades)
@@ -49,7 +49,7 @@ struct BalanceCalculatorValuationModeTests {
   @Test("non-investment account ignores valuationMode")
   func nonInvestmentIgnoresMode() async throws {
     let calculator = AccountBalanceCalculator(
-      conversionService: FixedConversionService(), targetInstrument: .AUD)
+      conversionService: FakeConversionService.fixedRates([:]), targetInstrument: .AUD)
     var account = Account(
       name: "Checking", type: .bank, instrument: .AUD,
       valuationMode: .recordedValue)
@@ -63,7 +63,7 @@ struct BalanceCalculatorValuationModeTests {
   @Test("totalConverted: recordedValue investment uses cache value")
   func totalConvertedRecordedMode() async throws {
     let calculator = AccountBalanceCalculator(
-      conversionService: FixedConversionService(), targetInstrument: .AUD)
+      conversionService: FakeConversionService.fixedRates([:]), targetInstrument: .AUD)
     var withSnapshot = Account(
       name: "A", type: .investment, instrument: .AUD,
       valuationMode: .recordedValue)
@@ -85,7 +85,7 @@ struct BalanceCalculatorValuationModeTests {
   @Test("totalConverted: calculatedFromTrades sums positions, ignores cache")
   func totalConvertedTradesMode() async throws {
     let calculator = AccountBalanceCalculator(
-      conversionService: FixedConversionService(), targetInstrument: .AUD)
+      conversionService: FakeConversionService.fixedRates([:]), targetInstrument: .AUD)
     var account = Account(
       name: "A", type: .investment, instrument: .AUD,
       valuationMode: .calculatedFromTrades)
@@ -117,7 +117,7 @@ struct BalanceCalculatorValuationModeTests {
       decimals: 18)
     let historic = Date(timeIntervalSince1970: 1_577_836_800)  // 2020-01-01
     let recent = Date(timeIntervalSince1970: 1_704_067_200)  // 2024-01-01
-    let conversion = DateBasedFixedConversionService(rates: [
+    let conversion = FakeConversionService.dateRates([
       historic: [eth.id: 1000],
       recent: [eth.id: 4000],
     ])
@@ -156,9 +156,9 @@ struct BalanceCalculatorValuationModeTests {
       name: "Spam OP",
       decimals: 18)
     let calculator = AccountBalanceCalculator(
-      conversionService: FixedConversionService(
-        rates: ["USD": Decimal(15) / Decimal(10)],
-        knownZeroInstrumentIds: [spam.id]),
+      conversionService: FakeConversionService.fixedRates(
+        ["USD": Decimal(15) / Decimal(10)],
+        knownZero: [spam.id]),
       targetInstrument: .AUD)
     var account = Account(
       name: "Wallet", type: .crypto, instrument: .AUD,
@@ -180,7 +180,7 @@ struct BalanceCalculatorValuationModeTests {
   @Test("displayBalance: transient rate failure still throws")
   func displayBalance_transientFailureStillThrows() async {
     let usd = Instrument.USD
-    let conversion = FailingConversionService(failingInstrumentIds: [usd.id])
+    let conversion = FakeConversionService.failingInstruments([usd.id])
     let calculator = AccountBalanceCalculator(
       conversionService: conversion, targetInstrument: .AUD)
     var account = Account(
@@ -207,8 +207,8 @@ struct BalanceCalculatorValuationModeTests {
       name: "Spam OP",
       decimals: 18)
     let calculator = AccountBalanceCalculator(
-      conversionService: FixedConversionService(
-        knownZeroInstrumentIds: [spam.id]),
+      conversionService: FakeConversionService.fixedRates(
+        [:], knownZero: [spam.id]),
       targetInstrument: .AUD)
     var account = Account(
       name: "Wallet", type: .crypto, instrument: .AUD,

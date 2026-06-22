@@ -99,7 +99,7 @@ struct CoreFinancialGraphRollbackTests {
     let txnRepo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .AUD,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
     let accountId = UUID()
@@ -155,7 +155,7 @@ struct CoreFinancialGraphRollbackTests {
     let txnRepo = GRDBTransactionRepository(
       database: database,
       defaultInstrument: .AUD,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
     let accountId = UUID()

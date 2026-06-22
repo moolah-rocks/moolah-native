@@ -3,7 +3,7 @@ import Testing
 
 @testable import Moolah
 
-/// Contract tests for multi-currency conversion via `FixedConversionService`
+/// Contract tests for multi-currency conversion via `FakeConversionService`
 /// across expense breakdown, income/expense, category balances, and forecasts.
 @Suite("AnalysisRepository Contract Tests — Multi-Currency Conversion")
 struct AnalysisMultiCurrencyConversionTests {
@@ -12,7 +12,7 @@ struct AnalysisMultiCurrencyConversionTests {
   func expenseBreakdownConvertsForeignCurrency() async throws {
     // USD -> AUD at 1.5x rate
     let rate = try AnalysisTestHelpers.decimal("1.5")
-    let conversion = FixedConversionService(rates: ["USD": rate])
+    let conversion = FakeConversionService.fixedRates(["USD": rate])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
     let account = Account(
       id: UUID(), name: "USD Account", type: .bank, instrument: .defaultTestInstrument)
@@ -52,7 +52,7 @@ struct AnalysisMultiCurrencyConversionTests {
   @Test("income/expense converts foreign-currency legs to profile currency")
   func incomeExpenseConvertsForeignCurrency() async throws {
     let rate = try AnalysisTestHelpers.decimal("1.5")
-    let conversion = FixedConversionService(rates: ["USD": rate])
+    let conversion = FakeConversionService.fixedRates(["USD": rate])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
     let account = Account(
       id: UUID(), name: "Account", type: .bank, instrument: .defaultTestInstrument)
@@ -91,7 +91,7 @@ struct AnalysisMultiCurrencyConversionTests {
   @Test("category balances converts foreign-currency legs to profile currency")
   func categoryBalancesConvertsForeignCurrency() async throws {
     let rate = try AnalysisTestHelpers.decimal("1.5")
-    let conversion = FixedConversionService(rates: ["USD": rate])
+    let conversion = FakeConversionService.fixedRates(["USD": rate])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
     let account = Account(
       id: UUID(), name: "Account", type: .bank, instrument: .defaultTestInstrument)
@@ -126,7 +126,7 @@ struct AnalysisMultiCurrencyConversionTests {
   @Test("forecast converts foreign-currency scheduled transactions to profile currency")
   func forecastConvertsForeignCurrencyScheduled() async throws {
     let rate = try AnalysisTestHelpers.decimal("1.5")
-    let conversion = FixedConversionService(rates: ["USD": rate])
+    let conversion = FakeConversionService.fixedRates(["USD": rate])
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let audAccount = Account(
@@ -174,7 +174,7 @@ struct AnalysisMultiCurrencyConversionTests {
   func forecastLeavesProfileCurrencyUnchanged() async throws {
     // Inject a service that throws on any invocation. If the short-circuit is
     // removed, this test fails because the throwing service propagates.
-    let conversion = ThrowingConversionService()
+    let conversion = FakeConversionService.alwaysThrows
     let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
 
     let account = Account(

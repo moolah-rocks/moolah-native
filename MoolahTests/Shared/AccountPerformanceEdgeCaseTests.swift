@@ -19,7 +19,7 @@ struct AccountPerformanceEdgeCaseTests {
       transactions: [],
       valuedPositions: [],
       profileCurrency: aud,
-      conversionService: FixedConversionService()
+      conversionService: FakeConversionService.fixedRates([:])
     )
     #expect(perf.currentValue == InstrumentAmount(quantity: 0, instrument: aud))
     #expect(perf.totalContributions == InstrumentAmount(quantity: 0, instrument: aud))
@@ -54,7 +54,7 @@ struct AccountPerformanceEdgeCaseTests {
       transactions: [opening],
       valuedPositions: valued,
       profileCurrency: aud,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       now: now
     )
     #expect(perf.currentValue == InstrumentAmount(quantity: 10_000, instrument: aud))
@@ -107,7 +107,7 @@ struct AccountPerformanceEdgeCaseTests {
       transactions: [deposit, withdrawal],
       valuedPositions: valued,
       profileCurrency: aud,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       now: withdrawalDate
     )
     #expect(perf.currentValue == InstrumentAmount(quantity: 0, instrument: aud))
@@ -143,7 +143,7 @@ struct AccountPerformanceEdgeCaseTests {
       transactions: [opening],
       valuedPositions: valued,
       profileCurrency: aud,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       now: now
     )
     #expect(perf.currentValue == InstrumentAmount(quantity: 1_010, instrument: aud))

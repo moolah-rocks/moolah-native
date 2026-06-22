@@ -37,7 +37,7 @@ struct AccountStoreInvestmentValuesTests {
 
     let store = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: instrument,
       investmentRepository: backend.investments)
 
@@ -57,7 +57,7 @@ struct AccountStoreInvestmentValuesTests {
 
     let store = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument,
       investmentRepository: backend.investments)
 
@@ -80,7 +80,7 @@ struct AccountStoreInvestmentValuesTests {
 
     let store = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument,
       investmentRepository: backend.investments)
 
@@ -98,7 +98,7 @@ struct AccountStoreInvestmentValuesTests {
     _ = AccountStoreTestSupport.seedAccount(
       name: "Invest", type: .investment, balance: Decimal(100000) / 100, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.count == 1 },
@@ -122,7 +122,7 @@ struct AccountStoreInvestmentValuesTests {
     _ = AccountStoreTestSupport.seedAccount(
       name: "Invest", type: .investment, balance: Decimal(100000) / 100, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.count == 1 },
@@ -151,7 +151,7 @@ struct AccountStoreInvestmentValuesTests {
     _ = AccountStoreTestSupport.seedAccount(
       name: "Invest", type: .investment, balance: Decimal(100000) / 100, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.count == 1 },
@@ -178,7 +178,7 @@ struct AccountStoreInvestmentValuesTests {
       id: acctId, name: "Invest", type: .investment, balance: Decimal(100000) / 100,
       in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.accounts.by(id: acctId) != nil },
@@ -201,7 +201,7 @@ struct AccountStoreInvestmentValuesTests {
     let (backend, database) = try TestBackend.create()
     _ = AccountStoreTestSupport.seedAccount(id: acctId, name: "Empty", in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     await expectEventually("seeded empty account can be deleted") {
       store.canDelete(acctId)
@@ -215,7 +215,7 @@ struct AccountStoreInvestmentValuesTests {
     _ = AccountStoreTestSupport.seedAccount(
       id: acctId, name: "Active", balance: Decimal(100000) / 100, in: database)
     let store = AccountStore(
-      repository: backend.accounts, conversionService: FixedConversionService(),
+      repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     await expectEventually("account with positions cannot be deleted") {
       store.accounts.by(id: acctId)?.positions.isEmpty == false && !store.canDelete(acctId)

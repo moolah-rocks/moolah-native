@@ -42,7 +42,7 @@ struct ExtractFlowsRefactorTests {
       transactions: [txn],
       valuedPositions: valued,
       profileCurrency: aud,
-      conversionService: FixedConversionService()
+      conversionService: FakeConversionService.fixedRates([:])
     )
     #expect(
       perf.totalContributions == InstrumentAmount(quantity: 300, instrument: aud)
@@ -64,7 +64,7 @@ struct ExtractFlowsRefactorTests {
     let nowDate = Date(timeIntervalSince1970: 1_800_000_000)
     let txnRate = try #require(Decimal(string: "1.50"))
     let nowRate = try #require(Decimal(string: "1.40"))
-    let service = DateBasedFixedConversionService(rates: [
+    let service = FakeConversionService.dateRates([
       txnDate: [usd.id: txnRate],
       nowDate: [usd.id: nowRate],
     ])

@@ -69,7 +69,7 @@ struct CapitalGainsCalculatorTestsMore {
     let result = try await CapitalGainsCalculator.computeWithConversion(
       transactions: [buyBHP, buyCBA, sellAllBHP],
       profileCurrency: aud,
-      conversionService: FixedConversionService(rates: [:])
+      conversionService: FakeConversionService.fixedRates([:])
     )
 
     // Only BHP sale produces an event; CBA is still held.
@@ -117,7 +117,7 @@ struct CapitalGainsCalculatorTestsMore {
           categoryId: nil, earmarkId: nil),
       ])
 
-    let service = FixedConversionService(rates: ["USD": dec("1.5")])
+    let service = FakeConversionService.fixedRates(["USD": dec("1.5")])
     let result = try await CapitalGainsCalculator.computeWithConversion(
       transactions: [buyTx, sellTx],
       profileCurrency: aud,
@@ -165,7 +165,7 @@ struct CapitalGainsCalculatorTestsMore {
           categoryId: nil, earmarkId: nil),
       ])
 
-    let service = FixedConversionService(rates: ["USD": dec("1.5")])
+    let service = FakeConversionService.fixedRates(["USD": dec("1.5")])
     let result = try await CapitalGainsCalculator.computeWithConversion(
       transactions: [buyTx, sellTx],
       profileCurrency: aud,
@@ -181,9 +181,9 @@ struct CapitalGainsCalculatorTestsMore {
   //
   // `computeWithConversion` must convert every fiat or non-fiat-swap leg
   // on the transaction's date (Rule 5). The rate-ignoring
-  // `FixedConversionService` would not detect a regression that swapped
-  // `tx.date` for `Date()` or another date; this test uses
-  // `DateBasedFixedConversionService` to make that observable.
+  // `FakeConversionService.fixedRates` would not detect a regression that
+  // swapped `tx.date` for `Date()` or another date; this test uses
+  // `FakeConversionService.dateRates` to make that observable.
 
   // Crypto-to-crypto swap test placeholder — described above but not
   // implemented. Tracking issue not filed; dead documentation kept as

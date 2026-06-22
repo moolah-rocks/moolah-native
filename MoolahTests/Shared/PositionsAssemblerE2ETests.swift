@@ -115,7 +115,7 @@ struct PositionsAssemblerE2ETests {
     _ = try await backend.transactions.create(
       buy(instrument: btc, qty: qty, fiat: 80_000, accountId: accountId, daysAgo: 5))
 
-    let conversionService = FixedConversionService(rates: [btc.id: rate])
+    let conversionService = FakeConversionService.fixedRates([btc.id: rate])
     let assembler = MultiInstrumentPositionsAssembler(conversionService: conversionService)
     let transactions = try await assembler.fetchTransactions(
       repository: backend.transactions, accountIds: [accountId])
@@ -134,7 +134,7 @@ struct PositionsAssemblerE2ETests {
     let series = try #require(input.historicalValue, "historicalValue must be non-nil")
     #expect(!series.total.isEmpty, "total series must not be empty")
     let lastPoint = try #require(series.total.last)
-    // FixedConversionService returns the same rate on every date.
+    // FakeConversionService.fixedRates returns the same rate on every date.
     #expect(lastPoint.value == qty * rate)
     #expect(input.showsChart)
   }
@@ -158,7 +158,7 @@ struct PositionsAssemblerE2ETests {
     _ = try await backend.transactions.create(
       buy(instrument: btc, qty: qtyB, fiat: 120_000, accountId: accountBId, daysAgo: 5))
 
-    let conversionService = FixedConversionService(rates: [btc.id: rate])
+    let conversionService = FakeConversionService.fixedRates([btc.id: rate])
     let assembler = MultiInstrumentPositionsAssembler(conversionService: conversionService)
     let accountIds: Set<UUID> = [accountAId, accountBId]
     let transactions = try await assembler.fetchTransactions(
@@ -212,7 +212,7 @@ struct PositionsAssemblerE2ETests {
       )
     )
 
-    let conversionService = FixedConversionService(rates: [btc.id: rate])
+    let conversionService = FakeConversionService.fixedRates([btc.id: rate])
     let assembler = MultiInstrumentPositionsAssembler(conversionService: conversionService)
     let accountIds: Set<UUID> = [accountAId, accountBId]
     let transactions = try await assembler.fetchTransactions(
@@ -234,7 +234,7 @@ struct PositionsAssemblerE2ETests {
     let lastPoint = try #require(series.total.last)
     // Internal transfer nets out — group holds 2 BTC externally on every day.
     #expect(lastPoint.value == totalQty * rate)
-    // FixedConversionService is date-independent: every emitted point equals
+    // FakeConversionService.fixedRates is date-independent: every emitted point equals
     // totalQty × rate (the transfer causes no dip or phantom buy/sell).
     for point in series.total {
       #expect(point.value == totalQty * rate)

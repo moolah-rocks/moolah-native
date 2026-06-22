@@ -149,7 +149,7 @@ struct PositionBookTests {
 
     // Tuned with a non-1 USD rate to prove the fast path is taken: if the
     // conversion service were called, totals would change.
-    let conversion = FixedConversionService(rates: ["USD": 999])
+    let conversion = FakeConversionService.fixedRates(["USD": 999])
 
     let result = try await book.dailyBalance(
       on: date,
@@ -193,7 +193,7 @@ struct PositionBookTests {
     // requested snapshot date would surface as a missing rate (1:1
     // fallback) and fail the assertion. Per
     // `guides/INSTRUMENT_CONVERSION_GUIDE.md` §6.
-    let conversion = DateBasedFixedConversionService(rates: [date: ["USD": 1.5]])
+    let conversion = FakeConversionService.dateRates([date: ["USD": 1.5]])
 
     let result = try await book.dailyBalance(
       on: date,
@@ -230,7 +230,7 @@ struct PositionBookTests {
           earmarkId: earmarkB)
       ]))
 
-    let conversion = FixedConversionService()
+    let conversion = FakeConversionService.fixedRates([:])
 
     let result = try await book.dailyBalance(
       on: date,

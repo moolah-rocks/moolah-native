@@ -9,7 +9,7 @@ import Testing
 /// buckets into financial months.
 ///
 /// These tests drive the static helper directly with an injected
-/// throwing conversion service (`ThrowingCountingConversionService` from
+/// throwing conversion service (`FakeConversionService.perCall` from
 /// `MoolahTests/Support/`) so the per-row error contract required by
 /// `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11 is captured by a unit test
 /// (no GRDB stack needed). A future refactor that collapses the per-row
@@ -45,7 +45,7 @@ struct GRDBExpenseBreakdownAssembleTests {
   @Test("handleConversionFailure invoked once per failing row before rethrow")
   func handleConversionFailureFiresPerRow() async throws {
     let aggregation = makeAggregation()
-    let conversionService = ThrowingCountingConversionService { index in
+    let conversionService = FakeConversionService.perCall { index in
       .failure(CallbackError(index: index))
     }
     let failures = FailureLog()
@@ -71,13 +71,13 @@ struct GRDBExpenseBreakdownAssembleTests {
     // out — a refactor to "log once at the outer catch" would only fire
     // once and break this assertion.
     #expect(failures.snapshot() == [0, 1, 2])
-    #expect(conversionService.calls == 3)
+    #expect(conversionService.callCount == 3)
   }
 
   @Test("loop processes all rows even when the first row fails")
   func loopContinuesAfterFirstFailure() async throws {
     let aggregation = makeAggregation()
-    let conversionService = ThrowingCountingConversionService { index in
+    let conversionService = FakeConversionService.perCall { index in
       index == 0 ? .failure(CallbackError(index: index)) : .success(0)
     }
     let visited = FailureLog()
@@ -103,13 +103,13 @@ struct GRDBExpenseBreakdownAssembleTests {
     // throw. A refactor that breaks early would log [0] and call the
     // service once, not three times.
     #expect(visited.snapshot() == [0])
-    #expect(conversionService.calls == 3)
+    #expect(conversionService.callCount == 3)
   }
 
   @Test("transient conversion failures degrade per-row — no rethrow")
   func transientFailuresDoNotRethrow() async throws {
     let aggregation = makeAggregation()
-    let conversionService = ThrowingCountingConversionService { _ in
+    let conversionService = FakeConversionService.perCall { _ in
       .failure(
         WalletSyncError(provider: .binance, kind: .network(underlyingDescription: "cooldown")))
     }
@@ -142,7 +142,7 @@ struct GRDBExpenseBreakdownAssembleTests {
   @Test("structural conversion failures still rethrow")
   func structuralFailuresRethrow() async throws {
     let aggregation = makeAggregation()
-    let conversionService = ThrowingCountingConversionService { _ in
+    let conversionService = FakeConversionService.perCall { _ in
       .failure(ConversionError.unsupportedConversion(from: "A", to: "B"))
     }
     let handlers = GRDBAnalysisRepository.ExpenseBreakdownHandlers(
@@ -174,11 +174,10 @@ struct GRDBExpenseBreakdownAssembleTests {
     let category = UUID()
     let rateOne = try AnalysisTestHelpers.decimal("1.5")
     let rateTwo = try AnalysisTestHelpers.decimal("2.0")
-    let conversion = DateBasedFixedConversionService(
-      rates: [
-        dayOne: [usd: rateOne],
-        dayTwo: [usd: rateTwo],
-      ])
+    let conversion = FakeConversionService.dateRates([
+      dayOne: [usd: rateOne],
+      dayTwo: [usd: rateTwo],
+    ])
     // `ExpenseBreakdownRow.qty` is an `Int64` storage value (raw quantity
     // scaled by 10^8). Use the scaled value so the post-conversion result
     // is a recognisable integer.
@@ -211,7 +210,7 @@ struct GRDBExpenseBreakdownAssembleTests {
   @Test("CancellationError rethrown immediately without invoking handleConversionFailure")
   func cancellationErrorIsNotFoldedIntoConversionFailureLog() async throws {
     let aggregation = makeAggregation()
-    let conversionService = ThrowingCountingConversionService { index in
+    let conversionService = FakeConversionService.perCall { index in
       index == 0 ? .failure(CancellationError()) : .success(0)
     }
     let visited = FailureLog()
@@ -234,6 +233,6 @@ struct GRDBExpenseBreakdownAssembleTests {
     // never fired, and the loop short-circuited on the first row
     // (no further conversion calls beyond the cancelled one).
     #expect(visited.snapshot().isEmpty)
-    #expect(conversionService.calls == 1)
+    #expect(conversionService.callCount == 1)
   }
 }

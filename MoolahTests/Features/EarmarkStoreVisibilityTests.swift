@@ -28,7 +28,7 @@ struct EarmarkStoreVisibilityTests {
       ],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     await expectEventually("only the visible earmark is listed") {
@@ -56,7 +56,7 @@ struct EarmarkStoreVisibilityTests {
       ],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     try await store.waitForNextEmission(
@@ -94,7 +94,7 @@ struct EarmarkStoreVisibilityTests {
       ],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     await expectEventually("hidden earmark balance populated despite showHidden=false") {
@@ -125,7 +125,7 @@ struct EarmarkStoreVisibilityTests {
       ],
       accountId: accountId, in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
 
     try await store.waitForNextEmission(
@@ -157,7 +157,7 @@ struct EarmarkStoreVisibilityTests {
       amounts: [usdEarmark.id: (saved: 500, spent: 0)],
       accountId: accountId, in: database, instrument: .USD)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .USD)
 
     await expectEventually("seeded USD earmark observed with USD instrument") {
@@ -202,7 +202,7 @@ struct EarmarkStoreVisibilityTests {
       accountId: accountId, in: database, instrument: aud)
     let store = EarmarkStore(
       repository: backend.earmarks,
-      conversionService: FixedConversionService(rates: ["AUD": 2]),
+      conversionService: FakeConversionService.fixedRates(["AUD": 2]),
       targetInstrument: aud)
 
     await expectEventually("USD balance settled in USD instrument") {
@@ -230,7 +230,7 @@ struct EarmarkStoreVisibilityTests {
       accountId: accountId, in: database, instrument: aud)
     let store = EarmarkStore(
       repository: backend.earmarks,
-      conversionService: FixedConversionService(rates: ["AUD": 2]),
+      conversionService: FakeConversionService.fixedRates(["AUD": 2]),
       targetInstrument: aud)
     await expectEventually("AUD balance settled in AUD instrument") {
       let balance = store.convertedBalance(for: earmarkId)

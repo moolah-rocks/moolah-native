@@ -108,7 +108,7 @@ struct ExportCoordinatorImportNewProfileTests {
       database: freshDatabase,
       instrument: instrument,
       profileLabel: registeredProfile.label,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       instrumentRegistry: registry
     )
 

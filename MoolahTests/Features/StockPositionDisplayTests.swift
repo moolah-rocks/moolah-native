@@ -50,7 +50,7 @@ struct StockPositionDisplayTests {
     let store = InvestmentStore(
       repository: backend.investments,
       transactionRepository: backend.transactions,
-      conversionService: FixedConversionService()
+      conversionService: FakeConversionService.fixedRates([:])
     )
     await store.loadPositions(accountId: accountId)
 
@@ -217,9 +217,9 @@ struct StockPositionDisplayTests {
     let accountId = UUID()
     let today = Date()
 
-    let conversionService = FailingConversionService(
-      rates: [bhp.id: Decimal(45), cba.id: Decimal(120)],
-      failingInstrumentIds: [cba.id]
+    let conversionService = FakeConversionService.failingInstruments(
+      [cba.id],
+      rates: [bhp.id: Decimal(45), cba.id: Decimal(120)]
     )
 
     let (backend, database) = try TestBackend.create()

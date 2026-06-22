@@ -26,7 +26,7 @@ struct AccountStorePreloadFilterTests {
 
     let store = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .AUD,
       investmentRepository: backend.investments)
     await expectEventually("only recordedValue account is preloaded") {
@@ -60,7 +60,7 @@ struct AccountStorePreloadFilterTests {
 
     let store = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .AUD,
       investmentRepository: backend.investments)
     await expectEventually("recorded account preloads but crypto wallet does not") {
@@ -81,7 +81,7 @@ struct AccountStorePreloadFilterTests {
 
     let store = AccountStore(
       repository: backend.accounts,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .AUD,
       investmentRepository: backend.investments)
     try await store.waitForNextEmission(

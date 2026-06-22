@@ -32,7 +32,7 @@ struct TransactionDisplayAmountTests {
       transactions: [transaction],
       priorBalance: InstrumentAmount(quantity: 100, instrument: aud),
       accountId: accountA, targetInstrument: aud,
-      conversionService: FixedConversionService(rates: [:]))
+      conversionService: FakeConversionService.fixedRates([:]))
     #expect(
       result.rows[0].displayAmounts == [InstrumentAmount(quantity: -50, instrument: aud)])
   }
@@ -50,7 +50,7 @@ struct TransactionDisplayAmountTests {
       transactions: [transaction],
       priorBalance: InstrumentAmount(quantity: 5_000, instrument: aud),
       accountId: accountA, targetInstrument: aud,
-      conversionService: FixedConversionService(rates: [
+      conversionService: FakeConversionService.fixedRates([
         bhp.id: Decimal(150), usd.id: Decimal(1.5),
       ]))
     let amounts = Set(result.rows[0].displayAmounts)
@@ -76,7 +76,7 @@ struct TransactionDisplayAmountTests {
       transactions: [transaction],
       priorBalance: InstrumentAmount(quantity: 5_000, instrument: aud),
       accountId: accountA, targetInstrument: aud,
-      conversionService: FixedConversionService(rates: [bhp.id: Decimal(150)]))
+      conversionService: FakeConversionService.fixedRates([bhp.id: Decimal(150)]))
     let amounts = Set(result.rows[0].displayAmounts)
     #expect(
       amounts
@@ -98,7 +98,7 @@ struct TransactionDisplayAmountTests {
       transactions: [transaction],
       priorBalance: InstrumentAmount(quantity: 5_000, instrument: aud),
       accountId: accountA, targetInstrument: aud,
-      conversionService: FixedConversionService(rates: [usd.id: Decimal(1.5)]))
+      conversionService: FakeConversionService.fixedRates([usd.id: Decimal(1.5)]))
     #expect(
       result.rows[0].displayAmounts == [InstrumentAmount(quantity: -1_000, instrument: aud)])
   }
@@ -114,7 +114,7 @@ struct TransactionDisplayAmountTests {
     let result = await TransactionPage.withRunningBalances(
       transactions: [transaction], priorBalance: nil,
       accountId: nil, targetInstrument: aud,
-      conversionService: FixedConversionService(rates: [:]))
+      conversionService: FakeConversionService.fixedRates([:]))
     #expect(
       result.rows[0].displayAmounts == [InstrumentAmount(quantity: -200, instrument: aud)])
   }
@@ -129,7 +129,7 @@ struct TransactionDisplayAmountTests {
       ])
     let result = await TransactionPage.withRunningBalances(
       transactions: [transaction], priorBalance: nil, accountId: nil, earmarkId: earmarkId,
-      targetInstrument: aud, conversionService: FixedConversionService(rates: [:]))
+      targetInstrument: aud, conversionService: FakeConversionService.fixedRates([:]))
     #expect(
       result.rows[0].displayAmounts == [InstrumentAmount(quantity: 100, instrument: aud)])
   }

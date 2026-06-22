@@ -15,7 +15,7 @@ struct PositionsValuatorTests {
       Position(instrument: bhp, quantity: 250),
       Position(instrument: cba, quantity: 80),
     ]
-    let service = FixedConversionService(rates: [
+    let service = FakeConversionService.fixedRates([
       bhp.id: Decimal(45.30),
       cba.id: Decimal(120),
     ])
@@ -38,7 +38,7 @@ struct PositionsValuatorTests {
   func fastPath() async throws {
     let positions = [Position(instrument: aud, quantity: 1_000)]
     // service throws for any conversion — must not be called for AUD->AUD.
-    let service = FailingConversionService(failingInstrumentIds: [aud.id])
+    let service = FakeConversionService.failingInstruments([aud.id])
     let valuator = PositionsValuator(conversionService: service)
     let rows = await valuator.valuate(
       positions: positions, hostCurrency: aud,
@@ -57,9 +57,9 @@ struct PositionsValuatorTests {
       Position(instrument: bhp, quantity: 100),
       Position(instrument: cba, quantity: 50),
     ]
-    let service = FailingConversionService(
-      rates: [bhp.id: Decimal(40)],
-      failingInstrumentIds: [cba.id]
+    let service = FakeConversionService.failingInstruments(
+      [cba.id],
+      rates: [bhp.id: Decimal(40)]
     )
     let valuator = PositionsValuator(conversionService: service)
     let rows = await valuator.valuate(
@@ -76,7 +76,7 @@ struct PositionsValuatorTests {
   @Test("cost basis snapshot is propagated into the row")
   func costBasisPropagated() async throws {
     let positions = [Position(instrument: bhp, quantity: 100)]
-    let service = FixedConversionService(rates: [bhp.id: Decimal(50)])
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
     let valuator = PositionsValuator(conversionService: service)
     let rows = await valuator.valuate(
       positions: positions, hostCurrency: aud,
@@ -87,7 +87,7 @@ struct PositionsValuatorTests {
 
   @Test("empty positions input returns an empty array")
   func emptyInput() async {
-    let service = FixedConversionService(rates: [:])
+    let service = FakeConversionService.fixedRates([:])
     let valuator = PositionsValuator(conversionService: service)
     let rows = await valuator.valuate(
       positions: [], hostCurrency: aud, costBasis: [:], on: Date())
@@ -97,7 +97,7 @@ struct PositionsValuatorTests {
   @Test("zero-quantity position has nil unitPrice (no division by zero)")
   func zeroQuantityUnitPrice() async {
     let positions = [Position(instrument: bhp, quantity: 0)]
-    let service = FixedConversionService(rates: [bhp.id: Decimal(40)])
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(40)])
     let valuator = PositionsValuator(conversionService: service)
     let rows = await valuator.valuate(
       positions: positions, hostCurrency: aud, costBasis: [:], on: Date())
@@ -110,7 +110,7 @@ struct PositionsValuatorTests {
     // Short -10 shares of BHP @ $40 each → value = -$400 (you owe $400 worth),
     // unit price = $40 (one share is still worth $40 regardless of position sign).
     let positions = [Position(instrument: bhp, quantity: -10)]
-    let service = FixedConversionService(rates: [bhp.id: Decimal(40)])
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(40)])
     let valuator = PositionsValuator(conversionService: service)
     let rows = await valuator.valuate(
       positions: positions, hostCurrency: aud, costBasis: [:], on: Date())

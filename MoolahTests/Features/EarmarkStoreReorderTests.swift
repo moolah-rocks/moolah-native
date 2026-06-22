@@ -14,7 +14,7 @@ struct EarmarkStoreReorderTests {
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(earmarks: [first, second, third], in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.earmarks.count == 3 },
@@ -46,7 +46,7 @@ struct EarmarkStoreReorderTests {
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(earmarks: [firstVisible, hidden, secondVisible], in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.earmarks.count == 3 },
@@ -73,7 +73,7 @@ struct EarmarkStoreReorderTests {
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(earmarks: [only], in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.earmarks.count == 1 },
@@ -91,7 +91,7 @@ struct EarmarkStoreReorderTests {
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(earmarks: [], in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForFirstEmission()
 
@@ -108,7 +108,7 @@ struct EarmarkStoreReorderTests {
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(earmarks: [first, second, third], in: database)
     let store = EarmarkStore(
-      repository: backend.earmarks, conversionService: FixedConversionService(),
+      repository: backend.earmarks, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.earmarks.count == 3 },
@@ -135,7 +135,7 @@ struct EarmarkStoreReorderTests {
     TestBackend.seed(earmarks: [first, second, third], in: database)
     let failing = UpdateFailingEarmarkRepository(wrapping: backend.earmarks)
     let store = EarmarkStore(
-      repository: failing, conversionService: FixedConversionService(),
+      repository: failing, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)
     try await store.waitForNextEmission(
       matching: { $0.earmarks.count == 3 },

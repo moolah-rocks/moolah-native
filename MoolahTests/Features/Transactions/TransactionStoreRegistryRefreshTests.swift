@@ -63,7 +63,7 @@ struct TransactionStoreRegistryRefreshTests {
   ) -> TransactionStore {
     TransactionStore(
       repository: backend.transactions,
-      conversionService: FixedConversionService(),
+      conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument,
       instrumentChanges: registry)
   }
