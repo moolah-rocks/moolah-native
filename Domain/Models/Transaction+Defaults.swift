@@ -16,13 +16,15 @@ extension Transaction {
     )
   }
 
-  /// A blank monthly-recurring expense. Shows up in the Upcoming view
-  /// immediately; the user sets payee, amount, and recurrence in the inspector.
-  static func defaultMonthlyScheduled(accountId: UUID, instrument: Instrument) -> Transaction {
+  /// A blank scheduled expense that does not repeat (a single `.once`
+  /// occurrence). Shows up in the Upcoming view immediately; the user sets
+  /// payee, amount, and — if they want it to recur — the recurrence in the
+  /// inspector.
+  static func defaultScheduled(accountId: UUID, instrument: Instrument) -> Transaction {
     Transaction(
       date: Date(),
       payee: "",
-      recurPeriod: .month,
+      recurPeriod: .once,
       recurEvery: 1,
       legs: [
         TransactionLeg(accountId: accountId, instrument: instrument, quantity: 0, type: .expense)

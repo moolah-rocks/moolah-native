@@ -101,7 +101,7 @@ struct TransactionStoreCreateDefaultsTests {
   // MARK: - createDefaultScheduled
 
   @Test
-  func testCreateDefaultScheduledSetsMonthlyRecurrence() async throws {
+  func testCreateDefaultScheduledDefaultsToNonRepeating() async throws {
     let (backend, _) = try TestBackend.create()
     let store = TransactionStore(
       repository: backend.transactions,
@@ -119,8 +119,8 @@ struct TransactionStoreCreateDefaultsTests {
 
     #expect(created != nil)
     #expect(created?.isScheduled == true)
-    #expect(created?.recurPeriod == .month)
-    #expect(created?.recurEvery == 1)
+    #expect(created?.isRecurring == false)
+    #expect(created?.recurPeriod == .once)
     #expect(created?.legs.first?.type == .expense)
     #expect(created?.legs.first?.quantity == 0)
     #expect(created?.accountIds.contains(accountId) == true)

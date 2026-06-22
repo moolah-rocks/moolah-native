@@ -149,7 +149,7 @@ struct AnalysisView: View {
       Transaction(
         date: Date(),
         payee: "",
-        recurPeriod: .month,
+        recurPeriod: .once,
         recurEvery: 1,
         legs: [TransactionLeg(accountId: id, instrument: instrument, quantity: 0, type: .expense)]
       )
