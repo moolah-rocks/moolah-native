@@ -3,7 +3,7 @@ import Foundation
 /// Row, bundle, handler, and context types shared by the
 /// `fetchDailyBalances` assembly (`+DailyBalances.swift`) and its sibling
 /// folds (`+DailyBalancesAggregation.swift`, `+DailyBalancesForecast.swift`,
-/// `+DailyBalancesPrewarm.swift`, …): the per-(day, account/earmark,
+/// …): the per-(day, account/earmark,
 /// instrument, type) SUM rows, the `database.read`-snapshot input bundle,
 /// the per-day diagnostic handlers, and the fixed per-walk context.
 extension GRDBAnalysisRepository {

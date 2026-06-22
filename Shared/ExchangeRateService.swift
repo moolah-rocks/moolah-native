@@ -20,6 +20,21 @@ actor ExchangeRateService {
   /// Loaded bases — set on first hydration so we don't re-read SQL when the
   /// cache is genuinely empty.
   var hydratedBases: Set<String> = []
+  /// Per-base serialization gate for cache-extending work (hydrate + fetch
+  /// + merge). The actor only guarantees mutual exclusion *between*
+  /// suspension points; a cache extension spans several `await`s
+  /// (`loadCache`, `client.fetchRates`, `persistDelta`), so two `rate()` /
+  /// `rates()` / `prefetchLatest` calls for the same base can interleave
+  /// and merge **non-adjacent** fetch windows. That unions `[earliest,
+  /// latest]` over an interior region neither window fetched, breaking the
+  /// contiguity invariant `fallbackRate`'s in-range short-circuit relies on
+  /// — the requester then carries forward an earlier day's rate. This gate
+  /// serialises extension per base so windows are always merged
+  /// contiguously; a waiter re-checks the cache on acquire, so the second
+  /// caller usually finds its date already covered and skips the fetch.
+  /// See `withCacheExtension(base:)`.
+  private var cacheExtensionWaiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+  private var cacheExtensionHeld: Set<String> = []
   let database: any DatabaseWriter
   let logger = Logger(
     subsystem: "com.moolah.app", category: "ExchangeRateService")
@@ -62,49 +77,57 @@ actor ExchangeRateService {
       return cached
     }
 
-    // Hydrate from SQL on first access
-    if !hydratedBases.contains(base) {
-      try await loadCache(base: base)
-    }
+    // Hydration + fetch + merge all extend the cache, so they run under the
+    // per-base extension gate: concurrent `rate()` calls for the same base
+    // must not interleave and union non-adjacent windows (see
+    // `cacheExtensionWaiters`). A caller that waited re-checks the cache
+    // first — another extender may have already covered this date.
+    return try await withCacheExtension(base: base) {
+      // Hydrate from SQL on first access.
+      if !hydratedBases.contains(base) {
+        try await loadCache(base: base)
+      }
 
-    // Check again after disk load
-    if let cached = lookupRate(base: base, quote: quote, dateString: dateString) {
-      return cached
-    }
+      // Check again after disk load (or after a prior waiter's fetch).
+      if let cached = lookupRate(base: base, quote: quote, dateString: dateString) {
+        return cached
+      }
 
-    // In-range short-circuit: if the requested date is within the cached
-    // `[earliestDate, latestDate]` window, the exact miss is a weekend /
-    // holiday / Frankfurter-not-yet-posted gap. `fallbackRate` resolves it
-    // from the most-recent prior cached rate without going to the network.
-    // Skipping the fetch here is what keeps repeat chart renders cheap —
-    // see `guides/INSTRUMENT_CONVERSION_GUIDE.md` and the perf rationale
-    // in `Shared/ExchangeRateService+Persistence.swift`.
-    if let cache = caches[base],
-      dateString >= cache.earliestDate, dateString <= cache.latestDate
-    {
+      // In-range short-circuit: if the requested date is within the cached
+      // `[earliestDate, latestDate]` window, the exact miss is a weekend /
+      // holiday / Frankfurter-not-yet-posted gap. `fallbackRate` resolves it
+      // from the most-recent prior cached rate without going to the network.
+      // Skipping the fetch here is what keeps repeat chart renders cheap —
+      // see `guides/INSTRUMENT_CONVERSION_GUIDE.md` and the perf rationale
+      // in `Shared/ExchangeRateService+Persistence.swift`. Safe under the
+      // gate: the bounds now reflect only contiguously-merged windows.
+      if let cache = caches[base],
+        dateString >= cache.earliestDate, dateString <= cache.latestDate
+      {
+        if let fallback = fallbackRate(base: base, quote: quote, dateString: dateString) {
+          return fallback
+        }
+        // In-range with no fallback only happens when this quote currency
+        // has never been seen for this base — surface as missing rather
+        // than triggering a fetch + full cache rewrite.
+        throw ExchangeRateError.noRateAvailable(base: base, quote: quote, date: dateString)
+      }
+
+      // Out of cached range — extend toward the requested date.
+      try await fetchToCoverDate(base: base, date: date, dateString: dateString)
+
+      // Exact hit after fetch?
+      if let cached = lookupRate(base: base, quote: quote, dateString: dateString) {
+        return cached
+      }
+
+      // Fall back to the most-recent cached rate on or before the requested date.
       if let fallback = fallbackRate(base: base, quote: quote, dateString: dateString) {
         return fallback
       }
-      // In-range with no fallback only happens when this quote currency
-      // has never been seen for this base — surface as missing rather
-      // than triggering a fetch + full cache rewrite.
+
       throw ExchangeRateError.noRateAvailable(base: base, quote: quote, date: dateString)
     }
-
-    // Out of cached range — extend toward the requested date.
-    try await fetchToCoverDate(base: base, date: date, dateString: dateString)
-
-    // Exact hit after fetch?
-    if let cached = lookupRate(base: base, quote: quote, dateString: dateString) {
-      return cached
-    }
-
-    // Fall back to the most-recent cached rate on or before the requested date.
-    if let fallback = fallbackRate(base: base, quote: quote, dateString: dateString) {
-      return fallback
-    }
-
-    throw ExchangeRateError.noRateAvailable(base: base, quote: quote, date: dateString)
   }
 
   // `fetchToCoverDate(base:date:dateString:)` lives in
@@ -125,27 +148,33 @@ actor ExchangeRateService {
     let base = from.id
     let quote = to.id
 
-    // Hydrate cache if not already in memory
-    if !hydratedBases.contains(base) {
-      try await loadCache(base: base)
-    }
+    // Hydrate + cover both extend the cache, so they run under the per-base
+    // extension gate to stay contiguous with any concurrent `rate()` /
+    // `rates()` / `prefetchLatest` call for the same base (see
+    // `cacheExtensionWaiters`).
+    try await withCacheExtension(base: base) {
+      // Hydrate cache if not already in memory.
+      if !hydratedBases.contains(base) {
+        try await loadCache(base: base)
+      }
 
-    // Cap the *fetch* upper bound at yesterday — same rationale as
-    // `rate()`. The result series below still walks the caller-supplied
-    // range; today's slot fills via `lastKnownRate` carry-forward.
-    let fetchUpperBound = cappedDate(range.upperBound)
+      // Cap the *fetch* upper bound at yesterday — same rationale as
+      // `rate()`. The result series below still walks the caller-supplied
+      // range; today's slot fills via `lastKnownRate` carry-forward.
+      let fetchUpperBound = cappedDate(range.upperBound)
 
-    // Cover the requested range contiguously using bounded 30-day windows
-    // driven by `ContiguousFetchPlanner`. Unlike a precomputed chunk list,
-    // the loop anchors each window at the live cache bounds and stops as
-    // soon as a window yields no progress — preventing a horizon-restricted
-    // provider from jumping `latest` over un-fetched interior days.
-    // `coverRangeContiguously` lives in `ExchangeRateService+FetchRange.swift`.
-    if range.lowerBound <= fetchUpperBound,
-      let lowerKey = DateKey.from(isoString: dateFormatter.string(from: range.lowerBound)),
-      let upperKey = DateKey.from(isoString: dateFormatter.string(from: fetchUpperBound))
-    {
-      try await coverRangeContiguously(base: base, lowerKey: lowerKey, upperKey: upperKey)
+      // Cover the requested range contiguously using bounded 30-day windows
+      // driven by `ContiguousFetchPlanner`. Unlike a precomputed chunk list,
+      // the loop anchors each window at the live cache bounds and stops as
+      // soon as a window yields no progress — preventing a horizon-restricted
+      // provider from jumping `latest` over un-fetched interior days.
+      // `coverRangeContiguously` lives in `ExchangeRateService+FetchRange.swift`.
+      if range.lowerBound <= fetchUpperBound,
+        let lowerKey = DateKey.from(isoString: dateFormatter.string(from: range.lowerBound)),
+        let upperKey = DateKey.from(isoString: dateFormatter.string(from: fetchUpperBound))
+      {
+        try await coverRangeContiguously(base: base, lowerKey: lowerKey, upperKey: upperKey)
+      }
     }
 
     // Build result series
@@ -179,6 +208,46 @@ actor ExchangeRateService {
   }
 
   // `prefetchLatest(base:)` lives in `ExchangeRateService+Prefetch.swift`.
+
+  // MARK: - Cache-extension serialization
+
+  /// Runs `body` (a hydrate / fetch / merge sequence that extends the cache
+  /// for `base`) with at most one extension in flight per base. Concurrent
+  /// callers for the same base queue and resume one at a time, so fetch
+  /// windows are always merged contiguously rather than unioned across an
+  /// unfetched interior gap. The lock is always released — including when
+  /// `body` throws — so a fetch failure (or cancellation) never strands the
+  /// next waiter. `body` runs after the lock is acquired, so callers should
+  /// re-check the cache inside it (another extender may have already covered
+  /// the requested date while this caller waited).
+  func withCacheExtension<T>(
+    base: String, _ body: () async throws -> T
+  ) async rethrows -> T {
+    if cacheExtensionHeld.contains(base) {
+      await withCheckedContinuation { continuation in
+        cacheExtensionWaiters[base, default: []].append(continuation)
+      }
+    } else {
+      cacheExtensionHeld.insert(base)
+    }
+    defer { releaseCacheExtension(base: base) }
+    return try await body()
+  }
+
+  /// Hands the per-base extension lock to the next queued waiter, or marks
+  /// the base free when none remain.
+  private func releaseCacheExtension(base: String) {
+    guard var waiters = cacheExtensionWaiters[base], !waiters.isEmpty else {
+      // No one queued — the base is free again.
+      cacheExtensionWaiters[base] = nil
+      cacheExtensionHeld.remove(base)
+      return
+    }
+    // Hand the lock straight to the next waiter (it stays "held").
+    let next = waiters.removeFirst()
+    cacheExtensionWaiters[base] = waiters.isEmpty ? nil : waiters
+    next.resume()
+  }
 
   // MARK: - Private helpers
 

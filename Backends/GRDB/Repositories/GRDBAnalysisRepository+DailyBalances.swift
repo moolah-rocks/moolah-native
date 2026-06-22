@@ -6,8 +6,6 @@ import GRDB
 /// - `+DailyBalancesTypes.swift` holds the row, bundle, handler, and
 ///   context types shared across the siblings.
 /// - `+DailyBalancesAggregation.swift` holds the four SQL fetches.
-/// - `+DailyBalancesPrewarm.swift` holds the concurrent conversion
-///   pre-warm that runs before the serial walk.
 /// - `+DailyBalancesInvestmentValues.swift` holds the per-day
 ///   recorded-value snapshot fold-in.
 /// - `+DailyBalancesTradesMode.swift` holds the per-day trades-mode
@@ -149,10 +147,37 @@ extension GRDBAnalysisRepository {
     return book
   }
 
-  /// Walk the post-`after` rows in day order; for each day, apply
-  /// every account / earmark delta then call
-  /// `PositionBook.dailyBalance(...)` once. The book mutates in place
-  /// so balances are cumulative — same shape as the per-leg walker.
+  /// One day's accumulated conversion plan: the day-string (failure
+  /// context), the representative instant the day converts on, and the
+  /// snapshot of that day's conversion requests at the day's cumulative
+  /// book state.
+  private struct PlannedDay {
+    let dayString: String
+    let sample: Date
+    let accumulation: PositionBook.DailyBalanceAccumulation
+  }
+
+  /// Phase-1 (`accumulateDays`) output: the per-day plans, the flat
+  /// index-aligned request list for one `convertResultBatch(...)`, and any
+  /// day-strings whose slices were empty (surfaced to `handleUnparseableDay`
+  /// by the caller).
+  private struct WalkAccumulation {
+    let plannedDays: [PlannedDay]
+    let requests: [BatchConversionRequest]
+    let unparseableDays: [String]
+  }
+
+  /// Walk the post-`after` rows in day order in three phases: (1) apply
+  /// each day's account / earmark deltas and snapshot that day's
+  /// conversion requests via `PositionBook.dailyBalanceRequests(...)` at
+  /// the day's cumulative book state; (2) resolve every day's requests in
+  /// a single `convertResultBatch(...)`; (3) assemble each day's
+  /// `DailyBalance` from its outcome slice via
+  /// `PositionBook.assembleDailyBalance(...)`. The book mutates in place
+  /// so balances are cumulative — same shape as the per-leg walker. The
+  /// per-day request snapshot MUST happen inside the phase-1 loop: the
+  /// book mutates cumulatively, so deriving requests after the walk would
+  /// collapse every day to the final-day balance.
   ///
   /// Days are keyed by the row group's `sample_date` instant
   /// (typically the earliest `t.date` inside the SQL group) rather
@@ -175,25 +200,74 @@ extension GRDBAnalysisRepository {
     context: DailyBalancesAssemblyContext,
     handlers: DailyBalancesHandlers
   ) async throws -> [Date: DailyBalance] {
-    let accountByDay = Dictionary(grouping: accountRows, by: \.day)
-    let earmarkByDay = Dictionary(grouping: earmarkRows, by: \.day)
-    let allDayStrings = Set(accountByDay.keys).union(earmarkByDay.keys).sorted()
-    // Trades-mode accounts contribute to investmentValue via
-    // applyTradesModePositionValuations, not to bankTotal. Including
-    // them in BalanceContext.investmentAccountIds excludes them from
-    // PositionBook.dailyBalance's `for ... where !investmentAccountIds`
-    // sum (no double-count) without changing accountsFromTransfers
-    // membership (which seedPriorBook / applyDailyDeltas gate on the
-    // recorded-value-only set, so the .investmentTransfersOnly read
-    // continues to see only recorded-value transfer cash).
+    let balanceContext = makeBalanceContext(context)
+
+    // Phase 1 — accumulate (sync). Snapshot each day's requests at that
+    // day's cumulative book state. Phase 2 — one batched conversion.
+    // Phase 3 — assemble each day from its outcome slice (Rule 11 drop).
+    let accumulated = accumulateDays(
+      book: &book,
+      accountRows: accountRows,
+      earmarkRows: earmarkRows,
+      context: context,
+      balanceContext: balanceContext)
+    for dayString in accumulated.unparseableDays {
+      handlers.handleUnparseableDay(dayString)
+    }
+    let outcomes = try await context.conversionService.convertResultBatch(accumulated.requests)
+    return assembleWalkedDays(
+      plannedDays: accumulated.plannedDays,
+      outcomes: outcomes,
+      book: book,
+      balanceContext: balanceContext,
+      handlers: handlers)
+  }
+
+  /// Build the per-day `BalanceContext` for the historic walk.
+  ///
+  /// Trades-mode accounts contribute to investmentValue via
+  /// `applyTradesModePositionValuations`, not to bankTotal. Including them
+  /// in `BalanceContext.investmentAccountIds` excludes them from
+  /// `PositionBook.dailyBalanceRequests`'s
+  /// `for ... where !investmentAccountIds` sum (no double-count) without
+  /// changing `accountsFromTransfers` membership (which `seedPriorBook` /
+  /// `applyDailyDeltas` gate on the recorded-value-only set, so the
+  /// `.investmentTransfersOnly` read continues to see only recorded-value
+  /// transfer cash).
+  private static func makeBalanceContext(
+    _ context: DailyBalancesAssemblyContext
+  ) -> PositionBook.BalanceContext {
     let allInvestmentIds =
       context.investmentAccountIds.union(context.tradesModeInvestmentAccountIds)
-    let balanceContext = PositionBook.BalanceContext(
+    return PositionBook.BalanceContext(
       investmentAccountIds: allInvestmentIds,
       profileInstrument: context.profileInstrument,
       rule: .investmentTransfersOnly,
       conversionService: context.conversionService)
-    var dailyBalances: [Date: DailyBalance] = [:]
+  }
+
+  /// Phase 1 of `walkDays`: apply each day's deltas to the in-place book
+  /// and snapshot the day's conversion requests *at that day's cumulative
+  /// state*. Returns the per-day plans, the flat index-aligned request list
+  /// ready for a single `convertResultBatch(...)`, and any day-strings whose
+  /// slices were empty (surfaced to `handleUnparseableDay` by the caller).
+  ///
+  /// CRITICAL: the snapshot happens inside this loop — the book mutates
+  /// cumulatively, so deriving requests after the walk would collapse
+  /// every day to the final-day balance.
+  private static func accumulateDays(
+    book: inout PositionBook,
+    accountRows: [DailyBalanceAccountRow],
+    earmarkRows: [DailyBalanceEarmarkRow],
+    context: DailyBalancesAssemblyContext,
+    balanceContext: PositionBook.BalanceContext
+  ) -> WalkAccumulation {
+    let accountByDay = Dictionary(grouping: accountRows, by: \.day)
+    let earmarkByDay = Dictionary(grouping: earmarkRows, by: \.day)
+    let allDayStrings = Set(accountByDay.keys).union(earmarkByDay.keys).sorted()
+    var plannedDays: [PlannedDay] = []
+    var requests: [BatchConversionRequest] = []
+    var unparseableDays: [String] = []
     for dayString in allDayStrings {
       let accountSlice = accountByDay[dayString] ?? []
       let earmarkSlice = earmarkByDay[dayString] ?? []
@@ -208,10 +282,10 @@ extension GRDBAnalysisRepository {
         // Every group's rows carry a sampleDate via SQL `MIN(t.date)`,
         // so this branch only fires if both slices are empty for a
         // day-string we discovered above — which is structurally
-        // impossible given the union construction. Surface it
-        // through the unparseable-day callback to preserve the
-        // diagnostic path.
-        handlers.handleUnparseableDay(dayString)
+        // impossible given the union construction. Collect it so the
+        // caller can surface it through the unparseable-day callback to
+        // preserve the diagnostic path.
+        unparseableDays.append(dayString)
         continue
       }
       applyDailyDeltas(
@@ -219,16 +293,42 @@ extension GRDBAnalysisRepository {
         earmarkRows: earmarkSlice,
         context: context,
         into: &book)
-      let dayKey = Calendar.current.startOfDay(for: sample)
+      let accumulation = book.dailyBalanceRequests(on: sample, context: balanceContext)
+      requests.append(contentsOf: accumulation.tags.map(\.request))
+      plannedDays.append(
+        PlannedDay(dayString: dayString, sample: sample, accumulation: accumulation))
+    }
+    return WalkAccumulation(
+      plannedDays: plannedDays, requests: requests, unparseableDays: unparseableDays)
+  }
+
+  /// Phase 3 of `walkDays`: slice the flat `outcomes` back out per day in
+  /// the same order the requests were appended and assemble each day's
+  /// `DailyBalance`. A `.failure` in a day's slice drops that day (Rule
+  /// 11) and logs once via `handleConversionFailure`.
+  private static func assembleWalkedDays(
+    plannedDays: [PlannedDay],
+    outcomes: [BatchConversionOutcome],
+    book: PositionBook,
+    balanceContext: PositionBook.BalanceContext,
+    handlers: DailyBalancesHandlers
+  ) -> [Date: DailyBalance] {
+    var dailyBalances: [Date: DailyBalance] = [:]
+    var cursor = 0
+    for plan in plannedDays {
+      let count = plan.accumulation.tags.count
+      let slice = Array(outcomes[cursor..<cursor + count])
+      cursor += count
+      let dayKey = Calendar.current.startOfDay(for: plan.sample)
       do {
-        dailyBalances[dayKey] = try await book.dailyBalance(
-          on: sample, context: balanceContext, isForecast: false)
-      } catch let cancel as CancellationError {
-        // Cooperative cancellation surfaces unchanged — never folded
-        // into the per-day conversion-failure log path.
-        throw cancel
+        dailyBalances[dayKey] = try book.assembleDailyBalance(
+          on: plan.sample,
+          context: balanceContext,
+          accumulation: plan.accumulation,
+          outcomes: slice,
+          isForecast: false)
       } catch {
-        let failureContext = DailyBalancesFailureContext(day: dayString)
+        let failureContext = DailyBalancesFailureContext(day: plan.dayString)
         handlers.handleConversionFailure(error, failureContext)
         continue
       }

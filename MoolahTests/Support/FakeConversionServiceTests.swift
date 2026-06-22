@@ -158,6 +158,77 @@ struct FakeConversionServiceTests {
   }
 
   @Test
+  func batchRecordsRequestsAndResolvesPerElement() async throws {
+    let service = FakeConversionService.fixedRates(
+      [usd.id: 2], knownZero: [Instrument.fiat(code: "EUR").id])
+    let requests = [
+      BatchConversionRequest(
+        amount: InstrumentAmount(quantity: 3, instrument: usd), target: aud, date: date),
+      BatchConversionRequest(
+        amount: InstrumentAmount(quantity: 9, instrument: .fiat(code: "EUR")), target: aud,
+        date: date),
+      // Same-instrument fast path: resolves to `.value` without reaching
+      // the outcome closure and without recording a convert call.
+      BatchConversionRequest(
+        amount: InstrumentAmount(quantity: 5, instrument: aud), target: aud, date: date),
+    ]
+    let outcomes = try await service.convertResultBatch(requests)
+
+    #expect(outcomes.count == 3)
+    guard case .value(let scaled) = outcomes[0] else {
+      Issue.record("expected .value for the rated request")
+      return
+    }
+    #expect(scaled == InstrumentAmount(quantity: 6, instrument: aud))
+    guard case .knownZero(let target) = outcomes[1] else {
+      Issue.record("expected .knownZero for the known-zero source")
+      return
+    }
+    #expect(target == aud)
+    guard case .value(let fastPath) = outcomes[2] else {
+      Issue.record("expected .value for the same-instrument fast path")
+      return
+    }
+    #expect(fastPath == InstrumentAmount(quantity: 5, instrument: aud))
+
+    // The whole batch is recorded; the same-instrument element never
+    // advanced the counter (only the two non-fast-path elements did).
+    #expect(service.recordedBatches.count == 1)
+    #expect(service.recordedBatches.last?.count == 3)
+    #expect(service.callCount == 2)
+  }
+
+  @Test
+  func batchSurfacesPerElementFailureButRethrowsCancellation() async throws {
+    // Per-element failure stays per-element.
+    let failing = FakeConversionService.perCall { index in
+      index == 0 ? .failure(FakeConversionError.invoked) : .success(Decimal(7))
+    }
+    let requests = [
+      BatchConversionRequest(
+        amount: InstrumentAmount(quantity: 1, instrument: usd), target: aud, date: date),
+      BatchConversionRequest(
+        amount: InstrumentAmount(quantity: 1, instrument: usd), target: aud, date: date),
+    ]
+    let outcomes = try await failing.convertResultBatch(requests)
+    guard case .failure = outcomes[0] else {
+      Issue.record("expected .failure for the failing element")
+      return
+    }
+    guard case .value(let second) = outcomes[1] else {
+      Issue.record("expected .value for the succeeding element")
+      return
+    }
+    #expect(second == InstrumentAmount(quantity: 7, instrument: aud))
+
+    // Cancellation is task-wide: it rethrows, never a per-element outcome.
+    let cancelling = FakeConversionService.perCall { _ in .failure(CancellationError()) }
+    await #expect(throws: CancellationError.self) {
+      _ = try await cancelling.convertResultBatch(requests)
+    }
+  }
+
+  @Test
   func recordsInvalidations() async {
     let service = FakeConversionService.passthrough
     await service.invalidateCache(for: usd)

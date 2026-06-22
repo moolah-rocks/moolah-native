@@ -107,12 +107,13 @@ struct GRDBDailyBalancesAssembleTests {
     // days in, three callbacks out — a refactor to "log once at the
     // outer catch" would only fire once and break this assertion.
     #expect(failures.snapshot() == [0, 1, 2])
-    // Each day exercises exactly one conversion (one USD position in
-    // the book on that day). The book is mutated in place so the same
-    // position persists across days; `dailyBalance` calls the service
-    // once per day's foreign-instrument bucket. Three days = three
-    // calls.
-    #expect(conversionService.callCount == 3)
+    // The walk now issues exactly ONE batch across all days. Each day
+    // contributes one request (one USD position in the book on that day —
+    // the book mutates in place so the same position persists), so the
+    // single batch carries three requests. A regression to per-day batch
+    // calls would shrink each recorded batch to one request.
+    #expect(conversionService.recordedBatches.last?.count == 3)
+    #expect(conversionService.recordedBatches.count == 1)
   }
 
   @Test("loop processes all days even when the first day fails")
@@ -138,11 +139,13 @@ struct GRDBDailyBalancesAssembleTests {
       handlers: handlers)
 
     // Exactly one failure logged (the first day), but all three days
-    // were converted — the loop did NOT short-circuit on the first
-    // throw. A refactor that breaks early would log [0] and call the
-    // service once, not three times.
+    // were converted — the assemble pass did NOT short-circuit on the
+    // first day's `.failure`. The single batch still carries all three
+    // days' requests; a refactor that bailed on the first failure would
+    // log [0] and never assemble days 1 and 2.
     #expect(visited.snapshot() == [0])
-    #expect(conversionService.callCount == 3)
+    #expect(conversionService.recordedBatches.last?.count == 3)
+    #expect(conversionService.recordedBatches.count == 1)
     // Day 0 is omitted; days 1 and 2 surface even though their
     // conversion returned 0 (the success branch). bestFit fills in
     // because the result has ≥2 entries.
@@ -171,11 +174,14 @@ struct GRDBDailyBalancesAssembleTests {
         handlers: handlers)
     }
 
-    // CancellationError surfaced unchanged — the per-day failure log
-    // never fired, and the loop short-circuited on the first day
-    // (no further conversion calls beyond the cancelled one).
+    // CancellationError surfaced unchanged — the single batch rethrows it
+    // from the cancelled element, so `assembleDailyBalances` propagates it
+    // and the per-day failure log never fired.
     #expect(visited.snapshot().isEmpty)
-    #expect(conversionService.callCount == 1)
+    // Still pin that the walk drove the batch mechanism exactly once (the
+    // cancellation surfaced from inside that single batch, not from a
+    // per-day serial path).
+    #expect(conversionService.recordedBatches.count == 1)
   }
 
   @Test("snapshot fold drops the day from dailyBalances on per-day conversion failure")
