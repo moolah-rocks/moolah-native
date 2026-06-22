@@ -62,16 +62,20 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
   // `decodeEarmarkDeltaRows`).
   //
   // `+DailyBalancesInvestmentValues.swift` — `applyInvestmentValues`
-  // plus its private cursor helpers (`advanceInvestmentCursor`,
-  // `sumInvestmentValues`); also owns the SQL fetches that produce
+  // plus its two-phase helpers (`accumulateInvestmentValueDays` /
+  // `assembleInvestmentValueDays`, around the `InvestmentValuePlan`
+  // plan type) and the private cursor helper
+  // (`advanceInvestmentCursor`); also owns the SQL fetches that produce
   // its inputs (`fetchInvestmentAccountIds`,
   // `fetchInvestmentValueSnapshots`,
   // `fetchTradesModeInvestmentAccountIds`).
   //
   // `+DailyBalancesTradesMode.swift` — `applyTradesModePositionValuations`
-  // fold + private helpers (`seedTradesModePriorPositions`,
+  // fold + its two-phase helpers (`accumulateTradesModeDays` /
+  // `assembleTradesModeDays`, around the `TradesModeDayPlan` plan type)
+  // and private helpers (`seedTradesModePriorPositions`,
   // `buildTradesModeEntries`, `mergeTradesModeTotal`,
-  // `sumTradesModePositions`, `TradesModePositionEntry`).
+  // `TradesModePositionEntry`).
   // Pre-filtered trades-mode rows arrive via the aggregation; the fold
   // computes per-day position valuations and adds them onto
   // `DailyBalance.investmentValue`.

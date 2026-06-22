@@ -302,10 +302,9 @@ struct GRDBDailyBalancesTradesModeTests {
 
     // After the cursor advance, positions[accountId][USD] = 0 — the
     // outer dict key is still present, so positions.isEmpty is false
-    // and `sumTradesModePositions` is invoked. The new
-    // `quantity == 0` guard inside the helper skips the zero
-    // position before the Rule 8 fast-path / convert decision —
-    // total stays 0. existing.investmentValue is nil, so
+    // and `accumulateTradesModeDays` is called. Its `quantity == 0`
+    // guard skips the zero position before the Rule 8 fast-path /
+    // convert decision — total stays 0. existing.investmentValue is nil, so
     // `(nil ?? .zero(AUD)) + .zero(AUD) == .zero(AUD)`. The day's
     // investmentValue is .zero(AUD) — non-nil, but quantity == 0.
     let value = try #require(balances[dayKey]?.investmentValue)

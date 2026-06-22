@@ -226,12 +226,13 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
 
   @Test("CancellationError from Task.checkCancellation rethrows immediately")
   func cancellationRethrown() async throws {
-    // All-fast-path scenario: a profile-instrument position means
-    // `sumTradesModePositions` never `await`s, so without an explicit
-    // `try Task.checkCancellation()` at the top of the per-day loop
-    // the runtime would never get a chance to surface cancellation.
-    // This test pins that the cancellation check is wired and rethrows
-    // directly (Rule 11 contract: never via the failure callback).
+    // All-fast-path scenario: `Task.checkCancellation()` fires before
+    // `convertResultBatch`. With an all-profile-instrument accumulate
+    // the batch is empty, so no `await` happens inside it and without
+    // the explicit check the runtime would never get a chance to
+    // surface cancellation. This test pins that the cancellation check
+    // is wired and rethrows directly (Rule 11 contract: never via the
+    // failure callback).
     let day = try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 12)
     let dayKey = Calendar.current.startOfDay(for: day)
     let aud = Instrument.defaultTestInstrument
