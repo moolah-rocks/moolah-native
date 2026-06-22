@@ -45,6 +45,15 @@ actor CryptoPriceService {
   // sibling-file extension can read them.
   let dateFormatter: ISO8601DateFormatter
   private let resolutionClient: TokenResolutionClient
+  /// In-memory cache of resolved `CryptoRegistration` values, keyed by
+  /// instrument id. Populated lazily on first call to `registration(for:)`
+  /// and evicted by `purgeCache(instrumentId:)`. Keyed under both the
+  /// original instrument id and the resolved lookup id (native id for
+  /// wrapped-native tokens) so a second call for the wrapper hits the
+  /// cache without re-running the lookup. Private — used only within this
+  /// file, no sibling-file extension reads it.
+  private var metadataCache: [String: CryptoRegistration] = [:]
+  private let metadataLookup: @Sendable (String) async throws -> CryptoRegistration?
   /// Injected clock so tests can pin "today" deterministically.
   let now: @Sendable () -> Date
   /// Injected zone used by `cappedToYesterday` to compute "yesterday".
@@ -56,12 +65,14 @@ actor CryptoPriceService {
     clients: [CryptoPriceClient],
     database: any DatabaseWriter,
     resolutionClient: (any TokenResolutionClient)? = nil,
+    metadataLookup: @Sendable @escaping (String) async throws -> CryptoRegistration? = { _ in nil },
     now: @Sendable @escaping () -> Date = { Date() },
     timeZone: TimeZone = .current
   ) {
     self.clients = clients
     self.database = database
     self.resolutionClient = resolutionClient ?? NoOpTokenResolutionClient()
+    self.metadataLookup = metadataLookup
     self.now = now
     self.timeZone = timeZone
     self.dateFormatter = ISO8601DateFormatter()
@@ -106,6 +117,16 @@ actor CryptoPriceService {
   func purgeCache(instrumentId: String) async {
     caches.removeValue(forKey: instrumentId)
     hydratedTokenIds.remove(instrumentId)
+    metadataCache.removeValue(forKey: instrumentId)
+    // When a native-asset registration is purged, also evict any cached
+    // wrapped-native entry that was resolved to it (e.g. WETH→ETH). Without
+    // this, a subsequent WETH price lookup would return the stale cached
+    // mapping instead of re-resolving via the lookup closure.
+    if let wrapperId = WrappedNativeContracts.canonicalWrappedInstrumentId(
+      forChainId: chainId(fromCryptoId: instrumentId))
+    {
+      metadataCache.removeValue(forKey: wrapperId)
+    }
     do {
       try await database.write { database in
         try CryptoPriceRecord
@@ -128,7 +149,46 @@ actor CryptoPriceService {
     }
   }
 
+  /// Extracts the chain id from a crypto instrument id of the form
+  /// `"<chainId>:native"` or `"<chainId>:<contractAddress>"`. Returns
+  /// `nil` when the id does not match the expected format.
+  private func chainId(fromCryptoId id: String) -> Int? {
+    Int(id.prefix(while: { $0 != ":" }))
+  }
+
   // MARK: - Single price
+
+  /// Resolves the `CryptoRegistration` for `instrument` via the injected
+  /// `metadataLookup` closure, with an in-memory cache to avoid redundant
+  /// point lookups. Wrapped-native tokens (WETH, WMATIC, …) are redirected
+  /// to their chain's native registration via `WrappedNativeContracts`.
+  ///
+  /// Throws `ConversionError.noProviderMapping` when the lookup returns
+  /// `nil` for the resolved id — matching the error the caller expects when
+  /// no provider mapping is registered for the instrument.
+  func registration(for instrument: Instrument) async throws -> CryptoRegistration {
+    if let cached = metadataCache[instrument.id] { return cached }
+    let lookupId =
+      WrappedNativeContracts.nativePricingInstrumentId(
+        chainId: instrument.chainId, contractAddress: instrument.contractAddress)
+      ?? instrument.id
+    guard let resolved = try await metadataLookup(lookupId) else {
+      throw ConversionError.noProviderMapping(instrumentId: instrument.id)
+    }
+    metadataCache[instrument.id] = resolved
+    metadataCache[lookupId] = resolved
+    return resolved
+  }
+
+  /// Prices `instrument` on `date` by first resolving its `CryptoRegistration`
+  /// (via the in-memory metadata cache + injected lookup), then delegating to
+  /// the internal `price(for:mapping:on:)`. Wrapped-native tokens are priced
+  /// via their chain's native registration so price fetch/cache uses the
+  /// native instrument's id, matching the pre-existing behaviour.
+  func price(for instrument: Instrument, on date: Date) async throws -> Decimal {
+    let reg = try await registration(for: instrument)
+    return try await price(for: reg.instrument, mapping: reg.mapping, on: date)
+  }
 
   func price(
     for instrument: Instrument,
