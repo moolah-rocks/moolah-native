@@ -75,20 +75,6 @@ extension GRDBAnalysisRepository {
       earmarkRows: aggregation.priorEarmarkRows,
       context: context)
 
-    // Pre-warm every conversion the per-day walk will perform, fanned out
-    // concurrently, so the underlying network price fetches overlap and the
-    // conversion memo is populated before the *serial* walk below — which
-    // then hits warm caches instead of awaiting each rate one at a time.
-    // Best-effort: the walk re-runs (and handles per Rule 11) any conversion
-    // that did not warm, so results are unchanged. See #1163.
-    let warmups = collectConversionWarmups(
-      priorAccountRows: aggregation.priorAccountRows,
-      priorEarmarkRows: aggregation.priorEarmarkRows,
-      accountRows: aggregation.accountRows,
-      earmarkRows: aggregation.earmarkRows,
-      context: context)
-    await prewarmConversions(warmups, to: profileInstrument, using: conversionService)
-
     var dailyBalances = try await walkDays(
       book: &book,
       accountRows: aggregation.accountRows,

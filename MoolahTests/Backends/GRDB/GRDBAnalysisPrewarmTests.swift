@@ -6,15 +6,6 @@ import Testing
 @Suite("GRDBAnalysisRepository — conversion pre-warm collection")
 struct GRDBAnalysisPrewarmTests {
 
-  private func context(profile: Instrument) -> GRDBAnalysisRepository.DailyBalancesAssemblyContext {
-    GRDBAnalysisRepository.DailyBalancesAssemblyContext(
-      investmentAccountIds: [],
-      tradesModeInvestmentAccountIds: [],
-      instrumentMap: [:],
-      profileInstrument: profile,
-      conversionService: StubConversionService())
-  }
-
   private func accountRow(
     day: String, sample: Date, instrument: String
   ) -> GRDBAnalysisRepository.DailyBalanceAccountRow {
@@ -31,6 +22,30 @@ struct GRDBAnalysisPrewarmTests {
       type: "transfer", qty: 100_000_000)
   }
 
+  /// Minimal aggregation carrying only the rows the warm-up collection
+  /// reads; everything else is empty. `instrumentMap` is left empty so
+  /// `resolveInstrument` falls back to `Instrument.fiat(code:)`.
+  private func aggregation(
+    priorAccount: [GRDBAnalysisRepository.DailyBalanceAccountRow] = [],
+    priorEarmark: [GRDBAnalysisRepository.DailyBalanceEarmarkRow] = [],
+    account: [GRDBAnalysisRepository.DailyBalanceAccountRow] = [],
+    earmark: [GRDBAnalysisRepository.DailyBalanceEarmarkRow] = []
+  ) -> GRDBAnalysisRepository.DailyBalancesAggregation {
+    GRDBAnalysisRepository.DailyBalancesAggregation(
+      priorAccountRows: priorAccount,
+      priorEarmarkRows: priorEarmark,
+      accountRows: account,
+      earmarkRows: earmark,
+      investmentValues: [],
+      investmentAccountIds: [],
+      tradesModeInvestmentAccountIds: [],
+      priorTradesModeAccountRows: [],
+      tradesModeAccountRows: [],
+      scheduled: [],
+      instrumentMap: [:],
+      forecastUntil: nil)
+  }
+
   /// The collected warm-ups must be the *running union* of instruments —
   /// each day carries every instrument seen up to and including that day,
   /// at that day's representative instant, mirroring what the per-day walk
@@ -43,16 +58,15 @@ struct GRDBAnalysisPrewarmTests {
     let day2 = Date(timeIntervalSince1970: 1_100_000)
 
     let warmups = GRDBAnalysisRepository.collectConversionWarmups(
-      priorAccountRows: [accountRow(day: "2025-12-31", sample: day1, instrument: "USD")],
-      priorEarmarkRows: [],
-      accountRows: [
-        accountRow(day: "2026-01-01", sample: day1, instrument: "EUR"),
-        // AUD == profile instrument: must never be warmed.
-        accountRow(day: "2026-01-01", sample: day1, instrument: "AUD"),
-        accountRow(day: "2026-01-02", sample: day2, instrument: "GBP"),
-      ],
-      earmarkRows: [],
-      context: context(profile: aud))
+      in: aggregation(
+        priorAccount: [accountRow(day: "2025-12-31", sample: day1, instrument: "USD")],
+        account: [
+          accountRow(day: "2026-01-01", sample: day1, instrument: "EUR"),
+          // AUD == profile instrument: must never be warmed.
+          accountRow(day: "2026-01-01", sample: day1, instrument: "AUD"),
+          accountRow(day: "2026-01-02", sample: day2, instrument: "GBP"),
+        ]),
+      profileInstrument: aud)
 
     // Compare as a set of (instrument id, date) — inner ordering is irrelevant.
     let got = Set(warmups.map { Pair(id: $0.instrument.id, date: $0.date) })
@@ -72,11 +86,10 @@ struct GRDBAnalysisPrewarmTests {
   func emptyWhenAllProfileInstrument() {
     let aud = Instrument.fiat(code: "AUD")
     let warmups = GRDBAnalysisRepository.collectConversionWarmups(
-      priorAccountRows: [accountRow(day: "2025-12-31", sample: Date(), instrument: "AUD")],
-      priorEarmarkRows: [],
-      accountRows: [accountRow(day: "2026-01-01", sample: Date(), instrument: "AUD")],
-      earmarkRows: [],
-      context: context(profile: aud))
+      in: aggregation(
+        priorAccount: [accountRow(day: "2025-12-31", sample: Date(), instrument: "AUD")],
+        account: [accountRow(day: "2026-01-01", sample: Date(), instrument: "AUD")]),
+      profileInstrument: aud)
     #expect(warmups.isEmpty)
   }
 
@@ -90,11 +103,11 @@ struct GRDBAnalysisPrewarmTests {
     let day2 = Date(timeIntervalSince1970: 2_100_000)
 
     let warmups = GRDBAnalysisRepository.collectConversionWarmups(
-      priorAccountRows: [],
-      priorEarmarkRows: [earmarkRow(day: "2025-12-31", sample: day1, instrument: "USD")],
-      accountRows: [accountRow(day: "2026-01-02", sample: day2, instrument: "EUR")],
-      earmarkRows: [earmarkRow(day: "2026-01-01", sample: day1, instrument: "GBP")],
-      context: context(profile: aud))
+      in: aggregation(
+        priorEarmark: [earmarkRow(day: "2025-12-31", sample: day1, instrument: "USD")],
+        account: [accountRow(day: "2026-01-02", sample: day2, instrument: "EUR")],
+        earmark: [earmarkRow(day: "2026-01-01", sample: day1, instrument: "GBP")]),
+      profileInstrument: aud)
 
     let got = Set(warmups.map { Pair(id: $0.instrument.id, date: $0.date) })
     let expected: Set<Pair> = [

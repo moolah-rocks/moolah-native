@@ -34,23 +34,20 @@ extension GRDBAnalysisRepository {
   /// warm-up does not populate. Internal so `GRDBAnalysisPrewarmTests` can
   /// pin the running-union math.
   static func collectConversionWarmups(
-    priorAccountRows: [DailyBalanceAccountRow],
-    priorEarmarkRows: [DailyBalanceEarmarkRow],
-    accountRows: [DailyBalanceAccountRow],
-    earmarkRows: [DailyBalanceEarmarkRow],
-    context: DailyBalancesAssemblyContext
+    in aggregation: DailyBalancesAggregation,
+    profileInstrument: Instrument
   ) -> [(instrument: Instrument, date: Date)] {
-    let profileInstrument = context.profileInstrument
+    let instrumentMap = aggregation.instrumentMap
     var active = Set<Instrument>()
-    for row in priorAccountRows {
-      active.insert(resolveInstrument(row.instrumentId, in: context.instrumentMap))
+    for row in aggregation.priorAccountRows {
+      active.insert(resolveInstrument(row.instrumentId, in: instrumentMap))
     }
-    for row in priorEarmarkRows {
-      active.insert(resolveInstrument(row.instrumentId, in: context.instrumentMap))
+    for row in aggregation.priorEarmarkRows {
+      active.insert(resolveInstrument(row.instrumentId, in: instrumentMap))
     }
 
-    let accountByDay = Dictionary(grouping: accountRows, by: \.day)
-    let earmarkByDay = Dictionary(grouping: earmarkRows, by: \.day)
+    let accountByDay = Dictionary(grouping: aggregation.accountRows, by: \.day)
+    let earmarkByDay = Dictionary(grouping: aggregation.earmarkRows, by: \.day)
     let allDayStrings = Set(accountByDay.keys).union(earmarkByDay.keys).sorted()
 
     var warmups: [(instrument: Instrument, date: Date)] = []
@@ -58,10 +55,10 @@ extension GRDBAnalysisRepository {
       let accountSlice = accountByDay[dayString] ?? []
       let earmarkSlice = earmarkByDay[dayString] ?? []
       for row in accountSlice {
-        active.insert(resolveInstrument(row.instrumentId, in: context.instrumentMap))
+        active.insert(resolveInstrument(row.instrumentId, in: instrumentMap))
       }
       for row in earmarkSlice {
-        active.insert(resolveInstrument(row.instrumentId, in: context.instrumentMap))
+        active.insert(resolveInstrument(row.instrumentId, in: instrumentMap))
       }
       let sample =
         accountSlice.first.map(\.sampleDate) ?? earmarkSlice.first.map(\.sampleDate)
