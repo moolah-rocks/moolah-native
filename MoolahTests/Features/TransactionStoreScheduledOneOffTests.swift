@@ -30,18 +30,22 @@ struct TransactionStoreScheduledOneOffTests {
     )
 
     // Simulates the user tapping "+" in the Upcoming view: a placeholder
-    // scheduled transaction is created with a default monthly period.
+    // scheduled transaction is created. The default does not repeat — it's a
+    // single scheduled occurrence (`.once`).
     let created = try #require(
       await store.createDefaultScheduled(
         accountId: accountId,
         fallbackAccountId: nil,
         instrument: Instrument.defaultTestInstrument))
     #expect(created.isScheduled == true)
-    #expect(created.isRecurring == true)
+    #expect(created.isRecurring == false)
 
-    // Simulates the user opening the inspector (draft from the saved record),
-    // flipping off "Repeat", and saving the update.
+    // Simulates the user opening the inspector, turning Repeat on (so the
+    // transaction becomes recurring) and then off again, saving the update.
+    // The round-trip must leave the transaction scheduled and one-off.
     var draft = TransactionDraft(from: created)
+    draft.isRepeating = true
+    #expect(draft.recurPeriod == .month)
     draft.isRepeating = false
     let updated = try #require(
       draft.toTransaction(id: created.id))

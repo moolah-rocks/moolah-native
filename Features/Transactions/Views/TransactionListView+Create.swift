@@ -54,11 +54,12 @@ extension TransactionListView {
     }
   }
 
-  /// Creates a new scheduled (recurring) transaction placeholder.
-  /// Mirrors `createNewTransaction()` but seeds the placeholder with a
-  /// monthly recurrence so the inspector opens in the recurring-transaction
-  /// editing mode. Used by the `.scheduledStatus` grouping's Add toolbar
-  /// button and `\.newTransactionAction` focused-scene-value.
+  /// Creates a new scheduled transaction placeholder. Mirrors
+  /// `createNewTransaction()` but seeds the placeholder with a single
+  /// (`.once`) scheduled occurrence so the inspector opens in scheduled
+  /// editing mode with Repeat off; the user turns Repeat on if they want it
+  /// to recur. Used by the `.scheduledStatus` grouping's Add toolbar button
+  /// and `\.newTransactionAction` focused-scene-value.
   func createNewScheduledTransaction() {
     let instrument = accounts.ordered.first?.instrument ?? .AUD
     let fallbackAccountId = accounts.ordered.first?.id
@@ -67,7 +68,7 @@ extension TransactionListView {
       Transaction(
         date: Date(),
         payee: "",
-        recurPeriod: .month,
+        recurPeriod: .once,
         recurEvery: 1,
         legs: [TransactionLeg(accountId: id, instrument: instrument, quantity: 0, type: .expense)]
       )

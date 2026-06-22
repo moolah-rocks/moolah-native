@@ -31,15 +31,15 @@ extension TransactionStore {
     return await create(.defaultExpense(accountId: acctId, instrument: instrument))
   }
 
-  /// Creates a blank monthly-recurring expense. See
-  /// `Transaction.defaultMonthlyScheduled(...)`.
+  /// Creates a blank scheduled expense that does not repeat. See
+  /// `Transaction.defaultScheduled(...)`.
   func createDefaultScheduled(
     accountId: UUID?,
     fallbackAccountId: UUID?,
     instrument: Instrument
   ) async -> Transaction? {
     guard let acctId = accountId ?? fallbackAccountId else { return nil }
-    return await create(.defaultMonthlyScheduled(accountId: acctId, instrument: instrument))
+    return await create(.defaultScheduled(accountId: acctId, instrument: instrument))
   }
 
   /// Creates a blank earmark-only income transaction. See
