@@ -40,14 +40,38 @@ struct AnalysisStoreRateTickTests {
     await repository.waitUntilFetchStarted()
     // These three observe the in-flight reload and coalesce to a single
     // pending re-run. Each returns synchronously (no suspension) because
-    // `reloadForRateTick` short-circuits on `rateTickReloadInFlight`,
-    // so awaiting them sequentially is deterministic.
+    // the in-flight load gate short-circuits a concurrent reload, so
+    // awaiting them sequentially is deterministic.
     await store.reloadForRateTick()
     await store.reloadForRateTick()
     await store.reloadForRateTick()
     await repository.releaseAll()
     await first.value
     // Exactly one in-flight reload + one coalesced re-run.
+    let count = await repository.loadAllCount
+    #expect(count == 2)
+  }
+
+  @Test("rate ticks during the view's initial load coalesce to one reconcile")
+  func ticksDuringInitialLoadCoalesce() async throws {
+    let repository = GatedCountingAnalysisRepository()
+    let store = AnalysisStore(
+      repository: repository, conversionService: StubConversionService(),
+      defaults: try makeDefaults())
+    // The view-initiated initial load is held at the gate, unambiguously
+    // in flight. Rate ticks that land during it (the load fetching prices
+    // writes the very cache `observeRates()` watches — the reload storm)
+    // must coalesce into exactly ONE trailing reconcile, not spawn a fresh
+    // full reload each. See #1163.
+    let initial = Task { @MainActor in await store.loadAll() }
+    await repository.waitUntilFetchStarted()
+    await store.reloadForRateTick()
+    await store.reloadForRateTick()
+    await store.reloadForRateTick()
+    await repository.releaseAll()
+    await initial.value
+    // Initial load (1) + one coalesced reconcile from the 3 ticks (1) = 2,
+    // not 4 (which is what spawning a fresh reload per tick would give).
     let count = await repository.loadAllCount
     #expect(count == 2)
   }

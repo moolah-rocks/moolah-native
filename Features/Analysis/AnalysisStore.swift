@@ -59,15 +59,21 @@ final class AnalysisStore {
   private let defaults: UserDefaults
   private let logger = Logger(subsystem: "com.moolah.app", category: "AnalysisStore")
 
-  // MARK: - Rate-tick reload coalescing
+  // MARK: - Load coalescing
 
-  /// True while a `reloadForRateTick()`-driven `loadAll(force:)` is in
-  /// flight. Bursts of rate ticks that arrive during a reload coalesce
-  /// into exactly one trailing re-run (see `reloadForRateTick`).
-  /// Non-private so the sibling `+Observation.swift` extension's
-  /// `reloadForRateTick` can read/write them.
-  var rateTickReloadInFlight = false
-  var rateTickReloadPending = false
+  /// True while a `loadAll(...)` pass is running. A single gate over ALL
+  /// loads — the view's initial load, filter-change reloads, and rate-tick
+  /// reloads alike — so a load requested while another is in flight never
+  /// runs concurrently; it coalesces into exactly one trailing reconcile
+  /// pass. This bounds the reload storm: the initial load's own price
+  /// fetches write the cache `observeRates()` watches, firing ticks
+  /// mid-load; without the gate each such tick spawns a fresh full
+  /// recompute (a populated profile cascades ~4–5 times). See #1163, #1075.
+  private var loadInFlight = false
+  private var pendingReload = false
+  /// Whether the coalesced trailing pass must bypass the cache guard
+  /// (a rate tick was among the coalesced requests). See `loadAll(force:)`.
+  private var pendingReloadForce = false
 
   /// The single observation `Task` draining `conversionService.observeRates()`
   /// / `observeErrors()`. Spawned from `init`, torn down by `stopObserving()`
@@ -133,7 +139,37 @@ final class AnalysisStore {
 
   // MARK: - Data Loading
 
+  /// Single-flight entry point for every load. A load requested while
+  /// another is running does not start concurrently — it coalesces into
+  /// exactly one trailing reconcile pass that re-reads the current filters.
+  /// A rate tick (`force`) makes that pass bypass the cache guard. This is
+  /// what tames the reload storm; see the `loadInFlight` doc and #1163.
   func loadAll(force: Bool = false) async {
+    if loadInFlight {
+      pendingReload = true
+      if force { pendingReloadForce = true }
+      return
+    }
+    loadInFlight = true
+    defer { loadInFlight = false }
+    var passForce = force
+    repeat {
+      // If the owning task (e.g. the view's `.task`) was cancelled while a
+      // pass ran, stop here rather than running the coalesced reconcile on
+      // a torn-down view — `performLoad` swallows `CancellationError`, so it
+      // would otherwise issue a wasted fetch and restamp `lastLoadedAt`.
+      guard !Task.isCancelled else { break }
+      pendingReload = false
+      pendingReloadForce = false
+      await performLoad(force: passForce)
+      // Any load requested during `performLoad` above set `pendingReload`
+      // (and `pendingReloadForce` if it was a rate tick); carry that force
+      // into the single trailing reconcile pass.
+      passForce = pendingReloadForce
+    } while pendingReload
+  }
+
+  private func performLoad(force: Bool) async {
     monthEnd = Calendar.current.component(.day, from: Date())
     error = nil
 
