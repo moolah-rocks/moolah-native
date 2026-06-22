@@ -43,57 +43,140 @@ extension GRDBAnalysisRepository {
       context: context)
   }
 
-  /// Pre-convert all instances concurrently — each conversion is
-  /// independent. The accumulator that follows is inherently
-  /// sequential (each iteration depends on the previous running
-  /// totals), so it can't be parallelised.
+  /// One instance's slot in the flat batch request list: the range of
+  /// requests that belong to its foreign-instrument legs, index-aligned
+  /// to `legs` so the rebuild can stitch converted quantities back in.
+  /// Same-instrument legs carry no request (they pass through untouched),
+  /// so `legRequestIndices` maps each leg to its request index or `nil`.
+  private struct ForecastInstancePlan {
+    let instance: Transaction
+    /// For each leg, the index into the flat batch (and thus the flat
+    /// outcomes list) that converts it, or `nil` when the leg already
+    /// shares the profile instrument and needs no conversion.
+    let legRequestIndices: [Int?]
+    /// `true` when at least one leg needs conversion. Instances with no
+    /// foreign leg pass straight through, mirroring the same-instrument
+    /// fast-path guard the serial per-leg conversion used.
+    let needsConversion: Bool
+  }
+
+  /// Pre-convert all instances in a single batch — each leg conversion is
+  /// independent, so they collapse into one `convertResultBatch(...)` hop
+  /// over the profile instrument on `conversionDate`. The accumulator that
+  /// follows is inherently sequential (each iteration depends on the
+  /// previous running totals), so it can't be parallelised.
+  ///
+  /// Per-instance error tolerance (Rule 11,
+  /// `INSTRUMENT_CONVERSION_GUIDE.md`): a single instance's conversion
+  /// failure must not abort the whole forecast (that surfaced on the
+  /// Analysis page as a full-screen "WalletSyncError"). When ANY of an
+  /// instance's leg conversions resolves to `.failure`, the instance is
+  /// passed through *unconverted* and logged — the accumulator's per-day
+  /// `catch` then drops that day, and every later occurrence of an
+  /// unpriceable recurring leg drops the same way, so a day's total is
+  /// never partial. `.knownZero` legs fold to a zero-quantity leg (issue
+  /// #790).
+  ///
+  /// Cancellation propagates as a thrown `CancellationError`.
   private static func preConvertForecastInstances(
     _ instances: [Transaction],
     profileInstrument: Instrument,
     conversionService: any InstrumentConversionService,
     on conversionDate: Date
   ) async throws -> [Transaction] {
-    guard let firstInstance = instances.first else { return [] }
-    return try await withThrowingTaskGroup(of: (Int, Transaction).self) { group in
-      for (index, instance) in instances.enumerated() {
-        group.addTask {
-          do {
-            let txn = try await convertLegsToProfileInstrument(
-              instance,
-              to: profileInstrument,
-              on: conversionDate,
-              conversionService: conversionService)
-            return (index, txn)
-          } catch let cancel as CancellationError {
-            // Cooperative cancellation surfaces unchanged — never
-            // folded into the per-day degradation path.
-            throw cancel
-          } catch {
-            // Rule 11 (`INSTRUMENT_CONVERSION_GUIDE.md`): a single
-            // instance's conversion failure must not abort the whole
-            // forecast (that surfaced on the Analysis page as a
-            // full-screen "WalletSyncError"). Pass the instance through
-            // *unconverted* and log here — the accumulator's per-day
-            // `catch` then drops that day, and every later occurrence
-            // of an unpriceable recurring leg drops the same way, so a
-            // day's total is never partial. Logging at the point of
-            // failure is required: the accumulator only logs if
-            // `dailyBalance` itself subsequently throws, which is not
-            // guaranteed for every degraded instance.
-            forecastLogger.warning(
-              """
-              Forecast pre-conversion failed for instance \(index, privacy: .public) — \
-              \(error.localizedDescription, privacy: .public). Passing it through \
-              unconverted; affected forecast days drop (Rule 11).
-              """)
-            return (index, instance)
-          }
+    guard !instances.isEmpty else { return [] }
+
+    // Phase 1 — plan: collect every foreign leg's request across all
+    // instances into one flat list, recording per-leg request indices so
+    // the rebuild can stitch outcomes back in.
+    var requests: [BatchConversionRequest] = []
+    var plans: [ForecastInstancePlan] = []
+    plans.reserveCapacity(instances.count)
+    for instance in instances {
+      var legRequestIndices: [Int?] = []
+      legRequestIndices.reserveCapacity(instance.legs.count)
+      var needsConversion = false
+      for leg in instance.legs {
+        if leg.instrument.id == profileInstrument.id {
+          legRequestIndices.append(nil)
+        } else {
+          needsConversion = true
+          legRequestIndices.append(requests.count)
+          requests.append(
+            BatchConversionRequest(
+              amount: InstrumentAmount(quantity: leg.quantity, instrument: leg.instrument),
+              target: profileInstrument,
+              date: conversionDate))
         }
       }
-      var out = Array(repeating: firstInstance, count: instances.count)
-      for try await (index, txn) in group { out[index] = txn }
-      return out
+      plans.append(
+        ForecastInstancePlan(
+          instance: instance,
+          legRequestIndices: legRequestIndices,
+          needsConversion: needsConversion))
     }
+
+    // Phase 2 — one batched conversion. Cancellation throws here.
+    let outcomes = try await conversionService.convertResultBatch(requests)
+
+    // Phase 3 — rebuild each instance from its outcome slice, passing the
+    // instance through unconverted if any of its legs failed (Rule 11).
+    return plans.enumerated().map { index, plan in
+      rebuildForecastInstance(
+        plan,
+        outcomes: outcomes,
+        profileInstrument: profileInstrument,
+        instanceIndex: index)
+    }
+  }
+
+  /// Rebuild a single forecast instance from the flat `outcomes` list using
+  /// its `legRequestIndices`. Same-instrument legs (`nil` index) pass
+  /// through; `.value` legs adopt the converted quantity in the profile
+  /// instrument; `.knownZero` legs fold to a zero-quantity profile leg; a
+  /// `.failure` on any leg passes the WHOLE instance through unconverted and
+  /// logs once (per-instance error tolerance, Rule 11).
+  private static func rebuildForecastInstance(
+    _ plan: ForecastInstancePlan,
+    outcomes: [BatchConversionOutcome],
+    profileInstrument: Instrument,
+    instanceIndex: Int
+  ) -> Transaction {
+    guard plan.needsConversion else { return plan.instance }
+    var convertedLegs: [TransactionLeg] = []
+    convertedLegs.reserveCapacity(plan.instance.legs.count)
+    for (leg, requestIndex) in zip(plan.instance.legs, plan.legRequestIndices) {
+      guard let requestIndex else {
+        convertedLegs.append(leg)
+        continue
+      }
+      let convertedQty: Decimal
+      switch outcomes[requestIndex] {
+      case .value(let amount):
+        convertedQty = amount.quantity
+      case .knownZero:
+        convertedQty = 0
+      case .failure(let error):
+        forecastLogger.warning(
+          """
+          Forecast pre-conversion failed for instance \(instanceIndex, privacy: .public) — \
+          \(error.localizedDescription, privacy: .public). Passing it through \
+          unconverted; affected forecast days drop (Rule 11).
+          """)
+        return plan.instance
+      }
+      convertedLegs.append(
+        TransactionLeg(
+          accountId: leg.accountId,
+          instrument: profileInstrument,
+          quantity: convertedQty,
+          type: leg.type,
+          categoryId: leg.categoryId,
+          earmarkId: leg.earmarkId))
+    }
+    var result = plan.instance
+    result.legs = convertedLegs
+    return result
   }
 
   // MARK: - Scheduled-transaction extrapolation
@@ -153,64 +236,6 @@ extension GRDBAnalysisRepository {
     }
 
     return calendar.date(byAdding: components, to: date)
-  }
-
-  // MARK: - Per-instance leg conversion
-
-  /// Return a copy of the transaction with every leg's
-  /// quantity/instrument rewritten into the profile instrument. Used
-  /// before feeding scheduled-transaction instances into the forecast
-  /// accumulator so every leg already shares the profile instrument
-  /// when `PositionBook.dailyBalance` is queried (skipping the
-  /// multi-instrument conversion path on every forecast day).
-  ///
-  /// - Parameter date: date passed to the conversion service. For
-  ///   forecast use this is `Date()` — the current rate — because
-  ///   scheduled transactions have future dates and no exchange-rate
-  ///   source has future rates. Same-instrument legs are returned
-  ///   untouched.
-  static func convertLegsToProfileInstrument(
-    _ txn: Transaction,
-    to instrument: Instrument,
-    on date: Date,
-    conversionService: any InstrumentConversionService
-  ) async throws -> Transaction {
-    guard txn.legs.contains(where: { $0.instrument.id != instrument.id }) else {
-      return txn
-    }
-    var convertedLegs: [TransactionLeg] = []
-    convertedLegs.reserveCapacity(txn.legs.count)
-    for leg in txn.legs {
-      if leg.instrument.id == instrument.id {
-        convertedLegs.append(leg)
-        continue
-      }
-      // `.knownZero` source legs (`.unpriced` / `.spam` crypto) fold to
-      // a zero-quantity leg rather than aborting the forecast day —
-      // issue #790. Real provider errors still throw so a transient
-      // rate failure preserves Rule 11 (mark the day unavailable).
-      let conversionResult = try await conversionService.convertResult(
-        InstrumentAmount(quantity: leg.quantity, instrument: leg.instrument),
-        to: instrument,
-        on: date)
-      let convertedQty: Decimal
-      switch conversionResult {
-      case .value(let amount): convertedQty = amount.quantity
-      case .knownZero: convertedQty = 0
-      }
-      convertedLegs.append(
-        TransactionLeg(
-          accountId: leg.accountId,
-          instrument: instrument,
-          quantity: convertedQty,
-          type: leg.type,
-          categoryId: leg.categoryId,
-          earmarkId: leg.earmarkId
-        ))
-    }
-    var result = txn
-    result.legs = convertedLegs
-    return result
   }
 
   /// Walk the pre-converted instances and emit one `DailyBalance` per

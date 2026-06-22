@@ -78,6 +78,7 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
   //
   // `+DailyBalancesForecast.swift` — `generateForecast` plus its
   // private helpers (`preConvertForecastInstances`,
+  // `rebuildForecastInstance`, the `ForecastInstancePlan` value type,
   // `runForecastAccumulator`) and a file-private logger for forecast
   // warnings.
   //

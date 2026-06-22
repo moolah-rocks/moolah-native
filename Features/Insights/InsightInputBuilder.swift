@@ -86,6 +86,14 @@ struct InsightInputBuilder: Sendable {
   /// dropped, never guessed (`INSTRUMENT_CONVERSION_GUIDE.md` Rule 11); the
   /// original sign is preserved (a bill is a negative outflow — never
   /// `abs()`). Transactions with no income/expense leg are skipped.
+  ///
+  /// The conversions run in a single `convertResultBatch(...)` hop. Each
+  /// candidate's contributing leg becomes one request (index-aligned to
+  /// `candidates`); a `.failure`/`.knownZero` outcome drops the bill (Rule
+  /// 11) — an unpriced or spam token has no meaningful reporting-currency
+  /// value, so surfacing a "$0" future bill would mislead. Cancellation
+  /// surfaces as a throw from `convertResultBatch` and propagates to the
+  /// caller.
   private func scheduledBills(context: InsightContext) async throws -> [ScheduledBill] {
     let filter = TransactionFilter(scheduled: .scheduledOnly)
     let scheduled = try await backend.transactions.fetchAll(filter: filter)
@@ -93,29 +101,55 @@ struct InsightInputBuilder: Sendable {
     let now = context.now  // gate: is this bill in the future, relative to the injected now?
     let conversionDate = Date()  // convert a future obligation at the CURRENT wall-clock rate (Rule 6)
 
+    // Phase 1 — gather each future candidate's contributing leg and build one
+    // request per candidate, index-aligned so each outcome maps back.
+    let candidates =
+      scheduled
+      .filter { $0.date >= now }
+      .compactMap { transaction -> (transaction: Transaction, leg: TransactionLeg)? in
+        guard
+          let leg = transaction.legs.first(where: { $0.type == .income || $0.type == .expense })
+        else { return nil }
+        return (transaction, leg)
+      }
+    let requests = candidates.map { candidate in
+      BatchConversionRequest(
+        amount: candidate.leg.amount, target: reportingCurrency, date: conversionDate)
+    }
+
+    // Phase 2 — one batched conversion. Cancellation throws here.
+    let outcomes = try await backend.conversionService.convertResultBatch(requests)
+
+    // Phase 3 — build a bill per candidate from its outcome, dropping the
+    // ones whose conversion failed (Rule 11).
     var bills: [ScheduledBill] = []
-    for transaction in scheduled {
-      guard transaction.date >= now else { continue }
-      guard let leg = transaction.legs.first(where: { $0.type == .income || $0.type == .expense })
-      else { continue }
+    bills.reserveCapacity(candidates.count)
+    for (candidate, outcome) in zip(candidates, outcomes) {
       let amount: InstrumentAmount
-      do {
-        amount = try await backend.conversionService.convertAmount(
-          leg.amount, to: reportingCurrency, on: conversionDate)
-      } catch {
+      switch outcome {
+      case .value(let converted):
+        amount = converted
+      case .knownZero:
+        // Rule 11: an unpriced/spam token has no meaningful reporting-currency
+        // value — drop the bill rather than surface a misleading "$0".
+        logger.error(
+          "Dropping scheduled bill \(candidate.transaction.id, privacy: .public): conversion resolved to a known zero"
+        )
+        continue
+      case .failure(let error):
         // Rule 11: a leg whose conversion fails is dropped, never guessed.
         logger.error(
-          "Dropping scheduled bill \(transaction.id, privacy: .public): conversion failed: \(error)"
+          "Dropping scheduled bill \(candidate.transaction.id, privacy: .public): conversion failed: \(error)"
         )
         continue
       }
       bills.append(
         ScheduledBill(
-          id: transaction.id,
-          date: transaction.date,
-          payee: transaction.payee,
+          id: candidate.transaction.id,
+          date: candidate.transaction.date,
+          payee: candidate.transaction.payee,
           amount: amount,
-          accountId: leg.accountId))
+          accountId: candidate.leg.accountId))
     }
     return bills
   }

@@ -27,6 +27,8 @@ struct TransactionPage: Sendable, Equatable {
   let priorBalance: InstrumentAmount?
   let totalCount: Int?
 
+  // MARK: - Running balances
+
   /// Computes the running balance after each transaction, converting each leg
   /// to the target instrument. Transactions must be ordered newest-first (as
   /// returned by the repository). `priorBalance` is the account balance
@@ -43,8 +45,8 @@ struct TransactionPage: Sendable, Equatable {
   ///   1. Walk every leg once to enumerate the unique source instruments
   ///      that need a rate.
   ///   2. Fetch one rate per instrument from `conversionService` in a single
-  ///      `TaskGroup` batch — the parent only suspends once for the whole
-  ///      batch, regardless of how many instruments are involved.
+  ///      `convertResultBatch` call — the parent only suspends once for the
+  ///      whole batch, regardless of how many instruments are involved.
   ///   3. Apply rates per leg synchronously. For all-target-instrument data
   ///      (the common scheduled / native-account case) phase 1 yields an
   ///      empty set, phase 2 is a no-op, and phase 3 has zero suspension
@@ -89,6 +91,8 @@ struct TransactionPage: Sendable, Equatable {
       prefetched: prefetched)
   }
 
+  // MARK: - Rate prefetch
+
   /// Outcome of a single per-instrument rate prefetch. Sendable so it can
   /// flow out of a `TaskGroup` child task.
   ///
@@ -119,66 +123,79 @@ struct TransactionPage: Sendable, Equatable {
     targetInstrument: Instrument,
     conversionService: InstrumentConversionService
   ) async -> PrefetchedRates {
-    var sources: Set<Instrument> = []
+    var sources: [Instrument] = []
+    var seen: Set<Instrument> = []
     for transaction in transactions {
-      for leg in transaction.legs where leg.instrument != targetInstrument {
-        sources.insert(leg.instrument)
+      for leg in transaction.legs
+      where leg.instrument != targetInstrument && seen.insert(leg.instrument).inserted {
+        sources.append(leg.instrument)
       }
     }
     if sources.isEmpty {
       return PrefetchedRates(rates: [:], knownZero: [], failures: [:])
     }
 
+    // One rate per UNIQUE source instrument: a 1-unit `convertResult`
+    // request per instrument, resolved in a single batched hop. `sources`
+    // preserves discovery order so each outcome maps back to its
+    // instrument by index. `convertResult` (not `convert`) so the
+    // `.knownZero` outcome (an `.unpriced` / `.spam` crypto token) stays an
+    // intentional zero rather than a real rate or a failure — issue #790: a
+    // spam ERC-20 with a copied ticker must contribute zero to the running
+    // balance, not poison it.
     let asOf = Date()
-    return await withTaskGroup(of: (Instrument, RatePrefetch).self) { group in
-      for instrument in sources {
-        group.addTask {
-          let outcome = await fetchOneRate(
-            for: instrument,
-            targetInstrument: targetInstrument,
-            asOf: asOf,
-            conversionService: conversionService)
-          return (instrument, outcome)
-        }
-      }
-      var rates: [Instrument: Decimal] = [:]
-      var knownZero: Set<Instrument> = []
-      var failures: [Instrument: String] = [:]
-      for await (instrument, outcome) in group {
-        switch outcome {
-        case .rate(let rate): rates[instrument] = rate
-        case .knownZero: knownZero.insert(instrument)
-        case .failure(let description): failures[instrument] = description
-        }
-      }
-      return PrefetchedRates(rates: rates, knownZero: knownZero, failures: failures)
+    let requests = sources.map { instrument in
+      BatchConversionRequest(
+        amount: InstrumentAmount(quantity: Decimal(1), instrument: instrument),
+        target: targetInstrument,
+        date: asOf)
     }
+    let outcomes: [BatchConversionOutcome]
+    do {
+      outcomes = try await conversionService.convertResultBatch(requests)
+    } catch {
+      // Cancellation is the only throw from `convertResultBatch`. The
+      // surrounding `withRunningBalances` is non-throwing and the running
+      // balance is best-effort, so degrade every source to a failure —
+      // each affected row blanks per Rule 11, same as if its rate fetch
+      // had failed.
+      var failures: [Instrument: String] = [:]
+      for instrument in sources { failures[instrument] = error.localizedDescription }
+      return PrefetchedRates(rates: [:], knownZero: [], failures: failures)
+    }
+
+    var rates: [Instrument: Decimal] = [:]
+    var knownZero: Set<Instrument> = []
+    var failures: [Instrument: String] = [:]
+    for (instrument, outcome) in zip(sources, outcomes) {
+      let prefetch = ratePrefetch(
+        from: outcome, instrument: instrument, targetInstrument: targetInstrument)
+      switch prefetch {
+      case .rate(let rate): rates[instrument] = rate
+      case .knownZero: knownZero.insert(instrument)
+      case .failure(let description): failures[instrument] = description
+      }
+    }
+    return PrefetchedRates(rates: rates, knownZero: knownZero, failures: failures)
   }
 
-  /// Fetch the conversion outcome for a single source instrument. Use
-  /// `convertResult` rather than `convert` so the `.knownZero` outcome
-  /// (an `.unpriced` / `.spam` crypto token) is preserved as an
-  /// intentional zero rather than being misapplied as a real rate or
-  /// thrown as a failure. Issue #790: a spam ERC-20 with a copied
-  /// ticker must contribute zero to the running balance, not poison it.
-  private static func fetchOneRate(
-    for instrument: Instrument,
-    targetInstrument: Instrument,
-    asOf: Date,
-    conversionService: InstrumentConversionService
-  ) async -> RatePrefetch {
-    do {
-      let result = try await conversionService.convertResult(
-        InstrumentAmount(quantity: Decimal(1), instrument: instrument),
-        to: targetInstrument,
-        on: asOf)
-      switch result {
-      case .value(let amount):
-        return .rate(amount.quantity)
-      case .knownZero:
-        return .knownZero
-      }
-    } catch {
+  /// Fold one batch outcome into a `RatePrefetch` for `instrument`. A
+  /// `.value` carries the 1-unit conversion (i.e. the rate); a `.knownZero`
+  /// is an intentional zero (issue #790); a `.failure` logs once — per
+  /// instrument, not per affected leg (Rule 11 of
+  /// `guides/INSTRUMENT_CONVERSION_GUIDE.md`) — and blanks every row with a
+  /// leg in that instrument.
+  private static func ratePrefetch(
+    from outcome: BatchConversionOutcome,
+    instrument: Instrument,
+    targetInstrument: Instrument
+  ) -> RatePrefetch {
+    switch outcome {
+    case .value(let amount):
+      return .rate(amount.quantity)
+    case .knownZero:
+      return .knownZero
+    case .failure(let error):
       transactionLogger.warning(
         """
         Failed to fetch rate \(instrument.id, privacy: .public) → \
@@ -190,6 +207,8 @@ struct TransactionPage: Sendable, Equatable {
       return .failure(error.localizedDescription)
     }
   }
+
+  // MARK: - Running-balance accumulation
 
   private static func accumulateRunningBalances(
     transactions: [Transaction],
@@ -291,6 +310,8 @@ struct TransactionPage: Sendable, Equatable {
     }
     return .success(legs)
   }
+
+  // MARK: - Display-amount computation
 
   /// Picks the amount to display on a row: per-account sum when viewing an
   /// account, per-earmark sum when viewing an earmark, otherwise transfers
