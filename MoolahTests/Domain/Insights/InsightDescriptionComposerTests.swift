@@ -183,4 +183,58 @@ struct InsightDescriptionComposerTests {
       ])
     #expect(text == "Dining now makes up 35% of your spending, up 8 pts.")
   }
+
+  @Test
+  func upcomingBillWarningWithBillReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .upcomingBillWarning, title: "Low balance coming up",
+      facts: [
+        InsightFact("Lowest projected", "$120.00"), InsightFact("On", "Jun 15"),
+        InsightFact("Upcoming bill", "Rent $1,500.00"),
+      ])
+    #expect(text == "Your balance is set to dip to $120.00 around Jun 15, after Rent $1,500.00.")
+  }
+
+  @Test
+  func upcomingBillWarningWithoutBillReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .upcomingBillWarning, title: "Low balance coming up",
+      facts: [InsightFact("Lowest projected", "$120.00"), InsightFact("On", "Jun 15")])
+    #expect(text == "Your balance is set to dip to $120.00 around Jun 15.")
+  }
+
+  @Test
+  func projectedMonthEndBalanceReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .projectedMonthEndBalance, title: "On track to end the month around $3,200",
+      facts: [InsightFact("Projected balance", "$3,200")])
+    #expect(text == "You're on track to finish the month with about $3,200.")
+  }
+
+  @Test
+  func savingsRateTrendRisingReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .savingsRateTrend, title: "Your savings rate is climbing",
+      facts: [InsightFact("Current savings rate", "18%"), InsightFact("Direction", "Rising")])
+    #expect(text == "Your savings rate is climbing — you're now saving 18% of your income.")
+  }
+
+  @Test
+  func savingsRateTrendFallingReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .savingsRateTrend, title: "Your savings rate is slipping",
+      facts: [InsightFact("Current savings rate", "9%"), InsightFact("Direction", "Falling")])
+    #expect(text == "Your savings rate has slipped to 9% of your income.")
+  }
+
+  @Test
+  func runwayEstimateReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .runwayEstimate, title: "4 months of runway",
+      facts: [
+        InsightFact("Available funds", "$8,000.00"), InsightFact("Monthly burn", "$2,000.00"),
+        InsightFact("Runway", "4 months"),
+      ])
+    #expect(text == "At about $2,000.00 a month, your $8,000.00 would cover roughly 4 months.")
+  }
 }
