@@ -104,7 +104,8 @@ extension InsightStore {
     narrator: any InsightNarrating
   ) async -> String? {
     let insight = scored.insight
-    let request = NarrationRequest.singleInsight(title: insight.title, facts: insight.facts)
+    let request = NarrationRequest.singleInsight(
+      kind: insight.kind, title: insight.title, facts: insight.facts)
     var latest = insight.title
     do {
       for try await snapshot in narrator.narrate(request) {

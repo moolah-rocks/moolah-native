@@ -24,8 +24,8 @@ extension TemplateNarrator: InsightNarrating {
 extension TemplateNarrator {
   private func compose(_ request: NarrationRequest) -> String {
     switch request {
-    case let .singleInsight(title, _):
-      return title
+    case let .singleInsight(kind, title, facts):
+      return InsightDescriptionComposer.compose(kind: kind, title: title, facts: facts)
     }
   }
 }

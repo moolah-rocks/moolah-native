@@ -5,14 +5,14 @@ import Foundation
 /// (zero-hallucination seam, issue #1042).
 enum NarrationRequest: Sendable, Hashable {
   /// A single insight to narrate in one or two sentences.
-  case singleInsight(title: String, facts: [InsightFact])
+  case singleInsight(kind: InsightKind, title: String, facts: [InsightFact])
 
   /// Every fact across the request, in presentation order. Used by the numeric
   /// provenance guard to verify that all numbers in the generated text were
   /// supplied verbatim here — never invented by the model.
   var allFacts: [InsightFact] {
     switch self {
-    case .singleInsight(_, let facts):
+    case .singleInsight(_, _, let facts):
       return facts
     }
   }
@@ -22,7 +22,7 @@ enum NarrationRequest: Sendable, Hashable {
   /// the title (not the facts) must still be treated as grounded.
   var groundingTitle: String {
     switch self {
-    case .singleInsight(let title, _):
+    case .singleInsight(_, let title, _):
       return title
     }
   }
