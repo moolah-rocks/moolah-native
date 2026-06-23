@@ -275,6 +275,22 @@ struct StockPriceServiceTests {
     #expect(results.last?.price == dec("38.60"))
   }
 
+  // MARK: - UTC day-series carry-forward
+
+  @Test
+  func rangeCarriesForwardOverWeekendUTC() async throws {
+    // BHP closes Fri 04-10 at 38.25 and Sat 04-11 at 38.60; Sun 04-12 has no
+    // close and carries forward. Asserts the shared `Calendar.utc` day walk
+    // emits exactly the three contiguous UTC day labels (04-10/04-11/04-12)
+    // regardless of host zone — the day stepping must not drift a day.
+    let service = try makeService(responses: ["BHP.AX": bhpResponse()])
+    _ = try await service.price(ticker: "BHP.AX", on: date("2026-04-07"))
+    let series = try await service.prices(
+      ticker: "BHP.AX", in: date("2026-04-10")...date("2026-04-12"))
+    #expect(series.map(\.date) == [date("2026-04-10"), date("2026-04-11"), date("2026-04-12")])
+    #expect(series.map(\.price) == [dec("38.25"), dec("38.60"), dec("38.60")])
+  }
+
   // MARK: - Multiple tickers
 
   @Test
