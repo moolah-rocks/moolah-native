@@ -54,6 +54,14 @@ extension CryptoPriceService {
   /// for sharing, and awaits the result with cooperative-cancellation
   /// forwarding. The coalescing key is the token id — callers must ensure
   /// they only issue one window fetch at a time per token.
+  ///
+  /// **Cancellation asymmetry (intentional):** a coalesced *subscriber*
+  /// (second+ caller that awaits `inFlight.task.value`) can be cancelled by
+  /// its own task tree — that cancellation stops its wait and re-throws
+  /// `CancellationError` to the subscriber only. It does **not** propagate to
+  /// the owner task, which continues running so that other subscribers sharing
+  /// the same fetch are unaffected. Only the owner's own
+  /// `withTaskCancellationHandler` can cancel the underlying network request.
   func fetchWindowCoalesced(
     instrument: Instrument,
     mapping: CryptoProviderMapping,
@@ -62,6 +70,10 @@ extension CryptoPriceService {
     let tokenId = instrument.id
     if let inFlight = extensionTasks[tokenId] {
       do {
+        // Cancellation asymmetry: if *this* subscriber's task is cancelled,
+        // Swift surfaces CancellationError here and we re-throw it below,
+        // stopping only this subscriber's wait. The owner task keeps running
+        // so other coalesced callers are not affected — see function doc.
         try await inFlight.task.value
       } catch is CancellationError {
         throw CancellationError()

@@ -50,13 +50,11 @@ func cappedToYesterday(
     return date
   }
   let components = local.dateComponents([.year, .month, .day], from: yesterdayLocal)
-  var utc = Calendar(identifier: .gregorian)
-  utc.timeZone = TimeZone(identifier: "UTC") ?? .current
   var noonComponents = components
   noonComponents.hour = 12
   noonComponents.minute = 0
   noonComponents.second = 0
-  guard let yesterdayLabelAtUTCNoon = utc.date(from: noonComponents) else {
+  guard let yesterdayLabelAtUTCNoon = Calendar.utc.date(from: noonComponents) else {
     return min(date, yesterdayLocal)
   }
   return min(date, yesterdayLabelAtUTCNoon)

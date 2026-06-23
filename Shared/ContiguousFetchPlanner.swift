@@ -21,19 +21,6 @@ enum ContiguousFetchPlanner {
     let forwardBuffer: Int
   }
 
-  /// Shared formatter for `addingDays` — `[.withFullDate]`, UTC. Hoisted to a
-  /// static so the hot per-window loop does not allocate an
-  /// `ISO8601DateFormatter` on every call. `ISO8601DateFormatter`'s
-  /// `date(from:)` / `string(from:)` are documented thread-safe and the
-  /// formatter is configured once and never mutated, so `nonisolated(unsafe)`
-  /// is sound here.
-  nonisolated(unsafe) private static let dateFormatter: ISO8601DateFormatter = {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withFullDate]
-    formatter.timeZone = TimeZone.utc
-    return formatter
-  }()
-
   /// Returns the next fetch window to issue, or `nil` when the requested date
   /// is already inside `[earliest, latest]` (read via prior-trading-day
   /// fallback, no fetch needed).
@@ -77,11 +64,14 @@ enum ContiguousFetchPlanner {
   /// month and year boundaries correctly. Never use raw `Int32 ± n` on a
   /// `DateKey` — the encoding is not contiguous across month ends.
   static func addingDays(_ days: Int, to key: Int32) -> Int32 {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withFullDate]
+    formatter.timeZone = TimeZone.utc
     let iso = DateKey.isoString(key)
     guard
-      let date = dateFormatter.date(from: iso),
+      let date = formatter.date(from: iso),
       let shifted = Calendar.utc.date(byAdding: .day, value: days, to: date),
-      let result = DateKey.from(isoString: dateFormatter.string(from: shifted))
+      let result = DateKey.from(isoString: formatter.string(from: shifted))
     else { return key }
     return result
   }
