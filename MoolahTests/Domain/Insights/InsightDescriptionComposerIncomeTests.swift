@@ -44,6 +44,18 @@ struct InsightDescriptionComposerIncomeTests {
   }
 
   @Test
+  func missingPaycheckAlertSingularDayReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .missingPaycheckAlert, title: "Expected pay hasn't arrived",
+      facts: [
+        InsightFact("Source", "Acme Corp"), InsightFact("Expected", "Jun 15"),
+        InsightFact("Days overdue", "1"), InsightFact("Typical amount", "$3,500.00"),
+      ])
+    #expect(
+      text == "Your Acme Corp paycheck of around $3,500.00 was expected Jun 15 and is 1 day late.")
+  }
+
+  @Test
   func windfallIncomeReadsClearly() {
     let text = InsightDescriptionComposer.compose(
       kind: .windfallIncome, title: "Larger-than-usual deposit",

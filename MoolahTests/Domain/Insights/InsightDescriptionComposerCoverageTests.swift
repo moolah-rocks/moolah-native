@@ -40,6 +40,30 @@ struct InsightDescriptionComposerCoverageTests {
   }
 
   @Test
+  func lapsedMerchantSingularDayReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .lapsedMerchant, title: "No recent payments to Corner Cafe",
+      facts: [InsightFact("Merchant", "Corner Cafe"), InsightFact("Days since last", "1")])
+    #expect(text == "You haven't paid Corner Cafe in 1 day.")
+  }
+
+  @Test
+  func uncategorizedBacklogSingularReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .uncategorizedBacklog, title: "1 transactions need a category",
+      facts: [InsightFact("Uncategorized", "1")])
+    #expect(text == "You've got 1 transaction waiting for a category.")
+  }
+
+  @Test
+  func unreconciledTransfersSingularReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .unreconciledTransfers, title: "1 transfers to review and merge",
+      facts: [InsightFact("Pending transfers", "1")])
+    #expect(text == "There is 1 possible transfer to review and merge.")
+  }
+
+  @Test
   func weekendSpendSkewReadsClearly() {
     let text = InsightDescriptionComposer.compose(
       kind: .weekendSpendSkew, title: "Weekends are your big spend days",

@@ -3,7 +3,7 @@ import Testing
 @testable import Moolah
 
 @Suite("InsightDescriptionComposer – Savings & Investments")
-struct InsightSavingsInvestmentsTests {
+struct InsightDescriptionComposerSavingsTests {
   @Test
   func idleCashAlertReadsClearly() {
     let text = InsightDescriptionComposer.compose(
@@ -29,6 +29,14 @@ struct InsightSavingsInvestmentsTests {
         InsightFact("Transactions", "47"),
       ])
     #expect(text == "You paid $120.00 in fees over the past year, across 47 charges.")
+  }
+
+  @Test
+  func feeSpendSingularChargeReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .feeSpend, title: "You paid $5.00 in fees",
+      facts: [InsightFact("Annual fees", "-$5.00"), InsightFact("Transactions", "1")])
+    #expect(text == "You paid $5.00 in fees over the past year, across 1 charge.")
   }
 
   @Test

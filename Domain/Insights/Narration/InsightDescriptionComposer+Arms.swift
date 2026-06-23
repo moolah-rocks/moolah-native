@@ -26,14 +26,16 @@ extension InsightDescriptionComposer {
       let days = facts.value("Days since last")
     else { return title }
     return
-      "You're still paying \(monthly) a month for \(merchant), but there hasn't been a charge in \(days) days."
+      "You're still paying \(monthly) a month for \(merchant), but there hasn't been a charge in \(days) \(plural(days, "day"))."
   }
   static func subscriptionOverspend(title: String, facts: FactLookup) -> String {
     guard let count = facts.value("Active subscriptions"),
       let monthly = facts.value("Monthly subscriptions"),
       let share = facts.value("Share of income")
     else { return title }
-    return "Your \(count) subscriptions add up to \(monthly) a month — \(share) of your income."
+    let verb = count == "1" ? "adds" : "add"
+    return
+      "Your \(count) \(plural(count, "subscription")) \(verb) up to \(monthly) a month — \(share) of your income."
   }
   static func largeTransactionAnomaly(title: String, facts: FactLookup) -> String {
     guard let amount = facts.value("Amount"), let merchant = facts.value("Merchant"),
@@ -145,7 +147,7 @@ extension InsightDescriptionComposer {
 
   static func feeSpend(title: String, facts: FactLookup) -> String {
     guard let transactions = facts.value("Transactions") else { return title }
-    return "\(title) over the past year, across \(transactions) charges."
+    return "\(title) over the past year, across \(transactions) \(plural(transactions, "charge"))."
   }
 
   static func netWorthMilestone(title: String, facts: FactLookup) -> String {
@@ -197,7 +199,7 @@ extension InsightDescriptionComposer {
       let expected = facts.value("Expected"), let overdue = facts.value("Days overdue")
     else { return title }
     return
-      "Your \(source) paycheck of around \(amount) was expected \(expected) and is \(overdue) days late."
+      "Your \(source) paycheck of around \(amount) was expected \(expected) and is \(overdue) \(plural(overdue, "day")) late."
   }
   static func windfallIncome(title: String, facts: FactLookup) -> String {
     guard let amount = facts.value("Amount"), let source = facts.value("Source"),
@@ -220,16 +222,17 @@ extension InsightDescriptionComposer {
   }
   static func uncategorizedBacklog(title: String, facts: FactLookup) -> String {
     guard let count = facts.value("Uncategorized") else { return title }
-    return "You've got \(count) transactions waiting for a category."
+    return "You've got \(count) \(plural(count, "transaction")) waiting for a category."
   }
   static func unreconciledTransfers(title: String, facts: FactLookup) -> String {
     guard let count = facts.value("Pending transfers") else { return title }
-    return "There are \(count) possible transfers to review and merge."
+    let verb = count == "1" ? "is" : "are"
+    return "There \(verb) \(count) possible \(plural(count, "transfer")) to review and merge."
   }
   static func lapsedMerchant(title: String, facts: FactLookup) -> String {
     guard let merchant = facts.value("Merchant"), let days = facts.value("Days since last")
     else { return title }
-    return "You haven't paid \(merchant) in \(days) days."
+    return "You haven't paid \(merchant) in \(days) \(plural(days, "day"))."
   }
   static func weekendSpendSkew(title: String, facts: FactLookup) -> String {
     guard let weekend = facts.value("Avg weekend day"), let weekday = facts.value("Avg weekday")

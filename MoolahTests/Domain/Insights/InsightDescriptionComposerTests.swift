@@ -85,6 +85,30 @@ struct InsightDescriptionComposerTests {
   }
 
   @Test
+  func subscriptionOverspendSingularReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .subscriptionOverspend, title: "Subscriptions are 5% of income",
+      facts: [
+        InsightFact("Monthly subscriptions", "$40.00"),
+        InsightFact("Share of income", "5%"), InsightFact("Active subscriptions", "1"),
+      ])
+    #expect(text == "Your 1 subscription adds up to $40.00 a month — 5% of your income.")
+  }
+
+  @Test
+  func subscriptionCancellationCandidateSingularDayReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .subscriptionCancellationCandidate, title: "Still paying for Gym",
+      facts: [
+        InsightFact("Merchant", "Gym"), InsightFact("Monthly cost", "$40.00"),
+        InsightFact("Days since last", "1"),
+      ])
+    #expect(
+      text == "You're still paying $40.00 a month for Gym, but there hasn't been a charge in 1 day."
+    )
+  }
+
+  @Test
   func largeTransactionAnomalyReadsClearly() {
     let text = InsightDescriptionComposer.compose(
       kind: .largeTransactionAnomaly, title: "Unusually large Dining charge",
