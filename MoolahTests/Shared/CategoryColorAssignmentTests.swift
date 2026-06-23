@@ -35,12 +35,15 @@ struct CategoryColorAssignmentTests {
     #expect(assignment.color(for: second) == CategoryColorAssignment.palette[1])
   }
 
-  @Test("The palette wraps once it is exhausted")
-  func paletteWraps() {
+  @Test("Categories beyond the palette fall back to gray")
+  func overflowCategoriesAreGray() {
     let count = CategoryColorAssignment.palette.count
-    let ids = (0...count).map { _ in UUID() }  // count + 1 distinct ids
+    let ids = (0..<(count + 3)).map { _ in UUID() }  // three past the palette
     let assignment = CategoryColorAssignment(orderedCategoryIds: ids)
-    #expect(assignment.color(for: ids[count]) == CategoryColorAssignment.palette[0])
+    #expect(assignment.color(for: ids[count - 1]) == CategoryColorAssignment.palette[count - 1])
+    for overflowIndex in count..<ids.count {
+      #expect(assignment.color(for: ids[overflowIndex]) == .gray)
+    }
   }
 
   @Test("A category keeps the same color however often it appears")
