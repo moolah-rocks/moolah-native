@@ -249,10 +249,32 @@ extension InsightDescriptionComposer {
     let dir = changeIsIncrease(change) ? "up" : "down"
     return "\(category) now makes up \(share) of your spending, \(dir) \(unsigned(change))."
   }
-  static func upcomingBillWarning(title: String, facts: FactLookup) -> String { title }
-  static func projectedMonthEndBalance(title: String, facts: FactLookup) -> String { title }
-  static func savingsRateTrend(title: String, facts: FactLookup) -> String { title }
-  static func runwayEstimate(title: String, facts: FactLookup) -> String { title }
+  static func upcomingBillWarning(title: String, facts: FactLookup) -> String {
+    guard let lowest = facts.value("Lowest projected"), let date = facts.value("On")
+    else { return title }
+    if let bill = facts.value("Upcoming bill") {
+      return "Your balance is set to dip to \(lowest) around \(date), after \(bill)."
+    }
+    return "Your balance is set to dip to \(lowest) around \(date)."
+  }
+  static func projectedMonthEndBalance(title: String, facts: FactLookup) -> String {
+    guard let balance = facts.value("Projected balance") else { return title }
+    return "You're on track to finish the month with about \(balance)."
+  }
+  static func savingsRateTrend(title: String, facts: FactLookup) -> String {
+    guard let rate = facts.value("Current savings rate"), let direction = facts.value("Direction")
+    else { return title }
+    if direction == "Rising" {
+      return "Your savings rate is climbing — you're now saving \(rate) of your income."
+    }
+    return "Your savings rate has slipped to \(rate) of your income."
+  }
+  static func runwayEstimate(title: String, facts: FactLookup) -> String {
+    guard let burn = facts.value("Monthly burn"), let funds = facts.value("Available funds"),
+      let runway = facts.value("Runway")
+    else { return title }
+    return "At about \(burn) a month, your \(funds) would cover roughly \(runway)."
+  }
   static func earmarkBurndownProjection(title: String, facts: FactLookup) -> String { title }
   static func earmarkUnderspend(title: String, facts: FactLookup) -> String { title }
   static func savingsGoalETA(title: String, facts: FactLookup) -> String { title }
