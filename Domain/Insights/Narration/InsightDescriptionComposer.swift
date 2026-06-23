@@ -165,13 +165,40 @@ extension InsightDescriptionComposer {
 // MARK: - Arm funcs (filled in by later tasks; each returns `title` until then)
 
 extension InsightDescriptionComposer {
-  static func newRecurringDetected(title: String, facts: FactLookup) -> String { title }
-  static func subscriptionPriceHike(title: String, facts: FactLookup) -> String { title }
-  static func duplicateSubscription(title: String, facts: FactLookup) -> String { title }
-  static func subscriptionCancellationCandidate(title: String, facts: FactLookup) -> String {
-    title
+  static func newRecurringDetected(title: String, facts: FactLookup) -> String {
+    guard let merchant = facts.value("Merchant"),
+      let monthly = facts.value("Monthly equivalent")
+    else { return title }
+    return "You've started a new \(merchant) subscription — about \(monthly) a month."
   }
-  static func subscriptionOverspend(title: String, facts: FactLookup) -> String { title }
+  static func subscriptionPriceHike(title: String, facts: FactLookup) -> String {
+    guard let merchant = facts.value("Merchant"), let newCharge = facts.value("New charge"),
+      let extra = facts.value("Extra per month"), let increase = facts.value("Increase")
+    else { return title }
+    return
+      "\(merchant) now costs \(newCharge) a month — \(extra) more than before, a \(increase) rise."
+  }
+  static func duplicateSubscription(title: String, facts: FactLookup) -> String {
+    guard let category = facts.value("Category"), let services = facts.value("Services"),
+      let combined = facts.value("Combined monthly")
+    else { return title }
+    return
+      "You're paying for overlapping \(category) subscriptions (\(services)) — \(combined) a month combined."
+  }
+  static func subscriptionCancellationCandidate(title: String, facts: FactLookup) -> String {
+    guard let merchant = facts.value("Merchant"), let monthly = facts.value("Monthly cost"),
+      let days = facts.value("Days since last")
+    else { return title }
+    return
+      "You're still paying \(monthly) a month for \(merchant), but there hasn't been a charge in \(days) days."
+  }
+  static func subscriptionOverspend(title: String, facts: FactLookup) -> String {
+    guard let count = facts.value("Active subscriptions"),
+      let monthly = facts.value("Monthly subscriptions"),
+      let share = facts.value("Share of income")
+    else { return title }
+    return "Your \(count) subscriptions add up to \(monthly) a month — \(share) of your income."
+  }
   static func largeTransactionAnomaly(title: String, facts: FactLookup) -> String { title }
   static func newMerchantAlert(title: String, facts: FactLookup) -> String { title }
   static func unusualDaySpend(title: String, facts: FactLookup) -> String { title }
