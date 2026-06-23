@@ -40,6 +40,21 @@ struct LiquidityInsightTests {
   }
 
   @Test
+  func runwaySingularMonthReadsGrammatically() throws {
+    let balances = [
+      DailyBalance(date: InsightTestSupport.now, balance: InsightTestSupport.amount(2000))
+    ]
+    let monthly = ["202603", "202604", "202605"].map {
+      InsightTestSupport.monthly(month: $0, income: 1000, expense: 3000)
+    }
+    // $2,000 liquid ÷ $2,000/mo burn = 1.0 month → singular noun, not "1 months".
+    let runway = try #require(
+      LiquidityInsights.runway(dailyBalances: balances, monthly: monthly, context: context).first)
+    #expect(runway.title == "Only 1 month of runway left")
+    #expect(runway.facts.contains { $0.label == "Runway" && $0.value == "1 month" })
+  }
+
+  @Test
   func runwayAttachesBalanceForecastChart() throws {
     let balances = [
       InsightTestSupport.balance(offsetDays: 10, total: 12000, forecast: false),

@@ -16,7 +16,15 @@ struct AdditionalInsightTests {
     let insights = DataQualityInsights.uncategorizedBacklog(input)
     let nudge = try #require(insights.first)
     #expect(nudge.kind == .uncategorizedBacklog)
-    #expect(nudge.title.contains("30"))
+    #expect(nudge.title == "30 transactions need a category")
+  }
+
+  @Test
+  func uncategorizedBacklogSingularReadsGrammatically() throws {
+    let input = InsightInput(context: context, uncategorizedTransactionCount: 1)
+    let nudge = try #require(
+      DataQualityInsights.uncategorizedBacklog(input, minimumCount: 1).first)
+    #expect(nudge.title == "1 transaction needs a category")
   }
 
   @Test
@@ -33,6 +41,17 @@ struct AdditionalInsightTests {
     let insight = try #require(DataQualityInsights.unreconciledTransfers(input).first)
     #expect(insight.kind == .unreconciledTransfers)
     #expect(insight.actionability == .act)
+    #expect(insight.title == "5 transfers to review and merge")
+  }
+
+  @Test
+  func unreconciledTransfersSingularReadsGrammatically() throws {
+    let input = InsightInput(
+      context: context, pendingTransferCount: 1,
+      oldestPendingTransferDate: InsightTestSupport.daysAgo(20))
+    let insight = try #require(
+      DataQualityInsights.unreconciledTransfers(input, minimumCount: 1).first)
+    #expect(insight.title == "1 transfer to review and merge")
   }
 
   // MARK: - Account groups

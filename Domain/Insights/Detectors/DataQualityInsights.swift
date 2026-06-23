@@ -17,7 +17,8 @@ enum DataQualityInsights {
       Insight(
         id: "\(InsightKind.uncategorizedBacklog.rawValue):\(monthKey(context))",
         kind: .uncategorizedBacklog,
-        title: "\(count) transactions need a category",
+        title: count == 1
+          ? "1 transaction needs a category" : "\(count) transactions need a category",
         date: context.now,
         framing: .neutral,
         actionability: .review,
@@ -39,7 +40,8 @@ enum DataQualityInsights {
       Insight(
         id: "\(InsightKind.unreconciledTransfers.rawValue):\(monthKey(context))",
         kind: .unreconciledTransfers,
-        title: "\(count) transfers to review and merge",
+        title: count == 1
+          ? "1 transfer to review and merge" : "\(count) transfers to review and merge",
         date: context.now,
         framing: .neutral,
         actionability: .act,

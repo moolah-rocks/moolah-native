@@ -111,9 +111,14 @@ enum LiquidityInsights {
 
   private static func monthsText(_ months: Double) -> String {
     if months >= 24 {
+      // Always ≥ 2.0 years in this branch, so "years" is never singular.
       return "\((months / 12).formatted(.number.precision(.fractionLength(1)))) years"
     }
-    return "\(months.formatted(.number.precision(.fractionLength(0)))) months"
+    // Derive the displayed number and the noun from the same rounded value so
+    // they never disagree at a half-month boundary (e.g. "1 month", not "1 months").
+    let whole = months.rounded()
+    return
+      "\(whole.formatted(.number.precision(.fractionLength(0)))) \(whole == 1 ? "month" : "months")"
   }
 
   private static func monthKey(_ context: InsightContext) -> String {
