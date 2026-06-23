@@ -4,7 +4,7 @@ import Foundation
 /// read and mutate. Abstracts only the common series state — NOT the
 /// per-service meta (stock's `instrument`, crypto's `symbol` /
 /// `firstTradedOn`), which the orchestration reaches through plugs.
-protocol PriceSeriesCache: Sendable, Equatable {
+protocol PriceSeriesCache: Sendable {
   /// Contiguous lower bound, ISO `YYYY-MM-DD`.
   var earliestDate: String { get set }
   /// Contiguous upper bound, ISO `YYYY-MM-DD`.

@@ -7,9 +7,9 @@ import OSLog
 /// `caches[instrumentKey]` PER KEY — never a whole-dict snapshot — which is
 /// what preserves the actors' concurrent-different-instrument re-entrancy
 /// contract (a snapshot/defer-writeback design would clobber a concurrent
-/// call's committed cache entry). The three genuine differences (provider
-/// fetch, quote denomination, optional first-trade floor) are plugs.
-protocol PriceSeriesOrchestrating: Actor {
+/// call's committed cache entry). The genuine per-service differences (provider
+/// fetch and the optional first-trade floor) are plugs.
+protocol PriceSeriesOrchestrating: Actor, Sendable {
   associatedtype Cache: PriceSeriesCache
 
   /// Per-instrument caches, keyed ticker / tokenId. Mutated per key by the
@@ -27,13 +27,11 @@ protocol PriceSeriesOrchestrating: Actor {
   /// Owns the single-client (stock) vs fallback-chain + coalescing (crypto)
   /// difference. Throws on genuine provider failure; rethrows `CancellationError`.
   func fetchAndMerge(instrumentKey: String, window: ClosedRange<Date>) async throws
-  /// Plug 2 — the instrument's quote denomination (stock: listing currency;
-  /// crypto: `.USD`). `nil` when unknown (cold cache).
-  func quote(for instrumentKey: String) -> Instrument?
-  /// Plug 3a — confirmed first-trade floor (`YYYY-MM-DD`); `nil` for stock.
+  /// Plug 2a — confirmed first-trade floor (`YYYY-MM-DD`); `nil` by default
+  /// (the no-floor case, e.g. stock).
   func firstTradeFloor(for instrumentKey: String) -> String?
-  /// Plug 3b — confirm+persist the floor on a no-error backward exhaustion;
-  /// no-op for stock.
+  /// Plug 2b — confirm+persist the floor on a no-error backward exhaustion;
+  /// a no-op by default (the no-floor case, e.g. stock).
   func confirmFirstTradeOnBackwardExhaustion(
     instrumentKey: String, lastFetchError: (any Error)?) async throws
 
@@ -45,6 +43,15 @@ protocol PriceSeriesOrchestrating: Actor {
 }
 
 extension PriceSeriesOrchestrating {
+  // MARK: - First-trade floor defaults (the no-floor case)
+
+  /// No first-trade floor by default; services with a floor (crypto) override.
+  func firstTradeFloor(for instrumentKey: String) -> String? { nil }
+  /// Nothing to confirm without a floor; services with one (crypto) override.
+  func confirmFirstTradeOnBackwardExhaustion(
+    instrumentKey: String, lastFetchError: (any Error)?
+  ) async throws {}
+
   // MARK: - Public orchestration
 
   /// Single price: cap → exact → hydrate-once → exact → floor-short-circuit →
@@ -84,7 +91,7 @@ extension PriceSeriesOrchestrating {
     return buildResultSeries(key: key, in: range)
   }
 
-  // MARK: - Shared internals (lifted verbatim, operating on self.caches[key])
+  // MARK: - Shared internals (operating on self.caches[key])
 
   private func exact(key: String, dateString: String) -> Decimal? {
     guard let dateKey = DateKey.from(isoString: dateString) else { return nil }
@@ -98,9 +105,9 @@ extension PriceSeriesOrchestrating {
     return cache.prices.floor(dateKey)
   }
 
-  /// In-range short-circuit (mirrors crypto `inRangeFallback`): when the date
-  /// sits inside `[earliest, latest]`, return the floor if present, else throw
-  /// `noPriceError` rather than re-fetch. `nil` ⇒ out of range, caller extends.
+  /// In-range short-circuit: when the date sits inside `[earliest, latest]`,
+  /// return the floor if present, else throw `noPriceError` rather than
+  /// re-fetch. `nil` ⇒ out of range, caller extends.
   private func inRangeResolution(key: String, dateString: String) throws -> Decimal? {
     guard let cache = caches[key],
       dateString >= cache.earliestDate, dateString <= cache.latestDate
@@ -120,8 +127,8 @@ extension PriceSeriesOrchestrating {
     return lower...max(lower, upper)
   }
 
-  /// Extend toward a single requested date, then resolve. Mirrors crypto
-  /// `extendContiguously` + `resolveAfterExtension`.
+  /// Extend the cache toward a single requested date through the bounded
+  /// window loop, then resolve to an exact / floor / in-range price or throw.
   private func extendAndResolve(
     key: String, date: Date, dateString: String
   ) async throws -> Decimal {
@@ -145,8 +152,7 @@ extension PriceSeriesOrchestrating {
   }
 
   /// Cover `[lowerKey, upperKey]` forward-then-backward, then surface the last
-  /// provider error if an endpoint is still uncovered. Mirrors crypto
-  /// `coverRangeContiguously`.
+  /// provider error if an endpoint is still uncovered.
   private func coverRange(key: String, lowerKey: Int32, upperKey: Int32) async throws {
     var lastError: (any Error)?
     for requestedKey in [upperKey, lowerKey] {
@@ -223,19 +229,20 @@ extension PriceSeriesOrchestrating {
     return lastError
   }
 
-  /// Carry-forward daily series over `range`, stepping with `Calendar.utc`
-  /// (the intentional stock fix). Non-trading gaps carry the last known close;
-  /// nothing is emitted before the first known close.
+  /// Carry-forward daily series over `range`, stepping with `Calendar.utc` so
+  /// the emitted day tokens stay zone-invariant. Non-trading gaps carry the
+  /// last known close; nothing is emitted before the first known close.
   private func buildResultSeries(
     key: String, in range: ClosedRange<Date>
   ) -> [(date: Date, price: Decimal)] {
+    let cache = caches[key]
     var results: [(date: Date, price: Decimal)] = []
     var lastKnownPrice: Decimal?
     var current = range.lowerBound
     while current <= range.upperBound {
       let dateString = dateFormatter.string(from: current)
       if let dateKey = DateKey.from(isoString: dateString),
-        let price = caches[key]?.prices.exact(dateKey)
+        let price = cache?.prices.exact(dateKey)
       {
         lastKnownPrice = price
         results.append((current, price))

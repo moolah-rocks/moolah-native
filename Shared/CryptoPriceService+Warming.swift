@@ -1,5 +1,3 @@
-// Shared/CryptoPriceService+Warming.swift
-
 import Foundation
 
 // MARK: - Background warming
@@ -32,7 +30,6 @@ extension CryptoPriceService {
     else { return .unavailable }
     let todayKey =
       DateKey.from(isoString: dateFormatter.string(from: now())) ?? upperKey
-    let config = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
 
     // Fast-path: if both endpoints are already within the cached range, there
     // is nothing to fetch. Mirrors the old `subRanges.isEmpty` early exit.
@@ -50,8 +47,7 @@ extension CryptoPriceService {
         instrument: instrument,
         mapping: mapping,
         requestedKey: requestedKey,
-        todayKey: todayKey,
-        config: config)
+        todayKey: todayKey)
       switch step {
       case .filled: filledAny = true
       case .cooledDown: return step
@@ -69,8 +65,7 @@ extension CryptoPriceService {
     instrument: Instrument,
     mapping: CryptoProviderMapping,
     requestedKey: Int32,
-    todayKey: Int32,
-    config: ContiguousFetchPlanner.Config
+    todayKey: Int32
   ) async -> WarmOutcome {
     let tokenId = instrument.id
     var guardSteps = 0
@@ -84,7 +79,7 @@ extension CryptoPriceService {
           latest: bounds.latest,
           requested: requestedKey,
           today: todayKey,
-          config: config)
+          config: plannerConfig)
       else { break warmLoop }  // endpoint already covered
       let before = bounds
       let fetchInterval = parseInterval(

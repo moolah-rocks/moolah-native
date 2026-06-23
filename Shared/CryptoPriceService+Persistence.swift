@@ -1,5 +1,3 @@
-// Shared/CryptoPriceService+Persistence.swift
-
 import Foundation
 import GRDB
 

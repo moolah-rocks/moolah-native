@@ -93,9 +93,6 @@ private actor FakeService: PriceSeriesOrchestrating {
   }
 
   // Plug 2
-  func quote(for instrumentKey: String) -> Instrument? { .USD }
-
-  // Plug 3
   func firstTradeFloor(for instrumentKey: String) -> String? {
     caches[instrumentKey]?.firstTradedOn ?? floors[instrumentKey]
   }
@@ -136,9 +133,7 @@ private func utcDay(_ iso: String) -> Date {
     components.day = parts[2]
   }
   components.hour = 12
-  var calendar = Calendar(identifier: .gregorian)
-  calendar.timeZone = .utc
-  return calendar.date(from: components) ?? Date(timeIntervalSince1970: 0)
+  return Calendar.utc.date(from: components) ?? Date(timeIntervalSince1970: 0)
 }
 
 @Suite("PriceSeriesOrchestrating")
@@ -239,6 +234,60 @@ struct PriceSeriesOrchestratingTests {
     formatter.formatOptions = [.withFullDate]
     formatter.timeZone = .utc
     return formatter.string(from: date)
+  }
+
+  /// A spread of zones either side of UTC: one strongly negative (the bug case
+  /// — a UTC instant read in a UTC-negative zone drifts into the prior day),
+  /// UTC itself, and two strongly positive. See `guides/DATE_TIME_GUIDE.md` §6.
+  private static let zones: [String] = [
+    "America/Los_Angeles",  // UTC-8 / -7
+    "UTC",
+    "Australia/Brisbane",  // UTC+10, no DST
+    "Pacific/Kiritimati",  // UTC+14, the extreme positive case
+  ]
+
+  @Test("prices() day tokens are zone-invariant under the canonical seam")
+  func resultSeriesDayTokensAreZoneInvariant() async throws {
+    // `prices(...)` is a NEW timezoneless producer: it emits `(date, price)`
+    // day tokens for a chart axis. The day tokens are noon-UTC anchored and are
+    // read back through the canonical `Calendar.utc` seam (as `buildResultSeries`
+    // and every consumer does). Decoding them through that seam must yield the
+    // SAME calendar day/month no matter what the process/runner zone is — this
+    // is the invariant that protects a UTC-negative reader from the off-by-one
+    // day drift the guide targets. (A bare noon-UTC *day* anchor rolls into the
+    // next day only at UTC+14, hence the seam, not an arbitrary calendar, is the
+    // contract for day-granularity tokens.)
+    let service = FakeService(wire: ["AAA": ["2026-04-20": Decimal(10)]], now: fixedNow)
+    let series = try await service.prices(
+      instrumentKey: "AAA", in: day("2026-04-20")...day("2026-04-22"))
+    let dates = series.map(\.date)
+    #expect(dates.count == 3)
+
+    let expected = ["2026-04-20", "2026-04-21", "2026-04-22"]
+    // The canonical seam reads the token identically in every process zone.
+    for (date, want) in zip(dates, expected) {
+      let parts = Calendar.utc.dateComponents([.year, .month, .day], from: date)
+      #expect(parts.year == 2026)
+      #expect(parts.month == 4)
+      #expect(
+        String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+          == want)
+    }
+
+    // The guide's negative-drift bug class: a calendar in any of the spread of
+    // zones from UTC-8 through UTC+10 must still read the same calendar day
+    // (noon-UTC survives the full UTC-12..+12 span at day granularity).
+    let dayInvariantZones = Self.zones.filter { $0 != "Pacific/Kiritimati" }
+    for zone in dayInvariantZones {
+      var calendar = Calendar(identifier: .gregorian)
+      calendar.timeZone = try #require(TimeZone(identifier: zone))
+      for (date, want) in zip(dates, expected) {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        let got = String(
+          format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+        #expect(got == want, "day drifted in \(zone)")
+      }
+    }
   }
 
   @Test
