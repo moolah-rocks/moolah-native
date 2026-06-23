@@ -11,7 +11,11 @@ struct CategoriesOverTimeCard: View {
   @State private var selectedDate: Date?
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    // Derive the colour assignment once per render so the chart's colour
+    // scale and the legend swatches resolve identical colours from a single
+    // source.
+    let colors = CategoryColorAssignment(orderedCategoryIds: entries.map(\.categoryId))
+    return VStack(alignment: .leading, spacing: 12) {
       VStack(alignment: .leading, spacing: 8) {
         VStack(alignment: .leading, spacing: 4) {
           Text("Expenses by Category Over Time")
@@ -40,9 +44,9 @@ struct CategoriesOverTimeCard: View {
         emptyState
       } else {
         ExpandableChart(title: "Expenses Over Time") {
-          chart
+          chart(colors: colors)
         }
-        legend
+        legend(colors: colors)
       }
     }
     .padding()
@@ -64,23 +68,9 @@ struct CategoriesOverTimeCard: View {
       .frame(height: 300)
   }
 
-  private var chart: some View {
+  private func chart(colors: CategoryColorAssignment) -> some View {
     Chart {
-      ForEach(entries) { entry in
-        let name = categoryLabel(for: entry.categoryId)
-        ForEach(entry.points) { point in
-          AreaMark(
-            x: .value("Month", point.monthDate),
-            y: .value(
-              "Amount",
-              showActualValues
-                ? Double(truncating: point.actualAmount as NSDecimalNumber) : point.percentage),
-            stacking: .standard
-          )
-          .foregroundStyle(by: .value("Category", name))
-        }
-      }
-
+      areaMarks
       if let selectedDate {
         RuleMark(x: .value("Selected", selectedDate))
           .foregroundStyle(.gray.opacity(0.5))
@@ -89,7 +79,7 @@ struct CategoriesOverTimeCard: View {
     }
     .chartForegroundStyleScale(
       domain: entries.map { categoryLabel(for: $0.categoryId) },
-      range: entries.map { categoryColor(for: $0.categoryId) }
+      range: entries.map { colors.color(for: $0.categoryId) }
     )
     .chartXAxis {
       AxisMarks(values: .automatic(desiredCount: 8)) { _ in
@@ -124,6 +114,23 @@ struct CategoriesOverTimeCard: View {
     .accessibilityLabel(chartAccessibilityLabel)
   }
 
+  @ChartContentBuilder private var areaMarks: some ChartContent {
+    ForEach(entries) { entry in
+      let name = categoryLabel(for: entry.categoryId)
+      ForEach(entry.points) { point in
+        AreaMark(
+          x: .value("Month", point.monthDate),
+          y: .value(
+            "Amount",
+            showActualValues
+              ? Double(truncating: point.actualAmount as NSDecimalNumber) : point.percentage),
+          stacking: .standard
+        )
+        .foregroundStyle(by: .value("Category", name))
+      }
+    }
+  }
+
   private var chartAccessibilityLabel: String {
     let base =
       "Stacked area chart showing expense categories over time in \(showActualValues ? "actual amounts" : "percentages")"
@@ -131,12 +138,12 @@ struct CategoriesOverTimeCard: View {
     return base + ". Some months may be incomplete; prices still loading."
   }
 
-  private var legend: some View {
+  private func legend(colors: CategoryColorAssignment) -> some View {
     LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 8) {
       ForEach(entries) { entry in
         HStack(spacing: 4) {
           Circle()
-            .fill(categoryColor(for: entry.categoryId))
+            .fill(colors.color(for: entry.categoryId))
             .frame(width: 10, height: 10)
           Text(categoryLabel(for: entry.categoryId))
             .font(.caption)
@@ -158,17 +165,6 @@ struct CategoriesOverTimeCard: View {
   private func categoryLabel(for id: UUID?) -> String {
     guard let id, let category = categories.by(id: id) else { return "Uncategorized" }
     return categories.path(for: category)
-  }
-
-  private static let chartPalette: [Color] = [
-    .chartBlue, .chartGreen, .chartOrange, .chartPurple, .chartRed, .chartTeal,
-    .chartIndigo, .chartPink, .chartMint, .chartCyan, .chartBrown, .chartYellow,
-  ]
-
-  private func categoryColor(for id: UUID?) -> Color {
-    guard let id else { return .gray }
-    let index = abs(id.hashValue) % Self.chartPalette.count
-    return Self.chartPalette[index]
   }
 }
 

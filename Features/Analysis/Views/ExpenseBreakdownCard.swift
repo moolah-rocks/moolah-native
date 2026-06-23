@@ -9,7 +9,12 @@ struct ExpenseBreakdownCard: View {
   @State private var selectedCategoryId: UUID?
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    // Derive the breakdown and its colour assignment once per render so the
+    // pie chart's colour scale and the legend swatches resolve identical
+    // colours from a single source, and `buildExpenseBreakdown` runs once.
+    let breakdown = filteredBreakdown
+    let colors = CategoryColorAssignment(orderedCategoryIds: breakdown.map(\.categoryId))
+    return VStack(alignment: .leading, spacing: 12) {
       VStack(alignment: .leading, spacing: 4) {
         Text("Expenses by Category")
           .font(.title2)
@@ -20,13 +25,13 @@ struct ExpenseBreakdownCard: View {
         }
       }
 
-      if filteredBreakdown.isEmpty {
+      if breakdown.isEmpty {
         emptyState
       } else {
         ExpandableChart(title: "Expenses by Category") {
-          pieChart
+          pieChart(breakdown, colors: colors)
         }
-        legendGrid
+        legendGrid(breakdown, colors: colors)
         breadcrumbs
       }
     }
@@ -49,8 +54,10 @@ struct ExpenseBreakdownCard: View {
       .padding(.vertical, 40)
   }
 
-  private var pieChart: some View {
-    Chart(filteredBreakdown, id: \.categoryId) { item in
+  private func pieChart(
+    _ breakdown: [ExpenseBreakdownWithPercentage], colors: CategoryColorAssignment
+  ) -> some View {
+    Chart(breakdown, id: \.categoryId) { item in
       SectorMark(
         angle: .value("Amount", Double(truncating: item.totalExpenses.quantity as NSDecimalNumber)),
         innerRadius: .ratio(0.5),
@@ -58,7 +65,7 @@ struct ExpenseBreakdownCard: View {
       )
       .foregroundStyle(by: .value("Category", categoryLabel(for: item.categoryId)))
       .annotation(position: .overlay) {
-        if item.percentage > 5 {  // Only show label if >5%
+        if item.percentage > 5 {
           Text("\(Int(item.percentage))%")
             .font(.caption)
             .fontWeight(.semibold)
@@ -71,6 +78,13 @@ struct ExpenseBreakdownCard: View {
         }
       }
     }
+    // Bind the sector colours to the same assignment legendGrid uses so the
+    // two always agree; without an explicit scale Swift Charts paints sectors
+    // from its own default palette by data order, which the legend can't match.
+    .chartForegroundStyleScale(
+      domain: breakdown.map { categoryLabel(for: $0.categoryId) },
+      range: breakdown.map { colors.color(for: $0.categoryId) }
+    )
     // The legendGrid below already lists each category with its colour
     // swatch and total, so the chart's built-in legend is redundant.
     .chartLegend(.hidden)
@@ -78,15 +92,17 @@ struct ExpenseBreakdownCard: View {
     .accessibilityLabel("Expense breakdown pie chart")
   }
 
-  private var legendGrid: some View {
+  private func legendGrid(
+    _ breakdown: [ExpenseBreakdownWithPercentage], colors: CategoryColorAssignment
+  ) -> some View {
     LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 8) {
-      ForEach(filteredBreakdown, id: \.categoryId) { item in
+      ForEach(breakdown, id: \.categoryId) { item in
         Button {
           handleCategoryTap(item.categoryId)
         } label: {
           HStack {
             Circle()
-              .fill(categoryColor(for: item.categoryId))
+              .fill(colors.color(for: item.categoryId))
               .frame(width: 12, height: 12)
             Text(categoryLabel(for: item.categoryId))
               .font(.caption)
@@ -127,23 +143,12 @@ struct ExpenseBreakdownCard: View {
   }
 
   private func categoryLabel(for id: UUID?) -> String {
-    guard let id = id, let category = categories.by(id: id) else { return "Uncategorized" }
+    guard let id, let category = categories.by(id: id) else { return "Uncategorized" }
     return categories.path(for: category)
   }
 
-  /// Fixed palette of system-compatible colors for chart segments.
-  private static let chartPalette: [Color] = [
-    .blue, .green, .orange, .purple, .red, .teal, .indigo, .pink, .mint, .cyan, .brown, .yellow,
-  ]
-
-  private func categoryColor(for id: UUID?) -> Color {
-    guard let id = id else { return .gray }
-    let index = abs(id.hashValue) % Self.chartPalette.count
-    return Self.chartPalette[index]
-  }
-
   private func hasChildren(_ categoryId: UUID?) -> Bool {
-    guard let categoryId = categoryId else { return false }
+    guard let categoryId else { return false }
     return !categories.children(of: categoryId).isEmpty
   }
 
