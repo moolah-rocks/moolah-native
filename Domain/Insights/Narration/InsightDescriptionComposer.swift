@@ -1,5 +1,3 @@
-import Foundation
-
 /// Deterministic, model-free composer that turns an insight's structured
 /// facts into one readable sentence — the non-AI fallback headline. Pure: no
 /// model, no I/O, fully testable in CI without a device. Numbers come only
@@ -37,7 +35,7 @@ extension InsightDescriptionComposer {
       return subscriptionCancellationCandidate(title: title, facts: facts)
     case .subscriptionOverspend: return subscriptionOverspend(title: title, facts: facts)
     case .lapsedMerchant: return lapsedMerchant(title: title, facts: facts)
-    default: return title
+    default: fatalError("InsightDescriptionComposer: \(kind) routed to wrong category dispatcher")
     }
   }
 
@@ -49,7 +47,7 @@ extension InsightDescriptionComposer {
     case .newMerchantAlert: return newMerchantAlert(title: title, facts: facts)
     case .unusualDaySpend: return unusualDaySpend(title: title, facts: facts)
     case .categorySpendingAnomaly: return categorySpendingAnomaly(title: title, facts: facts)
-    default: return title
+    default: fatalError("InsightDescriptionComposer: \(kind) routed to wrong category dispatcher")
     }
   }
 
@@ -62,7 +60,7 @@ extension InsightDescriptionComposer {
     case .monthOverMonthDelta: return monthOverMonthDelta(title: title, facts: facts)
     case .categoryMixShift: return categoryMixShift(title: title, facts: facts)
     case .weekendSpendSkew: return weekendSpendSkew(title: title, facts: facts)
-    default: return title
+    default: fatalError("InsightDescriptionComposer: \(kind) routed to wrong category dispatcher")
     }
   }
 
@@ -74,7 +72,7 @@ extension InsightDescriptionComposer {
     case .projectedMonthEndBalance: return projectedMonthEndBalance(title: title, facts: facts)
     case .savingsRateTrend: return savingsRateTrend(title: title, facts: facts)
     case .runwayEstimate: return runwayEstimate(title: title, facts: facts)
-    default: return title
+    default: fatalError("InsightDescriptionComposer: \(kind) routed to wrong category dispatcher")
     }
   }
 
@@ -87,7 +85,7 @@ extension InsightDescriptionComposer {
     case .earmarkUnderspend: return earmarkUnderspend(title: title, facts: facts)
     case .savingsGoalETA: return savingsGoalETA(title: title, facts: facts)
     case .unbudgetedCategory: return unbudgetedCategory(title: title, facts: facts)
-    default: return title
+    default: fatalError("InsightDescriptionComposer: \(kind) routed to wrong category dispatcher")
     }
   }
 
@@ -97,7 +95,7 @@ extension InsightDescriptionComposer {
     switch kind {
     case .idleCashAlert: return idleCashAlert(title: title, facts: facts)
     case .feeSpend: return feeSpend(title: title, facts: facts)
-    default: return title
+    default: fatalError("InsightDescriptionComposer: \(kind) routed to wrong category dispatcher")
     }
   }
 
@@ -111,7 +109,7 @@ extension InsightDescriptionComposer {
     case .topPerformer: return topPerformer(title: title, facts: facts)
     case .bottomPerformer: return bottomPerformer(title: title, facts: facts)
     case .capitalGainsHarvest: return capitalGainsHarvest(title: title, facts: facts)
-    default: return title
+    default: fatalError("InsightDescriptionComposer: \(kind) routed to wrong category dispatcher")
     }
   }
 
@@ -124,7 +122,7 @@ extension InsightDescriptionComposer {
     case .missingPaycheckAlert: return missingPaycheckAlert(title: title, facts: facts)
     case .windfallIncome: return windfallIncome(title: title, facts: facts)
     case .payRateChange: return payRateChange(title: title, facts: facts)
-    default: return title
+    default: fatalError("InsightDescriptionComposer: \(kind) routed to wrong category dispatcher")
     }
   }
 
@@ -133,7 +131,7 @@ extension InsightDescriptionComposer {
   ) -> String {
     switch kind {
     case .groupSpendConcentration: return groupSpendConcentration(title: title, facts: facts)
-    default: return title
+    default: fatalError("InsightDescriptionComposer: \(kind) routed to wrong category dispatcher")
     }
   }
 
@@ -143,7 +141,7 @@ extension InsightDescriptionComposer {
     switch kind {
     case .uncategorizedBacklog: return uncategorizedBacklog(title: title, facts: facts)
     case .unreconciledTransfers: return unreconciledTransfers(title: title, facts: facts)
-    default: return title
+    default: fatalError("InsightDescriptionComposer: \(kind) routed to wrong category dispatcher")
     }
   }
 }
