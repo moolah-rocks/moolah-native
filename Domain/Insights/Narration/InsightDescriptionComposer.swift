@@ -275,9 +275,31 @@ extension InsightDescriptionComposer {
     else { return title }
     return "At about \(burn) a month, your \(funds) would cover roughly \(runway)."
   }
-  static func earmarkBurndownProjection(title: String, facts: FactLookup) -> String { title }
-  static func earmarkUnderspend(title: String, facts: FactLookup) -> String { title }
-  static func savingsGoalETA(title: String, facts: FactLookup) -> String { title }
+  static func earmarkBurndownProjection(title: String, facts: FactLookup) -> String {
+    guard let spent = facts.value("Spent so far"), let budget = facts.value("Budget"),
+      let projected = facts.value("Projected")
+    else { return title }
+    return
+      "\(title) — you've spent \(spent) of your \(budget) budget and you're on pace for \(projected)."
+  }
+
+  static func earmarkUnderspend(title: String, facts: FactLookup) -> String {
+    guard let spent = facts.value("Spent so far"), let budget = facts.value("Budget"),
+      let projected = facts.value("Projected")
+    else { return title }
+    return "\(title) — you've spent \(spent) of \(budget), on pace for just \(projected)."
+  }
+
+  static func savingsGoalETA(title: String, facts: FactLookup) -> String {
+    guard let goal = facts.value("Goal"), let saved = facts.value("Saved") else { return title }
+    guard let progress = facts.value("Progress") else {
+      return "\(title) — you've saved \(saved) toward your \(goal) target."
+    }
+    if facts.value("Projected completion") != nil {
+      return "\(title) — you've saved \(saved) of \(goal) (\(progress))."
+    }
+    return "\(title) — \(saved) saved toward \(goal)."
+  }
   static func idleCashAlert(title: String, facts: FactLookup) -> String { title }
   static func feeSpend(title: String, facts: FactLookup) -> String { title }
   static func netWorthMilestone(title: String, facts: FactLookup) -> String { title }
