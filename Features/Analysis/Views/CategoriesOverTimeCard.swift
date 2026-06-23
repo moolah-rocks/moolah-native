@@ -58,7 +58,6 @@ struct CategoriesOverTimeCard: View {
     Text("Some prices are still loading; totals may be incomplete")
       .font(.caption)
       .foregroundStyle(.secondary)
-      .accessibilityLabel("Some prices are still loading; totals may be incomplete")
   }
 
   private var emptyState: some View {
@@ -181,7 +180,7 @@ struct CategoriesOverTimeCard: View {
       points: (0..<6).map { month in
         CategoryOverTimePoint(
           month: "20260\(month + 1)",
-          monthDate: Calendar.current.date(
+          monthDate: Calendar.utc.date(
             byAdding: .month, value: -5 + month, to: Date()) ?? Date(),
           actualAmount: Decimal(Int.random(in: 100...500)),
           percentage: Double.random(in: 10...50)
@@ -214,7 +213,7 @@ struct CategoriesOverTimeCard: View {
       points: (0..<6).map { month in
         CategoryOverTimePoint(
           month: "20260\(month + 1)",
-          monthDate: Calendar.current.date(
+          monthDate: Calendar.utc.date(
             byAdding: .month, value: -5 + month, to: Date()) ?? Date(),
           actualAmount: Decimal(Int.random(in: 100...500)),
           percentage: Double.random(in: 10...50)
