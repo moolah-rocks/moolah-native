@@ -89,7 +89,7 @@ struct ExpenseBreakdownCard: View {
     // swatch and total, so the chart's built-in legend is redundant.
     .chartLegend(.hidden)
     .frame(height: 250)
-    .accessibilityLabel("Expense breakdown pie chart")
+    .accessibilityLabel(pieChartAccessibilityLabel(breakdown))
   }
 
   private func legendGrid(
@@ -97,29 +97,51 @@ struct ExpenseBreakdownCard: View {
   ) -> some View {
     LazyVGrid(columns: [GridItem(.adaptive(minimum: 150))], spacing: 8) {
       ForEach(breakdown, id: \.categoryId) { item in
-        Button {
-          handleCategoryTap(item.categoryId)
-        } label: {
-          HStack {
-            Circle()
-              .fill(colors.color(for: item.categoryId))
-              .frame(width: 12, height: 12)
-            Text(categoryLabel(for: item.categoryId))
-              .font(.caption)
-              .foregroundStyle(.primary)
-            Spacer()
-            Text(item.totalExpenses.formatted)
-              .font(.caption)
-              .monospacedDigit()
-              .foregroundStyle(.secondary)
-          }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(
-          "\(categoryLabel(for: item.categoryId)): \(item.totalExpenses.formatted)"
-        )
-        .accessibilityHint(hasChildren(item.categoryId) ? "Double tap to drill down" : "")
+        legendRow(item, colors: colors)
       }
+    }
+  }
+
+  /// A legend row is only interactive when the category has children to drill
+  /// into; leaf categories render as plain content so VoiceOver doesn't
+  /// announce a button that does nothing.
+  @ViewBuilder
+  private func legendRow(
+    _ item: ExpenseBreakdownWithPercentage, colors: CategoryColorAssignment
+  ) -> some View {
+    let label = categoryLabel(for: item.categoryId)
+    let accessibilityLabel = "\(label): \(item.totalExpenses.formatted)"
+    if hasChildren(item.categoryId) {
+      Button {
+        handleCategoryTap(item.categoryId)
+      } label: {
+        legendRowContent(item, label: label, colors: colors)
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel(accessibilityLabel)
+      .accessibilityHint("Shows subcategories")
+    } else {
+      legendRowContent(item, label: label, colors: colors)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+    }
+  }
+
+  private func legendRowContent(
+    _ item: ExpenseBreakdownWithPercentage, label: String, colors: CategoryColorAssignment
+  ) -> some View {
+    HStack {
+      Circle()
+        .fill(colors.color(for: item.categoryId))
+        .frame(width: 12, height: 12)
+      Text(label)
+        .font(.caption)
+        .foregroundStyle(.primary)
+      Spacer()
+      Text(item.totalExpenses.formatted)
+        .font(.caption)
+        .monospacedDigit()
+        .foregroundStyle(.secondary)
     }
   }
 
@@ -140,6 +162,15 @@ struct ExpenseBreakdownCard: View {
   private var filteredBreakdown: [ExpenseBreakdownWithPercentage] {
     AnalysisStore.buildExpenseBreakdown(
       from: breakdown, categories: categories, selectedCategoryId: selectedCategoryId)
+  }
+
+  private func pieChartAccessibilityLabel(_ breakdown: [ExpenseBreakdownWithPercentage]) -> String {
+    let base =
+      breakdown.count == 1
+      ? "Expense breakdown pie chart with 1 category"
+      : "Expense breakdown pie chart with \(breakdown.count) categories"
+    guard hasUnavailableData else { return base }
+    return base + ". Some totals may be incomplete; prices still loading."
   }
 
   private func categoryLabel(for id: UUID?) -> String {
@@ -225,4 +256,26 @@ struct ExpenseBreakdownWithPercentage: Identifiable {
   )
   .frame(width: 400)
   .padding()
+}
+
+#Preview("Many categories (palette + grey tail)") {
+  let names = [
+    "Housing", "Groceries", "Transport", "Dining", "Utilities", "Health",
+    "Shopping", "Entertainment", "Insurance", "Subscriptions", "Travel",
+    "Education", "Gifts", "Pets",
+  ]
+  let categories = names.map { Category(id: UUID(), name: $0) }
+  let breakdown = categories.enumerated().map { index, category in
+    ExpenseBreakdown(
+      categoryId: category.id,
+      month: "202604",
+      totalExpenses: InstrumentAmount(quantity: Decimal(1500 - index * 100), instrument: .AUD)
+    )
+  }
+
+  ScrollView {
+    ExpenseBreakdownCard(breakdown: breakdown, categories: Categories(from: categories))
+      .frame(width: 400)
+      .padding()
+  }
 }
