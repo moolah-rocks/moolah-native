@@ -224,10 +224,31 @@ extension InsightDescriptionComposer {
     return
       "Your \(category) spending hit \(thisMonth) this month — about \(over) above your usual \(expected)."
   }
-  static func categoryTrendRising(title: String, facts: FactLookup) -> String { title }
-  static func categoryTrendFalling(title: String, facts: FactLookup) -> String { title }
-  static func monthOverMonthDelta(title: String, facts: FactLookup) -> String { title }
-  static func categoryMixShift(title: String, facts: FactLookup) -> String { title }
+  static func categoryTrendRising(title: String, facts: FactLookup) -> String {
+    guard let category = facts.value("Category"), let perMonth = facts.value("Per month")
+    else { return title }
+    return "Your \(category) spending is trending up, by about \(perMonth) a month."
+  }
+  static func categoryTrendFalling(title: String, facts: FactLookup) -> String {
+    guard let category = facts.value("Category"), let perMonth = facts.value("Per month")
+    else { return title }
+    return "Your \(category) spending is easing off — down about \(perMonth) a month."
+  }
+  static func monthOverMonthDelta(title: String, facts: FactLookup) -> String {
+    guard let thisPeriod = facts.value("This period"), let comparison = facts.value("Comparison"),
+      let change = facts.value("Change")
+    else { return title }
+    let dir = changeIsIncrease(change) ? "up" : "down"
+    return
+      "You spent \(thisPeriod) this period, \(dir) \(unsigned(change)) from \(comparison) before."
+  }
+  static func categoryMixShift(title: String, facts: FactLookup) -> String {
+    guard let category = facts.value("Category"), let share = facts.value("Current share"),
+      let change = facts.value("Change")
+    else { return title }
+    let dir = changeIsIncrease(change) ? "up" : "down"
+    return "\(category) now makes up \(share) of your spending, \(dir) \(unsigned(change))."
+  }
   static func upcomingBillWarning(title: String, facts: FactLookup) -> String { title }
   static func projectedMonthEndBalance(title: String, facts: FactLookup) -> String { title }
   static func savingsRateTrend(title: String, facts: FactLookup) -> String { title }
