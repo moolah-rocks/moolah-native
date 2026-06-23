@@ -1,5 +1,3 @@
-// Shared/CryptoPriceService+FetchRange.swift
-
 import Foundation
 
 // MARK: - First-trade confirmation + window-fetch coalescing

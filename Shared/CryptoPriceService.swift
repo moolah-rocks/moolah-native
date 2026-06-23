@@ -1,5 +1,3 @@
-// Shared/CryptoPriceService.swift
-
 import Foundation
 import GRDB
 import OSLog
@@ -281,11 +279,10 @@ actor CryptoPriceService {
 }
 
 // The price-series orchestration (cache lookup, carry-forward series, and the
-// contiguous window loop) is now provided by the shared
-// `PriceSeriesOrchestrating` default methods — see
-// `CryptoPriceService+PriceSeriesOrchestrating.swift` for the conformance and
-// the plug methods that route the 4-provider fallback chain + first-trade floor
-// back through per-service code.
+// contiguous window loop) lives in the shared `PriceSeriesOrchestrating`
+// default methods — see `CryptoPriceService+PriceSeriesOrchestrating.swift` for
+// the conformance and the plug methods that route the 4-provider fallback chain
+// + first-trade floor back through per-service code.
 //
 // `boundsKeys(tokenId:)`, `parseInterval(_:)`, `fetchWindowCoalesced(...)`,
 // `fetchRange(instrument:mapping:from:to:)`, and `confirmFirstTradedOnIfExhausted`

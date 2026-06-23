@@ -1,5 +1,3 @@
-// Shared/StockPriceService.swift
-
 import Foundation
 import GRDB
 import OSLog
