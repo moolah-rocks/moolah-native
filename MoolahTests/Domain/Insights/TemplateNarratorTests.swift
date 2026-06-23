@@ -9,8 +9,11 @@ struct TemplateNarratorTests {
     let narrator = TemplateNarrator()
     let req = NarrationRequest.singleInsight(
       kind: .categorySpendingAnomaly,
-      title: "Dining is up this month",
-      facts: [InsightFact("This month", "$640.00"), InsightFact("6-mo median", "$410.00")])
+      title: "Dining up 56% in June",
+      facts: [
+        InsightFact("Category", "Dining"), InsightFact("This month", "$640.00"),
+        InsightFact("Expected", "$410.00"), InsightFact("Over by", "56%"),
+      ])
 
     var snapshots: [String] = []
     for try await snapshot in narrator.narrate(req) {
@@ -19,8 +22,7 @@ struct TemplateNarratorTests {
 
     #expect(snapshots.count == 1)
     let text = try #require(snapshots.first)
-    // Arm not yet implemented (Task 3) and the fact labels here don't match
-    // its required labels, so the composer degrades to the title.
-    #expect(text == "Dining is up this month")
+    #expect(
+      text == "Your Dining spending hit $640.00 this month — about 56% above your usual $410.00.")
   }
 }
