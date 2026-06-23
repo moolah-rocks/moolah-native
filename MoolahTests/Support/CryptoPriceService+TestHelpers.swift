@@ -8,6 +8,6 @@ extension CryptoPriceService {
   /// For use in unit tests only.
   func injectCacheForTesting(_ cache: CryptoPriceCache) {
     caches[cache.tokenId] = cache
-    hydratedTokenIds.insert(cache.tokenId)
+    hydrated.insert(cache.tokenId)
   }
 }

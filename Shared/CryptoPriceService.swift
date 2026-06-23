@@ -10,7 +10,7 @@ actor CryptoPriceService {
   let clients: [CryptoPriceClient]
 
   // MARK: - Cross-extension internals
-  // `caches`, `hydratedTokenIds`, `database`, and `logger` are accessed
+  // `caches`, `hydrated`, `database`, and `logger` are accessed
   // by the SQL persistence extension in
   // `CryptoPriceService+Persistence.swift` and the merge extension in
   // `CryptoPriceService+Merge.swift`. The methods
@@ -20,10 +20,17 @@ actor CryptoPriceService {
   // both they and these properties are `internal` rather than `private`.
   // They remain actor-isolated; the access modifier is internal so the
   // sibling-file extensions can see them.
+  //
+  // The price-series orchestration (cap → exact → hydrate → window loop →
+  // carry-forward → resolution) is shared with `StockPriceService` via the
+  // `PriceSeriesOrchestrating` default methods; `caches`, `hydrated`, `now`,
+  // `timeZone`, `dateFormatter`, and `plannerConfig` satisfy that protocol's
+  // requirements directly. See `CryptoPriceService+PriceSeriesOrchestrating`.
   var caches: [String: CryptoPriceCache] = [:]
   /// Loaded token ids — set on first hydration so we don't re-read SQL when
-  /// the cache is genuinely empty.
-  var hydratedTokenIds: Set<String> = []
+  /// the cache is genuinely empty. Satisfies the `PriceSeriesOrchestrating`
+  /// `hydrated` requirement.
+  var hydrated: Set<String> = []
   /// In-flight cache-extension fetches, keyed by token id, so concurrent
   /// `price(...)` requests for the same token share one provider round-trip
   /// instead of each issuing its own. The `id` tags the owning request so a
@@ -32,6 +39,22 @@ actor CryptoPriceService {
   /// `CryptoPriceService+FetchRange.swift` can read and mutate it from the
   /// sibling-file extension. It remains actor-isolated.
   var extensionTasks: [String: (id: UUID, task: Task<Void, Error>)] = [:]
+  /// Bounded-window planner config used by the shared `PriceSeriesOrchestrating`
+  /// window loop. Same 30-day window / 2-day forward buffer the per-service
+  /// `warmRange` loop uses.
+  let plannerConfig = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
+  /// In-flight `(instrument, mapping)` context for the current price/prices
+  /// call, keyed by instrument id, so the window-only `fetchAndMerge` plug can
+  /// recover the provider mapping the crypto fetch needs. Set in the thin
+  /// `price(for:mapping:on:)`/`prices(for:mapping:in:)` call-throughs and
+  /// cleared with a keyed `defer`. KEYED (never a single slot) so concurrent
+  /// fetches for different tokens don't clobber each other — race-safe for the
+  /// same reason `caches[key]` is. A concurrent call for the *same* id writes
+  /// the identical context, so last-writer-wins is harmless.
+  ///
+  /// `internal` (not `private`) so the `fetchAndMerge` plug in the sibling
+  /// `CryptoPriceService+PriceSeriesOrchestrating.swift` extension can read it.
+  var pendingFetchContext: [String: (instrument: Instrument, mapping: CryptoProviderMapping)] = [:]
   let database: any DatabaseWriter
   let logger = Logger(
     subsystem: "com.moolah.app", category: "CryptoPriceService")
@@ -116,7 +139,7 @@ actor CryptoPriceService {
   /// deregistered instrument.
   func purgeCache(instrumentId: String) async {
     caches.removeValue(forKey: instrumentId)
-    hydratedTokenIds.remove(instrumentId)
+    hydrated.remove(instrumentId)
     metadataCache.removeValue(forKey: instrumentId)
     // `registration(for:)` co-stores a wrapped-native token's registration
     // under BOTH the wrapper's id and the resolved native lookup id, so a
@@ -217,124 +240,38 @@ actor CryptoPriceService {
     return try await price(for: reg.instrument, mapping: reg.mapping, on: date)
   }
 
+  /// Thin call-through: stashes the in-flight `(instrument, mapping)` so the
+  /// window-only `fetchAndMerge` plug can recover the mapping, then delegates
+  /// to the shared `PriceSeriesOrchestrating.price(instrumentKey:on:)` default.
+  ///
+  /// The `defer` clears the keyed context on return. Because the shared default
+  /// only fetches while this call is on the stack for `instrument.id`, and a
+  /// concurrent call for a *different* id uses a different dict key, the
+  /// per-key stash is race-safe for the same reason `caches[key]` is. A
+  /// concurrent call for the *same* id sets the same context value (identical
+  /// instrument/mapping), so last-writer-wins is harmless.
   func price(
     for instrument: Instrument,
     mapping: CryptoProviderMapping,
     on date: Date
   ) async throws -> Decimal {
-    let date = cappedToYesterday(date, now: now, timeZone: timeZone)
-    let tokenId = instrument.id
-    let dateString = dateFormatter.string(from: date)
-
-    if let cached = lookupPrice(tokenId: tokenId, dateString: dateString) {
-      return cached
-    }
-
-    if !hydratedTokenIds.contains(tokenId) {
-      try await loadCache(tokenId: tokenId)
-    }
-
-    if let cached = lookupPrice(tokenId: tokenId, dateString: dateString) {
-      return cached
-    }
-
-    // Fast-path: if the confirmed first-trade date is known and the requested
-    // date is strictly before it, the token had no market price on this date.
-    // Throw `.beforeFirstTrade` so the priceLookup seam can map it to .knownZero.
-    if let floor = caches[tokenId]?.firstTradedOn, dateString < floor {
-      throw CryptoPriceError.beforeFirstTrade(tokenId: tokenId, date: dateString)
-    }
-
-    if let inRange = try inRangeFallback(tokenId: tokenId, dateString: dateString) {
-      return inRange
-    }
-
-    // Out of cached range: extend contiguously toward the requested date.
-    return try await extendContiguously(
-      instrument: instrument,
-      mapping: mapping,
-      tokenId: tokenId,
-      dateString: dateString)
-  }
-
-  /// Resolves the request from the in-memory cache when the requested
-  /// date sits inside the `[earliestDate, latestDate]` window. Returns
-  /// the prior-trading-day fallback price if available and `nil` if the
-  /// date is out of range (the caller then triggers an extension fetch).
-  ///
-  /// Throws `noPriceAvailable` for the rare in-range case where the
-  /// cache has bounds set but no row on or before the requested date —
-  /// surfacing as missing rather than re-fetching is intentional.
-  /// Without this short-circuit every weekend / non-trading-day in a
-  /// chart's visible range dispatched a network probe and a `saveCache`
-  /// rewrite, saturating the GRDB queue. Mirrors
-  /// `ExchangeRateService.rate(...)`'s in-range branch.
-  ///
-  /// `internal` (not `private`) because `extendContiguously` in
-  /// `CryptoPriceService+FetchRange.swift` calls it from a sibling
-  /// extension on the same actor.
-  func inRangeFallback(tokenId: String, dateString: String) throws -> Decimal? {
-    guard let cache = caches[tokenId],
-      dateString >= cache.earliestDate, dateString <= cache.latestDate
-    else { return nil }
-    if let fallback = fallbackPrice(tokenId: tokenId, dateString: dateString) {
-      return fallback
-    }
-    throw CryptoPriceError.noPriceAvailable(tokenId: tokenId, date: dateString)
+    pendingFetchContext[instrument.id] = (instrument, mapping)
+    defer { pendingFetchContext[instrument.id] = nil }
+    return try await price(instrumentKey: instrument.id, on: date)
   }
 
   // MARK: - Date range
 
+  /// Thin call-through to the shared `PriceSeriesOrchestrating` range default.
+  /// See `price(for:mapping:on:)` for the `pendingFetchContext` race contract.
   func prices(
     for instrument: Instrument,
     mapping: CryptoProviderMapping,
     in range: ClosedRange<Date>
   ) async throws -> [(date: Date, price: Decimal)] {
-    let tokenId = instrument.id
-
-    if !hydratedTokenIds.contains(tokenId) {
-      try await loadCache(tokenId: tokenId)
-    }
-
-    // Cap the *fetch* upper bound at yesterday — same rationale as
-    // `price(for:mapping:on:)`. The result series below still walks the
-    // caller-supplied range; today's slot fills via `lastKnownPrice`.
-    let fetchUpperBound = cappedToYesterday(range.upperBound, now: now, timeZone: timeZone)
-
-    // Extend the cache contiguously toward both endpoints using the bounded
-    // planner loop (no-progress guard), so a horizon-restricted provider
-    // cannot jump `earliest`/`latest` over un-fetched days (the interior-gap
-    // bug). `coverRangeContiguously` lives in
-    // `CryptoPriceService+FetchRange.swift`.
-    if range.lowerBound <= fetchUpperBound,
-      let lowerKey = DateKey.from(isoString: dateFormatter.string(from: range.lowerBound)),
-      let upperKey = DateKey.from(isoString: dateFormatter.string(from: fetchUpperBound))
-    {
-      try await coverRangeContiguously(
-        instrument: instrument,
-        mapping: mapping,
-        tokenId: tokenId,
-        lowerKey: lowerKey,
-        upperKey: upperKey)
-    }
-
-    let dates = generateDateSeries(in: range)
-    var results: [(date: Date, price: Decimal)] = []
-    var lastKnownPrice: Decimal?
-
-    for date in dates {
-      let dateString = dateFormatter.string(from: date)
-      if let key = DateKey.from(isoString: dateString),
-        let price = caches[tokenId]?.prices.exact(key)
-      {
-        lastKnownPrice = price
-        results.append((date, price))
-      } else if let fallback = lastKnownPrice {
-        results.append((date, fallback))
-      }
-    }
-
-    return results
+    pendingFetchContext[instrument.id] = (instrument, mapping)
+    defer { pendingFetchContext[instrument.id] = nil }
+    return try await prices(instrumentKey: instrument.id, in: range)
   }
 
   // `currentPrices(for:)` (the live / spot endpoint) and
@@ -343,40 +280,15 @@ actor CryptoPriceService {
 
 }
 
-// MARK: - Cache lookup & merge
-
-extension CryptoPriceService {
-  /// Internal (not private) so `extendContiguously` in
-  /// `CryptoPriceService+FetchRange.swift` can call it from the sibling
-  /// extension — same actor isolation, just different file.
-  func lookupPrice(tokenId: String, dateString: String) -> Decimal? {
-    guard let key = DateKey.from(isoString: dateString) else { return nil }
-    return caches[tokenId]?.prices.exact(key)
-  }
-
-  func fallbackPrice(tokenId: String, dateString: String) -> Decimal? {
-    guard let key = DateKey.from(isoString: dateString),
-      let cache = caches[tokenId]
-    else { return nil }
-    return cache.prices.floor(key)
-  }
-
-  private func generateDateSeries(in range: ClosedRange<Date>) -> [Date] {
-    let calendar = Calendar.utc
-    var dates: [Date] = []
-    var current = range.lowerBound
-    while current <= range.upperBound {
-      dates.append(current)
-      guard let next = calendar.date(byAdding: .day, value: 1, to: current) else { break }
-      current = next
-    }
-    return dates
-  }
-
-  // `extendContiguously(instrument:mapping:tokenId:dateString:)`,
-  // `boundsKeys(tokenId:)`, `parseInterval(_:)`, `fetchWindowCoalesced(...)`,
-  // and `fetchRange(instrument:mapping:from:to:)` live in
-  // `CryptoPriceService+FetchRange.swift`, `mergeReturningDelta` lives
-  // in `CryptoPriceService+Merge.swift`, and `NoOpTokenResolutionClient`
-  // lives in its own sibling file.
-}
+// The price-series orchestration (cache lookup, carry-forward series, and the
+// contiguous window loop) is now provided by the shared
+// `PriceSeriesOrchestrating` default methods — see
+// `CryptoPriceService+PriceSeriesOrchestrating.swift` for the conformance and
+// the plug methods that route the 4-provider fallback chain + first-trade floor
+// back through per-service code.
+//
+// `boundsKeys(tokenId:)`, `parseInterval(_:)`, `fetchWindowCoalesced(...)`,
+// `fetchRange(instrument:mapping:from:to:)`, and `confirmFirstTradedOnIfExhausted`
+// live in `CryptoPriceService+FetchRange.swift`; `mergeReturningDelta` lives in
+// `CryptoPriceService+Merge.swift`; and `NoOpTokenResolutionClient` lives in its
+// own sibling file.
