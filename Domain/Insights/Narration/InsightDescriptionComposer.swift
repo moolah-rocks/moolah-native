@@ -300,13 +300,52 @@ extension InsightDescriptionComposer {
     }
     return "\(title) — \(saved) saved toward \(goal)."
   }
-  static func idleCashAlert(title: String, facts: FactLookup) -> String { title }
-  static func feeSpend(title: String, facts: FactLookup) -> String { title }
-  static func netWorthMilestone(title: String, facts: FactLookup) -> String { title }
-  static func investmentConcentrationRisk(title: String, facts: FactLookup) -> String { title }
-  static func topPerformer(title: String, facts: FactLookup) -> String { title }
-  static func bottomPerformer(title: String, facts: FactLookup) -> String { title }
-  static func capitalGainsHarvest(title: String, facts: FactLookup) -> String { title }
+  static func idleCashAlert(title: String, facts: FactLookup) -> String {
+    guard let funds = facts.value("Available funds"), let excess = facts.value("Idle excess")
+    else { return title }
+    return
+      "You've got \(funds) sitting in cash — about \(excess) more than you'd typically need on hand."
+  }
+
+  static func feeSpend(title: String, facts: FactLookup) -> String {
+    guard let transactions = facts.value("Transactions") else { return title }
+    return "\(title) over the past year, across \(transactions) charges."
+  }
+
+  static func netWorthMilestone(title: String, facts: FactLookup) -> String {
+    guard let milestone = facts.value("Milestone"), let current = facts.value("Net worth")
+    else { return title }
+    return "Your net worth just passed \(milestone) and now sits at \(current)."
+  }
+
+  static func investmentConcentrationRisk(title: String, facts: FactLookup) -> String {
+    guard let holding = facts.value("Holding"), let share = facts.value("Share of portfolio"),
+      let value = facts.value("Value")
+    else { return title }
+    return "\(holding) now makes up \(share) of your investments, worth \(value)."
+  }
+
+  static func topPerformer(title: String, facts: FactLookup) -> String {
+    guard let holding = facts.value("Holding"), let ret = facts.value("Return"),
+      let gain = facts.value("Gain/loss"), let invested = facts.value("Invested")
+    else { return title }
+    return
+      "\(holding) is your strongest holding, up \(ret) for a \(gain) gain on \(invested) invested."
+  }
+
+  static func bottomPerformer(title: String, facts: FactLookup) -> String {
+    guard let holding = facts.value("Holding"), let ret = facts.value("Return"),
+      let gain = facts.value("Gain/loss"), let invested = facts.value("Invested")
+    else { return title }
+    return "\(holding) is lagging — \(ret) on \(invested) invested, a \(gain) change."
+  }
+
+  static func capitalGainsHarvest(title: String, facts: FactLookup) -> String {
+    guard let offset = facts.value("Potential offset"),
+      let positions = facts.value("Loss positions")
+    else { return title }
+    return "You could offset \(offset) of realised gains against unrealised losses in \(positions)."
+  }
   static func paycheckTimingPattern(title: String, facts: FactLookup) -> String { title }
   static func incomeStabilityScore(title: String, facts: FactLookup) -> String { title }
   static func missingPaycheckAlert(title: String, facts: FactLookup) -> String { title }
