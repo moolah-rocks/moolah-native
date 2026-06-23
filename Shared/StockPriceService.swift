@@ -11,18 +11,26 @@ enum StockPriceError: Error, Equatable {
 
 actor StockPriceService {
   private let client: StockPriceClient
-  private var hydratedTickers: Set<String> = []
   private let database: any DatabaseWriter
 
   // MARK: - Cross-extension internals
-  // `caches`, `dateFormatter`, `now`, `timeZone`, and `logger` are accessed
-  // by the merge extension in `StockPriceService+Merge.swift` (which defines
-  // `mergeReturningDelta(ticker:instrument:newPrices:)`, called from this
-  // file) and by the bounded-extension / chunking extension in
-  // `StockPriceService+FetchRange.swift`, so they are `internal` rather than
-  // `private`. They remain actor-isolated; the access modifier is internal
-  // only so the sibling-file extensions can see them.
+  // `caches`, `hydrated`, `dateFormatter`, `now`, `timeZone`, and `logger` are
+  // accessed by the merge extension in `StockPriceService+Merge.swift` (which
+  // defines `mergeReturningDelta(ticker:instrument:newPrices:)`, called from
+  // this file), so they are `internal` rather than `private`. They remain
+  // actor-isolated; the access modifier is internal only so the sibling-file
+  // extensions can see them.
+  //
+  // The price-series orchestration (cap → exact → hydrate → window loop →
+  // carry-forward → resolution) is shared with `CryptoPriceService` via the
+  // `PriceSeriesOrchestrating` default methods; `caches`, `hydrated`, `now`,
+  // `timeZone`, `dateFormatter`, and `plannerConfig` satisfy that protocol's
+  // requirements directly. See `StockPriceService+PriceSeriesOrchestrating`.
   var caches: [String: StockPriceCache] = [:]
+  /// Tickers hydrated from SQL — set on first hydration so we don't re-read
+  /// SQL when the cache is genuinely empty. Satisfies the
+  /// `PriceSeriesOrchestrating` `hydrated` requirement.
+  var hydrated: Set<String> = []
   let dateFormatter: ISO8601DateFormatter
   /// Injected clock so tests can pin "today" deterministically.
   let now: @Sendable () -> Date
@@ -32,6 +40,9 @@ actor StockPriceService {
   let timeZone: TimeZone
   let logger = Logger(
     subsystem: "com.moolah.app", category: "StockPriceService")
+  /// Bounded-window planner config used by the shared `PriceSeriesOrchestrating`
+  /// window loop (30-day window / 2-day forward buffer).
+  let plannerConfig = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
 
   init(
     client: StockPriceClient,
@@ -49,85 +60,23 @@ actor StockPriceService {
 
   // MARK: - Public API
 
+  /// Thin call-through to the shared `PriceSeriesOrchestrating` default.
   func price(ticker: String, on date: Date) async throws -> Decimal {
-    let date = cappedDate(date)
-    let dateString = dateFormatter.string(from: date)
-
-    // Check in-memory cache
-    if let cached = lookupPrice(ticker: ticker, dateString: dateString) {
-      return cached
-    }
-
-    // Hydrate from SQL on first access
-    if !hydratedTickers.contains(ticker) {
-      try await loadCache(ticker: ticker)
-    }
-
-    // Check again after disk load
-    if let cached = lookupPrice(ticker: ticker, dateString: dateString) {
-      return cached
-    }
-
-    // Fetch from client — expand range to fill gap between cache and requested date
-    do {
-      try await fetchToCoverDate(ticker: ticker, date: date, dateString: dateString)
-      if let cached = lookupPrice(ticker: ticker, dateString: dateString) {
-        return cached
-      }
-    } catch {
-      // Network failure — try fallback to most recent prior date
-      if let fallback = fallbackPrice(ticker: ticker, dateString: dateString) {
-        return fallback
-      }
-      throw error
-    }
-
-    // Fetch succeeded but no price for this date — try fallback
-    if let fallback = fallbackPrice(ticker: ticker, dateString: dateString) {
-      return fallback
-    }
-
-    throw StockPriceError.noPriceAvailable(ticker: ticker, date: dateString)
+    try await price(instrumentKey: ticker, on: date)
   }
 
+  /// Thin call-through to the shared `PriceSeriesOrchestrating` default.
   func prices(
     ticker: String, in range: ClosedRange<Date>
   ) async throws -> [(date: Date, price: Decimal)] {
-    // Hydrate cache if not already in memory
-    if !hydratedTickers.contains(ticker) {
-      try await loadCache(ticker: ticker)
-    }
-
-    // Cap the *fetch* upper bound at yesterday — never ask Yahoo for
-    // today's still-running bar. The result series below still walks the
-    // caller-supplied range; today's slot fills via `lastKnownPrice`
-    // carry-forward (which lands on yesterday's close).
-    let fetchUpperBound = cappedDate(range.upperBound)
-
-    guard range.lowerBound <= fetchUpperBound else {
-      return buildResultSeries(ticker: ticker, in: range)
-    }
-
-    // Cover the requested range contiguously using bounded 30-day windows
-    // driven by `ContiguousFetchPlanner`. Unlike a precomputed chunk list,
-    // the loop anchors each window at the live cache bounds and stops as
-    // soon as a window yields no progress — preventing a horizon-restricted
-    // provider from jumping `latest` over un-fetched interior days.
-    if let lowerKey = DateKey.from(isoString: dateFormatter.string(from: range.lowerBound)),
-      let upperKey = DateKey.from(isoString: dateFormatter.string(from: fetchUpperBound))
-    {
-      try await coverRangeContiguously(
-        ticker: ticker, lowerKey: lowerKey, upperKey: upperKey)
-    }
-
-    return buildResultSeries(ticker: ticker, in: range)
+    try await prices(instrumentKey: ticker, in: range)
   }
 
   func instrument(for ticker: String) async throws -> Instrument {
     if let cache = caches[ticker] {
       return cache.instrument
     }
-    if !hydratedTickers.contains(ticker) {
+    if !hydrated.contains(ticker) {
       try await loadCache(ticker: ticker)
     }
     if let cache = caches[ticker] {
@@ -136,59 +85,7 @@ actor StockPriceService {
     throw StockPriceError.unknownTicker(ticker)
   }
 
-  // MARK: - Private helpers
-
-  func cappedDate(_ date: Date) -> Date {
-    cappedToYesterday(date, now: now, timeZone: timeZone)
-  }
-
-  func lookupPrice(ticker: String, dateString: String) -> Decimal? {
-    guard let key = DateKey.from(isoString: dateString) else { return nil }
-    return caches[ticker]?.prices.exact(key)
-  }
-
-  func fallbackPrice(ticker: String, dateString: String) -> Decimal? {
-    guard let key = DateKey.from(isoString: dateString),
-      let cache = caches[ticker]
-    else { return nil }
-    return cache.prices.floor(key)
-  }
-
-  private func generateDateSeries(in range: ClosedRange<Date>) -> [Date] {
-    let calendar = Calendar(identifier: .gregorian)
-    var dates: [Date] = []
-    var current = range.lowerBound
-    while current <= range.upperBound {
-      dates.append(current)
-      guard let next = calendar.date(byAdding: .day, value: 1, to: current) else { break }
-      current = next
-    }
-    return dates
-  }
-
-  /// Builds the carry-forward daily price series for `ticker` over `range`
-  /// from the in-memory cache. Weekend/holiday gaps carry the last known close.
-  func buildResultSeries(
-    ticker: String, in range: ClosedRange<Date>
-  ) -> [(date: Date, price: Decimal)] {
-    let dates = generateDateSeries(in: range)
-    var results: [(date: Date, price: Decimal)] = []
-    var lastKnownPrice: Decimal?
-
-    for date in dates {
-      let dateString = dateFormatter.string(from: date)
-      if let key = DateKey.from(isoString: dateString),
-        let price = caches[ticker]?.prices.exact(key)
-      {
-        lastKnownPrice = price
-        results.append((date, price))
-      } else if let fallback = lastKnownPrice {
-        results.append((date, fallback))
-      }
-    }
-
-    return results
-  }
+  // MARK: - Fetch + persistence
 
   func fetchAndMerge(ticker: String, from: Date, to: Date) async throws {
     let response = try await client.fetchDailyPrices(ticker: ticker, from: from, to: to)
@@ -216,7 +113,7 @@ actor StockPriceService {
   ///
   /// Marks the ticker as hydrated even when no rows exist so we don't
   /// re-query on every miss.
-  private func loadCache(ticker: String) async throws {
+  func loadCache(ticker: String) async throws {
     let snapshot: StockPriceCache? = try await database.read { database in
       let metaRecord =
         try StockTickerMetaRecord
@@ -248,7 +145,7 @@ actor StockPriceService {
       )
     }
     if let snapshot { caches[ticker] = snapshot }
-    hydratedTickers.insert(ticker)
+    hydrated.insert(ticker)
   }
 
   /// Persists the rows produced by `mergeReturningDelta` for `ticker`
@@ -258,8 +155,8 @@ actor StockPriceService {
   /// updates in place; the meta row is `INSERT OR REPLACE`d via
   /// `StockTickerMetaRecord`'s `.replace` conflict policy. There is no
   /// `deleteAll` — once a date is finalised its close is stable, and the
-  /// forward-extension overlap (see `fetchToCoverDate`) re-fetches the
-  /// latest cached date on every extension so a stale intraday tick
+  /// forward-extension overlap (the shared window loop re-fetches the
+  /// latest cached date on every extension) so a stale intraday tick
   /// persisted by an older build gets overwritten the next time the
   /// range moves forward. The rollback contract still holds because
   /// every statement runs inside one `database.write` closure and any
