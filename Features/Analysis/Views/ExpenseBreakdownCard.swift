@@ -44,7 +44,6 @@ struct ExpenseBreakdownCard: View {
     Text("Some prices are still loading; totals may be incomplete")
       .font(.caption)
       .foregroundStyle(.secondary)
-      .accessibilityLabel("Some prices are still loading; totals may be incomplete")
   }
 
   private var emptyState: some View {
@@ -165,12 +164,20 @@ struct ExpenseBreakdownCard: View {
   }
 
   private func pieChartAccessibilityLabel(_ breakdown: [ExpenseBreakdownWithPercentage]) -> String {
-    let base =
-      breakdown.count == 1
-      ? "Expense breakdown pie chart with 1 category"
-      : "Expense breakdown pie chart with \(breakdown.count) categories"
-    guard hasUnavailableData else { return base }
-    return base + ". Some totals may be incomplete; prices still loading."
+    let countPhrase = breakdown.count == 1 ? "1 category" : "\(breakdown.count) categories"
+    var summary = "Expense breakdown pie chart with \(countPhrase)"
+    // The breakdown is sorted largest-first, so the leading entries are the
+    // dominant slices a sighted user would read off first.
+    let largest = breakdown.prefix(2).map {
+      "\(categoryLabel(for: $0.categoryId)) \($0.totalExpenses.formatted)"
+    }
+    if !largest.isEmpty {
+      summary += ". Largest: \(largest.joined(separator: ", "))"
+    }
+    if hasUnavailableData {
+      summary += ". Some totals may be incomplete; prices still loading."
+    }
+    return summary
   }
 
   private func categoryLabel(for id: UUID?) -> String {
