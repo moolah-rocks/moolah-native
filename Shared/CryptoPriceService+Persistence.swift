@@ -47,7 +47,7 @@ extension CryptoPriceService {
       )
     }
     if let snapshot { caches[tokenId] = snapshot }
-    hydratedTokenIds.insert(tokenId)
+    hydrated.insert(tokenId)
   }
 
   /// Writes the confirmed first-trade date to the `crypto_token_meta` row for

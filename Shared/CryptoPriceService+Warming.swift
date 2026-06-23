@@ -6,7 +6,7 @@ import Foundation
 
 extension CryptoPriceService {
   /// Background-warm a token's prices over `range` using the same contiguous
-  /// bounded-window loop as `coverRangeContiguously`. Covers both endpoints,
+  /// bounded-window loop as the shared engine's `coverRange`. Covers both endpoints,
   /// anchoring each window at the live cache bounds and stopping the moment a
   /// window returns no new data — preventing interior gaps from horizon-
   /// restricted providers. Surfaces `RateLimitGateError.cooldown` so
@@ -17,7 +17,7 @@ extension CryptoPriceService {
     in range: ClosedRange<Date>
   ) async -> WarmOutcome {
     let tokenId = instrument.id
-    if !hydratedTokenIds.contains(tokenId) {
+    if !hydrated.contains(tokenId) {
       do { try await loadCache(tokenId: tokenId) } catch {
         logger.warning(
           "warmRange: loadCache failed for \(tokenId, privacy: .public): \(error.localizedDescription, privacy: .public)"
@@ -44,7 +44,7 @@ extension CryptoPriceService {
     }
 
     var filledAny = false
-    // Cover forward endpoint first, then backward — mirrors `coverRangeContiguously`.
+    // Cover forward endpoint first, then backward — mirrors the shared engine's `coverRange`.
     for requestedKey in [upperKey, lowerKey] {
       let step = await warmStep(
         instrument: instrument,
