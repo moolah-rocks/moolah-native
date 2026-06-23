@@ -160,6 +160,11 @@ extension InsightDescriptionComposer {
     }
     return value
   }
+
+  /// Pluralises a regular noun by appending "s" unless the count text is "1".
+  static func plural(_ count: String, _ singular: String) -> String {
+    count == "1" ? singular : "\(singular)s"
+  }
 }
 
 /// Label-keyed access over an insight's `facts`. Exact-label lookup for the
