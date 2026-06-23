@@ -7,6 +7,7 @@ struct NarrationPromptBuilderTests {
   @Test
   func perInsightPromptContainsOnlySuppliedFacts() {
     let req = NarrationRequest.singleInsight(
+      kind: .categorySpendingAnomaly,
       title: "Dining is up this month",
       facts: [InsightFact("This month", "$640.00"), InsightFact("6-mo median", "$410.00")])
     let built = NarrationPromptBuilder.build(req)
@@ -24,6 +25,7 @@ struct NarrationPromptBuilderTests {
       InsightFact("Change", "+$230.00"),
     ]
     let req = NarrationRequest.singleInsight(
+      kind: .categorySpendingAnomaly,
       title: "Dining is up",
       facts: facts)
     let built = NarrationPromptBuilder.build(req)
@@ -36,6 +38,7 @@ struct NarrationPromptBuilderTests {
   @Test
   func instructionsForbidInventingNumbers() {
     let req = NarrationRequest.singleInsight(
+      kind: .categorySpendingAnomaly,
       title: "Test",
       facts: [InsightFact("Amount", "$100.00")])
     let built = NarrationPromptBuilder.build(req)
@@ -46,6 +49,7 @@ struct NarrationPromptBuilderTests {
   @Test
   func instructionsForbidSpellingAmountsInWords() {
     let req = NarrationRequest.singleInsight(
+      kind: .categorySpendingAnomaly,
       title: "Net worth crossed $50,000",
       facts: [InsightFact("Now", "$50,000")])
     let built = NarrationPromptBuilder.build(req)
@@ -56,6 +60,7 @@ struct NarrationPromptBuilderTests {
   @Test
   func instructionsRequireOmittingStatisticalFacts() {
     let req = NarrationRequest.singleInsight(
+      kind: .categorySpendingAnomaly,
       title: "Test",
       facts: [InsightFact("Amount", "$100.00")])
     let built = NarrationPromptBuilder.build(req)
@@ -67,6 +72,7 @@ struct NarrationPromptBuilderTests {
   @Test
   func instructionsEncourageContractions() {
     let req = NarrationRequest.singleInsight(
+      kind: .categorySpendingAnomaly,
       title: "Test",
       facts: [InsightFact("Amount", "$100.00")])
     let built = NarrationPromptBuilder.build(req)
@@ -76,13 +82,15 @@ struct NarrationPromptBuilderTests {
   @Test
   func singleInsightAllFactsReturnsItsOwnFacts() {
     let facts = [InsightFact("Label", "42")]
-    let req = NarrationRequest.singleInsight(title: "T", facts: facts)
+    let req = NarrationRequest.singleInsight(
+      kind: .categorySpendingAnomaly, title: "T", facts: facts)
     #expect(req.allFacts == facts)
   }
 
   @Test
   func headlinePromptAsksForSelfSufficientSentence() {
     let req = NarrationRequest.singleInsight(
+      kind: .categorySpendingAnomaly,
       title: "Net worth crossed $100k",
       facts: [InsightFact("Now", "$101,200")])
     let built = NarrationPromptBuilder.build(req)

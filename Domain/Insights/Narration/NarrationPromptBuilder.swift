@@ -18,7 +18,7 @@ enum NarrationPromptBuilder {
   /// to narrate).
   static func build(_ request: NarrationRequest) -> (instructions: String, prompt: String) {
     switch request {
-    case let .singleInsight(title, facts):
+    case let .singleInsight(_, title, facts):
       return (
         instructions: singleInsightInstructions,
         prompt: singleInsightPrompt(title: title, facts: facts)
