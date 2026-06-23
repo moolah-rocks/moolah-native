@@ -346,11 +346,36 @@ extension InsightDescriptionComposer {
     else { return title }
     return "You could offset \(offset) of realised gains against unrealised losses in \(positions)."
   }
-  static func paycheckTimingPattern(title: String, facts: FactLookup) -> String { title }
-  static func incomeStabilityScore(title: String, facts: FactLookup) -> String { title }
-  static func missingPaycheckAlert(title: String, facts: FactLookup) -> String { title }
-  static func windfallIncome(title: String, facts: FactLookup) -> String { title }
-  static func payRateChange(title: String, facts: FactLookup) -> String { title }
+  static func paycheckTimingPattern(title: String, facts: FactLookup) -> String {
+    guard let source = facts.value("Source"), let amount = facts.value("Typical amount"),
+      let next = facts.value("Next expected")
+    else { return title }
+    return "Your next \(source) paycheck of about \(amount) should land around \(next)."
+  }
+  static func incomeStabilityScore(title: String, facts: FactLookup) -> String {
+    guard let variation = facts.value("Variation") else { return title }
+    return "\(title) — it varies by about \(variation) month to month."
+  }
+  static func missingPaycheckAlert(title: String, facts: FactLookup) -> String {
+    guard let source = facts.value("Source"), let amount = facts.value("Typical amount"),
+      let expected = facts.value("Expected"), let overdue = facts.value("Days overdue")
+    else { return title }
+    return
+      "Your \(source) paycheck of around \(amount) was expected \(expected) and is \(overdue) days late."
+  }
+  static func windfallIncome(title: String, facts: FactLookup) -> String {
+    guard let amount = facts.value("Amount"), let source = facts.value("Source"),
+      let typical = facts.value("Typical income")
+    else { return title }
+    return "You received \(amount) from \(source) — well above your typical \(typical)."
+  }
+  static func payRateChange(title: String, facts: FactLookup) -> String {
+    guard let source = facts.value("Source"), let newAmount = facts.value("New amount"),
+      let previous = facts.value("Previous"), let change = facts.value("Change")
+    else { return title }
+    let verb = changeIsIncrease(change) ? "rose" : "dropped"
+    return "Your \(source) pay \(verb) to \(newAmount) from \(previous)."
+  }
   static func groupSpendConcentration(title: String, facts: FactLookup) -> String { title }
   static func uncategorizedBacklog(title: String, facts: FactLookup) -> String { title }
   static func unreconciledTransfers(title: String, facts: FactLookup) -> String { title }
@@ -358,7 +383,6 @@ extension InsightDescriptionComposer {
   static func weekendSpendSkew(title: String, facts: FactLookup) -> String { title }
   static func unbudgetedCategory(title: String, facts: FactLookup) -> String { title }
 }
-
 /// Label-keyed access over an insight's `facts`. Exact-label lookup for the
 /// common case; prefix lookup for detectors that embed a dynamic value in the
 /// label ("Spent (90d)", "Typical Monday", "Over 6 months").
@@ -371,7 +395,6 @@ struct FactLookup {
     byLabel = Dictionary(
       facts.map { ($0.label, $0.value) }, uniquingKeysWith: { first, _ in first })
   }
-
   func value(_ label: String) -> String? { byLabel[label] }
   func value(prefix: String) -> String? { facts.first { $0.label.hasPrefix(prefix) }?.value }
 }
