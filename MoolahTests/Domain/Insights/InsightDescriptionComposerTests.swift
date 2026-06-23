@@ -128,4 +128,59 @@ struct InsightDescriptionComposerTests {
     #expect(
       text == "Your Dining spending hit $640.00 this month — about 56% above your usual $410.00.")
   }
+
+  @Test
+  func categoryTrendRisingReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .categoryTrendRising, title: "Groceries spend rising",
+      facts: [
+        InsightFact("Category", "Groceries"), InsightFact("Direction", "Rising"),
+        InsightFact("Per month", "$45.00"),
+      ])
+    #expect(text == "Your Groceries spending is trending up, by about $45.00 a month.")
+  }
+
+  @Test
+  func categoryTrendFallingReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .categoryTrendFalling, title: "Transport spend is trending down",
+      facts: [
+        InsightFact("Category", "Transport"), InsightFact("Direction", "Falling"),
+        InsightFact("Per month", "$30.00"),
+      ])
+    #expect(text == "Your Transport spending is easing off — down about $30.00 a month.")
+  }
+
+  @Test
+  func monthOverMonthDeltaUpReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .monthOverMonthDelta, title: "Spending up 30% vs last month",
+      facts: [
+        InsightFact("This period", "$2,600.00"), InsightFact("Comparison", "$2,000.00"),
+        InsightFact("Change", "+30%"),
+      ])
+    #expect(text == "You spent $2,600.00 this period, up 30% from $2,000.00 before.")
+  }
+
+  @Test
+  func monthOverMonthDeltaDownReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .monthOverMonthDelta, title: "Spending down 30% vs last month",
+      facts: [
+        InsightFact("This period", "$1,400.00"), InsightFact("Comparison", "$2,000.00"),
+        InsightFact("Change", "−30%"),
+      ])
+    #expect(text == "You spent $1,400.00 this period, down 30% from $2,000.00 before.")
+  }
+
+  @Test
+  func categoryMixShiftReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .categoryMixShift, title: "Dining is now 35% of your spending",
+      facts: [
+        InsightFact("Category", "Dining"), InsightFact("Current share", "35%"),
+        InsightFact("Change", "+8 pts"),
+      ])
+    #expect(text == "Dining now makes up 35% of your spending, up 8 pts.")
+  }
 }
