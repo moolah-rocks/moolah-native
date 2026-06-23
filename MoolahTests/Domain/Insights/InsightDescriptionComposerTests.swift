@@ -83,4 +83,49 @@ struct InsightDescriptionComposerTests {
       ])
     #expect(text == "Your 6 subscriptions add up to $120.00 a month — 8% of your income.")
   }
+
+  @Test
+  func largeTransactionAnomalyReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .largeTransactionAnomaly, title: "Unusually large Dining charge",
+      facts: [
+        InsightFact("Merchant", "Steakhouse"), InsightFact("Amount", "$450.00"),
+        InsightFact("Category", "Dining"), InsightFact("Typical for category", "$200.00"),
+      ])
+    #expect(
+      text
+        == "A $450.00 charge from Steakhouse stands out for Dining, where you usually spend around $200.00."
+    )
+  }
+
+  @Test
+  func newMerchantAlertReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .newMerchantAlert, title: "First charge from Acme",
+      facts: [InsightFact("Merchant", "Acme"), InsightFact("Amount", "$80.00")])
+    #expect(text == "Your first charge from Acme came in at $80.00.")
+  }
+
+  @Test
+  func unusualDaySpendReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .unusualDaySpend, title: "Big spending Monday",
+      facts: [
+        InsightFact("Day", "Monday"), InsightFact("Spent", "$300.00"),
+        InsightFact("Typical Monday", "$95.00"), InsightFact("Multiple", "3.2×"),
+      ])
+    #expect(text == "You spent $300.00 on Monday — around 3.2× your usual $95.00.")
+  }
+
+  @Test
+  func categorySpendingAnomalyReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .categorySpendingAnomaly, title: "Dining up 56% in June",
+      facts: [
+        InsightFact("Category", "Dining"), InsightFact("This month", "$640.00"),
+        InsightFact("Expected", "$410.00"), InsightFact("Over by", "56%"),
+      ])
+    #expect(
+      text == "Your Dining spending hit $640.00 this month — about 56% above your usual $410.00.")
+  }
 }

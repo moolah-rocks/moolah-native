@@ -199,10 +199,31 @@ extension InsightDescriptionComposer {
     else { return title }
     return "Your \(count) subscriptions add up to \(monthly) a month — \(share) of your income."
   }
-  static func largeTransactionAnomaly(title: String, facts: FactLookup) -> String { title }
-  static func newMerchantAlert(title: String, facts: FactLookup) -> String { title }
-  static func unusualDaySpend(title: String, facts: FactLookup) -> String { title }
-  static func categorySpendingAnomaly(title: String, facts: FactLookup) -> String { title }
+  static func largeTransactionAnomaly(title: String, facts: FactLookup) -> String {
+    guard let amount = facts.value("Amount"), let merchant = facts.value("Merchant"),
+      let category = facts.value("Category"), let typical = facts.value("Typical for category")
+    else { return title }
+    return
+      "A \(amount) charge from \(merchant) stands out for \(category), where you usually spend around \(typical)."
+  }
+  static func newMerchantAlert(title: String, facts: FactLookup) -> String {
+    guard let merchant = facts.value("Merchant"), let amount = facts.value("Amount")
+    else { return title }
+    return "Your first charge from \(merchant) came in at \(amount)."
+  }
+  static func unusualDaySpend(title: String, facts: FactLookup) -> String {
+    guard let day = facts.value("Day"), let spent = facts.value("Spent"),
+      let multiple = facts.value("Multiple"), let typical = facts.value("Typical \(day)")
+    else { return title }
+    return "You spent \(spent) on \(day) — around \(multiple) your usual \(typical)."
+  }
+  static func categorySpendingAnomaly(title: String, facts: FactLookup) -> String {
+    guard let category = facts.value("Category"), let thisMonth = facts.value("This month"),
+      let over = facts.value("Over by"), let expected = facts.value("Expected")
+    else { return title }
+    return
+      "Your \(category) spending hit \(thisMonth) this month — about \(over) above your usual \(expected)."
+  }
   static func categoryTrendRising(title: String, facts: FactLookup) -> String { title }
   static func categoryTrendFalling(title: String, facts: FactLookup) -> String { title }
   static func monthOverMonthDelta(title: String, facts: FactLookup) -> String { title }
