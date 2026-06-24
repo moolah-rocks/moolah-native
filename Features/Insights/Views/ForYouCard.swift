@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// The "For You" dashboard panel: renders the ready-to-show insight batch — each
-/// a single headline line with its signed impact, a "Show less" control, and an
-/// optional deep-link. Pure presentational view: the store resolves headlines,
+/// a single headline line (which states any signed impact inline), a "Show less"
+/// control, and an optional deep-link. Pure presentational view: the store
+/// resolves headlines,
 /// caps the batch, and holds the whole batch until ready; this binds the
 /// published `items` and dispatches the closures. `AnalysisView` renders it only
 /// when `items` is non-empty, so this view assumes a non-empty list.
@@ -93,30 +94,20 @@ private struct InsightRow: View {
   private var textColumn: some View {
     VStack(alignment: .leading, spacing: 6) {
       headlineLine
-      impactAndControls
+      controls
     }
     .frame(maxWidth: .infinity, alignment: .leading)
   }
 
-  /// The impact amount and the controls. They share a single row when there's
-  /// room; in a tight column (narrow window) the controls drop below the amount
-  /// rather than squeezing it — `ViewThatFits` picks the first layout that fits.
-  private var impactAndControls: some View {
-    ViewThatFits(in: .horizontal) {
-      HStack(spacing: 8) {
-        impactText
-        Spacer(minLength: 8)
-        showLessButton
-        viewButton
-      }
-      VStack(alignment: .leading, spacing: 6) {
-        impactText
-        HStack(spacing: 8) {
-          showLessButton
-          viewButton
-          Spacer(minLength: 0)
-        }
-      }
+  /// The row's controls, left-aligned under the headline. The signed impact
+  /// amount lives in the headline sentence itself ("…about $67,849.60 more
+  /// than…"), so the row carries no separate amount line — just "Show less"
+  /// and "View".
+  private var controls: some View {
+    HStack(spacing: 8) {
+      showLessButton
+      viewButton
+      Spacer(minLength: 0)
     }
   }
 
@@ -162,19 +153,6 @@ private struct InsightRow: View {
 
   // MARK: - Leaves and styling
 
-  @ViewBuilder private var impactText: some View {
-    if let impact = insight.monetaryImpact {
-      Text(impact.formatted)
-        .font(.subheadline)
-        .monospacedDigit()
-        // A monetary amount is read as a whole — never break it mid-number.
-        .lineLimit(1)
-        .fixedSize()
-        .foregroundStyle(impactColor(impact))
-        .accessibilityLabel("Impact: \(impact.formatted)")
-    }
-  }
-
   @ViewBuilder private var viewButton: some View {
     if let target {
       // `.borderless` (not macOS-only `.link`) renders a tinted, tappable
@@ -215,12 +193,6 @@ private struct InsightRow: View {
     .help("Show fewer insights like this")
     .accessibilityLabel("Show fewer insights like this: \(item.headline)")
     .accessibilityIdentifier(UITestIdentifiers.ForYou.showLess(item.id))
-  }
-
-  private func impactColor(_ impact: InstrumentAmount) -> Color {
-    if impact.isPositive { return .green }
-    if impact.isNegative { return .red }
-    return .secondary
   }
 
   private var framingColor: Color {
