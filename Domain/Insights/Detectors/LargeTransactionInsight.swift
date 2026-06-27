@@ -5,9 +5,14 @@ import Foundation
 /// instead of a raw z-score because spending distributions are heavy-tailed
 /// and a single prior outlier would inflate a classic standard deviation.
 ///
-/// Sparse categories (too few samples for a stable per-category scale) fall
-/// back to the global spend distribution — a pragmatic stand-in for the
-/// design's "Bayesian shrinkage toward a global prior".
+/// Sparse categories (fewer than `minimumCategorySamples`) are skipped: with
+/// too little history there is no basis to call a charge unusual *for that
+/// category*. An earlier design shrank toward a global prior here, but for
+/// inherently lumpy categories (a one-off car purchase, an annual super
+/// payment) that flagged expected one-offs and, worse, reported the global
+/// median as the category's "usual" spend — a figure unrelated to the
+/// category named in the insight. Requiring a real per-category baseline both
+/// suppresses those false positives and keeps the reported "typical" honest.
 ///
 /// The per-category baseline (`categorySamples`) only covers categorised
 /// expense legs — the SQL that builds it filters `category_id IS NOT NULL`,
@@ -23,9 +28,6 @@ enum LargeTransactionInsight {
     threshold: Double = 3.5,
     minimumCategorySamples: Int = 6
   ) -> [Insight] {
-    let globalMagnitudes = categorySamples.flatMap(\.magnitudes).map(toDouble)
-    guard globalMagnitudes.count >= minimumCategorySamples else { return [] }
-
     let samplesByCategory = Dictionary(
       categorySamples.map { ($0.categoryId, $0.magnitudes.map(toDouble)) },
       uniquingKeysWith: { first, _ in first })
@@ -35,11 +37,12 @@ enum LargeTransactionInsight {
       let age = context.daysSince(transaction.date)
       guard age >= 0, age <= windowDays else { continue }
 
-      let categoryPeers = samplesByCategory[transaction.categoryId] ?? []
-      let population =
-        categoryPeers.count >= minimumCategorySamples
-        ? categoryPeers
-        : globalMagnitudes
+      // Only fire when the category itself has enough history to establish a
+      // stable typical spend; otherwise the "usually spend around …" baseline
+      // would be meaningless (see the type doc).
+      let population = samplesByCategory[transaction.categoryId] ?? []
+      guard population.count >= minimumCategorySamples else { continue }
+
       let value = spendMagnitude(transaction)
       let zScore = DescriptiveStatistics.robustZScore(of: value, in: population)
       guard zScore >= threshold, value > 0 else { continue }
