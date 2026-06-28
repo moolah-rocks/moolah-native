@@ -18,14 +18,7 @@ This is editorial review, not a grammar checker. Don't flag every comma. Do flag
 
 ## Findings Must Be Fixed
 
-Every finding you raise is a fix request, not a discussion item. There is no "follow-up later", "defer", or "out of scope" tier. The expected outcomes are:
-
-- The author fixes the content before the change merges, **or**
-- The author rebuts the finding with a concrete reason and the reviewer drops it.
-
-Pre-existing problems noticed during review are still findings. Help corpus drift is how a help center becomes useless; don't qualify a finding with "this wasn't introduced by your change". If the same wording appears elsewhere in the corpus and is also wrong, note the additional locations so the fix can be applied broadly in the same change.
-
-If a finding is genuinely too large to fix in the current change, say so explicitly and ask the author to (a) split into a sibling PR landing before merge, or (b) obtain explicit user authorisation to defer. The default is fix it now.
+Follow `guides/AI_REVIEW_GATE_GUIDE.md`. Findings are fix requests: do not ignore, defer, or downgrade them, including pre-existing findings, unless the user explicitly authorizes that scope.
 
 ## Review Process
 

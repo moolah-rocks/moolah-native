@@ -20,16 +20,7 @@ Key files are in `Backends/CloudKit/Sync/` and `Backends/CloudKit/Repositories/`
 
 ## Findings Must Be Fixed
 
-Every finding you raise in this review is a fix request, not a discussion item. There is no "follow-up later", "defer", or "out of scope" tier in your report. The expected outcomes for any finding are:
-
-- The author fixes the code before this work merges, **or**
-- The author rebuts the finding with a concrete reason and the reviewer drops it.
-
-Pre-existing problems noticed during the review are still findings. Don't qualify a finding with "this wasn't introduced by your change" — sync bugs corrupt user data silently across devices and recovery is expensive; the next reviewer of the file will surface the same thing. If you noticed the problem, raise it at the same severity you would if the change had introduced it.
-
-If a finding is genuinely too large to fix in the current change, say so explicitly and ask the author either to (a) split the PR so the fix lands in a sibling PR before merge, or (b) obtain explicit user authorisation to defer. The default is: fix it now.
-
-The only exception is scope the user has explicitly authorised in the conversation. Note any such authorisation in your report so future reviewers see the carve-out.
+Follow `guides/AI_REVIEW_GATE_GUIDE.md`. Findings are fix requests: do not ignore, defer, or downgrade them, including pre-existing findings, unless the user explicitly authorizes that scope.
 
 ## Review Process
 
