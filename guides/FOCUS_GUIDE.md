@@ -264,6 +264,8 @@ Not for input focus — for **threading data from the focused view to a remote c
 - `.focusedValue(\.key, value)` publishes only while a descendant of the modified view is focused. Use for inspector palettes that should change when focus moves between sibling lists.
 - Read in `Commands` with `@FocusedValue(\.key)` (always optional) or `@FocusedBinding(\.key)` for `Binding<T>?` keys.
 
+> **Never read a focused value in a view that also writes focused scene values.** Adding a `@FocusedValue(\.key)` *reader* to a view that already publishes `.focusedSceneValue(...)` makes the body depend on focus state the body itself mutates each pass → invalidate → re-body → rewrite → an infinite `UpdateCycle`. The app pegs ~100% CPU forever; under XCUITest it never quiesces, so every test fails at launch ("main window did not appear", an empty accessibility tree in `tree.txt`), while a plain launch just spins invisibly and "looks fine". Thread the action via a closure from the owner instead (e.g. the parent owns the selection and passes `onNavigate: { selection = $0 }`). Reading the value in a `Commands` block (which doesn't publish focused scene values) is fine. Diagnose a suspected render loop with `sample <pid> 2` — the hot stack names the looping `*.body.getter`.
+
 ---
 
 ## 6. macOS specifics

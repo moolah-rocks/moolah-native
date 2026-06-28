@@ -92,6 +92,18 @@ A test that requires retries is hiding a missing post-condition wait somewhere u
 
 **Why this matters more than it looks.** Every retry mechanism in a test suite gradually erodes trust in the suite as a whole. Once "the test passes on rerun" is an accepted outcome, real failures and timing flakes become indistinguishable, and reviewers stop investigating. Holding the line on "wait for a real condition, fail loudly when it doesn't happen" is how the suite stays trustworthy.
 
+### Wait on the exact value you assert
+
+For reactive `@MainActor` store/service tests, poll the *whole asserted expression* — don't wait on a proxy and then read once. The "wait-then-read-once" shape (`await store.waitForNextEmission(matching: entityLoaded)` followed by a separate `#expect` on `convertedBalance`) is a flake: a racing observation pass can leave the separately-read value stale or `nil` in the gap. Derived/converted state often settles in a *later* async pass than the entities themselves, so wait on the converted value directly.
+
+Use `MoolahTests/Support/ExpectEventually.swift`: `await expectEventually("desc") { <full asserted boolean, with reads in try?> }` polls the exact post-condition on the MainActor until it holds or times out. Put the entire assertion inside the closure so there is no unguarded re-read.
+
+Do not migrate a `waitForNextEmission` that is acting as an **ordering barrier** (ensuring an initial emission lands before a later mutation), nor absence assertions. Verify any test-wait change with a full `just test-mac` run, not just the changed suite — over-migrating a barrier only fails deterministically under full-suite load.
+
+### Assert environment-independent values
+
+`Decimal.formatted(.currency(code:))` renders the symbol per the *current locale*, not per the currency code — AUD is `$` on an en-AU machine but `A$` on en-US and on CI. Never assert a literal currency symbol (`== "$225,000"`); it passes locally and fails on CI. Assert the rounded digits, grouping, sign, and absence of cents instead (e.g. `result.contains("225,000") && !result.contains(".00")`). The same discipline applies to any locale- or timezone-dependent formatting.
+
 ---
 
 ## 4. No Test-Only Branches in Production Code
@@ -179,6 +191,12 @@ just test-mac TransactionStoreTests # subset, macOS only
 just test-ui                       # UI tests, macOS only
 just benchmark                     # MoolahBenchmarks
 ```
+
+**Test filters must be exact suite type names.** A filter is forwarded to `xcodebuild` as `-only-testing:<target>/<Filter>` and must be an exact test struct / `@Suite` *type* name (or `Type/method`) — not the human `@Suite("...")` display string and not a substring. A filter that matches no suite runs **0 tests and still prints `** TEST SUCCEEDED **`** — a silent no-op. After a filtered run, confirm the printed test count is plausible; `0` (or far fewer than expected) means the filter didn't match. When unsure of a suite's type name, grep `MoolahTests` for its `struct …Tests` / `@Suite` declaration.
+
+**Runner hang.** `just test-mac` / `just test` sometimes fails every suite with "The test runner hung before establishing connection" (exit 65). It is environmental, not a code defect. In a worktree the usual cause is a missing `.env` — it carries `DEVELOPMENT_TEAM`, and without it the test host is ad-hoc signed and trips a TCC prompt the headless run can't answer (`EnterWorktree` copies `.env` for you; only an issue if you bypass it). Otherwise the cause is stale test-host processes (from prior runs, other worktrees, or open Xcode) holding the runner connection: `pkill -f "Moolah.app/Contents/MacOS/Moolah"; pkill -x xctest; sleep 2`, then re-run. If it persists, surface it as an environment blocker rather than retrying endlessly. (The XCUITest "System authentication is running" variant needs a reboot/GUI dismissal and `pkill` won't clear it — gate on the PR's CI UI-test job instead.)
+
+**Build vs test derived-data dirs differ.** `just build-mac` / `run-mac` write to `.build` (`.build/Build/Products/Debug/Moolah.app`); `just test-mac` / `test-ui` write to `.DerivedData-mac` (`Debug-Tests`). When reproducing a runtime issue by launching the binary directly, launch from the *same* derived-data dir as the build command you just ran, or you will measure a stale binary.
 
 ---
 

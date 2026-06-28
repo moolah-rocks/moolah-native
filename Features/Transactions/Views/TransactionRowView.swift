@@ -150,6 +150,8 @@ struct TransactionRowView: View {
         }
       }
     }
+    // `.caption` (not `.subheadline`) is a deliberate exception to the style guide:
+    // the smaller font is the intended look for this metadata row. Don't "fix" it.
     .font(.caption)
     .foregroundStyle(.secondary)
   }

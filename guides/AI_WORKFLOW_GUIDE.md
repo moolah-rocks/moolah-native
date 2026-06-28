@@ -11,6 +11,11 @@ Shared build, test, and commit workflow for AI assistants.
 
 Branch management is assistant-specific: an assistant with dedicated worktree tooling (for example, Claude's `EnterWorktree`/`ExitWorktree`) uses it; any agent without that tooling defaults to `wt` (Worktrunk) to manage worktrees, e.g. `wt switch --create <branch>`. See the assistant's own instruction file for details.
 
+### Inspecting and landing changes
+
+- To see what a branch actually changed, use `gh pr view <N> --json files` or three-dot `git diff origin/main...<branch>`. Avoid two-dot `git diff origin/main..<branch>`: when the branch was cut before another PR merged, that PR's additions show up as the branch's deletions, producing false "this branch reverted X" alarms.
+- Once a PR has auto-merge enabled it can enter the merge queue at any time. Treat such a PR as frozen — don't push to it or amend it; land the fix as a new follow-up PR with its own auto-merge. The one exception is a PR that is still gated on pending checks and has not yet entered the queue (`mergeStateStatus: BLOCKED`): it may be amended after `gh pr merge <N> --disable-auto`, then re-enable auto-merge.
+
 ## Commands
 
 Use `just` targets for consistent builds and test runs:
@@ -54,8 +59,18 @@ Before committing code:
 
 There is no SwiftLint baseline. Do not add one, do not pass `--baseline`, do not run `swiftlint --write-baseline`, do not silence violations with `// swiftlint:disable` without real justification, and do not raise SwiftLint thresholds to dodge failures.
 
+Read the full `just format-check` output and check its exit code. `swift-format` prints its success line (`All Swift files are correctly formatted.`) *before* SwiftLint runs, so piping to `tail` can show that success while hiding a later SwiftLint failure — a swift-format-clean file can still fail `swiftlint --strict`.
+
 The project treats warnings as errors (`SWIFT_TREAT_WARNINGS_AS_ERRORS: YES`). Common warning fixes:
 
 - Unused result: assign to `_ =`.
 - Variable never mutated: change `var` to `let`.
 - Immutable value never used: remove it.
+
+## Executing Plans
+
+When executing a multi-step plan:
+
+- Complete one step at a time. Don't batch multiple plan steps into one commit or PR; each step gets its own boundary.
+- After each step, review it for strict compliance against the plan before starting the next — re-read the step's acceptance criteria and confirm every one is met. Don't skip "trivial-looking" sub-steps (a cross-reference update, a tracking issue); they are in the plan deliberately.
+- Each step's verification must include `just format-check` and a compiler-warning sweep, not only `just build-mac` / `just test`. SwiftLint passes independently of a green build, so lint debt accumulates silently across steps and surfaces later as a disruptive cleanup if it isn't caught per step.

@@ -10,6 +10,7 @@ The shared branch-and-PR rule (`main` is protected, land every change via a pull
 
 - **Default to a worktree, created with `EnterWorktree(name: <branch>)`.** Never make changes directly on the `main` checkout. At the start of any task that modifies files, create a worktree with **`EnterWorktree(name: <branch>)`** — it sets everything up for you (carries the gitignored `.env` over from the main checkout, rebases onto the default branch, and switches the session in). **Never** create worktrees with raw `git worktree add`, and never hand-copy `.env`. Clean up a finished worktree (PR on automerge) with **`ExitWorktree(action: "remove")`** — add `discard_changes: true` if it balks at the gitignored `.env`.
 - **Ship via PR.** Push the feature branch and open a pull request with `gh pr create`. Do not attempt `git push origin main` — it will be rejected by branch protection.
+- **Land via the `landing-prs` skill.** Every PR is auto-queued by default the moment it is created: invoke the `landing-prs` skill and follow it end-to-end (it owns the procedure — regular vs stacked dispatch and worktree cleanup). Don't land by hand with a bare `gh pr merge`. The user can say "don't land this one yet" to override the default for a specific PR.
 - **Exceptions:** Read-only inspection and investigation can happen on the `main` checkout without a worktree. If you're unsure whether a task will require edits, create the worktree up front.
 
 ### Already in a worktree? `EnterWorktree` refuses to nest — `ExitWorktree` first
@@ -51,6 +52,10 @@ To use previews against a worktree:
 2. Open the worktree's `Moolah.xcodeproj` in Xcode (`open <worktree-path>/Moolah.xcodeproj`). `mcp__xcode__RenderPreview` will then read from the worktree.
 
 If the build passes from the worktree (`just build-mac`) but SourceKit / RenderPreview disagrees, the cause is usually that Xcode is still indexed against the main checkout — switch Xcode to the worktree's project before re-rendering.
+
+## Executing Plans
+
+For any non-trivial implementation plan, use the `superpowers:subagent-driven-development` skill by default — don't offer a choice between inline and subagent-driven execution. Act as the controller: dispatch subagents to do the work (reading files, writing code, running tests, migrating call sites) and review their concise structured results, so the orchestrator's context stays clean across long multi-PR efforts. Only make trivial controller-level edits yourself. The shared per-step plan-execution discipline (strict-compliance review and `just format-check` after every step) lives in `guides/AI_WORKFLOW_GUIDE.md`.
 
 ## Shared Workflow, Architecture, And Project Rules
 

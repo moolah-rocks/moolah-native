@@ -152,6 +152,7 @@ autocomplete.leg.<legIndex>.category.suggestion.<index>
 - **Identifiers do not displace labels.** `accessibilityLabel("Payee")` for VoiceOver remains. The two coexist.
 - **Identifiers travel with the view.** When a view file is renamed or split, identifiers move with the elements they target — they are not coupled to file paths.
 - **One namespace per area.** New areas (e.g. a future `reports.…`) extend the `UITestIdentifiers` constants struct rather than introducing a parallel naming scheme.
+- **Put an identifier on a leaf, not a container.** `.accessibilityIdentifier("foryou.card")` on an outer `VStack` stamps that same id onto *every* descendant, so per-row identifiers (`foryou.row.<id>`, dismiss/view buttons) all report the container's id and the driver can't find them. Attach the container's id to a leaf inside it (e.g. its header `Text`); children then keep their own identifiers. The symptom is every element sharing one id in `tree.txt`.
 
 ---
 
@@ -184,6 +185,8 @@ When a UI test fails:
    - Driver post-condition wrong → fix the driver's wait, not the test.
    - Genuine product change → update the driver, never the test.
 5. **Never modify the test to work around a failure.** The test describes the behaviour; only the driver, identifiers, or seeds change.
+
+**Prose `Text` surfaces in `value`, not `label`.** A SwiftUI `Text` carrying prose (a narration paragraph, a recap sentence) with an `.accessibilityIdentifier` appears in XCUITest as a text view (element type 48) whose content is in `element.value` — its `.label` is empty. A driver that matches `.label` sees `""` forever even though the text rendered. Match `value` (or both): `NSPredicate(format: "value == %@ OR label == %@", expected, expected)`. Short interactive controls (buttons, rows) still put their text in `.label`; this only bites prose. The `value` column in `tree.txt` shows which is which — for any "element exists but reads empty" failure you can't reproduce locally, read `tree.txt` first.
 
 ### Flaky = broken
 

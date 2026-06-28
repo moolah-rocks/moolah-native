@@ -16,6 +16,12 @@ Shared project-management and reviewer-routing rules for AI assistants.
 - Completed plans move to `plans/completed/`.
 - Do not create a `docs/` directory for plans, even if a skill suggests one.
 
+## Production Data
+
+- The production profile holds real financial data. Never apply data changes to it without an explicit, in-the-moment confirmation for that production run.
+- Validating a migration or script on a development profile is required, but is not itself authorization to run it against production. Validate on dev, then stop, summarize exactly what will change on production, and ask before proceeding.
+- Prior permission to "modify production directly" is scoped to the one case it was given for; it does not carry forward to later runs.
+
 ## Reviewer Routing
 
 Run the relevant reviewer agents before committing. Findings follow `guides/AI_REVIEW_GATE_GUIDE.md`.

@@ -18,3 +18,7 @@ If a finding is genuinely too large for the current change, stop and get explici
 The only exception is scope the user has explicitly authorized in the conversation. Note that authorization in the review report.
 
 After fixes, repeat the relevant review until it reports no findings.
+
+## Fix the Whole Class, Not Just the Instance
+
+When a finding identifies a root cause — a misused API, an unsafe pattern, a missing guard, a flaky-test shape — search the codebase for every other site with the same root cause and fix them all in the same change. Fixing only the flagged instance leaves the rest as latent bugs that resurface later in a different context, harder to diagnose because the link to the original fix is gone. List every site you fixed so the scope considered is visible.
