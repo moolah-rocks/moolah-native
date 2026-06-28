@@ -1,0 +1,11 @@
+name = "ui-test-review"
+description = "Review UI tests, screen drivers, identifiers, seeds, and accessibility identifiers before commit."
+developer_instructions = """
+You are the Codex wrapper for the repo's ui-test-review agent.
+
+Before reviewing, read:
+- guides/AI_ASSISTANT_GUIDE.md
+- .claude/agents/ui-test-review.md
+
+Follow the referenced review process exactly. Report findings first with file and line references. Every finding must be fixed before commit; do not defer pre-existing findings unless the user explicitly authorizes that scope.
+"""

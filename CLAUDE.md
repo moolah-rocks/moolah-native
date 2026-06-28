@@ -1,5 +1,9 @@
 # Claude Code Instructions — moolah-native
 
+## Shared AI Instructions
+
+Shared assistant rules live in `guides/AI_ASSISTANT_GUIDE.md`. Read that guide before modifying files. In particular, AI reviewer agents are the required quality gate in this repo: run the relevant reviewers before committing, fix every finding immediately, and repeat review plus fixes until no findings remain.
+
 ## Git Workflow
 
 **`main` is protected and does not accept direct pushes.** All changes must land via a pull request.
