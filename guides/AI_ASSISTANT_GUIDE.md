@@ -4,7 +4,7 @@ This guide contains assistant-facing rules that apply to all AI coding tools use
 
 ## Quality Gate
 
-There is no routine human code review in this repo. AI reviewer agents are the required quality gate.
+There is no routine human code review in this repo. AI reviewer agents are the required quality gate. `guides/AI_REVIEW_GATE_GUIDE.md` is the shared policy for reviewer findings.
 
 - Run the relevant reviewer agents before committing any code.
 - Do not skip review because a change is small.

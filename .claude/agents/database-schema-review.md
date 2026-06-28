@@ -24,14 +24,7 @@ Common cases where the lack of a justification comment is itself a finding:
 
 ## Findings Must Be Fixed
 
-Every finding you raise is a fix request, not a discussion item. There is no "follow-up later", "defer", or "out of scope" tier in your report. The expected outcomes for any finding are:
-
-- The author fixes the code before this work merges, **or**
-- The author rebuts the finding with a concrete reason and you drop it.
-
-Pre-existing problems noticed during the review are still findings. Schema bugs (broken migrations, missing UNIQUE on synced tables, money as REAL, drop-and-recreate paths) are particularly bad to leave lying around because they cause silent data loss. If you noticed the problem, raise it at the same severity you would if the change had introduced it.
-
-If a finding is genuinely too large to fix in the current change, say so explicitly and ask the author either to (a) split the PR so the fix lands in a sibling PR before merge, or (b) obtain explicit user authorisation to defer. The default is: fix it now.
+Follow `guides/AI_REVIEW_GATE_GUIDE.md`. Findings are fix requests: do not ignore, defer, or downgrade them, including pre-existing findings, unless the user explicitly authorizes that scope.
 
 ## Review Process
 
