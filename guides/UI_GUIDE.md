@@ -357,6 +357,8 @@ Form {
 .formStyle(.grouped) // iOS: grouped inset, macOS: bordered sections
 ```
 
+**Date fields — keep the default stepper style.** Leave `DatePicker` bare in a Form; on macOS it renders as a numeric field with up/down stepper arrows. Don't "modernise" it with `.datePickerStyle(.compact)`, a custom button + calendar popover, or a wrapped `NSDatePicker`. The arrow keys adjusting the focused date component (day/month/year) are a deliberate keyboard affordance the other styles lose, and `.compact` looks near-identical in a Form anyway. Only change the style if the user explicitly asks.
+
 **Field Validation:**
 - Show validation errors inline below fields using `.foregroundStyle(.red)` text
 - Use `.disabled(true)` on save button until form is valid

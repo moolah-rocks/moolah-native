@@ -40,3 +40,4 @@ Use at least `code-review` after modifying production Swift. Add specialized rev
 - Never edit `Moolah.xcodeproj` or generated CloudKit wire files directly.
 - Follow the domain isolation, thin-view, concurrency, testing, TODO, and style rules in `CLAUDE.md` and the guides it names.
 - Before committing, run `just format`, the appropriate tests/build, and the required reviewer cycle.
+- Before relying on or relaying a subagent's factual claim about *current* shipped code (a method body, whether a file or test exists, a control-flow detail), verify it against `origin/main` (`git show origin/main:<path>`). Subagents often work in worktrees branched off an older commit and confidently state pre-merge behaviour as current fact — especially a premise that "explains" a bug a merged PR already fixed.

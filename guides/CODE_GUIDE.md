@@ -81,6 +81,8 @@ extension TransferSuggestion: Codable { /* custom CodingKeys + init(from:) */ }
 
 Thresholds below are [SwiftLint](https://realm.github.io/SwiftLint/rule-directory.html) defaults; they reflect community consensus and are enforced by CI.
 
+These thresholds — and any future ones — are grounded in published Swift best practice (SwiftLint defaults, Apple's API Design Guidelines, established style guides), not in percentiles of the current codebase. When proposing or revising a limit, do the same: cite the external basis. The codebase's current distribution measures only *impact* (how many sites a rule would flag), never the right value. Existing code that exceeds a threshold is a refactoring backlog, not a reason to weaken the threshold.
+
 | Metric                  | Warn   | Error  | Rule                                                                            |
 | ----------------------- | ------ | ------ | ------------------------------------------------------------------------------- |
 | File length             | 400    | 1000   | [`file_length`](https://realm.github.io/SwiftLint/file_length.html)             |
@@ -112,6 +114,8 @@ The reason MUST live on its own line (as above). Do not append it to the disable
 ```
 
 SwiftLint parses every whitespace-separated token after the directive as a rule identifier, so words in an inline reason (`in`, `a`, `tmp`, `fallback`, etc.) produce a cascade of [`superfluous_disable_command`](https://realm.github.io/SwiftLint/superfluous_disable_command.html) violations. Put the directive on one line and the reason on the line above or below.
+
+The file-level `// swiftlint:disable multiline_arguments` carried by some files is a transitional accommodation, not permanent policy: files graduate off it piecemeal as they're refactored. When you create or substantially rewrite such a file, graduate it — expand every wrapped call to one argument per line (`swift-format` tolerates that layout; it won't repack it) and delete the disable. Don't mass-graduate untouched files in an unrelated PR, and watch for `function_body_length` cascades from the expansion (fix by helper extraction, never a threshold bump).
 
 ---
 
@@ -328,7 +332,7 @@ Apple's [Choosing Between Structures and Classes](https://developer.apple.com/do
   // Not: extension Foo: Bar, Baz { ... }
   ```
 
-- **Trailing `private extension Self`** for file-private helpers (cross-ref §2).
+- **Trailing extension for file-private helpers (cross-ref §2), written as `extension Self { private func … }` — not `private extension Self`.** `swift-format`'s `NoAccessLevelOnExtensionDeclaration` rule rewrites `private extension Self { func … }` to `extension Self { fileprivate func … }`, which then fails SwiftLint's `strict_fileprivate` (§7). A plain `extension` with `private` members satisfies both tools, and same-file `private` members are still reachable from the type's main declaration.
 - **Avoid extending Foundation / standard-library types in feature code.** Extensions leak across the module — a `String` extension in `Features/Transactions/` is visible everywhere. If an extension is genuinely useful across the repo and is generic (`Collection`, `Sequence`), put it in `Shared/` with a test.
 
 ---
@@ -475,6 +479,7 @@ Cross-references — these rules are normative and live in `CLAUDE.md`:
 - **`InstrumentAmount` is the canonical representation.** Monetary values are a `Decimal` `quantity` paired with their `Instrument` (stored as `Int64` scaled by 10^8 at the persistence layer). See `CLAUDE.md` "Currency & instruments" section.
 - **Preserve the sign** of monetary amounts. Expenses are typically negative, but a refund is an expense with a positive value — any transaction type may carry the opposite sign to its norm. **Do not use `abs()`** or otherwise discard the sign. Display logic must handle both signs correctly. See `CLAUDE.md` "Monetary Sign Convention."
 - **Parse via `InstrumentAmount.parseQuantity(from:decimals:)`.** Never duplicate amount parsing in views or reimplement quantity parsing anywhere else.
+- **Round a `Decimal` to an integer before converting it to `Int64`.** `Int64(truncating: someDecimal as NSDecimalNumber)` (i.e. `NSDecimalNumber.int64Value`) does **not** truncate toward zero — for a non-integer `Decimal` whose significand exceeds 64 bits it wraps mod 2^64 and can flip sign. Integer-valued decimals convert fine, so the bug hides until a high-precision value (e.g. an 18-decimal token amount scaled by 10^8) appears. Round to an integral `Decimal` first (`NSDecimalRound`, truncating toward zero) and then convert. `Double(truncating:)` is unaffected — only the integer accessors wrap. (This was the real cause of the synced-crypto wrong-balance bug.)
 - **Conversion correctness** — all multi-currency aggregation rules live in `guides/INSTRUMENT_CONVERSION_GUIDE.md`.
 
 ---

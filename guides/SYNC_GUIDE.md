@@ -37,6 +37,10 @@ Any sync-related change must be reviewed against `SyncCoordinator`, `ProfileData
 
 ## 3. Core Principles
 
+### Data Loss Is Non-Negotiable
+
+Not losing user data is an absolute requirement, not a trade-off. Never frame a data-loss or data-corruption fix as "overkill", and never accept a "tiny, very unlikely" residual race — a rare race *will* happen in production and is evidence of an incorrect design, not an acceptable cost. Design for *uniform* correctness: every code path closed the same rigorous way, with no "narrow window remains" caveat in the self-review. If part of a design can only be made "almost" safe (e.g. a dirty-check and its write that aren't in one transaction), treat that as a sign the design is wrong and fix the design, rather than documenting-and-deferring the gap.
+
 ### Let CKSyncEngine Drive Scheduling
 
 CKSyncEngine manages its own scheduling, batching, and retry logic. Your job is to respond to events and provide records when asked.

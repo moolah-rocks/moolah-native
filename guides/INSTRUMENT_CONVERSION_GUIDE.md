@@ -221,6 +221,7 @@ See Rule 8. Applies to both `convert(_:from:to:on:)` and `convertAmount(_:to:on:
 | Silently dropping the failing input from the sum and rendering the total as if complete | A total that omits one of its inputs is a wrong number, not a partial one | Mark the failing input unavailable and every total that consumes it unavailable together (Rule 11) |
 | Hiding the failing individual value while still displaying a total that depended on it (or vice versa) | The remaining display contradicts itself — a number derived from something the user can't see | Surface the failing individual value and its dependent totals as unavailable together (Rule 11) |
 | `try?` on a conversion without logging or surfacing an error | Silent failure, invisible in production | Log via `os.Logger` and surface a retryable error to the user (Rule 11) |
+| Showing a multi-instrument account/earmark balance as its primary position plus a "mixed currencies" warning badge | Hides real value behind a badge; the row no longer reflects the account's true worth | Convert every position to the account's *own* instrument and sum (Rule 1/2), the way `EarmarkStore.convertedBalances` converts to `earmark.instrument`; degrade per Rule 11 only when a rate is missing |
 
 ---
 
