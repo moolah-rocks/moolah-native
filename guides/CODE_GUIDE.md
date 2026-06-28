@@ -28,6 +28,8 @@ Simplicity beats cleverness. Readable code that a future maintainer can follow i
 
 This guide is a rule set, not a tutorial. When a topic is richer than a rule — protocol-oriented programming, value-type design, concurrency — follow the citation to the primary source.
 
+**This guide wins over local convention.** When existing code in the repo disagrees with a rule here, follow the guide and treat the existing code as the bug, not as precedent. The codebase predates these guidelines, so "the surrounding files do it this way" is not a reason to repeat a pattern the guide rejects — fix it where you touch it.
+
 ---
 
 ## 2. File Organization
