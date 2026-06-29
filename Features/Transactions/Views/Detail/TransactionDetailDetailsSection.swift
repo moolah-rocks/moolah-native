@@ -43,19 +43,16 @@ struct TransactionDetailDetailsSection: View {
 
       LabeledContent {
         HStack(spacing: 8) {
-          TextField("Amount", text: amountBinding)
-            .labelsHidden()
-            .multilineTextAlignment(.trailing)
-            .monospacedDigit()
-            #if os(iOS)
-              .keyboardType(.decimalPad)
-            #endif
-            .focused($focusedField, equals: .amount)
-            .onSubmit {
+          AmountField(
+            text: amountBinding,
+            focus: $focusedField,
+            equals: .amount,
+            onSubmit: {
               if isCrossCurrency {
                 focusedField = .counterpartAmount
               }
             }
+          )
           CompactInstrumentPickerButton(selection: relevantInstrumentBinding)
         }
       } label: {
