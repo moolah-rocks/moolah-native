@@ -58,15 +58,13 @@ struct TransactionDetailFeeSection: View {
 
     return LabeledContent {
       HStack(spacing: 8) {
-        TextField("Amount", text: amountBinding)
-          .labelsHidden()
-          .multilineTextAlignment(.trailing)
-          .monospacedDigit()
-          #if os(iOS)
-            .keyboardType(.decimalPad)
-          #endif
-          .focused($focusedField, equals: .tradeFeeAmount(legIndex))
-          .accessibilityIdentifier(UITestIdentifiers.Detail.tradeFeeAmount(displayNumber - 1))
+        AmountField(
+          text: amountBinding,
+          focus: $focusedField,
+          equals: .tradeFeeAmount(legIndex),
+          accessibilityLabel: "Amount for fee \(displayNumber)",
+          accessibilityIdentifier: UITestIdentifiers.Detail.tradeFeeAmount(displayNumber - 1)
+        )
         CompactInstrumentPickerButton(selection: instrumentBinding)
       }
     } label: {

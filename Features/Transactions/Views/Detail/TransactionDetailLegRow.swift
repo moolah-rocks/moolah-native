@@ -105,14 +105,12 @@ struct TransactionDetailLegRow: View {
     )
     return LabeledContent {
       HStack(spacing: 8) {
-        TextField("Amount", text: $draft.legDrafts[index].amountText)
-          .labelsHidden()
-          .multilineTextAlignment(.trailing)
-          .monospacedDigit()
-          #if os(iOS)
-            .keyboardType(.decimalPad)
-          #endif
-          .focused($focusedField, equals: .legAmount(index))
+        AmountField(
+          text: $draft.legDrafts[index].amountText,
+          focus: $focusedField,
+          equals: .legAmount(index),
+          accessibilityLabel: "Amount for sub-transaction \(index + 1)"
+        )
         CompactInstrumentPickerButton(selection: instrumentBinding)
           .accessibilityLabel("Currency for sub-transaction \(index + 1)")
           .accessibilityHint("Overrides the currency derived from the account")

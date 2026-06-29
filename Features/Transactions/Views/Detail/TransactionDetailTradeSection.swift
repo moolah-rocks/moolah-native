@@ -107,15 +107,13 @@ struct TransactionDetailTradeSection: View {
 
       LabeledContent {
         HStack(spacing: 8) {
-          TextField(side.label, text: amountBinding)
-            .labelsHidden()
-            .multilineTextAlignment(.trailing)
-            .monospacedDigit()
-            #if os(iOS)
-              .keyboardType(.decimalPad)
-            #endif
-            .focused($focusedField, equals: side.focus)
-            .accessibilityIdentifier(side.identifier)
+          AmountField(
+            text: amountBinding,
+            focus: $focusedField,
+            equals: side.focus,
+            titleKey: side.label,
+            accessibilityIdentifier: side.identifier
+          )
           CompactInstrumentPickerButton(selection: instrumentBinding)
             .accessibilityIdentifier(side.instrumentIdentifier)
         }

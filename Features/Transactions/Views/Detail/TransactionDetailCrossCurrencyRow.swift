@@ -57,20 +57,18 @@ struct TransactionDetailCrossCurrencyRow: View {
   }
 
   var body: some View {
-    let fieldLabel = draft.showFromAccount ? "Sent" : "Received"
+    let fieldLabel: LocalizedStringKey = draft.showFromAccount ? "Sent" : "Received"
     LabeledContent {
       HStack(spacing: 8) {
-        TextField(fieldLabel, text: counterpartAmountBinding)
-          .labelsHidden()
-          .multilineTextAlignment(.trailing)
-          .monospacedDigit()
-          .accessibilityLabel(draft.showFromAccount ? "Sent amount" : "Received amount")
-          #if os(iOS)
-            .keyboardType(.decimalPad)
-          #endif
-          .focused($focusedField, equals: .counterpartAmount)
-          .onSubmit { focusedField = nil }
-          .accessibilityIdentifier(UITestIdentifiers.Detail.counterpartAmount)
+        AmountField(
+          text: counterpartAmountBinding,
+          focus: $focusedField,
+          equals: .counterpartAmount,
+          titleKey: fieldLabel,
+          accessibilityLabel: draft.showFromAccount ? "Sent amount" : "Received amount",
+          accessibilityIdentifier: UITestIdentifiers.Detail.counterpartAmount,
+          onSubmit: { focusedField = nil }
+        )
         CompactInstrumentPickerButton(selection: counterpartInstrumentBinding)
           .accessibilityIdentifier(UITestIdentifiers.Detail.counterpartAmountInstrument)
       }
