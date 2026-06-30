@@ -21,9 +21,11 @@ struct TransactionRowView: View {
   /// `.scheduledStatus` grouping for overdue rows.
   var isOverdue: Bool = false
 
-  /// When true, the date in the meta row renders in orange and bold,
-  /// indicating the scheduled transaction is due today. Used by the
-  /// `.scheduledStatus` grouping.
+  /// When true, the payee header shows an orange `clock.fill` leading icon
+  /// (mirroring the overdue treatment) and the date in the meta row renders
+  /// in orange and bold, indicating the scheduled transaction is due today.
+  /// Mutually exclusive with `isOverdue`. Used by the `.scheduledStatus`
+  /// grouping.
   var isDueToday: Bool = false
 
   /// Optional inline Pay button. When non-nil, the row renders a trailing
@@ -79,6 +81,11 @@ struct TransactionRowView: View {
       if isOverdue {
         Image(systemName: "exclamationmark.triangle.fill")
           .foregroundStyle(.red)
+          .imageScale(.small)
+          .accessibilityHidden(true)
+      } else if isDueToday {
+        Image(systemName: "clock.fill")
+          .foregroundStyle(.orange)
           .imageScale(.small)
           .accessibilityHidden(true)
       }

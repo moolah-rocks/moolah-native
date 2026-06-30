@@ -173,6 +173,11 @@ private struct SimpleTransactionRow: View {
             .foregroundStyle(.red)
             .imageScale(.small)
             .accessibilityLabel("Overdue")
+        } else if isDueToday {
+          Image(systemName: "clock.fill")
+            .foregroundStyle(.orange)
+            .imageScale(.small)
+            .accessibilityLabel("Due today")
         }
         Text(displayPayee)
           .font(.body)
@@ -261,6 +266,16 @@ private func seedUpcomingPreview(backend: any BackendProvider, store: Transactio
   _ = try? await backend.accounts.create(
     account,
     openingBalance: InstrumentAmount(quantity: 1000, instrument: .AUD))
+  _ = try? await backend.transactions.create(
+    Transaction(
+      id: UUID(),
+      date: Date(),
+      payee: "Phone Bill",
+      recurPeriod: .month,
+      recurEvery: 1,
+      legs: [
+        TransactionLeg(accountId: account.id, instrument: .AUD, quantity: -40, type: .expense)
+      ]))
   _ = try? await backend.transactions.create(
     Transaction(
       id: UUID(),
