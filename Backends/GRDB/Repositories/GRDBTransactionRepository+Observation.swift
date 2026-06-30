@@ -60,8 +60,9 @@ extension GRDBTransactionRepository {
   /// observation until the subscription is cancelled and restarted.
   /// `removeDuplicates()` (applied inside the retry helper) coalesces
   /// re-fetches that produce the same page (e.g. a write to a row
-  /// outside `[page * pageSize ..< end]` that didn't change
-  /// `totalCount`). The supplied `filter`, `page`, and `pageSize` are
+  /// outside the current `LIMIT pageSize OFFSET page * pageSize` window
+  /// that didn't change the page rows or `totalCount`). The supplied
+  /// `filter`, `page`, and `pageSize` are
   /// captured into the tracking closure — changing any of them requires
   /// cancelling the prior subscription and starting a new one with the
   /// new values.
