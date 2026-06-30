@@ -100,7 +100,7 @@ extension GRDBTransactionRepository {
       try row.toDomain(legs: pageLegs[row.id] ?? [])
     }
 
-    let afterPageSubtotals = try afterPageSubtotals(
+    let afterPageEntries = try subtotalsAfterPage(
       database: database,
       orderedRequest: orderedRequest,
       afterPageOffset: offset + pageRows.count,
@@ -113,7 +113,7 @@ extension GRDBTransactionRepository {
       totalCount: totalCount,
       hasAccountFilter: hasAccountScope,
       isPastEnd: false,
-      afterPageSubtotals: afterPageSubtotals)
+      afterPageSubtotals: afterPageEntries)
   }
 
   /// Builds the filtered transaction request (NOT fetched) shared by the
@@ -201,32 +201,6 @@ extension GRDBTransactionRepository {
         TransactionRow.Columns.id.asc)
   }
 
-  /// Per-instrument subtotals for the transactions sorting AFTER the page
-  /// (older rows, since the order is `date DESC`). Their ids are fetched via
-  /// `LIMIT -1 OFFSET afterPageOffset` over the ordered filtered request
-  /// rather than materialising the whole table; the existing
-  /// `subtotalsAfterPage` then sums member-account legs. Returns empty when
-  /// the account set is empty (no scope) or the page is the last one, so the
-  /// caller needs no explicit branch.
-  private static func afterPageSubtotals(
-    database: Database,
-    orderedRequest: QueryInterfaceRequest<TransactionRow>,
-    afterPageOffset: Int,
-    accountIds: Set<UUID>,
-    instruments: [String: Instrument]
-  ) throws -> [SubtotalEntry] {
-    let afterPageTransactionIds =
-      try orderedRequest
-      .select(TransactionRow.Columns.id, as: UUID.self)
-      .limit(-1, offset: afterPageOffset)
-      .fetchAll(database)
-    return try subtotalsAfterPage(
-      database: database,
-      accountIds: accountIds,
-      afterPageTransactionIds: afterPageTransactionIds,
-      instruments: instruments)
-  }
-
   /// A `transaction_leg` subquery selecting `transaction_id` for legs
   /// matching `predicate`, used as `id IN (…)` against the `"transaction"`
   /// table. Kept as a request (not fetched) so the predicate constrains the
@@ -267,32 +241,58 @@ extension GRDBTransactionRepository {
     return grouped
   }
 
-  /// Groups raw leg storage values by instrument for the given
-  /// `afterPageTransactionIds` so the caller can compute a running
-  /// balance for the page. Sums only legs whose account is in
+  /// Per-instrument subtotals for the transactions sorting AFTER the page
+  /// (older rows, since the order is `date DESC`). Computes
+  /// `SUM(quantity)` per instrument in a single SQL aggregate over the
+  /// member-account legs whose transaction falls in the after-page
+  /// window — expressed as `transaction_id IN (<ordered filtered request
+  /// LIMIT -1 OFFSET afterPageOffset>)` so the after-page id list never
+  /// round-trips into Swift. Sums only legs whose `account_id` is in
   /// `accountIds` — a single account for a single-account view, or the
   /// member set for an account-group view — so a transfer's non-member
-  /// leg is excluded. Mirrors
+  /// leg is excluded. The `account_id IN (…)` predicate never matches a
+  /// NULL `account_id`, preserving the `leg_by_account` partial-index
+  /// coverage; all UUIDs bind as parameters through the query interface.
+  /// Returns empty when there is no account scope (and an empty result
+  /// when the page is the last one, since the subquery then selects no
+  /// ids), so the caller needs no explicit branch. Mirrors
   /// `CloudKitTransactionRepository.subtotalsAfterPage`.
   static func subtotalsAfterPage(
     database: Database,
+    orderedRequest: QueryInterfaceRequest<TransactionRow>,
+    afterPageOffset: Int,
     accountIds: Set<UUID>,
-    afterPageTransactionIds: [UUID],
     instruments: [String: Instrument]
   ) throws -> [SubtotalEntry] {
-    guard !afterPageTransactionIds.isEmpty, !accountIds.isEmpty else { return [] }
-    let txnIdSet = Set(afterPageTransactionIds)
-    let legs =
+    guard !accountIds.isEmpty else { return [] }
+
+    // The after-page transaction ids as a GRDB subquery (NOT fetched):
+    // the ordered filtered request windowed past the page via
+    // `LIMIT -1 OFFSET afterPageOffset`, selecting only `id`. Passing it
+    // straight into `transaction_id IN (…)` keeps the subtotal a single
+    // SQL statement.
+    let afterPageIds =
+      orderedRequest
+      .select(TransactionRow.Columns.id, as: UUID.self)
+      .limit(-1, offset: afterPageOffset)
+
+    let rows =
       try TransactionLegRow
       .filter(accountIds.contains(TransactionLegRow.Columns.accountId))
-      .filter(txnIdSet.contains(TransactionLegRow.Columns.transactionId))
+      .filter(afterPageIds.contains(TransactionLegRow.Columns.transactionId))
+      .group(TransactionLegRow.Columns.instrumentId)
+      .select(
+        TransactionLegRow.Columns.instrumentId,
+        sum(TransactionLegRow.Columns.quantity).forKey("quantity")
+      )
+      .asRequest(of: Row.self)
       .fetchAll(database)
 
-    var subtotalsById: [String: Int64] = [:]
-    for leg in legs {
-      subtotalsById[leg.instrumentId, default: 0] += leg.quantity
-    }
-    return subtotalsById.map { instrumentId, storage in
+    return rows.compactMap { row in
+      guard
+        let instrumentId: String = row["instrument_id"],
+        let storage: Int64 = row["quantity"]
+      else { return nil }
       let instrument =
         instruments[instrumentId] ?? Instrument.fiat(code: instrumentId)
       return SubtotalEntry(
