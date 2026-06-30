@@ -93,6 +93,12 @@ import GRDB
 /// `v18_deletion_journal` — adds the local-only `deletion_journal` table
 /// so a deletion survives engine-down timing / a sync-state reset
 /// (issue #1090). See `ProfileSchema+DeletionJournal.swift`.
+/// `v19_transaction_by_date_id` — adds the composite
+/// `(date DESC, id ASC)` index on `"transaction"` to support the page
+/// query's `ORDER BY date DESC, id ASC LIMIT/OFFSET`. The existing
+/// single-column `transaction_by_date` index covers `date` only; the
+/// `id` tiebreaker among equal dates forces a temp B-tree sort without
+/// this index. See `ProfileSchema+TransactionByDateId.swift`.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -113,7 +119,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 18
+  static let version = 19
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -155,6 +161,8 @@ enum ProfileSchema {
       "v16_insight_dismissals", migrate: addInsightDismissals)
     migrator.registerMigration("v17_needs_push", migrate: addNeedsPush)
     migrator.registerMigration("v18_deletion_journal", migrate: addDeletionJournal)
+    migrator.registerMigration(
+      "v19_transaction_by_date_id", migrate: addTransactionByDateIdIndex)
 
     return migrator
   }
