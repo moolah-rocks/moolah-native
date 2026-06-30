@@ -72,11 +72,12 @@ enum BenchmarkFixtures {
   static func seed(scale: BenchmarkScale, in database: any DatabaseWriter) {
     let instrument = Instrument.defaultTestInstrument
 
+    // Note: `instrument` is fiat (.AUD) and resolves as ambient from the
+    // shared profile-index registry — no per-profile InstrumentRow insert is
+    // needed. The per-profile `instrument` table was removed by migration
+    // `v10_drop_shared_instrument_legacy`.
     expecting("benchmark fixtures save failed") {
       try database.write { database in
-        // Ensure the instrument row exists.
-        try InstrumentRow(domain: instrument).insert(database)
-
         let accountIds = seedAccounts(scale: scale, database: database)
         let categoryIds = seedCategories(scale: scale, database: database)
         let earmarkIds = seedEarmarks(scale: scale, database: database, instrument: instrument)
