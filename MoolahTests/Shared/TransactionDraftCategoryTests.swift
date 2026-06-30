@@ -37,6 +37,57 @@ struct TransactionDraftCategoryTests {
     #expect(draft.categoryText.isEmpty)
   }
 
+  // Clearing the field to empty must remove the category even when the id
+  // still resolves — otherwise normalise rewrites the canonical path back
+  // and there is no way to remove a category from the leg.
+  // swiftlint:disable:next attributes
+  @Test func emptyTextRemovesResolvableCategory() {
+    let catId = UUID()
+    let categories = Categories(from: [Category(id: catId, name: "Groceries")])
+
+    var draft = support.makeExpenseDraft()
+    draft.categoryId = catId
+    draft.categoryText = ""
+
+    draft.normaliseCategoryText(using: categories)
+
+    #expect(draft.categoryId == nil)
+    #expect(draft.categoryText.isEmpty)
+  }
+
+  // Whitespace-only text is treated as empty: it removes the category.
+  // swiftlint:disable:next attributes
+  @Test func whitespaceTextRemovesResolvableCategory() {
+    let catId = UUID()
+    let categories = Categories(from: [Category(id: catId, name: "Groceries")])
+
+    var draft = support.makeExpenseDraft()
+    draft.categoryId = catId
+    draft.categoryText = "   "
+
+    draft.normaliseCategoryText(using: categories)
+
+    #expect(draft.categoryId == nil)
+    #expect(draft.categoryText.isEmpty)
+  }
+
+  // Per-leg counterpart: clearing a leg's field removes its category even
+  // when the id still resolves.
+  // swiftlint:disable:next attributes
+  @Test func emptyLegTextRemovesResolvableCategory() {
+    let catId = UUID()
+    let categories = Categories(from: [Category(id: catId, name: "Groceries")])
+
+    var draft = support.makeExpenseDraft()
+    draft.legDrafts[0].categoryId = catId
+    draft.legDrafts[0].categoryText = ""
+
+    draft.normaliseLegCategoryText(at: 0, using: categories)
+
+    #expect(draft.legDrafts[0].categoryId == nil)
+    #expect(draft.legDrafts[0].categoryText.isEmpty)
+  }
+
   // swiftlint:disable:next attributes
   @Test func nilCategoryIdClearsText() {
     let categories = Categories(from: [Category(id: UUID(), name: "Groceries")])
