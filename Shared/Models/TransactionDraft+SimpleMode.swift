@@ -69,12 +69,17 @@ extension TransactionDraft {
   }
 
   /// Reconcile `categoryText` with `categoryId` against the current
-  /// `Categories` snapshot. If the id resolves, `categoryText` is reset to
-  /// its canonical path; otherwise both fields are cleared. Called from the
-  /// view on category-field blur so partially-typed text that never
-  /// committed to a real category doesn't linger in the draft.
+  /// `Categories` snapshot. If the field was cleared to empty, the category
+  /// is removed (this is the only way to remove a category from the leg). If
+  /// the id resolves, `categoryText` is reset to its canonical path;
+  /// otherwise both fields are cleared. Called from the view on
+  /// category-field blur so partially-typed text that never committed to a
+  /// real category doesn't linger in the draft.
   mutating func normaliseCategoryText(using categories: Categories) {
-    if let id = categoryId, let category = categories.by(id: id) {
+    if categoryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      categoryText = ""
+      categoryId = nil
+    } else if let id = categoryId, let category = categories.by(id: id) {
       categoryText = categories.path(for: category)
     } else {
       categoryText = ""
@@ -84,10 +89,13 @@ extension TransactionDraft {
 
   /// Per-leg variant of `normaliseCategoryText(using:)`. Reconciles the
   /// leg at `index` so its `categoryText` matches the canonical path of
-  /// its `categoryId`, or clears both when the id is gone. Called from
-  /// each leg's category-field blur handler.
+  /// its `categoryId`, or clears both when the field was cleared to empty
+  /// or the id is gone. Called from each leg's category-field blur handler.
   mutating func normaliseLegCategoryText(at index: Int, using categories: Categories) {
-    if let id = legDrafts[index].categoryId, let category = categories.by(id: id) {
+    if legDrafts[index].categoryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      legDrafts[index].categoryText = ""
+      legDrafts[index].categoryId = nil
+    } else if let id = legDrafts[index].categoryId, let category = categories.by(id: id) {
       legDrafts[index].categoryText = categories.path(for: category)
     } else {
       legDrafts[index].categoryText = ""
