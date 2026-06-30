@@ -160,10 +160,9 @@ final class GRDBTransactionRepository: TransactionRepository, @unchecked Sendabl
     // as `fetch(filter:page:pageSize:)`.
     let instruments = try await instrumentResolver.instrumentMap()
     return try await database.read { database in
-      let candidateRows = try Self.candidateTransactionRows(
-        database: database, filter: filter)
-      let filteredRows = try Self.applyLegFilters(
-        rows: candidateRows, filter: filter, database: database)
+      let filteredRows =
+        try Self.orderedFilteredRequest(filter: filter)
+        .fetchAll(database)
       let legsByTxnId = try Self.fetchLegs(
         database: database,
         transactionIds: filteredRows.map(\.id),
@@ -378,7 +377,7 @@ final class GRDBTransactionRepository: TransactionRepository, @unchecked Sendabl
   //   `UpdateOutcome`, `performUpdate(database:transaction:)` →
   //     `GRDBTransactionRepository+Update.swift`
   //   `FetchSnapshot`, `buildFetchSnapshot(...)`,
-  //   `candidateTransactionRows(...)`, `applyLegFilters(...)`,
+  //   `filteredTransactionRequest(...)`, `orderedFilteredRequest(...)`,
   //   `fetchLegs(...)` →
   //     `GRDBTransactionRepository+Fetch.swift`
   //   `registerNonFiatLegInstruments(_:using:)` →

@@ -52,10 +52,7 @@ extension GRDBTransactionRepository {
   ) throws -> FetchSnapshot {
     let filter = input.filter
     let instruments = input.instruments
-    let candidateRows = try candidateTransactionRows(
-      database: database, filter: filter)
-    let filteredRows = try applyLegFilters(
-      rows: candidateRows, filter: filter, database: database)
+    let request = filteredTransactionRequest(filter: filter)
 
     let resolvedTarget = try resolveTargetInstrument(
       database: database,
@@ -63,7 +60,10 @@ extension GRDBTransactionRepository {
       instruments: instruments,
       defaultInstrument: input.defaultInstrument)
 
-    let totalCount = filteredRows.count
+    // `fetchCount` pushes the count into SQL (`SELECT COUNT(*) …`) over the
+    // same filtered request, replacing the old `filteredRows.count` on a
+    // fully materialised table.
+    let totalCount = try request.fetchCount(database)
     let offset = input.page * input.pageSize
     // Running balance / after-page subtotals apply to any account-scoped
     // view: a single account (`accountId`) or the member set of an account
@@ -84,8 +84,14 @@ extension GRDBTransactionRepository {
         isPastEnd: true,
         afterPageSubtotals: [])
     }
-    let end = min(offset + input.pageSize, totalCount)
-    let pageRows = Array(filteredRows[offset..<end])
+
+    // Page only the requested window through SQL `LIMIT/OFFSET` over the
+    // `date DESC, id ASC` ordering (index-backed by `transaction_by_date_id`).
+    let orderedRequest = orderedFilteredRequest(filter: filter)
+    let pageRows =
+      try orderedRequest
+      .limit(input.pageSize, offset: offset)
+      .fetchAll(database)
     let pageLegs = try fetchLegs(
       database: database,
       transactionIds: pageRows.map(\.id),
@@ -94,12 +100,11 @@ extension GRDBTransactionRepository {
       try row.toDomain(legs: pageLegs[row.id] ?? [])
     }
 
-    // `subtotalsAfterPage` returns empty when the account set is empty (no
-    // scope) or the page is the last one, so no explicit branch is needed.
-    let afterPageSubtotals = try subtotalsAfterPage(
+    let afterPageSubtotals = try afterPageSubtotals(
       database: database,
+      orderedRequest: orderedRequest,
+      afterPageOffset: offset + pageRows.count,
       accountIds: memberAccountIds,
-      afterPageTransactionIds: Array(filteredRows[end...].map(\.id)),
       instruments: instruments)
 
     return FetchSnapshot(
@@ -111,16 +116,20 @@ extension GRDBTransactionRepository {
       afterPageSubtotals: afterPageSubtotals)
   }
 
-  /// Runs the filters that can be expressed against the `"transaction"`
-  /// table directly: `scheduled`, `dateRange`, and a case-insensitive
-  /// `payee` substring match. Returns rows ordered `date DESC, id ASC`
-  /// — the deterministic tiebreaker pinned by
-  /// `TransactionRepositoryOrderingTests` on the CloudKit side.
-  static func candidateTransactionRows(
-    database: Database,
+  /// Builds the filtered transaction request (NOT fetched) shared by the
+  /// page, count, after-page, and `fetchAll` paths. Applies the
+  /// `"transaction"`-table filters directly (`scheduled`, `dateRange`,
+  /// case-insensitive `payee` substring) and the leg-driven filters
+  /// (`accountId` ∪ `accountIds`, `earmarkId`, `categoryIds`) as
+  /// intersecting `id IN (SELECT transaction_id FROM transaction_leg …)`
+  /// subqueries, so every predicate constrains the paginated query in SQL
+  /// instead of being re-applied to a fully materialised table. All UUIDs
+  /// bind as parameters. No ordering is applied here — see
+  /// `orderedFilteredRequest(filter:)`.
+  static func filteredTransactionRequest(
     filter: TransactionFilter
-  ) throws -> [TransactionRow] {
-    var query = TransactionRow.all()
+  ) -> QueryInterfaceRequest<TransactionRow> {
+    var request = TransactionRow.all()
 
     // Mirrors `CloudKitTransactionRepository`'s `loadAndFilter`: `.all`
     // and `.nonScheduledOnly` both exclude scheduled rows from the
@@ -130,81 +139,104 @@ extension GRDBTransactionRepository {
     // non-scheduled view shape.
     switch filter.scheduled {
     case .all, .nonScheduledOnly:
-      query = query.filter(TransactionRow.Columns.recurPeriod == nil)
+      request = request.filter(TransactionRow.Columns.recurPeriod == nil)
     case .scheduledOnly:
-      query = query.filter(TransactionRow.Columns.recurPeriod != nil)
+      request = request.filter(TransactionRow.Columns.recurPeriod != nil)
     }
 
     if let dateRange = filter.dateRange {
       let start = dateRange.lowerBound
       let end = dateRange.upperBound
-      query = query.filter(
+      request = request.filter(
         TransactionRow.Columns.date >= start
           && TransactionRow.Columns.date <= end)
     }
 
     if let payee = filter.payee, !payee.isEmpty {
       let pattern = "%" + payee.lowercased() + "%"
-      query = query.filter(
+      request = request.filter(
         sql: "lower(payee) LIKE ?", arguments: [pattern])
     }
 
-    return
-      try query
-      .order(
-        TransactionRow.Columns.date.desc,
-        TransactionRow.Columns.id.asc
-      )
-      .fetchAll(database)
-  }
-
-  /// Applies the leg-driven filters (`accountId`, `earmarkId`,
-  /// `categoryIds`) against the candidate rows. Each filter is
-  /// translated into a `transaction_leg` lookup and intersected with
-  /// the candidate set.
-  static func applyLegFilters(
-    rows: [TransactionRow],
-    filter: TransactionFilter,
-    database: Database
-  ) throws -> [TransactionRow] {
-    var rows = rows
-
-    // Build the union of account ids the caller is filtering by: a
-    // single `accountId` (single-account view) and / or a `accountIds`
-    // set (composite group view). Empty union → no account filter.
+    // Build the union of account ids the caller is filtering by: a single
+    // `accountId` (single-account view) and / or an `accountIds` set
+    // (composite group view). Empty union → no account filter. The `IN`
+    // / `==` leg predicates only match non-NULL leg columns, preserving the
+    // partial-index coverage on `transaction_leg`.
     var unionAccountIds: Set<UUID> = filter.accountIds
     if let accountId = filter.accountId { unionAccountIds.insert(accountId) }
     if !unionAccountIds.isEmpty {
-      let allowedIds =
-        try TransactionLegRow
-        .filter(unionAccountIds.contains(TransactionLegRow.Columns.accountId))
-        .select(TransactionLegRow.Columns.transactionId, as: UUID.self)
-        .fetchAll(database)
-      let allowedSet = Set(allowedIds)
-      rows = rows.filter { allowedSet.contains($0.id) }
+      request = request.filter(
+        legTransactionIds(
+          where: unionAccountIds.contains(TransactionLegRow.Columns.accountId)
+        ).contains(TransactionRow.Columns.id))
     }
 
     if let earmarkId = filter.earmarkId {
-      let allowedIds =
-        try TransactionLegRow
-        .filter(TransactionLegRow.Columns.earmarkId == earmarkId)
-        .select(TransactionLegRow.Columns.transactionId, as: UUID.self)
-        .fetchAll(database)
-      let allowedSet = Set(allowedIds)
-      rows = rows.filter { allowedSet.contains($0.id) }
+      request = request.filter(
+        legTransactionIds(
+          where: TransactionLegRow.Columns.earmarkId == earmarkId
+        ).contains(TransactionRow.Columns.id))
     }
 
     if !filter.categoryIds.isEmpty {
-      let allowedIds =
-        try TransactionLegRow
-        .filter(filter.categoryIds.contains(TransactionLegRow.Columns.categoryId))
-        .select(TransactionLegRow.Columns.transactionId, as: UUID.self)
-        .fetchAll(database)
-      let allowedSet = Set(allowedIds)
-      rows = rows.filter { allowedSet.contains($0.id) }
+      request = request.filter(
+        legTransactionIds(
+          where: filter.categoryIds.contains(TransactionLegRow.Columns.categoryId)
+        ).contains(TransactionRow.Columns.id))
     }
 
-    return rows
+    return request
+  }
+
+  /// The filtered request ordered `date DESC, id ASC` — the deterministic
+  /// tiebreaker pinned by `TransactionRepositoryOrderingTests` that makes
+  /// `LIMIT/OFFSET` paging stable. Index-backed by `transaction_by_date_id`.
+  static func orderedFilteredRequest(
+    filter: TransactionFilter
+  ) -> QueryInterfaceRequest<TransactionRow> {
+    filteredTransactionRequest(filter: filter)
+      .order(
+        TransactionRow.Columns.date.desc,
+        TransactionRow.Columns.id.asc)
+  }
+
+  /// Per-instrument subtotals for the transactions sorting AFTER the page
+  /// (older rows, since the order is `date DESC`). Their ids are fetched via
+  /// `LIMIT -1 OFFSET afterPageOffset` over the ordered filtered request
+  /// rather than materialising the whole table; the existing
+  /// `subtotalsAfterPage` then sums member-account legs. Returns empty when
+  /// the account set is empty (no scope) or the page is the last one, so the
+  /// caller needs no explicit branch.
+  private static func afterPageSubtotals(
+    database: Database,
+    orderedRequest: QueryInterfaceRequest<TransactionRow>,
+    afterPageOffset: Int,
+    accountIds: Set<UUID>,
+    instruments: [String: Instrument]
+  ) throws -> [SubtotalEntry] {
+    let afterPageTransactionIds =
+      try orderedRequest
+      .select(TransactionRow.Columns.id, as: UUID.self)
+      .limit(-1, offset: afterPageOffset)
+      .fetchAll(database)
+    return try subtotalsAfterPage(
+      database: database,
+      accountIds: accountIds,
+      afterPageTransactionIds: afterPageTransactionIds,
+      instruments: instruments)
+  }
+
+  /// A `transaction_leg` subquery selecting `transaction_id` for legs
+  /// matching `predicate`, used as `id IN (…)` against the `"transaction"`
+  /// table. Kept as a request (not fetched) so the predicate constrains the
+  /// outer paginated query in SQL.
+  private static func legTransactionIds(
+    where predicate: some SQLSpecificExpressible
+  ) -> QueryInterfaceRequest<UUID> {
+    TransactionLegRow
+      .filter(predicate)
+      .select(TransactionLegRow.Columns.transactionId, as: UUID.self)
   }
 
   /// Bulk-fetches legs for the given transaction ids, mapping each
