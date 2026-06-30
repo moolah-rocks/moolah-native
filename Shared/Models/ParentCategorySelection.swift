@@ -46,15 +46,12 @@ struct ParentCategorySelection: Equatable {
     text = suggestion.path
   }
 
-  /// Reconciles `text` with `id` on field blur. Three cases:
-  /// - A highlighted suggestion at blur time wins — committing matches
-  ///   the simple-mode category field's `commitHighlightedOrNormalise`
-  ///   behaviour that fixes Tab-from-highlight clearing the field (#509).
-  /// - Empty/whitespace text clears `id` — the picker treats an empty
-  ///   field as "no parent → top-level category".
-  /// - Anything else falls back to restoring the canonical path for
-  ///   `id`, or clearing both fields if `id` doesn't resolve to a
-  ///   live category.
+  /// Reconciles `text` with `id` on field blur. A highlighted suggestion at
+  /// blur time wins — committing matches the simple-mode category field's
+  /// behaviour that fixes Tab-from-highlight clearing the field (#509).
+  /// Otherwise delegates to `Categories.normalisedSelection(text:id:)`: an
+  /// empty field clears `id` ("no parent → top-level category"), a resolving
+  /// id restores its canonical path, and an unresolvable id clears both.
   mutating func commitHighlightedOrNormalise(
     highlighted: CategorySuggestion?, in categories: Categories
   ) {
@@ -62,17 +59,8 @@ struct ParentCategorySelection: Equatable {
       commit(highlighted)
       return
     }
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    if trimmed.isEmpty {
-      id = nil
-      text = ""
-      return
-    }
-    if let resolved = id.flatMap({ categories.by(id: $0) }) {
-      text = categories.path(for: resolved)
-    } else {
-      id = nil
-      text = ""
-    }
+    let normalised = categories.normalisedSelection(text: text, id: id)
+    text = normalised.text
+    id = normalised.id
   }
 }
