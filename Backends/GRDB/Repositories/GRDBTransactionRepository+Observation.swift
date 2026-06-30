@@ -148,10 +148,9 @@ extension GRDBTransactionRepository {
             TransactionLegRow.observableRegion,
           ],
           fetch: { [filter] database in
-            let candidateRows = try Self.candidateTransactionRows(
-              database: database, filter: filter)
-            let filteredRows = try Self.applyLegFilters(
-              rows: candidateRows, filter: filter, database: database)
+            let filteredRows =
+              try Self.orderedFilteredRequest(filter: filter)
+              .fetchAll(database)
             let legsByTxnId = try Self.fetchLegs(
               database: database,
               transactionIds: filteredRows.map(\.id),
