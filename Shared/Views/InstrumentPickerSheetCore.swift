@@ -237,6 +237,11 @@ struct InstrumentPickerSheetCore: View {
     #endif
   }
 
+}
+
+// MARK: - Row rendering
+
+extension InstrumentPickerSheetCore {
   @ViewBuilder
   private func row(for result: InstrumentSearchResult) -> some View {
     Button {
@@ -255,30 +260,54 @@ struct InstrumentPickerSheetCore: View {
           }
         }
         Spacer()
-        if !result.isRegistered {
-          Text("Add")
-            .font(.caption)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(.tint.opacity(0.15), in: Capsule())
-            .accessibilityHidden(true)
-        }
-        if result.instrument == selection {
-          Image(systemName: "checkmark").foregroundStyle(.tint)
-            .accessibilityHidden(true)
-        }
+        trailingAccessories(for: result)
       }
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
     .accessibilityIdentifier(UITestIdentifiers.InstrumentPicker.row(result.instrument.id))
-    .accessibilityLabel(
-      Text(
-        result.isRegistered
-          ? result.instrument.pickerLabel
-          : "\(result.instrument.pickerLabel), new")
-    )
+    .accessibilityLabel(Text(accessibilityLabel(for: result)))
     .accessibilityAddTraits(result.instrument == selection ? .isSelected : [])
+  }
+
+  /// Trailing edge of a row: the chain name (crypto disambiguator), the
+  /// "Add" affordance for unregistered tokens, and the selection checkmark.
+  /// All are accessibility-hidden — the row's combined label speaks them.
+  @ViewBuilder
+  private func trailingAccessories(for result: InstrumentSearchResult) -> some View {
+    if let chain = result.instrument.chainDisplayName {
+      Text(chain)
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
+    }
+    if !result.isRegistered {
+      Text("Add")
+        .font(.caption)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2)
+        .background(.tint.opacity(0.15), in: Capsule())
+        .accessibilityHidden(true)
+    }
+    if result.instrument == selection {
+      Image(systemName: "checkmark").foregroundStyle(.tint)
+        .accessibilityHidden(true)
+    }
+  }
+
+  /// Spoken row label: "Long Name (CODE)", with the chain appended for
+  /// crypto tokens so VoiceOver users can tell same-ticker variants apart
+  /// (e.g. "Ethereum (ETH), Optimism"). Unregistered tokens get ", add" to
+  /// match the visible "Add" affordance rather than the vaguer "new".
+  private func accessibilityLabel(for result: InstrumentSearchResult) -> String {
+    var label = result.instrument.pickerLabel
+    if let chain = result.instrument.chainDisplayName {
+      label += ", \(chain)"
+    }
+    if !result.isRegistered {
+      label += ", add"
+    }
+    return label
   }
 
   private func glyph(for instrument: Instrument) -> some View {
