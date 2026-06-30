@@ -69,11 +69,18 @@ struct TransactionPage: Sendable, Equatable {
   /// launch by waiting for the main actor to drain its queue of other
   /// stores' bg-fetch domain conversions — measured ~600 ms even when the
   /// loop body itself is < 5 ms. See #530.
+  ///
+  /// `accountIds` scopes the running balance to a *set* of accounts — the
+  /// member accounts of an account group. When non-empty (and `accountId` is
+  /// `nil`), each transaction contributes only the legs whose account is in
+  /// the set, so the merged group list ties out to the group's sidebar total.
+  /// Empty for single-account (`accountId`), earmark, and global views.
   @MainActor
   static func withRunningBalances(
     transactions: [Transaction],
     priorBalance: InstrumentAmount?,
     accountId: UUID?,
+    accountIds: Set<UUID> = [],
     earmarkId: UUID? = nil,
     targetInstrument: Instrument,
     conversionService: InstrumentConversionService
@@ -86,6 +93,7 @@ struct TransactionPage: Sendable, Equatable {
       transactions: transactions,
       priorBalance: priorBalance,
       accountId: accountId,
+      accountIds: accountIds,
       earmarkId: earmarkId,
       targetInstrument: targetInstrument,
       prefetched: prefetched)
@@ -210,10 +218,14 @@ struct TransactionPage: Sendable, Equatable {
 
   // MARK: - Running-balance accumulation
 
+  // Defaults on `accountIds` / `earmarkId` keep this within SwiftLint's
+  // `function_parameter_count` (which ignores defaulted parameters); the sole
+  // caller passes both explicitly.
   private static func accumulateRunningBalances(
     transactions: [Transaction],
     priorBalance: InstrumentAmount?,
     accountId: UUID?,
+    accountIds: Set<UUID> = [],
     earmarkId: UUID? = nil,
     targetInstrument: Instrument,
     prefetched: PrefetchedRates
@@ -222,6 +234,11 @@ struct TransactionPage: Sendable, Equatable {
     var rows: [TransactionWithBalance] = []
     rows.reserveCapacity(transactions.count)
     var firstConversionError: RunningBalanceConversionError?
+    // Single-account (`accountId`) and group (`accountIds`) scope are the same
+    // operation — "sum the legs in these accounts" — so collapse them into one
+    // set the display-amount computation can filter against.
+    var scopedAccountIds = accountIds
+    if let accountId { scopedAccountIds.insert(accountId) }
 
     for transaction in transactions.reversed() {
       let outcome = convert(
@@ -233,7 +250,7 @@ struct TransactionPage: Sendable, Equatable {
         let displayAmount = computeDisplayAmount(
           for: transaction,
           convertedLegs: convertedLegs,
-          accountId: accountId,
+          accountIds: scopedAccountIds,
           earmarkId: earmarkId,
           targetInstrument: targetInstrument)
         if let displayAmount, var runningBalance = balance {
@@ -313,21 +330,27 @@ struct TransactionPage: Sendable, Equatable {
 
   // MARK: - Display-amount computation
 
-  /// Picks the amount to display on a row: per-account sum when viewing an
-  /// account, per-earmark sum when viewing an earmark, otherwise transfers
-  /// show the negative-quantity leg and non-transfers sum all legs.
+  /// Picks the amount to display on a row: sum of the in-scope account legs
+  /// when viewing an account or account group, per-earmark sum when viewing an
+  /// earmark, otherwise transfers show the negative-quantity leg and
+  /// non-transfers sum all legs. `accountIds` holds the in-scope accounts — one
+  /// for a single-account view, the member set for a group, empty otherwise.
   private static func computeDisplayAmount(
     for transaction: Transaction,
     convertedLegs: [ConvertedTransactionLeg],
-    accountId: UUID?,
+    accountIds: Set<UUID>,
     earmarkId: UUID?,
     targetInstrument: Instrument
   ) -> InstrumentAmount? {
     let zero = InstrumentAmount.zero(instrument: targetInstrument)
-    if let accountId {
+    // Account / account-group view: sum only the legs in the in-scope accounts,
+    // so a leg in an out-of-scope account (e.g. the far side of a transfer out
+    // of the group) contributes zero and the list ties out to the account /
+    // group total.
+    if !accountIds.isEmpty {
       return
         convertedLegs
-        .filter { $0.leg.accountId == accountId }
+        .filter { $0.leg.accountId.map(accountIds.contains) ?? false }
         .reduce(zero) { $0 + $1.convertedAmount }
     }
     if let earmarkId {

@@ -192,6 +192,47 @@ struct TransactionRunningBalanceTests {
     #expect(error.targetInstrumentId == target.id)
   }
 
+  // MARK: - Account-group scoping (member-account set)
+
+  /// Viewing an account *group*'s combined transactions, the running balance
+  /// must sum only the legs belonging to member accounts — a leg in a
+  /// non-member account contributes zero, exactly as the single-account path
+  /// scopes to its one account. Regression for the group-balance bug where
+  /// the merged list summed every leg (and so never tied out to the group's
+  /// sidebar total).
+  @Test
+  func accountGroupScopesRunningBalanceToMemberAccounts() async {
+    let memberA = UUID()
+    let memberB = UUID()
+    let nonMember = UUID()
+    let nonMemberId = UUID()
+    // newest-first, as the function expects.
+    let transactions = [
+      tx(daysFromEpoch: 4, accountId: memberA, quantity: -5, instrument: target),
+      tx(
+        id: nonMemberId, daysFromEpoch: 3, accountId: nonMember, quantity: -100, instrument: target),
+      tx(daysFromEpoch: 2, accountId: memberB, quantity: -20, instrument: target),
+      tx(daysFromEpoch: 1, accountId: memberA, quantity: -10, instrument: target),
+    ]
+
+    let response = await TransactionPage.withRunningBalances(
+      transactions: transactions,
+      priorBalance: .zero(instrument: target),
+      accountId: nil,
+      accountIds: [memberA, memberB],
+      targetInstrument: target,
+      conversionService: FakeConversionService.fixedRates([:])
+    )
+
+    #expect(response.firstConversionError == nil)
+    // Newest balance = -10 (A) + -20 (B) + 0 (non-member, excluded) + -5 (A) = -35.
+    // Without member scoping the non-member's -100 leaks in, giving -135.
+    #expect(response.rows.first?.balance?.quantity == -35)
+    // The non-member transaction contributes zero to the running balance.
+    let byId = Dictionary(uniqueKeysWithValues: response.rows.map { ($0.transaction.id, $0) })
+    #expect(byId[nonMemberId]?.displayAmount == .zero(instrument: target))
+  }
+
   // MARK: - .knownZero legs (issue #790)
 
   /// Issue #790: a leg whose conversion resolves to `.knownZero` (an

@@ -138,6 +138,72 @@ struct TransactionStoreRunningBalanceTests {
     }
   }
 
+  // MARK: - Account groups
+
+  /// Regression for the account-group balance bug: viewing a group's merged
+  /// transactions, the newest row's running balance must equal the sum of the
+  /// member accounts' balances (what the group sidebar shows) — even when the
+  /// list is paginated, so older history sits in `priorBalance`. Before the
+  /// fix the group `priorBalance` was forced to zero and the merged list never
+  /// tied out to the sidebar total.
+  @Test
+  func testGroupRunningBalanceTiesOutToMemberTotalAcrossPages() async throws {
+    let memberA = UUID()
+    let memberB = UUID()
+    let target = Instrument.defaultTestInstrument
+    // 5 transactions across the two members, oldest → newest.
+    let txs = [
+      Transaction(
+        date: try TransactionStoreTestSupport.makeDate("2024-01-01"), payee: "A in",
+        legs: [TransactionLeg(accountId: memberA, instrument: target, quantity: 100, type: .income)]
+      ),
+      Transaction(
+        date: try TransactionStoreTestSupport.makeDate("2024-01-02"), payee: "B in",
+        legs: [TransactionLeg(accountId: memberB, instrument: target, quantity: 50, type: .income)]),
+      Transaction(
+        date: try TransactionStoreTestSupport.makeDate("2024-01-03"), payee: "A out",
+        legs: [
+          TransactionLeg(accountId: memberA, instrument: target, quantity: -30, type: .expense)
+        ]),
+      Transaction(
+        date: try TransactionStoreTestSupport.makeDate("2024-01-04"), payee: "B in 2",
+        legs: [TransactionLeg(accountId: memberB, instrument: target, quantity: 20, type: .income)]),
+      Transaction(
+        date: try TransactionStoreTestSupport.makeDate("2024-01-05"), payee: "A in 2",
+        legs: [TransactionLeg(accountId: memberA, instrument: target, quantity: 10, type: .income)]),
+    ]
+
+    let (backend, database) = try TestBackend.create()
+    TestBackend.seed(
+      accounts: [
+        (
+          Account(id: memberA, name: "A", type: .bank, instrument: target),
+          .zero(instrument: target)
+        ),
+        (
+          Account(id: memberB, name: "B", type: .bank, instrument: target),
+          .zero(instrument: target)
+        ),
+      ],
+      in: database)
+    TestBackend.seed(transactions: txs, in: database)
+
+    // Small page size forces pagination, so older history lands in priorBalance.
+    let store = TransactionStore(
+      repository: backend.transactions,
+      conversionService: FakeConversionService.fixedRates([:]),
+      targetInstrument: target,
+      pageSize: 2
+    )
+
+    await store.load(filter: TransactionFilter(accountIds: [memberA, memberB]))
+
+    // Member total = 100 + 50 - 30 + 20 + 10 = 150 — the group sidebar figure.
+    // The newest row (index 0) must tie out to it.
+    let newest = try #require(store.transactions.first)
+    #expect(newest.balance?.quantity == 150)
+  }
+
   // MARK: - Helpers
 
   private func makeIncome(
