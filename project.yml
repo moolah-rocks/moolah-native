@@ -341,6 +341,11 @@ targets:
     sources:
       - path: MoolahBenchmarks
       - path: MoolahTests/Support
+        excludes:
+          # ExchangeSyncEngineTestSupport references CountingRegistrationResolver
+          # from MoolahTests/Shared/CryptoImport, which is not in the benchmark
+          # target. Benchmarks do not call makeExchangeSyncEngine, so exclude it.
+          - ExchangeSyncEngineTestSupport.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: rocks.moolah.benchmarks

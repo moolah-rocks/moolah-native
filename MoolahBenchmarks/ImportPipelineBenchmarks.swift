@@ -109,7 +109,7 @@ final class ImportPipelineBenchmarks: XCTestCase {
               quantity: Decimal(-5), type: .expense,
               categoryId: nil, earmarkId: nil)
           ],
-          importOrigin: origin))
+          importOrigin: .single(origin)))
     }
     return out
   }
