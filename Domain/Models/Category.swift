@@ -54,6 +54,30 @@ struct Categories: Sendable {
     return parts.joined(separator: ":")
   }
 
+  /// Reconcile a category autocomplete field's `(text, id)` pair against
+  /// this snapshot — the shared blur-normalisation rule used by the
+  /// transaction leg/simple category fields and the parent-category picker.
+  ///
+  /// - Empty/whitespace `text` → cleared (`nil` id, `""` text). Clearing the
+  ///   field is the gesture that removes the category.
+  /// - A non-empty `text` whose `id` resolves to a live category → `text`
+  ///   reset to that category's canonical path (drops partially-typed input).
+  /// - Anything else (no id, or an id that no longer resolves) → cleared.
+  ///
+  /// Returns the reconciled pair; callers assign it back to their own
+  /// storage. Does not handle a highlighted suggestion — callers that
+  /// support arrow-key selection commit that first and only fall through
+  /// here when nothing is highlighted.
+  func normalisedSelection(text: String, id: UUID?) -> (text: String, id: UUID?) {
+    if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      return (text: "", id: nil)
+    }
+    if let id, let category = by(id: id) {
+      return (text: path(for: category), id: id)
+    }
+    return (text: "", id: nil)
+  }
+
   /// Every category in the subtree rooted at `parentId`, in depth-first
   /// pre-order with siblings sorted by name (inherited from `children(of:)`).
   ///

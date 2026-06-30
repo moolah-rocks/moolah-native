@@ -68,23 +68,16 @@ extension TransactionDraft {
     set { legDrafts[0].earmarkId = newValue }
   }
 
-  /// Reconcile `categoryText` with `categoryId` against the current
-  /// `Categories` snapshot. If the field was cleared to empty, the category
-  /// is removed (this is the only way to remove a category from the leg). If
-  /// the id resolves, `categoryText` is reset to its canonical path;
-  /// otherwise both fields are cleared. Called from the view on
-  /// category-field blur so partially-typed text that never committed to a
-  /// real category doesn't linger in the draft.
+  /// Reconcile `categoryText` with `categoryId` via
+  /// `Categories.normalisedSelection(text:id:)`. Clearing the field to empty
+  /// removes the category (the only way to remove one from the leg); a
+  /// resolving id rewrites the text to its canonical path; anything else
+  /// clears both. Called from the view on category-field blur so
+  /// partially-typed text that never committed doesn't linger in the draft.
   mutating func normaliseCategoryText(using categories: Categories) {
-    if categoryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      categoryText = ""
-      categoryId = nil
-    } else if let id = categoryId, let category = categories.by(id: id) {
-      categoryText = categories.path(for: category)
-    } else {
-      categoryText = ""
-      categoryId = nil
-    }
+    let normalised = categories.normalisedSelection(text: categoryText, id: categoryId)
+    categoryText = normalised.text
+    categoryId = normalised.id
   }
 
   /// Per-leg variant of `normaliseCategoryText(using:)`. Reconciles the
@@ -92,15 +85,10 @@ extension TransactionDraft {
   /// its `categoryId`, or clears both when the field was cleared to empty
   /// or the id is gone. Called from each leg's category-field blur handler.
   mutating func normaliseLegCategoryText(at index: Int, using categories: Categories) {
-    if legDrafts[index].categoryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-      legDrafts[index].categoryText = ""
-      legDrafts[index].categoryId = nil
-    } else if let id = legDrafts[index].categoryId, let category = categories.by(id: id) {
-      legDrafts[index].categoryText = categories.path(for: category)
-    } else {
-      legDrafts[index].categoryText = ""
-      legDrafts[index].categoryId = nil
-    }
+    let normalised = categories.normalisedSelection(
+      text: legDrafts[index].categoryText, id: legDrafts[index].categoryId)
+    legDrafts[index].categoryText = normalised.text
+    legDrafts[index].categoryId = normalised.id
   }
 
   /// Commits the currently-highlighted suggestion to the simple-mode

@@ -31,6 +31,63 @@ struct CategoriesTests {
     #expect(categories.path(for: leaf) == "Income:Salary:Janet")
   }
 
+  // MARK: - normalisedSelection(text:id:)
+
+  @Test
+  func normalisedSelectionEmptyTextClearsResolvableId() {
+    let groceries = Category(name: "Groceries")
+    let categories = Categories(from: [groceries])
+
+    let result = categories.normalisedSelection(text: "", id: groceries.id)
+
+    #expect(result.text.isEmpty)
+    #expect(result.id == nil)
+  }
+
+  @Test
+  func normalisedSelectionWhitespaceTextClearsResolvableId() {
+    let groceries = Category(name: "Groceries")
+    let categories = Categories(from: [groceries])
+
+    let result = categories.normalisedSelection(text: "  \n ", id: groceries.id)
+
+    #expect(result.text.isEmpty)
+    #expect(result.id == nil)
+  }
+
+  @Test
+  func normalisedSelectionResolvableIdRewritesToCanonicalPath() {
+    let income = Category(name: "Income")
+    let salary = Category(name: "Salary", parentId: income.id)
+    let categories = Categories(from: [income, salary])
+
+    let result = categories.normalisedSelection(text: "sal", id: salary.id)
+
+    #expect(result.text == "Income:Salary")
+    #expect(result.id == salary.id)
+  }
+
+  @Test
+  func normalisedSelectionUnresolvableIdClearsBoth() {
+    let categories = Categories(from: [])
+
+    let result = categories.normalisedSelection(text: "Made up", id: UUID())
+
+    #expect(result.text.isEmpty)
+    #expect(result.id == nil)
+  }
+
+  @Test
+  func normalisedSelectionNilIdWithTextClearsBoth() {
+    let groceries = Category(name: "Groceries")
+    let categories = Categories(from: [groceries])
+
+    let result = categories.normalisedSelection(text: "partial input", id: nil)
+
+    #expect(result.text.isEmpty)
+    #expect(result.id == nil)
+  }
+
   @Test
   func flattenedSortedAlphabeticallyByPath() {
     let groceries = Category(name: "Groceries")
