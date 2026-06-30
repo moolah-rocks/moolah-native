@@ -172,6 +172,14 @@ extension Instrument {
 }
 
 extension Instrument {
+  /// Human-readable chain name for crypto tokens, used to disambiguate
+  /// instruments that share a ticker across chains (e.g. ETH on mainnet,
+  /// Optimism, and Base). `nil` for fiat and stocks, which have no chain.
+  var chainDisplayName: String? {
+    guard kind == .cryptoToken, let chainId else { return nil }
+    return Self.chainName(for: chainId)
+  }
+
   /// Human-readable chain name for a given chain ID (crypto tokens).
   static func chainName(for chainId: Int) -> String {
     switch chainId {
