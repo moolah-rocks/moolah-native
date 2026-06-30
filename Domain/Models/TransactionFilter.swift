@@ -43,11 +43,13 @@ extension TransactionFilter {
       || dateRange != nil || !categoryIds.isEmpty || payee != nil
   }
 
-  /// True when *any* account-scoped predicate is present (single
-  /// `accountId` or a non-empty `accountIds`). The GRDB fetch path uses
-  /// this to gate running-balance and subtotal computations — those
-  /// only make sense for a single-account view, so a multi-account
-  /// (group) filter disables them.
+  /// True when *any* account-scoped predicate is present — a single
+  /// `accountId` (single-account view) or a non-empty `accountIds` set
+  /// (account-group view). Views use this to choose between in-scope and
+  /// all-legs account context when labelling transaction rows
+  /// (`TransactionListView`'s `accountContext(for:)`). Both scopes carry a
+  /// running balance; the GRDB running-balance gate keys off
+  /// `FetchSnapshot.hasAccountFilter`, not this property.
   var hasAccountFilter: Bool {
     accountId != nil || !accountIds.isEmpty
   }

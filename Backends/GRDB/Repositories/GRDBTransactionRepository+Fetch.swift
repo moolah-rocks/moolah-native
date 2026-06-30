@@ -65,18 +65,22 @@ extension GRDBTransactionRepository {
 
     let totalCount = filteredRows.count
     let offset = input.page * input.pageSize
-    // Running balance / after-page subtotals only make sense for a
-    // single-account view. A multi-account (group) filter renders a
-    // merged list with no running balance, so the subtotal computation
-    // is skipped and `hasAccountFilter` is reported as false to the
-    // caller (it gates running-balance UI).
-    let isSingleAccount = filter.accountId != nil && filter.accountIds.isEmpty
+    // Running balance / after-page subtotals apply to any account-scoped
+    // view: a single account (`accountId`) or the member set of an account
+    // group (`accountIds`). Both render a running-balance column that must
+    // tie out to the account / group sidebar total, so the subtotal is
+    // computed over the union of member accounts. A global / scheduled
+    // filter has no account scope, so it is skipped and `hasAccountFilter`
+    // is reported false (it gates the running-balance computation).
+    var memberAccountIds = filter.accountIds
+    if let accountId = filter.accountId { memberAccountIds.insert(accountId) }
+    let hasAccountScope = !memberAccountIds.isEmpty
     guard offset < totalCount else {
       return FetchSnapshot(
         pageTransactions: [],
         resolvedTarget: resolvedTarget,
         totalCount: totalCount,
-        hasAccountFilter: isSingleAccount,
+        hasAccountFilter: hasAccountScope,
         isPastEnd: true,
         afterPageSubtotals: [])
     }
@@ -90,23 +94,19 @@ extension GRDBTransactionRepository {
       try row.toDomain(legs: pageLegs[row.id] ?? [])
     }
 
-    let afterPageSubtotals: [SubtotalEntry]
-    if let accountId = filter.accountId, isSingleAccount {
-      let afterPageIds = Array(filteredRows[end...].map(\.id))
-      afterPageSubtotals = try subtotalsAfterPage(
-        database: database,
-        accountId: accountId,
-        afterPageTransactionIds: afterPageIds,
-        instruments: instruments)
-    } else {
-      afterPageSubtotals = []
-    }
+    // `subtotalsAfterPage` returns empty when the account set is empty (no
+    // scope) or the page is the last one, so no explicit branch is needed.
+    let afterPageSubtotals = try subtotalsAfterPage(
+      database: database,
+      accountIds: memberAccountIds,
+      afterPageTransactionIds: Array(filteredRows[end...].map(\.id)),
+      instruments: instruments)
 
     return FetchSnapshot(
       pageTransactions: pageTransactions,
       resolvedTarget: resolvedTarget,
       totalCount: totalCount,
-      hasAccountFilter: isSingleAccount,
+      hasAccountFilter: hasAccountScope,
       isPastEnd: false,
       afterPageSubtotals: afterPageSubtotals)
   }
@@ -237,19 +237,22 @@ extension GRDBTransactionRepository {
 
   /// Groups raw leg storage values by instrument for the given
   /// `afterPageTransactionIds` so the caller can compute a running
-  /// balance for the page. Mirrors
+  /// balance for the page. Sums only legs whose account is in
+  /// `accountIds` — a single account for a single-account view, or the
+  /// member set for an account-group view — so a transfer's non-member
+  /// leg is excluded. Mirrors
   /// `CloudKitTransactionRepository.subtotalsAfterPage`.
   static func subtotalsAfterPage(
     database: Database,
-    accountId: UUID,
+    accountIds: Set<UUID>,
     afterPageTransactionIds: [UUID],
     instruments: [String: Instrument]
   ) throws -> [SubtotalEntry] {
-    guard !afterPageTransactionIds.isEmpty else { return [] }
+    guard !afterPageTransactionIds.isEmpty, !accountIds.isEmpty else { return [] }
     let txnIdSet = Set(afterPageTransactionIds)
     let legs =
       try TransactionLegRow
-      .filter(TransactionLegRow.Columns.accountId == accountId)
+      .filter(accountIds.contains(TransactionLegRow.Columns.accountId))
       .filter(txnIdSet.contains(TransactionLegRow.Columns.transactionId))
       .fetchAll(database)
 

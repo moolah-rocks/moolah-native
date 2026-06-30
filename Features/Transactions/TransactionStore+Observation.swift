@@ -256,6 +256,7 @@ extension TransactionStore {
       transactions: snapshot.transactions,
       priorBalance: snapshot.priorBalance,
       accountId: currentFilter.accountId,
+      accountIds: currentFilter.accountIds,
       earmarkId: currentFilter.earmarkId,
       targetInstrument: snapshot.targetInstrument,
       conversionService: conversionService)
