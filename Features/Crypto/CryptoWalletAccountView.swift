@@ -50,7 +50,11 @@ struct CryptoWalletAccountView: View {
         // Drives a re-fire of the per-row valuator when the user marks
         // a token as `.spam` from preferences — issue #790.
         registrationsVersion: session.cryptoTokenStore?.registrationsVersion ?? 0,
-        accountIds: [account.id])
+        accountIds: [account.id],
+        // Single crypto wallet: stamp the owning chain onto its positions so
+        // the asset fold derives `contributingChainIds`. Cross-chain identity
+        // PR1.
+        accountChainId: account.chainId)
     }
   }
 

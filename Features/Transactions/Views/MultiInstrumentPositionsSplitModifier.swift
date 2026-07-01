@@ -27,6 +27,12 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
   let conversionService: (any InstrumentConversionService)?
   let registrationsVersion: Int
   let accountIds: [UUID]
+  /// The owning account's `Account.chainId`, forwarded to the valuator so the
+  /// built `ValuedPosition`s carry chain context. Only meaningful for a single
+  /// chain-scoped (crypto) account host; guarded to `accountIds.count == 1`
+  /// before it reaches the valuator so multi-account group hosts never stamp a
+  /// misleading chain.
+  let accountChainId: Int?
 
   @Environment(ProfileSession.self) private var session: ProfileSession?
 
@@ -99,11 +105,15 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       return
     }
     let valuator = PositionsValuator(conversionService: conversionService)
+    // Only a single-account host has one unambiguous owning chain; group hosts
+    // (plural `accountIds`) leave it nil so the fold derives no false chain.
+    let owningChainId = accountIds.count == 1 ? accountChainId : nil
     let rows = await valuator.valuate(
       positions: positions,
       hostCurrency: hostCurrency,
       costBasis: [:],
-      on: Date()
+      on: Date(),
+      accountChainId: owningChainId
     )
     // The valuator cooperates with cancellation by breaking out of its
     // per-row loop, but it cannot signal cancellation through the
@@ -196,7 +206,8 @@ extension View {
     title: String,
     conversionService: (any InstrumentConversionService)?,
     registrationsVersion: Int = 0,
-    accountIds: [UUID] = []
+    accountIds: [UUID] = [],
+    accountChainId: Int? = nil
   ) -> some View {
     modifier(
       MultiInstrumentPositionsSplitModifier(
@@ -205,7 +216,8 @@ extension View {
         title: title,
         conversionService: conversionService,
         registrationsVersion: registrationsVersion,
-        accountIds: accountIds))
+        accountIds: accountIds,
+        accountChainId: accountChainId))
   }
 }
 

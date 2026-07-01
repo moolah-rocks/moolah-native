@@ -31,20 +31,20 @@ struct PositionsValuator: Sendable {
   ///   - costBasis: remaining cost basis per instrument id, expressed in
   ///     `hostCurrency`. Use `[:]` when no cost basis is known (flow context).
   ///   - on: valuation date.
+  ///   - accountChainId: the owning account's `Account.chainId`, stamped onto
+  ///     every built row. Supply this only when the positions belong to a
+  ///     single chain-scoped (crypto) account; pass `nil` (the default) for
+  ///     multi-account group hosts and for exchange / manual accounts, where
+  ///     no single owning chain applies. Feeds `AssetHolding.fold`'s
+  ///     `contributingChainIds` derivation.
   /// - Returns: surviving rows in input order. Failures map to `value == nil`;
   ///   `.knownZero` sources are dropped. Never throws.
-  ///
-  /// The emitted rows leave `ValuedPosition.accountChainId` at its `nil`
-  /// default: this valuator receives a bare `[Position]` with no `Account`
-  /// context, and its sole caller
-  /// (`MultiInstrumentPositionsSplitModifier`) is shared between
-  /// single-account (crypto wallet) and multi-account (group) hosts via a
-  /// plural `accountIds`, so no single owning chain is guaranteed here.
   func valuate(
     positions: [Position],
     hostCurrency: Instrument,
     costBasis: [String: Decimal],
-    on date: Date
+    on date: Date,
+    accountChainId: Int? = nil
   ) async -> [ValuedPosition] {
     // Phase 1 — accumulate one batch request per cross-instrument position;
     // same-instrument positions resolve inline (Rule 8 fast path) and never
@@ -89,12 +89,17 @@ struct PositionsValuator: Sendable {
             quantity: position.quantity,
             unitPrice: nil,
             costBasis: cost,
-            value: InstrumentAmount(quantity: position.quantity, instrument: hostCurrency)))
+            value: InstrumentAmount(quantity: position.quantity, instrument: hostCurrency),
+            accountChainId: accountChainId))
         continue
       }
       defer { cursor += 1 }
       if let entry = row(
-        for: position, hostCurrency: hostCurrency, cost: cost, outcome: outcomes[cursor])
+        for: position,
+        hostCurrency: hostCurrency,
+        cost: cost,
+        outcome: outcomes[cursor],
+        accountChainId: accountChainId)
       {
         rows.append(entry)
       }
@@ -109,7 +114,8 @@ struct PositionsValuator: Sendable {
     for position: Position,
     hostCurrency: Instrument,
     cost: InstrumentAmount?,
-    outcome: BatchConversionOutcome
+    outcome: BatchConversionOutcome,
+    accountChainId: Int?
   ) -> ValuedPosition? {
     switch outcome {
     case .knownZero:
@@ -134,7 +140,8 @@ struct PositionsValuator: Sendable {
         quantity: position.quantity,
         unitPrice: unit,
         costBasis: cost,
-        value: converted
+        value: converted,
+        accountChainId: accountChainId
       )
     case .failure(let error):
       logger.warning(
@@ -145,7 +152,8 @@ struct PositionsValuator: Sendable {
         quantity: position.quantity,
         unitPrice: nil,
         costBasis: cost,
-        value: nil
+        value: nil,
+        accountChainId: accountChainId
       )
     }
   }
