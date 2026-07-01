@@ -9,9 +9,9 @@ import os
 ///
 /// Two layers:
 /// - A **static base layer** (`staticBaseMap`), present from the instant the
-///   app launches, so construction-time canonicalization (later PRs) maps
-///   retired ids before the data migration writes any `alias_of` — the local
-///   device never mints a retired id.
+///   app launches, so construction-time canonicalization maps retired ids
+///   before the data migration writes any `alias_of` — the local device never
+///   mints a retired id.
 /// - A **dynamic layer** (`dynamicMap`), derived by grouping the shared
 ///   registry's crypto registrations by `assetKey` and refreshed on registry
 ///   change, covering discovered ERC-20s absent from the static list.
@@ -121,7 +121,6 @@ final class CanonicalInstrumentResolver: @unchecked Sendable {
   /// The `changes` stream is injected (not fetched from `registry`) so callers
   /// can share a single `observeChanges()` subscription across multiple
   /// consumers and tests can drive ticks without a real registry.
-  @discardableResult
   func startObserving(
     registry: any InstrumentRegistryRepository,
     changes: AsyncStream<Void>
