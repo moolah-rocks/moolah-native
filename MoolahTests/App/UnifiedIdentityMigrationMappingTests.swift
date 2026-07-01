@@ -1,7 +1,6 @@
 // MoolahTests/App/UnifiedIdentityMigrationMappingTests.swift
 
 import Foundation
-import GRDB
 import Testing
 
 @testable import Moolah
@@ -13,7 +12,7 @@ struct UnifiedIdentityMigrationMappingTests {
   func mapsRetiredToCanonical() async throws {
     let harness = try MigrationTestHarness.make()
     // Seed the shared registry with ETH on mainnet + OP + Base (all coingeckoId "ethereum"),
-    // and OP-USDC alongside mainnet-USDC. Retired rows are present (alias_of written by Task 2).
+    // and OP-USDC alongside mainnet-USDC.
     try await harness.seedSharedRegistry([
       .ethMainnet, .ethOptimism, .ethBase, .usdcMainnet, .usdcOptimism,
       .noKeyToken(chainId: 10, address: "0xdead"),  // no provider key -> its own canonical

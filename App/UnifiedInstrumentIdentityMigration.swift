@@ -40,17 +40,18 @@ struct UnifiedInstrumentIdentityMigration {
   private static let logger = Logger(
     subsystem: "com.moolah.app", category: "UnifiedInstrumentIdentityMigration")
 
-  // MARK: - Entry point (stub — full orchestration in Task 8)
+  // MARK: - Entry point
 
   /// Runs the migration if it has not already completed. Returns immediately
   /// when the gate flag is set. The full orchestration (alias writes, FK
-  /// rewrites, price-cache purge, re-push) is added in Task 8.
+  /// rewrites, price-cache purge, re-push) is implemented in a follow-on
+  /// commit; the gate-flag check above is sufficient for the scaffold.
   func run() async throws {
     guard !Self.isComplete(in: userDefaults) else {
       Self.logger.info("Already complete — skipping")
       return
     }
-    // Full orchestration (alias step, FK rewrite, price purge, re-push) is added in Task 8.
+    // Orchestration body added in a follow-on commit.
   }
 
   // MARK: - Mapping derivation
