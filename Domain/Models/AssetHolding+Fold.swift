@@ -90,7 +90,7 @@ extension AssetHolding {
       return InstrumentAmount(quantity: value.quantity / quantity, instrument: value.instrument)
     }()
 
-    let chainIds = Set(group.compactMap { $0.instrument.chainId })
+    let chainIds = Set(group.compactMap { $0.accountChainId })
 
     return AssetHolding(
       id: key,
@@ -105,7 +105,7 @@ extension AssetHolding {
       unitPrice: unitPrice,
       costBasis: costBasis,
       value: value,
-      contributingInstrumentIds: group.map { $0.instrument.id }.sorted(),
+      contributingInstrumentIds: Array(Set(group.map { $0.instrument.id })).sorted(),
       contributingChainIds: chainIds.sorted()
     )
   }
