@@ -129,6 +129,25 @@ private func seedUnmappedRows(_ database: Database) throws {
     arguments: [acctId, "Acct|\(acctId.uuidString)"])
 }
 
+// MARK: - Query helpers
+
+/// Executes a single-column `sql` query against `queue` and returns all rows
+/// as strings. For test use only — `sql` must be a hard-coded literal.
+private func fetchAll(_ sql: String, in queue: DatabaseQueue) async throws -> [String] {
+  try await queue.read { database in
+    try String.fetchAll(database, sql: sql)
+  }
+}
+
+/// Returns the count of rows with `needs_push = 1` in `table`.
+/// For test use only — `table` must be a hard-coded literal.
+private func needsPushCount(_ table: String, in queue: DatabaseQueue) async throws -> Int {
+  try await queue.read { database in
+    try Int.fetchOne(
+      database, sql: "SELECT count(*) FROM \(table) WHERE needs_push = 1") ?? 0
+  }
+}
+
 // MARK: - Tests
 
 @MainActor
@@ -148,63 +167,35 @@ struct UnifiedIdentityMigrationFkRewriteTests {
       profileId, mapping: ["10:native": "1:native", "8453:native": "1:native"])
 
     // All instrument_id FK columns point at the canonical id.
-    let legIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM transaction_leg")
-    }
+    let legIds = try await fetchAll("SELECT instrument_id FROM transaction_leg", in: queue)
     #expect(legIds == ["1:native"])
-    let earmarkIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM earmark")
-    }
+    let earmarkIds = try await fetchAll("SELECT instrument_id FROM earmark", in: queue)
     #expect(earmarkIds == ["1:native"])
-    let savingsIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT savings_target_instrument_id FROM earmark")
-    }
-    #expect(savingsIds == ["1:native"])
-    let ebiIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM earmark_budget_item")
-    }
+    let stIds = try await fetchAll(
+      "SELECT savings_target_instrument_id FROM earmark", in: queue)
+    #expect(stIds == ["1:native"])
+    let ebiIds = try await fetchAll(
+      "SELECT instrument_id FROM earmark_budget_item", in: queue)
     #expect(ebiIds == ["1:native"])
-    let groupIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM account_group")
-    }
+    let groupIds = try await fetchAll("SELECT instrument_id FROM account_group", in: queue)
     #expect(groupIds == ["1:native"])
-    let ivIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM investment_value")
-    }
+    let ivIds = try await fetchAll("SELECT instrument_id FROM investment_value", in: queue)
     #expect(ivIds == ["1:native"])
-    let acctIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM account")
-    }
+    let acctIds = try await fetchAll("SELECT instrument_id FROM account", in: queue)
     #expect(acctIds == ["1:native"])
 
     // needs_push = 1 on every rewritten row.
-    let legNP = try await queue.read { database in
-      try Int.fetchOne(database, sql: "SELECT count(*) FROM transaction_leg WHERE needs_push = 1")
-        ?? 0
-    }
+    let legNP = try await needsPushCount("transaction_leg", in: queue)
     #expect(legNP == 1)
-    let emkNP = try await queue.read { database in
-      try Int.fetchOne(database, sql: "SELECT count(*) FROM earmark WHERE needs_push = 1") ?? 0
-    }
+    let emkNP = try await needsPushCount("earmark", in: queue)
     #expect(emkNP == 1)
-    let ebiNP = try await queue.read { database in
-      try Int.fetchOne(
-        database, sql: "SELECT count(*) FROM earmark_budget_item WHERE needs_push = 1") ?? 0
-    }
+    let ebiNP = try await needsPushCount("earmark_budget_item", in: queue)
     #expect(ebiNP == 1)
-    let grpNP = try await queue.read { database in
-      try Int.fetchOne(database, sql: "SELECT count(*) FROM account_group WHERE needs_push = 1")
-        ?? 0
-    }
+    let grpNP = try await needsPushCount("account_group", in: queue)
     #expect(grpNP == 1)
-    let ivNP = try await queue.read { database in
-      try Int.fetchOne(database, sql: "SELECT count(*) FROM investment_value WHERE needs_push = 1")
-        ?? 0
-    }
+    let ivNP = try await needsPushCount("investment_value", in: queue)
     #expect(ivNP == 1)
-    let actNP = try await queue.read { database in
-      try Int.fetchOne(database, sql: "SELECT count(*) FROM account WHERE needs_push = 1") ?? 0
-    }
+    let actNP = try await needsPushCount("account", in: queue)
     #expect(actNP == 1)
   }
 
@@ -221,59 +212,32 @@ struct UnifiedIdentityMigrationFkRewriteTests {
     try await harness.migration.rewriteProfile(profileId, mapping: ["10:native": "1:native"])
 
     // instrument_ids are unchanged.
-    let legIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM transaction_leg")
-    }
+    let legIds = try await fetchAll("SELECT instrument_id FROM transaction_leg", in: queue)
     #expect(legIds == ["AUD"])
-    let earmarkIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM earmark")
-    }
+    let earmarkIds = try await fetchAll("SELECT instrument_id FROM earmark", in: queue)
     #expect(earmarkIds == ["AUD"])
-    let ebiIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM earmark_budget_item")
-    }
+    let ebiIds = try await fetchAll(
+      "SELECT instrument_id FROM earmark_budget_item", in: queue)
     #expect(ebiIds == ["AUD"])
-    let groupIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM account_group")
-    }
+    let groupIds = try await fetchAll("SELECT instrument_id FROM account_group", in: queue)
     #expect(groupIds == ["AUD"])
-    let ivIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM investment_value")
-    }
+    let ivIds = try await fetchAll("SELECT instrument_id FROM investment_value", in: queue)
     #expect(ivIds == ["AUD"])
-    let acctIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM account")
-    }
+    let acctIds = try await fetchAll("SELECT instrument_id FROM account", in: queue)
     #expect(acctIds == ["AUD"])
 
     // needs_push = 0 on every row — no rows were rewritten.
-    let legNP = try await queue.read { database in
-      try Int.fetchOne(database, sql: "SELECT count(*) FROM transaction_leg WHERE needs_push = 1")
-        ?? 0
-    }
+    let legNP = try await needsPushCount("transaction_leg", in: queue)
     #expect(legNP == 0)
-    let emkNP = try await queue.read { database in
-      try Int.fetchOne(database, sql: "SELECT count(*) FROM earmark WHERE needs_push = 1") ?? 0
-    }
+    let emkNP = try await needsPushCount("earmark", in: queue)
     #expect(emkNP == 0)
-    let ebiNP = try await queue.read { database in
-      try Int.fetchOne(
-        database, sql: "SELECT count(*) FROM earmark_budget_item WHERE needs_push = 1") ?? 0
-    }
+    let ebiNP = try await needsPushCount("earmark_budget_item", in: queue)
     #expect(ebiNP == 0)
-    let grpNP = try await queue.read { database in
-      try Int.fetchOne(database, sql: "SELECT count(*) FROM account_group WHERE needs_push = 1")
-        ?? 0
-    }
+    let grpNP = try await needsPushCount("account_group", in: queue)
     #expect(grpNP == 0)
-    let ivNP = try await queue.read { database in
-      try Int.fetchOne(database, sql: "SELECT count(*) FROM investment_value WHERE needs_push = 1")
-        ?? 0
-    }
+    let ivNP = try await needsPushCount("investment_value", in: queue)
     #expect(ivNP == 0)
-    let actNP = try await queue.read { database in
-      try Int.fetchOne(database, sql: "SELECT count(*) FROM account WHERE needs_push = 1") ?? 0
-    }
+    let actNP = try await needsPushCount("account", in: queue)
     #expect(actNP == 0)
   }
 }
