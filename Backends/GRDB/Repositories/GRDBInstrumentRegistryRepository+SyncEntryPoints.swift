@@ -97,8 +97,12 @@ extension GRDBInstrumentRegistryRepository {
   /// row is upserted with the `PricingStatusMerge` CRDT applied (and the
   /// issue-#1085 stale-echo date gate) and any stale local deletion intent
   /// cleared (D1-b, issue #1097); every deleted id is removed WITHOUT journaling
-  /// — server-originated deletes are already propagated by CKSyncEngine. If any
-  /// statement throws, the whole batch rolls back so prior on-disk state
+  /// — server-originated deletes are already propagated by CKSyncEngine. Where
+  /// a `canonicalResolver` is wired, incoming retired cross-chain ids (e.g.
+  /// `10:native`) have `alias_of` set to the canonical id via raw SQL (design
+  /// §3.5) on BOTH the fresh-insert path (after upsert) and the stale-echo path
+  /// (before the early `continue`) so a retired row is never left unaliased. If
+  /// any statement throws, the whole batch rolls back so prior on-disk state
   /// survives byte-equal, per `guides/DATABASE_CODE_GUIDE.md` §5.
   func applyRemoteChangesSync(saved rows: [InstrumentRow], deleted ids: [String]) throws {
     try database.write { database in
@@ -123,6 +127,11 @@ extension GRDBInstrumentRegistryRepository {
         // rather than throwing.
         let mergedStatus = Self.mergedPricingStatus(local: existing, incoming: row)
 
+        // Resolve the incoming id to its canonical id (design §3.5).
+        // `nil` when no resolver is wired (most construction sites) or
+        // when the id is already canonical — no alias write in either case.
+        let aliasTarget = canonicalAlias(for: row.id)
+
         // Modification-date gate on identity / provider-mapping fields and
         // the cached system-fields blob (issue #1085). Instruments have no
         // `needs_push`; the date gate piggybacks on the `fetchOne` above.
@@ -142,6 +151,13 @@ extension GRDBInstrumentRegistryRepository {
               .updateAll(
                 database, [InstrumentRow.Columns.pricingStatus.set(to: mergedStatus)])
           }
+          // Alias even on the stale-echo path: the row already exists but
+          // may have arrived before the alias feature shipped, leaving
+          // `alias_of` NULL. Write it here — BEFORE the `continue` — so a
+          // retired row is never left unaliased and visible. Idempotent.
+          if let aliasTarget {
+            try Self.setAliasOf(row.id, to: aliasTarget, in: database)
+          }
           continue
         }
 
@@ -152,6 +168,12 @@ extension GRDBInstrumentRegistryRepository {
         // now holds. Apply-path deletions below are NOT journaled —
         // server-originated deletions are already propagated.
         try Self.clearDeletionIntent(for: row.id, in: database)
+        // Alias AFTER the upsert so the row exists on a fresh insert.
+        // On the update path (existing row) ordering relative to upsert
+        // is immaterial — the row already exists and the UPDATE is idempotent.
+        if let aliasTarget {
+          try Self.setAliasOf(row.id, to: aliasTarget, in: database)
+        }
       }
       for id in ids {
         _ = try InstrumentRow.deleteOne(database, key: id)
@@ -161,6 +183,32 @@ extension GRDBInstrumentRegistryRepository {
     // map must be rebuilt before the next reader (e.g. a price-cache
     // resolution) observes it.
     invalidateInstrumentMapCache()
+  }
+
+  /// Returns the canonical alias target for `id` when `canonicalResolver`
+  /// is wired and `id` is a retired cross-chain instrument, or `nil`
+  /// otherwise (no resolver, or `id` is already canonical). Used to keep
+  /// the `applyRemoteChangesSync` write closure under the SwiftLint
+  /// `closure_body_length` budget.
+  private func canonicalAlias(for id: String) -> String? {
+    guard let resolver = canonicalResolver else { return nil }
+    let canonical = resolver.canonicalId(for: id)
+    return canonical == id ? nil : canonical
+  }
+
+  /// Marks a retired instrument row as an alias of its canonical id.
+  /// `alias_of` is a local-only column (not in `InstrumentRow.CodingKeys`),
+  /// written exclusively via raw SQL so no Codable upsert can clobber it.
+  /// The `id`/`recordName` and `encodedSystemFields` are never touched.
+  /// Idempotent — writing the same `alias_of` value twice is a no-op.
+  /// Uses `cachedStatement` per `DATABASE_CODE_GUIDE.md` §8: the statement
+  /// is prepared once per `Database` connection and reused across loop iterations.
+  private static func setAliasOf(
+    _ id: String, to canonical: String, in database: Database
+  ) throws {
+    let statement = try database.cachedStatement(
+      sql: "UPDATE instrument SET alias_of = ? WHERE id = ?")
+    try statement.execute(arguments: [canonical, id])
   }
 
   /// Resolves the `pricingStatus` raw value to persist for an incoming
