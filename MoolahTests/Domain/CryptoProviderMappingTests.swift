@@ -67,10 +67,12 @@ struct CryptoProviderMappingTests {
     #expect(btc.cryptocompareSymbol == "BTC")
     #expect(btc.binanceSymbol == "BTCUSDT")
 
-    // Every chain native gas instrument carries a real provider
-    // mapping so transaction detail / running-balance / aggregation
-    // resolves them from session start (issue #791).
-    for id in ["1:native", "10:native", "137:native", "8453:native"] {
+    // The canonical mainnet ETH and Polygon native gas instruments carry a
+    // real provider mapping so transaction detail / running-balance /
+    // aggregation resolves them from session start (issue #791).
+    // L2 ETH variants (10:native, 8453:native) are omitted from presets:
+    // ChainConfig aliases them to the canonical 1:native.
+    for id in ["1:native", "137:native"] {
       let preset = try #require(presets.first { $0.instrumentId == id })
       #expect(preset.cryptocompareSymbol != nil, "missing CC mapping for \(id)")
       #expect(preset.binanceSymbol != nil, "missing Binance mapping for \(id)")
