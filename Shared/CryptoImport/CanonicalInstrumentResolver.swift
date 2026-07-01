@@ -54,11 +54,17 @@ final class CanonicalInstrumentResolver: @unchecked Sendable {
 
   /// The canonical id for `id`, or `id` unchanged when it is not a known
   /// alias. Static base layer wins (it is authoritative and lock-free); the
-  /// dynamic layer covers the discovered tail. Canonical ids are never
-  /// themselves aliases, so a single hop suffices.
+  /// dynamic layer covers the discovered tail. The layers compose: a dynamic
+  /// entry is re-resolved through the static layer, so this method can never
+  /// return a static-alias (retired) id regardless of what `derive` selected
+  /// as a group's canonical. A single hop through each layer suffices because
+  /// `staticBaseMap` is flat (every alias maps directly to a mainnet id) and
+  /// `derive` now stores only resolved canonical ids.
   func canonicalId(for id: String) -> String {
     if let canonical = Self.staticBaseMap[id] { return canonical }
-    if let canonical = dynamicMap.withLock({ $0[id] }) { return canonical }
+    if let canonical = dynamicMap.withLock({ $0[id] }) {
+      return Self.staticBaseMap[canonical] ?? canonical
+    }
     return id
   }
 
@@ -88,8 +94,15 @@ final class CanonicalInstrumentResolver: @unchecked Sendable {
         return lhs.instrument.id < rhs.instrument.id
       }
       guard let canonical else { continue }
-      for member in members where member.instrument.id != canonical.instrument.id {
-        map[member.instrument.id] = canonical.instrument.id
+      // Resolve through the static base layer so the dynamic map only ever
+      // stores true canonical ids and never a static-alias key. This matters
+      // when a group has no mainnet member and `min` selects an L2 member that
+      // happens to be a static-alias key (e.g. Optimism USDC when only an
+      // Arbitrum sibling is registered alongside it).
+      let resolvedId =
+        Self.staticBaseMap[canonical.instrument.id] ?? canonical.instrument.id
+      for member in members where member.instrument.id != resolvedId {
+        map[member.instrument.id] = resolvedId
       }
     }
     return map
