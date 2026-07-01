@@ -318,6 +318,10 @@ final class SyncCoordinator {
   /// Scene-active fetch handle. `scheduleFetchChanges` cancels-and-replaces; `stop()` clears it.
   var fetchChangesTask: Task<Void, Never>?
 
+  /// Observation task that keeps `sharedCanonicalResolver`'s dynamic alias map
+  /// in sync with registry changes. Cancelled in `stop()`.
+  var canonicalResolverObservationTask: Task<Void, Never>?
+
   /// Number of consecutive re-fetch attempts scheduled after a save failure.
   /// Reset to zero whenever a fetched-record-zone-changes batch applies successfully.
   /// Exposed for testing.

@@ -23,14 +23,10 @@ extension MoolahApp {
     // `registry.observeChanges()` for its lifetime so remote-
     // arriving CKSyncEngine applies fan out automatically.
     let registryStore = SharedRegistryStore(registry: scope.registry)
-    // Construct the shared canonical resolver and start it observing the
-    // registry change stream. The returned Task runs for the app's lifetime
-    // (fire-and-forget: the resolver uses `[weak self]` internally so it
-    // exits cleanly if ever deallocated, matching the
-    // `attachSharedInstrumentRegistrySyncHooks` fire-and-forget pattern).
+    // Construct the shared canonical resolver. The observation task is wired
+    // after coordinator construction so it can be stored on the coordinator
+    // and cancelled by stop().
     let canonicalResolver = CanonicalInstrumentResolver()
-    _ = canonicalResolver.startObserving(
-      registry: scope.registry, changes: scope.registry.observeChanges())
     let coordinator = SyncCoordinator(
       containerManager: setup.manager,
       sharedInstrumentRegistry: scope.registry,
@@ -38,6 +34,8 @@ extension MoolahApp {
       sharedRegistryStore: registryStore,
       sharedNetworking: networking,
       sharedCanonicalResolver: canonicalResolver)
+    coordinator.canonicalResolverObservationTask = canonicalResolver.startObserving(
+      registry: scope.registry, changes: scope.registry.observeChanges())
     attachSharedInstrumentRegistrySyncHooks(
       registry: scope.registry, coordinator: coordinator)
     return coordinator
