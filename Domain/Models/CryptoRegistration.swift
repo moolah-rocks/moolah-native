@@ -4,26 +4,14 @@
 import Foundation
 
 /// Pairs a crypto instrument with its price provider mapping for persistence.
-struct CryptoRegistration: Codable, Sendable, Hashable, Identifiable {
+struct CryptoRegistration: Sendable, Hashable {
   let instrument: Instrument
   let mapping: CryptoProviderMapping
   /// How aggregation should treat this token's fiat value. Distinct from
   /// "rate unavailable" — `.unpriced` and `.spam` are intentionally zero,
   /// not errors. Defaults to `.priced` for rows decoded without the field
   /// and for built-in presets.
-  var pricingStatus: TokenPricingStatus
-
-  init(
-    instrument: Instrument,
-    mapping: CryptoProviderMapping,
-    pricingStatus: TokenPricingStatus = .priced
-  ) {
-    self.instrument = instrument
-    self.mapping = mapping
-    self.pricingStatus = pricingStatus
-  }
-
-  var id: String { instrument.id }
+  var pricingStatus: TokenPricingStatus = .priced
 
   /// Builds an `[instrumentId: assetKey]` lookup from a set of crypto
   /// registrations. An instrument absent from the result is treated by callers
@@ -48,30 +36,23 @@ struct CryptoRegistration: Codable, Sendable, Hashable, Identifiable {
     return assetKeys(from: registrations)
   }
 
-  private enum CodingKeys: String, CodingKey {
-    case instrument
-    case mapping
-    case pricingStatus
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    self.instrument = try container.decode(Instrument.self, forKey: .instrument)
-    self.mapping = try container.decode(CryptoProviderMapping.self, forKey: .mapping)
-    self.pricingStatus =
-      try container.decodeIfPresent(TokenPricingStatus.self, forKey: .pricingStatus) ?? .priced
-  }
-
   /// Hand-curated registrations seeded into every profile at session
-  /// startup so common chain native gas tokens (ETH on Ethereum / OP /
-  /// Base; MATIC on Polygon) and well-known ERC-20s (OP, UNI, ENS, plus
-  /// the canonical BTC entry) carry a real provider mapping before any
+  /// startup so common chain native gas tokens (ETH on Ethereum mainnet;
+  /// MATIC on Polygon) and well-known ERC-20s (OP, UNI, ENS, plus the
+  /// canonical BTC entry) carry a real provider mapping before any
   /// transaction references them. Without this seed, wallet sync's
   /// `ensureInstrumentReadable` would land a placeholder
   /// `InstrumentRow` with `pricingStatus=.priced` and no mapping —
   /// which `allCryptoRegistrations()` projects to nil and which
   /// `cryptoUsdPrice` then can't resolve, throwing
   /// `ConversionError.noProviderMapping`. See issue #791.
+  ///
+  /// L2 ETH variants (Optimism `10:native`, Base `8453:native`) are
+  /// omitted: `ChainConfig` aliases them to the canonical `1:native` so
+  /// they never need their own preset entry.
+  /// `registerBuiltInPresetsIfMissing` skips any preset whose `assetKey`
+  /// already matches an existing canonical registration, which prevents a
+  /// stale preset from re-minting a retired id.
   static let builtInPresets: [CryptoRegistration] = [
     CryptoRegistration(
       instrument: .crypto(
@@ -86,22 +67,6 @@ struct CryptoRegistration: Codable, Sendable, Hashable, Identifiable {
         chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
       mapping: CryptoProviderMapping(
         instrumentId: "1:native", coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
-      )
-    ),
-    CryptoRegistration(
-      instrument: .crypto(
-        chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
-      mapping: CryptoProviderMapping(
-        instrumentId: "10:native", coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
-      )
-    ),
-    CryptoRegistration(
-      instrument: .crypto(
-        chainId: 8453, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
-      mapping: CryptoProviderMapping(
-        instrumentId: "8453:native", coingeckoId: "ethereum",
         cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
       )
     ),
@@ -147,4 +112,24 @@ struct CryptoRegistration: Codable, Sendable, Hashable, Identifiable {
       )
     ),
   ]
+}
+
+extension CryptoRegistration: Identifiable {
+  var id: String { instrument.id }
+}
+
+extension CryptoRegistration: Codable {
+  private enum CodingKeys: String, CodingKey {
+    case instrument
+    case mapping
+    case pricingStatus
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    self.instrument = try container.decode(Instrument.self, forKey: .instrument)
+    self.mapping = try container.decode(CryptoProviderMapping.self, forKey: .mapping)
+    self.pricingStatus =
+      try container.decodeIfPresent(TokenPricingStatus.self, forKey: .pricingStatus) ?? .priced
+  }
 }

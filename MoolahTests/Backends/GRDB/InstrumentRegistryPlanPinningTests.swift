@@ -45,4 +45,28 @@ struct InstrumentRegistryPlanPinningTests {
     // partial index has to update this test deliberately.
     #expect(PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "instrument"))
   }
+
+  /// `allCryptoRegistrations()` issues `SELECT * FROM instrument WHERE
+  /// kind = ?` to load every crypto row and project each to a
+  /// `CryptoRegistration`. It runs on the startup preset-seeding path
+  /// (`registerBuiltInPresetsIfMissing` snapshots the existing asset
+  /// keys via this method), the sync-merge loop, reconcile, and the
+  /// analysis / store-refresh reads. There is no index on `kind`, so
+  /// SQLite plans a `SCAN instrument`: the table is small (a bounded set
+  /// of registered instruments plus ambient fiat synthesised in memory),
+  /// and reading every crypto row is the query's whole purpose, so an
+  /// index would not help. Pin the intentional full scan so a future
+  /// schema edit that (e.g.) routes this through a partial index has to
+  /// update this test deliberately.
+  @Test("allCryptoRegistrations WHERE kind is an intentional full scan")
+  func allCryptoRegistrationsIsIntentionalFullScan() throws {
+    let database = try makeDatabase()
+    let detail = try PlanPinningTestHelpers.planDetail(
+      database,
+      query: """
+        SELECT * FROM instrument WHERE kind = ?
+        """,
+      arguments: [Instrument.Kind.cryptoToken.rawValue])
+    #expect(PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "instrument"))
+  }
 }
