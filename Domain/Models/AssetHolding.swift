@@ -106,7 +106,7 @@ extension AssetHolding {
   /// that differs from their underlying instrument ids (e.g. "1:native").
   /// For these holdings the contributing chain ids reflect the canonical
   /// chain used for pricing, not the accounts' actual chains, so showing
-  /// a chain caption would be misleading (design §5). Chain-scoped tokens
+  /// a chain caption would be misleading. Chain-scoped tokens
   /// with no provider mapping fold under their own instrument id, so
   /// `contributingInstrumentIds.contains(id)` is true there and chain
   /// names are shown as normal.

@@ -225,7 +225,7 @@ struct AssetHoldingFoldTests {
     #expect(holding.unitPrice == nil)
   }
 
-  // MARK: - Chain caption suppression (design §5)
+  // MARK: - Chain caption suppression
 
   /// A canonical/unified asset (e.g. ETH `1:native` mapped to "ethereum")
   /// must suppress its chain caption. The `id` (provider key "ethereum")
@@ -266,11 +266,12 @@ struct AssetHoldingFoldTests {
     #expect(holding.chainSummaryLabel == "Polygon")
   }
 
-  /// Regression guard (design §5): after Task 2, OP-ETH and Base-ETH mint as
-  /// `1:native`. A multi-account group host coalesces them into one
-  /// `ValuedPosition` with `accountChainId = nil`, so the fold computes
-  /// `contributingChainIds = [1]` and would show "Ethereum" — misleading.
-  /// Option 2 suppresses the chain caption for this unified/canonical asset.
+  /// Regression guard: OP-ETH and Base-ETH are canonical `1:native`
+  /// instruments that fold under the "ethereum" provider key. A multi-account
+  /// group host coalesces them into one `ValuedPosition` with
+  /// `accountChainId = nil`, so the fold computes `contributingChainIds = [1]`
+  /// — misleadingly suggesting the single chain "Ethereum". Chain captions are
+  /// suppressed for canonical/unified assets to avoid this false signal.
   @Test
   func groupHostCoalescedUnifiedETHSuppressesChainCaption() throws {
     // Simulates what aggregatedGroupPositions + group host produce: one
@@ -283,10 +284,10 @@ struct AssetHoldingFoldTests {
     let holding = try #require(
       AssetHolding.fold(rows, assetKeys: ["1:native": "ethereum"], hostCurrency: aud).first)
     // contributingChainIds is [1] from the instrument fallback — misleadingly
-    // "Ethereum" — but chain caption must be suppressed for unified assets.
+    // "Ethereum" — but chain caption is suppressed for canonical/unified assets.
     #expect(holding.contributingChainIds == [1])
     #expect(
       holding.chainSummaryLabel == nil,
-      "Unified canonical asset must suppress misleading chain caption (design §5)")
+      "Canonical/unified asset must suppress misleading chain caption")
   }
 }
