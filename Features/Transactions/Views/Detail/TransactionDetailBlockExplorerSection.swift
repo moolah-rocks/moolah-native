@@ -20,10 +20,6 @@ struct TransactionDetailBlockExplorerSection: View {
   /// collection (not a store), so threading it here keeps the view thin.
   let accounts: Accounts
 
-  /// Whether the section should render at all. Hidden when no leg has
-  /// a usable explorer link so the section header doesn't appear empty.
-  var isApplicable: Bool { !explorerURLs.isEmpty }
-
   var body: some View {
     let urls = explorerURLs
     if !urls.isEmpty {

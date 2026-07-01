@@ -90,7 +90,14 @@ extension AssetHolding {
       return InstrumentAmount(quantity: value.quantity / quantity, instrument: value.instrument)
     }()
 
-    let chainIds = Set(group.compactMap { $0.accountChainId })
+    // Prefer the owning-account chain, falling back to the instrument's chain.
+    // The account chain is authoritative once cross-chain identity unifies;
+    // until then `instrument.chainId` still identifies the chain, so the
+    // fallback keeps behavior identical for group/exchange/unwired paths (whose
+    // positions carry a nil `accountChainId`) while letting `accountChainId` win
+    // where it is set. Mirrors the block-explorer tier logic
+    // (`accountId chain ?? instrument.chainId`).
+    let chainIds = Set(group.compactMap { $0.accountChainId ?? $0.instrument.chainId })
 
     return AssetHolding(
       id: key,
