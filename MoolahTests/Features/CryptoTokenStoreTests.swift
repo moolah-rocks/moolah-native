@@ -144,6 +144,9 @@ private struct FailingRegistry: InstrumentRegistryRepository, @unchecked Sendabl
   struct BoomError: Error {}
   func all() async throws -> [Instrument] { throw BoomError() }
   func allCryptoRegistrations() async throws -> [CryptoRegistration] { throw BoomError() }
+  func allCryptoRegistrationsIncludingAliased() async throws -> [CryptoRegistration] {
+    throw BoomError()
+  }
   func cryptoRegistration(byId id: String) async throws -> CryptoRegistration? {
     throw BoomError()
   }
