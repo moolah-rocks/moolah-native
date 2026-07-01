@@ -16,15 +16,19 @@ enum ProfileDataSyncHandlerTestSupport {
   /// queue it was wired to. Tests retain `database` so the in-memory
   /// queue outlives the handler's repository references.
   @MainActor
-  static func makeHandlerWithDatabase() throws -> HandlerHarness {
-    try makeHandlerAndDatabase()
+  static func makeHandlerWithDatabase(
+    canonicalResolver: CanonicalInstrumentResolver? = nil
+  ) throws -> HandlerHarness {
+    try makeHandlerAndDatabase(canonicalResolver: canonicalResolver)
   }
 
   /// Same as `makeHandlerWithDatabase()` — a separate name for callers
   /// that distinguish "I only need the handler" from "I need to verify
   /// GRDB state".
   @MainActor
-  static func makeHandlerAndDatabase() throws -> HandlerHarness {
+  static func makeHandlerAndDatabase(
+    canonicalResolver: CanonicalInstrumentResolver? = nil
+  ) throws -> HandlerHarness {
     let database = try ProfileDatabase.openInMemory()
     let profileId = UUID()
     let zoneID = CKRecordZone.ID(
@@ -36,7 +40,8 @@ enum ProfileDataSyncHandlerTestSupport {
     let handler = ProfileDataSyncHandler(
       profileId: profileId,
       zoneID: zoneID,
-      grdbRepositories: bundle)
+      grdbRepositories: bundle,
+      canonicalResolver: canonicalResolver)
     return HandlerHarness(handler: handler, database: database)
   }
 

@@ -244,7 +244,12 @@ extension ProfileDataSyncHandler {
       context: context,
       fieldValues: TransactionLegRow.fieldValues(from:),
       idKey: { $0.id.uuidString },
-      stamp: stampSystemFields)
+      stamp: stampSystemFields,
+      canonicalize: { row in
+        var row = row
+        row.instrumentId = self.canonicalInstrumentId(for: row.instrumentId)
+        return row
+      })
     try writeRemote(site: context.site) {
       try grdbRepositories.transactionLegs.applyRemoteChangesSync(
         saved: rows, deleted: [], in: database)
@@ -252,6 +257,18 @@ extension ProfileDataSyncHandler {
   }
 
   // MARK: - Mapping & Logging Helpers
+
+  /// Canonicalizes a stored FK instrument id via the injected resolver,
+  /// or returns it unchanged when no resolver is wired (preview/tests).
+  /// Synchronous and lock-guarded — safe from this `nonisolated` context.
+  nonisolated func canonicalInstrumentId(for id: String) -> String {
+    canonicalResolver?.canonicalId(for: id) ?? id
+  }
+
+  /// Optional overload for nullable FK columns (e.g. `EarmarkRow`).
+  nonisolated func canonicalInstrumentId(for id: String?) -> String? {
+    id.map { canonicalInstrumentId(for: $0) }
+  }
 
   /// Generic `stamp` closure shared by every save helper: copies the
   /// per-row encoded system fields blob onto the row before it lands
@@ -265,24 +282,29 @@ extension ProfileDataSyncHandler {
   }
 
   /// Decodes a batch of `CKRecord` values into typed GRDB rows, stamping
-  /// each row's `encodedSystemFields` from the per-batch lookup. Skips
-  /// (and logs) any record whose `fieldValues` returns `nil`.
+  /// each row's `encodedSystemFields` from the per-batch lookup and
+  /// applying an optional post-stamp transform (e.g. instrument-id
+  /// canonicalization). Skips (and logs) any record whose `fieldValues`
+  /// returns `nil`.
   ///
   /// `idKey` extracts the per-row lookup key for the system-fields
   /// dictionary — `.id.uuidString` for UUID-keyed rows, `.id` for the
   /// string-keyed `InstrumentRow`.
+  /// `canonicalize` defaults to the identity transform; callers that
+  /// require no instrument-id remapping may omit it.
   nonisolated func mapRows<Row>(
     context: GRDBBatchSaveContext,
     fieldValues: (CKRecord) -> Row?,
     idKey: (Row) -> String,
-    stamp: (Row, Data?) -> Row
+    stamp: (Row, Data?) -> Row,
+    canonicalize: (Row) -> Row = { $0 }
   ) -> [Row] {
     context.ckRecords.compactMap { ckRecord -> Row? in
       guard let row = fieldValues(ckRecord) else {
         Self.logMalformed(context.site, ckRecord)
         return nil
       }
-      return stamp(row, context.systemFields[idKey(row)])
+      return canonicalize(stamp(row, context.systemFields[idKey(row)]))
     }
   }
 

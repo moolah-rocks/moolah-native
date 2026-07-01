@@ -24,7 +24,8 @@ extension SyncCoordinator {
     let handler = ProfileDataSyncHandler(
       profileId: profileId,
       zoneID: zoneID,
-      grdbRepositories: grdbRepositories)
+      grdbRepositories: grdbRepositories,
+      canonicalResolver: sharedCanonicalResolver)
     dataHandlers[profileId] = handler
     return handler
   }
