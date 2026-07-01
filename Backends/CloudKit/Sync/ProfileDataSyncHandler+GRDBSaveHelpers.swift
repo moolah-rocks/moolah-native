@@ -172,7 +172,14 @@ extension ProfileDataSyncHandler {
       context: context,
       fieldValues: EarmarkRow.fieldValues(from:),
       idKey: { $0.id.uuidString },
-      stamp: stampSystemFields)
+      stamp: stampSystemFields,
+      canonicalize: { row in
+        var row = row
+        row.instrumentId = self.canonicalInstrumentId(for: row.instrumentId)
+        row.savingsTargetInstrumentId =
+          self.canonicalInstrumentId(for: row.savingsTargetInstrumentId)
+        return row
+      })
     try writeRemote(site: context.site) {
       try grdbRepositories.earmarks.applyRemoteChangesSync(
         saved: rows, deleted: [], in: database)
