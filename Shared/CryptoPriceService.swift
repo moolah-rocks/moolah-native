@@ -181,22 +181,15 @@ actor CryptoPriceService {
     }
   }
 
-  /// Extracts the chain id from a crypto instrument id of the form
-  /// `"<chainId>:native"` or `"<chainId>:<contractAddress>"`. Returns
-  /// `nil` when the id does not match the expected format.
+  // Ergonomic shims: retain the `fromCryptoId:` call-site phrasing that the
+  // purge and metadata eviction paths below already use; delegate to the
+  // shared `CryptoInstrumentID` helpers to avoid duplicating parse logic.
   private func chainId(fromCryptoId id: String) -> Int? {
-    Int(id.prefix(while: { $0 != ":" }))
+    CryptoInstrumentID.chainId(from: id)
   }
 
-  /// Extracts the contract-address segment from a crypto instrument id of the
-  /// form `"<chainId>:<contractAddress>"`. Returns `nil` for a native id
-  /// (`"<chainId>:native"`) or an id without a `:` separator — matching the
-  /// `contractAddress == nil` shape of a native `Instrument`, so the value
-  /// round-trips through `WrappedNativeContracts.nativePricingInstrumentId`.
   private func contractAddress(fromCryptoId id: String) -> String? {
-    guard let colon = id.firstIndex(of: ":") else { return nil }
-    let suffix = String(id[id.index(after: colon)...])
-    return suffix == "native" ? nil : suffix
+    CryptoInstrumentID.contractAddress(from: id)
   }
 
   // MARK: - Single price

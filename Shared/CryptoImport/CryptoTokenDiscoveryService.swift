@@ -36,9 +36,9 @@ actor CryptoTokenDiscoveryService {
   private var inFlight: [String: Task<CryptoRegistration, Error>] = [:]
   private let registry: any InstrumentRegistryRepository
   private let resolver: any CryptoRegistrationResolver
-  /// Resolver that redirects L2 native/ERC-20 instruments onto their
-  /// canonical mainnet id (e.g. OP native ETH → `1:native`) before persisting.
-  /// Defaulted so existing call sites compile unchanged.
+  /// Redirects L2 native/ERC-20 instruments onto their canonical mainnet id
+  /// (e.g. OP native ETH → `1:native`) before persisting. Omit in init to use
+  /// the standard canonicalization rules.
   private let canonicalResolver: CanonicalInstrumentResolver
   private let logger = Logger(
     subsystem: "com.moolah.app", category: "CryptoTokenDiscovery")
@@ -81,6 +81,13 @@ actor CryptoTokenDiscoveryService {
   /// coalesced via the in-flight `Task` pattern — the actor serialises the
   /// "check repository → launch resolution → store result" critical section
   /// so at most one new row per unique key reaches the registry.
+  ///
+  /// The incoming `(chainId, contractAddress)` pair is canonicalized before
+  /// the registry lookup, in-flight dedup, and persist: L2 native tokens
+  /// (e.g. Optimism/Base ETH) collapse onto `1:native`, and L2 stablecoin
+  /// deployments (e.g. OP USDC) collapse onto their mainnet contract id.
+  /// Two callers with different raw ids that map to the same canonical id
+  /// share one in-flight `Task` and produce one registry row.
   func resolveOrLoad(
     chainId: Int,
     contractAddress: String?,
@@ -88,9 +95,25 @@ actor CryptoTokenDiscoveryService {
     name: String,
     decimals: Int
   ) async throws -> CryptoRegistration {
-    let instrument = Instrument.crypto(
+    // Derive the canonical id synchronously — `canonicalId(for:)` only
+    // touches an `OSAllocatedUnfairLock` and is never awaited, so there is
+    // no risk of holding the lock across a suspension point.
+    let requestedId = Instrument.crypto(
       chainId: chainId,
       contractAddress: contractAddress,
+      symbol: symbol,
+      name: name,
+      decimals: decimals
+    ).id
+    let canonicalId = canonicalResolver.canonicalId(for: requestedId)
+    // Decompose the canonical id so the instrument's value fields (chainId,
+    // contractAddress) match its id. A mismatch would persist a row whose
+    // stored chainId/contractAddress differ from the primary key.
+    let canonicalChainId = CryptoInstrumentID.chainId(from: canonicalId) ?? chainId
+    let canonicalAddress = CryptoInstrumentID.contractAddress(from: canonicalId)
+    let instrument = Instrument.crypto(
+      chainId: canonicalChainId,
+      contractAddress: canonicalAddress,
       symbol: symbol,
       name: name,
       decimals: decimals)

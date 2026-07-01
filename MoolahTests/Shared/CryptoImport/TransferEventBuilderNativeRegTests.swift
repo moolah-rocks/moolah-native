@@ -39,8 +39,11 @@ struct TransferEventBuilderNativeRegTests {
         alchemy: ZeroReceiptAlchemyStub()),
       importOrigin: origin)
 
+    // After canonicalization, OP native ETH (10:native) is stored under
+    // the mainnet canonical id (1:native). The registry must not have a
+    // row for the retired id.
     let registration = try #require(
-      try await subject.registry.cryptoRegistration(byId: "10:native"))
+      try await subject.registry.cryptoRegistration(byId: "1:native"))
     // Default resolver scripts `coingecko: "default-id"` for unscripted
     // keys; the assertion is on "mapping populated", not on a specific
     // provider id.
@@ -81,8 +84,11 @@ struct TransferEventBuilderNativeRegTests {
         alchemy: ZeroReceiptAlchemyStub()),
       importOrigin: origin)
 
+    // After canonicalization, OP native ETH (10:native) is stored under
+    // the mainnet canonical id (1:native). The registry must not have a
+    // row for the retired id.
     let native = try #require(
-      try await subject.registry.cryptoRegistration(byId: "10:native"))
+      try await subject.registry.cryptoRegistration(byId: "1:native"))
     #expect(native.mapping.coingeckoId == "default-id")
     #expect(native.pricingStatus == .priced)
   }
