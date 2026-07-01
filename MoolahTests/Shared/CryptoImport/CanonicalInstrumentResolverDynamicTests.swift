@@ -65,6 +65,46 @@ struct CanonicalInstrumentResolverDynamicTests {
     #expect(resolver.isAlias("10:0xddd"))
   }
 
+  // MARK: - Layer-composition tests
+
+  /// Regression: `derive` picks the lowest-chainId member as canonical when
+  /// there is no mainnet member. If that member is itself a static-alias key
+  /// (e.g. Optimism USDC, chainId 10), the dynamic map used to store the
+  /// static-alias as the canonical id. `canonicalId(for:)` would then return
+  /// a RETIRED id rather than the true mainnet id.
+  ///
+  /// After the fix, `derive` resolves the selected canonical through
+  /// `staticBaseMap` before writing the map, and `canonicalId(for:)` also
+  /// re-resolves the dynamic result through the static layer — so both layers
+  /// compose and the invariant holds.
+  @Test(
+    "dynamic + static layers compose: no-mainnet group with static-alias member resolves to mainnet canonical"
+  )
+  func dynamicStaticLayersCompose() {
+    // Arbitrum USDC (chainId 42161) — not in staticBaseMap.
+    let arbitrumUSDC = "42161:0xaf88d065e77c8cc2239327c5edb3a432268e5831"
+    // Optimism USDC (chainId 10) — IS a static-alias of mainnet USDC.
+    let optimismUSDC = "10:0x0b2c639c533813f4aa9d7837caf62653d097ff85"
+    let mainnnetUSDC = "1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+
+    let resolver = CanonicalInstrumentResolver()
+    // No mainnet member. `derive` selects Optimism (lowest chainId = 10) as
+    // the group canonical, but Optimism USDC is itself a static-alias key.
+    resolver.refresh(with: [
+      reg(arbitrumUSDC, chainId: 42161, coingeckoId: "usd-coin"),
+      reg(optimismUSDC, chainId: 10, coingeckoId: "usd-coin"),
+    ])
+
+    // The Arbitrum USDC must resolve all the way to the mainnet canonical,
+    // not to the intermediate Optimism USDC (the retired static-alias key).
+    #expect(resolver.canonicalId(for: arbitrumUSDC) == mainnnetUSDC)
+    #expect(resolver.isAlias(arbitrumUSDC))
+
+    // Optimism USDC still resolves correctly via the static layer.
+    #expect(resolver.canonicalId(for: optimismUSDC) == mainnnetUSDC)
+    #expect(resolver.isAlias(optimismUSDC))
+  }
+
   @Test("refresh(from:) swallows registry errors and leaves map unchanged")
   func refreshErrorDoesNotCorruptMap() async {
     let resolver = CanonicalInstrumentResolver()
