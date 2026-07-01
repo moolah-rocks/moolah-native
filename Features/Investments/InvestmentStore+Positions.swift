@@ -89,6 +89,15 @@ extension InvestmentStore {
     // contribute a request. Phase 2 — one batched conversion (cancellation
     // surfaces as a thrown `CancellationError`). Phase 3 — assemble each
     // position's row and fold its outcome into the total / first failure.
+    //
+    // Snapshot both actor-isolated properties into locals before the first
+    // suspension point. A concurrent `reloadPositionsIfNeeded` can grow
+    // `self.positions` during the await, causing `outcomes[cursor]` to go
+    // out-of-bounds on the second iteration. The snapshot also freezes
+    // `loadedAccountChainId` so every `ValuedPosition` in this run carries
+    // the same chain identity regardless of what the actor sees post-await.
+    let positions = self.positions
+    let loadedAccountChainId = self.loadedAccountChainId
     var requests: [BatchConversionRequest] = []
     requests.reserveCapacity(positions.count)
     for position in positions where position.instrument.id != profileCurrency.id {
@@ -118,7 +127,10 @@ extension InvestmentStore {
       let resolved: BatchConversionOutcome? = isHostCurrency ? nil : outcomes[cursor]
       if !isHostCurrency { cursor += 1 }
       let (entry, outcome) = valuate(
-        position: position, profileCurrency: profileCurrency, outcome: resolved)
+        position: position,
+        profileCurrency: profileCurrency,
+        outcome: resolved,
+        accountChainId: loadedAccountChainId)
       if let entry { valued.append(entry) }
       switch outcome {
       case .success(let value):
@@ -196,7 +208,10 @@ extension InvestmentStore {
   /// pre-resolved batch `outcome`. Pass `outcome: nil` for a host-currency
   /// position (Rule 8 fast path) — it values 1:1 without a conversion.
   private func valuate(
-    position: Position, profileCurrency: Instrument, outcome: BatchConversionOutcome?
+    position: Position,
+    profileCurrency: Instrument,
+    outcome: BatchConversionOutcome?,
+    accountChainId: Int?
   ) -> (ValuedPosition?, ValuationOutcome) {
     guard let outcome else {
       let entry = ValuedPosition(
@@ -205,7 +220,7 @@ extension InvestmentStore {
         unitPrice: nil,
         costBasis: nil,
         value: InstrumentAmount(quantity: position.quantity, instrument: profileCurrency),
-        accountChainId: loadedAccountChainId)
+        accountChainId: accountChainId)
       return (entry, .success(position.quantity))
     }
     switch outcome {
@@ -223,7 +238,7 @@ extension InvestmentStore {
         unitPrice: unit,
         costBasis: nil,
         value: converted,
-        accountChainId: loadedAccountChainId)
+        accountChainId: accountChainId)
       return (entry, .success(value))
     case .failure(let error):
       logger.warning(
@@ -235,7 +250,7 @@ extension InvestmentStore {
         unitPrice: nil,
         costBasis: nil,
         value: nil,
-        accountChainId: loadedAccountChainId)
+        accountChainId: accountChainId)
       return (entry, .failure(error))
     }
   }

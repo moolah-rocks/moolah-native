@@ -134,6 +134,43 @@ struct MultiInstrumentPositionsAssemblerTests {
     )
   }
 
+  // assemble preserves accountChainId stamped on a ValuedPosition by the upstream
+  // valuator. The cost-basis overlay rebuilds each row; this test guards against
+  // the overlay accidentally dropping chain identity.
+  @Test
+  func assemblePreservesAccountChainId() async throws {
+    let chainId = 10
+    let txns = [
+      buyTransaction(
+        instrument: btc, qty: 1, fiat: 50_000, accountId: accountA, daysAfterEpoch: 1)
+    ]
+    let service = FakeConversionService.fixedRates([btc.id: Decimal(60_000)])
+    let assembler = MultiInstrumentPositionsAssembler(conversionService: service)
+
+    let valuedRow = ValuedPosition(
+      instrument: btc, quantity: 1,
+      unitPrice: InstrumentAmount(quantity: 60_000, instrument: aud),
+      costBasis: nil,
+      value: InstrumentAmount(quantity: 60_000, instrument: aud),
+      accountChainId: chainId)
+
+    let context = PositionsAssemblyContext(
+      title: "Chain Wallet",
+      hostCurrency: aud,
+      accountIds: [accountA])
+    let input = await assembler.assemble(
+      context: context,
+      valuedRows: [valuedRow],
+      transactions: txns,
+      range: .all
+    )
+
+    let row = try #require(input.positions.first, "assembler must produce at least one row")
+    #expect(
+      row.accountChainId == chainId,
+      "accountChainId \(chainId) must survive the cost-basis overlay rebuild")
+  }
+
   // costBasisSnapshot omits an instrument whose classification fails while
   // keeping cleanly-classifiable instruments (Rule 11 — unavailable, not zero).
   //
