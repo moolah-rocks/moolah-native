@@ -283,12 +283,12 @@ extension ProfileDataSyncHandler {
   /// Canonicalizes a stored FK instrument id via the injected resolver,
   /// or returns it unchanged when no resolver is wired (preview/tests).
   /// Synchronous and lock-guarded — safe from this `nonisolated` context.
-  nonisolated func canonicalInstrumentId(for id: String) -> String {
+  nonisolated private func canonicalInstrumentId(for id: String) -> String {
     canonicalResolver?.canonicalId(for: id) ?? id
   }
 
   /// Optional overload for nullable FK columns (e.g. `EarmarkRow`).
-  nonisolated func canonicalInstrumentId(for id: String?) -> String? {
+  nonisolated private func canonicalInstrumentId(for id: String?) -> String? {
     id.map { canonicalInstrumentId(for: $0) }
   }
 

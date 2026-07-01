@@ -240,7 +240,7 @@ extension InstrumentPickerStore {
     /// drive the canonicalize → resolve → persist path without going through a
     /// full `InstrumentSearchService` / `InstrumentSearchResult` stack.
     /// Production code never calls this method.
-    func registerForTest(_ instrument: Instrument) async -> Instrument? {
+    func registerForTesting(_ instrument: Instrument) async -> Instrument? {
       await registerCrypto(instrument)
     }
   }

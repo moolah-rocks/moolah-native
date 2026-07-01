@@ -6,7 +6,7 @@ import Testing
 @testable import Moolah
 
 /// Regression guard for the per-profile-zone `.serverRecordChanged`
-/// conflict-path convergence invariant (design §3.4 must-verify).
+/// conflict-path convergence invariant.
 ///
 /// The conflict path never decodes the server record's field values into
 /// local storage. `SyncErrorRecovery.classifySaveFailure` routes a
@@ -16,7 +16,7 @@ import Testing
 /// by calling back into `ProfileDataSyncHandler.recordToSave(for:)`, which
 /// reads the *current stored GRDB row* — not any cached server record.
 ///
-/// Because fetch-path canonicalization (Tasks 1-3) already rewrites a
+/// Because fetch-path canonicalization already rewrites a
 /// non-canonical instrument id before the row is stored, the row
 /// `recordToSave` reads is always canonical, so the re-queued upload is
 /// canonical too. There is no separate decode-and-write conflict path that

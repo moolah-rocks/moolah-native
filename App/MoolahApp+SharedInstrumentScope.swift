@@ -14,7 +14,7 @@ extension MoolahApp {
   static func bootstrapSyncCoordinator(setup: ContainerSetup) -> SyncCoordinator {
     let networking = NetworkingServices()
     // Build the resolver first so the shared registry can apply `alias_of`
-    // on incoming instrument records (design §3.5). Its observation task is
+    // on incoming instrument records. Its observation task is
     // wired after the coordinator exists so it can be stored on the coordinator
     // and cancelled by stop().
     let canonicalResolver = CanonicalInstrumentResolver()
@@ -46,7 +46,7 @@ extension MoolahApp {
   /// Constructs the app-level shared `GRDBInstrumentRegistryRepository`
   /// pointed at the profile-index DB, wired with `canonicalResolver` so the
   /// apply path marks incoming retired cross-chain instrument rows `alias_of`
-  /// their canonical id (design §3.5). Sync hooks are no-ops at construction
+  /// their canonical id. Sync hooks are no-ops at construction
   /// time and rotated in via `attachSharedInstrumentRegistrySyncHooks` once the
   /// `SyncCoordinator` exists (chicken-and-egg: the coordinator's init takes
   /// the registry, so the registry can't capture the coordinator at its own init).

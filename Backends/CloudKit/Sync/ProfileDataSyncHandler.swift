@@ -34,8 +34,8 @@ final class ProfileDataSyncHandler {
   nonisolated let grdbRepositories: ProfileGRDBRepositories
 
   /// Redirects a retired cross-chain instrument id on an incoming
-  /// FK-holding record onto its canonical id before the row is stored
-  /// (design §3.4), so an un-migrated peer's `10:native` leg lands as
+  /// FK-holding record onto its canonical id before the row is stored,
+  /// so an un-migrated peer's `10:native` leg lands as
   /// `1:native`. `nil` for preview/test callers that don't canonicalize;
   /// production wires `SyncCoordinator.sharedCanonicalResolver`.
   nonisolated let canonicalResolver: CanonicalInstrumentResolver?
