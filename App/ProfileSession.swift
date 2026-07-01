@@ -243,9 +243,9 @@ final class ProfileSession: Identifiable {
   }
 
   /// Tail of the initialiser: wires registry pieces, AccountGroupStore,
-  /// InsightStore, the canonical resolver (addition A), and crypto sync
-  /// stores; starts the hourly `PRAGMA optimize` tick (issue #576). Reads
-  /// from `self` — every property is fully initialised before this runs.
+  /// InsightStore, the canonical resolver, and crypto sync stores; starts
+  /// the hourly `PRAGMA optimize` tick (issue #576). Reads from `self` —
+  /// every property is fully initialised before this runs.
   private func finishInit(registryWiring: RegistryWiring, syncCoordinator: SyncCoordinator?) {
     // MUST run before `makeCryptoSyncWiring` / `seedBuiltInCryptoPresets`
     // below, which read `instrumentRegistry`.

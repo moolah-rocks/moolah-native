@@ -21,7 +21,7 @@ final class InstrumentPickerStore {
   /// Collapses a searched L2 instrument onto its canonical mainnet id before
   /// persisting — mirrors `CryptoTokenDiscoveryService.resolveOrLoad`. `nil`
   /// in previews and tests that don't wire the resolver; those callers fall
-  /// through to the raw id unchanged (addition A).
+  /// through to the raw id unchanged.
   private let canonicalResolver: CanonicalInstrumentResolver?
   private let logger = Logger(
     subsystem: "com.moolah.app", category: "InstrumentPickerStore")
@@ -113,7 +113,7 @@ final class InstrumentPickerStore {
   /// write: an L2 stablecoin (e.g. Optimism USDC `10:0x0b2c…`) collapses onto
   /// its mainnet id (`1:0xa0b8…`), matching `CryptoTokenDiscoveryService
   /// .resolveOrLoad`. When the canonical row already exists the method returns
-  /// it immediately, skipping the network round-trip (addition A).
+  /// it immediately, skipping the network round-trip.
   ///
   /// Native (chain-only) tokens are detected by a nil `contractAddress`. The
   /// resolver gets `isNative: true` and a nil contract on those rows; tokens
@@ -129,8 +129,14 @@ final class InstrumentPickerStore {
 
     // If the canonical instrument is already registered, reuse it verbatim —
     // don't re-resolve or clobber a good mainnet row with placeholder fields.
-    if let existing = try? await registry.cryptoRegistration(byId: canonicalInstrument.id) {
-      return existing.instrument
+    do {
+      if let existing = try await registry.cryptoRegistration(byId: canonicalInstrument.id) {
+        return existing.instrument
+      }
+    } catch {
+      logger.error("Registry lookup failed: \(error, privacy: .public)")
+      self.error = "Couldn't check registration for \(canonicalInstrument.displayLabel)."
+      return nil
     }
 
     isResolving = true
