@@ -250,9 +250,9 @@ final class ProfileSession: Identifiable {
   /// Cross-store propagation is handled reactively: every store
   /// subscribes to its repository's GRDB `ValueObservation` stream in
   /// `init`, so remote-sync writes (and local writes) reach views
-  /// without an explicit reload step. The session needs no reference
-  /// to `SyncCoordinator` here — apply drives GRDB writes and the
-  /// observation streams take it from there.
+  /// without an explicit reload step. `syncCoordinator` is passed only
+  /// to supply the shared `CanonicalInstrumentResolver` to the crypto
+  /// discovery wiring; it is not otherwise retained here.
   private func finishInit(registryWiring: RegistryWiring, syncCoordinator: SyncCoordinator?) {
     // MUST run before `makeCryptoSyncWiring` / `seedBuiltInCryptoPresets`
     // below, which read `instrumentRegistry`.
