@@ -68,4 +68,43 @@ struct WrappedNativeContractsTests {
     #expect(WrappedNativeContracts.canonicalWrappedInstrumentId(forChainId: 999) == nil)
     #expect(WrappedNativeContracts.canonicalWrappedInstrumentId(forChainId: nil) == nil)
   }
+
+  // Design §3a: L2 WETH prices via the canonical mainnet native id
+
+  @Test("L2 WETH prices via the canonical mainnet native id")
+  func l2WethMapsToMainnetNative() {
+    let opWeth = "0x4200000000000000000000000000000000000006"
+    #expect(
+      WrappedNativeContracts.nativePricingInstrumentId(chainId: 10, contractAddress: opWeth)
+        == "1:native")
+    #expect(
+      WrappedNativeContracts.nativePricingInstrumentId(chainId: 8453, contractAddress: opWeth)
+        == "1:native")
+    #expect(
+      WrappedNativeContracts.nativePricingInstrumentId(
+        chainId: 1,
+        contractAddress: "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2") == "1:native")
+  }
+
+  @Test("Polygon WMATIC still prices via its own native id")
+  func polygonWmaticUnchanged() {
+    #expect(
+      WrappedNativeContracts.nativePricingInstrumentId(
+        chainId: 137,
+        contractAddress: "0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270") == "137:native")
+  }
+
+  @Test("wrapperIds enumerates every wrapper pricing via the canonical native id")
+  func wrapperIdsForCanonicalNative() {
+    let ids = Set(WrappedNativeContracts.wrapperIds(pricingVia: "1:native"))
+    #expect(
+      ids == [
+        "1:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
+        "10:0x4200000000000000000000000000000000000006",
+        "8453:0x4200000000000000000000000000000000000006",
+      ])
+    #expect(
+      WrappedNativeContracts.wrapperIds(pricingVia: "137:native")
+        == ["137:0x0d500b1d8e8ef31e21c99d1db9a6444d3adf1270"])
+  }
 }

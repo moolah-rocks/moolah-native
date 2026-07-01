@@ -293,15 +293,14 @@ actor FullConversionService: InstrumentConversionService {
   /// that changes `pricingStatus` for the instrument's registration.
   func invalidateCache(for instrument: Instrument) async {
     var staleIds: Set<String> = [instrument.id]
-    // A wrapped-native token is priced via its chain's native asset but
-    // its unit rate is memoised under the wrapper's own id, so
-    // invalidating the native asset must also evict the wrapper —
-    // otherwise WETH keeps converting at the pre-update ETH rate.
-    if instrument.kind == .cryptoToken, instrument.contractAddress == nil,
-      let wrapperId = WrappedNativeContracts.canonicalWrappedInstrumentId(
-        forChainId: instrument.chainId)
-    {
-      staleIds.insert(wrapperId)
+    // A native rate change invalidates every wrapper priced via this
+    // native id (design §3a: mainnet + OP + Base WETH all price via
+    // `1:native`). Wrappers memoise their rate under their own id;
+    // they must be evicted or they keep converting at a stale ETH rate.
+    if instrument.kind == .cryptoToken, instrument.contractAddress == nil {
+      for wrapperId in WrappedNativeContracts.wrapperIds(pricingVia: instrument.id) {
+        staleIds.insert(wrapperId)
+      }
     }
     rateCache = rateCache.filter { key, _ in
       !staleIds.contains(key.fromId) && !staleIds.contains(key.toId)
