@@ -31,7 +31,8 @@ struct ChainConfigTests {
     #expect(config.blockExplorerBaseURL.absoluteString == "https://optimistic.etherscan.io")
     #expect(config.blockscoutAPIBaseURL.absoluteString == "https://explorer.optimism.io")
     #expect(config.nativeInstrument.ticker == "ETH")
-    #expect(config.nativeInstrument.chainId == 10)
+    #expect(config.nativeInstrument.id == "1:native")  // canonical mainnet ETH (§3.1)
+    #expect(config.nativeInstrument.chainId == 1)  // canonical mainnet ETH — chain-of-holding is on the account (§2/§3.1)
   }
 
   @Test
@@ -44,7 +45,8 @@ struct ChainConfigTests {
     #expect(config.blockExplorerBaseURL.absoluteString == "https://basescan.org")
     #expect(config.blockscoutAPIBaseURL.absoluteString == "https://base.blockscout.com")
     #expect(config.nativeInstrument.ticker == "ETH")
-    #expect(config.nativeInstrument.chainId == 8453)
+    #expect(config.nativeInstrument.id == "1:native")  // canonical mainnet ETH (§3.1)
+    #expect(config.nativeInstrument.chainId == 1)  // canonical mainnet ETH — chain-of-holding is on the account (§2/§3.1)
   }
 
   @Test
@@ -71,10 +73,20 @@ struct ChainConfigTests {
 
   @Test
   func nativeInstrumentsUseCorrectFactoryFormat() {
-    // The crypto factory normalises native instruments to "<chainId>:native".
+    // ETH L2 native instruments canonicalize to mainnet ETH (1:native) per design §3.1.
+    // Chain-of-holding is carried by the account, not the instrument (design §2).
     #expect(ChainConfig.ethereum.nativeInstrument.id == "1:native")
-    #expect(ChainConfig.optimism.nativeInstrument.id == "10:native")
-    #expect(ChainConfig.base.nativeInstrument.id == "8453:native")
+    #expect(ChainConfig.optimism.nativeInstrument.id == "1:native")
+    #expect(ChainConfig.base.nativeInstrument.id == "1:native")
+  }
+
+  @Test("L2 native instruments match the resolver's static canonical map")
+  func l2NativeMatchesResolverStaticMap() {
+    // Drift guard: if CanonicalInstrumentResolver.staticBaseMap ever changes its ETH
+    // L2 entries, this test will catch the divergence from the hardcoded ChainConfig values.
+    let resolver = CanonicalInstrumentResolver()
+    #expect(ChainConfig.optimism.nativeInstrument.id == resolver.canonicalId(for: "10:native"))
+    #expect(ChainConfig.base.nativeInstrument.id == resolver.canonicalId(for: "8453:native"))
   }
 
   @Test

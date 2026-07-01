@@ -84,11 +84,14 @@ extension ChainConfig {
   /// Blockscout is the authoritative internal-ETH source; Alchemy
   /// `internal` is not requested. OP-stack rollup: charges an L1 data
   /// fee on top of L2 execution.
+  ///
+  /// `nativeInstrument` is the canonical mainnet ETH instrument (`1:native`);
+  /// chain-of-holding comes from the account, not the instrument (design §2/§3.1).
   static let optimism = ChainConfig(
     chainId: 10,
     alchemyNetworkSlug: "opt-mainnet",
     nativeInstrument: Instrument.crypto(
-      chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
+      chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
     supportsInternalTransfers: false,
     chargesL1DataFee: true,
     blockExplorerBaseURL: requireURL("https://optimistic.etherscan.io"),
@@ -103,11 +106,14 @@ extension ChainConfig {
   /// Blockscout is the authoritative internal-ETH source; Alchemy
   /// `internal` is not requested. OP-stack rollup: charges an L1 data
   /// fee on top of L2 execution.
+  ///
+  /// `nativeInstrument` is the canonical mainnet ETH instrument (`1:native`);
+  /// chain-of-holding comes from the account, not the instrument (design §2/§3.1).
   static let base = ChainConfig(
     chainId: 8453,
     alchemyNetworkSlug: "base-mainnet",
     nativeInstrument: Instrument.crypto(
-      chainId: 8453, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
+      chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
     supportsInternalTransfers: false,
     chargesL1DataFee: true,
     blockExplorerBaseURL: requireURL("https://basescan.org"),
