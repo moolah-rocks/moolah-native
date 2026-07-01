@@ -143,4 +143,112 @@ struct ProfileHandlerCanonicalizationTests {
     #expect(stored?.instrumentId == "1:native")
     #expect(stored?.savingsTargetInstrumentId == nil)
   }
+
+  // MARK: - EarmarkBudgetItem, InvestmentValue, AccountGroup
+
+  @Test
+  func incomingEarmarkBudgetItemCanonicalizesInstrument() async throws {
+    let harness = try await MainActor.run {
+      try ProfileDataSyncHandlerTestSupport.makeHandlerAndDatabase(
+        canonicalResolver: CanonicalInstrumentResolver())
+    }
+    let id = UUID()
+    let item = ProfileDataSyncHandlerTestSupport.earmarkBudgetItemRow(
+      id: id, earmarkId: UUID(), categoryId: UUID(), instrumentId: "10:native")
+    _ = harness.handler.applyRemoteChanges(
+      saved: [item.toCKRecord(in: harness.handler.zoneID)], deleted: [])
+    let stored = try await harness.database.read { database in
+      try EarmarkBudgetItemRow
+        .filter(EarmarkBudgetItemRow.Columns.id == id).fetchOne(database)
+    }
+    #expect(stored?.instrumentId == "1:native")
+  }
+
+  @Test
+  func incomingEarmarkBudgetItemWithNilResolverStoredUnchanged() async throws {
+    let harness = try await MainActor.run {
+      try ProfileDataSyncHandlerTestSupport.makeHandlerAndDatabase(
+        canonicalResolver: nil)
+    }
+    let id = UUID()
+    let item = ProfileDataSyncHandlerTestSupport.earmarkBudgetItemRow(
+      id: id, earmarkId: UUID(), categoryId: UUID(), instrumentId: "10:native")
+    _ = harness.handler.applyRemoteChanges(
+      saved: [item.toCKRecord(in: harness.handler.zoneID)], deleted: [])
+    let stored = try await harness.database.read { database in
+      try EarmarkBudgetItemRow
+        .filter(EarmarkBudgetItemRow.Columns.id == id).fetchOne(database)
+    }
+    #expect(stored?.instrumentId == "10:native")
+  }
+
+  @Test
+  func incomingInvestmentValueCanonicalizesInstrument() async throws {
+    let harness = try await MainActor.run {
+      try ProfileDataSyncHandlerTestSupport.makeHandlerAndDatabase(
+        canonicalResolver: CanonicalInstrumentResolver())
+    }
+    let id = UUID()
+    let value = ProfileDataSyncHandlerTestSupport.investmentValueRow(
+      id: id, accountId: UUID(), instrumentId: "8453:native")
+    _ = harness.handler.applyRemoteChanges(
+      saved: [value.toCKRecord(in: harness.handler.zoneID)], deleted: [])
+    let stored = try await harness.database.read { database in
+      try InvestmentValueRow
+        .filter(InvestmentValueRow.Columns.id == id).fetchOne(database)
+    }
+    #expect(stored?.instrumentId == "1:native")
+  }
+
+  @Test
+  func incomingInvestmentValueWithNilResolverStoredUnchanged() async throws {
+    let harness = try await MainActor.run {
+      try ProfileDataSyncHandlerTestSupport.makeHandlerAndDatabase(
+        canonicalResolver: nil)
+    }
+    let id = UUID()
+    let value = ProfileDataSyncHandlerTestSupport.investmentValueRow(
+      id: id, accountId: UUID(), instrumentId: "8453:native")
+    _ = harness.handler.applyRemoteChanges(
+      saved: [value.toCKRecord(in: harness.handler.zoneID)], deleted: [])
+    let stored = try await harness.database.read { database in
+      try InvestmentValueRow
+        .filter(InvestmentValueRow.Columns.id == id).fetchOne(database)
+    }
+    #expect(stored?.instrumentId == "8453:native")
+  }
+
+  @Test
+  func incomingAccountGroupCanonicalizesInstrument() async throws {
+    let harness = try await MainActor.run {
+      try ProfileDataSyncHandlerTestSupport.makeHandlerAndDatabase(
+        canonicalResolver: CanonicalInstrumentResolver())
+    }
+    let id = UUID()
+    let group = ProfileDataSyncHandlerTestSupport.accountGroupRow(
+      id: id, name: "Crypto", instrumentId: "10:native")
+    _ = harness.handler.applyRemoteChanges(
+      saved: [group.toCKRecord(in: harness.handler.zoneID)], deleted: [])
+    let stored = try await harness.database.read { database in
+      try AccountGroupRow.filter(AccountGroupRow.Columns.id == id).fetchOne(database)
+    }
+    #expect(stored?.instrumentId == "1:native")
+  }
+
+  @Test
+  func incomingAccountGroupWithNilResolverStoredUnchanged() async throws {
+    let harness = try await MainActor.run {
+      try ProfileDataSyncHandlerTestSupport.makeHandlerAndDatabase(
+        canonicalResolver: nil)
+    }
+    let id = UUID()
+    let group = ProfileDataSyncHandlerTestSupport.accountGroupRow(
+      id: id, name: "Crypto", instrumentId: "10:native")
+    _ = harness.handler.applyRemoteChanges(
+      saved: [group.toCKRecord(in: harness.handler.zoneID)], deleted: [])
+    let stored = try await harness.database.read { database in
+      try AccountGroupRow.filter(AccountGroupRow.Columns.id == id).fetchOne(database)
+    }
+    #expect(stored?.instrumentId == "10:native")
+  }
 }

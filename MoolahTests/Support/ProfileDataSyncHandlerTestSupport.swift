@@ -188,6 +188,24 @@ enum ProfileDataSyncHandlerTestSupport {
       encodedSystemFields: encodedSystemFields)
   }
 
+  static func accountGroupRow(
+    id: UUID,
+    name: String,
+    bucket: String = AccountBucket.current.rawValue,
+    instrumentId: String = Instrument.defaultTestInstrument.id,
+    position: Int = 0,
+    encodedSystemFields: Data? = nil
+  ) -> AccountGroupRow {
+    AccountGroupRow(
+      id: id,
+      recordName: AccountGroupRow.recordName(for: id),
+      name: name,
+      bucket: bucket,
+      instrumentId: instrumentId,
+      position: position,
+      encodedSystemFields: encodedSystemFields)
+  }
+
   static func investmentValueRow(
     id: UUID,
     accountId: UUID,

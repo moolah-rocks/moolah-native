@@ -136,7 +136,12 @@ extension ProfileDataSyncHandler {
       context: context,
       fieldValues: AccountGroupRow.fieldValues(from:),
       idKey: { $0.id.uuidString },
-      stamp: stampSystemFields)
+      stamp: stampSystemFields,
+      canonicalize: { row in
+        var row = row
+        row.instrumentId = self.canonicalInstrumentId(for: row.instrumentId)
+        return row
+      })
     try writeRemote(site: context.site) {
       try grdbRepositories.accountGroups.applyRemoteChangesSync(
         saved: rows, deleted: [], in: database)
@@ -197,7 +202,12 @@ extension ProfileDataSyncHandler {
       context: context,
       fieldValues: EarmarkBudgetItemRow.fieldValues(from:),
       idKey: { $0.id.uuidString },
-      stamp: stampSystemFields)
+      stamp: stampSystemFields,
+      canonicalize: { row in
+        var row = row
+        row.instrumentId = self.canonicalInstrumentId(for: row.instrumentId)
+        return row
+      })
     try writeRemote(site: context.site) {
       try grdbRepositories.earmarkBudgetItems.applyRemoteChangesSync(
         saved: rows, deleted: [], in: database)
@@ -215,7 +225,12 @@ extension ProfileDataSyncHandler {
       context: context,
       fieldValues: InvestmentValueRow.fieldValues(from:),
       idKey: { $0.id.uuidString },
-      stamp: stampSystemFields)
+      stamp: stampSystemFields,
+      canonicalize: { row in
+        var row = row
+        row.instrumentId = self.canonicalInstrumentId(for: row.instrumentId)
+        return row
+      })
     try writeRemote(site: context.site) {
       try grdbRepositories.investmentValues.applyRemoteChangesSync(
         saved: rows, deleted: [], in: database)
