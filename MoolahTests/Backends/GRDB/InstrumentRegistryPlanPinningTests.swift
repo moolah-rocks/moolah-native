@@ -25,9 +25,6 @@ import Testing
 /// edit that turns it into something else is a conscious decision.
 @Suite("Shared instrument-registry GRDB query plans")
 struct InstrumentRegistryPlanPinningTests {
-  private func makeDatabase() throws -> DatabaseQueue {
-    try ProfileIndexDatabase.openInMemory()
-  }
 
   @Test("fetchInstrumentMap SELECT * FROM instrument is an intentional full scan")
   func fetchInstrumentMapIsIntentionalFullScan() throws {
@@ -46,27 +43,54 @@ struct InstrumentRegistryPlanPinningTests {
     #expect(PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "instrument"))
   }
 
-  /// `allCryptoRegistrations()` issues `SELECT * FROM instrument WHERE
-  /// kind = ?` to load every crypto row and project each to a
-  /// `CryptoRegistration`. It runs on the startup preset-seeding path
-  /// (`registerBuiltInPresetsIfMissing` snapshots the existing asset
-  /// keys via this method), the sync-merge loop, reconcile, and the
-  /// analysis / store-refresh reads. There is no index on `kind`, so
-  /// SQLite plans a `SCAN instrument`: the table is small (a bounded set
-  /// of registered instruments plus ambient fiat synthesised in memory),
-  /// and reading every crypto row is the query's whole purpose, so an
-  /// index would not help. Pin the intentional full scan so a future
-  /// schema edit that (e.g.) routes this through a partial index has to
-  /// update this test deliberately.
-  @Test("allCryptoRegistrations WHERE kind is an intentional full scan")
+  /// `allCryptoRegistrations()` issues
+  /// `SELECT * FROM instrument WHERE kind = ? AND alias_of IS NULL`
+  /// (the `alias_of IS NULL` predicate hides aliased / retired rows from
+  /// the Settings registry display).
+  /// It runs on the startup preset-seeding path, the sync-merge loop,
+  /// reconcile, and the analysis / store-refresh reads. There is no index
+  /// on `kind` and the `instrument_by_alias` partial index covers the
+  /// opposite predicate (`alias_of IS NOT NULL`), so SQLite plans a
+  /// `SCAN instrument`: the table is small and reading every non-aliased
+  /// crypto row is the query's whole purpose. Pin the intentional full scan
+  /// so a future schema edit that (e.g.) routes this through a partial
+  /// index has to update this test deliberately.
+  @Test("allCryptoRegistrations WHERE kind and alias_of IS NULL is an intentional full scan")
   func allCryptoRegistrationsIsIntentionalFullScan() throws {
     let database = try makeDatabase()
     let detail = try PlanPinningTestHelpers.planDetail(
       database,
       query: """
-        SELECT * FROM instrument WHERE kind = ?
+        SELECT * FROM instrument WHERE kind = ? AND alias_of IS NULL
         """,
       arguments: [Instrument.Kind.cryptoToken.rawValue])
     #expect(PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "instrument"))
+  }
+
+  /// `all()` issues `SELECT * FROM instrument WHERE alias_of IS NULL`
+  /// (the `alias_of IS NULL` predicate hides aliased / retired rows from
+  /// the picker list). The
+  /// `instrument_by_alias` partial index covers the opposite predicate
+  /// (`alias_of IS NOT NULL`), so SQLite cannot use it here and plans a
+  /// `SCAN instrument`. That is intentional and correct: `all()` needs
+  /// every non-aliased row (crypto + stock + stored fiat), the table is
+  /// small, and a full scan avoids the read-amplification a secondary
+  /// index would add for zero benefit. Pin the scan so a future edit that
+  /// (e.g.) adds an `IS NULL` partial index must also update this test.
+  @Test("all() WHERE alias_of IS NULL is an intentional full scan")
+  func allIsIntentionalFullScan() throws {
+    let database = try makeDatabase()
+    let detail = try PlanPinningTestHelpers.planDetail(
+      database,
+      query: """
+        SELECT * FROM instrument WHERE alias_of IS NULL
+        """)
+    #expect(PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "instrument"))
+  }
+}
+
+extension InstrumentRegistryPlanPinningTests {
+  private func makeDatabase() throws -> DatabaseQueue {
+    try ProfileIndexDatabase.openInMemory()
   }
 }
