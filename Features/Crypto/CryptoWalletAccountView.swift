@@ -52,8 +52,7 @@ struct CryptoWalletAccountView: View {
         registrationsVersion: session.cryptoTokenStore?.registrationsVersion ?? 0,
         accountIds: [account.id],
         // Single crypto wallet: stamp the owning chain onto its positions so
-        // the asset fold derives `contributingChainIds`. Cross-chain identity
-        // PR1.
+        // the asset fold derives `contributingChainIds`.
         accountChainId: account.chainId)
     }
   }

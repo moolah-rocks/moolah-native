@@ -124,19 +124,15 @@ struct AssetHoldingFoldTests {
     #expect(AssetHolding.fold([], assetKeys: [:], hostCurrency: aud).isEmpty)
   }
 
-  // MARK: - accountChainId-based chain derivation
-
   @Test
   func multiChainAccountsYieldNilChainId() throws {
-    let eth8453 = Instrument.crypto(
-      chainId: 8453, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
     let keys = ["10:native": "ethereum", "8453:native": "ethereum"]
     let rows = [
       ValuedPosition(
         instrument: eth(10), quantity: 1, unitPrice: nil, costBasis: nil, value: nil,
         accountChainId: 10),
       ValuedPosition(
-        instrument: eth8453, quantity: 2, unitPrice: nil, costBasis: nil, value: nil,
+        instrument: eth(8453), quantity: 2, unitPrice: nil, costBasis: nil, value: nil,
         accountChainId: 8453),
     ]
     let holding = try #require(AssetHolding.fold(rows, assetKeys: keys, hostCurrency: aud).first)
@@ -158,7 +154,7 @@ struct AssetHoldingFoldTests {
   }
 
   @Test
-  func exchangePositionHasNoChain() throws {
+  func unwiredPositionFallsBackToInstrumentChain() throws {
     let rows = [
       ValuedPosition(
         instrument: eth(1), quantity: 1, unitPrice: nil, costBasis: nil, value: nil,
@@ -166,8 +162,21 @@ struct AssetHoldingFoldTests {
     ]
     let holding = try #require(
       AssetHolding.fold(rows, assetKeys: ["1:native": "ethereum"], hostCurrency: aud).first)
-    #expect(holding.chainId == nil)
-    #expect(holding.contributingChainIds.isEmpty)
+    #expect(holding.chainId == 1)
+    #expect(holding.contributingChainIds == [1])
+  }
+
+  @Test
+  func accountChainWinsOverInstrumentChain() throws {
+    let rows = [
+      ValuedPosition(
+        instrument: eth(1), quantity: 1, unitPrice: nil, costBasis: nil, value: nil,
+        accountChainId: 10)
+    ]
+    let holding = try #require(
+      AssetHolding.fold(rows, assetKeys: ["1:native": "ethereum"], hostCurrency: aud).first)
+    #expect(holding.chainId == 10)
+    #expect(holding.contributingChainIds == [10])
   }
 
   @Test
