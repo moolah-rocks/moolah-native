@@ -86,7 +86,7 @@ extension ChainConfig {
   /// fee on top of L2 execution.
   ///
   /// `nativeInstrument` is the canonical mainnet ETH instrument (`1:native`);
-  /// chain-of-holding comes from the account, not the instrument (design §2/§3.1).
+  /// chain-of-holding comes from the account, not the instrument.
   static let optimism = ChainConfig(
     chainId: 10,
     alchemyNetworkSlug: "opt-mainnet",
@@ -108,7 +108,7 @@ extension ChainConfig {
   /// fee on top of L2 execution.
   ///
   /// `nativeInstrument` is the canonical mainnet ETH instrument (`1:native`);
-  /// chain-of-holding comes from the account, not the instrument (design §2/§3.1).
+  /// chain-of-holding comes from the account, not the instrument.
   static let base = ChainConfig(
     chainId: 8453,
     alchemyNetworkSlug: "base-mainnet",

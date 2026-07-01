@@ -1,10 +1,22 @@
 import CloudKit
 import Foundation
 
-// Profile-index repository hook wiring for `SyncCoordinator`. The single
-// entry point is invoked from `SyncCoordinator.init`; this file's only
-// responsibility is the closure plumbing.
+// Registry hook wiring and observation setup for `SyncCoordinator`. Covers
+// both the profile-index repository hooks (invoked from `SyncCoordinator.init`)
+// and the canonical-resolver observation task started at bootstrap.
 extension SyncCoordinator {
+
+  /// Starts observing `registry` for changes and keeps `sharedCanonicalResolver`'s
+  /// dynamic alias map up to date. The created `Task` is stored privately and
+  /// cancelled by `stop()`. Called once at bootstrap after coordinator construction.
+  func startCanonicalResolverObservation(
+    registry: any InstrumentRegistryRepository,
+    changes: AsyncStream<Void>
+  ) {
+    guard let resolver = sharedCanonicalResolver else { return }
+    canonicalResolverObservationTask = resolver.startObserving(
+      registry: registry, changes: changes)
+  }
 
   /// Installs repository-side hooks so app-side mutations (`upsert` /
   /// `delete` on `GRDBProfileIndexRepository`) automatically queue

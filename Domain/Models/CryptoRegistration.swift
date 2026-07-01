@@ -4,7 +4,7 @@
 import Foundation
 
 /// Pairs a crypto instrument with its price provider mapping for persistence.
-struct CryptoRegistration: Sendable, Hashable {
+struct CryptoRegistration {
   let instrument: Instrument
   let mapping: CryptoProviderMapping
   /// How aggregation should treat this token's fiat value. Distinct from
@@ -113,6 +113,10 @@ struct CryptoRegistration: Sendable, Hashable {
     ),
   ]
 }
+
+extension CryptoRegistration: Sendable {}
+
+extension CryptoRegistration: Hashable {}
 
 extension CryptoRegistration: Identifiable {
   var id: String { instrument.id }

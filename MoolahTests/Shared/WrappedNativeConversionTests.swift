@@ -118,8 +118,8 @@ struct WrappedNativeConversionTests {
   /// must therefore also evict the wrapper's cached factor — otherwise
   /// WETH keeps converting at the pre-update ETH rate.
   ///
-  /// Design §3a: invalidating `1:native` must also evict ALL L2 WETH
-  /// ids (OP, Base) that price via mainnet ETH, not just mainnet WETH.
+  /// Invalidating `1:native` must also evict ALL L2 WETH ids (OP, Base)
+  /// that price via mainnet ETH, not just mainnet WETH.
   @Test("invalidateCache(for: canonical ETH) evicts OP WETH cached rate")
   func invalidateCacheForCanonicalEthEvictsL2WethRate() async throws {
     let opWeth = Instrument.crypto(

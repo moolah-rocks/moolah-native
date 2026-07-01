@@ -69,7 +69,8 @@ struct WrappedNativeContractsTests {
     #expect(WrappedNativeContracts.canonicalWrappedInstrumentId(forChainId: nil) == nil)
   }
 
-  // Design §3a: L2 WETH prices via the canonical mainnet native id
+  // L2 WETH (OP, Base) prices via the canonical mainnet native id (`1:native`)
+  // because OP/Base ETH is unified to the mainnet instrument.
 
   @Test("L2 WETH prices via the canonical mainnet native id")
   func l2WethMapsToMainnetNative() {

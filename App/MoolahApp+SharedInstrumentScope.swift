@@ -34,7 +34,7 @@ extension MoolahApp {
       sharedRegistryStore: registryStore,
       sharedNetworking: networking,
       sharedCanonicalResolver: canonicalResolver)
-    coordinator.canonicalResolverObservationTask = canonicalResolver.startObserving(
+    coordinator.startCanonicalResolverObservation(
       registry: scope.registry, changes: scope.registry.observeChanges())
     attachSharedInstrumentRegistrySyncHooks(
       registry: scope.registry, coordinator: coordinator)

@@ -31,8 +31,8 @@ struct ChainConfigTests {
     #expect(config.blockExplorerBaseURL.absoluteString == "https://optimistic.etherscan.io")
     #expect(config.blockscoutAPIBaseURL.absoluteString == "https://explorer.optimism.io")
     #expect(config.nativeInstrument.ticker == "ETH")
-    #expect(config.nativeInstrument.id == "1:native")  // canonical mainnet ETH (§3.1)
-    #expect(config.nativeInstrument.chainId == 1)  // canonical mainnet ETH — chain-of-holding is on the account (§2/§3.1)
+    #expect(config.nativeInstrument.id == "1:native")  // canonical mainnet ETH — OP native is unified to 1:native
+    #expect(config.nativeInstrument.chainId == 1)  // canonical mainnet ETH — chain-of-holding is on the account, not the instrument
   }
 
   @Test
@@ -45,8 +45,8 @@ struct ChainConfigTests {
     #expect(config.blockExplorerBaseURL.absoluteString == "https://basescan.org")
     #expect(config.blockscoutAPIBaseURL.absoluteString == "https://base.blockscout.com")
     #expect(config.nativeInstrument.ticker == "ETH")
-    #expect(config.nativeInstrument.id == "1:native")  // canonical mainnet ETH (§3.1)
-    #expect(config.nativeInstrument.chainId == 1)  // canonical mainnet ETH — chain-of-holding is on the account (§2/§3.1)
+    #expect(config.nativeInstrument.id == "1:native")  // canonical mainnet ETH — Base native is unified to 1:native
+    #expect(config.nativeInstrument.chainId == 1)  // canonical mainnet ETH — chain-of-holding is on the account, not the instrument
   }
 
   @Test
@@ -73,8 +73,8 @@ struct ChainConfigTests {
 
   @Test
   func nativeInstrumentsUseCorrectFactoryFormat() {
-    // ETH L2 native instruments canonicalize to mainnet ETH (1:native) per design §3.1.
-    // Chain-of-holding is carried by the account, not the instrument (design §2).
+    // OP and Base native ETH instruments canonicalize to mainnet ETH (1:native) so
+    // all ETH holdings share a single price feed. Chain-of-holding is on the account.
     #expect(ChainConfig.ethereum.nativeInstrument.id == "1:native")
     #expect(ChainConfig.optimism.nativeInstrument.id == "1:native")
     #expect(ChainConfig.base.nativeInstrument.id == "1:native")
