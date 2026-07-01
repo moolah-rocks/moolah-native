@@ -9,8 +9,14 @@ import Foundation
 // `AccountPerformance` summary for the position-tracked path.
 extension InvestmentStore {
 
-  /// Load positions for a position-tracked account by computing them from transaction legs.
-  func loadPositions(accountId: UUID) async {
+  /// Load positions for a position-tracked account by computing them from
+  /// transaction legs.
+  ///
+  /// `accountChainId` is the owning account's `Account.chainId` — captured so
+  /// `valuatePositions` can stamp each per-account `ValuedPosition` with its
+  /// owning chain. `nil` for non-crypto accounts; callers with an `Account`
+  /// in scope pass `account.chainId`.
+  func loadPositions(accountId: UUID, accountChainId: Int? = nil) async {
     guard let transactionRepository else {
       logger.warning("loadPositions called without transactionRepository")
       return
@@ -22,6 +28,7 @@ extension InvestmentStore {
       let quantityByInstrument = sumLegQuantities(
         transactions: allTransactions, accountId: accountId)
       setLoadedAccountId(accountId)
+      setLoadedAccountChainId(accountChainId)
       setPositions(
         quantityByInstrument
           .compactMap { instrument, quantity in
@@ -197,7 +204,8 @@ extension InvestmentStore {
         quantity: position.quantity,
         unitPrice: nil,
         costBasis: nil,
-        value: InstrumentAmount(quantity: position.quantity, instrument: profileCurrency))
+        value: InstrumentAmount(quantity: position.quantity, instrument: profileCurrency),
+        accountChainId: loadedAccountChainId)
       return (entry, .success(position.quantity))
     }
     switch outcome {
@@ -214,7 +222,8 @@ extension InvestmentStore {
         quantity: position.quantity,
         unitPrice: unit,
         costBasis: nil,
-        value: converted)
+        value: converted,
+        accountChainId: loadedAccountChainId)
       return (entry, .success(value))
     case .failure(let error):
       logger.warning(
@@ -225,7 +234,8 @@ extension InvestmentStore {
         quantity: position.quantity,
         unitPrice: nil,
         costBasis: nil,
-        value: nil)
+        value: nil,
+        accountChainId: loadedAccountChainId)
       return (entry, .failure(error))
     }
   }
