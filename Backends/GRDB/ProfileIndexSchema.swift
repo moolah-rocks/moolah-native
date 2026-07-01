@@ -45,6 +45,11 @@ import GRDB
 ///   (nullable ISO YYYY-MM-DD) for confirmed cross-provider first-trade dates.
 ///   NULL means "not yet confirmed". Pre-first-trade prices are valued at $0
 ///   (.knownZero). See `ProfileIndexSchema+CryptoFirstTradedOn.swift`.
+/// `v9_add_instrument_alias_of`     — adds the local-only `instrument.alias_of`
+///   (nullable TEXT) + `instrument_by_alias` partial index. Points a retired
+///   cross-chain crypto id at its canonical id; never synced (out of
+///   `InstrumentRow.CodingKeys`/`toCKRecord`). See
+///   `ProfileIndexSchema+InstrumentAliasOf.swift`.
 ///
 /// Each migration body is registered here. Once shipped, migration IDs
 /// are frozen forever; splitting later is fine, merging post-ship is
@@ -58,7 +63,7 @@ enum ProfileIndexSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 8
+  static let version = 9
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -80,6 +85,8 @@ enum ProfileIndexSchema {
       "v7_purge_crypto_price_cache", migrate: purgeCryptoPriceCache)
     migrator.registerMigration(
       "v8_crypto_first_traded_on", migrate: addCryptoFirstTradedOn)
+    migrator.registerMigration(
+      "v9_add_instrument_alias_of", migrate: addInstrumentAliasOf)
 
     return migrator
   }
