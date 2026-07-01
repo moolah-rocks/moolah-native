@@ -29,7 +29,7 @@ struct InstrumentPickerCanonicalizationTests {
       name: "USD Coin",
       decimals: 18)
 
-    let added = try #require(await store.registerForTest(opUSDC))
+    let added = try #require(await store.registerForTesting(opUSDC))
     #expect(added.id == "1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
 
     let registration = try await registry.cryptoRegistration(byId: added.id)
@@ -57,7 +57,7 @@ struct InstrumentPickerCanonicalizationTests {
       name: "Uniswap",
       decimals: 18)
 
-    let added = try #require(await store.registerForTest(uniMainnet))
+    let added = try #require(await store.registerForTesting(uniMainnet))
     #expect(added.id == uniMainnet.id)
 
     let registration = try await registry.cryptoRegistration(byId: uniMainnet.id)
@@ -99,7 +99,7 @@ struct InstrumentPickerCanonicalizationTests {
       name: "USD Coin",
       decimals: 18)
 
-    let added = try #require(await store.registerForTest(opUSDC))
+    let added = try #require(await store.registerForTesting(opUSDC))
     #expect(added.id == mainnetUSDC.id)
     // The existing canonical registration was returned — no network call.
     #expect(client.callCount == 0)
@@ -122,7 +122,7 @@ struct InstrumentPickerCanonicalizationTests {
       name: "USD Coin",
       decimals: 18)
 
-    let added = try #require(await store.registerForTest(opUSDC))
+    let added = try #require(await store.registerForTesting(opUSDC))
     // Falls through unchanged — no canonicalization.
     #expect(added.id == opUSDC.id)
   }

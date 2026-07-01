@@ -7,7 +7,7 @@ import Testing
 
 @testable import Moolah
 
-/// Verifies §3.5: an incoming retired cross-chain instrument record is
+/// Verifies that an incoming retired cross-chain instrument record is
 /// retained but marked `alias_of` its canonical id on apply — fresh AND
 /// stale-echo — via the resolver-driven raw-SQL write in
 /// `applyRemoteChangesSync`. `alias_of` is local-only (not in

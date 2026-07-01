@@ -54,8 +54,8 @@ final class GRDBInstrumentRegistryRepository: @unchecked Sendable {
   // `private` access.
   let hooks: OSAllocatedUnfairLock<HookState>
   /// Redirects an incoming retired cross-chain instrument id onto its
-  /// canonical id so the apply path can mark the retired row `alias_of`
-  /// (design §3.5). `nil` for repos that never apply instrument records
+  /// canonical id so the apply path can mark the retired row `alias_of`.
+  /// `nil` for repos that never apply instrument records
   /// (per-profile bundles, previews, tests that don't exercise aliasing).
   let canonicalResolver: CanonicalInstrumentResolver?
 

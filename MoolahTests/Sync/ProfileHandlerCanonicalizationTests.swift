@@ -7,7 +7,7 @@ import Testing
 
 /// Verifies the CloudKit apply path rewrites an un-migrated peer's retired
 /// cross-chain instrument id onto its canonical id before storing FK-holding
-/// records (design §3.4).
+/// records.
 @Suite("ProfileDataSyncHandler — instrument-id canonicalization on apply")
 struct ProfileHandlerCanonicalizationTests {
 

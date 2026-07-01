@@ -181,6 +181,81 @@ struct GRDBInstrumentRegistryRollbackTests {
     #expect(surviving.coingeckoId == "ethereum")
   }
 
+  /// Rollback contract for the `setAliasOf` write inside `applyRemoteChangesSync`.
+  /// The existing rollback tests construct the registry without a `canonicalResolver`,
+  /// so the `setAliasOf` code path is never exercised in a rollback scenario. This
+  /// test constructs the registry WITH a real `CanonicalInstrumentResolver` (its
+  /// static map maps `10:native` → `1:native`), applies a stale echo of the retired
+  /// `10:native` row (which triggers the alias write on the stale-echo branch) followed
+  /// by a sentinel row that trips a `BEFORE INSERT` trigger, and asserts that the
+  /// `setAliasOf` write rolled back with the rest of the transaction — `alias_of`
+  /// stays `NULL` on the pre-seeded retired row.
+  @Test
+  func applyRemoteChangesSyncAliasWriteRollsBackOnFailure() async throws {
+    let database = try ProfileIndexDatabase.openInMemory()
+    let registry = GRDBInstrumentRegistryRepository(
+      database: database, canonicalResolver: CanonicalInstrumentResolver())
+    let zone = CKRecordZone.ID(zoneName: "profile-index", ownerName: CKCurrentUserDefaultName)
+    let tOlder = Date(timeIntervalSince1970: 1_700_000_000)
+    let tNewer = Date(timeIntervalSince1970: 1_700_000_060)
+
+    // Pre-seed the retired `10:native` row stamped at tNewer with alias_of = NULL
+    // (simulating a row that arrived before the alias feature shipped).
+    let retiredInstrument = Instrument.crypto(
+      chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    var prior = InstrumentRow(domain: retiredInstrument)
+    prior.encodedSystemFields =
+      prior.toCKRecord(in: zone).withModificationDate(tNewer).encodedSystemFields
+    let priorRow = prior
+    try await database.write { database in try priorRow.insert(database) }
+
+    // Trigger that aborts any INSERT whose id matches the sentinel.
+    try await database.write { database in
+      try database.execute(
+        sql: """
+          CREATE TRIGGER fail_instrument_upsert
+          BEFORE INSERT ON instrument
+          WHEN NEW.id = '___FAIL___'
+          BEGIN
+              SELECT RAISE(ABORT, 'forced failure for rollback test');
+          END;
+          """)
+    }
+
+    // Stale echo (older date → stale-echo branch fires `setAliasOf` to write
+    // alias_of = "1:native") followed by a sentinel that trips the trigger,
+    // aborting the whole transaction before the alias write commits.
+    var staleEcho = InstrumentRow(domain: retiredInstrument)
+    staleEcho.encodedSystemFields =
+      staleEcho.toCKRecord(in: zone).withModificationDate(tOlder).encodedSystemFields
+    var failing = InstrumentRow(
+      domain: Instrument.crypto(
+        chainId: 9, contractAddress: nil, symbol: "FAIL", name: "Fail", decimals: 18))
+    failing.id = "___FAIL___"
+    failing.recordName = "___FAIL___"
+
+    do {
+      try registry.applyRemoteChangesSync(saved: [staleEcho, failing], deleted: [])
+      Issue.record("applyRemoteChangesSync should have thrown but did not")
+    } catch {
+      // Expected — trigger raises ABORT mid-transaction.
+    }
+
+    // The `setAliasOf` call in the stale-echo branch rolled back:
+    // `alias_of` remains NULL on the pre-seeded retired row.
+    let aliasValue = try await registry.database.read { database in
+      try String.fetchOne(
+        database,
+        sql: "SELECT alias_of FROM instrument WHERE id = ?",
+        arguments: [retiredInstrument.id])
+    }
+    #expect(aliasValue == nil)
+    // Pre-seeded row survives byte-equal and the sentinel was not persisted.
+    let surviving = try #require(try registry.fetchRowSync(id: retiredInstrument.id))
+    #expect(surviving.name == "Ethereum")
+    #expect(try registry.fetchRowSync(id: "___FAIL___") == nil)
+  }
+
   /// Rollback contract for the issue-#1085 stale-echo branch of
   /// `applyRemoteChangesSync`. When a stale echo (older `modificationDate`)
   /// carries a `pricingStatus` that the merge resolves to a *different*

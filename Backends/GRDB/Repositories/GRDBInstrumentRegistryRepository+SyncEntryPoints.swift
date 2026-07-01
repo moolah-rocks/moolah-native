@@ -99,8 +99,8 @@ extension GRDBInstrumentRegistryRepository {
   /// cleared (D1-b, issue #1097); every deleted id is removed WITHOUT journaling
   /// — server-originated deletes are already propagated by CKSyncEngine. Where
   /// a `canonicalResolver` is wired, incoming retired cross-chain ids (e.g.
-  /// `10:native`) have `alias_of` set to the canonical id via raw SQL (design
-  /// §3.5) on BOTH the fresh-insert path (after upsert) and the stale-echo path
+  /// `10:native`) have `alias_of` set to the canonical id via raw SQL on BOTH
+  /// the fresh-insert path (after upsert) and the stale-echo path
   /// (before the early `continue`) so a retired row is never left unaliased. If
   /// any statement throws, the whole batch rolls back so prior on-disk state
   /// survives byte-equal, per `guides/DATABASE_CODE_GUIDE.md` §5.
@@ -127,7 +127,7 @@ extension GRDBInstrumentRegistryRepository {
         // rather than throwing.
         let mergedStatus = Self.mergedPricingStatus(local: existing, incoming: row)
 
-        // Resolve the incoming id to its canonical id (design §3.5).
+        // Resolve the incoming id to its canonical id.
         // `nil` when no resolver is wired (most construction sites) or
         // when the id is already canonical — no alias write in either case.
         let aliasTarget = canonicalAlias(for: row.id)
@@ -227,7 +227,7 @@ extension GRDBInstrumentRegistryRepository {
 
   /// True when `row` is a superseded stale echo relative to `existing` —
   /// its server `modificationDate` is older-or-equal to the date the local
-  /// row caches (reject-on-tie, design §4). Fail-open: if either date is
+  /// row caches (reject-on-tie). Fail-open: if either date is
   /// absent (no cached blob, or a dateless incoming record) returns `false`
   /// so the incoming record applies, matching the gate's behaviour at the
   /// UUID-keyed sites.
