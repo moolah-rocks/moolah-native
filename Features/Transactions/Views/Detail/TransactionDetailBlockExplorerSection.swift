@@ -15,13 +15,17 @@ import SwiftUI
 /// label avoids privileging any one service in our UI.
 struct TransactionDetailBlockExplorerSection: View {
   let transaction: Transaction
+  /// The account collection from the enclosing transaction-detail view,
+  /// used to resolve each leg's owning-account chain. A plain value
+  /// collection (not a store), so threading it here keeps the view thin.
+  let accounts: Accounts
 
   /// Whether the section should render at all. Hidden when no leg has
   /// a usable explorer link so the section header doesn't appear empty.
-  var isApplicable: Bool { !Self.explorerURLs(for: transaction.legs).isEmpty }
+  var isApplicable: Bool { !explorerURLs.isEmpty }
 
   var body: some View {
-    let urls = Self.explorerURLs(for: transaction.legs)
+    let urls = explorerURLs
     if !urls.isEmpty {
       Section("Block Explorer") {
         ForEach(urls, id: \.self) { url in
@@ -33,32 +37,14 @@ struct TransactionDetailBlockExplorerSection: View {
       }
     }
   }
+}
 
-  /// Distinct block-explorer URLs for the supplied legs in first-seen
-  /// order. The `externalId` overload strips the `<category>:<index>`
-  /// (transfer leg) or `gas` (gas leg) suffix to recover the bare
-  /// on-chain hash the explorer expects — issue #848. The per-URL
-  /// dedup collapses the usual transfer-plus-gas pair (sharing one
-  /// hash) down to a single row, matching the user's mental model
-  /// that one transaction = one explorer link.
-  ///
-  /// `nonisolated` so the dedup logic is testable from a non-MainActor
-  /// suite without spinning up a SwiftUI context. Also exposed as a
-  /// static helper because the view is `@MainActor` and the body's
-  /// "is the section worth rendering" guard wants to share the same
-  /// computation that produces the rows.
-  nonisolated static func explorerURLs(for legs: [TransactionLeg]) -> [URL] {
-    var seen: Set<URL> = []
-    var result: [URL] = []
-    for leg in legs {
-      guard let externalId = leg.externalId,
-        let chainId = leg.instrument.chainId,
-        let url = BlockExplorerLink.transactionURL(chainId: chainId, externalId: externalId)
-      else { continue }
-      if seen.insert(url).inserted {
-        result.append(url)
-      }
-    }
-    return result
+extension TransactionDetailBlockExplorerSection {
+  /// Distinct explorer URLs for this transaction's legs, resolving each
+  /// leg's chain from its owning account first — see
+  /// `BlockExplorerLink.explorerURLs(for:accountChainId:)` for the
+  /// three-tier chain selection and per-hash dedup.
+  private var explorerURLs: [URL] {
+    BlockExplorerLink.explorerURLs(for: transaction.legs) { accounts.by(id: $0)?.chainId }
   }
 }
