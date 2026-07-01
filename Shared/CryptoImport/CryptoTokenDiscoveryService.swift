@@ -37,12 +37,18 @@ actor CryptoTokenDiscoveryService {
   private let registry: any InstrumentRegistryRepository
   private let resolver: any CryptoRegistrationResolver
   /// Redirects L2 native/ERC-20 instruments onto their canonical mainnet id
-  /// (e.g. OP native ETH → `1:native`) before persisting. Omit in init to use
-  /// the standard canonicalization rules.
+  /// (e.g. OP native ETH → `1:native`) before persisting.
   private let canonicalResolver: CanonicalInstrumentResolver
   private let logger = Logger(
     subsystem: "com.moolah.app", category: "CryptoTokenDiscovery")
 
+  /// - Parameters:
+  ///   - registry: Backing store for resolved registrations.
+  ///   - resolver: Provider-mapping resolver (CoinGecko → CryptoCompare → Binance).
+  ///   - canonicalResolver: Redirects L2 instruments to their canonical mainnet id
+  ///     (e.g. OP native ETH → `1:native`). Defaults to a resolver with only the
+  ///     static base canonicalization layer; the shared app resolver (with dynamic
+  ///     registry aliases) is injected in production.
   init(
     registry: any InstrumentRegistryRepository,
     resolver: any CryptoRegistrationResolver,

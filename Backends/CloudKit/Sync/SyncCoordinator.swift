@@ -319,7 +319,9 @@ final class SyncCoordinator {
   var fetchChangesTask: Task<Void, Never>?
 
   /// Observation task that keeps `sharedCanonicalResolver`'s dynamic alias map
-  /// in sync with registry changes. Cancelled in `stop()`.
+  /// in sync with registry changes. Cancelled in `stop()`. Assigned only via
+  /// `startCanonicalResolverObservation(registry:changes:)`; do not assign
+  /// directly (see the cross-file-access note above this MARK).
   var canonicalResolverObservationTask: Task<Void, Never>?
 
   /// Number of consecutive re-fetch attempts scheduled after a save failure.

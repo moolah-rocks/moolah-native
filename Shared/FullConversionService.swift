@@ -294,8 +294,8 @@ actor FullConversionService: InstrumentConversionService {
   func invalidateCache(for instrument: Instrument) async {
     var staleIds: Set<String> = [instrument.id]
     // A native rate change invalidates every wrapper priced via this
-    // native id (design §3a: mainnet + OP + Base WETH all price via
-    // `1:native`). Wrappers memoise their rate under their own id;
+    // native id (mainnet + OP + Base WETH all price via `1:native`).
+    // Wrappers memoise their rate under their own id;
     // they must be evicted or they keep converting at a stale ETH rate.
     if instrument.kind == .cryptoToken, instrument.contractAddress == nil {
       for wrapperId in WrappedNativeContracts.wrapperIds(pricingVia: instrument.id) {

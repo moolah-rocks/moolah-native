@@ -11,9 +11,9 @@ import Foundation
 /// them via a canonical native instrument id, reusing that native
 /// asset's working price feed.
 ///
-/// **L2 ETH wrappers (design §3a):** OP and Base WETH price via the
-/// *mainnet* ETH canonical id (`1:native`), not their chain's own
-/// `"<chainId>:native"` id, which is a retired alias post-unification.
+/// **L2 ETH wrappers:** OP and Base WETH price via the *mainnet* ETH
+/// canonical id (`1:native`), not their chain's own `"<chainId>:native"` id,
+/// which is a retired alias now that OP/Base ETH is unified to `1:native`.
 /// Arbitrum WETH is not yet unified and still prices via `42161:native`.
 ///
 /// **Trust model — exact `(chainId, address)` only.** Matching is on a
@@ -28,14 +28,14 @@ import Foundation
 /// official documentation before extending this map.
 enum WrappedNativeContracts {
   /// Wrapped-native contract address (lowercased) + the canonical native
-  /// instrument id it prices via. L2 ETH wrappers price via mainnet ETH
-  /// (`1:native`, design §3a); non-unified chains price via their own native.
+  /// instrument id it prices via. L2 ETH wrappers (OP, Base) price via
+  /// mainnet ETH (`1:native`); non-unified chains price via their own native.
   private static let entries: [Int: (address: String, nativeId: String)] = [
     // Ethereum — WETH
     1: ("0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2", "1:native"),
-    // Optimism — WETH (network predeploy) → prices via mainnet ETH (§3a)
+    // Optimism — WETH (network predeploy) → prices via mainnet ETH
     10: ("0x4200000000000000000000000000000000000006", "1:native"),
-    // Base — WETH (network predeploy) → prices via mainnet ETH (§3a)
+    // Base — WETH (network predeploy) → prices via mainnet ETH
     8453: ("0x4200000000000000000000000000000000000006", "1:native"),
     // Arbitrum One — WETH (not yet unified; prices via its own chain native)
     42161: ("0x82af49447d8a07e3bd95bd0d56f35241523fbab1", "42161:native"),
@@ -48,7 +48,7 @@ enum WrappedNativeContracts {
   /// If `(chainId, contractAddress)` is the canonical wrapped-native
   /// contract for that chain, returns the canonical native instrument id
   /// to use for pricing. For L2 ETH chains (OP, Base) this is `"1:native"`
-  /// (mainnet ETH, design §3a); for other chains it is `"<chainId>:native"`.
+  /// (unified to mainnet ETH); for other chains it is `"<chainId>:native"`.
   /// Returns `nil` for native instruments (no contract address), unknown
   /// contracts, and right-address/wrong-chain queries — the caller then
   /// prices the token normally.
@@ -67,7 +67,8 @@ enum WrappedNativeContracts {
 
   /// Every listed wrapper id (`"<chainId>:<address>"`) that prices via
   /// `nativeId`. Used by cache invalidation: dropping a native rate must
-  /// also evict all wrappers memoised under their own id (design §3a).
+  /// also evict all wrappers memoised under their own id (OP and Base WETH
+  /// price via the same `1:native` as mainnet WETH).
   ///
   /// For `"1:native"` this returns mainnet WETH + OP WETH + Base WETH;
   /// for `"137:native"` it returns only WMATIC.
@@ -86,7 +87,7 @@ enum WrappedNativeContracts {
   ///
   /// Used by `CryptoPriceService.purgeCache` to evict the metadata-cache
   /// entry for a single chain's wrapper when the native id is purged.
-  /// For multi-wrapper eviction (design §3a) use `wrapperIds(pricingVia:)`.
+  /// For multi-wrapper eviction (OP + Base WETH) use `wrapperIds(pricingVia:)`.
   static func canonicalWrappedInstrumentId(forChainId chainId: Int?) -> String? {
     guard let chainId, let entry = entries[chainId] else { return nil }
     return "\(chainId):\(entry.address)"
