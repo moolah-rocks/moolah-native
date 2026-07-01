@@ -224,4 +224,69 @@ struct AssetHoldingFoldTests {
     #expect(holding.quantity == 0)
     #expect(holding.unitPrice == nil)
   }
+
+  // MARK: - Chain caption suppression (design §5)
+
+  /// A canonical/unified asset (e.g. ETH `1:native` mapped to "ethereum")
+  /// must suppress its chain caption. The `id` (provider key "ethereum")
+  /// differs from the contributing instrument id ("1:native"), which is the
+  /// signal that identifies a unified holding.
+  @Test
+  func unifiedAssetSuppressesChainCaption() throws {
+    let rows = [
+      ValuedPosition(
+        instrument: eth(1), quantity: 1, unitPrice: nil, costBasis: nil, value: nil,
+        accountChainId: nil)
+    ]
+    let holding = try #require(
+      AssetHolding.fold(rows, assetKeys: ["1:native": "ethereum"], hostCurrency: aud).first)
+    #expect(holding.id == "ethereum")
+    #expect(holding.contributingInstrumentIds == ["1:native"])
+    #expect(holding.contributingChainNames.isEmpty)
+    #expect(holding.chainSummaryLabel == nil)
+    #expect(holding.chainAccessibilitySummary == nil)
+  }
+
+  /// A chain-scoped token with no provider mapping must keep its chain
+  /// caption. Its `id` equals its instrument id — not a provider key —
+  /// so the suppression guard does not fire.
+  @Test
+  func chainScopedNoKeyTokenKeepsChainCaption() throws {
+    let token = Instrument.crypto(
+      chainId: 137, contractAddress: "0xabc", symbol: "FOO", name: "Foo", decimals: 18)
+    let rows = [
+      ValuedPosition(
+        instrument: token, quantity: 1, unitPrice: nil, costBasis: nil, value: nil,
+        accountChainId: 137)
+    ]
+    let holding = try #require(
+      AssetHolding.fold(rows, assetKeys: [:], hostCurrency: aud).first)
+    #expect(holding.id == "137:0xabc")
+    #expect(holding.contributingChainNames == ["Polygon"])
+    #expect(holding.chainSummaryLabel == "Polygon")
+  }
+
+  /// Regression guard (design §5): after Task 2, OP-ETH and Base-ETH mint as
+  /// `1:native`. A multi-account group host coalesces them into one
+  /// `ValuedPosition` with `accountChainId = nil`, so the fold computes
+  /// `contributingChainIds = [1]` and would show "Ethereum" — misleading.
+  /// Option 2 suppresses the chain caption for this unified/canonical asset.
+  @Test
+  func groupHostCoalescedUnifiedETHSuppressesChainCaption() throws {
+    // Simulates what aggregatedGroupPositions + group host produce: one
+    // 1:native position, accountChainId nil (group host has no single chain).
+    let rows = [
+      ValuedPosition(
+        instrument: eth(1), quantity: 3, unitPrice: nil, costBasis: nil, value: nil,
+        accountChainId: nil)
+    ]
+    let holding = try #require(
+      AssetHolding.fold(rows, assetKeys: ["1:native": "ethereum"], hostCurrency: aud).first)
+    // contributingChainIds is [1] from the instrument fallback — misleadingly
+    // "Ethereum" — but chain caption must be suppressed for unified assets.
+    #expect(holding.contributingChainIds == [1])
+    #expect(
+      holding.chainSummaryLabel == nil,
+      "Unified canonical asset must suppress misleading chain caption (design §5)")
+  }
 }
