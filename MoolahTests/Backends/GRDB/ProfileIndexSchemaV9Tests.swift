@@ -45,7 +45,7 @@ struct ProfileIndexSchemaV9Tests {
   @Test("CHECK rejects a self-referential alias_of")
   func checkRejectsSelfReference() throws {
     let queue = try makeMigratedDatabase()
-    #expect(throws: DatabaseError.self) {
+    do {
       try queue.write { database in
         try database.execute(
           sql: """
@@ -54,6 +54,9 @@ struct ProfileIndexSchemaV9Tests {
             VALUES ('1:native', '1:native', 'cryptoToken', 'Ethereum', 18, '1:native');
             """)
       }
+      Issue.record("expected CHECK constraint violation for self-referential alias_of")
+    } catch let error as DatabaseError {
+      #expect(error.resultCode == .SQLITE_CONSTRAINT)
     }
   }
 

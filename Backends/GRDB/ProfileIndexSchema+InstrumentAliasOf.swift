@@ -18,8 +18,8 @@ import GRDB
 // `SELECT id, alias_of FROM instrument WHERE alias_of IS NOT NULL`
 // (per DATABASE_SCHEMA_GUIDE §4: the WHERE column `alias_of` is in the index,
 // and the index carries both selected columns so the query is index-only).
-// The consuming query ships in a later PR; this migration ships the index
-// with the column because v9 is one frozen unit.
+// The index ships with the column in the same migration — v9 is one frozen
+// unit.
 
 extension ProfileIndexSchema {
   /// Body of the `v9_add_instrument_alias_of` migration.
