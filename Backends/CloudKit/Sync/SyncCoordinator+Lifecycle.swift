@@ -269,6 +269,8 @@ extension SyncCoordinator {
     recoveryReplayDidRun = false
     fetchChangesTask?.cancel()
     fetchChangesTask = nil
+    canonicalResolverObservationTask?.cancel()
+    canonicalResolverObservationTask = nil
     cancelRefetchTasks()
     for (_, task) in zoneCreationTasks {
       task.cancel()
