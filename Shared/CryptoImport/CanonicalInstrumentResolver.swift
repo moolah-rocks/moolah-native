@@ -1,0 +1,69 @@
+// Shared/CryptoImport/CanonicalInstrumentResolver.swift
+
+import Foundation
+import os
+
+/// Resolves a retired cross-chain crypto instrument id to its canonical id,
+/// so ETH on mainnet / OP / Base is treated as one asset (`1:native`) and an
+/// L2 USDC/USDT collapses onto its mainnet contract.
+///
+/// Two layers:
+/// - A **static base layer** (`staticBaseMap`), present from the instant the
+///   app launches, so construction-time canonicalization (later PRs) maps
+///   retired ids before the data migration writes any `alias_of` — the local
+///   device never mints a retired id.
+/// - A **dynamic layer** (`dynamicMap`), derived by grouping the shared
+///   registry's crypto registrations by `assetKey` and refreshed on registry
+///   change, covering discovered ERC-20s absent from the static list.
+///
+/// **`@unchecked Sendable` justification.** The only mutable state is
+/// `dynamicMap`, guarded by `OSAllocatedUnfairLock` — the lock-guarded
+/// mutable-map pattern sanctioned in `guides/CONCURRENCY_GUIDE.md` §2
+/// carve-out 7. `staticBaseMap` is an immutable `static let`. The lock is
+/// never held across an `await`: lookups are synchronous because the first
+/// consumers (`ChainConfig.nativeInstrument`, native transfer/gas legs) read
+/// them from non-async contexts.
+final class CanonicalInstrumentResolver: @unchecked Sendable {
+  /// Hardcoded retired → canonical entries available at startup. Mirrors the
+  /// cross-chain deployments in `CanonicalTokenRegistry+Bundled.swift`; the
+  /// drift-guard test asserts each L2 stablecoin address is still recognised
+  /// there. ETH L2 natives collapse to `1:native`; L2 USDC/USDT collapse to
+  /// their mainnet contract ids.
+  static let staticBaseMap: [String: String] = [
+    // ETH L2 natives → mainnet native.
+    "10:native": "1:native",
+    "8453:native": "1:native",
+    // USDC: L2 deployment → mainnet USDC.
+    "10:0x0b2c639c533813f4aa9d7837caf62653d097ff85":
+      "1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "137:0x3c499c542cef5e3811e1192ce70d8cc03d5c3359":
+      "1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "8453:0x833589fcd6edb6e08f4c7c32d4f71b54bda02913":
+      "1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    // USDT: L2 deployment → mainnet USDT.
+    "10:0x94b008aa00579c1307b0ef2c499ad98a8ce58e58":
+      "1:0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "137:0xc2132d05d31c914a87c6611c10748aeb04b58e8f":
+      "1:0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "8453:0xfde4c96c8593536e31f229ea8f37b2ada2699bb2":
+      "1:0xdac17f958d2ee523a2206206994597c13d831ec7",
+  ]
+
+  /// Dynamic retired → canonical map, rebuilt on registry change.
+  private let dynamicMap = OSAllocatedUnfairLock<[String: String]>(initialState: [:])
+
+  /// The canonical id for `id`, or `id` unchanged when it is not a known
+  /// alias. Static base layer wins (it is authoritative and lock-free); the
+  /// dynamic layer covers the discovered tail. Canonical ids are never
+  /// themselves aliases, so a single hop suffices.
+  func canonicalId(for id: String) -> String {
+    if let canonical = Self.staticBaseMap[id] { return canonical }
+    if let canonical = dynamicMap.withLock({ $0[id] }) { return canonical }
+    return id
+  }
+
+  /// `true` when `id` is retired (resolves to a different canonical id).
+  func isAlias(_ id: String) -> Bool {
+    canonicalId(for: id) != id
+  }
+}
