@@ -10,9 +10,9 @@ import GRDB
 // row `10:native` aliases `1:native`). It is deliberately absent from
 // `InstrumentRow.Columns` / `CodingKeys` / `toCKRecord`, so every Codable
 // upsert and every sync apply writes only the CloudKit-backed columns and
-// cannot clobber it. It is written exclusively by raw SQL — the data
-// migration and the sync apply path in later PRs — and read by
-// `Column("alias_of")` / raw SQL (registry filter + resolver map build).
+// cannot clobber it. It is written exclusively by raw SQL (never through the
+// Codable surface) and read by `Column("alias_of")` / raw SQL (registry filter
+// + resolver map build).
 //
 // The partial index covers the resolver's map-build query
 // `SELECT id, alias_of FROM instrument WHERE alias_of IS NOT NULL`
