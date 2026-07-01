@@ -32,9 +32,13 @@ extension TransferEventBuilder {
   /// `ensureInstrumentReadable` inserts a placeholder `InstrumentRow`
   /// with default `pricingStatus=.priced` and no provider mapping,
   /// which `allCryptoRegistrations()` then projects to nil — and the
-  /// downstream conversion of `10:native` (and other native gas
-  /// tokens like `1:native`, `137:native`, `8453:native`) throws
-  /// `ConversionError.noProviderMapping`. See issue #791.
+  /// downstream conversion throws `ConversionError.noProviderMapping`.
+  ///
+  /// `resolveOrLoad` canonicalizes the incoming `(chainId, nil)` pair
+  /// before persisting: Optimism/Base native ETH collapses onto
+  /// `1:native` (the mainnet canonical id), so the registry always
+  /// stores a single row per asset regardless of which L2 triggered
+  /// the pre-registration. See issue #791.
   ///
   /// Idempotent at the discovery actor: when a registration already
   /// exists for the chain's native id, `resolveOrLoad` short-circuits
