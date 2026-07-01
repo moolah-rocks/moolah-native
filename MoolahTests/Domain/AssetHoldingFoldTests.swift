@@ -25,10 +25,10 @@ struct AssetHoldingFoldTests {
     let rows = [
       ValuedPosition(
         instrument: eth(1), quantity: qty1,
-        unitPrice: amt(4000), costBasis: amt(30000), value: amt(45468)),
+        unitPrice: amt(4000), costBasis: amt(30000), value: amt(45468), accountChainId: 1),
       ValuedPosition(
         instrument: eth(10), quantity: qty2,
-        unitPrice: amt(4000), costBasis: amt(5000), value: amt(6359)),
+        unitPrice: amt(4000), costBasis: amt(5000), value: amt(6359), accountChainId: 10),
     ]
     let holdings = AssetHolding.fold(rows, assetKeys: ethKeys, hostCurrency: aud)
     #expect(holdings.count == 1)
@@ -48,9 +48,10 @@ struct AssetHoldingFoldTests {
     let rows = [
       ValuedPosition(
         instrument: eth(1), quantity: 1, unitPrice: amt(4000), costBasis: amt(3000),
-        value: amt(4000)),
+        value: amt(4000), accountChainId: 1),
       ValuedPosition(
-        instrument: eth(10), quantity: 2, unitPrice: nil, costBasis: nil, value: nil),
+        instrument: eth(10), quantity: 2, unitPrice: nil, costBasis: nil, value: nil,
+        accountChainId: 10),
     ]
     let holding = try #require(AssetHolding.fold(rows, assetKeys: ethKeys, hostCurrency: aud).first)
     #expect(holding.quantity == 3)
@@ -79,7 +80,9 @@ struct AssetHoldingFoldTests {
     let token = Instrument.crypto(
       chainId: 1, contractAddress: "0xabc", symbol: "FOO", name: "Foo", decimals: 18)
     let rows = [
-      ValuedPosition(instrument: token, quantity: 5, unitPrice: nil, costBasis: nil, value: nil)
+      ValuedPosition(
+        instrument: token, quantity: 5, unitPrice: nil, costBasis: nil, value: nil,
+        accountChainId: 1)
     ]
     let holdings = AssetHolding.fold(rows, assetKeys: [:], hostCurrency: aud)
     #expect(holdings.count == 1)
@@ -107,7 +110,7 @@ struct AssetHoldingFoldTests {
     let rows = [
       ValuedPosition(
         instrument: eth(1), quantity: 1, unitPrice: amt(4000), costBasis: amt(3000),
-        value: amt(4000))
+        value: amt(4000), accountChainId: 1)
     ]
     let holding = try #require(
       AssetHolding.fold(rows, assetKeys: ["1:native": "ethereum"], hostCurrency: aud).first)
@@ -119,6 +122,67 @@ struct AssetHoldingFoldTests {
   @Test
   func emptyInputYieldsNoHoldings() {
     #expect(AssetHolding.fold([], assetKeys: [:], hostCurrency: aud).isEmpty)
+  }
+
+  // MARK: - accountChainId-based chain derivation
+
+  @Test
+  func multiChainAccountsYieldNilChainId() throws {
+    let eth8453 = Instrument.crypto(
+      chainId: 8453, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    let keys = ["10:native": "ethereum", "8453:native": "ethereum"]
+    let rows = [
+      ValuedPosition(
+        instrument: eth(10), quantity: 1, unitPrice: nil, costBasis: nil, value: nil,
+        accountChainId: 10),
+      ValuedPosition(
+        instrument: eth8453, quantity: 2, unitPrice: nil, costBasis: nil, value: nil,
+        accountChainId: 8453),
+    ]
+    let holding = try #require(AssetHolding.fold(rows, assetKeys: keys, hostCurrency: aud).first)
+    #expect(holding.chainId == nil)
+    #expect(holding.contributingChainIds == [10, 8453])
+  }
+
+  @Test
+  func singleAccountChainPassesThrough() throws {
+    let rows = [
+      ValuedPosition(
+        instrument: eth(1), quantity: 1, unitPrice: nil, costBasis: nil, value: nil,
+        accountChainId: 1)
+    ]
+    let holding = try #require(
+      AssetHolding.fold(rows, assetKeys: ["1:native": "ethereum"], hostCurrency: aud).first)
+    #expect(holding.chainId == 1)
+    #expect(holding.contributingChainIds == [1])
+  }
+
+  @Test
+  func exchangePositionHasNoChain() throws {
+    let rows = [
+      ValuedPosition(
+        instrument: eth(1), quantity: 1, unitPrice: nil, costBasis: nil, value: nil,
+        accountChainId: nil)
+    ]
+    let holding = try #require(
+      AssetHolding.fold(rows, assetKeys: ["1:native": "ethereum"], hostCurrency: aud).first)
+    #expect(holding.chainId == nil)
+    #expect(holding.contributingChainIds.isEmpty)
+  }
+
+  @Test
+  func sameInstrumentDeduped() throws {
+    let rows = [
+      ValuedPosition(
+        instrument: eth(1), quantity: 1, unitPrice: nil, costBasis: nil, value: nil,
+        accountChainId: 1),
+      ValuedPosition(
+        instrument: eth(1), quantity: 2, unitPrice: nil, costBasis: nil, value: nil,
+        accountChainId: 1),
+    ]
+    let holding = try #require(
+      AssetHolding.fold(rows, assetKeys: ["1:native": "ethereum"], hostCurrency: aud).first)
+    #expect(holding.contributingInstrumentIds == ["1:native"])
   }
 
   @Test
