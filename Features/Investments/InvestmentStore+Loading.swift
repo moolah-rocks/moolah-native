@@ -121,7 +121,7 @@ extension InvestmentStore {
     // account values stream. Clear any leftover state from a prior
     // recordedValue load so the views see a clean slate.
     setActiveAccount(nil)
-    await loadPositions(accountId: account.id)
+    await loadPositions(accountId: account.id, accountChainId: account.chainId)
     guard !Task.isCancelled else { return }
     await valuatePositions(profileCurrency: profileCurrency, on: Date())
     guard !Task.isCancelled else { return }
@@ -151,7 +151,7 @@ extension InvestmentStore {
   /// `.onChange` where we only care about position-tracked accounts.
   func reloadPositionsIfNeeded(account: Account, profileCurrency: Instrument) async {
     guard account.valuationMode == .calculatedFromTrades else { return }
-    await loadPositions(accountId: account.id)
+    await loadPositions(accountId: account.id, accountChainId: account.chainId)
     guard !Task.isCancelled else { return }
     await valuatePositions(profileCurrency: profileCurrency, on: Date())
     guard !Task.isCancelled else { return }

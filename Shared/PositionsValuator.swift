@@ -33,6 +33,13 @@ struct PositionsValuator: Sendable {
   ///   - on: valuation date.
   /// - Returns: surviving rows in input order. Failures map to `value == nil`;
   ///   `.knownZero` sources are dropped. Never throws.
+  ///
+  /// The emitted rows leave `ValuedPosition.accountChainId` at its `nil`
+  /// default: this valuator receives a bare `[Position]` with no `Account`
+  /// context, and its sole caller
+  /// (`MultiInstrumentPositionsSplitModifier`) is shared between
+  /// single-account (crypto wallet) and multi-account (group) hosts via a
+  /// plural `accountIds`, so no single owning chain is guaranteed here.
   func valuate(
     positions: [Position],
     hostCurrency: Instrument,

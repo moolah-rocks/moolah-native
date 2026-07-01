@@ -26,6 +26,12 @@ final class InvestmentStore {
 
   var selectedPeriod: TimePeriod = .all
   private(set) var loadedAccountId: UUID?
+  /// The chain of the currently-loaded account (`Account.chainId`), captured
+  /// so `valuatePositions` can stamp each per-account `ValuedPosition` with
+  /// its owning chain. `nil` for non-crypto accounts and for re-valuations
+  /// that ran before any per-account load. Preserved across rate-tick and
+  /// spam-flip re-valuations that don't carry an `Account`.
+  private(set) var loadedAccountChainId: Int?
   private(set) var loadedHostCurrency: Instrument?
 
   // internal (was private) so the `+Observation`, `+Loading`, `+Positions`,
@@ -229,6 +235,7 @@ final class InvestmentStore {
     accountPerformance = performance
   }
   func setLoadedAccountId(_ id: UUID?) { loadedAccountId = id }
+  func setLoadedAccountChainId(_ chainId: Int?) { loadedAccountChainId = chainId }
   func setLoadedHostCurrency(_ instrument: Instrument?) { loadedHostCurrency = instrument }
   func setError(_ error: (any Error)?) { self.error = error }
   func yieldTestObservationTick() { testObservationTickContinuation.yield(()) }

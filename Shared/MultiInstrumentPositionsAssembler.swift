@@ -161,7 +161,10 @@ struct MultiInstrumentPositionsAssembler: Sendable {
         costBasis: costSnapshot[row.instrument.id].map {
           InstrumentAmount(quantity: $0, instrument: context.hostCurrency)
         },
-        value: row.value)
+        value: row.value,
+        // Preserve the owning chain the upstream valuator stamped; this
+        // overlay only adds cost basis and must not drop chain identity.
+        accountChainId: row.accountChainId)
     }
     return PositionsViewInput(
       title: context.title,
