@@ -27,9 +27,7 @@ import os
 /// All three are race-free at runtime — see
 /// `guides/CONCURRENCY_GUIDE.md` §2 "False Positives to Avoid",
 /// Carve-out 3 (GRDB repositories).
-final class GRDBInstrumentRegistryRepository:
-  InstrumentRegistryRepository, @unchecked Sendable
-{
+final class GRDBInstrumentRegistryRepository: @unchecked Sendable {
   // `database` is `internal` rather than `private` so the sibling
   // extension file `GRDBInstrumentRegistryRepository+Lookup.swift`
   // (which hosts `cryptoRegistration(byId:)`) can read from it. The
@@ -55,6 +53,11 @@ final class GRDBInstrumentRegistryRepository:
   // scoped because Swift extensions in separate files don't share
   // `private` access.
   let hooks: OSAllocatedUnfairLock<HookState>
+  /// Redirects an incoming retired cross-chain instrument id onto its
+  /// canonical id so the apply path can mark the retired row `alias_of`
+  /// (design §3.5). `nil` for repos that never apply instrument records
+  /// (per-profile bundles, previews, tests that don't exercise aliasing).
+  let canonicalResolver: CanonicalInstrumentResolver?
 
   /// Lock-guarded memoised instrument-map snapshot. The
   /// `MapCacheState` type and the invalidation / test-accessor helpers
@@ -83,9 +86,11 @@ final class GRDBInstrumentRegistryRepository:
   init(
     database: any DatabaseWriter,
     onRecordChanged: @escaping @Sendable (String) -> Void = { _ in },
-    onRecordDeleted: @escaping @Sendable (String) -> Void = { _ in }
+    onRecordDeleted: @escaping @Sendable (String) -> Void = { _ in },
+    canonicalResolver: CanonicalInstrumentResolver? = nil
   ) {
     self.database = database
+    self.canonicalResolver = canonicalResolver
     self.hooks = OSAllocatedUnfairLock(
       initialState: HookState(
         onRecordChanged: onRecordChanged,
@@ -324,3 +329,7 @@ final class GRDBInstrumentRegistryRepository:
   // `+SyncEntryPoints` extension file.
   // `unsyncedNonFiatRowIdsSync` similarly lives in `+Lookup`.
 }
+
+// MARK: - InstrumentRegistryRepository
+
+extension GRDBInstrumentRegistryRepository: InstrumentRegistryRepository {}

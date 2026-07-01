@@ -13,7 +13,13 @@ extension MoolahApp {
   /// `SyncCoordinator` with the registry's sync hooks rotated in.
   static func bootstrapSyncCoordinator(setup: ContainerSetup) -> SyncCoordinator {
     let networking = NetworkingServices()
-    let scope = makeSharedInstrumentScope(setup: setup, networking: networking)
+    // Build the resolver first so the shared registry can apply `alias_of`
+    // on incoming instrument records (design §3.5). Its observation task is
+    // wired after the coordinator exists so it can be stored on the coordinator
+    // and cancelled by stop().
+    let canonicalResolver = CanonicalInstrumentResolver()
+    let scope = makeSharedInstrumentScope(
+      setup: setup, networking: networking, canonicalResolver: canonicalResolver)
     // App-level store of the registry data — every per-session
     // `CryptoTokenStore` proxies its `registrations` /
     // `instruments` / `providerMappings` / `registrationsVersion`
@@ -23,10 +29,6 @@ extension MoolahApp {
     // `registry.observeChanges()` for its lifetime so remote-
     // arriving CKSyncEngine applies fan out automatically.
     let registryStore = SharedRegistryStore(registry: scope.registry)
-    // Construct the shared canonical resolver. The observation task is wired
-    // after coordinator construction so it can be stored on the coordinator
-    // and cancelled by stop().
-    let canonicalResolver = CanonicalInstrumentResolver()
     let coordinator = SyncCoordinator(
       containerManager: setup.manager,
       sharedInstrumentRegistry: scope.registry,
@@ -42,23 +44,25 @@ extension MoolahApp {
   }
 
   /// Constructs the app-level shared `GRDBInstrumentRegistryRepository`
-  /// pointed at the profile-index DB. Sync hooks are no-ops at
-  /// construction time and rotated in via
-  /// `attachSharedInstrumentRegistrySyncHooks` once the
-  /// `SyncCoordinator` exists (chicken-and-egg: the coordinator's
-  /// init takes the registry, so the registry can't capture the
-  /// coordinator at its own init).
-  static func makeSharedInstrumentRegistry(
-    database: any DatabaseWriter
+  /// pointed at the profile-index DB, wired with `canonicalResolver` so the
+  /// apply path marks incoming retired cross-chain instrument rows `alias_of`
+  /// their canonical id (design §3.5). Sync hooks are no-ops at construction
+  /// time and rotated in via `attachSharedInstrumentRegistrySyncHooks` once the
+  /// `SyncCoordinator` exists (chicken-and-egg: the coordinator's init takes
+  /// the registry, so the registry can't capture the coordinator at its own init).
+  private static func makeSharedInstrumentRegistry(
+    database: any DatabaseWriter,
+    canonicalResolver: CanonicalInstrumentResolver
   ) -> GRDBInstrumentRegistryRepository {
-    GRDBInstrumentRegistryRepository(database: database)
+    GRDBInstrumentRegistryRepository(database: database, canonicalResolver: canonicalResolver)
   }
 
   /// Bundles the shared registry + market-data services, both pointed
   /// at the profile-index DB. Tuple shape keeps `MoolahApp.init` short.
   static func makeSharedInstrumentScope(
     setup: ContainerSetup,
-    networking: NetworkingServices
+    networking: NetworkingServices,
+    canonicalResolver: CanonicalInstrumentResolver
   ) -> (
     registry: GRDBInstrumentRegistryRepository,
     marketData: ProfileSession.MarketDataServices
@@ -68,7 +72,8 @@ extension MoolahApp {
     // point lookup can be injected as the `CryptoPriceService` metadata plug.
     // The conversion layer then self-resolves crypto mappings / pricing status
     // through the price service instead of scanning the registry.
-    let registry = makeSharedInstrumentRegistry(database: database)
+    let registry = makeSharedInstrumentRegistry(
+      database: database, canonicalResolver: canonicalResolver)
     return (
       registry: registry,
       marketData: ProfileSession.makeMarketDataServices(
