@@ -117,6 +117,31 @@ struct WrappedNativeConversionTests {
   /// price comes from the native asset. Invalidating the native asset
   /// must therefore also evict the wrapper's cached factor — otherwise
   /// WETH keeps converting at the pre-update ETH rate.
+  ///
+  /// Design §3a: invalidating `1:native` must also evict ALL L2 WETH
+  /// ids (OP, Base) that price via mainnet ETH, not just mainnet WETH.
+  @Test("invalidateCache(for: canonical ETH) evicts OP WETH cached rate")
+  func invalidateCacheForCanonicalEthEvictsL2WethRate() async throws {
+    let opWeth = Instrument.crypto(
+      chainId: 10,
+      contractAddress: "0x4200000000000000000000000000000000000006",
+      symbol: "WETH", name: "Wrapped Ether", decimals: 18)
+    let ethNative = Instrument.crypto(
+      chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    let service = try makeService(
+      cryptoPrices: ["1:native": ["2026-04-10": dec("1623.45")]],
+      providerMappings: [nativeEthRegistration()])
+
+    _ = try await service.convert(
+      dec("1"), from: opWeth, to: usd, on: try date("2026-04-10"))
+    let warmedCount = await service.cachedRateCountForTesting
+    #expect(warmedCount == 1)
+
+    await service.invalidateCache(for: ethNative)
+    let evictedCount = await service.cachedRateCountForTesting
+    #expect(evictedCount == 0)
+  }
+
   @Test("invalidateCache(for: native) evicts the wrapped-native cached rate")
   func invalidateCacheForNativeEvictsWrappedEntry() async throws {
     let weth = Instrument.crypto(
