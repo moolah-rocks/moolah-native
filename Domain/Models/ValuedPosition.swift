@@ -16,6 +16,27 @@ struct ValuedPosition: Sendable, Hashable, Identifiable {
   let unitPrice: InstrumentAmount?
   let costBasis: InstrumentAmount?
   let value: InstrumentAmount?
+  /// The chain ID of the account that owns this position, when the position
+  /// originates from a chain-scoped (crypto) account. `nil` for fiat and
+  /// stock positions, and for crypto positions where chain context is not
+  /// available to the caller.
+  let accountChainId: Int?
+
+  init(
+    instrument: Instrument,
+    quantity: Decimal,
+    unitPrice: InstrumentAmount?,
+    costBasis: InstrumentAmount?,
+    value: InstrumentAmount?,
+    accountChainId: Int? = nil
+  ) {
+    self.instrument = instrument
+    self.quantity = quantity
+    self.unitPrice = unitPrice
+    self.costBasis = costBasis
+    self.value = value
+    self.accountChainId = accountChainId
+  }
 
   var id: String { instrument.id }
 
