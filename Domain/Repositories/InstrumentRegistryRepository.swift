@@ -21,6 +21,19 @@ protocol InstrumentRegistryRepository: InstrumentChangeObserving {
   /// Throws on a backing-store failure.
   func allCryptoRegistrations() async throws -> [CryptoRegistration]
 
+  /// All registered crypto instruments INCLUDING aliased (retired) rows.
+  /// Identical projection rules to `allCryptoRegistrations()` except the
+  /// `alias_of IS NULL` filter is absent, so retired cross-chain ids
+  /// (e.g. `10:native` aliased to `1:native`) are included.
+  ///
+  /// The one-shot `UnifiedInstrumentIdentityMigration` uses this to derive
+  /// the retired → canonical mapping across the full registration set. No
+  /// other caller should use this — production read paths must hide aliased
+  /// rows via the unfiltered `allCryptoRegistrations()`.
+  ///
+  /// Throws on a backing-store failure.
+  func allCryptoRegistrationsIncludingAliased() async throws -> [CryptoRegistration]
+
   /// Looks up a single crypto registration by its `Instrument.id`. Returns
   /// `nil` when no row exists for that id, when the row exists but has no
   /// provider mapping (all three mapping columns nil — e.g. an auto-insert

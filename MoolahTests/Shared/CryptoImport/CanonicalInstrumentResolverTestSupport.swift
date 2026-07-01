@@ -51,6 +51,9 @@ final class ThrowingCryptoRegistryStub: InstrumentRegistryRepository, @unchecked
   func allCryptoRegistrations() async throws -> [CryptoRegistration] {
     throw Failure.intentional
   }
+  func allCryptoRegistrationsIncludingAliased() async throws -> [CryptoRegistration] {
+    throw Failure.intentional
+  }
   func cryptoRegistration(byId id: String) async throws -> CryptoRegistration? { nil }
   func registerCrypto(_ instrument: Instrument, mapping: CryptoProviderMapping) async throws {}
   func registerCrypto(
@@ -82,6 +85,10 @@ final class CountingRegistryStub: InstrumentRegistryRepository, Sendable {
 
   func all() async throws -> [Instrument] { [] }
   func allCryptoRegistrations() async throws -> [CryptoRegistration] {
+    _callCount.withLock { $0 += 1 }
+    return _registrations
+  }
+  func allCryptoRegistrationsIncludingAliased() async throws -> [CryptoRegistration] {
     _callCount.withLock { $0 += 1 }
     return _registrations
   }
