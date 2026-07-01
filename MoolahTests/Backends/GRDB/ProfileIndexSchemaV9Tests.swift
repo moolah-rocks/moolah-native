@@ -74,4 +74,38 @@ struct ProfileIndexSchemaV9Tests {
     }
     #expect(stored == "1:native")
   }
+
+  @Test("a Codable InstrumentRow update cannot clobber alias_of")
+  func codableUpdateDoesNotClobberAliasOf() throws {
+    let queue = try makeMigratedDatabase()
+
+    // Seed a crypto row via the Codable record (no alias_of in CodingKeys),
+    // then set alias_of via raw SQL — mirroring how the data migration writes it.
+    try queue.write { database in
+      var row = InstrumentRow(
+        id: "10:native", recordName: "10:native", kind: "cryptoToken",
+        name: "Ethereum", decimals: 18, ticker: "ETH", exchange: nil,
+        chainId: 10, contractAddress: nil, coingeckoId: "ethereum",
+        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT",
+        encodedSystemFields: nil, pricingStatus: "priced")
+      try row.insert(database)
+      try database.execute(
+        sql: "UPDATE instrument SET alias_of = '1:native' WHERE id = '10:native'")
+
+      // A normal Codable update (as registerCrypto / sync-apply would issue)
+      // rewrites the mapped columns only.
+      row.name = "Ether"
+      try row.update(database)
+    }
+
+    let (name, aliasOf): (String, String?) = try queue.read { database in
+      let row = try #require(
+        try Row.fetchOne(
+          database,
+          sql: "SELECT name, alias_of FROM instrument WHERE id = '10:native'"))
+      return (row["name"], row["alias_of"])
+    }
+    #expect(name == "Ether")  // Codable update landed…
+    #expect(aliasOf == "1:native")  // …without touching the local-only column.
+  }
 }
