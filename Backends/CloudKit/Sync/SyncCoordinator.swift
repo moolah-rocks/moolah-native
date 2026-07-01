@@ -126,23 +126,15 @@ final class SyncCoordinator {
   /// pass shared services.
   nonisolated let sharedNetworking: NetworkingServices?
 
-  /// App-level shared `SharedRegistryStore` — owns the registry data
-  /// (`registrations`, `instruments`, `providerMappings`,
-  /// `registrationsVersion`) and subscribes to the registry's
-  /// `observeChanges()` so a mutation through any session (or a
-  /// remote-arriving CKSyncEngine apply) updates every session's
-  /// view on the next read. Per-session `CryptoTokenStore` instances
-  /// hold a reference and proxy data reads to this store; per-
-  /// session UI state (`error`, `isLoading`) stays on the per-session
-  /// store so a transient failure in one session doesn't leak onto
-  /// every Settings screen. `nil` for callers (preview /
-  /// tests) that don't construct a shared store.
-  ///
-  /// Not `nonisolated`: `SharedRegistryStore` is `@MainActor
-  /// @Observable` and reading it from a non-`@MainActor` context
-  /// would race the observation infrastructure. `SyncCoordinator`
-  /// itself is `@MainActor`, so all access is already isolated and
-  /// the keyword is unnecessary.
+  /// App-level shared `CanonicalInstrumentResolver`, kept warm via a
+  /// registry-change observation Task. `nil` for preview / test callers.
+  nonisolated let sharedCanonicalResolver: CanonicalInstrumentResolver?
+
+  /// App-level shared `SharedRegistryStore`. Per-session `CryptoTokenStore`
+  /// instances proxy `registrations` / `instruments` / `providerMappings` /
+  /// `registrationsVersion` reads through this single store so a write in
+  /// any session reaches every UI. `nil` for preview / test callers.
+  /// Not `nonisolated`: `SharedRegistryStore` is `@MainActor @Observable`.
   let sharedRegistryStore: SharedRegistryStore?
 
   // Cross-file-access note: members below this MARK that sibling extension
@@ -347,7 +339,8 @@ final class SyncCoordinator {
     sharedInstrumentRegistry: GRDBInstrumentRegistryRepository? = nil,
     sharedMarketData: ProfileSession.MarketDataServices? = nil,
     sharedRegistryStore: SharedRegistryStore? = nil,
-    sharedNetworking: NetworkingServices? = nil
+    sharedNetworking: NetworkingServices? = nil,
+    sharedCanonicalResolver: CanonicalInstrumentResolver? = nil
   ) {
     self.containerManager = containerManager
     self.userDefaults = userDefaults
@@ -356,6 +349,7 @@ final class SyncCoordinator {
     self.sharedMarketData = sharedMarketData
     self.sharedRegistryStore = sharedRegistryStore
     self.sharedNetworking = sharedNetworking
+    self.sharedCanonicalResolver = sharedCanonicalResolver
     self.profileIndexHandler = ProfileIndexSyncHandler(
       repository: containerManager.profileIndexRepository,
       instrumentRepository: sharedInstrumentRegistry,
