@@ -36,15 +36,21 @@ actor CryptoTokenDiscoveryService {
   private var inFlight: [String: Task<CryptoRegistration, Error>] = [:]
   private let registry: any InstrumentRegistryRepository
   private let resolver: any CryptoRegistrationResolver
+  /// Injected resolver used in Task 4 to redirect L2 native/ERC-20
+  /// instruments onto their canonical mainnet id before persisting.
+  /// Defaulted so the 10+ existing test call sites compile unchanged.
+  private let canonicalResolver: CanonicalInstrumentResolver
   private let logger = Logger(
     subsystem: "com.moolah.app", category: "CryptoTokenDiscovery")
 
   init(
     registry: any InstrumentRegistryRepository,
-    resolver: any CryptoRegistrationResolver
+    resolver: any CryptoRegistrationResolver,
+    canonicalResolver: CanonicalInstrumentResolver = CanonicalInstrumentResolver()
   ) {
     self.registry = registry
     self.resolver = resolver
+    self.canonicalResolver = canonicalResolver
   }
 
   /// Returns the existing `CryptoRegistration` if one is registered for

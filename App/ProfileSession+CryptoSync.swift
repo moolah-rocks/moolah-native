@@ -103,7 +103,8 @@ extension ProfileSession {
     backend: BackendProvider,
     registry: (any InstrumentRegistryRepository)?,
     cryptoPriceService: CryptoPriceService,
-    profileInstrument: Instrument
+    profileInstrument: Instrument,
+    canonicalResolver: CanonicalInstrumentResolver = CanonicalInstrumentResolver()
   ) -> CryptoSyncWiring? {
     guard let registry else { return nil }
     let rateLimiter = RateLimiter(permitsPerSecond: 25)
@@ -114,7 +115,7 @@ extension ProfileSession {
       apiKeyProvider: { ProfileSession.resolveAlchemyApiKey() },
       rateLimiter: rateLimiter)
     let discovery = CryptoTokenDiscoveryService(
-      registry: registry, resolver: cryptoPriceService)
+      registry: registry, resolver: cryptoPriceService, canonicalResolver: canonicalResolver)
     let walletSyncEngine = makeWalletSyncEngine(
       alchemy: alchemy,
       blockExplorer: makeLiveBlockExplorer(),

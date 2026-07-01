@@ -238,7 +238,7 @@ final class ProfileSession: Identifiable {
     self.folderScanner = importPipeline.scanner
     self.folderWatcher = importPipeline.watcher
 
-    finishInit(registryWiring: registryWiring)
+    finishInit(registryWiring: registryWiring, syncCoordinator: syncCoordinator)
   }
 
   /// Tail of the initialiser. Wires
@@ -253,7 +253,7 @@ final class ProfileSession: Identifiable {
   /// without an explicit reload step. The session needs no reference
   /// to `SyncCoordinator` here — apply drives GRDB writes and the
   /// observation streams take it from there.
-  private func finishInit(registryWiring: RegistryWiring) {
+  private func finishInit(registryWiring: RegistryWiring, syncCoordinator: SyncCoordinator?) {
     // MUST run before `makeCryptoSyncWiring` / `seedBuiltInCryptoPresets`
     // below, which read `instrumentRegistry`.
     self.instrumentRegistry = registryWiring.registry
@@ -304,7 +304,7 @@ final class ProfileSession: Identifiable {
       let insightAvailability: any ModelAvailabilityProviding = SystemLanguageModelAvailability()
       let insightNarrator: any InsightNarrating = Self.makeInsightNarrator()
     #endif
-    let builtInsightStore = InsightStore(
+    self.insightStore = InsightStore(
       sources: insightSources,
       backend: backend,
       profile: profile,
@@ -312,12 +312,12 @@ final class ProfileSession: Identifiable {
       availability: insightAvailability,
       narrator: insightNarrator,
       fixtureInsights: Self.uiTestingInsightFixtures())
-    self.insightStore = builtInsightStore
     let cryptoWiring = Self.makeCryptoSyncWiring(
       backend: backend,
       registry: instrumentRegistry,
       cryptoPriceService: cryptoPriceService,
-      profileInstrument: profile.instrument)
+      profileInstrument: profile.instrument,
+      canonicalResolver: syncCoordinator?.sharedCanonicalResolver ?? CanonicalInstrumentResolver())
     self.cryptoSyncStore = cryptoWiring?.store
     self.cryptoTokenDiscovery = cryptoWiring?.discovery
     seedBuiltInCryptoPresets(registry: instrumentRegistry)
