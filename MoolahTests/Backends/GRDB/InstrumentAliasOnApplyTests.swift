@@ -150,6 +150,39 @@ struct InstrumentAliasOnApplyTests {
     #expect(try aliasOf("10:native", in: registry) == nil)
   }
 
+  // MARK: - Conflict merge path (applyInstrumentServerRecordChangedMerge)
+
+  /// Regression: `applyInstrumentServerRecordChangedMerge` routes through
+  /// `applyRemoteChangesSync` — the shared apply path that also writes
+  /// `alias_of` — so an incoming `10:native` record via the conflict merge
+  /// path is aliased to `1:native` without any separate alias write in the
+  /// conflict handler itself. If a future refactor bypasses
+  /// `applyRemoteChangesSync` in the conflict path, this test will catch the
+  /// regression.
+  @Test
+  func instrumentConflictMergeAliasesRetiredRecord() throws {
+    let database = try ProfileIndexDatabase.openInMemory()
+    let profileRepo = GRDBProfileIndexRepository(database: database)
+    let registry = GRDBInstrumentRegistryRepository(
+      database: database, canonicalResolver: CanonicalInstrumentResolver())
+    let handler = ProfileIndexSyncHandler(
+      repository: profileRepo, instrumentRepository: registry)
+
+    // Build a CKRecord for `10:native` (Optimism ETH — retired id) and
+    // route it through the conflict merge entry point.
+    let row = InstrumentRow(
+      id: "10:native", recordName: "10:native", kind: "cryptoToken",
+      name: "Ethereum", decimals: 18, ticker: "ETH", exchange: nil,
+      chainId: 10, contractAddress: nil,
+      coingeckoId: "ethereum", cryptocompareSymbol: nil, binanceSymbol: nil,
+      encodedSystemFields: nil, pricingStatus: "priced")
+    let serverRecord = row.toCKRecord(in: handler.zoneID)
+
+    handler.applyInstrumentServerRecordChangedMerge(serverRecord: serverRecord)
+
+    #expect(try aliasOf("10:native", in: registry) == "1:native")
+  }
+
   // MARK: - id / recordName / encodedSystemFields unchanged
 
   /// The alias write touches ONLY `alias_of`; it must never clobber
