@@ -18,6 +18,7 @@ struct CompactInstrumentPickerButton: View {
         searchService: session?.instrumentSearchService,
         registry: session?.instrumentRegistry,
         resolutionClient: session?.tokenResolutionClient,
+        canonicalResolver: session?.canonicalResolver,
         kinds: Set(Instrument.Kind.allCases)
       )
       isPresented = true
