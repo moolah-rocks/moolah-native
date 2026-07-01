@@ -115,7 +115,15 @@ final class GRDBInstrumentRegistryRepository: @unchecked Sendable {
 
   func all() async throws -> [Instrument] {
     let stored = try await database.read { database in
-      try InstrumentRow.fetchAll(database).map { try $0.toDomain() }
+      // Hide aliased (retired) rows — a unified asset (e.g. ETH) must
+      // appear once. `alias_of` is not in `CodingKeys` so we reference it
+      // via `Column("alias_of")` per GRDB's untyped-column API. The
+      // `instrument_by_alias` partial index covers `WHERE alias_of IS NOT NULL`
+      // (the FK-resolver path); this predicate (`IS NULL`) is the opposite, so
+      // SQLite does a full scan — intentional and correct for this small table.
+      try InstrumentRow
+        .filter(Column("alias_of") == nil)
+        .fetchAll(database).map { try $0.toDomain() }
     }
     let storedIds = Set(stored.map(\.id))
     let ambient =
@@ -129,9 +137,16 @@ final class GRDBInstrumentRegistryRepository: @unchecked Sendable {
   func allCryptoRegistrations() async throws -> [CryptoRegistration] {
     try await database.read { database in
       let cryptoKind = Instrument.Kind.cryptoToken.rawValue
+      // Compose the alias filter (hide retired rows) with the existing
+      // kind filter. `alias_of` is not in `CodingKeys` so we reference it via
+      // `Column("alias_of")`. The `instrument_by_alias` partial index covers
+      // `WHERE alias_of IS NOT NULL` (the FK-resolver path); this predicate
+      // (`IS NULL`) is the opposite, so SQLite does a full scan — intentional
+      // and correct for this small table (same scan as the unfiltered form).
       let rows =
         try InstrumentRow
         .filter(InstrumentRow.Columns.kind == cryptoKind)
+        .filter(Column("alias_of") == nil)
         .fetchAll(database)
       return try rows.compactMap { row in try Self.project(row: row) }
     }
