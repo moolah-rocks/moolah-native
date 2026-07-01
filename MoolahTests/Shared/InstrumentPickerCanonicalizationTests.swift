@@ -1,4 +1,4 @@
-// MoolahTests/Shared/InstrumentPickerStoreCanonicalizationTests.swift
+// MoolahTests/Shared/InstrumentPickerCanonicalizationTests.swift
 
 import Foundation
 import Testing
@@ -6,7 +6,7 @@ import Testing
 @testable import Moolah
 
 /// The manual picker must not mint a retired L2 id: adding an L2-stablecoin
-/// catalog hit persists under the canonical mainnet id (addition A / design §3).
+/// catalog hit must persist under the canonical mainnet id.
 @Suite("InstrumentPickerStore — canonical registration")
 @MainActor
 struct InstrumentPickerCanonicalizationTests {
