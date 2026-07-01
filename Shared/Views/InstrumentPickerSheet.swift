@@ -127,6 +127,7 @@ private struct CallbackSheet: View {
         searchService: session?.instrumentSearchService,
         registry: session?.instrumentRegistry,
         resolutionClient: session?.tokenResolutionClient,
+        canonicalResolver: session?.canonicalResolver,
         kinds: kinds
       )
     }

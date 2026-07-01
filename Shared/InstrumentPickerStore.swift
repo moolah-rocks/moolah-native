@@ -18,6 +18,11 @@ final class InstrumentPickerStore {
   private let searchService: InstrumentSearchService?
   private let registry: (any InstrumentRegistryRepository)?
   private let resolutionClient: (any TokenResolutionClient)?
+  /// Collapses a searched L2 instrument onto its canonical mainnet id before
+  /// persisting — mirrors `CryptoTokenDiscoveryService.resolveOrLoad`. `nil`
+  /// in previews and tests that don't wire the resolver; those callers fall
+  /// through to the raw id unchanged (addition A).
+  private let canonicalResolver: CanonicalInstrumentResolver?
   private let logger = Logger(
     subsystem: "com.moolah.app", category: "InstrumentPickerStore")
   private var searchTask: Task<Void, Never>?
@@ -26,11 +31,13 @@ final class InstrumentPickerStore {
     searchService: InstrumentSearchService? = nil,
     registry: (any InstrumentRegistryRepository)? = nil,
     resolutionClient: (any TokenResolutionClient)? = nil,
+    canonicalResolver: CanonicalInstrumentResolver? = nil,
     kinds: Set<Instrument.Kind>
   ) {
     self.searchService = searchService
     self.registry = registry
     self.resolutionClient = resolutionClient
+    self.canonicalResolver = canonicalResolver
     self.kinds = kinds
   }
 
@@ -102,21 +109,40 @@ final class InstrumentPickerStore {
   /// surface a user-facing error instead of poisoning the registry with a
   /// row that will never price.
   ///
+  /// The incoming instrument is canonicalized before any registry lookup or
+  /// write: an L2 stablecoin (e.g. Optimism USDC `10:0x0b2c…`) collapses onto
+  /// its mainnet id (`1:0xa0b8…`), matching `CryptoTokenDiscoveryService
+  /// .resolveOrLoad`. When the canonical row already exists the method returns
+  /// it immediately, skipping the network round-trip (addition A).
+  ///
   /// Native (chain-only) tokens are detected by a nil `contractAddress`. The
   /// resolver gets `isNative: true` and a nil contract on those rows; tokens
   /// with a contract pass it through verbatim.
   private func registerCrypto(_ instrument: Instrument) async -> Instrument? {
     guard let registry, let resolutionClient else { return nil }
+
+    // Canonicalize the searched id so an L2 stablecoin collapses onto its
+    // canonical mainnet id, then decompose that id back into value fields so
+    // the stored row's chainId/contractAddress match its primary key
+    // (mirrors CryptoTokenDiscoveryService.resolveOrLoad).
+    let canonicalInstrument = canonicalized(instrument)
+
+    // If the canonical instrument is already registered, reuse it verbatim —
+    // don't re-resolve or clobber a good mainnet row with placeholder fields.
+    if let existing = try? await registry.cryptoRegistration(byId: canonicalInstrument.id) {
+      return existing.instrument
+    }
+
     isResolving = true
     error = nil
     defer { isResolving = false }
-    let isNative = instrument.contractAddress == nil
-    let chainId = instrument.chainId ?? 0
+    let isNative = canonicalInstrument.contractAddress == nil
+    let chainId = canonicalInstrument.chainId ?? 0
     do {
       let resolution = try await resolutionClient.resolve(
         chainId: chainId,
-        contractAddress: isNative ? nil : instrument.contractAddress,
-        symbol: instrument.ticker,
+        contractAddress: isNative ? nil : canonicalInstrument.contractAddress,
+        symbol: canonicalInstrument.ticker,
         isNative: isNative
       )
       guard resolution.hasAnyProviderId else {
@@ -124,18 +150,34 @@ final class InstrumentPickerStore {
         return nil
       }
       let mapping = CryptoProviderMapping(
-        instrumentId: instrument.id,
+        instrumentId: canonicalInstrument.id,
         coingeckoId: resolution.coingeckoId,
         cryptocompareSymbol: resolution.cryptocompareSymbol,
         binanceSymbol: resolution.binanceSymbol
       )
-      try await registry.registerCrypto(instrument, mapping: mapping)
-      return instrument
+      try await registry.registerCrypto(canonicalInstrument, mapping: mapping)
+      return canonicalInstrument
     } catch {
       logger.error("Crypto registration failed: \(error, privacy: .public)")
-      self.error = "Couldn't add \(instrument.displayLabel)."
+      self.error = "Couldn't add \(canonicalInstrument.displayLabel)."
       return nil
     }
+  }
+
+  /// Maps a searched crypto instrument onto its canonical id and rebuilds the
+  /// instrument from the decomposed canonical `(chainId, contractAddress)` so
+  /// the value fields agree with the id. Returns the input unchanged when it
+  /// is already canonical or no resolver is wired.
+  private func canonicalized(_ instrument: Instrument) -> Instrument {
+    guard let canonicalResolver else { return instrument }
+    let canonicalId = canonicalResolver.canonicalId(for: instrument.id)
+    guard canonicalId != instrument.id else { return instrument }
+    return Instrument.crypto(
+      chainId: CryptoInstrumentID.chainId(from: canonicalId) ?? (instrument.chainId ?? 0),
+      contractAddress: CryptoInstrumentID.contractAddress(from: canonicalId),
+      symbol: instrument.ticker ?? instrument.name,
+      name: instrument.name,
+      decimals: instrument.decimals)
   }
 
   private func runSearch() async {
@@ -185,3 +227,15 @@ extension InstrumentPickerStore {
     return "No matching \(kindsLabel) for \"\(query)\"."
   }
 }
+
+#if DEBUG
+  extension InstrumentPickerStore {
+    /// Test seam: forwards directly to `registerCrypto` so unit tests can
+    /// drive the canonicalize → resolve → persist path without going through a
+    /// full `InstrumentSearchService` / `InstrumentSearchResult` stack.
+    /// Production code never calls this method.
+    func registerForTest(_ instrument: Instrument) async -> Instrument? {
+      await registerCrypto(instrument)
+    }
+  }
+#endif

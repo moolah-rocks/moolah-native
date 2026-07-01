@@ -66,6 +66,7 @@ final class ProfileSession: Identifiable {
   private(set) var binanceCache: BinanceTokenCache?
   private(set) var defiLlamaSupportCache: DefiLlamaSupportCache?
   private(set) var tokenResolutionClient: (any TokenResolutionClient)?
+  private(set) var canonicalResolver: CanonicalInstrumentResolver?
   /// Orchestrator for crypto-wallet auto-import. `nil` when the profile
   /// has no `instrumentRegistry` (preview / degraded launches). Set
   /// once in `finishInit` after `init` returns; effectively `let` from
@@ -241,18 +242,10 @@ final class ProfileSession: Identifiable {
     finishInit(registryWiring: registryWiring, syncCoordinator: syncCoordinator)
   }
 
-  /// Tail of the initialiser. Wires
-  /// the crypto-wallet sync stores and starts the hourly
-  /// `PRAGMA optimize` tick (issue #576). Reads everything it needs
-  /// from `self` (every stored property is fully initialised by the
-  /// time `init` calls this).
-  ///
-  /// Cross-store propagation is handled reactively: every store
-  /// subscribes to its repository's GRDB `ValueObservation` stream in
-  /// `init`, so remote-sync writes (and local writes) reach views
-  /// without an explicit reload step. `syncCoordinator` is passed only
-  /// to supply the shared `CanonicalInstrumentResolver` to the crypto
-  /// discovery wiring; it is not otherwise retained here.
+  /// Tail of the initialiser: wires registry pieces, AccountGroupStore,
+  /// InsightStore, the canonical resolver (addition A), and crypto sync
+  /// stores; starts the hourly `PRAGMA optimize` tick (issue #576). Reads
+  /// from `self` — every property is fully initialised before this runs.
   private func finishInit(registryWiring: RegistryWiring, syncCoordinator: SyncCoordinator?) {
     // MUST run before `makeCryptoSyncWiring` / `seedBuiltInCryptoPresets`
     // below, which read `instrumentRegistry`.
@@ -312,14 +305,7 @@ final class ProfileSession: Identifiable {
       availability: insightAvailability,
       narrator: insightNarrator,
       fixtureInsights: Self.uiTestingInsightFixtures())
-    let cryptoWiring = Self.makeCryptoSyncWiring(
-      backend: backend,
-      registry: instrumentRegistry,
-      cryptoPriceService: cryptoPriceService,
-      profileInstrument: profile.instrument,
-      canonicalResolver: syncCoordinator?.sharedCanonicalResolver ?? CanonicalInstrumentResolver())
-    self.cryptoSyncStore = cryptoWiring?.store
-    self.cryptoTokenDiscovery = cryptoWiring?.discovery
+    wireCanonicalResolverAndCryptoSync(syncCoordinator: syncCoordinator)
     seedBuiltInCryptoPresets(registry: instrumentRegistry)
     wireCrossStoreSideEffects()
     startPeriodicPragmaOptimize()
@@ -327,6 +313,20 @@ final class ProfileSession: Identifiable {
 
   // `seedBuiltInCryptoPresets(registry:)` and `reconcileFromCaches(registry:)`
   // live in `ProfileSession+CryptoPresets.swift`.
+
+  private func wireCanonicalResolverAndCryptoSync(syncCoordinator: SyncCoordinator?) {
+    let canonicalResolver =
+      syncCoordinator?.sharedCanonicalResolver ?? CanonicalInstrumentResolver()
+    self.canonicalResolver = canonicalResolver
+    let cryptoWiring = Self.makeCryptoSyncWiring(
+      backend: backend,
+      registry: instrumentRegistry,
+      cryptoPriceService: cryptoPriceService,
+      profileInstrument: profile.instrument,
+      canonicalResolver: canonicalResolver)
+    self.cryptoSyncStore = cryptoWiring?.store
+    self.cryptoTokenDiscovery = cryptoWiring?.discovery
+  }
 
   /// Wires the crypto-token-store -> investment-store hook: when a
   /// registration's `pricingStatus` flips (e.g. user marks a token as
