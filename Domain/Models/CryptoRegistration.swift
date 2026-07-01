@@ -111,6 +111,34 @@ struct CryptoRegistration {
         coingeckoId: "ethereum-name-service", cryptocompareSymbol: "ENS", binanceSymbol: "ENSUSDT"
       )
     ),
+    // Canonical mainnet stablecoin presets. Every L2 USDC/USDT is collapsed
+    // onto these ids by `CanonicalInstrumentResolver.staticBaseMap`; these
+    // rows must exist locally so leg resolution finds a real cryptoToken row
+    // (6 decimals) rather than falling back to `Instrument.fiat(code:)`
+    // (2 decimals). Stablecoin pricing is handled by `StablecoinPriceClient`
+    // ($1 peg); the provider fields support deep-history fallback only.
+    CryptoRegistration(
+      instrument: .crypto(
+        chainId: 1,
+        contractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        symbol: "USDC", name: "USD Coin", decimals: 6
+      ),
+      mapping: CryptoProviderMapping(
+        instrumentId: "1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+        coingeckoId: "usd-coin", cryptocompareSymbol: "USDC", binanceSymbol: "USDCUSDT"
+      )
+    ),
+    CryptoRegistration(
+      instrument: .crypto(
+        chainId: 1,
+        contractAddress: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+        symbol: "USDT", name: "Tether", decimals: 6
+      ),
+      mapping: CryptoProviderMapping(
+        instrumentId: "1:0xdac17f958d2ee523a2206206994597c13d831ec7",
+        coingeckoId: "tether", cryptocompareSymbol: "USDT", binanceSymbol: nil
+      )
+    ),
   ]
 }
 

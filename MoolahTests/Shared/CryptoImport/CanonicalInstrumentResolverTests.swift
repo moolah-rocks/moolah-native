@@ -59,5 +59,28 @@ struct CanonicalInstrumentResolverTests {
           "static alias \(aliasId) no longer recognised by CanonicalTokenRegistry")
       }
     }
+
+    /// Every canonical id that `staticBaseMap` maps *onto* must be seeded at
+    /// startup — either by a `CryptoRegistration.builtInPresets` entry (by
+    /// instrument id) or by a `ChainConfig` native instrument id. This
+    /// guarantees a received L2 leg that resolves to a canonical id always
+    /// finds a real cryptoToken row instead of falling back to
+    /// `Instrument.fiat(code:)`. Adding a new static alias without also
+    /// seeding its canonical target will break this test.
+    @Test("every static-map canonical target is seeded in builtInPresets or ChainConfig")
+    func staticMapCanonicalTargetsAreSeeded() {
+      let presetIds = Set(CryptoRegistration.builtInPresets.map(\.instrument.id))
+      let chainNativeIds = Set(ChainConfig.all.map(\.nativeInstrument.id))
+      let seededIds = presetIds.union(chainNativeIds)
+      for (aliasId, canonicalId) in CanonicalInstrumentResolver.staticBaseMap {
+        #expect(
+          seededIds.contains(canonicalId),
+          """
+          static-map canonical target '\(canonicalId)' (alias of '\(aliasId)') is not in \
+          builtInPresets or ChainConfig.all — add a builtInPresets entry for it so \
+          registerBuiltInPresetsIfMissing seeds the row before it is referenced by a leg
+          """)
+      }
+    }
   }
 }
