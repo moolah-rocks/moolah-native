@@ -28,8 +28,8 @@ protocol InstrumentRegistryRepository: InstrumentChangeObserving {
   ///
   /// The one-shot `UnifiedInstrumentIdentityMigration` uses this to derive
   /// the retired → canonical mapping across the full registration set. No
-  /// other caller should use this — production read paths must hide aliased
-  /// rows via the unfiltered `allCryptoRegistrations()`.
+  /// other caller should use this — production read paths must use
+  /// `allCryptoRegistrations()`, which excludes aliased rows.
   ///
   /// Throws on a backing-store failure.
   func allCryptoRegistrationsIncludingAliased() async throws -> [CryptoRegistration]
