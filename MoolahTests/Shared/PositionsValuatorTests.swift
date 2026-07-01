@@ -105,6 +105,47 @@ struct PositionsValuatorTests {
     #expect(rows[0].unitPrice == nil)
   }
 
+  @Test("stamps the supplied owning account chain id onto every built row")
+  func stampsAccountChainId() async throws {
+    let eth = Instrument.crypto(
+      chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    let positions = [
+      Position(instrument: aud, quantity: 1_000),  // host-currency fast path
+      Position(instrument: eth, quantity: 2),  // cross-instrument path
+    ]
+    let service = FakeConversionService.fixedRates([eth.id: Decimal(4_000)])
+    let valuator = PositionsValuator(conversionService: service)
+    let rows = await valuator.valuate(
+      positions: positions, hostCurrency: aud, costBasis: [:], on: Date(),
+      accountChainId: 10)
+    #expect(rows.count == 2)
+    #expect(rows.allSatisfy { $0.accountChainId == 10 })
+  }
+
+  @Test("omitting the owning chain leaves accountChainId nil")
+  func defaultsAccountChainIdNil() async throws {
+    let positions = [Position(instrument: bhp, quantity: 100)]
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
+    let valuator = PositionsValuator(conversionService: service)
+    let rows = await valuator.valuate(
+      positions: positions, hostCurrency: aud, costBasis: [:], on: Date())
+    #expect(rows[0].accountChainId == nil)
+  }
+
+  @Test("single crypto wallet chain folds into a holding's contributingChainIds")
+  func chainFoldsThroughValuator() async throws {
+    let eth = Instrument.crypto(
+      chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    let service = FakeConversionService.fixedRates([eth.id: Decimal(4_000)])
+    let valuator = PositionsValuator(conversionService: service)
+    let rows = await valuator.valuate(
+      positions: [Position(instrument: eth, quantity: 2)],
+      hostCurrency: aud, costBasis: [:], on: Date(), accountChainId: 10)
+    let holdings = AssetHolding.fold(rows, assetKeys: [eth.id: "ethereum"], hostCurrency: aud)
+    let holding = try #require(holdings.first)
+    #expect(holding.contributingChainIds.contains(10))
+  }
+
   @Test("negative quantity (short position) preserves sign in value, positive unit price")
   func shortPositionSignPreservation() async throws {
     // Short -10 shares of BHP @ $40 each → value = -$400 (you owe $400 worth),
