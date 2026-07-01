@@ -99,9 +99,20 @@ extension AssetHolding {
 /// `Instrument.chainName(for:)`, which is domain logic.
 extension AssetHolding {
   /// Resolved chain names for a crypto holding's contributing chains, sorted.
-  /// Empty for non-crypto holdings.
+  /// Empty for non-crypto holdings and for canonical/unified assets.
+  ///
+  /// Canonical/unified assets (e.g. ETH `1:native`, USDC across chains)
+  /// are identified by having a provider key as their `id` (e.g. "ethereum")
+  /// that differs from their underlying instrument ids (e.g. "1:native").
+  /// For these holdings the contributing chain ids reflect the canonical
+  /// chain used for pricing, not the accounts' actual chains, so showing
+  /// a chain caption would be misleading (design §5). Chain-scoped tokens
+  /// with no provider mapping fold under their own instrument id, so
+  /// `contributingInstrumentIds.contains(id)` is true there and chain
+  /// names are shown as normal.
   var contributingChainNames: [String] {
     guard kind == .cryptoToken else { return [] }
+    guard contributingInstrumentIds.contains(id) else { return [] }
     return contributingChainIds.map { Instrument.chainName(for: $0) }
   }
 
