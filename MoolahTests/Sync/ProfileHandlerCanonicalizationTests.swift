@@ -75,4 +75,72 @@ struct ProfileHandlerCanonicalizationTests {
     }
     #expect(stored?.instrumentId == "10:native")
   }
+
+  @Test
+  func incomingEarmarkCanonicalizesBothInstrumentColumns() async throws {
+    let harness = try await MainActor.run {
+      try ProfileDataSyncHandlerTestSupport.makeHandlerAndDatabase(
+        canonicalResolver: CanonicalInstrumentResolver())
+    }
+    let handler = harness.handler
+
+    let earmarkId = UUID()
+    var earmark = ProfileDataSyncHandlerTestSupport.earmarkRow(
+      id: earmarkId, name: "ETH goal", instrumentId: "10:native")
+    earmark.savingsTargetInstrumentId = "8453:native"  // Base ETH.
+    let ckRecord = earmark.toCKRecord(in: handler.zoneID)
+
+    _ = handler.applyRemoteChanges(saved: [ckRecord], deleted: [])
+
+    let stored = try await harness.database.read { database in
+      try EarmarkRow.filter(EarmarkRow.Columns.id == earmarkId).fetchOne(database)
+    }
+    #expect(stored?.instrumentId == "1:native")
+    #expect(stored?.savingsTargetInstrumentId == "1:native")
+  }
+
+  @Test
+  func incomingEarmarkWithNilResolverStoredUnchanged() async throws {
+    let harness = try await MainActor.run {
+      try ProfileDataSyncHandlerTestSupport.makeHandlerAndDatabase(canonicalResolver: nil)
+    }
+    let handler = harness.handler
+
+    let earmarkId = UUID()
+    var earmark = ProfileDataSyncHandlerTestSupport.earmarkRow(
+      id: earmarkId, name: "ETH goal", instrumentId: "10:native")
+    earmark.savingsTargetInstrumentId = "8453:native"
+    let ckRecord = earmark.toCKRecord(in: handler.zoneID)
+
+    _ = handler.applyRemoteChanges(saved: [ckRecord], deleted: [])
+
+    let stored = try await harness.database.read { database in
+      try EarmarkRow.filter(EarmarkRow.Columns.id == earmarkId).fetchOne(database)
+    }
+    #expect(stored?.instrumentId == "10:native")
+    #expect(stored?.savingsTargetInstrumentId == "8453:native")
+  }
+
+  @Test
+  func incomingEarmarkNilSavingsTargetInstrumentIdStaysNil() async throws {
+    let harness = try await MainActor.run {
+      try ProfileDataSyncHandlerTestSupport.makeHandlerAndDatabase(
+        canonicalResolver: CanonicalInstrumentResolver())
+    }
+    let handler = harness.handler
+
+    let earmarkId = UUID()
+    // earmarkRow sets savingsTargetInstrumentId = nil by default.
+    let earmark = ProfileDataSyncHandlerTestSupport.earmarkRow(
+      id: earmarkId, name: "ETH goal", instrumentId: "10:native")
+    let ckRecord = earmark.toCKRecord(in: handler.zoneID)
+
+    _ = handler.applyRemoteChanges(saved: [ckRecord], deleted: [])
+
+    let stored = try await harness.database.read { database in
+      try EarmarkRow.filter(EarmarkRow.Columns.id == earmarkId).fetchOne(database)
+    }
+    #expect(stored?.instrumentId == "1:native")
+    #expect(stored?.savingsTargetInstrumentId == nil)
+  }
 }
