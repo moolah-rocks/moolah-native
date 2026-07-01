@@ -10,7 +10,7 @@ import Foundation
 /// - Investment account: all four are populated where the conversion service
 ///   succeeds. A per-row conversion failure leaves `value` (and the derived
 ///   `gainLoss`) `nil`; the caller still renders qty + identifier.
-struct ValuedPosition: Sendable, Hashable, Identifiable {
+struct ValuedPosition {
   let instrument: Instrument
   let quantity: Decimal
   let unitPrice: InstrumentAmount?
@@ -38,8 +38,6 @@ struct ValuedPosition: Sendable, Hashable, Identifiable {
     self.accountChainId = accountChainId
   }
 
-  var id: String { instrument.id }
-
   /// The position quantity wrapped as an `InstrumentAmount` in the
   /// instrument's own units (not the host currency).
   var amount: InstrumentAmount {
@@ -65,4 +63,12 @@ struct ValuedPosition: Sendable, Hashable, Identifiable {
     guard let value, let costBasis, costBasis.quantity != 0 else { return nil }
     return (value.quantity - costBasis.quantity) / costBasis.quantity * 100
   }
+}
+
+extension ValuedPosition: Sendable {}
+
+extension ValuedPosition: Hashable {}
+
+extension ValuedPosition: Identifiable {
+  var id: String { instrument.id }
 }
