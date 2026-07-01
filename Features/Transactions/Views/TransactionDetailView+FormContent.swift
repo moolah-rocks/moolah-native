@@ -24,7 +24,7 @@ extension TransactionDetailView {
       // Per-leg block-explorer links for any leg with an externalId
       // (on-chain tx hash). Skipped when no leg qualifies — the section
       // hides itself rather than rendering an empty header.
-      TransactionDetailBlockExplorerSection(transaction: transaction)
+      TransactionDetailBlockExplorerSection(transaction: transaction, accounts: accounts)
       // Per-leg on-chain counterparty rows for any leg with a non-nil
       // `counterpartyAddress`. Skipped when no leg qualifies. Renders
       // truncated addresses with copy-to-clipboard buttons; deliberately
