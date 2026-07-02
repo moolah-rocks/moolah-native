@@ -149,10 +149,17 @@ func fetchAll(_ sql: String, in queue: DatabaseQueue) async throws -> [String] {
   }
 }
 
-/// Returns the count of rows with `needs_push = 1` in `table`.
-/// For test use only — `table` must be a hard-coded literal.
+/// Returns the count of rows with `needs_push = 1` in `table`. `table` is a
+/// SQL identifier and cannot be bound with `?`; the `allowed` allowlist closes
+/// the set immediately before interpolation so no dynamic value reaches the SQL
+/// (DATABASE_CODE_GUIDE §4). Test use only.
 func needsPushCount(_ table: String, in queue: DatabaseQueue) async throws -> Int {
-  try await queue.read { database in
+  let allowed: Set<String> = [
+    "transaction_leg", "earmark", "earmark_budget_item",
+    "account_group", "investment_value", "account",
+  ]
+  precondition(allowed.contains(table), "needsPushCount: unlisted table '\(table)'")
+  return try await queue.read { database in
     try Int.fetchOne(
       database, sql: "SELECT count(*) FROM \(table) WHERE needs_push = 1") ?? 0
   }

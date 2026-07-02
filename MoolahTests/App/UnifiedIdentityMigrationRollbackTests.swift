@@ -18,20 +18,20 @@ private enum MigrationTestError: Error, Equatable {
 /// table touched by `rewriteProfile`. Used to prove byte-identical state
 /// before and after a rolled-back write.
 private struct ProfileSnapshot: Equatable {
-  var legInstrumentIds: [String]
-  var legNeedsPush: [Int]
-  var earmarkInstrumentIds: [String]
+  let legInstrumentIds: [String]
+  let legNeedsPush: [Int]
+  let earmarkInstrumentIds: [String]
   /// Nullable — earmark.savings_target_instrument_id is `TEXT` without NOT NULL.
-  var earmarkSavingsTargetIds: [String?]
-  var earmarkNeedsPush: [Int]
-  var ebiInstrumentIds: [String]
-  var ebiNeedsPush: [Int]
-  var groupInstrumentIds: [String]
-  var groupNeedsPush: [Int]
-  var ivInstrumentIds: [String]
-  var ivNeedsPush: [Int]
-  var acctInstrumentIds: [String]
-  var acctNeedsPush: [Int]
+  let earmarkSavingsTargetIds: [String?]
+  let earmarkNeedsPush: [Int]
+  let ebiInstrumentIds: [String]
+  let ebiNeedsPush: [Int]
+  let groupInstrumentIds: [String]
+  let groupNeedsPush: [Int]
+  let ivInstrumentIds: [String]
+  let ivNeedsPush: [Int]
+  let acctInstrumentIds: [String]
+  let acctNeedsPush: [Int]
 }
 
 /// Reads `ProfileSnapshot` from all FK tables touched by `rewriteProfile`.
@@ -100,7 +100,7 @@ struct UnifiedIdentityMigrationRollbackTests {
     let before = try await snapshotProfile(queue)
 
     var migration = harness.migration
-    migration.faultAfterFirstStatement = { _ in throw MigrationTestError.injected }
+    migration.faultAfterFirstStatementForTesting = { _ in throw MigrationTestError.injected }
     await #expect(throws: MigrationTestError.self) {
       try await migration.rewriteProfile(
         profileId, mapping: ["10:native": "1:native", "8453:native": "1:native"])
