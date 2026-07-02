@@ -26,7 +26,6 @@ actor RePushRecorder {
 @MainActor
 struct MigrationTestHarness {
   let registry: GRDBInstrumentRegistryRepository
-  let resolver: CanonicalInstrumentResolver
   /// Stub migration (no-op rePush, no cache) used by unit tests.
   let migration: UnifiedInstrumentIdentityMigration
   /// Per-profile in-memory databases shared between seeding and the migration.
@@ -39,7 +38,6 @@ struct MigrationTestHarness {
   static func make() throws -> MigrationTestHarness {
     let database = try ProfileIndexDatabase.openInMemory()
     let registry = GRDBInstrumentRegistryRepository(database: database)
-    let resolver = CanonicalInstrumentResolver()
     let suiteName = "test-migration-\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suiteName))
     defaults.removePersistentDomain(forName: suiteName)
@@ -50,12 +48,10 @@ struct MigrationTestHarness {
       dataDatabaseProvider: { _ in try ProfileDatabase.openInMemory() },
       allProfileIds: { [] },
       registry: registry,
-      resolver: resolver,
       rePush: { _ in },
       userDefaults: defaults)
     return MigrationTestHarness(
       registry: registry,
-      resolver: resolver,
       migration: stubMigration,
       cache: cache,
       rePushRecorder: recorder,
@@ -97,7 +93,6 @@ func makeProfileRewriteHarness() throws -> (
   let cache = ProfileDatabaseCache()
   let indexDatabase = try ProfileIndexDatabase.openInMemory()
   let registry = GRDBInstrumentRegistryRepository(database: indexDatabase)
-  let resolver = CanonicalInstrumentResolver()
   let suiteName = "test-profile-rewrite-\(UUID().uuidString)"
   let defaults = try #require(UserDefaults(suiteName: suiteName))
   defaults.removePersistentDomain(forName: suiteName)
@@ -107,12 +102,10 @@ func makeProfileRewriteHarness() throws -> (
     dataDatabaseProvider: { profileId in try cache.database(for: profileId) },
     allProfileIds: { [] },
     registry: registry,
-    resolver: resolver,
     rePush: { _ in },
     userDefaults: defaults)
   let harness = MigrationTestHarness(
     registry: registry,
-    resolver: resolver,
     migration: stubMigration,
     cache: cache,
     rePushRecorder: recorder,
@@ -133,7 +126,6 @@ extension MigrationTestHarness {
       dataDatabaseProvider: { profileId in try capturedCache.database(for: profileId) },
       allProfileIds: { profileIds },
       registry: registry,
-      resolver: resolver,
       rePush: { profileId in await capturedRecorder.record(profileId) },
       userDefaults: userDefaults)
   }

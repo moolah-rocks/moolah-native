@@ -39,6 +39,38 @@ struct UnifiedIdentityMigrationRePushTests {
     #expect(await recorder.ids == [profileA])
   }
 
+  /// A profile whose FK rows carry no retired ids (e.g. a fiat-only profile)
+  /// must NOT trigger a re-push — the migration writes zero rows for it so
+  /// `rePush` would cause a needless full CloudKit re-sync.
+  ///
+  /// Contrasted against a profile that DOES have retired-id rows to confirm
+  /// that the gate is `changesCount > 0`, not "mapping is non-empty".
+  @Test("run() skips rePush for a profile with no rows matching the mapping")
+  func doesNotRePushWhenNoRowsChanged() async throws {
+    let harness = try MigrationTestHarness.make()
+    let profileWithRetired = UUID()
+    let profileFiatOnly = UUID()
+    try await harness.seedSharedRegistry([.ethMainnet, .ethOptimism])
+    // Profile A: has retired-id rows → should be re-pushed.
+    try await harness.seedProfileWithRetiredLegs(profileWithRetired)
+    // Profile B: fiat-only (AUD) — no rows with retired ids → must NOT be re-pushed.
+    let fiatQueue = try harness.cache.database(for: profileFiatOnly)
+    let fiatLegId = UUID()
+    try await fiatQueue.write { database in
+      try database.execute(
+        sql: "INSERT INTO transaction_leg "
+          + "(id, record_name, transaction_id, instrument_id, quantity, type, sort_order) "
+          + "VALUES (?, ?, ?, 'AUD', 50, 'expense', 0)",
+        arguments: [fiatLegId, "TxLeg|\(fiatLegId.uuidString)", UUID()])
+    }
+    let recorder = harness.rePushRecorder
+
+    try await harness.migration(profileIds: [profileWithRetired, profileFiatOnly]).run()
+
+    // Only the profile with retired rows was re-pushed; the fiat-only profile was skipped.
+    #expect(await recorder.ids == [profileWithRetired])
+  }
+
   /// When the completion flag is already set, `run()` returns immediately without
   /// touching any profile. The `rePush` closure must NOT be invoked on the
   /// flag-short-circuit path.

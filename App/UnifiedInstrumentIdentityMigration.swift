@@ -19,7 +19,6 @@ struct UnifiedInstrumentIdentityMigration {
   let dataDatabaseProvider: @MainActor (UUID) throws -> DatabaseQueue
   let allProfileIds: @Sendable () async -> [UUID]
   let registry: any AliasedCryptoRegistrationProvider
-  let resolver: CanonicalInstrumentResolver
   let rePush: @MainActor (UUID) async -> Void
   let userDefaults: UserDefaults
 
@@ -82,8 +81,10 @@ struct UnifiedInstrumentIdentityMigration {
 
     for profileId in await allProfileIds() {
       guard !Task.isCancelled else { return }
-      try await rewriteProfile(profileId, mapping: mapping)
-      await rePush(profileId)
+      let changesCount = try await rewriteProfile(profileId, mapping: mapping)
+      if changesCount > 0 {
+        await rePush(profileId)
+      }
     }
 
     try await applyPriceCacheStep(mapping: mapping)
@@ -95,20 +96,38 @@ struct UnifiedInstrumentIdentityMigration {
   }
 
   /// Derives the retired id → canonical id mapping from the UNFILTERED shared
-  /// registry. Populates the resolver's dynamic layer with all registrations
-  /// (including retired ones) so ERC-20s absent from the static base map are
-  /// also resolved.
+  /// registry and the resolver's static base map.
+  ///
+  /// Uses a LOCAL throwaway `CanonicalInstrumentResolver` — never the shared
+  /// instance — so the derivation cannot race with the concurrent observation
+  /// task that refreshes `sharedCanonicalResolver` from the FILTERED registry.
+  ///
+  /// Two sources compose the mapping:
+  /// 1. Registry registrations: grouped by `assetKey` via a local resolver's
+  ///    dynamic layer, covering discovered ERC-20s absent from the static list.
+  /// 2. Static base map: folded in for any key not already in the registry
+  ///    result, so ids present only in profile FK columns (not in the registry
+  ///    on this device) are still rewritten when encountered.
   ///
   /// Only ids that resolve to a *different* canonical id appear as keys —
   /// canonicals and no-key tokens map to themselves and are excluded.
   func deriveMapping() async throws -> [String: String] {
     let registrations = try await registry.allCryptoRegistrationsIncludingAliased()
-    resolver.refresh(with: registrations)
+    // Local resolver: throwaway instance that does not mutate shared state.
+    let localResolver = CanonicalInstrumentResolver()
+    localResolver.refresh(with: registrations)
     var mapping: [String: String] = [:]
     for registration in registrations {
       let id = registration.instrument.id
-      let canonical = resolver.canonicalId(for: id)
+      let canonical = localResolver.canonicalId(for: id)
       if canonical != id { mapping[id] = canonical }
+    }
+    // Fold in static base-map entries so ids present in profile data but absent
+    // from this device's registry (e.g. a chain never synced here) are still
+    // rewritten when their retired id appears in a FK column.
+    for (retired, canonical) in CanonicalInstrumentResolver.staticBaseMap
+    where mapping[retired] == nil {
+      mapping[retired] = canonical
     }
     return mapping
   }
