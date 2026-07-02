@@ -13,8 +13,11 @@ extension InstrumentRegistryRepository {
   /// Provides the offline-first, no-network path that lets transaction
   /// detail / running-balance / aggregation render correctly the very
   /// first time a profile session reads a crypto leg, without waiting
-  /// for wallet sync to fire (issue #791). Per-preset failures are
-  /// logged and skipped so a single bad row doesn't block the rest.
+  /// for wallet sync to fire (issue #791). The not-already-present set is
+  /// seeded in one `registerCryptoBatch` call so startup touches the WAL
+  /// once rather than once per preset (issue #1197); a backing-store
+  /// failure rolls the whole seed back and is logged, then retried on the
+  /// next launch.
   ///
   /// Cancellation propagates immediately. Best-effort otherwise.
   func registerBuiltInPresetsIfMissing() async {
@@ -40,21 +43,21 @@ extension InstrumentRegistryRepository {
       )
       existingAssetKeys = []
     }
-    for preset in presets {
-      do {
-        try Task.checkCancellation()
-        if existingAssetKeys.contains(preset.mapping.assetKey) { continue }
-        try await registerCrypto(preset.instrument, mapping: preset.mapping)
-      } catch is CancellationError {
-        return
-      } catch {
-        logger.warning(
-          """
-          registerBuiltInPresetsIfMissing: \(preset.id, privacy: .public): \
-          \(error.localizedDescription, privacy: .public)
-          """
-        )
-      }
+    let missing = presets.filter { !existingAssetKeys.contains($0.mapping.assetKey) }
+    guard !missing.isEmpty else { return }
+    do {
+      try Task.checkCancellation()
+      try await registerCryptoBatch(
+        missing.map { (instrument: $0.instrument, mapping: $0.mapping) })
+    } catch is CancellationError {
+      return
+    } catch {
+      logger.warning(
+        """
+        registerBuiltInPresetsIfMissing: seeding \(missing.count, privacy: .public) \
+        preset(s) failed: \(error.localizedDescription, privacy: .public)
+        """
+      )
     }
   }
 }

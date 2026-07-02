@@ -68,6 +68,25 @@ protocol InstrumentRegistryRepository: InstrumentChangeObserving {
     forcingStatus status: TokenPricingStatus
   ) async throws
 
+  /// Registers (or upserts) a batch of crypto instruments with their
+  /// provider mappings. Semantically equivalent to calling
+  /// `registerCrypto(_:mapping:)` once per element — same upgrade-only
+  /// merge, same `.priced` insert default, same per-id sync-queue hook —
+  /// but implementations are free to collapse the writes into a single
+  /// backing-store transaction so a bulk seed touches the WAL once rather
+  /// than once per row (issue #1197).
+  ///
+  /// Atomic where the backing store supports it: either every element is
+  /// persisted or none is (a mid-batch backing-store failure rolls the
+  /// whole batch back and rethrows). An empty input is a no-op — no
+  /// transaction, no fan-out.
+  ///
+  /// - Precondition: every `instrument.kind == .cryptoToken`. Passing any
+  ///   other kind is a programmer error and traps.
+  func registerCryptoBatch(
+    _ registrations: [(instrument: Instrument, mapping: CryptoProviderMapping)]
+  ) async throws
+
   /// Registers (or upserts) a stock instrument. Stock rows carry no
   /// provider-mapping fields; Yahoo's lookup key is the instrument's own
   /// ticker. Invokes the implementation's sync-queue hook after a
@@ -105,7 +124,8 @@ protocol InstrumentRegistryRepository: InstrumentChangeObserving {
   // depend on without pulling in the full registry surface). For this
   // repository the stream fires for **both local mutations and
   // remote-arriving changes**: local mutations (`registerCrypto`,
-  // `registerStock`, `update`, `remove`) fan out synchronously inside
+  // `registerCryptoBatch`, `registerStock`, `update`, `remove`) fan out
+  // synchronously inside
   // the corresponding method; remote-arriving rows from
   // `ProfileIndexSyncHandler.applyRemoteChanges` (the profile-index
   // zone carries `InstrumentRecord`) fan out via the handler's
@@ -116,4 +136,20 @@ protocol InstrumentRegistryRepository: InstrumentChangeObserving {
   // After a tick, callers re-fetch via `all()` /
   // `allCryptoRegistrations()`; the `Void` payload is a signal, not a
   // diff.
+}
+
+extension InstrumentRegistryRepository {
+  /// Default `registerCryptoBatch` that forwards to
+  /// `registerCrypto(_:mapping:)` element-by-element. Correct for any
+  /// conformer; the single-transaction win is opt-in via an override (see
+  /// `GRDBInstrumentRegistryRepository`). In-memory stubs get this for
+  /// free — their per-call recording (registered rows, fan-out) is
+  /// preserved exactly.
+  func registerCryptoBatch(
+    _ registrations: [(instrument: Instrument, mapping: CryptoProviderMapping)]
+  ) async throws {
+    for registration in registrations {
+      try await registerCrypto(registration.instrument, mapping: registration.mapping)
+    }
+  }
 }

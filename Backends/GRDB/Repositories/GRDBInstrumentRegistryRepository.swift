@@ -189,6 +189,40 @@ final class GRDBInstrumentRegistryRepository: @unchecked Sendable {
     await notifySubscribers()
   }
 
+  /// Single-transaction batch upsert. Overrides the protocol's
+  /// element-by-element default (see `InstrumentRegistryRepository`) so a
+  /// bulk seed — the built-in preset seeding on session open — collapses
+  /// its N row upserts into one `database.write`, touching the WAL once
+  /// rather than once per row (issue #1197).
+  ///
+  /// The post-write bookkeeping still matches N× `registerCrypto`: the
+  /// instrument-map cache is invalidated once, `onRecordChanged` fires
+  /// once per registered id (so CKSyncEngine queues every row for upload),
+  /// and the `observeChanges()` fan-out fires once (its payload is a
+  /// coalesced signal, not a per-row diff). An empty input is a no-op — no
+  /// transaction, no cache churn, no fan-out.
+  func registerCryptoBatch(
+    _ registrations: [(instrument: Instrument, mapping: CryptoProviderMapping)]
+  ) async throws {
+    guard !registrations.isEmpty else { return }
+    for registration in registrations {
+      precondition(registration.instrument.kind == .cryptoToken)
+    }
+    try await database.write { database in
+      for registration in registrations {
+        try Self.upsertCrypto(
+          database: database,
+          instrument: registration.instrument,
+          mapping: registration.mapping)
+      }
+    }
+    invalidateInstrumentMapCache()
+    for registration in registrations {
+      fireOnRecordChanged(registration.instrument.id)
+    }
+    await notifySubscribers()
+  }
+
   func registerStock(_ instrument: Instrument) async throws {
     precondition(instrument.kind == .stock)
     try await database.write { database in
