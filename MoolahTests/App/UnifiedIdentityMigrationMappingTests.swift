@@ -6,7 +6,7 @@ import Testing
 @testable import Moolah
 
 @MainActor
-@Suite
+@Suite("UnifiedIdentityMigration: mapping derivation")
 struct UnifiedIdentityMigrationMappingTests {
   @Test("deriveMapping maps every retired per-chain id to its canonical id")
   func mapsRetiredToCanonical() async throws {

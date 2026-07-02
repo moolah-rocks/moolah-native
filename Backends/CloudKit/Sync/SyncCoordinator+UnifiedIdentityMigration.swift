@@ -13,6 +13,14 @@ extension SyncCoordinator {
   /// (preview / test contexts that never pass these deps). The migration gates
   /// itself on a `UserDefaults` completion flag, so invoking it every launch is
   /// safe — it is a no-op after the first successful run.
+  ///
+  /// **Ordering:** Must run AFTER `replayDeletionJournal()` (disjoint concerns;
+  /// no ordering constraint between them) and BEFORE the unsynced backfill scan
+  /// (`queueUnsyncedRecordsForAllProfiles`). The backfill snapshots
+  /// `instrument_id` values from every FK table; if it ran before the migration
+  /// those snapshots would still carry retired cross-chain ids and the resulting
+  /// CKSyncEngine uploads would overwrite any already-canonical server-side rows
+  /// with stale retired ids.
   func runUnifiedIdentityMigration() async {
     guard let registry = sharedInstrumentRegistry,
       let resolver = sharedCanonicalResolver

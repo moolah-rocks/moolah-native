@@ -19,7 +19,7 @@ struct ReportingStoreTests {
   private func makeDefaultsWithMigrationComplete() throws -> UserDefaults {
     let suiteName = "reporting-store-test-\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suiteName))
-    UnifiedInstrumentIdentityMigration.setCompleteForTesting(in: defaults)
+    UnifiedInstrumentIdentityMigration.markCompleteForTesting(in: defaults)
     return defaults
   }
 

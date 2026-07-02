@@ -20,7 +20,7 @@ extension MigrationTestHarness {
 }
 
 @MainActor
-@Suite
+@Suite("UnifiedIdentityMigration: alias step")
 struct UnifiedIdentityMigrationAliasStepTests {
   @Test("alias step sets alias_of on retired rows, canonical rows untouched, idempotent")
   func aliasesRetiredRows() async throws {
