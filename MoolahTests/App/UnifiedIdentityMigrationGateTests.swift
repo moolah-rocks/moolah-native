@@ -96,14 +96,14 @@ struct UnifiedIdentityMigrationGateTests {
   }
 
   /// Verifies that `runUnifiedIdentityMigrationForTesting()` silently skips
-  /// when the coordinator has no shared registry or resolver (preview / test
-  /// contexts that omit those deps). The completion flag must NOT be set —
-  /// the migration was not run, not finished.
-  @Test("coordinator skips migration when shared registry or resolver is absent")
-  func coordinatorSkipsMigrationWithoutDeps() async throws {
+  /// when the coordinator has no shared registry (preview / test contexts that
+  /// omit that dep). The completion flag must NOT be set — the migration was
+  /// not run, not finished.
+  @Test("coordinator skips migration when shared registry is absent")
+  func coordinatorSkipsMigrationWithoutRegistry() async throws {
     let manager = try ProfileContainerManager.forTesting()
     let defaults = try makeIsolatedDefaults(tag: "nodeps")
-    // Coordinator constructed without sharedInstrumentRegistry / sharedCanonicalResolver.
+    // Coordinator constructed without sharedInstrumentRegistry.
     let coordinator = SyncCoordinator(
       containerManager: manager,
       userDefaults: defaults)
