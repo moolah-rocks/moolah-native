@@ -82,8 +82,12 @@ struct UnifiedInstrumentIdentityAliasCleanup {
     let fault = faultAfterFirstDeleteForTesting
 
     let deletedCount = try await profileIndexDatabase.write { database -> Int in
+      // Defense-in-depth: exclude fiat rows even though no fiat row is ever
+      // aliased in practice — mirrors the same guard in
+      // GRDBInstrumentRegistryRepository.remove(id:).
       let ids = try String.fetchAll(
-        database, sql: "SELECT id FROM instrument WHERE alias_of IS NOT NULL")
+        database,
+        sql: "SELECT id FROM instrument WHERE alias_of IS NOT NULL AND kind != 'fiatCurrency'")
       var count = 0
       var faultFired = false
       for id in ids {
