@@ -11,12 +11,17 @@ extension UnifiedInstrumentIdentityMigration {
   /// back byte-identical to its pre-run state (DATABASE_CODE_GUIDE §5).
   /// Idempotent: canonical rows are not in `mapping` keys, so a re-run's
   /// `WHERE instrument_id = ?` (bound to a retired id) matches nothing.
-  func rewriteProfile(_ profileId: UUID, mapping: [String: String]) async throws {
-    guard !mapping.isEmpty else { return }
+  ///
+  /// Returns the total number of rows changed across all tables and mapping
+  /// entries. A zero return means no rows in this profile matched the mapping
+  /// (e.g. a fiat-only profile) — `run()` uses this to skip the re-push.
+  @discardableResult
+  func rewriteProfile(_ profileId: UUID, mapping: [String: String]) async throws -> Int {
+    guard !mapping.isEmpty else { return 0 }
     let queue = try dataDatabaseProvider(profileId)
     let fault = faultAfterFirstStatementForTesting
     let faultProfile = faultOnProfile
-    try await queue.write { database in
+    return try await queue.write { database in
       // Test-only: fault on a chosen profile inside the transaction so GRDB
       // rolls it back byte-identical (faultOnProfile is always nil in production).
       if let faultedId = faultProfile, faultedId == profileId {
@@ -24,15 +29,18 @@ extension UnifiedInstrumentIdentityMigration {
       }
       let statements = try Self.rewriteStatements(database)
       var faultFired = false
+      var totalChanges = 0
       for (retired, canonical) in mapping {
         for statement in statements {
           try statement.execute(arguments: [canonical, retired])
+          totalChanges += database.changesCount
           if !faultFired {
             faultFired = true
             try fault?(database)
           }
         }
       }
+      return totalChanges
     }
   }
 
