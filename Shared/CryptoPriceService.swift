@@ -43,16 +43,24 @@ actor CryptoPriceService {
   let plannerConfig = ContiguousFetchPlanner.Config(windowDays: 30, forwardBuffer: 2)
   /// In-flight `(instrument, mapping)` context for the current price/prices
   /// call, keyed by instrument id, so the window-only `fetchAndMerge` plug can
-  /// recover the provider mapping the crypto fetch needs. Set in the thin
-  /// `price(for:mapping:on:)`/`prices(for:mapping:in:)` call-throughs and
-  /// cleared with a keyed `defer`. KEYED (never a single slot) so concurrent
-  /// fetches for different tokens don't clobber each other — race-safe for the
-  /// same reason `caches[key]` is. A concurrent call for the *same* id writes
-  /// the identical context, so last-writer-wins is harmless.
+  /// recover the provider mapping the crypto fetch needs. Managed via
+  /// `retainPendingFetchContext(for:instrument:mapping:)` /
+  /// `releasePendingFetchContext(for:)` rather than direct mutation so that
+  /// concurrent calls for the *same* id ref-count the entry: a concurrent call
+  /// sets the same value (identical instrument+mapping) and increments the
+  /// count; the context is removed only when the count drops to zero, ensuring
+  /// no early finisher strips the context out from under a still-in-flight
+  /// sibling call. KEYED (never a single slot) so concurrent fetches for
+  /// different tokens are independent — same reason `caches[key]` is safe.
   ///
   /// `internal` (not `private`) so the `fetchAndMerge` plug in the sibling
   /// `CryptoPriceService+PriceSeriesOrchestrating.swift` extension can read it.
   var pendingFetchContext: [String: (instrument: Instrument, mapping: CryptoProviderMapping)] = [:]
+  /// Ref-counts for `pendingFetchContext` entries, keyed by instrument id.
+  /// Incremented by `retainPendingFetchContext` and decremented by
+  /// `releasePendingFetchContext`; the context entry is removed when the count
+  /// reaches zero. Private — only the two helpers in this file touch it.
+  private var pendingFetchContextRefCounts: [String: Int] = [:]
   let database: any DatabaseWriter
   let logger = Logger(
     subsystem: "com.moolah.app", category: "CryptoPriceService")
@@ -98,6 +106,41 @@ actor CryptoPriceService {
     self.timeZone = timeZone
     self.dateFormatter = ISO8601DateFormatter()
     self.dateFormatter.formatOptions = [.withFullDate]
+  }
+
+  // MARK: - PendingFetchContext ref-counting
+
+  /// Stashes `(instrument, mapping)` under `id` and increments the ref-count.
+  /// Idempotent for the value: concurrent callers for the same id set the
+  /// identical pair, so re-setting is safe. Each call must be balanced by
+  /// exactly one `releasePendingFetchContext(for:)`.
+  ///
+  /// `internal` (not `private`) so `CryptoPriceServiceConcurrencyTests` can
+  /// drive the retain/release lifecycle directly and assert the ref-count
+  /// invariant deterministically (an end-to-end concurrency test cannot: the
+  /// same-token fetch coalescing masks the context race — see that suite's doc).
+  func retainPendingFetchContext(
+    for id: String, instrument: Instrument, mapping: CryptoProviderMapping
+  ) {
+    pendingFetchContext[id] = (instrument, mapping)
+    pendingFetchContextRefCounts[id, default: 0] += 1
+  }
+
+  /// Decrements the ref-count for `id`; removes both the context entry and the
+  /// count entry when the count reaches zero. Must only be called once per
+  /// matching `retainPendingFetchContext(for:instrument:mapping:)`.
+  ///
+  /// `internal` (not `private`) for the same testability reason as
+  /// `retainPendingFetchContext(for:instrument:mapping:)`.
+  func releasePendingFetchContext(for id: String) {
+    guard let currentCount = pendingFetchContextRefCounts[id] else { return }
+    let newCount = currentCount - 1
+    if newCount <= 0 {
+      pendingFetchContextRefCounts.removeValue(forKey: id)
+      pendingFetchContext.removeValue(forKey: id)
+    } else {
+      pendingFetchContextRefCounts[id] = newCount
+    }
   }
 
   // MARK: - Token resolution
@@ -235,33 +278,38 @@ actor CryptoPriceService {
   /// window-only `fetchAndMerge` plug can recover the mapping, then delegates
   /// to the shared `PriceSeriesOrchestrating.price(instrumentKey:on:)` default.
   ///
-  /// The `defer` clears the keyed context on return. Because the shared default
-  /// only fetches while this call is on the stack for `instrument.id`, and a
-  /// concurrent call for a *different* id uses a different dict key, the
-  /// per-key stash is race-safe for the same reason `caches[key]` is. A
-  /// concurrent call for the *same* id sets the same context value (identical
-  /// instrument/mapping), so last-writer-wins is harmless.
+  /// The context is managed via ref-counting (`retainPendingFetchContext` /
+  /// `releasePendingFetchContext`) so that concurrent calls for the *same* id
+  /// (same instrument+mapping) do not race: each call increments the count on
+  /// entry and decrements it on exit, and the context entry is only removed
+  /// when the last concurrent call finishes. Without ref-counting an early
+  /// finisher's `defer` would clear the context while a sibling call is still
+  /// inside the `fetchAndMerge` window loop, triggering its assertion.
+  ///
+  /// A concurrent call for a *different* id uses a different dict key and is
+  /// unaffected — same reason `caches[key]` is safe.
   func price(
     for instrument: Instrument,
     mapping: CryptoProviderMapping,
     on date: Date
   ) async throws -> Decimal {
-    pendingFetchContext[instrument.id] = (instrument, mapping)
-    defer { pendingFetchContext[instrument.id] = nil }
+    retainPendingFetchContext(for: instrument.id, instrument: instrument, mapping: mapping)
+    defer { releasePendingFetchContext(for: instrument.id) }
     return try await price(instrumentKey: instrument.id, on: date)
   }
 
   // MARK: - Date range
 
   /// Thin call-through to the shared `PriceSeriesOrchestrating` range default.
-  /// See `price(for:mapping:on:)` for the `pendingFetchContext` race contract.
+  /// See `price(for:mapping:on:)` for the ref-counted `pendingFetchContext`
+  /// contract — the same retain/release pair applies here.
   func prices(
     for instrument: Instrument,
     mapping: CryptoProviderMapping,
     in range: ClosedRange<Date>
   ) async throws -> [(date: Date, price: Decimal)] {
-    pendingFetchContext[instrument.id] = (instrument, mapping)
-    defer { pendingFetchContext[instrument.id] = nil }
+    retainPendingFetchContext(for: instrument.id, instrument: instrument, mapping: mapping)
+    defer { releasePendingFetchContext(for: instrument.id) }
     return try await prices(instrumentKey: instrument.id, in: range)
   }
 
