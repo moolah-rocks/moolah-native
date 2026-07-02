@@ -28,7 +28,7 @@ private func seedAliasedRegistry(queue: DatabaseQueue) async throws {
   try await registry.registerCrypto(
     CryptoRegistration.ethBase.instrument,
     mapping: CryptoRegistration.ethBase.mapping)
-  // Simulate PR5 having set alias_of on the retired rows.
+  // Simulate the identity migration having set alias_of on the retired rows.
   try await queue.write { database in
     try database.execute(
       sql: "UPDATE instrument SET alias_of = '1:native' WHERE id = '10:native'")
@@ -93,7 +93,7 @@ struct UnifiedIdentityAliasCleanupTests {
       #expect(entry.recordType == InstrumentRow.recordType)
     }
 
-    // PR6 flag must be set.
+    // Own completion flag must be set.
     #expect(UnifiedInstrumentIdentityAliasCleanup.isComplete(in: defaults))
   }
 
@@ -144,10 +144,10 @@ struct UnifiedIdentityAliasCleanupTests {
     #expect(UnifiedInstrumentIdentityAliasCleanup.isComplete(in: defaults))
   }
 
-  // MARK: - PR5 flag unset → no-op, PR6 flag NOT set
+  // MARK: - Identity-migration flag unset → no-op, own flag NOT set
 
-  @Test("no-op when PR5 migration flag is unset; PR6 flag must NOT be set")
-  func noOpWhenPR5FlagUnset() async throws {
+  @Test("no-op when identity-migration flag is unset; own completion flag must NOT be set")
+  func noOpWhenIdentityMigrationFlagUnset() async throws {
     let queue = try ProfileIndexDatabase.openInMemory()
     let defaults = try makeIsolatedDefaults(tag: "pr5unset")
     try await seedAliasedRegistry(queue: queue)
@@ -168,19 +168,19 @@ struct UnifiedIdentityAliasCleanupTests {
     // Journal must be empty.
     let entries = try await journalEntries(in: queue)
     #expect(entries.isEmpty)
-    // PR6 flag must NOT be set.
+    // Own completion flag must NOT be set.
     #expect(!UnifiedInstrumentIdentityAliasCleanup.isComplete(in: defaults))
   }
 
   // MARK: - Own-flag short-circuit
 
-  @Test("immediate no-op when own PR6 flag is already set")
+  @Test("immediate no-op when own completion flag is already set")
   func ownFlagShortCircuit() async throws {
     let queue = try ProfileIndexDatabase.openInMemory()
     let defaults = try makeIsolatedDefaults(tag: "ownflag")
     try await seedAliasedRegistry(queue: queue)
     UnifiedInstrumentIdentityMigration.markCompleteForTesting(in: defaults)
-    // Pre-set PR6 flag — simulate a prior completed run.
+    // Pre-set own completion flag — simulate a prior completed run.
     defaults.set(true, forKey: UnifiedInstrumentIdentityAliasCleanup.gateKey)
 
     let cleanup = UnifiedInstrumentIdentityAliasCleanup(
@@ -227,7 +227,7 @@ struct UnifiedIdentityAliasCleanupTests {
 
   // MARK: - resetGateFlag
 
-  @Test("resetGateFlag clears a previously-set PR6 completion flag")
+  @Test("resetGateFlag clears a previously-set alias-cleanup completion flag")
   func resetGateFlagClearsFlag() throws {
     let defaults = try makeIsolatedDefaults(tag: "reset")
     defaults.set(true, forKey: UnifiedInstrumentIdentityAliasCleanup.gateKey)

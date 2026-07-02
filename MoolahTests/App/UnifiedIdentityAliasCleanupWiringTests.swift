@@ -17,12 +17,13 @@ struct UnifiedIdentityAliasCleanupWiringTests {
 
   /// Verifies that `runUnifiedIdentityAliasCleanupForTesting()` — which
   /// delegates to the same construction path as the lifecycle — deletes
-  /// aliased rows, writes journal entries, and sets the PR6 flag.
+  /// aliased rows, writes journal entries, and sets the alias-cleanup
+  /// completion flag.
   ///
   /// This exercises the wiring (dep construction + invocation) that
   /// `runZoneSetup` performs after `runUnifiedIdentityMigration()`, without
   /// dispatching a real `CKSyncEngine`.
-  @Test("coordinator deletes aliased rows, writes journal, and sets PR6 flag")
+  @Test("coordinator deletes aliased rows, writes journal, and sets alias-cleanup completion flag")
   func coordinatorRunsAliasCleanup() async throws {
     let manager = try ProfileContainerManager.forTesting()
     let registry = GRDBInstrumentRegistryRepository(database: manager.profileIndexDatabase)
@@ -50,13 +51,13 @@ struct UnifiedIdentityAliasCleanupWiringTests {
       try database.execute(
         sql: "UPDATE instrument SET alias_of = '1:native' WHERE id = '8453:native'")
     }
-    // Set PR5's flag so the cleanup does not defer.
+    // Set the identity-migration completion flag so the cleanup does not defer.
     UnifiedInstrumentIdentityMigration.markCompleteForTesting(in: defaults)
 
     // Act: invoke the lifecycle cleanup path via the test hook.
     await coordinator.runUnifiedIdentityAliasCleanupForTesting()
 
-    // Assert: PR6 completion flag is set.
+    // Assert: alias-cleanup completion flag is set.
     #expect(UnifiedInstrumentIdentityAliasCleanup.isComplete(in: defaults))
 
     // Assert: retired rows are gone.
@@ -77,8 +78,8 @@ struct UnifiedIdentityAliasCleanupWiringTests {
   }
 
   /// Verifies that `runUnifiedIdentityAliasCleanupForTesting()` is a no-op
-  /// when the PR6 completion flag is already set.
-  @Test("coordinator alias cleanup is a no-op when PR6 flag is already set")
+  /// when the alias-cleanup completion flag is already set.
+  @Test("coordinator alias cleanup is a no-op when alias-cleanup completion flag is already set")
   func coordinatorSkipsCleanupWhenAlreadyComplete() async throws {
     let manager = try ProfileContainerManager.forTesting()
     let defaults = try makeIsolatedDefaults(tag: "noop")
