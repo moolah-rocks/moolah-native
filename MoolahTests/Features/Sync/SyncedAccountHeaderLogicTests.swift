@@ -111,7 +111,7 @@ struct SyncedAccountHeaderLogicTests {
 
   @Test("Option not held renders the default title and does not request a full resync")
   func syncButtonTitleWhenOptionNotHeld() {
-    #expect(SyncedAccountHeaderLogic.syncButtonTitle(optionHeld: false) == "Sync now")
+    #expect(SyncedAccountHeaderLogic.syncButtonTitle(optionHeld: false) == "Sync Now")
     #expect(!SyncedAccountHeaderLogic.syncButtonIsFullResync(optionHeld: false))
   }
 

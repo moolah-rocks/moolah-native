@@ -1399,7 +1399,7 @@ These shortcuts are owned by macOS or by universal Mac convention. Using them fo
 
 #### Modifier Conventions
 
-- **Shift = reverse direction, or larger scope.** `⇧⌘Z` reverses Undo. `⇧⌘G` finds previous. `⇧⌘K` marks *all* as cleared (vs `⌘K` marks one).
+- **Shift = reverse direction, or larger scope.** `⇧⌘Z` reverses Undo. `⇧⌘G` finds previous. `⇧⌘K` marks *all* as cleared (vs `⌘K` marks one). Shift may also stand in as a collision-avoider when the natural `⌘`-only key is already reserved — e.g. Account > Sync Now uses `⇧⌘R` because `⌘R` is taken by Refresh.
 - **Option = alternate behavior, or apply to all siblings.** `⌥⌘H` hides others (not self). `⌥⌘W` would close all windows in many apps. Hold Option to reveal hidden alternate menu items (see **Alternate Items** below).
 - **Control = rarely used for app shortcuts.** Reserved for text-navigation conventions (`^A` line start, `^E` line end). Avoid inventing ⌃-only shortcuts.
 - **Command = the app-level primary modifier.** Every app command uses ⌘ as its base. Unmodified keys (`j`, `k`, Space) are for list navigation only.
@@ -1432,6 +1432,7 @@ Assign shortcuts only when the action is **frequent** (used more than a few time
 | Enter/Exit Full Screen | ⌃⌘F | View |
 | Go to Accounts / Transactions / … | ⌘1…⌘6 | Go |
 | Back / Forward | ⌘[ / ⌘] | Go |
+| Sync Now / Resync Now | ⇧⌘R / ⌥⇧⌘R | Account (synced accounts only; ⌘R taken by Refresh) |
 | Duplicate Transaction | ⌘D | Transaction |
 | Mark as Cleared / All | ⌘K / ⇧⌘K | Transaction |
 | Pay Scheduled Transaction | — | Transaction (⌘P reserved for Print) |
