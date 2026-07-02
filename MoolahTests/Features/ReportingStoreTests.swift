@@ -13,6 +13,16 @@ import Testing
 struct ReportingStoreTests {
   let aud = Instrument.fiat(code: "AUD")
 
+  /// Returns an isolated `UserDefaults` suite with the unified-identity
+  /// migration completion flag pre-set, so capital-gains tests that exercise
+  /// the normal happy path are not gated by `isMigratingCrossChainIdentity`.
+  private func makeDefaultsWithMigrationComplete() throws -> UserDefaults {
+    let suiteName = "reporting-store-test-\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    UnifiedInstrumentIdentityMigration.setCompleteForTesting(in: defaults)
+    return defaults
+  }
+
   @Test @MainActor func loadProfitLoss_populatesState() async throws {
     let (backend, database) = try TestBackend.create()
     let account = Account(
@@ -98,7 +108,8 @@ struct ReportingStoreTests {
     let store = ReportingStore(
       transactionRepository: backend.transactions,
       conversionService: FakeConversionService.fixedRates([:]),
-      profileCurrency: aud
+      profileCurrency: aud,
+      userDefaults: try makeDefaultsWithMigrationComplete()
     )
 
     await store.loadCapitalGains(financialYear: 2026)
@@ -128,7 +139,8 @@ struct ReportingStoreTests {
     let store = ReportingStore(
       transactionRepository: backend.transactions,
       conversionService: FakeConversionService.fixedRates([:]),
-      profileCurrency: aud
+      profileCurrency: aud,
+      userDefaults: try makeDefaultsWithMigrationComplete()
     )
 
     await store.loadCapitalGains(financialYear: 2026)

@@ -22,18 +22,30 @@ final class ReportingStore {
   private let analysisRepository: AnalysisRepository?
   private let conversionService: InstrumentConversionService
   private(set) var profileCurrency: Instrument
+  private let userDefaults: UserDefaults
   private let logger = Logger(subsystem: "com.moolah.app", category: "ReportingStore")
+
+  /// `true` while the one-shot cross-chain identity migration has not yet
+  /// completed. Capital-gains FIFO results are gated on this flag: lots for
+  /// the same asset may still be split across retired + canonical ids, so any
+  /// figure produced by `CostBasisEngine` would be wrong until migration
+  /// finishes and all ids are rewritten to canonical.
+  var isMigratingCrossChainIdentity: Bool {
+    !UnifiedInstrumentIdentityMigration.isComplete(in: userDefaults)
+  }
 
   init(
     transactionRepository: TransactionRepository,
     analysisRepository: AnalysisRepository? = nil,
     conversionService: InstrumentConversionService,
-    profileCurrency: Instrument
+    profileCurrency: Instrument,
+    userDefaults: UserDefaults = .moolahShared
   ) {
     self.transactionRepository = transactionRepository
     self.analysisRepository = analysisRepository
     self.conversionService = conversionService
     self.profileCurrency = profileCurrency
+    self.userDefaults = userDefaults
   }
 
   /// Loads income + expense category balances for a date range. Results are
@@ -94,7 +106,17 @@ final class ReportingStore {
   }
 
   /// Load capital gains for an Australian financial year (1 Jul to 30 Jun).
+  ///
+  /// Returns immediately (leaving `capitalGainsSummary`/`capitalGainsResult`
+  /// nil) while `isMigratingCrossChainIdentity` is true: the FIFO engine keys
+  /// lots by `instrument.id`, and lots for the same asset may still be split
+  /// across retired + canonical ids until the migration completes.
   func loadCapitalGains(financialYear: Int) async {
+    guard !isMigratingCrossChainIdentity else {
+      logger.info(
+        "loadCapitalGains: skipping — cross-chain identity migration not yet complete")
+      return
+    }
     isLoading = true
     error = nil
     do {

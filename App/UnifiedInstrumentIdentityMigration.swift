@@ -37,7 +37,9 @@ struct UnifiedInstrumentIdentityMigration {
   var faultOnProfile: UUID?
 
   /// `UserDefaults` key in `.moolahShared` that marks the migration complete.
-  static let gateKey = "didMigrateUnifiedInstrumentIdentity"
+  /// `nonisolated`: a string constant with no mutable state; safe to read
+  /// from any isolation domain.
+  nonisolated static let gateKey = "didMigrateUnifiedInstrumentIdentity"
 
   /// `true` when the migration has already run successfully on this device.
   static func isComplete(in defaults: UserDefaults = .moolahShared) -> Bool {
@@ -49,6 +51,16 @@ struct UnifiedInstrumentIdentityMigration {
   /// the migration. No production code path should invoke this.
   static func resetGateFlag(in defaults: UserDefaults) {
     defaults.removeObject(forKey: gateKey)
+  }
+
+  /// Sets the completion flag. Unit-test only — lets a test confirm that a
+  /// gated surface (e.g. `ReportingStore.isMigratingCrossChainIdentity`)
+  /// observes the flag correctly without running the full migration.
+  /// No production code path should invoke this.
+  /// `nonisolated`: only accesses `UserDefaults` (thread-safe) so it can be
+  /// called from any isolation domain without a main-actor hop.
+  nonisolated static func setCompleteForTesting(in defaults: UserDefaults) {
+    defaults.set(true, forKey: gateKey)
   }
 
   private static let logger = Logger(
