@@ -34,14 +34,19 @@ extension SyncCoordinator {
     guard !Task.isCancelled else { return }
     await runUnifiedIdentityMigration()  // Before backfill; see method doc.
     guard !Task.isCancelled else { return }
-    await runUnifiedIdentityAliasCleanup()  // After identity migration; before backfill.
+    let aliasDeletedCount = await runUnifiedIdentityAliasCleanup()  // After identity migration; before backfill.
     guard !Task.isCancelled else { return }
-    // The alias cleanup writes new deletion_journal entries after the first
-    // replayDeletionJournal() ran, so re-run now so its tombstones enqueue as
-    // .deleteRecord this launch (idempotent — no-op when the journal is empty
-    // on later launches after the cleanup has already completed).
-    await replayDeletionJournal()
-    guard !Task.isCancelled else { return }
+    // The alias cleanup writes new deletion_journal entries AFTER the first
+    // replayDeletionJournal() ran above.  Gate this second replay on the
+    // cleanup actually having deleted rows this launch: the first replay
+    // already re-enqueues any un-sent tombstone written by a prior launch, so
+    // the second replay is only load-bearing on the launch where new rows were
+    // just deleted.  On every subsequent launch deletedCount == 0, and the
+    // unnecessary call is a free no-op.
+    if aliasDeletedCount > 0 {
+      await replayDeletionJournal()
+      guard !Task.isCancelled else { return }
+    }
     // On first launch (migration or truly first launch), queue all existing records.
     if runFirstLaunchQueue {
       await queueAllExistingRecordsForAllZones()

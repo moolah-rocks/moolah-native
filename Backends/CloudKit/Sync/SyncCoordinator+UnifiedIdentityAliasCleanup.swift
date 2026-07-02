@@ -21,8 +21,15 @@ extension SyncCoordinator {
   /// BEFORE the unsynced backfill scan so the backfill does not re-queue
   /// deleted retired rows for upload. Same-launch tombstone propagation is
   /// achieved by a second `replayDeletionJournal()` call immediately after
-  /// this cleanup.
-  func runUnifiedIdentityAliasCleanup() async {
+  /// this cleanup (gated on the returned count — see `runZoneSetup`).
+  ///
+  /// - Returns: The number of retired rows deleted (0 on early exit or when no
+  ///   aliased rows exist). The caller uses this to skip the post-cleanup
+  ///   `replayDeletionJournal` on launches where no rows were actually deleted
+  ///   (the first replay already re-enqueues any un-sent tombstone from prior
+  ///   launches).
+  @discardableResult
+  func runUnifiedIdentityAliasCleanup() async -> Int {
     let cleanup = UnifiedInstrumentIdentityAliasCleanup(
       profileIndexDatabase: containerManager.profileIndexDatabase,
       userDefaults: userDefaults)
@@ -32,9 +39,11 @@ extension SyncCoordinator {
         sharedInstrumentRegistry?.invalidateInstrumentMapCache()
         sharedInstrumentRegistry?.notifyExternalChange()
       }
+      return deletedCount
     } catch {
       logger.error(
         "Unified identity alias cleanup failed: \(error, privacy: .public)")
+      return 0
     }
   }
 
@@ -42,7 +51,8 @@ extension SyncCoordinator {
   /// does, so the wiring can be asserted without dispatching a real
   /// `CKSyncEngine` start.
   #if DEBUG
-    func runUnifiedIdentityAliasCleanupForTesting() async {
+    @discardableResult
+    func runUnifiedIdentityAliasCleanupForTesting() async -> Int {
       await runUnifiedIdentityAliasCleanup()
     }
   #endif
