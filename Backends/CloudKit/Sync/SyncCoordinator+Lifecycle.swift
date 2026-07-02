@@ -213,7 +213,8 @@ extension SyncCoordinator {
     // the order is conflict-free. See `SyncCoordinator+DeletionReplay`.
     await replayDeletionJournal()
     guard !Task.isCancelled else { return }
-
+    await runUnifiedIdentityMigration()  // Before backfill; rationale on the method.
+    guard !Task.isCancelled else { return }
     // On first launch (migration or truly first launch), queue all existing records.
     if runFirstLaunchQueue {
       await queueAllExistingRecordsForAllZones()

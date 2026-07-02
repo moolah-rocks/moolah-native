@@ -75,8 +75,9 @@ struct MigrationTestHarness {
 // MARK: - Per-profile database cache
 
 /// Per-profile in-memory `DatabaseQueue` cache shared between seeding and the migration.
-/// `@unchecked Sendable`: all test access is `@MainActor`; `@Sendable` is required
-/// by `dataDatabaseProvider`.
+/// `@unchecked Sendable`: all test access is `@MainActor` (the harness and its
+/// factories are `@MainActor`), so the unguarded `databases` dictionary is never
+/// touched concurrently.
 final class ProfileDatabaseCache: @unchecked Sendable {
   private var databases: [UUID: DatabaseQueue] = [:]
 
