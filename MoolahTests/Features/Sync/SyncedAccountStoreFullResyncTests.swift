@@ -129,14 +129,49 @@ struct SyncedAccountStoreFullResyncTests {
         lastSyncedAt: Self.pinnedNow, lastError: nil))
     await fixture.store.loadInitialState()
 
-    // Launch two full-resync triggers concurrently. The in-flight guard
-    // must run before the checkpoint delete, so only one Alchemy call
-    // fires and the duplicate collapses without also stripping the
-    // watermark out from under the winning run.
+    // Launch two full-resync triggers concurrently. Both calls pass
+    // `syncAccount`'s own in-flight guard (neither has marked the
+    // account in-progress yet at that point) — the actual collapse
+    // happens one level down, in `syncAccounts`'s
+    // `inProgressAccountIds` filter (`SyncedAccountStore.swift`), which
+    // the second call hits after the first has already inserted the
+    // id. So only one Alchemy call fires and the duplicate collapses
+    // without also stripping the watermark out from under the winning
+    // run.
     async let firstRun: Void = fixture.store.syncAccount(account, fullResync: true)
     async let duplicate: Void = fixture.store.syncAccount(account, fullResync: true)
     _ = await (firstRun, duplicate)
 
     #expect(fixture.alchemy.recordedCalls.count == 1)
+  }
+
+  // MARK: - Failed resync must not resurrect the old watermark
+
+  @Test(
+    "A failed full-resync build leaves the persisted watermark at genesis, not the prior block"
+  )
+  func failedFullResyncLeavesWatermarkAtGenesis() async throws {
+    let fixture = try makeStore()
+    let account = seedCryptoAccount(in: fixture.database)
+    try await fixture.backend.walletSyncState.save(
+      WalletSyncState(
+        id: account.id, lastSyncedBlockNumber: 5_000,
+        lastSyncedAt: Self.pinnedNow, lastError: nil))
+    await fixture.store.loadInitialState()
+
+    // Force the build phase to fail for this account's wallet.
+    let walletAddress = try #require(account.walletAddress)
+    fixture.alchemy.setTransfersResponse(
+      .failure(WalletSyncError.invalidApiKey), for: walletAddress)
+
+    await fixture.store.syncAccount(account, fullResync: true)
+
+    // The reset must survive the failure: a later plain sync should
+    // still refetch from genesis, not resume at the stale 5_000
+    // watermark that was cached in `statePerAccount` before the delete.
+    let saved = try #require(
+      try await fixture.backend.walletSyncState.load(accountId: account.id))
+    #expect(saved.lastSyncedBlockNumber == 0)
+    #expect(saved.lastError == .invalidApiKey)
   }
 }

@@ -47,15 +47,21 @@ extension SyncedAccountStore {
   /// queueing a duplicate write).
   ///
   /// `fullResync: true` first deletes the persisted `WalletSyncState`
-  /// checkpoint, so the build phase finds no watermark and computes
-  /// `fromBlock == 0` (full-history re-fetch), recovering transfers an
-  /// earlier incremental sync skipped. Safe to repeat: the apply pass
-  /// dedups on `(accountId, externalId)`, and a failed resync build just
-  /// leaves the checkpoint deleted rather than corrupted. Benign TOCTOU:
-  /// a sync racing the in-flight guard above can still see the deleted
-  /// checkpoint after this call collapses to a no-op below; the next
-  /// sync of either kind simply refetches from block 0 — accepted rather
-  /// than adding locking.
+  /// checkpoint and drops the account's cached entry in
+  /// `statePerAccount`, so the build phase finds no watermark (neither
+  /// persisted nor cached) and computes `fromBlock == 0` (full-history
+  /// re-fetch), recovering transfers an earlier incremental sync
+  /// skipped. Safe to repeat: the apply pass dedups on
+  /// `(accountId, externalId)`, and a failed resync build leaves the
+  /// watermark at genesis rather than resurrecting the prior block —
+  /// dropping the in-memory cache entry means `runParallelBuilds`'s
+  /// `priorState` snapshot is `nil`, so `persistError` writes
+  /// `lastSyncedBlockNumber: 0` instead of the pre-reset value, and a
+  /// later sync of either kind still does the full re-fetch. Benign
+  /// TOCTOU: a sync racing the in-flight guard above can still see the
+  /// deleted checkpoint after this call collapses to a no-op below; the
+  /// next sync of either kind simply refetches from block 0 — accepted
+  /// rather than adding locking.
   func syncAccount(_ account: Account, fullResync: Bool = false) async {
     guard source(for: account) != nil else { return }
     guard !inProgressAccountIds.contains(account.id) else { return }
@@ -69,6 +75,12 @@ extension SyncedAccountStore {
           "Full-resync checkpoint reset failed for account \(account.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
         )
       }
+      // Drop the cached checkpoint too — otherwise a build failure's
+      // `persistError` would read the stale in-memory `priorState` and
+      // re-save the pre-reset watermark instead of genesis.
+      var trimmedState = statePerAccount
+      trimmedState.removeValue(forKey: account.id)
+      replaceStatePerAccount(trimmedState)
     }
     await syncAccounts([account])
   }
