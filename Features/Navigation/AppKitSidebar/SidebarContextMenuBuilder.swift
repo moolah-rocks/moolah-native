@@ -7,6 +7,14 @@
   /// identifier (e.g. `renameContextMenuItem`, `editAccountContextMenuItem`)
   /// and dispatch fires the associated `on…` closure.
   ///
+  /// The account menu also carries a "Resync Now (Full History)" item,
+  /// but only when the account is synced (`AccountType.isSynced` —
+  /// crypto or exchange). It posts `.requestAccountResync`, the same
+  /// notification the menu-bar Account → Resync Now command posts
+  /// (`MoolahDomainCommands`), so the shared `SidebarSharedModifiers`
+  /// observer resolves the account and dispatches the sync — no new
+  /// store plumbing needed here.
+  ///
   /// Using an AppKit `NSMenu` (rather than a SwiftUI `.contextMenu` on
   /// the hosted row) keeps the menu open across re-renders of the
   /// hosted SwiftUI tree: AppKit's menu-tracking session owns the menu
@@ -26,7 +34,10 @@
           guard let fresh = accountStore.accounts.by(id: accountId) else { return }
           accountToEdit.wrappedValue = fresh
         },
-        onViewTransactions: { selection.wrappedValue = .account(accountId) })
+        onViewTransactions: { selection.wrappedValue = .account(accountId) },
+        onResync: {
+          NotificationCenter.default.post(name: .requestAccountResync, object: accountId)
+        })
 
       let menu = NSMenu()
 
@@ -60,6 +71,11 @@
       viewItem.setAccessibilityIdentifier(
         UITestIdentifiers.Sidebar.viewTransactionsContextMenuItem)
       menu.addItem(viewItem)
+
+      if accountStore.accounts.by(id: accountId)?.type.isSynced == true {
+        menu.addItem(.separator())
+        menu.addItem(resyncMenuItem(target: actions))
+      }
 
       objc_setAssociatedObject(
         menu, &AssociationKeys.cellActions, actions, .OBJC_ASSOCIATION_RETAIN)
@@ -113,6 +129,24 @@
     }
   }
 
+  extension SidebarContextMenuBuilder {
+    /// The "Resync Now (Full History)" item appended to the account menu
+    /// for synced accounts. Extracted here (in the type's trailing
+    /// helpers block) so `accountMenu(...)` stays inside SwiftLint's
+    /// function-body-length budget.
+    @MainActor
+    private static func resyncMenuItem(target: AccountMenuActions) -> NSMenuItem {
+      let item = NSMenuItem(
+        title: "Resync Now (Full History)",
+        action: #selector(AccountMenuActions.resyncAction(_:)),
+        keyEquivalent: "")
+      item.target = target
+      item.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil)
+      item.setAccessibilityIdentifier(UITestIdentifiers.Sidebar.resyncAccountContextMenuItem)
+      return item
+    }
+  }
+
   /// Target/action sink for the account context menu. Each menu gets
   /// its own instance, retained via `objc_setAssociatedObject` on the
   /// menu (matches the lifetime of the cell it is attached to).
@@ -121,15 +155,18 @@
     private let onRename: () -> Void
     private let onEdit: () -> Void
     private let onViewTransactions: () -> Void
+    private let onResync: () -> Void
 
     init(
       onRename: @escaping () -> Void,
       onEdit: @escaping () -> Void,
-      onViewTransactions: @escaping () -> Void
+      onViewTransactions: @escaping () -> Void,
+      onResync: @escaping () -> Void
     ) {
       self.onRename = onRename
       self.onEdit = onEdit
       self.onViewTransactions = onViewTransactions
+      self.onResync = onResync
     }
 
     @objc
@@ -140,6 +177,9 @@
 
     @objc
     func viewTransactionsAction(_ sender: Any?) { onViewTransactions() }
+
+    @objc
+    func resyncAction(_ sender: Any?) { onResync() }
   }
 
   /// Target/action sink for the earmark and group context menus —

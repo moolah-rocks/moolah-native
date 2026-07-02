@@ -222,6 +222,13 @@ struct SidebarView: View {
       Button("View Transactions", systemImage: "list.bullet") {
         selection = .account(account.id)
       }
+      if account.type.isSynced {
+        Divider()
+        Button("Resync Now (Full History)", systemImage: "arrow.clockwise") {
+          NotificationCenter.default.post(name: .requestAccountResync, object: account.id)
+        }
+        .accessibilityIdentifier(UITestIdentifiers.Sidebar.resyncAccountContextMenuItem)
+      }
     }
 
     @ViewBuilder
