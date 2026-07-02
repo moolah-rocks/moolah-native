@@ -312,6 +312,9 @@ struct SyncedAccountStoreTests {
     #expect(fixture.alchemy.recordedCalls.count == 1)
   }
 
+  // The full-resync (`syncAccount(_:fullResync:)`) tests live in
+  // `SyncedAccountStoreFullResyncTests.swift`.
+
   // MARK: - Stale filter
 
   @Test("Recently-synced accounts are filtered out of syncStaleAccounts")

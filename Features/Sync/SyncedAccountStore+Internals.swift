@@ -45,9 +45,31 @@ extension SyncedAccountStore {
   /// Skips when the account is already mid-sync (the existing in-flight
   /// task wins; the user-initiated one collapses to a no-op rather than
   /// queueing a duplicate write).
-  func syncAccount(_ account: Account) async {
+  ///
+  /// `fullResync: true` first deletes the persisted `WalletSyncState`
+  /// checkpoint, so the build phase finds no watermark and computes
+  /// `fromBlock == 0` (full-history re-fetch), recovering transfers an
+  /// earlier incremental sync skipped. Safe to repeat: the apply pass
+  /// dedups on `(accountId, externalId)`, and a failed resync build just
+  /// leaves the checkpoint deleted rather than corrupted. Benign TOCTOU:
+  /// a sync racing the in-flight guard above can still see the deleted
+  /// checkpoint after this call collapses to a no-op below; the next
+  /// sync of either kind simply refetches from block 0 — accepted rather
+  /// than adding locking.
+  func syncAccount(_ account: Account, fullResync: Bool = false) async {
     guard source(for: account) != nil else { return }
     guard !inProgressAccountIds.contains(account.id) else { return }
+    if fullResync {
+      do {
+        try await walletSyncState.delete(accountId: account.id)
+      } catch {
+        // Non-fatal: fall back to an incremental sync rather than
+        // aborting the user's request.
+        Self.internalsLogger.error(
+          "Full-resync checkpoint reset failed for account \(account.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
+        )
+      }
+    }
     await syncAccounts([account])
   }
 
@@ -355,35 +377,6 @@ extension SyncedAccountStore {
       newlyImported: eligible,
       participatingAccountIds: participatingAccountIds,
       windowLowerBound: windowLowerBound)
-  }
-
-  // MARK: - Timer
-
-  /// Cancels any prior `timerTask` and starts a fresh one. Centralised
-  /// so every entry point (scene-active, explicit re-arm) goes through
-  /// the same cancel-then-spawn sequence.
-  func restartTimer() {
-    cancelTimer()
-    timerTask = Task { [weak self] in
-      await self?.runTimerLoop()
-    }
-  }
-
-  /// Hourly stale-check loop. Foreground only — entry/exit is gated by
-  /// `handleScenePhaseChange`. `Task.sleep` itself throws on cancellation;
-  /// the explicit `Task.checkCancellation()` between sleep and dispatch
-  /// catches a late cancellation that arrives in the gap so a cancelled
-  /// task exits without leaking a fetch.
-  func runTimerLoop() async {
-    while !Task.isCancelled {
-      do {
-        try await Task.sleep(for: timerInterval)
-        try Task.checkCancellation()
-      } catch {
-        return
-      }
-      await syncStaleAccounts()
-    }
   }
 
   /// Logger for internals-extension diagnostics. Static and `Sendable`
