@@ -153,4 +153,37 @@ struct UnifiedIdentityMigrationPriceCacheTests {
     #expect(try await harness.cryptoMetaExists("1:native") == true)
     #expect(try await harness.cryptoPriceCount("1:native") > 0)
   }
+
+  @Test("price cache: a throw mid-transaction rolls back every change atomically")
+  func rollsBackEntireTransactionOnMidRunFailure() async throws {
+    let harness = try MigrationTestHarness.make()
+    try await harness.seedCryptoMeta([
+      ("1:native", "2022-01-01"),
+      ("10:native", "2021-06-01"),
+    ])
+    try await harness.seedCryptoPrice(["1:native", "10:native"])
+
+    // Plant a TEMP trigger that fires FAIL before the final DELETE on
+    // crypto_token_meta. By that point the transaction has already run the
+    // first_traded_on UPDATE and the crypto_price DELETE; the rollback must
+    // restore all three to their original state.
+    try await harness.migration.profileIndexDatabase.write { database in
+      try database.execute(
+        sql: """
+          CREATE TEMP TRIGGER fail_before_meta_delete
+          BEFORE DELETE ON crypto_token_meta
+          BEGIN SELECT RAISE(FAIL, 'test-rollback'); END
+          """)
+    }
+
+    await #expect(throws: (any Error).self) {
+      try await harness.migration.applyPriceCacheStep(
+        mapping: ["10:native": "1:native"])
+    }
+
+    // Everything must be identical to the pre-step state.
+    #expect(try await harness.firstTradedOn("1:native") == "2022-01-01")
+    #expect(try await harness.cryptoMetaExists("10:native") == true)
+    #expect(try await harness.cryptoPriceCount("10:native") > 0)
+  }
 }
