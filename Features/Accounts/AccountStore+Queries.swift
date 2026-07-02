@@ -5,6 +5,16 @@ extension AccountStore {
   // `AccountStore.swift` and the SwiftUI views need them across file
   // boundaries. Treat them as the store's read-only query surface.
 
+  /// Current-bucket accounts, honouring `showHidden`.
+  var currentAccounts: [Account] {
+    accounts.filter { $0.bucket == .current && (showHidden || !$0.isHidden) }
+  }
+
+  /// Investment-bucket accounts, honouring `showHidden`.
+  var investmentAccounts: [Account] {
+    accounts.filter { $0.bucket == .investments && (showHidden || !$0.isHidden) }
+  }
+
   /// The display balance for an account in its own instrument. Forwards to
   /// `balanceCalculator`, passing the cached externally-set investment value
   /// when the account is an investment account.

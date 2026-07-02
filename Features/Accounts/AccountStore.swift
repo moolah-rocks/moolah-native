@@ -68,12 +68,15 @@ final class AccountStore {
   private let instrumentChanges: (any InstrumentChangeObserving)?
   private var instrumentChangeObservationTask: Task<Void, Never>?
 
-  /// Monotonic counter over authoritative `observeAll()` snapshots. The
-  /// instrument-registry refresh path captures it before its `fetchAll()`
-  /// and drops a stale refetch that raced a fresher snapshot — see
-  /// `applyInstrumentRegistryRefresh` for the full rationale. `private(set)`
-  /// (only `bumpSnapshotGeneration()` writes it) + `@ObservationIgnored`
-  /// (a pure guard counter no view reads).
+  /// Monotonic counter over authoritative `observeAll()` snapshots. Two
+  /// sites capture it before suspending and drop their work if a fresher
+  /// authoritative snapshot lands while they are suspended:
+  ///   - the instrument-registry refresh path, before its `fetchAll()` —
+  ///     see `applyInstrumentRegistryRefresh`;
+  ///   - the balance-recompute path, before it suspends in the conversion
+  ///     service — see `publishSnapshot(_:ifGeneration:)` and issue #1209.
+  /// `private(set)` (only `bumpSnapshotGeneration()` writes it) +
+  /// `@ObservationIgnored` (a pure guard counter no view reads).
   @ObservationIgnored private(set) var snapshotGeneration: UInt64 = 0
 
   /// The single increment path for `snapshotGeneration`. Internal so the
@@ -223,22 +226,6 @@ final class AccountStore {
     showHiddenTask = nil
   }
 
-  /// Asks `investmentValueCache` to hydrate itself with the latest value for
-  /// every investment account. Without this, `displayBalance` falls back to
-  /// summing positions until `InvestmentStore` happens to call
-  /// `updateInvestmentValue(accountId:value:)`, so the sidebar flashes the
-  /// transaction sum until the user opens an investment account. See
-  /// `InvestmentValueCache.preload(for:)` for the failure-tolerant details.
-  func preloadInvestmentValues() async {
-    // Only `recordedValue` investment accounts read from the snapshot cache;
-    // `calculatedFromTrades` accounts derive their value from positions, so
-    // their snapshot fetch would be a wasted round-trip.
-    let investmentAccountIds = accounts.ordered
-      .filter { $0.type == .investment && $0.valuationMode == .recordedValue }
-      .map(\.id)
-    await investmentValueCache.preload(for: investmentAccountIds)
-  }
-
   /// Recompute task spawned by the `showHidden` `didSet`. Tracked (not
   /// fire-and-forget) so `stopObserving()` and `deinit` can cancel an
   /// in-flight recompute. A rapid double-toggle cancels the prior task
@@ -251,20 +238,15 @@ final class AccountStore {
       // stay pinned to the previous visibility's sum until the next tick.
       guard oldValue != showHidden else { return }
       showHiddenTask?.cancel()
-      showHiddenTask = Task { await recomputeConvertedTotals() }
+      // `@MainActor in` for the same future-refactor safety reason as the
+      // retry task below — see the note on `conversionTask`.
+      showHiddenTask = Task { @MainActor in await recomputeConvertedTotals() }
     }
   }
 
-  var currentAccounts: [Account] {
-    accounts.filter { $0.bucket == .current && (showHidden || !$0.isHidden) }
-  }
-
-  var investmentAccounts: [Account] {
-    accounts.filter { $0.bucket == .investments && (showHidden || !$0.isHidden) }
-  }
-
-  // Read-only query helpers (`displayBalance`, `hasUnrecordedValue`,
-  // `canDelete`, `positions(for:)`) live in `AccountStore+Queries.swift`.
+  // Read-only query helpers (`currentAccounts`, `investmentAccounts`,
+  // `displayBalance`, `hasUnrecordedValue`, `canDelete`, `positions(for:)`)
+  // live in `AccountStore+Queries.swift`.
 
   /// Recompute per-account balances and aggregate totals via
   /// `balanceCalculator`. Driven by emissions from either
@@ -279,6 +261,17 @@ final class AccountStore {
   /// either source would otherwise reset the clock and a profile with
   /// frequent unrelated rate ticks could delay recovery indefinitely.
   func recomputeConvertedTotals() async {
+    // Capture the authoritative-snapshot generation *before* reading
+    // `accounts` (no suspension intervenes, so the two are consistent).
+    // `publishSnapshot` drops this pass if a fresher `observeAll()`
+    // snapshot lands while `computeBalanceSnapshot` is suspended in the
+    // conversion service — otherwise a recompute that read a stale
+    // accounts snapshot (classically the startup rate-tick pass over the
+    // empty initial accounts) can publish *after* the authoritative
+    // accounts recompute and clobber it back to a pre-snapshot state.
+    // Same guard, same rationale as `applyInstrumentRegistryRefresh`.
+    // See issue #1209.
+    let generation = snapshotGeneration
     // Layer 7 signpost 4 (recompute path). Region covers the balance
     // compute + main-thread publish; the retry-loop spawn that follows
     // on failure is outside the region (background work). When called
@@ -286,7 +279,7 @@ final class AccountStore {
     // `account-store-apply` interval.
     let snapshot = await withReactiveStoreSignpost("account-store-recompute") {
       let snap = await computeBalanceSnapshot()
-      publishSnapshot(snap)
+      publishSnapshot(snap, ifGeneration: generation)
       testObservationTickContinuation.yield(())
       return snap
     }
@@ -318,8 +311,13 @@ final class AccountStore {
           return  // CancellationError — exit the retry loop immediately
         }
         guard !Task.isCancelled else { return }
+        // Re-capture per iteration: an accounts change during the delay
+        // bumps the generation, so a retry that raced a fresher snapshot
+        // drops its publish rather than clobbering it (see #1209).
+        let generation = self.snapshotGeneration
         let retry = await self.computeBalanceSnapshot()
-        self.publishSnapshot(retry)
+        guard !Task.isCancelled else { return }
+        self.publishSnapshot(retry, ifGeneration: generation)
         self.testObservationTickContinuation.yield(())
         if !retry.anyFailed {
           self.conversionTask = nil
@@ -337,7 +335,17 @@ final class AccountStore {
       investmentValues: investmentValueCache)
   }
 
-  private func publishSnapshot(_ snapshot: AccountBalanceCalculator.Snapshot) {
+  /// Publishes a computed snapshot, unless a fresher authoritative
+  /// accounts snapshot has landed since the recompute captured
+  /// `generation`. Dropping a stale pass is what stops an out-of-order
+  /// publish from clobbering the current state — see the capture site in
+  /// `recomputeConvertedTotals` and issue #1209. A dropped pass leaves
+  /// `hasCompletedInitialConversion` to the fresher pass that superseded
+  /// it (which sets it), so the "still loading" flag never regresses.
+  private func publishSnapshot(
+    _ snapshot: AccountBalanceCalculator.Snapshot, ifGeneration generation: UInt64
+  ) {
+    guard snapshotGeneration == generation else { return }
     convertedBalances = snapshot.balances
     convertedCurrentTotal = snapshot.currentTotal
     convertedInvestmentTotal = snapshot.investmentTotal
@@ -353,14 +361,6 @@ final class AccountStore {
   func waitForPendingConversions() async {
     guard let task = conversionTask else { return }
     await task.value
-  }
-
-  /// Updates the investment value for a specific account locally.
-  /// Called when `InvestmentStore` sets or removes a value.
-  func updateInvestmentValue(accountId: UUID, value: InstrumentAmount?) async {
-    guard accounts.by(id: accountId) != nil else { return }
-    investmentValueCache.set(value, for: accountId)
-    await recomputeConvertedTotals()
   }
 
   /// Applies position deltas to account balances. Used by
