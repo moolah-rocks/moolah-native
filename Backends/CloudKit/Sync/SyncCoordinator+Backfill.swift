@@ -214,4 +214,12 @@ extension SyncCoordinator {
   func handleEncryptedDataResetForTesting(zoneID: CKRecordZone.ID) {
     handleEncryptedDataReset(zoneID, zoneType: Self.parseZone(zoneID))
   }
+
+  /// Test-only: constructs and runs the unified identity migration exactly as the
+  /// lifecycle does, so the wiring and ordering can be asserted without dispatching
+  /// a real `CKSyncEngine` start. Delegates to `runUnifiedIdentityMigration()`,
+  /// which skips when `sharedInstrumentRegistry` or `sharedCanonicalResolver` is nil.
+  func runUnifiedIdentityMigrationForTesting() async {
+    await runUnifiedIdentityMigration()
+  }
 }

@@ -12,7 +12,11 @@ import OSLog
 @MainActor
 struct UnifiedInstrumentIdentityMigration {
   let profileIndexDatabase: DatabaseQueue
-  let dataDatabaseProvider: @Sendable (UUID) throws -> DatabaseQueue
+  /// `@MainActor` (not `@Sendable`): the only call site is `rewriteProfile`, itself
+  /// `@MainActor`, and the production provider hops to `ProfileContainerManager`
+  /// (a `@MainActor` type). Typing it `@MainActor` makes that requirement a
+  /// compile-time guarantee instead of a `MainActor.assumeIsolated` runtime trap.
+  let dataDatabaseProvider: @MainActor (UUID) throws -> DatabaseQueue
   let allProfileIds: @Sendable () async -> [UUID]
   let registry: any InstrumentRegistryRepository
   let resolver: CanonicalInstrumentResolver
