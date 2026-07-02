@@ -20,6 +20,15 @@ struct UnifiedInstrumentIdentityMigration {
   let rePush: @MainActor (UUID) async -> Void
   let userDefaults: UserDefaults
 
+  // MARK: - Test-only fault hook
+
+  /// When non-nil, `rewriteProfile` calls this closure after its first
+  /// `db.execute`, inside the active `write` transaction. The closure is
+  /// expected to throw, proving SQLite rolls the whole `IMMEDIATE` transaction
+  /// back. Always nil in production. Mutated by tests only.
+  /// `@Sendable` required because it executes inside GRDB's `write` closure.
+  var faultAfterFirstStatement: (@Sendable (Database) throws -> Void)?
+
   // MARK: - Gate flag
 
   /// `UserDefaults` key in `.moolahShared` that marks the migration complete.
