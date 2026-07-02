@@ -6,7 +6,6 @@ import OSLog
 
 /// One-shot app-side migration collapsing retired per-chain crypto identities
 /// onto their canonical id across the shared registry AND every profile's data.
-/// See `plans/2026-07-01-unified-instrument-identity-pr5-data-migration.md`.
 ///
 /// NOT a `DatabaseMigrator` step: it needs `profile-index.sqlite` and each
 /// profile's `data.sqlite` at once plus the `CanonicalInstrumentResolver`.
@@ -27,6 +26,12 @@ struct UnifiedInstrumentIdentityMigration {
   /// closure.
   var faultAfterFirstStatementForTesting: (@Sendable (Database) throws -> Void)?
 
+  /// Test-only seam: when non-nil, `rewriteProfile` throws `ProfileRewriteTestFault`
+  /// for the matching profile UUID inside the `write` transaction (so GRDB rolls
+  /// that profile back byte-identical). Proves cross-profile resumability: a fault
+  /// on profile B leaves A fully rewritten and B untouched. Always nil in production.
+  var faultOnProfile: UUID?
+
   /// `UserDefaults` key in `.moolahShared` that marks the migration complete.
   static let gateKey = "didMigrateUnifiedInstrumentIdentity"
 
@@ -45,16 +50,42 @@ struct UnifiedInstrumentIdentityMigration {
   private static let logger = Logger(
     subsystem: "com.moolah.app", category: "UnifiedInstrumentIdentityMigration")
 
-  /// Runs the migration if it has not already completed, returning immediately
-  /// when the gate flag is set. The orchestration body (alias writes, FK
-  /// rewrites, price-cache purge, re-push) is not yet wired up; the function
-  /// currently performs only the gate-flag check.
+  /// Runs the migration end-to-end if it has not already completed.
+  ///
+  /// Orchestration order (every step idempotent; flag last):
+  /// 1. Gate: completion flag set → return immediately.
+  /// 2. Derive retired→canonical mapping from the unfiltered registry.
+  /// 3. Alias step (shared DB): set `alias_of` on every retired row.
+  /// 4. Per-profile loop: rewrite FKs (atomic per profile) then re-push.
+  /// 5. Price-cache step (shared DB): fold meta dates + purge retired caches.
+  /// 6. Set the completion flag — only after ALL steps succeed for ALL profiles.
+  ///
+  /// A kill between any two steps leaves the flag `false`; the next launch
+  /// re-derives the same mapping (retired rows still present + aliased) and
+  /// re-applies each step idempotently. Finished profiles are no-ops; unfinished
+  /// profiles get rewritten. The flag is only set after full convergence.
   func run() async throws {
     guard !Self.isComplete(in: userDefaults) else {
-      Self.logger.info("Already complete — skipping")
+      Self.logger.info("Unified identity migration already complete — skipping")
       return
     }
-    // Orchestration body not yet implemented.
+    guard !Task.isCancelled else { return }
+
+    let mapping = try await deriveMapping()
+    try await applyAliasStep(mapping: mapping)
+
+    for profileId in await allProfileIds() {
+      guard !Task.isCancelled else { return }
+      try await rewriteProfile(profileId, mapping: mapping)
+      await rePush(profileId)
+    }
+
+    try await applyPriceCacheStep(mapping: mapping)
+    guard !Task.isCancelled else { return }
+    userDefaults.set(true, forKey: Self.gateKey)
+    Self.logger.info(
+      "Unified identity migration complete: \(mapping.count, privacy: .public) retired id(s) rewritten"
+    )
   }
 
   /// Derives the retired id → canonical id mapping from the UNFILTERED shared
@@ -75,4 +106,11 @@ struct UnifiedInstrumentIdentityMigration {
     }
     return mapping
   }
+}
+
+extension UnifiedInstrumentIdentityMigration {
+  /// Thrown by `rewriteProfile` when `faultOnProfile` matches the profile being
+  /// rewritten. Thrown inside the `write` transaction so GRDB rolls the profile
+  /// back byte-identical. Test-only; never emitted in production.
+  struct ProfileRewriteTestFault: Error {}
 }

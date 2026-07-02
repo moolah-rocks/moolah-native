@@ -15,7 +15,13 @@ extension UnifiedInstrumentIdentityMigration {
     guard !mapping.isEmpty else { return }
     let queue = try dataDatabaseProvider(profileId)
     let fault = faultAfterFirstStatementForTesting
+    let faultProfile = faultOnProfile
     try await queue.write { database in
+      // Test-only: fault on a chosen profile inside the transaction so GRDB
+      // rolls it back byte-identical (faultOnProfile is always nil in production).
+      if let faultedId = faultProfile, faultedId == profileId {
+        throw UnifiedInstrumentIdentityMigration.ProfileRewriteTestFault()
+      }
       let statements = try Self.rewriteStatements(database)
       var faultFired = false
       for (retired, canonical) in mapping {
