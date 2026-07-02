@@ -41,9 +41,7 @@ struct MigrationTestHarness {
     let registry = GRDBInstrumentRegistryRepository(database: database)
     let resolver = CanonicalInstrumentResolver()
     let suiteName = "test-migration-\(UUID().uuidString)"
-    guard let defaults = UserDefaults(suiteName: suiteName) else {
-      fatalError("Failed to create isolated UserDefaults suite: \(suiteName)")
-    }
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
     defaults.removePersistentDomain(forName: suiteName)
     let cache = ProfileDatabaseCache()
     let recorder = RePushRecorder()
@@ -101,9 +99,7 @@ func makeProfileRewriteHarness() throws -> (
   let registry = GRDBInstrumentRegistryRepository(database: indexDatabase)
   let resolver = CanonicalInstrumentResolver()
   let suiteName = "test-profile-rewrite-\(UUID().uuidString)"
-  guard let defaults = UserDefaults(suiteName: suiteName) else {
-    fatalError("Failed to create isolated UserDefaults suite: \(suiteName)")
-  }
+  let defaults = try #require(UserDefaults(suiteName: suiteName))
   defaults.removePersistentDomain(forName: suiteName)
   let recorder = RePushRecorder()
   let stubMigration = UnifiedInstrumentIdentityMigration(
@@ -315,14 +311,6 @@ func seedRetiredRows(_ database: Database) throws {
 
 // MARK: - Free query utilities
 
-/// Executes a single-column `sql` query against `queue` and returns all rows
-/// as strings. For test use only — `sql` must be a hard-coded literal.
-func fetchAll(_ sql: String, in queue: DatabaseQueue) async throws -> [String] {
-  try await queue.read { database in
-    try String.fetchAll(database, sql: sql)
-  }
-}
-
 /// Returns the count of rows with `needs_push = 1` in `table`. `table` is a
 /// SQL identifier and cannot be bound with `?`; the `allowed` allowlist closes
 /// the set immediately before interpolation so no dynamic value reaches the SQL
@@ -396,5 +384,17 @@ extension CryptoRegistration {
       mapping: CryptoProviderMapping(
         instrumentId: "\(chainId):\(address.lowercased())",
         coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil))
+  }
+}
+
+// MARK: - Test-only migration helpers
+
+extension UnifiedInstrumentIdentityMigration {
+  /// Sets the completion flag. Unit-test only — lets a test confirm that a
+  /// gated surface (e.g. `ReportingStore.isMigratingCrossChainIdentity`)
+  /// observes the flag without running the full migration.
+  /// No production code path should invoke this.
+  nonisolated static func markCompleteForTesting(in defaults: UserDefaults) {
+    defaults.set(true, forKey: gateKey)
   }
 }

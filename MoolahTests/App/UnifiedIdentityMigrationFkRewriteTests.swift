@@ -62,21 +62,33 @@ struct UnifiedIdentityMigrationFkRewriteTests {
       profileId, mapping: ["10:native": "1:native", "8453:native": "1:native"])
 
     // All instrument_id FK columns point at the canonical id.
-    let legIds = try await fetchAll("SELECT instrument_id FROM transaction_leg", in: queue)
+    let legIds = try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT instrument_id FROM transaction_leg")
+    }
     #expect(legIds == ["1:native"])
-    let earmarkIds = try await fetchAll("SELECT instrument_id FROM earmark", in: queue)
+    let earmarkIds = try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT instrument_id FROM earmark")
+    }
     #expect(earmarkIds == ["1:native"])
-    let stIds = try await fetchAll(
-      "SELECT savings_target_instrument_id FROM earmark", in: queue)
+    let stIds = try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT savings_target_instrument_id FROM earmark")
+    }
     #expect(stIds == ["1:native"])
-    let ebiIds = try await fetchAll(
-      "SELECT instrument_id FROM earmark_budget_item", in: queue)
+    let ebiIds = try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT instrument_id FROM earmark_budget_item")
+    }
     #expect(ebiIds == ["1:native"])
-    let groupIds = try await fetchAll("SELECT instrument_id FROM account_group", in: queue)
+    let groupIds = try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT instrument_id FROM account_group")
+    }
     #expect(groupIds == ["1:native"])
-    let ivIds = try await fetchAll("SELECT instrument_id FROM investment_value", in: queue)
+    let ivIds = try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT instrument_id FROM investment_value")
+    }
     #expect(ivIds == ["1:native"])
-    let acctIds = try await fetchAll("SELECT instrument_id FROM account", in: queue)
+    let acctIds = try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT instrument_id FROM account")
+    }
     #expect(acctIds == ["1:native"])
 
     // needs_push = 1 on every rewritten row.
@@ -107,18 +119,29 @@ struct UnifiedIdentityMigrationFkRewriteTests {
     try await harness.migration.rewriteProfile(profileId, mapping: ["10:native": "1:native"])
 
     // instrument_ids are unchanged.
-    let legIds = try await fetchAll("SELECT instrument_id FROM transaction_leg", in: queue)
+    let legIds = try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT instrument_id FROM transaction_leg")
+    }
     #expect(legIds == ["AUD"])
-    let earmarkIds = try await fetchAll("SELECT instrument_id FROM earmark", in: queue)
+    let earmarkIds = try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT instrument_id FROM earmark")
+    }
     #expect(earmarkIds == ["AUD"])
-    let ebiIds = try await fetchAll(
-      "SELECT instrument_id FROM earmark_budget_item", in: queue)
+    let ebiIds = try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT instrument_id FROM earmark_budget_item")
+    }
     #expect(ebiIds == ["AUD"])
-    let groupIds = try await fetchAll("SELECT instrument_id FROM account_group", in: queue)
+    let groupIds = try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT instrument_id FROM account_group")
+    }
     #expect(groupIds == ["AUD"])
-    let ivIds = try await fetchAll("SELECT instrument_id FROM investment_value", in: queue)
+    let ivIds = try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT instrument_id FROM investment_value")
+    }
     #expect(ivIds == ["AUD"])
-    let acctIds = try await fetchAll("SELECT instrument_id FROM account", in: queue)
+    let acctIds = try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT instrument_id FROM account")
+    }
     #expect(acctIds == ["AUD"])
 
     // needs_push = 0 on every row — no rows were rewritten.

@@ -76,7 +76,7 @@ extension MigrationTestHarness {
 // MARK: - Tests
 
 @MainActor
-@Suite
+@Suite("UnifiedIdentityMigration: price-cache step")
 struct UnifiedIdentityMigrationPriceCacheTests {
   @Test("price cache: canonical first_traded_on = MIN(canonical, retired); retired caches purged")
   func priceCacheMinAndPurge() async throws {

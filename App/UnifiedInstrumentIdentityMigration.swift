@@ -18,7 +18,7 @@ struct UnifiedInstrumentIdentityMigration {
   /// compile-time guarantee instead of a `MainActor.assumeIsolated` runtime trap.
   let dataDatabaseProvider: @MainActor (UUID) throws -> DatabaseQueue
   let allProfileIds: @Sendable () async -> [UUID]
-  let registry: any InstrumentRegistryRepository
+  let registry: any AliasedCryptoRegistrationProvider
   let resolver: CanonicalInstrumentResolver
   let rePush: @MainActor (UUID) async -> Void
   let userDefaults: UserDefaults
@@ -51,16 +51,6 @@ struct UnifiedInstrumentIdentityMigration {
   /// the migration. No production code path should invoke this.
   static func resetGateFlag(in defaults: UserDefaults) {
     defaults.removeObject(forKey: gateKey)
-  }
-
-  /// Sets the completion flag. Unit-test only — lets a test confirm that a
-  /// gated surface (e.g. `ReportingStore.isMigratingCrossChainIdentity`)
-  /// observes the flag correctly without running the full migration.
-  /// No production code path should invoke this.
-  /// `nonisolated`: only accesses `UserDefaults` (thread-safe) so it can be
-  /// called from any isolation domain without a main-actor hop.
-  nonisolated static func setCompleteForTesting(in defaults: UserDefaults) {
-    defaults.set(true, forKey: gateKey)
   }
 
   private static let logger = Logger(

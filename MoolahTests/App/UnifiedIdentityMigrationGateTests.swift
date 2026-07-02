@@ -121,7 +121,7 @@ struct UnifiedIdentityMigrationGateTests {
   @Test("resetGateFlag clears a previously-set completion flag")
   func resetGateFlagClearsFlag() throws {
     let defaults = try makeIsolatedDefaults(tag: "reset")
-    UnifiedInstrumentIdentityMigration.setCompleteForTesting(in: defaults)
+    UnifiedInstrumentIdentityMigration.markCompleteForTesting(in: defaults)
     #expect(UnifiedInstrumentIdentityMigration.isComplete(in: defaults))
     UnifiedInstrumentIdentityMigration.resetGateFlag(in: defaults)
     #expect(!UnifiedInstrumentIdentityMigration.isComplete(in: defaults))
