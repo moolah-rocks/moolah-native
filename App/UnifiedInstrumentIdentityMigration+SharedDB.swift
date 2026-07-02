@@ -36,6 +36,11 @@ extension UnifiedInstrumentIdentityMigration {
   /// Idempotent: retired rows already deleted → DELETEs match nothing; MIN
   /// already applied → UPDATE is effectively a no-op.
   /// One atomic `write` transaction (DATABASE_CODE_GUIDE §5).
+  ///
+  /// `notifyRateCacheChange(.cryptoPrice)` at the end is required because
+  /// `crypto_price` is `WITHOUT ROWID` — SQLite's `sqlite3_update_hook` does
+  /// not fire for such tables, so `ValueObservation` over the crypto-price
+  /// region needs an explicit signal (see `RateCacheTable.swift`).
   func applyPriceCacheStep(mapping: [String: String]) async throws {
     guard !mapping.isEmpty else { return }
     let retiredByCanonical = mapping.reduce(into: [String: [String]]()) { acc, pair in
@@ -67,6 +72,12 @@ extension UnifiedInstrumentIdentityMigration {
         try database.execute(
           literal: "DELETE FROM crypto_token_meta WHERE token_id IN (\(retiredClause))")
       }
+      // `crypto_price` is WITHOUT ROWID; SQLite's update hook does not fire for
+      // it, so ValueObservation needs an explicit notification (same pattern as
+      // CryptoPriceService+Persistence.swift). See RateCacheTable.swift and
+      // DATABASE_CODE_GUIDE §2. `crypto_token_meta` is not tracked by
+      // RateCacheTickStream so no additional notify is required for it.
+      try database.notifyRateCacheChange(.cryptoPrice)
     }
   }
 }
