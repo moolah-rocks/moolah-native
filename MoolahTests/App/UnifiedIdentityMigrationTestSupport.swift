@@ -9,27 +9,45 @@ import Testing
 /// Namespace marker (required by CODE_GUIDE §5 file_name rule).
 enum UnifiedIdentityMigrationTestSupport {}
 
+// MARK: - RePushRecorder
+
+/// Spy actor that records profile IDs passed to the `rePush` closure.
+actor RePushRecorder {
+  private(set) var ids: [UUID] = []
+
+  func record(_ id: UUID) {
+    ids.append(id)
+  }
+}
+
 // MARK: - MigrationTestHarness
 
-/// Minimal in-memory harness for `UnifiedInstrumentIdentityMigration` mapping
-/// tests. Wires a real `GRDBInstrumentRegistryRepository` +
-/// `CanonicalInstrumentResolver` over an in-memory profile-index DB.
-/// Per-profile dependencies (`dataDatabaseProvider`, `allProfileIds`, `rePush`)
-/// are no-op stubs — Task 1 tests cover mapping derivation only.
+/// In-memory harness for `UnifiedInstrumentIdentityMigration` tests.
 @MainActor
 struct MigrationTestHarness {
   let registry: GRDBInstrumentRegistryRepository
   let resolver: CanonicalInstrumentResolver
+  /// Stub migration (no-op rePush, no cache) used by unit tests.
   let migration: UnifiedInstrumentIdentityMigration
+  /// Per-profile in-memory databases shared between seeding and the migration.
+  let cache: ProfileDatabaseCache
+  /// Spy for asserting which profiles were re-pushed and in what order.
+  let rePushRecorder: RePushRecorder
+  /// Isolated UserDefaults suite so the completion flag does not leak between tests.
+  let userDefaults: UserDefaults
 
   static func make() throws -> MigrationTestHarness {
     let database = try ProfileIndexDatabase.openInMemory()
     let registry = GRDBInstrumentRegistryRepository(database: database)
     let resolver = CanonicalInstrumentResolver()
     let suiteName = "test-migration-\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+    guard let defaults = UserDefaults(suiteName: suiteName) else {
+      fatalError("Failed to create isolated UserDefaults suite: \(suiteName)")
+    }
     defaults.removePersistentDomain(forName: suiteName)
-    let migration = UnifiedInstrumentIdentityMigration(
+    let cache = ProfileDatabaseCache()
+    let recorder = RePushRecorder()
+    let stubMigration = UnifiedInstrumentIdentityMigration(
       profileIndexDatabase: database,
       dataDatabaseProvider: { _ in try ProfileDatabase.openInMemory() },
       allProfileIds: { [] },
@@ -37,13 +55,16 @@ struct MigrationTestHarness {
       resolver: resolver,
       rePush: { _ in },
       userDefaults: defaults)
-    return MigrationTestHarness(registry: registry, resolver: resolver, migration: migration)
+    return MigrationTestHarness(
+      registry: registry,
+      resolver: resolver,
+      migration: stubMigration,
+      cache: cache,
+      rePushRecorder: recorder,
+      userDefaults: defaults)
   }
 
-  /// Seeds the shared registry with `registrations`, writing each via the
-  /// normal `registerCrypto` path. Retired rows (with a provider mapping but
-  /// a chain-scoped id that resolves to a different canonical id) are
-  /// acceptable; `alias_of` is written separately by Task 2.
+  /// Seeds the shared registry with `registrations` via the normal `registerCrypto` path.
   func seedSharedRegistry(_ registrations: [CryptoRegistration]) async throws {
     for registration in registrations {
       try await registry.registerCrypto(registration.instrument, mapping: registration.mapping)
@@ -53,11 +74,9 @@ struct MigrationTestHarness {
 
 // MARK: - Per-profile database cache
 
-/// Stores one in-memory `DatabaseQueue` per profile UUID so the same database
-/// is returned to both the test (seeding + assertions) and the migration
-/// (`dataDatabaseProvider` closure). Marked `@unchecked Sendable` because
-/// all test access is on the main actor; the `@Sendable` closure requirement
-/// on `dataDatabaseProvider` requires the captured type to be `Sendable`.
+/// Per-profile in-memory `DatabaseQueue` cache shared between seeding and the migration.
+/// `@unchecked Sendable`: all test access is `@MainActor`; `@Sendable` is required
+/// by `dataDatabaseProvider`.
 final class ProfileDatabaseCache: @unchecked Sendable {
   private var databases: [UUID: DatabaseQueue] = [:]
 
@@ -71,8 +90,7 @@ final class ProfileDatabaseCache: @unchecked Sendable {
 
 // MARK: - Harness factory for profile-rewrite tests
 
-/// Returns a `MigrationTestHarness` whose `dataDatabaseProvider` is backed by
-/// `cache`, so seeding and the migration share the same per-profile database.
+/// Returns a `MigrationTestHarness` backed by `cache` for per-profile-rewrite tests.
 @MainActor
 func makeProfileRewriteHarness() throws -> (
   harness: MigrationTestHarness, cache: ProfileDatabaseCache
@@ -82,9 +100,12 @@ func makeProfileRewriteHarness() throws -> (
   let registry = GRDBInstrumentRegistryRepository(database: indexDatabase)
   let resolver = CanonicalInstrumentResolver()
   let suiteName = "test-profile-rewrite-\(UUID().uuidString)"
-  let defaults = UserDefaults(suiteName: suiteName) ?? .standard
+  guard let defaults = UserDefaults(suiteName: suiteName) else {
+    fatalError("Failed to create isolated UserDefaults suite: \(suiteName)")
+  }
   defaults.removePersistentDomain(forName: suiteName)
-  let migration = UnifiedInstrumentIdentityMigration(
+  let recorder = RePushRecorder()
+  let stubMigration = UnifiedInstrumentIdentityMigration(
     profileIndexDatabase: indexDatabase,
     dataDatabaseProvider: { profileId in try cache.database(for: profileId) },
     allProfileIds: { [] },
@@ -92,8 +113,160 @@ func makeProfileRewriteHarness() throws -> (
     resolver: resolver,
     rePush: { _ in },
     userDefaults: defaults)
-  let harness = MigrationTestHarness(registry: registry, resolver: resolver, migration: migration)
+  let harness = MigrationTestHarness(
+    registry: registry,
+    resolver: resolver,
+    migration: stubMigration,
+    cache: cache,
+    rePushRecorder: recorder,
+    userDefaults: defaults)
   return (harness, cache)
+}
+
+// MARK: - Migration factory
+
+extension MigrationTestHarness {
+  /// Returns a migration wired to the shared index DB, per-profile cache, and
+  /// `rePushRecorder`, with `allProfileIds` returning exactly `profileIds`.
+  func migration(profileIds: [UUID]) -> UnifiedInstrumentIdentityMigration {
+    let capturedCache = cache
+    let capturedRecorder = rePushRecorder
+    return UnifiedInstrumentIdentityMigration(
+      profileIndexDatabase: migration.profileIndexDatabase,
+      dataDatabaseProvider: { profileId in try capturedCache.database(for: profileId) },
+      allProfileIds: { profileIds },
+      registry: registry,
+      resolver: resolver,
+      rePush: { profileId in await capturedRecorder.record(profileId) },
+      userDefaults: userDefaults)
+  }
+}
+
+// MARK: - Profile seeding helpers
+
+extension MigrationTestHarness {
+  /// Seeds `profileId`'s database with one retired row in each FK table.
+  func seedProfileWithRetiredLegs(_ profileId: UUID) async throws {
+    let queue = try cache.database(for: profileId)
+    try await queue.write { database in try seedRetiredRows(database) }
+  }
+
+  /// Seeds a rich profile: all FK tables with retired ids, a canonical `1:native`
+  /// leg, and an OP→Coinstash transfer pair (one `10:native` + one `1:native`).
+  /// After migration both transfer legs carry `1:native`, proving reconciliation.
+  func seedFullProfile(_ profileId: UUID) async throws {
+    let queue = try cache.database(for: profileId)
+    try await queue.write { database in
+      try seedRetiredRows(database)
+      try seedCanonicalAndTransferPair(database)
+    }
+  }
+}
+
+/// Inserts a canonical `1:native` income leg and a transfer pair into `database`.
+/// Extracted from `seedFullProfile` to stay under `closure_body_length`.
+private func seedCanonicalAndTransferPair(_ database: Database) throws {
+  // Canonical Coinstash income leg — already on 1:native (no rewrite needed).
+  let canonicalLegId = UUID()
+  try database.execute(
+    sql:
+      "INSERT INTO transaction_leg "
+      + "(id, record_name, transaction_id, instrument_id, quantity, type, sort_order) "
+      + "VALUES (?, ?, ?, '1:native', 50, 'income', 0)",
+    arguments: [canonicalLegId, "TxLeg|\(canonicalLegId.uuidString)", UUID()])
+  // Transfer pair: OP wallet (10:native) → Coinstash (1:native). Same transaction_id.
+  // After migration both legs must carry '1:native' — the reconciliation proof.
+  let transferTxId = UUID()
+  let opLegId = UUID()
+  let coinstashLegId = UUID()
+  try database.execute(
+    sql:
+      "INSERT INTO transaction_leg "
+      + "(id, record_name, transaction_id, instrument_id, quantity, type, sort_order) "
+      + "VALUES (?, ?, ?, '10:native', 100, 'transfer', 0)",
+    arguments: [opLegId, "TxLeg|\(opLegId.uuidString)", transferTxId])
+  try database.execute(
+    sql:
+      "INSERT INTO transaction_leg "
+      + "(id, record_name, transaction_id, instrument_id, quantity, type, sort_order) "
+      + "VALUES (?, ?, ?, '1:native', 100, 'transfer', 1)",
+    arguments: [coinstashLegId, "TxLeg|\(coinstashLegId.uuidString)", transferTxId])
+}
+
+// MARK: - Query helpers
+
+extension MigrationTestHarness {
+  /// Returns all `instrument_id` values from `table` in `profileId`'s database.
+  /// `table` is validated against an allowlist (DATABASE_CODE_GUIDE §4).
+  func allInstrumentIds(_ profileId: UUID, _ table: String) async throws -> [String] {
+    let allowed: Set<String> = [
+      "transaction_leg", "earmark", "earmark_budget_item",
+      "account_group", "investment_value", "account",
+    ]
+    precondition(allowed.contains(table), "allInstrumentIds: unlisted table '\(table)'")
+    let queue = try cache.database(for: profileId)
+    return try await queue.read { database in
+      try String.fetchAll(database, sql: "SELECT instrument_id FROM \(table)")
+    }
+  }
+
+  /// Returns `true` when a row with `id` exists in `table` of the shared index DB.
+  func rowExists(_ table: String, id: String) async throws -> Bool {
+    let allowed: Set<String> = ["instrument"]
+    precondition(allowed.contains(table), "rowExists: unlisted table '\(table)'")
+    return try await migration.profileIndexDatabase.read { database in
+      let count =
+        try Int.fetchOne(
+          database, sql: "SELECT count(*) FROM \(table) WHERE id = ?",
+          arguments: [id]) ?? 0
+      return count > 0
+    }
+  }
+
+  /// Returns the single `instrument_id` shared by all `type = 'transfer'` legs in
+  /// `profileId`'s database, or `nil` when transfer legs disagree (i.e. the
+  /// OP→Coinstash transfer pair has not yet been reconciled to a single id).
+  func transferLegsShareInstrument(_ profileId: UUID) async throws -> String? {
+    let queue = try cache.database(for: profileId)
+    return try await queue.read { database in
+      let ids = try String.fetchAll(
+        database,
+        sql: "SELECT DISTINCT instrument_id FROM transaction_leg WHERE type = 'transfer'")
+      return ids.count == 1 ? ids.first : nil
+    }
+  }
+
+  /// Captures `instrument_id` values across all FK tables in `profileId`'s
+  /// database. Used for idempotency checks: run the migration twice and assert
+  /// the second snapshot equals the first. `earmark_savings_target` is stored
+  /// separately (may be NULL, represented as an empty string).
+  func snapshotAllTables(_ profileId: UUID) async throws -> [String: [String]] {
+    let queue = try cache.database(for: profileId)
+    return try await queue.read { try fetchTableSnapshot($0) }
+  }
+}
+
+/// Reads `instrument_id` values from every FK table and returns a keyed
+/// snapshot. Extracted from `snapshotAllTables` to stay under
+/// `closure_body_length` (DATABASE_CODE_GUIDE §5 / SwiftLint limit).
+/// Table names are hardcoded literals — not user input (DATABASE_CODE_GUIDE §4).
+private func fetchTableSnapshot(_ database: Database) throws -> [String: [String]] {
+  var snap: [String: [String]] = [:]
+  let tables = [
+    "transaction_leg", "earmark", "earmark_budget_item",
+    "account_group", "investment_value", "account",
+  ]
+  for table in tables {
+    // Allowlist guard consistent with the file-wide pattern (DATABASE_CODE_GUIDE §4),
+    // even though `tables` is a closed literal set — protects a future caller.
+    precondition(tables.contains(table), "fetchTableSnapshot: unlisted table '\(table)'")
+    snap[table] = try String.fetchAll(
+      database, sql: "SELECT instrument_id FROM \(table) ORDER BY rowid")
+  }
+  snap["earmark_savings_target"] = try Row.fetchAll(
+    database, sql: "SELECT savings_target_instrument_id FROM earmark ORDER BY rowid"
+  ).map { ($0[0] as String?) ?? "" }
+  return snap
 }
 
 // MARK: - Seeding helpers
@@ -139,7 +312,7 @@ func seedRetiredRows(_ database: Database) throws {
     arguments: [acctId, "Acct|\(acctId.uuidString)"])
 }
 
-// MARK: - Query helpers
+// MARK: - Free query utilities
 
 /// Executes a single-column `sql` query against `queue` and returns all rows
 /// as strings. For test use only — `sql` must be a hard-coded literal.
