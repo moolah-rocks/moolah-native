@@ -56,6 +56,27 @@ extension UITestIdentifiers {
     /// works across all three entity types once they are wired.
     public static let renameContextMenuItem = "sidebar.contextMenu.rename"
 
+    /// "Resync Now (Full History)" item in the sidebar account context
+    /// menu. Present only for synced accounts (`AccountType.isSynced` —
+    /// crypto or exchange); posts `.requestAccountResync` with the
+    /// account's `UUID`, which `SidebarSharedModifiers` observes and
+    /// dispatches to `SyncedAccountStore.syncAccount(_:fullResync:
+    /// true)`. Shared by both the AppKit (macOS) and SwiftUI (iOS)
+    /// sidebar context menus so a single identifier resolves the item
+    /// on either platform.
+    ///
+    /// Currently referenced by `SidebarContextMenuBuilderTests` (a
+    /// `MoolahTests` unit test that asserts the AppKit menu item carries
+    /// this identifier for synced accounts and is absent otherwise), not
+    /// yet by a `MoolahUITests_macOS` driver: the gated visibility and
+    /// notification payload are pure orchestration with no focus /
+    /// overlay / keyboard component, so per UI_TEST_GUIDE §1 the unit
+    /// test is the cheapest sufficient coverage and no XCUITest is
+    /// warranted for this task. The identifier is still applied so a
+    /// later end-to-end resync UI test can resolve the item without a
+    /// further view change.
+    public static let resyncAccountContextMenuItem = "sidebar.contextMenu.resyncAccount"
+
     /// Accessibility identifier on the inline `TextField` rendered while
     /// a sidebar row is being renamed. Used by `SidebarScreen` driver
     /// methods to resolve the field through the `NSHostingView` boundary
