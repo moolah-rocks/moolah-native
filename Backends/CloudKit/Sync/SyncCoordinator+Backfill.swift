@@ -218,7 +218,7 @@ extension SyncCoordinator {
   /// Test-only: constructs and runs the unified identity migration exactly as the
   /// lifecycle does, so the wiring and ordering can be asserted without dispatching
   /// a real `CKSyncEngine` start. Delegates to `runUnifiedIdentityMigration()`,
-  /// which skips when `sharedInstrumentRegistry` or `sharedCanonicalResolver` is nil.
+  /// which skips when `sharedInstrumentRegistry` is nil.
   func runUnifiedIdentityMigrationForTesting() async {
     await runUnifiedIdentityMigration()
   }

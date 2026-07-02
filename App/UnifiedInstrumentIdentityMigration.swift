@@ -81,10 +81,8 @@ struct UnifiedInstrumentIdentityMigration {
 
     for profileId in await allProfileIds() {
       guard !Task.isCancelled else { return }
-      let changesCount = try await rewriteProfile(profileId, mapping: mapping)
-      if changesCount > 0 {
-        await rePush(profileId)
-      }
+      try await rewriteProfile(profileId, mapping: mapping)
+      await rePush(profileId)
     }
 
     try await applyPriceCacheStep(mapping: mapping)
