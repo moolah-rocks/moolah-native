@@ -14,10 +14,16 @@ extension UnifiedInstrumentIdentityMigration {
   func rewriteProfile(_ profileId: UUID, mapping: [String: String]) async throws {
     guard !mapping.isEmpty else { return }
     let queue = try dataDatabaseProvider(profileId)
+    let fault = faultAfterFirstStatement
     try await queue.write { database in
+      var faultFired = false
       for (retired, canonical) in mapping {
         for statement in Self.rewriteStatements {
           try database.execute(sql: statement, arguments: [canonical, retired])
+          if !faultFired {
+            faultFired = true
+            try fault?(database)
+          }
         }
       }
     }
