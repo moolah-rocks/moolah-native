@@ -11,7 +11,12 @@ extension InsightStore {
       dailyBalances: sources.analysis.dailyBalances,
       earmarks: makeEarmarkSnapshots(),
       profitLoss: sources.reporting.profitLoss,
-      capitalGains: sources.reporting.capitalGainsResult?.events ?? [],
+      // Gate: while the cross-chain identity migration is in flight, lots for
+      // the same asset may be split across retired + canonical instrument ids.
+      // Pass an empty array so no capital-gains insight is generated from
+      // mixed-id lots.
+      capitalGains: sources.reporting.isMigratingCrossChainIdentity
+        ? [] : (sources.reporting.capitalGainsResult?.events ?? []),
       categories: sources.category.categories,
       accountGroups: (sources.accountGroup?.groups ?? []).map {
         InsightAccountGroup(id: $0.id, name: $0.name)
