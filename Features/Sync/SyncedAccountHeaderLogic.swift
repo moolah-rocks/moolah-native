@@ -31,7 +31,7 @@ enum SyncedAccountHeaderLogic {
     return "Synced \(relative)"
   }
 
-  /// Whether the "Sync now" button should be enabled for the given
+  /// Whether the "Sync Now" button should be enabled for the given
   /// account. The button collapses to disabled when:
   ///
   /// - The account is already mid-sync (mirrors
@@ -51,16 +51,16 @@ enum SyncedAccountHeaderLogic {
     return !inProgress.contains(accountId)
   }
 
-  /// "Sync now" button title given whether the Option (⌥) key is
+  /// "Sync Now" button title given whether the Option (⌥) key is
   /// currently held (macOS only; always `false` on iOS, which has no
   /// modifier keys to hold). Holding Option relabels the button to
   /// signal that the tap will trigger a full re-sync rather than the
   /// default incremental one.
   static func syncButtonTitle(optionHeld: Bool) -> String {
-    optionHeld ? "Resync Now" : "Sync now"
+    optionHeld ? "Resync Now" : "Sync Now"
   }
 
-  /// Whether a tap of the "Sync now" button should request a full
+  /// Whether a tap of the "Sync Now" button should request a full
   /// resync (`SyncedAccountStore.syncAccount(_:fullResync:)`). Mirrors
   /// `syncButtonTitle(optionHeld:)` — the two must never disagree, since
   /// a "Resync Now" label promising a full resync that silently does an

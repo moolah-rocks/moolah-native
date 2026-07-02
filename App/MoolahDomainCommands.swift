@@ -184,6 +184,34 @@ struct MoolahDomainCommands: Commands {
         }
       }
       .disabled(selectedAccount?.wrappedValue == nil)
+
+      Divider()
+
+      // ⌘R is already claimed by the generic "Refresh" command
+      // (`RefreshCommands`), so Sync/Resync use ⇧⌘R / ⌥⇧⌘R instead —
+      // Option layers onto the base shortcut the same way it does for
+      // the synced-account header's "Sync Now" button, so the mnemonic
+      // (Option = full resync) stays consistent app-wide. SwiftUI
+      // `Commands` doesn't expose `NSMenuItem.isAlternate`, so this ships
+      // as two always-visible items rather than a single
+      // Option-alternating one.
+      Button("Sync Now") {
+        NotificationCenter.default.post(
+          name: .requestAccountSync,
+          object: selectedAccount?.wrappedValue?.id
+        )
+      }
+      .keyboardShortcut("r", modifiers: [.command, .shift])
+      .disabled(!accountOffersSync)
+
+      Button("Resync Now") {
+        NotificationCenter.default.post(
+          name: .requestAccountResync,
+          object: selectedAccount?.wrappedValue?.id
+        )
+      }
+      .keyboardShortcut("r", modifiers: [.command, .shift, .option])
+      .disabled(!accountOffersSync)
     }
 
     CommandMenu("Earmark") {
@@ -267,6 +295,14 @@ struct MoolahDomainCommands: Commands {
         if let url = URL(string: "https://moolah.rocks/privacy") { openURL(url) }
       }
     }
+  }
+
+  /// Whether the selected account offers Sync/Resync — mirrors
+  /// `AccountType.isSynced`, the same predicate `SyncedAccountStore` and
+  /// `SyncedAccountHeaderLogic` use to decide an account is a synced
+  /// wallet/exchange rather than manually entered.
+  private var accountOffersSync: Bool {
+    selectedAccount?.wrappedValue?.type.isSynced == true
   }
 
   @ViewBuilder private var transactionTypeMenuItems: some View {

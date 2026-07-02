@@ -16,6 +16,17 @@ extension Notification.Name {
 
   // Account commands
   static let requestAccountEdit = Notification.Name("requestAccountEdit")
+  /// Posted to request an incremental sync of a synced (crypto/exchange)
+  /// account. `object` is the account's `UUID`. Posted by the menu-bar
+  /// "Sync Now" command; designed so other surfaces (e.g. a sidebar
+  /// context-menu item) can route through the same observer.
+  static let requestAccountSync = Notification.Name("requestAccountSync")
+  /// Posted to request a full re-sync (checkpoint reset) of a synced
+  /// (crypto/exchange) account. `object` is the account's `UUID`. Posted
+  /// by the menu-bar "Resync Now" command; designed so other surfaces
+  /// (e.g. a sidebar context-menu item) can route through the same
+  /// observer.
+  static let requestAccountResync = Notification.Name("requestAccountResync")
 
   // Earmark commands
   static let requestEarmarkEdit = Notification.Name("requestEarmarkEdit")

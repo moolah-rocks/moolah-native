@@ -47,6 +47,30 @@ struct SidebarSharedModifiers: ViewModifier {
         NotificationCenter.default.publisher(for: .requestAccountEdit),
         perform: onRequestAccountEdit
       )
+      .onReceive(
+        NotificationCenter.default.publisher(for: .requestAccountSync)
+      ) { handleSyncRequest($0, fullResync: false) }
+      .onReceive(
+        NotificationCenter.default.publisher(for: .requestAccountResync)
+      ) { handleSyncRequest($0, fullResync: true) }
+  }
+
+  /// Shared sink for both `.requestAccountSync` and
+  /// `.requestAccountResync` — the menu-bar Account menu (and any other
+  /// surface, such as a sidebar context menu) posts one of these two
+  /// notifications with the target account's `UUID` as `object`.
+  /// Resolves the account the same way `handleAccountEditRequest`
+  /// resolves `accountToEdit`, then dispatches to
+  /// `SyncedAccountStore.syncAccount`. Silently ignores unknown ids and
+  /// non-synced accounts (e.g. a stale notification for an account
+  /// deleted or retyped since it was posted).
+  private func handleSyncRequest(_ note: Notification, fullResync: Bool) {
+    guard let id = note.object as? UUID,
+      let account = accountStore.accounts.by(id: id),
+      account.type.isSynced,
+      let syncStore = session.cryptoSyncStore
+    else { return }
+    Task { await syncStore.syncAccount(account, fullResync: fullResync) }
   }
 
   /// Focused-scene-value bindings: surfaced as keypath-bound focus
