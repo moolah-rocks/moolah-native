@@ -368,7 +368,9 @@ final class SyncedAccountStore {
 
   /// Replaces the entire `statePerAccount` map. Used by the apply-phase
   /// refresh after a sync cycle so the in-memory view of checkpoint
-  /// state matches the persisted truth.
+  /// state matches the persisted truth. Also used by
+  /// `syncAccount(_:fullResync:)` to drop a single account's cached
+  /// entry ahead of a full resync.
   func replaceStatePerAccount(_ map: [UUID: WalletSyncState]) {
     statePerAccount = map
   }
