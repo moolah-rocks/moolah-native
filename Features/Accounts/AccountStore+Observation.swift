@@ -165,6 +165,30 @@ extension AccountStore {
     await recomputeConvertedTotals()
   }
 
+  /// Asks `investmentValueCache` to hydrate itself with the latest value for
+  /// every investment account. Without this, `displayBalance` falls back to
+  /// summing positions until `InvestmentStore` happens to call
+  /// `updateInvestmentValue(accountId:value:)`, so the sidebar flashes the
+  /// transaction sum until the user opens an investment account. See
+  /// `InvestmentValueCache.preload(for:)` for the failure-tolerant details.
+  func preloadInvestmentValues() async {
+    // Only `recordedValue` investment accounts read from the snapshot cache;
+    // `calculatedFromTrades` accounts derive their value from positions, so
+    // their snapshot fetch would be a wasted round-trip.
+    let investmentAccountIds = accounts.ordered
+      .filter { $0.type == .investment && $0.valuationMode == .recordedValue }
+      .map(\.id)
+    await investmentValueCache.preload(for: investmentAccountIds)
+  }
+
+  /// Updates the investment value for a specific account locally.
+  /// Called when `InvestmentStore` sets or removes a value.
+  func updateInvestmentValue(accountId: UUID, value: InstrumentAmount?) async {
+    guard accounts.by(id: accountId) != nil else { return }
+    investmentValueCache.set(value, for: accountId)
+    await recomputeConvertedTotals()
+  }
+
   /// Surface an observation error onto `self.error`.
   func surfaceObservationError(_ error: any Error) {
     surface(error: error)
