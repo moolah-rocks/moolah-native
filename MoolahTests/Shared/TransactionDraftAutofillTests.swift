@@ -43,6 +43,31 @@ struct TransactionDraftAutofillTests {
     #expect(draft.date != matchDate)
   }
 
+  /// Autofill creates a *new* transaction from a template. If the template is
+  /// a wallet-imported transaction, the new manual transaction must NOT inherit
+  /// the template's on-chain identity (`externalId` / `counterpartyAddress`) —
+  /// doing so would pollute the importer's `(accountId, externalId)` dedup key
+  /// and could suppress a genuine future import of that on-chain event.
+  @Test
+  func autofillDoesNotCarryOnChainIdentityFromMatch() {
+    let matchTx = Transaction(
+      date: Date(),
+      payee: "Coffee",
+      legs: [
+        TransactionLeg(
+          accountId: support.accountA, instrument: support.instrument,
+          quantity: -5, externalId: "0xdeadbeef:erc20:0",
+          counterpartyAddress: "0xcounterparty", type: .expense)
+      ]
+    )
+
+    var draft = TransactionDraft(accountId: support.accountA, viewingAccountId: support.accountA)
+    draft.applyAutofill(from: matchTx, categories: Categories(from: []))
+
+    #expect(draft.legDrafts[0].externalId == nil)
+    #expect(draft.legDrafts[0].counterpartyAddress == nil)
+  }
+
   @Test
   func autofillFromComplexTransactionSetsCustomMode() {
     let matchTx = Transaction(
