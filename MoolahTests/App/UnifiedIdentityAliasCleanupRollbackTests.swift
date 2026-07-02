@@ -50,7 +50,7 @@ struct UnifiedIdentityAliasCleanupRollbackTests {
   /// aliased), captures a snapshot before the cleanup, injects a fault that
   /// fires after the FIRST delete (inside the write transaction), and asserts
   /// the shared DB is byte-identical afterward — no row deleted, no journal
-  /// entry written, PR6 flag unset.
+  /// entry written, alias-cleanup completion flag unset.
   ///
   /// This is the release-blocking atomicity proof: if the deletes + journal
   /// writes were NOT inside a single `database.write` transaction, the fault
@@ -93,7 +93,7 @@ struct UnifiedIdentityAliasCleanupRollbackTests {
     let after = try await snapshot(queue: queue)
     // Database must be byte-identical — no partial delete survived the rollback.
     #expect(after == before)
-    // PR6 flag must NOT be set (run() throws before reaching the flag write).
+    // Own completion flag must NOT be set (run() throws before reaching the flag write).
     #expect(!UnifiedInstrumentIdentityAliasCleanup.isComplete(in: defaults))
   }
 }
