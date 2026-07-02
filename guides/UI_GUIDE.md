@@ -1432,7 +1432,7 @@ Assign shortcuts only when the action is **frequent** (used more than a few time
 | Enter/Exit Full Screen | ⌃⌘F | View |
 | Go to Accounts / Transactions / … | ⌘1…⌘6 | Go |
 | Back / Forward | ⌘[ / ⌘] | Go |
-| Sync Now / Resync Now | ⇧⌘R / ⌥⇧⌘R | Account (synced accounts only; ⌘R taken by Refresh) |
+| Sync Now | ⇧⌘R | Account (synced accounts only; ⌘R taken by Refresh). Full resync is the adjacent `Resync Now (Full History)` menu item — no shortcut (SwiftUI can't do an Option-alternate; header button's Option relabel carries the mnemonic). |
 | Duplicate Transaction | ⌘D | Transaction |
 | Mark as Cleared / All | ⌘K / ⇧⌘K | Transaction |
 | Pay Scheduled Transaction | — | Transaction (⌘P reserved for Print) |

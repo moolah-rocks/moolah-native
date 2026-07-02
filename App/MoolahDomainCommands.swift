@@ -187,14 +187,17 @@ struct MoolahDomainCommands: Commands {
 
       Divider()
 
-      // ⌘R is already claimed by the generic "Refresh" command
-      // (`RefreshCommands`), so Sync/Resync use ⇧⌘R / ⌥⇧⌘R instead —
-      // Option layers onto the base shortcut the same way it does for
-      // the synced-account header's "Sync Now" button, so the mnemonic
-      // (Option = full resync) stays consistent app-wide. SwiftUI
-      // `Commands` doesn't expose `NSMenuItem.isAlternate`, so this ships
-      // as two always-visible items rather than a single
-      // Option-alternating one.
+      // Incremental "Sync Now" (⇧⌘R — ⌘R is already claimed by the
+      // generic "Refresh" command, `RefreshCommands`) plus a full
+      // "Resync Now (Full History)". Resync carries NO keyboard shortcut:
+      // SwiftUI `Commands` can't render a native Option-alternate item (no
+      // `NSMenuItem.isAlternate`), and a second shortcut-bearing entry
+      // would clutter/collide. But the menu entry itself is required —
+      // UI_GUIDE §14: every toolbar/context-menu action needs a menu-bar
+      // counterpart for VoiceOver / full-keyboard discoverability, and the
+      // label matches the sidebar context menu so the two agree. The
+      // synced-account header button's Option relabel offers the same
+      // full resync with the mnemonic.
       Button("Sync Now") {
         NotificationCenter.default.post(
           name: .requestAccountSync,
@@ -204,13 +207,12 @@ struct MoolahDomainCommands: Commands {
       .keyboardShortcut("r", modifiers: [.command, .shift])
       .disabled(!accountOffersSync)
 
-      Button("Resync Now") {
+      Button("Resync Now (Full History)") {
         NotificationCenter.default.post(
           name: .requestAccountResync,
           object: selectedAccount?.wrappedValue?.id
         )
       }
-      .keyboardShortcut("r", modifiers: [.command, .shift, .option])
       .disabled(!accountOffersSync)
     }
 
