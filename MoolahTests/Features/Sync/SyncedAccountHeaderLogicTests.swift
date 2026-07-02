@@ -101,6 +101,20 @@ struct SyncedAccountHeaderLogicTests {
         accountId: id, inProgress: [id], hasCredential: false))
   }
 
+  // MARK: - Sync button title / full-resync intent (Option-key toggle)
+
+  @Test("Option held renders the resync title and requests a full resync")
+  func syncButtonTitleWhenOptionHeld() {
+    #expect(SyncedAccountHeaderLogic.syncButtonTitle(optionHeld: true) == "Resync Now")
+    #expect(SyncedAccountHeaderLogic.syncButtonIsFullResync(optionHeld: true))
+  }
+
+  @Test("Option not held renders the default title and does not request a full resync")
+  func syncButtonTitleWhenOptionNotHeld() {
+    #expect(SyncedAccountHeaderLogic.syncButtonTitle(optionHeld: false) == "Sync now")
+    #expect(!SyncedAccountHeaderLogic.syncButtonIsFullResync(optionHeld: false))
+  }
+
   // MARK: - Inline error caption
 
   @Test("Nil lastError yields no inline error caption")

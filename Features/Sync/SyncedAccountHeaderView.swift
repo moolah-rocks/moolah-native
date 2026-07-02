@@ -19,7 +19,10 @@ import SwiftUI
 ///   ago" / "Never synced") and the "Sync now" button trailing on the
 ///   *same* line. The button calls `syncStore.syncAccount(account)` and
 ///   is disabled while a sync is in flight or the account's credential
-///   is missing.
+///   is missing. On macOS, holding Option (⌥) relabels the button to
+///   "Resync Now" and switches the tap to a full resync
+///   (`fullResync: true`); iOS has no modifier keys, so the button there
+///   always performs the default incremental sync.
 ///
 /// Pure presentation: every piece of business logic that benefits from
 /// unit testing (last-synced formatting, sync button state, error
@@ -52,6 +55,15 @@ struct SyncedAccountHeaderView: View {
   /// so the header doesn't flash a "missing credential" state before
   /// the task runs, and matches the optimistic-on-keychain-error intent.
   @State private var hasCredential = true
+
+  /// Whether the Option (⌥) key is currently held. macOS-only — iOS has
+  /// no modifier keys to hold, so this stays permanently `false` there
+  /// and the sync button keeps its plain, non-toggling behaviour.
+  /// Tracked live (not just at tap time) so the button's label updates
+  /// the instant the user presses/releases Option, before they click.
+  #if os(macOS)
+    @State private var optionHeld = false
+  #endif
 
   init(
     account: Account,
@@ -86,6 +98,17 @@ struct SyncedAccountHeaderView: View {
 
   private var isSyncing: Bool {
     syncStore.inProgressAccountIds.contains(account.id)
+  }
+
+  /// `optionHeld` collapsed to a cross-platform read: iOS has no
+  /// modifier keys, so it reads permanently `false` there without the
+  /// call sites below needing their own `#if os(macOS)`.
+  private var isOptionHeld: Bool {
+    #if os(macOS)
+      optionHeld
+    #else
+      false
+    #endif
   }
 
   /// Per-account error caption (red), or `nil` when the most recent
@@ -295,14 +318,30 @@ extension SyncedAccountHeaderView {
     }
   }
 
+  /// The "Sync now" button. On macOS, holding Option (⌥) relabels it to
+  /// "Resync Now" and switches its tap to a full resync
+  /// (`syncAccount(_:fullResync: true)`) — an escape hatch for accounts
+  /// whose incrementally-synced history has drifted, without cluttering
+  /// the default path with a second always-visible button. The
+  /// label/action mapping itself lives in `SyncedAccountHeaderLogic` so
+  /// it's unit-testable without the AppKit event plumbing; this method
+  /// only wires up live Option-key tracking. iOS has no modifier keys,
+  /// so `isOptionHeld` reads permanently `false` there and the button
+  /// keeps its original plain behaviour.
   private func syncButton(_ presentation: SyncableAccountPresentation) -> some View {
     Button {
-      Task { await syncStore.syncAccount(account) }
+      Task {
+        await syncStore.syncAccount(
+          account,
+          fullResync: SyncedAccountHeaderLogic.syncButtonIsFullResync(optionHeld: isOptionHeld))
+      }
     } label: {
       if isSyncing {
         ProgressView().controlSize(.small)
       } else {
-        Label("Sync now", systemImage: "arrow.clockwise")
+        Label(
+          SyncedAccountHeaderLogic.syncButtonTitle(optionHeld: isOptionHeld),
+          systemImage: "arrow.clockwise")
       }
     }
     .disabled(
@@ -314,10 +353,19 @@ extension SyncedAccountHeaderView {
     .buttonStyle(.borderless)
     .help(
       presentation.hasCredential
-        ? "Sync account now"
+        ? (isOptionHeld ? "Resync full history now" : "Sync account now")
         : (presentation.missingCredentialHint ?? "Configure this account to enable sync")
     )
-    .accessibilityLabel(isSyncing ? "Syncing in progress" : "Sync account now")
+    .accessibilityLabel(
+      isSyncing
+        ? "Syncing in progress"
+        : (isOptionHeld ? "Resync full history now" : "Sync account now")
+    )
     .accessibilityIdentifier(UITestIdentifiers.WalletAccountHeader.syncButton)
+    #if os(macOS)
+      .onModifierKeysChanged(mask: .option) { _, modifiers in
+        optionHeld = modifiers.contains(.option)
+      }
+    #endif
   }
 }
