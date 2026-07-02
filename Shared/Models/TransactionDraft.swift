@@ -65,6 +65,16 @@ struct TransactionDraft: Sendable, Equatable {
     /// The full instrument for this leg. Stored directly so the draft is
     /// self-describing and `toTransaction` never needs a lookup-by-id.
     var instrument: Instrument?
+    /// The on-chain dedup key for a wallet-imported leg (or `nil` for legs
+    /// the user adds by hand). The user never edits these; they are carried
+    /// through the draft round-trip so an inspector edit doesn't drop them.
+    /// Dropping `externalId` would make the next wallet sync re-import the
+    /// transaction as a duplicate (the importer dedups on
+    /// `(accountId, externalId)`).
+    let externalId: String?
+    /// The on-chain counterparty address for a wallet-imported leg. Carried
+    /// through the round-trip alongside `externalId` for the same reason.
+    let counterpartyAddress: String?
 
     init(
       legId: UUID? = nil,
@@ -74,7 +84,9 @@ struct TransactionDraft: Sendable, Equatable {
       categoryId: UUID?,
       categoryText: String,
       earmarkId: UUID?,
-      instrument: Instrument? = nil
+      instrument: Instrument? = nil,
+      externalId: String? = nil,
+      counterpartyAddress: String? = nil
     ) {
       self.legId = legId
       self.type = type
@@ -84,6 +96,8 @@ struct TransactionDraft: Sendable, Equatable {
       self.categoryText = categoryText
       self.earmarkId = earmarkId
       self.instrument = instrument
+      self.externalId = externalId
+      self.counterpartyAddress = counterpartyAddress
     }
 
     /// True when this leg represents an earmark-only entry (no account).
@@ -97,6 +111,12 @@ struct TransactionDraft: Sendable, Equatable {
     /// `transaction_leg` row: autofill uses this to pin each leg to a stable
     /// id, so repeated saves upsert the same row instead of churning a fresh
     /// leg id each time.
+    ///
+    /// `externalId` / `counterpartyAddress` are intentionally dropped: autofill
+    /// creates a *new* transaction from a template, and on-chain identity must
+    /// not transfer from the source. Carrying it would pollute the importer's
+    /// `(accountId, externalId)` dedup key and could suppress a genuine future
+    /// import of that on-chain event.
     func withLegId(_ legId: UUID) -> LegDraft {
       LegDraft(
         legId: legId,
@@ -163,7 +183,9 @@ extension TransactionDraft {
         categoryId: leg.categoryId,
         categoryText: "",
         earmarkId: leg.earmarkId,
-        instrument: leg.instrument
+        instrument: leg.instrument,
+        externalId: leg.externalId,
+        counterpartyAddress: leg.counterpartyAddress
       )
     }
 
@@ -331,6 +353,8 @@ extension TransactionDraft {
           accountId: legDraft.accountId,
           instrument: instrument,
           quantity: quantity,
+          externalId: legDraft.externalId,
+          counterpartyAddress: legDraft.counterpartyAddress,
           type: legDraft.type,
           categoryId: legDraft.categoryId,
           earmarkId: legDraft.earmarkId
@@ -362,27 +386,5 @@ extension TransactionDraft {
   }
 }
 
-// MARK: - Custom Mode Operations
-
-extension TransactionDraft {
-  /// Append a blank leg for custom mode editing. Callers should pass the default
-  /// account's instrument so the leg is self-describing from the start.
-  mutating func addLeg(defaultAccountId: UUID? = nil, instrument: Instrument? = nil) {
-    legDrafts.append(
-      LegDraft(
-        legId: nil,
-        type: .expense,
-        accountId: defaultAccountId,
-        amountText: "0",
-        categoryId: nil,
-        categoryText: "",
-        earmarkId: nil,
-        instrument: instrument
-      ))
-  }
-
-  /// Remove a leg at the given index.
-  mutating func removeLeg(at index: Int) {
-    legDrafts.remove(at: index)
-  }
-}
+// Custom-mode leg operations (addLeg/removeLeg) live in
+// `TransactionDraft+CustomMode.swift`.
