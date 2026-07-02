@@ -20,16 +20,12 @@ struct UnifiedInstrumentIdentityMigration {
   let rePush: @MainActor (UUID) async -> Void
   let userDefaults: UserDefaults
 
-  // MARK: - Test-only fault hook
-
-  /// When non-nil, `rewriteProfile` calls this closure after its first
-  /// `db.execute`, inside the active `write` transaction. The closure is
-  /// expected to throw, proving SQLite rolls the whole `IMMEDIATE` transaction
-  /// back. Always nil in production. Mutated by tests only.
-  /// `@Sendable` required because it executes inside GRDB's `write` closure.
-  var faultAfterFirstStatement: (@Sendable (Database) throws -> Void)?
-
-  // MARK: - Gate flag
+  /// Test-only fault seam: when non-nil, `rewriteProfile` calls this closure
+  /// after its first statement, inside the active `write` transaction, so a
+  /// test can prove SQLite rolls the whole `IMMEDIATE` transaction back. Always
+  /// nil in production. `@Sendable` because it runs inside GRDB's `write`
+  /// closure.
+  var faultAfterFirstStatementForTesting: (@Sendable (Database) throws -> Void)?
 
   /// `UserDefaults` key in `.moolahShared` that marks the migration complete.
   static let gateKey = "didMigrateUnifiedInstrumentIdentity"
@@ -49,21 +45,17 @@ struct UnifiedInstrumentIdentityMigration {
   private static let logger = Logger(
     subsystem: "com.moolah.app", category: "UnifiedInstrumentIdentityMigration")
 
-  // MARK: - Entry point
-
-  /// Runs the migration if it has not already completed. Returns immediately
-  /// when the gate flag is set. The full orchestration (alias writes, FK
-  /// rewrites, price-cache purge, re-push) is implemented in a follow-on
-  /// commit; the gate-flag check above is sufficient for the scaffold.
+  /// Runs the migration if it has not already completed, returning immediately
+  /// when the gate flag is set. The orchestration body (alias writes, FK
+  /// rewrites, price-cache purge, re-push) is not yet wired up; the function
+  /// currently performs only the gate-flag check.
   func run() async throws {
     guard !Self.isComplete(in: userDefaults) else {
       Self.logger.info("Already complete — skipping")
       return
     }
-    // Orchestration body added in a follow-on commit.
+    // Orchestration body not yet implemented.
   }
-
-  // MARK: - Mapping derivation
 
   /// Derives the retired id → canonical id mapping from the UNFILTERED shared
   /// registry. Populates the resolver's dynamic layer with all registrations
