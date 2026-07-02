@@ -113,4 +113,17 @@ struct UnifiedIdentityMigrationGateTests {
     // Flag must NOT be set — migration was skipped, not completed.
     #expect(!UnifiedInstrumentIdentityMigration.isComplete(in: defaults))
   }
+
+  /// Verifies that `resetGateFlag(in:)` clears a completion flag that was
+  /// previously set — the behaviour relied upon by the `--ui-testing` reset
+  /// path in `MoolahApp+Setup.swift` to prevent stale `UserDefaults` from
+  /// short-circuiting the migration for fresh in-memory UI-test profiles.
+  @Test("resetGateFlag clears a previously-set completion flag")
+  func resetGateFlagClearsFlag() throws {
+    let defaults = try makeIsolatedDefaults(tag: "reset")
+    UnifiedInstrumentIdentityMigration.setCompleteForTesting(in: defaults)
+    #expect(UnifiedInstrumentIdentityMigration.isComplete(in: defaults))
+    UnifiedInstrumentIdentityMigration.resetGateFlag(in: defaults)
+    #expect(!UnifiedInstrumentIdentityMigration.isComplete(in: defaults))
+  }
 }

@@ -51,6 +51,7 @@ extension MoolahApp {
         // `UserDefaults.moolahShared`. Production code paths never enter
         // this branch.
         ValuationModeMigration.resetGateFlags(in: .moolahShared)
+        UnifiedInstrumentIdentityMigration.resetGateFlag(in: .moolahShared)
         let manager = try ProfileContainerManager.forTesting()
         let profile = try UITestSeedHydrator.hydrate(seed, into: manager)
         return ContainerSetup(manager: manager, uiTestingProfileId: profile?.id)
