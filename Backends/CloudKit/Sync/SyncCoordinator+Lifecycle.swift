@@ -161,7 +161,6 @@ extension SyncCoordinator {
     // for the next batch. See
     // `SyncCoordinator+LegacyInstrumentDrain.swift`.
     purgeLegacyInstrumentPendingChanges()
-
     let shouldBackfillUnsynced = !isFirstLaunch
     let runFirstLaunchQueue = isFirstLaunch
     zoneSetupTask = Task {
@@ -204,7 +203,6 @@ extension SyncCoordinator {
     // the throwing path — must NOT use `allProfileIds()` below (which swallows
     // errors to `[]`).
     await reconcilePendingAgainstLiveProfiles()
-
     // Durable deletion-journal replay (issue #1090): re-issue every journaled
     // deletion as a `.deleteRecord` so a deletion survives an engine-down
     // window or a sync-state reset. Runs after reconciliation (issue #1091) —
@@ -214,6 +212,8 @@ extension SyncCoordinator {
     await replayDeletionJournal()
     guard !Task.isCancelled else { return }
     await runUnifiedIdentityMigration()  // Before backfill; see method doc.
+    guard !Task.isCancelled else { return }
+    await runUnifiedIdentityAliasCleanup()  // After PR5 migration; before backfill.
     guard !Task.isCancelled else { return }
     // On first launch (migration or truly first launch), queue all existing records.
     if runFirstLaunchQueue {
