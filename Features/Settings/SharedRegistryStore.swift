@@ -42,6 +42,15 @@ final class SharedRegistryStore {
   /// Issue #790.
   private(set) var registrationsVersion: Int = 0
 
+  /// Monotonic guard for `loadRegistrations`. The observation task and direct
+  /// callers can both trigger a reload, and the local mutations below update
+  /// the lists synchronously; a stale `allCryptoRegistrations()` result that
+  /// resumes last could clobber a fresher reload or resurrect a just-removed
+  /// row. Each reload and each local mutation bumps this; a reload drops its
+  /// publish if the counter advanced while it was suspended.
+  /// `@ObservationIgnored` — a pure guard counter no view reads. See #1209.
+  @ObservationIgnored private var loadGeneration: UInt64 = 0
+
   // The `unpricedRegistrations` / `unpricedCount` /
   // `spamRegistrations` filters live on the per-session
   // `CryptoTokenStore` façade — every UI consumer goes through it,
@@ -95,8 +104,14 @@ final class SharedRegistryStore {
   /// state — this method's call from the observation task has no UI
   /// caller and intentionally does not propagate.
   func loadRegistrations() async {
+    loadGeneration &+= 1
+    let generation = loadGeneration
     do {
       let loaded = try await registry.allCryptoRegistrations()
+      // Drop this reload if a later reload or a local mutation bumped the
+      // counter while `allCryptoRegistrations()` was in flight — publishing our
+      // now-stale snapshot could clobber it or resurrect a removed row (#1209).
+      guard generation == loadGeneration else { return }
       registrations = loaded
       instruments = loaded.map(\.instrument)
       providerMappings = Dictionary(
@@ -120,6 +135,7 @@ final class SharedRegistryStore {
     instruments.removeAll { $0.id == registration.id }
     providerMappings.removeValue(forKey: registration.id)
     registrationsVersion &+= 1
+    loadGeneration &+= 1  // supersede any in-flight reload (see #1209)
   }
 
   /// Convenience overload — removes the registration backing an
@@ -149,5 +165,6 @@ final class SharedRegistryStore {
       registrations[index] = updated
     }
     registrationsVersion &+= 1
+    loadGeneration &+= 1  // supersede any in-flight reload (see #1209)
   }
 }
