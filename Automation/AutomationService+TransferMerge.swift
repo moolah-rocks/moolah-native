@@ -54,8 +54,10 @@ extension AutomationService {
   }
 
   /// Finds a transaction by id within an already-fetched snapshot, throwing
-  /// `transactionNotFound` when absent.
-  private static func transaction(
+  /// `transactionNotFound` when absent. Module-internal (not `private`) so
+  /// `AutomationService+CombineTransactions` can resolve ids from the same
+  /// fetched snapshot without duplicating the lookup.
+  static func transaction(
     id: UUID, in transactions: [Transaction]
   ) throws -> Transaction {
     guard let transaction = transactions.first(where: { $0.id == id }) else {
