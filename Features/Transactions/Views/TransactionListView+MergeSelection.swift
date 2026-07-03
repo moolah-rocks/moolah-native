@@ -1,5 +1,13 @@
 import Foundation
 
+/// The transactions armed for the "Merge Transactions" confirmation
+/// dialog. A named wrapper (rather than a bare `[Transaction]?` `@State`)
+/// so the pending state reads as one action and avoids the
+/// empty-vs-absent ambiguity of an optional collection.
+struct PendingTransactionMerge {
+  let transactions: [Transaction]
+}
+
 // Selection-shape gates for the two merge commands the transaction list
 // exposes. Both resolve the `List`'s multi-selection against the loaded
 // projection and apply the cheap model-level predicate; the stores /
@@ -14,10 +22,8 @@ extension TransactionListView {
   /// not duplicated; the menu-bar command applies the same
   /// `Transaction.canManualMerge` predicate over the focused value.
   var manualMergePair: (Transaction, Transaction)? {
-    guard transferMergeSelection.count == 2 else { return nil }
-    let selected = transactionStore.transactions
-      .map(\.transaction)
-      .filter { transferMergeSelection.contains($0.id) }
+    guard multiSelectedTransactionIDs.count == 2 else { return nil }
+    let selected = resolvedSelection()
     guard selected.count == 2 else { return nil }
     guard Transaction.canManualMerge(selected[0], with: selected[1]) else { return nil }
     return (selected[0], selected[1])
@@ -31,12 +37,19 @@ extension TransactionListView {
   /// predicate. Empty (rather than optional) so callers gate on
   /// `isEmpty`.
   var mergeSelection: [Transaction] {
-    guard transferMergeSelection.count >= 2 else { return [] }
-    let selected = transactionStore.transactions
-      .map(\.transaction)
-      .filter { transferMergeSelection.contains($0.id) }
-    guard selected.count == transferMergeSelection.count else { return [] }
+    guard multiSelectedTransactionIDs.count >= 2 else { return [] }
+    let selected = resolvedSelection()
+    guard selected.count == multiSelectedTransactionIDs.count else { return [] }
     guard Transaction.canMerge(selected) else { return [] }
     return selected
+  }
+
+  /// The loaded `Transaction` objects for the current multi-selection,
+  /// in projection order. Shared by both merge gates so the
+  /// selection-to-transaction lookup is written once.
+  private func resolvedSelection() -> [Transaction] {
+    transactionStore.transactions
+      .map(\.transaction)
+      .filter { multiSelectedTransactionIDs.contains($0.id) }
   }
 }

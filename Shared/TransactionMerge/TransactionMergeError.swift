@@ -10,3 +10,14 @@ enum TransactionMergeError: Error, Equatable, Sendable {
   case differentPayees  // payees are not all equal
   case containsScheduled  // a scheduled / recurring transaction was included
 }
+
+extension TransactionMergeError: LocalizedError {
+  var errorDescription: String? {
+    switch self {
+    case .tooFewTransactions: "Select two or more transactions to merge."
+    case .differentDays: "The transactions must all be on the same day."
+    case .differentPayees: "The transactions must all have the same payee."
+    case .containsScheduled: "Scheduled transactions cannot be merged."
+    }
+  }
+}

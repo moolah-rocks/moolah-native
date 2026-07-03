@@ -66,11 +66,12 @@ struct PayTransactionActionKey: FocusedValueKey {
   typealias Value = () -> Void
 }
 
-/// The set of transaction ids the focused list has multi-selected. The
-/// Transaction > Merge as Transfer command and the list toolbar gate on
-/// this being exactly two transactions on disjoint accounts. Empty (not
-/// nil) when nothing is multi-selected; nil when no list publishes it.
-struct TransferMergeSelectionKey: FocusedValueKey {
+/// The set of transaction ids the focused list has multi-selected.
+/// Backs both merge gates: Merge as Transfer (exactly two on disjoint
+/// accounts) and Merge Transactions (two or more, same day/payee). Empty
+/// (not nil) when nothing is multi-selected; nil when no list publishes
+/// it.
+struct MultiSelectedTransactionIDsKey: FocusedValueKey {
   typealias Value = Set<Transaction.ID>
 }
 
@@ -220,9 +221,9 @@ extension FocusedValues {
     get { self[PayTransactionActionKey.self] }
     set { self[PayTransactionActionKey.self] = newValue }
   }
-  var transferMergeSelection: TransferMergeSelectionKey.Value? {
-    get { self[TransferMergeSelectionKey.self] }
-    set { self[TransferMergeSelectionKey.self] = newValue }
+  var multiSelectedTransactionIDs: MultiSelectedTransactionIDsKey.Value? {
+    get { self[MultiSelectedTransactionIDsKey.self] }
+    set { self[MultiSelectedTransactionIDsKey.self] = newValue }
   }
   var mergeAsTransferAction: MergeAsTransferActionKey.Value? {
     get { self[MergeAsTransferActionKey.self] }

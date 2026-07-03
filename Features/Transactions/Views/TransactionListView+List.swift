@@ -13,10 +13,10 @@ extension TransactionListView {
     Binding(
       get: {
         if let id = selectedTransaction?.id { return [id] }
-        return transferMergeSelection
+        return multiSelectedTransactionIDs
       },
       set: { newSelection in
-        transferMergeSelection = newSelection
+        multiSelectedTransactionIDs = newSelection
         if newSelection.count == 1, let id = newSelection.first {
           selectedTransaction =
             transactionStore.transactions.first {
@@ -343,8 +343,12 @@ extension TransactionListView {
     }
     let mergeCandidates = mergeSelection
     if mergeCandidates.contains(where: { $0.id == transaction.id }) {
-      Button("Merge Transactions", systemImage: "arrow.triangle.merge") {
-        Task { await transactionStore.mergeTransactions(mergeCandidates) }
+      Button(
+        "Merge Transactions\u{2026}",
+        systemImage: "arrow.triangle.merge",
+        role: .destructive
+      ) {
+        transactionPendingMerge = PendingTransactionMerge(transactions: mergeCandidates)
       }
       .accessibilityIdentifier(UITestIdentifiers.TransactionMerge.merge(transaction.id))
     }

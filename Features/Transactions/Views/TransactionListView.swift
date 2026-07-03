@@ -77,9 +77,9 @@ struct TransactionListView: View {
   /// it: exactly one selected row opens the inspector as before; zero or
   /// two-plus selected rows close it (multi-select has no inspector — a
   /// merge candidate, not a detail target). Published as the
-  /// `transferMergeSelection` focused value so the Transaction menu and
-  /// the toolbar can gate "Merge as Transfer" on it.
-  @State var transferMergeSelection: Set<Transaction.ID> = []
+  /// `multiSelectedTransactionIDs` focused value and read by both merge
+  /// gates — "Merge as Transfer" (pair) and "Merge Transactions" (N-way).
+  @State var multiSelectedTransactionIDs: Set<Transaction.ID> = []
 
   private var handlesOwnInspector: Bool { _externalSelection == nil }
 
@@ -142,8 +142,20 @@ struct TransactionListView: View {
   @FocusState private var searchFieldFocused: Bool
   @State var transactionPendingDelete: Transaction.ID?
   @State var transactionPendingUnmerge: Transaction.ID?
+  /// The transactions awaiting the general-merge confirmation dialog. The
+  /// merge is irreversible (no unmerge), so — like Delete and Split Back —
+  /// it is confirmed before firing rather than run on the menu click.
+  /// Wrapped (rather than a bare optional array) so the state reads as one
+  /// pending action, not an "empty vs. absent" collection.
+  @State var transactionPendingMerge: PendingTransactionMerge?
   @State var createRuleFromTransaction: Transaction?
+}
 
+// The body, its focused-command sub-expressions, and the row/import
+// helpers live in this same-file extension so the `TransactionListView`
+// struct body stays within SwiftLint's type-body-length budget; a
+// same-file extension keeps `private` members accessible.
+extension TransactionListView {
   // MARK: - Body
 
   /// Wraps `transactionsList` with the spam-filter priming modifiers so the
@@ -181,7 +193,7 @@ struct TransactionListView: View {
   private var mergeTransactionsSceneAction: (() -> Void)? {
     let selection = mergeSelection
     guard !selection.isEmpty else { return nil }
-    return { Task { await transactionStore.mergeTransactions(selection) } }
+    return { transactionPendingMerge = PendingTransactionMerge(transactions: selection) }
   }
 
   /// The list plus its inspector and the focused-scene command values.
@@ -215,7 +227,7 @@ struct TransactionListView: View {
       }
       .focusedSceneValue(\.selectedTransaction, selectedTransactionBinding)
       .focusedSceneValue(\.selectedTransactionID, selectedTransaction?.id)
-      .focusedSceneValue(\.transferMergeSelection, transferMergeSelection)
+      .focusedSceneValue(\.multiSelectedTransactionIDs, multiSelectedTransactionIDs)
       .focusedSceneValue(\.mergeAsTransferAction, mergeAsTransferSceneAction)
       .focusedSceneValue(\.mergeTransactionsAction, mergeTransactionsSceneAction)
       .focusedSceneValue(
@@ -309,6 +321,26 @@ struct TransactionListView: View {
         Text(
           "The two original transactions are restored and stay separate. "
             + "This decision is synced across your devices.")
+      }
+      .confirmationDialog(
+        "Merge Transactions",
+        isPresented: Binding(
+          get: { transactionPendingMerge != nil },
+          set: { if !$0 { transactionPendingMerge = nil } }
+        ),
+        titleVisibility: .visible
+      ) {
+        Button("Merge Transactions", role: .destructive) {
+          if let pending = transactionPendingMerge {
+            Task { await transactionStore.mergeTransactions(pending.transactions) }
+          }
+          transactionPendingMerge = nil
+        }
+        Button("Cancel", role: .cancel) { transactionPendingMerge = nil }
+      } message: {
+        Text(
+          "The selected transactions are combined into one. "
+            + "This cannot be undone.")
       }
       .modifier(
         TransactionListCSVImportAddons(

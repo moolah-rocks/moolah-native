@@ -32,16 +32,4 @@ struct TransactionMergeBuilder: Sendable {
       notes: mergedNotes(transactions.map(\.notes)),
       legs: transactions.flatMap(\.legs))
   }
-
-  /// Splits each note into lines, drops duplicate lines, and re-joins
-  /// with newlines in the supplied order. Mirrors
-  /// `TransferMergeBuilder.mergedNotes` generalised to N inputs.
-  private func mergedNotes(_ notes: [String?]) -> String? {
-    let present = notes.compactMap { $0 }
-    guard !present.isEmpty else { return nil }
-    var seen: Set<String> = []
-    let lines = present.flatMap { $0.components(separatedBy: "\n") }
-    let deduped = lines.filter { seen.insert($0).inserted }
-    return deduped.joined(separator: "\n")
-  }
 }
