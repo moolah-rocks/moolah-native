@@ -46,6 +46,11 @@ final class SyncedAccountStore {
   /// without another round-trip.
   private(set) var statePerAccount: [UUID: WalletSyncState] = [:]
 
+  /// Monotonic guard for `reloadStatePerAccount`. A stale full-map refresh
+  /// resuming after a fresher one could clobber a concurrent pass's checkpoint,
+  /// so a reload bumps on entry and `replaceStatePerAccount` on publish (#1209).
+  @ObservationIgnored private var loadGeneration: UInt64 = 0
+
   /// Banner-level error visible across the crypto-settings UI when a
   /// process-wide Alchemy-key failure (`.missingApiKey` /
   /// `.invalidApiKey`) means no **crypto** account can sync at all. Set
@@ -179,15 +184,6 @@ final class SyncedAccountStore {
     self.timerInterval = timerInterval
     self.maxConcurrentBuilds = max(1, maxConcurrentBuilds)
     self.priceWarmer = priceWarmer
-  }
-
-  /// The first registered `AccountSyncSource` that claims `account`, or
-  /// `nil` if none do. Centralises the provider-neutral lookup so the
-  /// store never branches on `account.type` itself. Module-internal (not
-  /// `private`) so the `+Internals` extension's `accountsToSync` can
-  /// share the same predicate.
-  func source(for account: Account) -> (any AccountSyncSource)? {
-    sources.first(where: { $0.handles(account) })
   }
 
   // MARK: - Public sync triggers
@@ -373,14 +369,19 @@ final class SyncedAccountStore {
   /// entry ahead of a full resync.
   func replaceStatePerAccount(_ map: [UUID: WalletSyncState]) {
     statePerAccount = map
+    loadGeneration &+= 1  // supersede any in-flight reload (e.g. fullResync, #1209)
   }
 
   /// Loads every persisted checkpoint into `statePerAccount`. Shared
   /// between launch bootstrap and the post-apply refresh; the
   /// `failureLogPrefix` distinguishes the two call sites in the log.
   func reloadStatePerAccount(failureLogPrefix: String) async {
+    loadGeneration &+= 1
+    let generation = loadGeneration
     do {
       let states = try await walletSyncState.loadAll()
+      // A later reload/mutation superseded us; drop rather than clobber (#1209).
+      guard generation == loadGeneration else { return }
       var map: [UUID: WalletSyncState] = [:]
       map.reserveCapacity(states.count)
       for state in states { map[state.id] = state }
