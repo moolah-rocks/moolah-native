@@ -736,6 +736,8 @@ git commit -m "feat(transactions): Merge Transactions menu, context menu, focuse
 
 ### Task 7: macOS UI test — merge two rows via the context menu
 
+> **SKIPPED (2026-07-03, user decision):** No multi-select/context-menu driver exists in `MoolahUITests_macOS`, and the sibling list "Merge as Transfer" (`manualMergePair`) has no UI test — it is store-tested only. The merge is covered by 20 store/unit tests (builder 11, canMerge 5, store 2, automation 2). Building command-click + context-menu driver infrastructure for one happy-path test was judged over-investment inconsistent with the codebase. Revisit if the list gains other UI tests that establish the drivers.
+
 **Files:**
 - Test: `MoolahUITests_macOS/TransactionMergeUITests.swift`
 - Possibly modify: `UITestSupport/UITestSeeds.swift` (only if no existing seed yields two same-day/same-payee rows in one account; prefer reusing an existing seed)
