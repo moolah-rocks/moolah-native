@@ -254,7 +254,7 @@
       <result type="txn" description="The paid txn."/>
     </command>
 
-    <command name="merge txns" code="Moolmgtx" description="Merge two opposing single-account transactions into one cross-account transfer.">
+    <command name="merge txns" code="Moolmgtx" description="Merge two opposing single-account transactions into one cross-account transfer (use 'combine txns' for a general N-way merge).">
       <cocoa class="Moolah.MergeTransactionsCommand"/>
       <direct-parameter type="specifier" description="The profile containing the transactions."/>
       <parameter name="first" code="Cfst" type="text" description="The id of the first transaction to merge.">
@@ -264,6 +264,16 @@
         <cocoa key="second"/>
       </parameter>
       <result type="txn" description="The merged transfer txn."/>
+    </command>
+
+    <command name="combine txns" code="Moolcbtx" description="Merge two or more same-day, same-payee transactions into one whose legs are the union of the sources' legs (general merge; use 'merge txns' for the two-sided transfer merge).">
+      <cocoa class="Moolah.CombineTransactionsCommand"/>
+      <direct-parameter type="specifier" description="The profile containing the transactions."/>
+      <parameter name="ids" code="Cbid" description="The ids of the transactions to combine (two or more).">
+        <cocoa key="ids"/>
+        <type type="text" list="yes"/>
+      </parameter>
+      <result type="txn" description="The merged txn."/>
     </command>
 
     <command name="clear investment values" code="Moolcliv" description="Delete every recorded investment value for an account, clearing its value-history snapshots (e.g. when retiring a manual investment account during a migration).">
