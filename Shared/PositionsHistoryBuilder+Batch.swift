@@ -32,7 +32,7 @@ extension PositionsHistoryBuilder {
   /// later in one batch. `day` is UTC midnight (conversion key); `pointDate`
   /// is noon UTC (zone-invariant chart positioning token).
   func recordDailyPoints(
-    for day: Date, state: inout BuildState
+    for day: Date, state: BuildState
   ) -> PendingDay {
     let pointDate = Calendar.utc.date(byAdding: .hour, value: 12, to: day) ?? day
     var entries: [PendingEntry] = []
