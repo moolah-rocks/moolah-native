@@ -6,6 +6,71 @@ extension EarmarkStore {
   // not intended as API for any other type — treat them as `private` to
   // the `EarmarkStore` family.
 
+  /// Single pass over every earmark. The result tells the caller how to manage
+  /// the retry loop: `true` if any conversion failed (retry warranted), `false`
+  /// on clean success or cancellation (nothing to retry), or `nil` if a fresher
+  /// snapshot superseded this pass before it could publish. The caller must
+  /// make *no* retry decision on `nil` — this pass published nothing, so the
+  /// pass that superseded it owns the decision; reporting the stale pass's
+  /// success as `false` would instead cancel a fresher failing pass's retry.
+  ///
+  /// Iterates all earmarks (not just `visibleEarmarks`) so per-earmark
+  /// balances populate regardless of `showHidden` — otherwise toggling
+  /// "Show Hidden" surfaces a permanent spinner on hidden rows that no
+  /// recompute ever filled in. The grand total still sums only visible
+  /// earmarks so it matches what the user sees.
+  func runConversionAttempt(generation: UInt64) async -> Bool? {
+    var anyFailed = false
+    var balances: [UUID: InstrumentAmount] = [:]
+    var saved: [UUID: InstrumentAmount] = [:]
+    var spent: [UUID: InstrumentAmount] = [:]
+    var grandTotal = InstrumentAmount.zero(instrument: targetInstrument)
+    var grandTotalValid = true
+    let zeroInTarget = InstrumentAmount.zero(instrument: targetInstrument)
+
+    for earmark in earmarks {
+      let isVisible = showHidden || !earmark.isHidden
+      do {
+        let totals = try await convertEarmarkPositions(earmark)
+        guard !Task.isCancelled else { return false }
+        balances[earmark.id] = totals.balance
+        saved[earmark.id] = totals.saved
+        spent[earmark.id] = totals.spent
+
+        // Only visible earmarks contribute to the displayed grand total.
+        // Clamp negative balances to zero so they don't reduce the total.
+        if isVisible, grandTotalValid {
+          let convertedToTarget = try await conversionService.convertAmount(
+            totals.balance, to: targetInstrument, on: Date())
+          guard !Task.isCancelled else { return false }
+          grandTotal += max(convertedToTarget, zeroInTarget)
+        }
+      } catch {
+        anyFailed = true
+        // A failure on a hidden earmark shouldn't blank the total — only
+        // visible earmarks contribute to it. Hidden-earmark failures still
+        // mark `anyFailed` so the retry loop kicks in (and a later toggle
+        // doesn't surface a spinner because no retry was scheduled).
+        if isVisible { grandTotalValid = false }
+        logger.warning(
+          "Conversion failed for earmark \(earmark.name): \(error.localizedDescription)")
+      }
+    }
+
+    guard !Task.isCancelled else { return false }
+    // Drop this pass if a fresher authoritative snapshot landed while we were
+    // suspended — publishing over stale `earmarks` would clobber the fresher
+    // one (see #1209). `nil` tells the caller this pass published nothing, so
+    // it makes no retry decision (returning our stale `anyFailed` would let it
+    // cancel the retry the superseding pass needs).
+    guard snapshotGeneration == generation else { return nil }
+
+    publishConvertedTotals(
+      balances: balances, saved: saved, spent: spent,
+      total: grandTotalValid ? grandTotal : nil)
+    return anyFailed
+  }
+
   /// Per-earmark conversion result: the three position-list totals,
   /// each expressed in the earmark's own instrument.
   struct ConvertedEarmarkTotals {
