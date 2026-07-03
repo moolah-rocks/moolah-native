@@ -266,14 +266,11 @@ final class EarmarkStore {
     // intervenes) so `runConversionAttempt` can drop its publish if a
     // fresher snapshot lands while it is suspended (see #1209).
     let generation = snapshotGeneration
-    let result = await withReactiveStoreSignpost("earmark-store-recompute") {
+    let anyFailed = await withReactiveStoreSignpost("earmark-store-recompute") {
       let failed = await runConversionAttempt(generation: generation)
       testObservationTickContinuation.yield(())
       return failed
     }
-    // A superseded pass (`nil`) published nothing — the pass that superseded it
-    // owns the retry decisions, so leave `conversionTask` untouched here.
-    guard let anyFailed = result else { return }
     if !anyFailed {
       // Success — kill any in-flight retry; nothing left to retry.
       conversionTask?.cancel()
@@ -306,11 +303,10 @@ final class EarmarkStore {
         // bumps the generation, so a retry that raced a fresher snapshot
         // drops its publish rather than clobbering it (see #1209).
         let generation = self.snapshotGeneration
-        let retryResult = await self.runConversionAttempt(generation: generation)
+        let retryFailed = await self.runConversionAttempt(generation: generation)
         self.testObservationTickContinuation.yield(())
-        // A superseded pass (`nil`) published nothing — keep the loop running
-        // rather than terminating on a stale success (see `runConversionAttempt`).
-        guard let retryFailed = retryResult else { continue }
+        // A superseded pass returns `true`, so the loop keeps running rather
+        // than terminating on a stale success (see `runConversionAttempt`).
         if !retryFailed {
           self.conversionTask = nil
           return
