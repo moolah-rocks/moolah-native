@@ -148,15 +148,13 @@ struct MoolahDomainCommands: Commands {
       Divider()
 
       // Merge / split-transfer group. No keyboard shortcuts (infrequent
-      // actions, UI_GUIDE §14) and no destructive role on these menu-bar
-      // buttons — the menu bar does not render role colour, so they do
-      // not belong in the Delete group below. "Merge Transactions" is
-      // irreversible, but it arms a confirmation dialog on the list leaf
-      // (like Delete), so the click itself is non-destructive.
+      // actions, UI_GUIDE §14) and no destructive role — these combine or
+      // split transactions rather than delete data (merging just unions
+      // the existing legs), so they do not belong in the Delete group.
       Button("Merge as Transfer") { mergeAsTransferAction?() }
         .disabled(mergeAsTransferAction == nil)
 
-      Button("Merge Transactions\u{2026}") { mergeTransactionsAction?() }
+      Button("Merge Transactions") { mergeTransactionsAction?() }
         .disabled(mergeTransactionsAction == nil)
         .help("Select two or more same-day, same-payee transactions to merge.")
 

@@ -343,12 +343,8 @@ extension TransactionListView {
     }
     let mergeCandidates = mergeSelection
     if mergeCandidates.contains(where: { $0.id == transaction.id }) {
-      Button(
-        "Merge Transactions\u{2026}",
-        systemImage: "arrow.triangle.merge",
-        role: .destructive
-      ) {
-        transactionPendingMerge = PendingTransactionMerge(transactions: mergeCandidates)
+      Button("Merge Transactions", systemImage: "arrow.triangle.merge") {
+        Task { await transactionStore.mergeTransactions(mergeCandidates) }
       }
       .accessibilityIdentifier(UITestIdentifiers.TransactionMerge.merge(transaction.id))
     }

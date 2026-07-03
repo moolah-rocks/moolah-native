@@ -1,13 +1,5 @@
 import SwiftUI
 
-/// The transactions armed for the "Merge Transactions" confirmation
-/// dialog. A named wrapper (rather than a bare `[Transaction]?` `@State`)
-/// so the pending state reads as one action and avoids the
-/// empty-vs-absent ambiguity of an optional collection.
-struct PendingTransactionMerge {
-  let transactions: [Transaction]
-}
-
 struct TransactionListView: View {
   // MARK: - Properties
 
@@ -150,12 +142,6 @@ struct TransactionListView: View {
   @FocusState private var searchFieldFocused: Bool
   @State var transactionPendingDelete: Transaction.ID?
   @State var transactionPendingUnmerge: Transaction.ID?
-  /// The transactions awaiting the general-merge confirmation dialog. The
-  /// merge is irreversible (no unmerge), so — like Delete and Split Back —
-  /// it is confirmed before firing rather than run on the menu click.
-  /// Wrapped (rather than a bare optional array) so the state reads as one
-  /// pending action, not an "empty vs. absent" collection.
-  @State var transactionPendingMerge: PendingTransactionMerge?
   @State var createRuleFromTransaction: Transaction?
 }
 
@@ -201,7 +187,7 @@ extension TransactionListView {
   private var mergeTransactionsSceneAction: (() -> Void)? {
     let selection = mergeSelection
     guard !selection.isEmpty else { return nil }
-    return { transactionPendingMerge = PendingTransactionMerge(transactions: selection) }
+    return { Task { await transactionStore.mergeTransactions(selection) } }
   }
 
   /// The list plus its inspector and the focused-scene command values.
@@ -329,26 +315,6 @@ extension TransactionListView {
         Text(
           "The two original transactions are restored and stay separate. "
             + "This decision is synced across your devices.")
-      }
-      .confirmationDialog(
-        "Merge Transactions",
-        isPresented: Binding(
-          get: { transactionPendingMerge != nil },
-          set: { if !$0 { transactionPendingMerge = nil } }
-        ),
-        titleVisibility: .visible
-      ) {
-        Button("Merge Transactions", role: .destructive) {
-          if let pending = transactionPendingMerge {
-            Task { await transactionStore.mergeTransactions(pending.transactions) }
-          }
-          transactionPendingMerge = nil
-        }
-        Button("Cancel", role: .cancel) { transactionPendingMerge = nil }
-      } message: {
-        Text(
-          "The selected transactions are combined into one. "
-            + "This cannot be undone.")
       }
       .modifier(
         TransactionListCSVImportAddons(
