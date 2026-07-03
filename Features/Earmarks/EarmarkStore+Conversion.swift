@@ -6,20 +6,19 @@ extension EarmarkStore {
   // not intended as API for any other type — treat them as `private` to
   // the `EarmarkStore` family.
 
-  /// Single pass over every earmark. The result tells the caller how to manage
-  /// the retry loop: `true` if any conversion failed (retry warranted), `false`
-  /// on clean success or cancellation (nothing to retry), or `nil` if a fresher
-  /// snapshot superseded this pass before it could publish. The caller must
-  /// make *no* retry decision on `nil` — this pass published nothing, so the
-  /// pass that superseded it owns the decision; reporting the stale pass's
-  /// success as `false` would instead cancel a fresher failing pass's retry.
+  /// Single pass over every earmark. Returns whether a retry is warranted:
+  /// `true` if any conversion failed, *or* if a fresher snapshot superseded
+  /// this pass before it could publish — reporting the superseded pass as
+  /// "failed" stops the caller from treating a stale success as a reason to
+  /// cancel the retry loop the superseding pass may still need. A cancelled
+  /// pass returns `false` to short-circuit cleanly during teardown.
   ///
   /// Iterates all earmarks (not just `visibleEarmarks`) so per-earmark
   /// balances populate regardless of `showHidden` — otherwise toggling
   /// "Show Hidden" surfaces a permanent spinner on hidden rows that no
   /// recompute ever filled in. The grand total still sums only visible
   /// earmarks so it matches what the user sees.
-  func runConversionAttempt(generation: UInt64) async -> Bool? {
+  func runConversionAttempt(generation: UInt64) async -> Bool {
     var anyFailed = false
     var balances: [UUID: InstrumentAmount] = [:]
     var saved: [UUID: InstrumentAmount] = [:]
@@ -60,14 +59,13 @@ extension EarmarkStore {
     guard !Task.isCancelled else { return false }
     // Drop this pass if a fresher authoritative snapshot landed while we were
     // suspended — publishing over stale `earmarks` would clobber the fresher
-    // one (see #1209). `nil` tells the caller this pass published nothing, so
-    // it makes no retry decision (returning our stale `anyFailed` would let it
-    // cancel the retry the superseding pass needs).
-    guard snapshotGeneration == generation else { return nil }
+    // one (see #1209). Return `true` (not `anyFailed`): this stale pass may
+    // have "succeeded" over old data, but reporting success would let the
+    // caller cancel the retry the superseding pass needs.
+    guard snapshotGeneration == generation else { return true }
 
-    publishConvertedTotals(
-      balances: balances, saved: saved, spent: spent,
-      total: grandTotalValid ? grandTotal : nil)
+    let total = grandTotalValid ? grandTotal : nil
+    publishConvertedTotals(balances: balances, saved: saved, spent: spent, total: total)
     return anyFailed
   }
 
