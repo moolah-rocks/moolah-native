@@ -18,11 +18,6 @@ final class AccountStore {
   /// positions; per the bug fix, we never display a partial balance.
   private(set) var convertedBalances: [UUID: InstrumentAmount] = [:]
 
-  /// Externally-set values for investment accounts (e.g. mark-to-market share
-  /// prices set via `InvestmentStore`). Read-through to `investmentValueCache`
-  /// so existing call sites can continue to inspect the map directly.
-  var investmentValues: [UUID: InstrumentAmount] { investmentValueCache.values }
-
   /// True once at least one conversion pass has completed, regardless of
   /// success or failure. Views use this to distinguish "still loading"
   /// from "conversion ran and produced no balance".
@@ -248,6 +243,8 @@ final class AccountStore {
   // `displayBalance`, `hasUnrecordedValue`, `canDelete`, `positions(for:)`)
   // live in `AccountStore+Queries.swift`.
 
+  // MARK: - Balance recomputation
+
   /// Recompute per-account balances and aggregate totals via
   /// `balanceCalculator`. Driven by emissions from either
   /// `repository.observeAll()` (fresh data) or
@@ -277,12 +274,15 @@ final class AccountStore {
     // on failure is outside the region (background work). When called
     // from `apply(accounts:)`, this region nests inside the outer
     // `account-store-apply` interval.
-    let snapshot = await withReactiveStoreSignpost("account-store-recompute") {
+    let (snapshot, published) = await withReactiveStoreSignpost("account-store-recompute") {
       let snap = await computeBalanceSnapshot()
-      publishSnapshot(snap, ifGeneration: generation)
+      let didPublish = publishSnapshot(snap, ifGeneration: generation)
       testObservationTickContinuation.yield(())
-      return snap
+      return (snap, didPublish)
     }
+    // A superseded pass published nothing; acting on its stale `anyFailed`
+    // would let a stale success cancel a fresher failing pass's retry (#1209).
+    guard published else { return }
     if !snapshot.anyFailed {
       // Success — kill any in-flight retry; nothing left to retry.
       conversionTask?.cancel()
@@ -317,8 +317,10 @@ final class AccountStore {
         let generation = self.snapshotGeneration
         let retry = await self.computeBalanceSnapshot()
         guard !Task.isCancelled else { return }
-        self.publishSnapshot(retry, ifGeneration: generation)
+        let published = self.publishSnapshot(retry, ifGeneration: generation)
         self.testObservationTickContinuation.yield(())
+        // A superseded pass published nothing — keep looping (see #1209).
+        guard published else { continue }
         if !retry.anyFailed {
           self.conversionTask = nil
           return
@@ -342,15 +344,20 @@ final class AccountStore {
   /// `recomputeConvertedTotals` and issue #1209. A dropped pass leaves
   /// `hasCompletedInitialConversion` to the fresher pass that superseded
   /// it (which sets it), so the "still loading" flag never regresses.
+  ///
+  /// Returns whether it published; on `false` (superseded) the caller must
+  /// make no retry decision (a stale success would cancel a fresher failing
+  /// pass's retry). Not `@discardableResult`: ignoring the result is the bug.
   private func publishSnapshot(
     _ snapshot: AccountBalanceCalculator.Snapshot, ifGeneration generation: UInt64
-  ) {
-    guard snapshotGeneration == generation else { return }
+  ) -> Bool {
+    guard snapshotGeneration == generation else { return false }
     convertedBalances = snapshot.balances
     convertedCurrentTotal = snapshot.currentTotal
     convertedInvestmentTotal = snapshot.investmentTotal
     convertedNetWorth = snapshot.netWorth
     hasCompletedInitialConversion = true
+    return true
   }
 
   /// Awaits the background retry loop, if one is running. Only relevant
@@ -388,10 +395,6 @@ final class AccountStore {
   }
 
   /// Module-internal helper for `AccountStore+Mutations.swift` to log
-  /// against the shared logger.
+  /// against the shared logger. Lives here because `logger` is `private`.
   var mutationLogger: Logger { logger }
-
-  /// Module-internal accessor for `AccountStore+Mutations.swift` to
-  /// reach the underlying repository.
-  var mutationRepository: AccountRepository { repository }
 }
