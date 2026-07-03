@@ -49,7 +49,7 @@ struct InsightInputBuilderTests {
     #expect(input.recentCandidates.first?.amount == -12)
   }
 
-  @Test("dailyTotals, payees, categorySamples, incomeSamples populate from seeded rows")
+  @Test("dailyTotals, payees, categorySamples, incomeSourceSamples populate from seeded rows")
   func summariesPopulate() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
@@ -69,7 +69,8 @@ struct InsightInputBuilderTests {
     #expect(!input.dailyTotals.isEmpty)
     #expect(input.payees.contains { $0.normalizedPayee.contains("cafe") })
     #expect(input.categorySamples.contains { $0.categoryId == dining.id })
-    #expect(input.incomeSamples == [2000])
+    #expect(input.incomeSourceSamples.map(\.normalizedPayee) == ["salary"])
+    #expect(input.incomeSourceSamples.flatMap(\.magnitudes) == [2000])
   }
 
   @Test("feeCategorySpend (365d) and unbudgetedCategorySpend (90d) reflect their windows")

@@ -165,10 +165,10 @@ struct GRDBInsightDataSourceTests {
     #expect(entry.magnitudes == [99, 10])
   }
 
-  // MARK: - incomeSamples
+  // MARK: - incomeSourceSamples
 
-  @Test("incomeSamples returns only income magnitudes, most-recent first")
-  func incomeSamplesOrderAndType() async throws {
+  @Test("incomeSourceSamples returns only income magnitudes, grouped per source, most-recent first")
+  func incomeSourceSamplesOrderAndType() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
     let older = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 1)
@@ -183,16 +183,37 @@ struct GRDBInsightDataSourceTests {
         date: newer, payee: "Shop",
         legs: [leg(-80, type: .expense, instrument: aud)]))
 
-    let samples = try await backend.insightDataSource.incomeSamples(
+    let samples = try await backend.insightDataSource.incomeSourceSamples(
       windowDays: 365, maxCount: 50, context: context(now: now))
 
-    // Only the two income legs; expense excluded; most-recent first.
-    #expect(samples == [1200, 500])
-    #expect(samples.allSatisfy { $0 > 0 })
+    // Two distinct sources; expense excluded; most-recent source first.
+    #expect(samples.map(\.normalizedPayee) == ["bonus", "salary a"])
+    #expect(samples.flatMap(\.magnitudes) == [1200, 500])
+    #expect(samples.flatMap(\.magnitudes).allSatisfy { $0 > 0 })
   }
 
-  @Test("incomeSamples respects maxCount cap")
-  func incomeSamplesMaxCount() async throws {
+  @Test("incomeSourceSamples groups same-payee deposits under one source, most-recent first")
+  func incomeSourceSamplesGroupsBySource() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
+    for day in 1...4 {
+      let date = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: day)
+      _ = try await backend.transactions.create(
+        Transaction(
+          date: date, payee: "Employer",
+          legs: [leg(Decimal(day * 100), type: .income, instrument: aud)]))
+    }
+
+    let samples = try await backend.insightDataSource.incomeSourceSamples(
+      windowDays: 365, maxCount: 50, context: context(now: now))
+
+    #expect(samples.map(\.normalizedPayee) == ["employer"])
+    // Most-recent first: day 4 (400) … day 1 (100).
+    #expect(samples.first?.magnitudes == [400, 300, 200, 100])
+  }
+
+  @Test("incomeSourceSamples respects the overall maxCount cap")
+  func incomeSourceSamplesMaxCount() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
     for day in 1...5 {
@@ -203,14 +224,15 @@ struct GRDBInsightDataSourceTests {
           legs: [leg(Decimal(day * 100), type: .income, instrument: aud)]))
     }
 
-    let samples = try await backend.insightDataSource.incomeSamples(
+    let samples = try await backend.insightDataSource.incomeSourceSamples(
       windowDays: 365, maxCount: 3, context: context(now: now))
 
-    #expect(samples.count == 3)
+    // The overall cap bounds the projected legs, then they group by source.
+    #expect(samples.reduce(0) { $0 + $1.magnitudes.count } == 3)
   }
 
-  @Test("incomeSamples drops non-positive income amounts from the baseline")
-  func incomeSamplesDropsNonPositive() async throws {
+  @Test("incomeSourceSamples drops non-positive income amounts from the baseline")
+  func incomeSourceSamplesDropsNonPositive() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
     let day = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 10)
@@ -225,15 +247,16 @@ struct GRDBInsightDataSourceTests {
         date: day, payee: "Salary",
         legs: [leg(3000, type: .income, instrument: aud)]))
 
-    let samples = try await backend.insightDataSource.incomeSamples(
+    let samples = try await backend.insightDataSource.incomeSourceSamples(
       windowDays: 365, maxCount: 50, context: context(now: now))
 
-    #expect(samples == [3000])
-    #expect(samples.allSatisfy { $0 > 0 })
+    #expect(samples.map(\.normalizedPayee) == ["salary"])
+    #expect(samples.flatMap(\.magnitudes) == [3000])
+    #expect(samples.flatMap(\.magnitudes).allSatisfy { $0 > 0 })
   }
 
-  @Test("incomeSamples excludes legs outside the windowDays cutoff")
-  func incomeSamplesWindowCutoff() async throws {
+  @Test("incomeSourceSamples excludes legs outside the windowDays cutoff")
+  func incomeSourceSamplesWindowCutoff() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
     let inWindow = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 1)
@@ -244,10 +267,11 @@ struct GRDBInsightDataSourceTests {
     _ = try await backend.transactions.create(
       Transaction(date: outWindow, payee: "Old", legs: [leg(9999, type: .income, instrument: aud)]))
 
-    let samples = try await backend.insightDataSource.incomeSamples(
+    let samples = try await backend.insightDataSource.incomeSourceSamples(
       windowDays: 30, maxCount: 50, context: context(now: now))
 
-    #expect(samples == [300])
+    #expect(samples.map(\.normalizedPayee) == ["recent"])
+    #expect(samples.flatMap(\.magnitudes) == [300])
   }
 
   // MARK: - recentCandidates

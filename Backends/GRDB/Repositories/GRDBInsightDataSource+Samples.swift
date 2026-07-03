@@ -7,13 +7,16 @@ import GRDB
 /// `maxPerCategory` rows per category, so memory stays
 /// `O(categories × cap)` rather than scaling with the window's leg count.
 extension GRDBInsightDataSource {
-  /// One sampled expense leg: the day it posted, its instrument, and the
-  /// raw signed quantity (converted in Swift).
+  /// One sampled leg: the day it posted, its instrument, the raw signed
+  /// quantity (converted in Swift), and — for income samples — the owning
+  /// transaction's payee (`nil` for category samples, which group by
+  /// `categoryId` instead).
   struct SampleRow: Sendable {
     let categoryId: UUID?
     let day: String
     let instrumentId: String
     let qty: Int64
+    let payee: String?
   }
 
   func categorySamples(
@@ -56,24 +59,28 @@ extension GRDBInsightDataSource {
     return try await foldSamples(rows, instruments: instruments, context: context)
   }
 
-  func incomeSamples(
+  func incomeSourceSamples(
     windowDays: Int,
     maxCount: Int,
     context: InsightContext
-  ) async throws -> [Decimal] {
+  ) async throws -> [IncomeSourceSamples] {
     let after = cutoff(windowDays: windowDays, context: context)
     let instruments = try await resolveInstruments()
     let cap = max(1, maxCount)
     let rows = try await profileDatabase.read { database -> [SampleRow] in
       // `:after` / `:cap` are bound parameters; the SQL is a compile-time
       // string literal — safe per `guides/DATABASE_CODE_GUIDE.md` §4. The
-      // `ROW_NUMBER()` window caps the global income sample set in SQL.
+      // `ROW_NUMBER()` window caps the global income sample set in SQL; the
+      // per-source split happens in Swift (`foldIncomeSamples`) so the pinned
+      // leg-index plan is preserved (partitioning by the transaction's payee
+      // would force a sort the leg indexes can't satisfy).
       let sql = """
-        SELECT day, instrument_id, quantity
+        SELECT day, instrument_id, quantity, payee
         FROM (
           SELECT DATE(t.date)       AS day,
                  leg.instrument_id  AS instrument_id,
                  leg.quantity       AS quantity,
+                 t.payee            AS payee,
                  ROW_NUMBER() OVER (
                    ORDER BY t.date DESC, leg.transaction_id DESC
                  ) AS rn
@@ -101,23 +108,26 @@ extension GRDBInsightDataSource {
       categoryId: nil,
       day: day,
       instrumentId: instrumentId,
-      qty: row["quantity"] ?? 0)
+      qty: row["quantity"] ?? 0,
+      payee: row["payee"])
   }
 
-  /// Convert each sampled income leg on its own day and collect positive
-  /// magnitudes, preserving the SQL's most-recent-first order. Rows are
-  /// dropped (creating gaps in coverage) when conversion fails (Rule 11)
-  /// or when the converted quantity is non-positive (income refunds).
-  /// Callers must not assume contiguous date coverage.
+  /// Convert each sampled income leg on its own day and group the positive
+  /// magnitudes per normalized source (payee), preserving the SQL's
+  /// most-recent-first order both across and within sources. Rows are dropped
+  /// (creating gaps in coverage) when conversion fails (Rule 11) or when the
+  /// converted quantity is non-positive (income refunds). Callers must not
+  /// assume contiguous date coverage.
   private func foldIncomeSamples(
     _ rows: [SampleRow],
     instruments: [String: Instrument],
     context: InsightContext
-  ) async throws -> [Decimal] {
-    var magnitudes: [Decimal] = []
+  ) async throws -> [IncomeSourceSamples] {
+    var magnitudes: [String: [Decimal]] = [:]
+    var order: [String] = []
     for row in rows {
       guard let day = GRDBAnalysisRepository.parseDayString(row.day) else {
-        log.error("incomeSamples: unparseable day '\(row.day, privacy: .public)'")
+        log.error("incomeSourceSamples: unparseable day '\(row.day, privacy: .public)'")
         continue
       }
       let source = instrument(forId: row.instrumentId, in: instruments)
@@ -129,19 +139,21 @@ extension GRDBInsightDataSource {
           on: day,
           conversionService: converter)
         guard amount.quantity > 0 else { continue }
-        magnitudes.append(amount.quantity)
+        let key = PayeeNormalizer.normalize(row.payee)
+        if magnitudes[key] == nil { order.append(key) }
+        magnitudes[key, default: []].append(amount.quantity)
       } catch let cancel as CancellationError {
         throw cancel
       } catch {
         log.warning(
           """
-          incomeSamples: dropping sample day=\(row.day, privacy: .public) \
+          incomeSourceSamples: dropping sample day=\(row.day, privacy: .public) \
           instrument=\(row.instrumentId, privacy: .public) — conversion failed: \
           \(error.localizedDescription, privacy: .public)
           """)
       }
     }
-    return magnitudes
+    return order.map { IncomeSourceSamples(normalizedPayee: $0, magnitudes: magnitudes[$0] ?? []) }
   }
 
   private static func decodeSampleRow(_ row: Row) -> SampleRow? {
@@ -152,7 +164,8 @@ extension GRDBInsightDataSource {
       categoryId: row["category_id"],
       day: day,
       instrumentId: instrumentId,
-      qty: row["quantity"] ?? 0)
+      qty: row["quantity"] ?? 0,
+      payee: nil)
   }
 
   /// Convert each sampled leg on its own day and group the positive spend

@@ -14,15 +14,16 @@ import OSLog
 /// `guides/INSTRUMENT_CONVERSION_GUIDE.md` Rule 5 is preserved and a
 /// single-currency profile pays ~nothing.
 ///
-/// **Concurrency.** `final class` + `@unchecked Sendable`, mirroring
-/// `GRDBAnalysisRepository`: all stored properties are `let`, `database`
-/// and `conversionService` are `Sendable`, and `logger` is a `Sendable`
-/// value type. Nothing mutates post-init.
+/// **Concurrency — Carve-out 3** (`guides/CONCURRENCY_GUIDE.md`). `final
+/// class` + `@unchecked Sendable`, mirroring `GRDBAnalysisRepository`: all
+/// stored properties are `let`, `database` and `conversionService` are
+/// `Sendable`, and `logger` is a `Sendable` value type. Nothing mutates
+/// post-init.
 final class GRDBInsightDataSource: InsightDataSource, @unchecked Sendable {
   // Cross-extension internals. Sibling files reach these `internal`
   // members rather than the `private` storage:
   //   `+CategorySpend.swift` — categorySpend / accountSpend
-  //   `+Samples.swift`       — categorySamples / incomeSamples
+  //   `+Samples.swift`       — categorySamples / incomeSourceSamples
   //   `+Payees.swift`        — payeeSummaries + the normalize-and-fold
   //   `+RecentCandidates.swift` — recentCandidates + assemble
   // The day-parse and `(qty, instrument) → InstrumentAmount` conversion
