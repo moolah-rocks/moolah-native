@@ -40,8 +40,23 @@ extension TransactionDetailView {
         )
       }
       unmergeSection
+      // "Synced from …" row for a transaction that background sync created.
+      // Custom mode marks each leg's header instead (see `customModeContent`),
+      // so this footer is limited to the non-custom views. Self-hides when no
+      // leg came from background sync.
+      if !draft.isCustom {
+        TransactionDetailSyncSection(sources: Set(syncedLegSources.values))
+      }
       TransactionDetailDeleteSection(onRequestDelete: { showDeleteConfirmation = true })
     }
+  }
+
+  /// Leg id → background-sync source for the transaction being edited, keyed
+  /// by the original `transaction_leg.id`. Manually-added legs (nil `legId`)
+  /// are absent. Derived from the domain transaction so it reflects the true
+  /// origin regardless of in-progress edits.
+  var syncedLegSources: [UUID: BackgroundSyncSource] {
+    transaction.backgroundSyncedLegSources()
   }
 
   @ViewBuilder private var modeAwareSections: some View {
@@ -179,6 +194,7 @@ extension TransactionDetailView {
         earmarks: earmarks,
         categoryState: legCategoryStateBinding(for: index),
         focusedField: $focusedField,
+        syncSource: draft.legDrafts[index].legId.flatMap { syncedLegSources[$0] },
         onRequestDelete: { legPendingDeletion = index }
       )
     }

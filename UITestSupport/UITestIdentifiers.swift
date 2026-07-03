@@ -180,6 +180,17 @@ public enum UITestIdentifiers {
     public static func counterpartyCopyButton(legIndex: Int) -> String {
       "detail.leg.\(legIndex).counterpartyAddress.copy"
     }
+
+    /// Sync-origin indicator icon in the header of the leg section at `index`.
+    /// Only rendered in the custom (multi-leg) view when that leg was created
+    /// by background sync (wallet or exchange).
+    public static func legSyncIndicator(_ index: Int) -> String {
+      "detail.leg.\(index).syncIndicator"
+    }
+
+    /// "Synced from …" row at the foot of the non-custom transaction detail.
+    /// Only rendered when at least one leg was created by background sync.
+    public static let syncOrigin = "detail.syncOrigin"
   }
 
   // MARK: - SyncFooter
