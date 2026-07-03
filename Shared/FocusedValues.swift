@@ -84,6 +84,16 @@ struct MergeAsTransferActionKey: FocusedValueKey {
   typealias Value = () -> Void
 }
 
+/// Trigger action for Transaction > Merge Transactions. Published by
+/// the transaction-list leaf only when its multi-selection is two or
+/// more transactions that share a calendar day and payee and are not
+/// scheduled (`Transaction.canMerge`); `nil` otherwise, which disables
+/// the menu item. Distinct from `MergeAsTransferActionKey`, which gates
+/// the two-leg transfer merge.
+struct MergeTransactionsActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
 /// Trigger action for Transaction > Split Back into Separate
 /// Transactions… Published by the leaf that owns the focused
 /// transaction only when it `isMergedTransfer`; `nil` otherwise (which
@@ -217,6 +227,10 @@ extension FocusedValues {
   var mergeAsTransferAction: MergeAsTransferActionKey.Value? {
     get { self[MergeAsTransferActionKey.self] }
     set { self[MergeAsTransferActionKey.self] = newValue }
+  }
+  var mergeTransactionsAction: MergeTransactionsActionKey.Value? {
+    get { self[MergeTransactionsActionKey.self] }
+    set { self[MergeTransactionsActionKey.self] = newValue }
   }
   var unmergeTransferAction: UnmergeTransferActionKey.Value? {
     get { self[UnmergeTransferActionKey.self] }
