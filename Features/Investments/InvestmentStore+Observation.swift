@@ -73,6 +73,10 @@ extension InvestmentStore {
   func applyValuesPage(_ page: InvestmentValuePage, accountId: UUID) async {
     guard loadedAccountId == accountId else { return }
     await withReactiveStoreSignpost("investment-store-apply") {
+      // Re-check inside the body: the `await` above is a suspension point, so a
+      // concurrent `setActiveAccount` could have switched accounts since the
+      // outer guard (#1209).
+      guard loadedAccountId == accountId else { return }
       setValues(page.values)
       // Recompute the legacy performance from the new values + the
       // existing dailyBalances (set by `loadDailyBalances`).
@@ -88,10 +92,17 @@ extension InvestmentStore {
   /// so we don't touch `values` here.
   func recomputeOnRateTick() async {
     guard let accountId = loadedAccountId, let host = loadedHostCurrency else { return }
+    // Capture before the first suspension. `loadDailyBalances` / `valuatePositions`
+    // carry their own guards, but the synchronous `refreshLegacyPerformance` below
+    // reads the in-memory `dailyBalances` / `values` — if an authoritative load
+    // superseded this rate tick, those may be the previous account's, so skip the
+    // legacy recompute rather than clobber the switched-to account (#1209).
+    let generation = snapshotGeneration
     await loadDailyBalances(accountId: accountId, hostCurrency: host)
     if !positions.isEmpty {
       await valuatePositions(profileCurrency: host, on: Date())
     }
+    guard generation == snapshotGeneration else { return }
     refreshLegacyPerformance()
     yieldTestObservationTick()
   }

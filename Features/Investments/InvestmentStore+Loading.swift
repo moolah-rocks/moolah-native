@@ -58,13 +58,20 @@ extension InvestmentStore {
   /// unavailable (`dailyBalances = []` and `error` set) rather than
   /// rendering a partial sum or a native-instrument fallback.
   func loadDailyBalances(accountId: UUID, hostCurrency: Instrument) async {
+    let generation = snapshotGeneration
     do {
       let raw = try await repository.fetchDailyBalances(accountId: accountId)
-      setDailyBalances(try await aggregateDailyBalances(raw: raw, hostCurrency: hostCurrency))
+      let aggregated = try await aggregateDailyBalances(raw: raw, hostCurrency: hostCurrency)
+      // Drop a superseded pass so a stale account's series can't overwrite the
+      // switched-to account's (#1209).
+      guard generation == snapshotGeneration else { return }
+      setDailyBalances(aggregated)
     } catch is CancellationError {
       return  // Cancelling a `.task` mid-load is not a failure.
     } catch {
       logger.error("Failed to load daily balances: \(error.localizedDescription)")
+      // Don't surface a superseded pass's failure over the fresher account.
+      guard generation == snapshotGeneration else { return }
       setError(error)
       setDailyBalances([])
     }
@@ -82,6 +89,9 @@ extension InvestmentStore {
   /// recorded before the user switched modes), which would confuse
   /// callers that pin "trades-mode means values is empty" semantics.
   func loadAllData(account: Account, profileCurrency: Instrument) async {
+    // Authoritative load: supersede any in-flight rate-tick / previous-account
+    // pass so its late publish can't clobber this account's data (#1209).
+    bumpSnapshotGeneration()
     setLoadedHostCurrency(profileCurrency)
     setAccountPerformance(nil)  // clear stale data immediately
     await refreshAssetKeys()
@@ -151,6 +161,8 @@ extension InvestmentStore {
   /// `.onChange` where we only care about position-tracked accounts.
   func reloadPositionsIfNeeded(account: Account, profileCurrency: Instrument) async {
     guard account.valuationMode == .calculatedFromTrades else { return }
+    // Authoritative reload (post-trade): supersede any in-flight rate-tick pass.
+    bumpSnapshotGeneration()
     await loadPositions(accountId: account.id, accountChainId: account.chainId)
     guard !Task.isCancelled else { return }
     await valuatePositions(profileCurrency: profileCurrency, on: Date())
@@ -161,12 +173,16 @@ extension InvestmentStore {
 
   func setValue(accountId: UUID, date: Date, value: InstrumentAmount) async {
     setError(nil)
+    let generation = snapshotGeneration
     do {
       try await repository.setValue(accountId: accountId, date: date, value: value)
-      // The reactive observation will re-emit and update `values` via
-      // `applyValuesPage(_:accountId:)`. We still update locally so the
-      // UI reflects the change synchronously when the active subscription
-      // hasn't caught up yet.
+      // If an account switch bumped the generation during the write, `values`
+      // now holds the other account's page — splicing this account's entry in
+      // and publishing would corrupt it (#1209). The write persisted; the
+      // reactive `applyValuesPage` subscription refreshes the active account.
+      guard generation == snapshotGeneration else { return }
+      // Otherwise update locally so the UI reflects the change synchronously
+      // when the active subscription hasn't caught up yet.
       let newValue = InvestmentValue(date: date, value: value)
       var updated = values
       updated.removeAll { $0.date.isSameDay(as: date) }
@@ -182,8 +198,12 @@ extension InvestmentStore {
 
   func removeValue(accountId: UUID, date: Date) async {
     setError(nil)
+    let generation = snapshotGeneration
     do {
       try await repository.removeValue(accountId: accountId, date: date)
+      // Skip the local update if an account switch bumped the generation
+      // mid-write; see `setValue`.
+      guard generation == snapshotGeneration else { return }
       var updated = values
       updated.removeAll { $0.date.isSameDay(as: date) }
       setValues(updated)

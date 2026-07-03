@@ -98,6 +98,10 @@ extension InvestmentStore {
     // the same chain identity regardless of what the actor sees post-await.
     let positions = self.positions
     let loadedAccountChainId = self.loadedAccountChainId
+    // Capture before the first suspension (no `await` intervenes); drop the
+    // publish below if a fresher authoritative load supersedes this pass, so a
+    // stale rate-tick valuation can't overwrite a switched-to account (#1209).
+    let generation = snapshotGeneration
     var requests: [BatchConversionRequest] = []
     requests.reserveCapacity(positions.count)
     for position in positions where position.instrument.id != profileCurrency.id {
@@ -142,6 +146,10 @@ extension InvestmentStore {
       }
     }
 
+    // A fresher authoritative load superseded this pass while it was suspended
+    // in the conversion layer — publishing now would show a stale account's
+    // positions/total, so drop it (#1209). The superseding load publishes.
+    guard generation == snapshotGeneration else { return }
     setValuedPositions(valued)
     if let firstFailure {
       setTotalPortfolioValue(nil)
@@ -158,6 +166,8 @@ extension InvestmentStore {
   /// having to navigate away and back. Issue #790.
   func revaluateLoadedPositions() async {
     guard let profileCurrency = loadedHostCurrency else { return }
+    // Authoritative refresh: supersede any in-flight rate-tick valuation.
+    bumpSnapshotGeneration()
     await valuatePositions(profileCurrency: profileCurrency, on: Date())
   }
 
@@ -173,23 +183,29 @@ extension InvestmentStore {
       setAccountPerformance(nil)
       return
     }
+    let generation = snapshotGeneration
     do {
       let txns = try await fetchAllTransactions(
         repository: transactionRepository,
         accountId: accountId)
-      setAccountPerformance(
-        try await AccountPerformanceCalculator.compute(
-          accountId: accountId,
-          transactions: txns,
-          valuedPositions: valuedPositions,
-          profileCurrency: profileCurrency,
-          conversionService: conversionService))
+      let performance = try await AccountPerformanceCalculator.compute(
+        accountId: accountId,
+        transactions: txns,
+        valuedPositions: valuedPositions,
+        profileCurrency: profileCurrency,
+        conversionService: conversionService)
+      // Drop a superseded pass so a stale account's performance can't overwrite
+      // the switched-to account's (#1209).
+      guard generation == snapshotGeneration else { return }
+      setAccountPerformance(performance)
     } catch is CancellationError {
       return
     } catch {
       logger.warning(
         "AccountPerformance unavailable: \(error.localizedDescription, privacy: .public)"
       )
+      // Don't blank a superseded pass's account over the fresher one (#1209).
+      guard generation == snapshotGeneration else { return }
       setAccountPerformance(nil)
       // self.error intentionally not set — performance tile degrades to
       // "Unavailable" while the rest of the account view stays functional.
