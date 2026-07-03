@@ -125,6 +125,7 @@ struct MoolahDomainCommands: Commands {
   @FocusedValue(\.deleteTransactionAction) private var deleteTransactionAction
   @FocusedValue(\.payTransactionAction) private var payTransactionAction
   @FocusedValue(\.mergeAsTransferAction) private var mergeAsTransferAction
+  @FocusedValue(\.mergeTransactionsAction) private var mergeTransactionsAction
   @FocusedValue(\.unmergeTransferAction) private var unmergeTransferAction
   @Environment(\.openWindow) private var openWindow
   @Environment(\.openURL) private var openURL
@@ -153,6 +154,9 @@ struct MoolahDomainCommands: Commands {
       // belong in the Delete group below.
       Button("Merge as Transfer") { mergeAsTransferAction?() }
         .disabled(mergeAsTransferAction == nil)
+
+      Button("Merge Transactions") { mergeTransactionsAction?() }
+        .disabled(mergeTransactionsAction == nil)
 
       Button("Split Back into Separate Transactions\u{2026}") {
         unmergeTransferAction?()
