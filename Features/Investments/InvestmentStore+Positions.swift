@@ -122,6 +122,45 @@ extension InvestmentStore {
       return
     }
 
+    let fold = foldValuations(
+      positions: positions,
+      profileCurrency: profileCurrency,
+      outcomes: outcomes,
+      accountChainId: loadedAccountChainId)
+
+    // A fresher authoritative load superseded this pass while it was suspended
+    // in the conversion layer — publishing now would show a stale account's
+    // positions/total, so drop it (#1209). The superseding load publishes.
+    guard generation == snapshotGeneration else { return }
+    setValuedPositions(fold.valued)
+    if let firstFailure = fold.firstFailure {
+      setTotalPortfolioValue(nil)
+      setError(firstFailure)
+    } else {
+      setTotalPortfolioValue(fold.total)
+    }
+  }
+
+  /// The accumulated result of folding a batch of position valuations:
+  /// the display rows, the summed portfolio value, and the first conversion
+  /// failure (if any) so the caller can mark the total unavailable per Rule 11.
+  private struct ValuationFold {
+    let valued: [ValuedPosition]
+    let total: Decimal
+    let firstFailure: Error?
+  }
+
+  /// Assemble each position's `ValuedPosition` row and fold its conversion
+  /// outcome into the running total / first failure. `outcomes` holds one
+  /// entry per cross-instrument position, indexed by `cursor` in the order the
+  /// requests were appended; host-currency positions resolve inline (Rule 8)
+  /// and consume no outcome. `.knownZero` positions drop out entirely (#790).
+  private func foldValuations(
+    positions: [Position],
+    profileCurrency: Instrument,
+    outcomes: [BatchConversionOutcome],
+    accountChainId: Int?
+  ) -> ValuationFold {
     var valued: [ValuedPosition] = []
     var total: Decimal = 0
     var firstFailure: Error?
@@ -134,7 +173,7 @@ extension InvestmentStore {
         position: position,
         profileCurrency: profileCurrency,
         outcome: resolved,
-        accountChainId: loadedAccountChainId)
+        accountChainId: accountChainId)
       if let entry { valued.append(entry) }
       switch outcome {
       case .success(let value):
@@ -145,18 +184,7 @@ extension InvestmentStore {
         if firstFailure == nil { firstFailure = error }
       }
     }
-
-    // A fresher authoritative load superseded this pass while it was suspended
-    // in the conversion layer — publishing now would show a stale account's
-    // positions/total, so drop it (#1209). The superseding load publishes.
-    guard generation == snapshotGeneration else { return }
-    setValuedPositions(valued)
-    if let firstFailure {
-      setTotalPortfolioValue(nil)
-      setError(firstFailure)
-    } else {
-      setTotalPortfolioValue(total)
-    }
+    return ValuationFold(valued: valued, total: total, firstFailure: firstFailure)
   }
 
   /// Re-runs `valuatePositions` against the most recently loaded
