@@ -460,7 +460,80 @@ func update(_ account: Account) async throws {
 
 ---
 
-## 6. Pagination
+## 6. Reactive Recompute: Guard Against Stale Publishes
+
+A reactive `@MainActor @Observable` store often recomputes published state
+(converted balances, running-balance rows, valued positions) in response to
+*several independent* async sources — a `repository.observeAll()` snapshot, a
+`conversionService.observeRates()` tick, an instrument-registry change, an
+account switch. Each recompute reads a snapshot of the store's inputs, `await`s
+a conversion / fetch, then publishes.
+
+`@MainActor` serialises the *continuations* but not their *order*, so two
+recomputes can be in flight at once (e.g. a background rate-tick pass and an
+authoritative data pass) and **whichever resumes last wins** — even if it
+computed over stale input. An unconditional publish therefore lets a stale pass
+clobber fresher state (a just-added transaction vanishes, the sidebar blanks,
+the wrong account's positions show):
+
+```swift
+// WRONG — unconditional publish
+func recompute() async {
+    let input = self.accounts             // snapshot the input
+    let result = await convert(input)     // suspends; a fresher snapshot may land here
+    self.published = result               // clobbers whatever landed while suspended
+}
+```
+
+**Rule: capture a generation before the compute; drop the publish if it
+advanced.** A monotonic counter, bumped only by the authoritative source, lets a
+superseded pass detect that it lost the race and skip its write:
+
+```swift
+@ObservationIgnored private(set) var snapshotGeneration: UInt64 = 0
+func bumpSnapshotGeneration() { snapshotGeneration &+= 1 }  // authoritative apply / load calls this
+
+func recompute() async {
+    let generation = snapshotGeneration   // capture BEFORE reading inputs (no await between)
+    let input = self.accounts
+    let result = await convert(input)
+    guard generation == snapshotGeneration else { return }  // superseded — a fresher pass owns the state
+    self.published = result
+}
+```
+
+- Capture the generation with **no suspension** between the capture and the
+  input read, so the two are consistent (both `@MainActor`, both synchronous).
+- Bump the counter only from the **authoritative** context change — a new
+  `observeAll()` snapshot, an account switch, a filter reset — *not* from the
+  background tick that should be dropped. The tick is the loser, not the bumper.
+- `@ObservationIgnored` so a bump doesn't re-render every view.
+
+**Retry loops: a dropped pass makes no retry decision.** If the store spawns a
+background retry after a conversion failure, a pass that *dropped* its publish
+must not also drive retry management. Its (stale) `anyFailed` is meaningless —
+treating a stale success as authoritative would cancel the retry a fresher
+*failing* pass needs. Return whether the publish happened and gate the retry
+decision on it (do **not** mark the publish helper `@discardableResult`, so an
+ignored result fails to compile):
+
+```swift
+let published = publishSnapshot(result, ifGeneration: generation)
+guard published else { return }   // (or `continue`, inside the retry loop)
+if !result.anyFailed { conversionTask?.cancel(); conversionTask = nil }
+```
+
+This class of bug (issue #1209) was fixed across `AccountStore`, `EarmarkStore`,
+`TransactionStore`, and `InvestmentStore`; `AccountGroupStore` and the
+instrument-registry refetch path (`applyInstrumentRegistryRefresh`) use the same
+guard. Stores that instead **serialise** their recomputes with a single-flight
+flag — flipped with no `await` between the check and the set, as in
+`AnalysisStore` / `InsightStore` — are already safe, because concurrent
+recomputes never coexist.
+
+---
+
+## 7. Pagination
 
 For large data sets, load pages incrementally:
 
@@ -513,7 +586,7 @@ final class TransactionStore {
 
 ---
 
-## 7. SwiftUI List Performance
+## 8. SwiftUI List Performance
 
 ### Never Add `.id()` to ForEach Children
 
@@ -578,7 +651,7 @@ Alternatively, use the Task cancellation pattern in the store (see Section 3).
 
 ---
 
-## 8. Anti-Patterns
+## 9. Anti-Patterns
 
 ### Threading & Concurrency
 
@@ -620,10 +693,12 @@ Alternatively, use the Task cancellation pattern in the store (see Section 3).
 | Loading all pages in a loop at startup | Slow initial load, blocks UI | Use pagination with `loadMore()` |
 | Mutating `@Observable` state from background | Runtime crash or undefined behavior | Ensure all state mutation is `@MainActor` |
 | Sharing mutable state between stores | Race conditions, unclear ownership | Each store owns its state; communicate via callbacks or reload |
+| Publishing a recompute result unconditionally after an `await` | A stale pass that resumes last clobbers fresher published state (#1209) | Capture a generation before the compute; drop the publish if it advanced (§6) |
+| A dropped (superseded) recompute still driving retry / cancel decisions | A stale success cancels the retry a fresher failing pass needs | Return whether the publish happened; make no retry decision when it didn't (§6) |
 
 ---
 
-## 9. Testing Concurrency
+## 10. Testing Concurrency
 
 ### Store Tests Run on `@MainActor`
 
@@ -678,7 +753,7 @@ final class URLProtocolStub: URLProtocol {
 
 ---
 
-## 10. Future Considerations
+## 11. Future Considerations
 
 ### Swift 6.2 Default MainActor Isolation
 
@@ -730,4 +805,5 @@ For large file downloads or uploads that should continue when the app is backgro
 
 ## Version History
 
+- **1.1** (2026-07-03): Added §6 "Reactive Recompute: Guard Against Stale Publishes" (the `snapshotGeneration` clobber-guard pattern) and its anti-pattern rows.
 - **1.0** (2026-04-09): Initial concurrency guide
