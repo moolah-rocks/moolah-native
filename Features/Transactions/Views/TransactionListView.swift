@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// The transactions armed for the "Merge Transactions" confirmation
+/// dialog. A named wrapper (rather than a bare `[Transaction]?` `@State`)
+/// so the pending state reads as one action and avoids the
+/// empty-vs-absent ambiguity of an optional collection.
+struct PendingTransactionMerge {
+  let transactions: [Transaction]
+}
+
 struct TransactionListView: View {
   // MARK: - Properties
 

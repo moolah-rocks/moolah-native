@@ -1,13 +1,5 @@
 import Foundation
 
-/// The transactions armed for the "Merge Transactions" confirmation
-/// dialog. A named wrapper (rather than a bare `[Transaction]?` `@State`)
-/// so the pending state reads as one action and avoids the
-/// empty-vs-absent ambiguity of an optional collection.
-struct PendingTransactionMerge {
-  let transactions: [Transaction]
-}
-
 // Selection-shape gates for the two merge commands the transaction list
 // exposes. Both resolve the `List`'s multi-selection against the loaded
 // projection and apply the cheap model-level predicate; the stores /
