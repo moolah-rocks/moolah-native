@@ -46,6 +46,13 @@ struct PositionsViewInput: Sendable, Hashable {
   /// keep the `shouldHide` collapse.
   let alwaysShowsFullSurface: Bool
 
+  /// `true` while the historical series is still being built asynchronously
+  /// (progressive render). The positions table renders immediately; the
+  /// chart area shows a loading placeholder until `historicalValue` arrives.
+  /// Independent of `hasAnyHistoricalActivity` (which answers "does history
+  /// exist at all", not "is it loading right now").
+  let isHistoryLoading: Bool
+
   /// Single designated init with defaults so non-investment callers
   /// (the transaction list, all previews) only have to fill in the
   /// fields they care about. The investment-account path opts in to
@@ -61,7 +68,8 @@ struct PositionsViewInput: Sendable, Hashable {
     assetKeysByInstrumentId: [String: String] = [:],
     performance: AccountPerformance? = nil,
     hasAnyHistoricalActivity: Bool = false,
-    alwaysShowsFullSurface: Bool = false
+    alwaysShowsFullSurface: Bool = false,
+    isHistoryLoading: Bool = false
   ) {
     self.title = title
     self.hostCurrency = hostCurrency
@@ -71,6 +79,7 @@ struct PositionsViewInput: Sendable, Hashable {
     self.performance = performance
     self.hasAnyHistoricalActivity = hasAnyHistoricalActivity
     self.alwaysShowsFullSurface = alwaysShowsFullSurface
+    self.isHistoryLoading = isHistoryLoading
   }
 
   /// Sum of per-row values. `nil` if any row's `value` is `nil` — per the
@@ -115,6 +124,12 @@ struct PositionsViewInput: Sendable, Hashable {
   var showsChart: Bool {
     guard let series = historicalValue else { return false }
     return !series.total.isEmpty
+  }
+
+  /// Show a chart-area loading placeholder when the series is still being
+  /// built and there is a table worth rendering beneath it.
+  var showsChartLoadingPlaceholder: Bool {
+    isHistoryLoading && !showsChart && !rendersNothing
   }
 
   /// `true` iff the all-positions chart line should render. False when any

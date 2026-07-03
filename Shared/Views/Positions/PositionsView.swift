@@ -34,6 +34,11 @@ struct PositionsView: View {
             selection: $selection
           )
           .padding(.vertical, 8)
+        } else if input.showsChartLoadingPlaceholder {
+          Divider()
+          ProgressView()
+            .frame(maxWidth: .infinity, minHeight: 160)
+            .padding(.vertical, 8)
         }
         Divider()
         PositionsTable(input: input, selection: $selection)
