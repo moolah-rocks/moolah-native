@@ -73,24 +73,51 @@ struct PositionsHistoryBuilder: Sendable {
       // already swallowed and latched.
     }
 
+    let pending: [PendingDay]
+    do {
+      pending = try await foldPendingDays(
+        start: start, endDay: endDay, context: context, state: &state)
+    } catch {
+      return state.series(hostCurrency: hostCurrency)
+    }
+
+    // One flat batch of value conversions across every (instrument, day).
+    let outcomes: [BatchConversionOutcome]
+    do {
+      outcomes = try await convertPending(pending, hostCurrency: hostCurrency)
+    } catch {
+      // CancellationError (or any thrown batch error): the view is being
+      // torn down; return whatever the fold produced (no value points).
+      return state.series(hostCurrency: hostCurrency)
+    }
+
+    assemble(pending: pending, outcomes: outcomes, into: &state)
+    return state.series(hostCurrency: hostCurrency)
+  }
+
+  /// Walk `start...endDay`, folding each day's transactions and recording
+  /// (not yet converting) that day's held-instrument points. Throws
+  /// `CancellationError` if cancellation was observed, so the caller can
+  /// bail without batching.
+  private func foldPendingDays(
+    start: Date, endDay: Date, context: BuildContext, state: inout BuildState
+  ) async throws -> [PendingDay] {
+    var pending: [PendingDay] = []
     var day = start
     while day <= endDay {
-      if Task.isCancelled { return state.series(hostCurrency: hostCurrency) }
+      if Task.isCancelled { throw CancellationError() }
       do {
         try await applyTransactions(on: day, context: context, state: &state)
       } catch is CancellationError {
-        return state.series(hostCurrency: hostCurrency)
+        throw CancellationError()
       } catch {
         // see preFoldHistory comment
       }
-      let cancelled = await emitDailyPoints(
-        for: day, hostCurrency: hostCurrency, state: &state)
-      if cancelled { return state.series(hostCurrency: hostCurrency) }
+      pending.append(recordDailyPoints(for: day, state: &state))
       guard let next = Calendar.utc.date(byAdding: .day, value: 1, to: day) else { break }
       day = next
     }
-
-    return state.series(hostCurrency: hostCurrency)
+    return pending
   }
 
   /// Single-account convenience overload. Forwards to the `Set<UUID>` version.
@@ -155,85 +182,15 @@ struct PositionsHistoryBuilder: Sendable {
     let hostCurrency: Instrument
   }
 
-  /// Emit one point per held instrument on `day` and, when every conversion
-  /// succeeds, one aggregate point. Returns `true` if cancellation was observed
-  /// so the caller can bail.
-  private func emitDailyPoints(
-    for day: Date,
-    hostCurrency: Instrument,
-    state: inout BuildState
-  ) async -> Bool {
-    var aggValue: Decimal = 0
-    var aggCost: Decimal = 0
-    var aggOK = true
-    var anyHeld = false
-
-    // `day` is UTC midnight — used for iteration, comparison, and conversion
-    // key lookups. `pointDate` is noon UTC — a zone-invariant positioning
-    // token for the chart axis (the ±12 h margin keeps the civil month stable
-    // even when a downstream read uses a non-UTC calendar).
-    let pointDate = Calendar.utc.date(byAdding: .hour, value: 12, to: day) ?? day
-
-    // Host-currency legs are excluded from `quantities` in `apply()`, so every
-    // instrument here is a non-host investment instrument and always requires
-    // a conversion call.
-    for (instrument, qty) in state.quantities where qty != 0 {
-      if Task.isCancelled { return true }
-      anyHeld = true
-      let cost = state.engine.openLots(for: instrument)
-        .reduce(Decimal(0)) { $0 + $1.remainingCost }
-      let value = await convertValue(
-        qty: qty,
-        instrument: instrument,
-        hostCurrency: hostCurrency,
-        on: day)
-      if let value {
-        state.perInstrument[instrument.id, default: []].append(
-          HistoricalValueSeries.Point(
-            date: pointDate,
-            value: value,
-            cost: cost,
-            contributions: nil))
-        aggValue += value
-        aggCost += cost
-      } else {
-        aggOK = false
-      }
-    }
-
-    if anyHeld && aggOK {
-      state.total.append(
-        HistoricalValueSeries.Point(
-          date: pointDate,
-          value: aggValue,
-          cost: aggCost,
-          contributions: state.contributions))
-    }
-    return false
-  }
-
-  /// Convert `qty` of `instrument` to `hostCurrency` on `day`, logging and
-  /// returning `nil` on failure so the caller can mark the day incomplete.
-  private func convertValue(
-    qty: Decimal, instrument: Instrument, hostCurrency: Instrument, on day: Date
-  ) async -> Decimal? {
-    do {
-      return try await conversionService.convert(
-        qty, from: instrument, to: hostCurrency, on: day)
-    } catch {
-      logger.warning(
-        "history conversion failed for \(instrument.id, privacy: .public) on \(day, privacy: .public): \(error.localizedDescription, privacy: .public)"
-      )
-      return nil
-    }
-  }
-
   /// Mutable running state threaded through `build`'s per-day loop.
   /// Exclusively owned by the single `@concurrent` build task; no
   /// other task ever holds a reference. The `inout`-across-`await`
   /// usage in `apply` is therefore safe — there is no concurrent
   /// reader or writer.
-  private struct BuildState {
+  ///
+  /// Not `private`: shared with the batch-conversion assembly pass in
+  /// `PositionsHistoryBuilder+Batch.swift`.
+  struct BuildState {
     var quantities: [Instrument: Decimal] = [:]
     var engine = CostBasisEngine()
     var txnIndex = 0
