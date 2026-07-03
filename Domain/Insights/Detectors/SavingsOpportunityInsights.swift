@@ -56,15 +56,15 @@ enum SavingsOpportunityInsights {
   }
 
   /// Subscriptions as a share of income (23). Flags when the combined
-  /// monthly subscription cost exceeds `threshold` of average monthly income.
+  /// monthly subscription cost exceeds `threshold` of typical monthly income.
   static func subscriptionOverspend(
     subscriptions: [DetectedSubscription],
-    averageMonthlyIncome: Decimal?,
+    typicalMonthlyIncome: Decimal?,
     context: InsightContext,
     threshold: Double = 0.15
   ) -> [Insight] {
     let expenseStreams = subscriptions.filter { !$0.isIncome }
-    guard !expenseStreams.isEmpty, let income = averageMonthlyIncome, income > 0 else { return [] }
+    guard !expenseStreams.isEmpty, let income = typicalMonthlyIncome, income > 0 else { return [] }
     let monthlyTotal = expenseStreams.reduce(Decimal(0)) { $0 + $1.monthlyCostMagnitude }
     let share = toDouble(monthlyTotal) / toDouble(income)
     guard share > threshold else { return [] }

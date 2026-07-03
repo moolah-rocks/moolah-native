@@ -106,7 +106,7 @@ struct SubscriptionInsightsTests {
     }
     let subscriptions = detect(transactions)
     let insights = SavingsOpportunityInsights.subscriptionOverspend(
-      subscriptions: subscriptions, averageMonthlyIncome: 300, context: context)
+      subscriptions: subscriptions, typicalMonthlyIncome: 300, context: context)
     #expect(insights.contains { $0.kind == .subscriptionOverspend })
   }
 }

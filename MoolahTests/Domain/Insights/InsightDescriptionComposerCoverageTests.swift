@@ -68,7 +68,7 @@ struct InsightDescriptionComposerCoverageTests {
     let text = InsightDescriptionComposer.compose(
       kind: .weekendSpendSkew, title: "Weekends are your big spend days",
       facts: [
-        InsightFact("Avg weekend day", "$150.00"), InsightFact("Avg weekday", "$60.00"),
+        InsightFact("Typical weekend day", "$150.00"), InsightFact("Typical weekday", "$60.00"),
         InsightFact("Ratio", "2.5×"),
       ])
     #expect(

@@ -79,6 +79,52 @@ struct AdditionalInsightTests {
     #expect(insight.references.groupIds == [groupA.id])
   }
 
+  @Test
+  func groupSpendConcentrationDividesByAllSpendNotJustGrouped() {
+    // A group holds $800, but $2,000 of spend sits in an ungrouped account.
+    // "% of your spending" must divide by ALL spend ($2,800 → 29%), not by
+    // grouped spend alone (which would read as a false 100%).
+    let groupedAccount = UUID()
+    let ungroupedAccount = UUID()
+    let group = InsightAccountGroup(id: UUID(), name: "Daily Spending")
+    let bills = InsightAccountGroup(id: UUID(), name: "Bills")
+    var legs: [InsightTransaction] = []
+    for index in 0..<8 {
+      legs.append(
+        InsightTestSupport.expense(
+          100, payee: "Shop", daysAgo: index + 1, accountId: groupedAccount)
+      )
+    }
+    for index in 0..<10 {
+      legs.append(
+        InsightTestSupport.expense(
+          200, payee: "Rent", daysAgo: index + 1, accountId: ungroupedAccount)
+      )
+    }
+    let input = InsightInput(
+      context: context,
+      accountSpend: InsightTestSupport.accountSpend(from: legs),
+      accountGroups: [group, bills],
+      accountGroupMembership: [groupedAccount: group.id])
+    #expect(AccountGroupInsights.groupSpendConcentration(input).isEmpty)
+  }
+
+  @Test
+  func groupSpendConcentrationQuietBelowMinimumActivity() {
+    let account = UUID()
+    let group = InsightAccountGroup(id: UUID(), name: "A")
+    let bills = InsightAccountGroup(id: UUID(), name: "B")
+    let legs = [InsightTestSupport.expense(100, payee: "Shop", daysAgo: 1, accountId: account)]
+    let input = InsightInput(
+      context: context,
+      accountSpend: InsightTestSupport.accountSpend(from: legs),
+      accountGroups: [group, bills],
+      accountGroupMembership: [account: group.id])
+    // A single transaction is a 100% share but too little activity to call a
+    // group "dominant".
+    #expect(AccountGroupInsights.groupSpendConcentration(input).isEmpty)
+  }
+
   // MARK: - Income extensions
 
   @Test
@@ -193,6 +239,30 @@ struct AdditionalInsightTests {
         dailyTotals: InsightTestSupport.dailyTotals(from: legs), context: context
       ).first)
     #expect(insight.kind == .weekendSpendSkew)
+  }
+
+  @Test
+  func weekendSkewIgnoresSingleBlowoutWeekend() {
+    // Weekends and weekdays both typically $20 — except one blowout weekend at
+    // $5,000. The mean would fabricate a "weekends are big" habit; the median
+    // (the same $20 on both sides) correctly stays quiet.
+    var legs: [InsightTransaction] = []
+    var boostedOneWeekend = false
+    for daysAgo in 1...42 {
+      let date = InsightTestSupport.daysAgo(daysAgo)
+      let weekday = calendar.component(.weekday, from: date)
+      let isWeekend = weekday == 1 || weekday == 7
+      var magnitude: Decimal = 20
+      if isWeekend && !boostedOneWeekend {
+        magnitude = 5000
+        boostedOneWeekend = true
+      }
+      legs.append(InsightTestSupport.expense(magnitude, payee: "Spend", daysAgo: daysAgo))
+    }
+    #expect(
+      SpendHabitInsights.weekendSkew(
+        dailyTotals: InsightTestSupport.dailyTotals(from: legs), context: context
+      ).isEmpty)
   }
 
   // MARK: - Budget coverage

@@ -35,8 +35,12 @@ enum SpendHabitInsights {
     return best.map { [$0] } ?? []
   }
 
-  /// Weekend-vs-weekday spend skew (E-4): the ratio of average daily
-  /// weekend spend to weekday spend, when stable and lopsided.
+  /// Weekend-vs-weekday spend skew (E-4): the ratio of *typical* daily
+  /// weekend spend to weekday spend, when stable and lopsided. Uses the
+  /// median (not the mean) of each side's daily totals — spending is
+  /// heavy-tailed, so a single blowout weekend must not fabricate a "habit"
+  /// or inflate the quoted per-day figure (the same reason every sibling
+  /// anomaly detector scores against a robust median / MAD).
   static func weekendSkew(
     dailyTotals dailySummaries: [DailySpendSummary],
     context: InsightContext,
@@ -57,10 +61,10 @@ enum SpendHabitInsights {
     guard weekendTotals.count >= minimumDaysEachSide,
       weekdayTotals.count >= minimumDaysEachSide
     else { return [] }
-    let weekendMean = DescriptiveStatistics.mean(weekendTotals)
-    let weekdayMean = DescriptiveStatistics.mean(weekdayTotals)
-    guard weekdayMean > 0 else { return [] }
-    let ratio = weekendMean / weekdayMean
+    let weekendTypical = DescriptiveStatistics.median(weekendTotals)
+    let weekdayTypical = DescriptiveStatistics.median(weekdayTotals)
+    guard weekdayTypical > 0 else { return [] }
+    let ratio = weekendTypical / weekdayTypical
     guard ratio >= minimumRatio else { return [] }
 
     return [
@@ -74,8 +78,8 @@ enum SpendHabitInsights {
         surprise: min((ratio - 1) / 2, 1),
         monetaryImpact: nil,
         facts: [
-          InsightFact("Avg weekend day", context.formatted(Decimal(-weekendMean))),
-          InsightFact("Avg weekday", context.formatted(Decimal(-weekdayMean))),
+          InsightFact("Typical weekend day", context.formatted(Decimal(-weekendTypical))),
+          InsightFact("Typical weekday", context.formatted(Decimal(-weekdayTypical))),
           InsightFact("Ratio", "\(multiple(ratio))×"),
         ],
         references: InsightReferences(instrumentIds: [context.reportingCurrency.id]))

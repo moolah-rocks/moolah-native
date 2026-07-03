@@ -16,7 +16,7 @@ enum LiquidityInsights {
   ) -> [Insight] {
     guard let liquid = InsightAggregates.latestActual(dailyBalances)?.availableFunds,
       liquid.quantity > 0,
-      let net = InsightAggregates.averageMonthlyNet(monthly, context: context),
+      let net = InsightAggregates.typicalMonthlyNet(monthly, context: context),
       net < 0
     else { return [] }
 
@@ -58,14 +58,14 @@ enum LiquidityInsights {
   ) -> [Insight] {
     guard let liquid = InsightAggregates.latestActual(dailyBalances)?.availableFunds,
       liquid.quantity > 0,
-      let spend = InsightAggregates.averageMonthlySpend(monthly, context: context),
+      let spend = InsightAggregates.typicalMonthlySpend(monthly, context: context),
       spend > 0
     else { return [] }
 
     let cushion = spend * multiple
     guard liquid.quantity > cushion else { return [] }
     let excess = liquid.quantity - cushion
-    // Surface the buffer's basis — `multiple` months of average spending — so
+    // Surface the buffer's basis — `multiple` months of typical spending — so
     // the fact (and the narration built from it) explains the dollar figure
     // rather than asserting it bare.
     let bufferLabel = "Suggested buffer (\(multiple) months' spending)"
@@ -82,7 +82,7 @@ enum LiquidityInsights {
         monetaryImpact: InstrumentAmount(quantity: excess, instrument: context.reportingCurrency),
         facts: [
           InsightFact("Available funds", context.formatted(liquid)),
-          InsightFact("Average monthly spend", context.formatted(spend)),
+          InsightFact("Typical monthly spend", context.formatted(spend)),
           InsightFact(bufferLabel, context.formatted(cushion)),
           InsightFact("Idle excess", context.formatted(excess)),
         ],
