@@ -78,6 +78,7 @@ struct PositionsHistoryBuilder: Sendable {
       pending = try await foldPendingDays(
         start: start, endDay: endDay, context: context, state: &state)
     } catch {
+      // Cancellation during the fold: view is being torn down; return what we have.
       return state.series(hostCurrency: hostCurrency)
     }
 
@@ -90,6 +91,8 @@ struct PositionsHistoryBuilder: Sendable {
       // torn down; return whatever the fold produced (no value points).
       return state.series(hostCurrency: hostCurrency)
     }
+
+    if Task.isCancelled { return state.series(hostCurrency: hostCurrency) }
 
     assemble(pending: pending, outcomes: outcomes, into: &state)
     return state.series(hostCurrency: hostCurrency)
@@ -113,7 +116,7 @@ struct PositionsHistoryBuilder: Sendable {
       } catch {
         // see preFoldHistory comment
       }
-      pending.append(recordDailyPoints(for: day, state: &state))
+      pending.append(recordDailyPoints(for: day, state: state))
       guard let next = Calendar.utc.date(byAdding: .day, value: 1, to: day) else { break }
       day = next
     }

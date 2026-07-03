@@ -84,6 +84,7 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
           ProgressView()
             .frame(maxWidth: .infinity)
             .padding()
+            .accessibilityLabel("Loading positions")
         }
       } transactions: {
         content
@@ -135,12 +136,15 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
     // current valuation; the historical chart fills in from buildHistoryInput
     // below. isHistoryLoading drives the chart-area loading placeholder.
     if !accountIds.isEmpty {
-      positionsInput = PositionsViewInput(
-        title: title,
-        hostCurrency: hostCurrency,
-        positions: rows,
-        historicalValue: nil,
-        assetKeysByInstrumentId: assetKeys,
+      // Preserve the previously-built series (if any) so a re-fire
+      // (range change, routine positions refresh) doesn't wipe an
+      // already-rendered chart back to a spinner. On genuine first load
+      // `positionsInput` is nil, so this is nil and the placeholder
+      // still shows.
+      positionsInput = loadingBaseInput(
+        rows: rows,
+        assetKeys: assetKeys,
+        historicalValue: positionsInput?.historicalValue,
         isHistoryLoading: true)
     }
     if !accountIds.isEmpty, let repository = session?.backend.transactions {
@@ -152,13 +156,30 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       )
       return
     }
-    positionsInput = PositionsViewInput(
+    positionsInput = loadingBaseInput(
+      rows: rows,
+      assetKeys: assetKeys,
+      historicalValue: nil,
+      isHistoryLoading: false)
+  }
+
+  /// Shared `PositionsViewInput` construction for `valuatePositions()`'s two
+  /// non-history-assembled sites (the stage-1 loading assignment and the
+  /// no-account-ids fallback). They differ only in `historicalValue` and
+  /// `isHistoryLoading`.
+  private func loadingBaseInput(
+    rows: [ValuedPosition],
+    assetKeys: [String: String],
+    historicalValue: HistoricalValueSeries?,
+    isHistoryLoading: Bool
+  ) -> PositionsViewInput {
+    PositionsViewInput(
       title: title,
       hostCurrency: hostCurrency,
       positions: rows,
-      historicalValue: nil,
-      assetKeysByInstrumentId: assetKeys
-    )
+      historicalValue: historicalValue,
+      assetKeysByInstrumentId: assetKeys,
+      isHistoryLoading: isHistoryLoading)
   }
 
   private func buildHistoryInput(

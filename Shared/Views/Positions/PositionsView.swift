@@ -36,9 +36,13 @@ struct PositionsView: View {
           .padding(.vertical, 8)
         } else if input.showsChartLoadingPlaceholder {
           Divider()
+          // Matches PositionsChart's footprint (header + 220pt chartBody +
+          // rangePicker, plus this container's own vertical padding) so
+          // swapping placeholder → chart doesn't jump the table below it.
           ProgressView()
-            .frame(maxWidth: .infinity, minHeight: 160)
+            .frame(maxWidth: .infinity, minHeight: 280)
             .padding(.vertical, 8)
+            .accessibilityLabel("Loading chart")
         }
         Divider()
         PositionsTable(input: input, selection: $selection)
@@ -222,4 +226,17 @@ private func performanceTilesPreviewInput() -> PositionsViewInput {
 #Preview("With performance tiles") {
   PositionsView(input: performanceTilesPreviewInput(), range: .constant(.threeMonths))
     .frame(width: 720, height: 480)
+}
+
+#Preview("Chart loading placeholder") {
+  PositionsView(
+    input: PositionsViewInput(
+      title: "Brokerage",
+      hostCurrency: .AUD,
+      positions: defaultPreviewPositions(),
+      historicalValue: nil,
+      isHistoryLoading: true),
+    range: .constant(.threeMonths)
+  )
+  .frame(width: 720, height: 480)
 }

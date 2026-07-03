@@ -67,5 +67,9 @@ struct PositionsHistoryBuilderBatchTests {
     #expect(series.totalSeries.count == 5)
     // Day 5 total = BHP 100×50 + CBA 0 = 5000.
     #expect(series.totalSeries.last?.value == 100 * Decimal(50))
+    // CBA (knownZero) still gets its own per-instrument point, valued at 0.
+    let cbaSeries = series.series(forInstrumentIds: [cba.id])
+    #expect(!cbaSeries.isEmpty)
+    #expect(cbaSeries.last?.value == 0)
   }
 }
