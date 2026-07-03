@@ -17,6 +17,9 @@ struct TransactionDetailLegRow: View {
   let earmarks: Earmarks
   @Binding var categoryState: CategoryAutocompleteState
   @FocusState.Binding var focusedField: TransactionDetailFocus?
+  /// The background-sync source this leg originated from, or `nil` for a
+  /// manually-entered leg. Drives the sync indicator in the section header.
+  let syncSource: BackgroundSyncSource?
   let onRequestDelete: () -> Void
 
   @FocusState private var categoryFieldFocused: Bool
@@ -43,7 +46,7 @@ struct TransactionDetailLegRow: View {
 
   var body: some View {
     if isLive {
-      Section("Sub-transaction \(index + 1) of \(totalLegCount)") {
+      Section {
         if !isEarmarkOnly {
           typePicker
         }
@@ -61,6 +64,25 @@ struct TransactionDetailLegRow: View {
               .frame(maxWidth: .infinity)
           }
         }
+      } header: {
+        legHeader
+      }
+    }
+  }
+
+  /// Section header: the "Sub-transaction N of M" title plus, for a leg that
+  /// background sync created, a trailing sync glyph whose source name is a
+  /// tooltip (and its accessibility label).
+  private var legHeader: some View {
+    HStack {
+      Text("Sub-transaction \(index + 1) of \(totalLegCount)")
+      if let syncSource {
+        Spacer()
+        Image(systemName: "arrow.triangle.2.circlepath")
+          .foregroundStyle(.secondary)
+          .help("Synced from \(syncSource.displayName)")
+          .accessibilityLabel("Synced from \(syncSource.displayName)")
+          .accessibilityIdentifier(UITestIdentifiers.Detail.legSyncIndicator(index))
       }
     }
   }

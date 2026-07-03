@@ -146,8 +146,6 @@ extension ProfileSession {
     return CryptoSyncWiring(store: store, discovery: discovery)
   }
 
-  // MARK: - Private helpers
-
   @MainActor
   private static func makeLiveBlockExplorer() -> any BlockExplorerClient {
     // Blockscout public unauthenticated tier: ~5 req/s per IP.
@@ -167,7 +165,7 @@ extension ProfileSession {
         rawAmount: 0,
         importedAt: Date(),
         importSessionId: UUID(),
-        parserIdentifier: "alchemy-wallet-sync")
+        parserIdentifier: BackgroundSyncSource.wallet.parserIdentifier)
     }
     return WalletSyncEngine(
       alchemy: alchemy,
@@ -199,7 +197,7 @@ extension ProfileSession {
         rawAmount: 0,
         importedAt: Date(),
         importSessionId: UUID(),
-        parserIdentifier: "coinstash")
+        parserIdentifier: BackgroundSyncSource.coinstash.parserIdentifier)
     }
     return CoinstashSyncSource(
       tokenStore: ExchangeTokenStore(synchronizable: true),
