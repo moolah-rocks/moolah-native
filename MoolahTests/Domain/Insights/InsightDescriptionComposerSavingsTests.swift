@@ -10,7 +10,7 @@ struct InsightDescriptionComposerSavingsTests {
       kind: .idleCashAlert, title: "More cash than usual in liquid accounts",
       facts: [
         InsightFact("Available funds", "$20,000.00"),
-        InsightFact("Average monthly spend", "$4,000.00"),
+        InsightFact("Typical monthly spend", "$4,000.00"),
         InsightFact("Suggested buffer (3 months' spending)", "$12,000.00"),
         InsightFact("Idle excess", "$8,000.00"),
       ])

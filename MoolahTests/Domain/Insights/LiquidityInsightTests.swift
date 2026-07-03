@@ -94,7 +94,7 @@ struct LiquidityInsightTests {
 
   @Test
   func idleCashUsesAvailableFundsNotGrossBalance() throws {
-    // $20k current funds, $8k earmarked → $12k available. Average monthly
+    // $20k current funds, $8k earmarked → $12k available. Typical monthly
     // spend $2k × 3 = $6k buffer, so the idle excess is measured from the
     // available $12k (excess $6k), not the gross $20k (which would be $14k).
     let balances = [
@@ -109,7 +109,7 @@ struct LiquidityInsightTests {
     #expect(idle.monetaryImpact?.quantity == 6000)
     let labels = Dictionary(uniqueKeysWithValues: idle.facts.map { ($0.label, $0.value) })
     #expect(labels["Available funds"] == InsightTestSupport.amount(12000).formatted)
-    #expect(labels["Average monthly spend"] == InsightTestSupport.amount(2000).formatted)
+    #expect(labels["Typical monthly spend"] == InsightTestSupport.amount(2000).formatted)
     #expect(labels["Idle excess"] == InsightTestSupport.amount(6000).formatted)
     #expect(labels["Liquid cash"] == nil)
     // The buffer fact makes its 3-months-of-spending basis visible.

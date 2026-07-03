@@ -235,7 +235,8 @@ extension InsightDescriptionComposer {
     return "You haven't paid \(merchant) in \(days) \(plural(days, "day"))."
   }
   static func weekendSpendSkew(title: String, facts: FactLookup) -> String {
-    guard let weekend = facts.value("Avg weekend day"), let weekday = facts.value("Avg weekday")
+    guard let weekend = facts.value("Typical weekend day"),
+      let weekday = facts.value("Typical weekday")
     else { return title }
     return
       "You spend more on weekends — about \(weekend) a weekend day versus \(weekday) on weekdays."

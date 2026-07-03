@@ -62,7 +62,7 @@ struct InsightEngine: Sendable {
     _ input: InsightInput, subscriptions: [DetectedSubscription]
   ) -> [Insight] {
     let context = input.context
-    let income = InsightAggregates.averageMonthlyIncome(input.monthly, context: context)
+    let income = InsightAggregates.typicalMonthlyIncome(input.monthly, context: context)
     var insights: [Insight] = []
     insights += SubscriptionInsights.newRecurring(subscriptions, context: context)
     insights += SubscriptionInsights.priceHikes(subscriptions, context: context)
@@ -70,7 +70,7 @@ struct InsightEngine: Sendable {
       subscriptions, categories: input.categories, context: context)
     insights += SubscriptionInsights.cancellationCandidates(subscriptions, context: context)
     insights += SavingsOpportunityInsights.subscriptionOverspend(
-      subscriptions: subscriptions, averageMonthlyIncome: income, context: context)
+      subscriptions: subscriptions, typicalMonthlyIncome: income, context: context)
     return insights
   }
 

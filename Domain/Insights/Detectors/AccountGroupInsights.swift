@@ -7,30 +7,40 @@ import Foundation
 enum AccountGroupInsights {
   static func groupSpendConcentration(
     _ input: InsightInput,
-    windowDays: Int = 30,
-    minimumShare: Double = 0.6
+    minimumShare: Double = 0.6,
+    minimumLegs: Int = 5
   ) -> [Insight] {
     let context = input.context
     let groupsById = Dictionary(uniqueKeysWithValues: input.accountGroups.map { ($0.id, $0) })
     guard groupsById.count >= 2 else { return [] }
 
+    // The share the message quotes is "% of your spending", so the
+    // denominator must be *all* spend — including accounts that belong to no
+    // group. Dividing only by grouped spend inflated the share (a group could
+    // read as "most of your spending" while ungrouped accounts held the bulk
+    // of it).
     var spendByGroup: [UUID: Double] = [:]
-    var groupedTotal = 0.0
+    var totalSpend = 0.0
+    var totalLegCount = 0
     for summary in input.accountSpend {
+      let magnitudeDecimal = summary.total.quantity < 0 ? -summary.total.quantity : 0
+      let magnitude = Double(truncating: magnitudeDecimal as NSDecimalNumber)
+      totalSpend += magnitude
+      totalLegCount += summary.legCount
       guard let accountId = summary.accountId,
         let groupId = input.accountGroupMembership[accountId]
       else { continue }
-      let magnitudeDecimal = summary.total.quantity < 0 ? -summary.total.quantity : 0
-      let magnitude = Double(truncating: magnitudeDecimal as NSDecimalNumber)
       spendByGroup[groupId, default: 0] += magnitude
-      groupedTotal += magnitude
     }
-    guard groupedTotal > 0,
+    // Too little activity to call any group "dominant" — a lone expense would
+    // otherwise fire this at a 100% share. `totalLegCount` is the count of
+    // expense legs across all accounts (`accountSpend` is expense-only).
+    guard totalSpend > 0, totalLegCount >= minimumLegs,
       let top = spendByGroup.max(by: { $0.value < $1.value }),
       let group = groupsById[top.key]
     else { return [] }
 
-    let share = top.value / groupedTotal
+    let share = top.value / totalSpend
     guard share >= minimumShare else { return [] }
 
     return [
