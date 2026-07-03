@@ -24,23 +24,6 @@ import Testing
 @MainActor
 struct AccountGroupStoreRegistryRefreshTests {
 
-  /// Registers an arbitrary crypto instrument on the shared registry,
-  /// which fires its `observeChanges()` stream — the signal an import
-  /// emits via `registerInstruments` before writing the per-profile rows.
-  private func fireRegistryChange(
-    on registry: GRDBInstrumentRegistryRepository
-  ) async throws {
-    let crypto = Instrument.crypto(
-      chainId: 1,
-      contractAddress: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
-      symbol: "WBTC", name: "Wrapped Bitcoin", decimals: 8)
-    try await registry.registerCrypto(
-      crypto,
-      mapping: CryptoProviderMapping(
-        instrumentId: crypto.id, coingeckoId: "wrapped-bitcoin",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
-  }
-
   @Test("registry tick refreshes groups written via a separate connection")
   func registryTickRefreshesGroupsAcrossConnections() async throws {
     let directory = FileManager.default.temporaryDirectory
@@ -80,7 +63,7 @@ struct AccountGroupStoreRegistryRefreshTests {
 
     // The import fires the shared registry's change stream; the store must
     // re-fetch and surface the group it never observed.
-    try await fireRegistryChange(on: registry)
+    try await SharedRegistryTestSupport.fireRegistryChange(on: registry)
 
     await expectEventually("registry tick live-refreshes the imported group") {
       store.groups.count == 1 && store.groups.first?.name == "Imported Crypto"
@@ -104,7 +87,7 @@ struct AccountGroupStoreRegistryRefreshTests {
     store.stopObserving()
     await store.awaitObservationTermination()
 
-    try await fireRegistryChange(on: registry)
+    try await SharedRegistryTestSupport.fireRegistryChange(on: registry)
 
     let didEmit = await store.didEmitWithin(timeout: .milliseconds(200))
     #expect(didEmit == false)

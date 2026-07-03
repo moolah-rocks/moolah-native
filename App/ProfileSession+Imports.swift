@@ -30,7 +30,9 @@ extension ProfileSession {
       profileId: profileId,
       logger: logger
     )
-    let importRuleStore = ImportRuleStore(repository: backend.importRules)
+    let importRuleStore = ImportRuleStore(
+      repository: backend.importRules,
+      instrumentChanges: backend.instrumentChangeObserver)
     let folderWatch = Self.makeFolderWatch(
       stagingDirectory: stagingDirectory,
       profileId: profileId,

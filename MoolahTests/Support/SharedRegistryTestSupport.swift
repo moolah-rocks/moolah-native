@@ -23,4 +23,22 @@ enum SharedRegistryTestSupport {
     GRDBInstrumentRegistryRepository(
       database: try ProfileIndexDatabase.openInMemory())
   }
+
+  /// Registers an arbitrary crypto instrument, which fires the registry's
+  /// `observeChanges()` stream — the signal an in-app import emits before
+  /// writing its per-profile rows. Shared by every store's registry-refresh
+  /// backstop test (Account/Group/Category/ImportRule).
+  static func fireRegistryChange(
+    on registry: GRDBInstrumentRegistryRepository
+  ) async throws {
+    let crypto = Instrument.crypto(
+      chainId: 1,
+      contractAddress: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
+      symbol: "WBTC", name: "Wrapped Bitcoin", decimals: 8)
+    try await registry.registerCrypto(
+      crypto,
+      mapping: CryptoProviderMapping(
+        instrumentId: crypto.id, coingeckoId: "wrapped-bitcoin",
+        cryptocompareSymbol: nil, binanceSymbol: nil))
+  }
 }
