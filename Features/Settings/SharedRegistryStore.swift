@@ -42,13 +42,14 @@ final class SharedRegistryStore {
   /// Issue #790.
   private(set) var registrationsVersion: Int = 0
 
-  /// Monotonic guard for `loadRegistrations`. The observation task and direct
-  /// callers can both trigger a reload, and the local mutations below update
-  /// the lists synchronously; a stale `allCryptoRegistrations()` result that
-  /// resumes last could clobber a fresher reload or resurrect a just-removed
-  /// row. Each reload and each local mutation bumps this; a reload drops its
-  /// publish if the counter advanced while it was suspended.
-  /// `@ObservationIgnored` — a pure guard counter no view reads. See #1209.
+  /// Monotonic guard for `loadRegistrations`, bumped by the local mutations
+  /// below (`removeRegistration` / `setStatus`) after their synchronous list
+  /// updates. A reload captures it before `allCryptoRegistrations()` and drops
+  /// its publish if a mutation advanced it meanwhile — otherwise a stale reload
+  /// resuming after a `removeRegistration` could resurrect the removed row.
+  /// Concurrent reloads (the observation task + a direct caller) are *not*
+  /// dropped against each other: they read the same registry, so last-writer-
+  /// wins is harmless. `@ObservationIgnored` — a pure guard no view reads (#1209).
   @ObservationIgnored private var loadGeneration: UInt64 = 0
 
   // The `unpricedRegistrations` / `unpricedCount` /
@@ -104,13 +105,13 @@ final class SharedRegistryStore {
   /// state — this method's call from the observation task has no UI
   /// caller and intentionally does not propagate.
   func loadRegistrations() async {
-    loadGeneration &+= 1
     let generation = loadGeneration
     do {
       let loaded = try await registry.allCryptoRegistrations()
-      // Drop this reload if a later reload or a local mutation bumped the
-      // counter while `allCryptoRegistrations()` was in flight — publishing our
-      // now-stale snapshot could clobber it or resurrect a removed row (#1209).
+      // Drop this reload if a local mutation bumped the counter while
+      // `allCryptoRegistrations()` was in flight — publishing our now-stale
+      // snapshot could resurrect a just-removed row (#1209). Concurrent reloads
+      // don't bump, so they don't drop each other.
       guard generation == loadGeneration else { return }
       registrations = loaded
       instruments = loaded.map(\.instrument)
