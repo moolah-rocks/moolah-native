@@ -20,9 +20,14 @@ protocol TestableStoreObservation: AnyObject, Sendable {
 
 /// Thrown by the `waitForFirstEmission` / `waitForNextEmission` helpers
 /// when the underlying store does not emit within the deadline.
-struct StoreEmissionTimeoutError: Error, CustomStringConvertible {
+struct StoreEmissionTimeoutError {
   let storeType: String
   let predicate: String?
+}
+
+extension StoreEmissionTimeoutError: Error {}
+
+extension StoreEmissionTimeoutError: CustomStringConvertible {
   var description: String {
     if let predicate {
       return "Timed out waiting for \(storeType) emission matching \(predicate)"
@@ -73,9 +78,9 @@ extension TestableStoreObservation {
   /// `@MainActor` to read the snapshot before evaluating.
   ///
   /// The default is deliberately generous (10s) — see `waitForFirstEmission`.
-  /// Callers should not pass a `timeout`; a match-wait wants headroom, not a
-  /// short cap. Short timeouts belong only on absence assertions
-  /// (`didEmitWithin`).
+  /// Callers rarely need to override `timeout`; a match-wait wants headroom,
+  /// not a short cap. Override only to assert absence of emission — see
+  /// `didEmitWithin`.
   func waitForNextEmission(
     matching predicate: @MainActor @Sendable @escaping (State) -> Bool,
     description: String = "<predicate>",
@@ -98,27 +103,18 @@ extension TestableStoreObservation {
     ) {
       // Fast path: the predicate may already be true (e.g. the store
       // applied the awaited state before this helper was called).
-      // Otherwise the iterator created below could see the underlying
-      // `AsyncStream` return `nil` immediately — single-consumer streams
-      // give undefined results when iterated twice — and we'd silently
-      // succeed without ever checking the predicate.
       if await evaluate() { return }
-      var iterator = ticks.makeAsyncIterator()
-      while await iterator.next() != nil {
-        if await evaluate() { return }
-      }
-      // Stream finished without a matching tick. The store's awaited
-      // state may still be in flight (e.g. a GRDB `ValueObservation`
-      // hasn't fired yet), or the underlying single-consumer
-      // `AsyncStream` may have dropped a tick across multiple iterator
-      // creations within the same test. Fall back to polling the
-      // predicate until the timeout-task in `withEmissionTimeout`
-      // cancels us — that way state arriving after the iterator
-      // misbehaves is still caught instead of falsely timing out.
-      while !Task.isCancelled {
-        if await evaluate() { return }
-        try? await Task.sleep(for: .milliseconds(20))
-      }
+      // Otherwise race two independent satisfiers, bounded by
+      // `withEmissionTimeout`'s deadline (see `awaitPredicate`): a
+      // tick-driven re-check AND a concurrent predicate poll. The poll is
+      // load-bearing, not just a fallback — a reactive store assigns its
+      // published state BEFORE it yields the observation tick, and the tick
+      // fires only after a recompute that can suspend arbitrarily in the
+      // conversion layer. Keying solely off the tick let this helper time out
+      // while the awaited state was already present (the flaky
+      // `EarmarkStoreApplyDeltaTests` emission-wait). Polling observes the
+      // state directly; the tick path keeps the common case latency-free.
+      await awaitPredicate(ticks: ticks, evaluate: evaluate)
     }
   }
 
@@ -147,6 +143,50 @@ extension TestableStoreObservation {
   func drainPendingEmissions() async {
     let ticks = observationTicks
     while await waitForOneTick(in: ticks, timeout: .milliseconds(20)) {}
+  }
+}
+
+/// Waits until `evaluate()` returns `true`, or until the surrounding task is
+/// cancelled (the `withEmissionTimeout` deadline). Races two satisfiers so the
+/// wait can never miss an already-true predicate:
+///
+///   1. **Tick-driven** — re-checks `evaluate()` on every observation tick, so
+///      a matching emission is observed the instant it lands (latency-free
+///      common case).
+///   2. **Poll-driven** — re-checks `evaluate()` on a short interval, so state
+///      a store assigns BEFORE it yields the corresponding tick is still
+///      observed. Reactive stores set their published state, then yield the
+///      test tick only AFTER a recompute that can suspend arbitrarily in the
+///      conversion layer; a tick-only wait timed out while the awaited state
+///      was already present.
+///
+/// The first child to observe the predicate ends the group; `cancelAll()` then
+/// stops the other. AsyncStream's iterator is cancellation-aware (`next()`
+/// returns `nil` on cancellation), so the group unwinds cleanly. File-scope so
+/// it can run inside the `@Sendable` `withEmissionTimeout` body without
+/// capturing `Self`.
+private func awaitPredicate(
+  ticks: AsyncStream<Void>,
+  evaluate: @escaping @MainActor @Sendable () -> Bool
+) async {
+  await withTaskGroup(of: Void.self) { group in
+    group.addTask {
+      var iterator = ticks.makeAsyncIterator()
+      while await iterator.next() != nil {
+        if await evaluate() { return }
+      }
+    }
+    group.addTask {
+      while !Task.isCancelled {
+        if await evaluate() { return }
+        // Re-check after the `evaluate()` suspension before sleeping, so a
+        // cancellation that lands in that window exits promptly.
+        guard !Task.isCancelled else { return }
+        try? await Task.sleep(for: .milliseconds(20))
+      }
+    }
+    _ = await group.next()
+    group.cancelAll()
   }
 }
 
