@@ -40,7 +40,7 @@ struct TransferMergeBuilder: Sendable {
     return Transaction(
       date: min(sideA.date, sideB.date),
       payee: mergedPayee(outgoing: outgoingSide.payee, incoming: incomingSide.payee),
-      notes: mergedNotes(outgoingSide.notes, incomingSide.notes),
+      notes: mergedNotes([outgoingSide.notes, incomingSide.notes]),
       legs: [outgoingTransferLeg, incomingTransferLeg] + feeLegs,
       importOrigin: .merged(
         MergedImportOrigin(
@@ -152,12 +152,4 @@ extension TransferMergeBuilder {
     return distinct.joined(separator: " / ")
   }
 
-  private func mergedNotes(_ outgoing: String?, _ incoming: String?) -> String? {
-    let joined = [outgoing, incoming].compactMap { $0 }
-    guard !joined.isEmpty else { return nil }
-    var seen: Set<String> = []
-    let lines = joined.flatMap { $0.components(separatedBy: "\n") }
-    let deduped = lines.filter { seen.insert($0).inserted }
-    return deduped.joined(separator: "\n")
-  }
 }
