@@ -34,6 +34,24 @@ final class InvestmentStore {
   private(set) var loadedAccountChainId: Int?
   private(set) var loadedHostCurrency: Instrument?
 
+  /// Monotonic counter bumped at the start of each authoritative account load
+  /// (`loadAllData`, `reloadPositionsIfNeeded`, `revaluateLoadedPositions`).
+  /// The account-scoped publish passes (`valuatePositions`, `loadDailyBalances`,
+  /// `refreshPositionTrackedPerformance`) capture it before suspending in the
+  /// conversion layer and drop their publish if a fresher load superseded them,
+  /// so a background rate-tick pass for the previous account can't publish
+  /// *after* a switch and show the wrong account's data (#1209). `private(set)`
+  /// enforces the single-writer invariant; `@ObservationIgnored` keeps a bump
+  /// from re-rendering every view, since this is internal bookkeeping no view
+  /// binds to.
+  @ObservationIgnored private(set) var snapshotGeneration: UInt64 = 0
+
+  /// Internal (not `private`) so the `+Loading` / `+Positions` extensions can
+  /// bump the counter past its `private(set)` setter. Wrapping (`&+=`) so a
+  /// counter at `UInt64.max` rolls over rather than trapping — unreachable in
+  /// practice, but free to make total.
+  func bumpSnapshotGeneration() { snapshotGeneration &+= 1 }
+
   // internal (was private) so the `+Observation`, `+Loading`, `+Positions`,
   // and `+PositionsInput` extension files can reach the repository for
   // fetches and pass-through writes.
