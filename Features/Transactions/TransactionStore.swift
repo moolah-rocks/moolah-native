@@ -5,6 +5,8 @@ import Observation
 @Observable
 @MainActor
 final class TransactionStore {
+  // MARK: - Stored properties
+
   /// View-visible list, spam-filtered from `unfilteredTransactions`.
   /// Written only via `setTransactions(_:)` or `publishFilteredTransactions()`.
   /// See `plans/2026-05-20-hide-spam-transactions-design.md`.
@@ -98,6 +100,18 @@ final class TransactionStore {
   /// check it before mutating state so a superseded operation can early-
   /// return. internal so `+Observation` and `+Mutations` can read it.
   var loadGeneration: Int = 0
+
+  /// Monotonic counter bumped whenever `lastSnapshotPage` is (re)assigned
+  /// (distinct from `loadGeneration`, which isn't bumped on a same-filter
+  /// emission). `recomputeBalances` captures it before suspending in the
+  /// conversion layer and drops its publish if a fresher snapshot landed
+  /// meanwhile, so a stale rate-tick recompute can't clobber fresher rows
+  /// (#1209). Only `bumpSnapshotGeneration()` writes it; no view reads it.
+  @ObservationIgnored private(set) var snapshotGeneration: UInt64 = 0
+
+  /// The single increment path for `snapshotGeneration`. Internal so the
+  /// `+Observation` extension can bump it past the property's `private(set)`.
+  func bumpSnapshotGeneration() { snapshotGeneration &+= 1 }
 
   /// Test-only emission tick stream. Yields `()` after every `apply(page:)`
   /// in `+Observation` and after every recompute in
@@ -198,6 +212,8 @@ final class TransactionStore {
   /// properties, so the storage lives here.
   var saveTask: Task<Void, Never>?
 
+  // MARK: - Lifecycle
+
   init(
     repository: TransactionRepository,
     conversionService: any InstrumentConversionService,
@@ -263,6 +279,8 @@ final class TransactionStore {
     }
   }
 
+  // MARK: - Public API
+
   /// View-driven entry point: subscribe to remote changes for `filter` and
   /// stream emissions into `transactions` until the surrounding `.task`
   /// is cancelled. Callers use `.task(id: filter) {
@@ -287,14 +305,6 @@ final class TransactionStore {
   /// wrapper that yields the restart and waits one tick.
   func load(filter: TransactionFilter) async {
     await runImperativeReload(filter: filter)
-  }
-
-  /// Whether the store's currently-active subscription matches `filter`
-  /// AND has produced at least one emission. Used by `.task(id: filter)`
-  /// call sites that may re-fire on spurious re-mounts (see #372) to
-  /// short-circuit a redundant `load(filter:)`.
-  func isLoaded(for filter: TransactionFilter) -> Bool {
-    currentFilter == filter && lastSnapshotPage != nil
   }
 
   /// Bumps the page window and signals the active subscription to

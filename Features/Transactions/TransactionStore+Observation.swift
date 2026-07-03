@@ -27,6 +27,8 @@ extension TransactionStore {
     case rateTick
   }
 
+  // MARK: - Entry points
+
   /// View-driven entry point: ensure a subscription is running for
   /// `filter` and hold the calling `.task` open until it's cancelled.
   /// The `for await` loop lives inside the spawned `subscriptionTask`,
@@ -120,6 +122,8 @@ extension TransactionStore {
     for awaiter in awaiters { awaiter.resume() }
   }
 
+  // MARK: - Subscription loop
+
   /// Inner subscription driver — keeps re-subscribing whenever the
   /// kick channel signals (loadMore / explicit refresh). Returns when
   /// cancelled or when the data stream finishes naturally.
@@ -168,6 +172,16 @@ extension TransactionStore {
 
   private enum CycleOutcome: Sendable { case streamFinished, restartRequested }
 
+  // MARK: - Filter & load state
+
+  /// Whether the store's currently-active subscription matches `filter`
+  /// AND has produced at least one emission. Used by `.task(id: filter)`
+  /// call sites that may re-fire on spurious re-mounts (see #372) to
+  /// short-circuit a redundant `load(filter:)`.
+  func isLoaded(for filter: TransactionFilter) -> Bool {
+    currentFilter == filter && lastSnapshotPage != nil
+  }
+
   /// Resets per-filter state. Called once per `ensureSubscription` call
   /// when the filter actually changes.
   func setupForFilter(_ filter: TransactionFilter) {
@@ -177,12 +191,17 @@ extension TransactionStore {
     setCurrentTargetInstrument(targetInstrument)
     setTransactions([])
     lastSnapshotPage = nil
+    // Resetting the snapshot supersedes any in-flight recompute from the
+    // previous filter so its rows can't clobber the cleared list (#1209).
+    bumpSnapshotGeneration()
     setHasMore(true)
     setError(nil)
     setLoadedCount(0)
     setTotalCount(nil)
     setIsLoading(true)
   }
+
+  // MARK: - Apply & recompute
 
   /// Receives an emission from `repository.observe(...)`. The observation
   /// page lacks `priorBalance`, so this method calls `repository.fetch(...)`
@@ -225,6 +244,9 @@ extension TransactionStore {
   ) async {
     await withReactiveStoreSignpost("transaction-store-apply") {
       lastSnapshotPage = snapshot
+      // A new snapshot supersedes any recompute still suspended in the
+      // conversion layer — bump so their stale publish is dropped (#1209).
+      bumpSnapshotGeneration()
       setCurrentTargetInstrument(snapshot.targetInstrument)
       setHasMore(snapshot.transactions.count >= pageSize * pageWindow)
       setLoadedCount(snapshot.transactions.count)
@@ -252,6 +274,9 @@ extension TransactionStore {
   /// conversion layer is stale).
   func recomputeBalances(reason: RecomputeReason) async {
     guard let snapshot = lastSnapshotPage else { return }
+    // Capture before suspending; drop the publish below if a fresher snapshot
+    // lands meanwhile (no suspension between this read and `snapshot`).
+    let generation = snapshotGeneration
     let result = await TransactionPage.withRunningBalances(
       transactions: snapshot.transactions,
       priorBalance: snapshot.priorBalance,
@@ -261,6 +286,11 @@ extension TransactionStore {
       targetInstrument: snapshot.targetInstrument,
       conversionService: conversionService)
     if Task.isCancelled { return }
+    // A fresher snapshot (new emission or filter change) landed while we were
+    // suspended in the conversion layer — publishing these now-stale rows
+    // would clobber the fresher list, so drop this pass (#1209). The
+    // superseding recompute publishes the authoritative rows.
+    guard generation == snapshotGeneration else { return }
     setTransactions(result.rows)
     if let conversionError = result.firstConversionError {
       logger.error(
@@ -274,6 +304,8 @@ extension TransactionStore {
       testObservationTickContinuation.yield(())
     }
   }
+
+  // MARK: - Rate & registry observation
 
   /// Subscribes to `conversionService.observeRates()` /
   /// `…observeErrors()`. A rate tick recomputes the running-balance
