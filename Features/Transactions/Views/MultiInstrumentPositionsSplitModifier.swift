@@ -131,6 +131,18 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       )
     }
     guard !Task.isCancelled else { return }
+    // Progressive render: show the positions table immediately with the
+    // current valuation; the historical chart fills in from buildHistoryInput
+    // below. isHistoryLoading drives the chart-area loading placeholder.
+    if !accountIds.isEmpty {
+      positionsInput = PositionsViewInput(
+        title: title,
+        hostCurrency: hostCurrency,
+        positions: rows,
+        historicalValue: nil,
+        assetKeysByInstrumentId: assetKeys,
+        isHistoryLoading: true)
+    }
     if !accountIds.isEmpty, let repository = session?.backend.transactions {
       await buildHistoryInput(
         conversionService: conversionService,
