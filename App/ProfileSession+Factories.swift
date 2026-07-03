@@ -197,7 +197,8 @@ extension ProfileSession {
       repository: backend.accounts, conversionService: backend.conversionService,
       targetInstrument: profile.instrument, investmentRepository: backend.investments,
       instrumentChanges: instrumentChanges)
-    let category = CategoryStore(repository: backend.categories)
+    let category = CategoryStore(
+      repository: backend.categories, instrumentChanges: instrumentChanges)
     let earmark = EarmarkStore(
       repository: backend.earmarks, conversionService: backend.conversionService,
       targetInstrument: profile.instrument,

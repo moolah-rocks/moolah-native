@@ -42,6 +42,28 @@ final class ImportRuleStore {
   /// `EarmarkStore`.
   private var observationTask: Task<Void, Never>?
 
+  /// The shared instrument-registry change seam + the child task draining it.
+  /// An in-app profile import writes `import_rule` rows through its own
+  /// `DatabaseQueue`, which the open session's `observeAll()` never sees;
+  /// re-fetching on each registry tick live-refreshes the open list across the
+  /// DB boundary — same backstop as `AccountGroupStore` (#1149). Nil in
+  /// previews / legacy tests.
+  private let instrumentChanges: (any InstrumentChangeObserving)?
+  private var instrumentChangeObservationTask: Task<Void, Never>?
+
+  /// Monotonic counter over authoritative `observeAll()` snapshots. The
+  /// instrument-registry refresh path captures it before its `fetchAll()`
+  /// and drops a stale refetch that raced a fresher snapshot — see
+  /// `applyInstrumentRegistryRefresh`. `private(set)` (only
+  /// `bumpSnapshotGeneration()` writes it) + `@ObservationIgnored` (a pure
+  /// guard counter no view reads). Mirrors `AccountGroupStore`.
+  @ObservationIgnored private(set) var snapshotGeneration: UInt64 = 0
+
+  /// The single increment path for `snapshotGeneration`.
+  private func bumpSnapshotGeneration() {
+    snapshotGeneration &+= 1
+  }
+
   /// Test-only emission tick stream. Yields `()` after every state
   /// assignment in `apply(rules:)`. Tests use the
   /// `TestableStoreObservation` helpers in
@@ -51,8 +73,12 @@ final class ImportRuleStore {
   let testObservationTickStream: AsyncStream<Void>
   private let testObservationTickContinuation: AsyncStream<Void>.Continuation
 
-  init(repository: any ImportRuleRepository) {
+  init(
+    repository: any ImportRuleRepository,
+    instrumentChanges: (any InstrumentChangeObserving)? = nil
+  ) {
     self.repository = repository
+    self.instrumentChanges = instrumentChanges
     let pair = AsyncStream<Void>.makeStream()
     self.testObservationTickStream = pair.stream
     self.testObservationTickContinuation = pair.continuation
@@ -64,6 +90,12 @@ final class ImportRuleStore {
     // preventing the retain — and `guard let self else { return }` would
     // mask cancellation-propagation bugs by silently exiting.
     observationTask = Task { await self.observe() }
+    if let instrumentChanges {
+      let changes = instrumentChanges.observeChanges()
+      instrumentChangeObservationTask = Task { [self] in
+        await self.observeInstrumentRegistryChanges(changes)
+      }
+    }
   }
 
   deinit {
@@ -78,9 +110,12 @@ final class ImportRuleStore {
     // code (`ProfileSession`), so the assumption holds in practice.
     MainActor.assumeIsolated {
       observationTask?.cancel()
+      instrumentChangeObservationTask?.cancel()
       testObservationTickContinuation.finish()
     }
   }
+
+  // MARK: - Observation
 
   /// Subscribes to the two reactive streams in parallel via a
   /// `TaskGroup`. The child tasks run nonisolated; each per-emission
@@ -95,7 +130,7 @@ final class ImportRuleStore {
     await withTaskGroup(of: Void.self) { group in
       group.addTask { [self] in
         for await fresh in rulesStream {
-          await self.apply(rules: fresh)
+          await self.applyRulesSnapshot(fresh)
         }
       }
       group.addTask { [self] in
@@ -108,16 +143,61 @@ final class ImportRuleStore {
     }
   }
 
-  /// Applies a fresh rules snapshot from `observeAll()`. Wrapped in
-  /// the reactive-store signpost interval so benchmarks and Instruments
-  /// traces can attribute `mainThreadMs` to this method. The repo
-  /// orders by `position`; we re-sort defensively in case a future
-  /// change in the observation projection drops that guarantee.
+  /// The **authoritative** per-emission entry point for the `observeAll()`
+  /// subscription. Bumps `snapshotGeneration` so a concurrent
+  /// instrument-registry refetch can detect that it raced a fresher snapshot,
+  /// then applies it. Mirrors `AccountGroupStore.applyGroupsSnapshot`.
+  private func applyRulesSnapshot(_ fresh: [ImportRule]) async {
+    bumpSnapshotGeneration()
+    await apply(rules: fresh)
+  }
+
+  /// Applies a fresh rules snapshot. Wrapped in the reactive-store signpost
+  /// interval so benchmarks and Instruments traces can attribute `mainThreadMs`
+  /// to this method. The repo orders by `position`; we re-sort defensively in
+  /// case a future change in the observation projection drops that guarantee.
+  /// Does NOT bump the generation — only authoritative `observeAll()` snapshots
+  /// do, so the registry-refresh guard stays meaningful.
   private func apply(rules fresh: [ImportRule]) async {
     await withReactiveStoreSignpost("import-rule-store-apply") {
       self.rules = fresh.sorted { $0.position < $1.position }
       testObservationTickContinuation.yield(())
     }
+  }
+
+  /// Consumes the shared instrument registry's change stream. Each tick
+  /// re-fetches the rules so a write that landed through a connection
+  /// `observeAll()` doesn't track (an in-app import's own `DatabaseQueue`)
+  /// still reaches the open list. Re-checks `Task.isCancelled` after each
+  /// suspension, and captures `snapshotGeneration` *before* the `fetchAll()`
+  /// so a stale refetch can be dropped. Mirrors `AccountGroupStore`.
+  private func observeInstrumentRegistryChanges(_ changes: AsyncStream<Void>) async {
+    for await _ in changes {
+      guard !Task.isCancelled else { return }
+      let observedGeneration = snapshotGeneration
+      do {
+        let fresh = try await repository.fetchAll()
+        guard !Task.isCancelled else { return }
+        await applyInstrumentRegistryRefresh(fresh, observedGeneration: observedGeneration)
+      } catch {
+        surface(error: error)
+      }
+    }
+  }
+
+  /// Applies an instrument-registry-triggered refetch, but only if no
+  /// authoritative `observeAll()` snapshot has landed since the fetch was
+  /// issued. The `fetchAll()` runs unordered with respect to `observeAll()`; a
+  /// fetch that read the database before a concurrent write committed returns a
+  /// stale row set, and applying it after a fresher snapshot would clobber
+  /// `rules` back to the pre-write state (#1209). The generation check and the
+  /// assignment run with no intervening suspension on the main actor. Internal
+  /// so the store's refresh tests can drive the guard path directly.
+  func applyInstrumentRegistryRefresh(
+    _ fresh: [ImportRule], observedGeneration: UInt64
+  ) async {
+    guard snapshotGeneration == observedGeneration else { return }
+    await apply(rules: fresh)
   }
 
   private func surface(error: any Error) {
@@ -136,13 +216,16 @@ final class ImportRuleStore {
   /// `awaitObservationTermination()` before the assertion.
   func stopObserving() {
     observationTask?.cancel()
+    instrumentChangeObservationTask?.cancel()
   }
 
-  /// Test-only. Awaits the observation task to fully terminate after
-  /// `stopObserving()`, then nils the reference.
+  /// Test-only. Awaits the observation tasks to fully terminate after
+  /// `stopObserving()`, then nils the references.
   func awaitObservationTermination() async {
     await observationTask?.value
     observationTask = nil
+    await instrumentChangeObservationTask?.value
+    instrumentChangeObservationTask = nil
   }
 
   // MARK: - Mutations
