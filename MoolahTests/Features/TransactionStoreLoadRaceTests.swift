@@ -8,6 +8,59 @@ import Testing
 struct TransactionStoreLoadRaceTests {
   private let accountId = UUID()
 
+  /// `load(filter:)` must not resolve while its own recompute has been
+  /// superseded — and therefore dropped — by a concurrent subscription
+  /// re-apply that has not finished recomputing yet. Otherwise `load()`
+  /// returns with the pre-load empty list still showing, then the superseding
+  /// recompute publishes a tick later: the intermittent `count == 0` that made
+  /// `mixedLegTransactionIsAlwaysVisible` flaky under iOS scheduling (#1209
+  /// follow-up). The fix makes `runImperativeReload` wait for a publish at (or
+  /// past) its snapshot's generation.
+  @Test
+  func loadWaitsForPublishWhenImperativeRecomputeSuperseded() async throws {
+    let usd = Instrument.USD
+    let aud = Instrument.AUD
+    // A USD leg with an AUD target forces a `convertResultBatch`, so the gate
+    // fires inside the imperative reload's recompute.
+    let txn = Transaction(
+      date: Date(),
+      legs: [TransactionLeg(accountId: accountId, instrument: usd, quantity: 10, type: .income)])
+    let page = TransactionPage(
+      transactions: [txn], targetInstrument: aud, priorBalance: nil, totalCount: 1)
+
+    let conversion = GatingConversionService()
+    let store = TransactionStore(
+      repository: FixedPageTransactionRepository(page: page),
+      conversionService: conversion,
+      targetInstrument: aud)
+
+    // Gate the imperative reload's recompute mid-conversion.
+    conversion.armGate()
+    let loadTask = Task<Int, Never> { @MainActor in
+      await store.load(filter: TransactionFilter(accountId: accountId))
+      return store.transactions.count
+    }
+    await conversion.waitUntilGateReached()
+
+    // A concurrent subscription re-apply of the same data lands while the
+    // imperative recompute is suspended, bumping the snapshot generation so the
+    // imperative recompute is stale and will drop when it resumes.
+    store.bumpSnapshotGeneration()
+
+    // Release the imperative recompute. It drops without publishing. Drain the
+    // main actor so that, WITHOUT the fix, `load()` returns here with the list
+    // still empty (captured as `0`).
+    conversion.releaseGate()
+    for _ in 0..<20 { await Task.yield() }
+
+    // The superseding recompute finally publishes its rows; the fix keeps
+    // `load()` parked until exactly this point.
+    await store.applySnapshot(page, observedCount: 1, fetchMs: 0)
+
+    #expect(await loadTask.value == 1)
+    store.stopObserving()
+  }
+
   /// Two `load()` calls in flight at the same time (e.g. SwiftUI re-mounting
   /// `TransactionListView` during Analysis → Account navigation and firing
   /// `.task(id: baseFilter)` twice) must not cause the earlier fetch's result
@@ -234,6 +287,51 @@ actor FirstFetchGatedTransactionRepository: TransactionRepository {
   }
   nonisolated func observeAll(filter: TransactionFilter) -> AsyncStream<[Transaction]> {
     AsyncStream { $0.finish() }
+  }
+  nonisolated func observeErrors() -> AsyncStream<any Error> {
+    AsyncStream { $0.finish() }
+  }
+  func create(_ transaction: Transaction) async throws -> Transaction { transaction }
+  func createMany(_ transactions: [Transaction]) async throws -> [Transaction] { transactions }
+  func update(_ transaction: Transaction) async throws -> Transaction { transaction }
+  func delete(id: UUID) async throws {}
+  func replace(deletingIds: [UUID], creating: [Transaction]) async throws -> [Transaction] {
+    creating
+  }
+  func fetchPayeeSuggestions(
+    prefix: String, excludingTransactionId: UUID?
+  ) async throws -> [String] { [] }
+  func legs(matchingExternalId externalId: String) async throws -> [TransactionLeg] { [] }
+  func transactions(touchingExternalIds externalIds: Set<String>) async throws -> [Transaction] {
+    []
+  }
+  func legExists(accountId: UUID, externalId: String) async throws -> Bool { false }
+  func distinctLegInstrumentIds() async throws -> Set<String> { [] }
+  func countNeedsReview() async throws -> Int { 0 }
+}
+
+/// A `TransactionRepository` that returns a fixed page from every `fetch`, and
+/// whose `observe` stays open without ever emitting. This lets a test drive the
+/// imperative reload's snapshot deterministically while suppressing the real
+/// subscription's re-apply (which the test models explicitly with
+/// `applySnapshot`).
+private final class FixedPageTransactionRepository: TransactionRepository, Sendable {
+  private let page: TransactionPage
+
+  init(page: TransactionPage) { self.page = page }
+
+  func fetch(filter: TransactionFilter, page: Int, pageSize: Int) async throws -> TransactionPage {
+    self.page
+  }
+
+  func fetchAll(filter: TransactionFilter) async throws -> [Transaction] { page.transactions }
+  nonisolated func observe(
+    filter: TransactionFilter, page: Int, pageSize: Int
+  ) -> AsyncStream<TransactionPage> {
+    AsyncStream { _ in }
+  }
+  nonisolated func observeAll(filter: TransactionFilter) -> AsyncStream<[Transaction]> {
+    AsyncStream { _ in }
   }
   nonisolated func observeErrors() -> AsyncStream<any Error> {
     AsyncStream { $0.finish() }

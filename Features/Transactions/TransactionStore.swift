@@ -113,6 +113,21 @@ final class TransactionStore {
   /// `+Observation` extension can bump it past the property's `private(set)`.
   func bumpSnapshotGeneration() { snapshotGeneration &+= 1 }
 
+  /// The `snapshotGeneration` of the most recent recompute that actually
+  /// published rows (passed its supersession guard). `runImperativeReload`
+  /// waits until this reaches the generation of its own snapshot before
+  /// returning, so `load(filter:)` never resolves with the list still empty
+  /// because its own recompute was dropped in favour of a concurrent
+  /// subscription re-apply that hadn't finished yet (#1209 follow-up).
+  /// Only `recordPublishedGeneration(_:)` writes it.
+  @ObservationIgnored private(set) var lastPublishedGeneration: UInt64 = 0
+
+  /// The single write path for `lastPublishedGeneration`, called from
+  /// `recomputeBalances` after a publish clears its guard.
+  func recordPublishedGeneration(_ generation: UInt64) {
+    lastPublishedGeneration = generation
+  }
+
   /// Test-only emission tick stream. Yields `()` after every `apply(page:)`
   /// in `+Observation` and after every recompute in
   /// `recomputeBalances()`. Tests use the `TestableStoreObservation`
@@ -280,55 +295,6 @@ final class TransactionStore {
   }
 
   // MARK: - Public API
-
-  /// View-driven entry point: subscribe to remote changes for `filter` and
-  /// stream emissions into `transactions` until the surrounding `.task`
-  /// is cancelled. Callers use `.task(id: filter) {
-  /// await store.observe(filter: filter) }` — the `for await` loop lives
-  /// here (per the thin-view rule from spec Section 5).
-  func observe(filter: TransactionFilter) async {
-    await runDataObservation(filter: filter)
-  }
-
-  /// Convenience for views keyed by a single account id (account-detail,
-  /// embedded investment account list). Wraps `observe(filter:)` with the
-  /// canonical per-account filter so the call site stays one line.
-  func observe(accountId: UUID) async {
-    await observe(filter: TransactionFilter(accountId: accountId))
-  }
-
-  /// Compatibility entry point. Restarts the active subscription with the
-  /// supplied filter and returns once the first emission settles. Used by
-  /// toolbar Refresh / `.refreshable` and by tests that want a synchronous-
-  /// looking "load and assert" pattern. The view-driven `observe(filter:)`
-  /// is the preferred way to drive observation; `load(filter:)` is a thin
-  /// wrapper that yields the restart and waits one tick.
-  func load(filter: TransactionFilter) async {
-    await runImperativeReload(filter: filter)
-  }
-
-  /// Bumps the page window and signals the active subscription to
-  /// resubscribe with the wider page size. Awaits the next observation
-  /// emission so callers can assert against the wider page contents
-  /// immediately. Idempotent when no more pages are available or
-  /// another load is already in flight.
-  func loadMore() async {
-    guard !isLoading, hasMore else { return }
-    pageWindow += 1
-    loadGeneration &+= 1
-    setIsLoading(true)
-    subscriptionRestartContinuation?.yield(())
-    await awaitNextLoadEmissionInternal()
-  }
-
-  /// Test-internal helper for `loadMore` and the imperative-reload path
-  /// to wait for the next `applySnapshot` to wake them. Mirrors the
-  /// inline body of `awaitNextLoadEmission` in `+Observation.swift`.
-  func awaitNextLoadEmissionInternal() async {
-    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-      pendingLoadAwaiters.append(continuation)
-    }
-  }
 
   /// Tears down the rate-observation task and the data subscription.
   /// Idempotent. Called from

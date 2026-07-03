@@ -75,8 +75,15 @@ extension TransactionStore {
         if myGeneration == loadGeneration { setIsLoading(false) }
         return
       }
-      await applySnapshot(
+      let appliedGeneration = await applySnapshot(
         snapshot, observedCount: snapshot.transactions.count, fetchMs: 0)
+      // Our own recompute may have been dropped in favour of a concurrent
+      // subscription re-apply of the same data (a fresher generation) that
+      // hasn't finished recomputing yet. Wait until a recompute at (or past)
+      // our snapshot's generation has actually published, so `load(filter:)`
+      // never returns with the list still showing the pre-load empty state
+      // (#1209 follow-up — see `awaitPublish`).
+      await awaitPublish(throughGeneration: appliedGeneration, filter: filter)
     } catch is CancellationError {
       // View teardown / supersession. Mirror the legacy `fetchPage`
       // contract: don't latch `isLoading` past the cancel so a
@@ -107,8 +114,30 @@ extension TransactionStore {
       await self.driveSubscription(filter: capturedFilter, kickStream: kickStream)
       // Subscription terminated (cancellation or natural finish without
       // emissions). Wake any `load(filter:)` callers parked on
-      // `pendingLoadAwaiters` so they don't hang past tear-down.
-      await MainActor.run { self.wakePendingLoadAwaiters() }
+      // `pendingLoadAwaiters` so they don't hang past tear-down. The task
+      // inherits `@MainActor` from `ensureSubscription`, so this is a direct
+      // call — no `MainActor.run` hop needed.
+      self.wakePendingLoadAwaiters()
+    }
+  }
+
+  /// Parks until a recompute at (or past) `generation` has published, the
+  /// filter is superseded, or the subscription/task tears down. Every
+  /// `applySnapshot` wakes pending awaiters after its recompute, so each wake
+  /// re-checks the guard; the check and the park run with no suspension
+  /// between them, so a publish can't slip through unobserved. Used by
+  /// `runImperativeReload` so `load(filter:)` waits out a concurrent
+  /// subscription re-apply that superseded — and therefore dropped — the
+  /// imperative recompute (#1209 follow-up).
+  private func awaitPublish(
+    throughGeneration generation: UInt64, filter: TransactionFilter
+  ) async {
+    while lastPublishedGeneration < generation,
+      !Task.isCancelled,
+      currentFilter == filter,
+      subscriptionTask?.isCancelled == false
+    {
+      await awaitNextLoadEmissionInternal()
     }
   }
 
@@ -239,14 +268,21 @@ extension TransactionStore {
     }
   }
 
+  /// Applies a fetched snapshot and recomputes the running balances.
+  /// Returns the `snapshotGeneration` this snapshot was assigned, so
+  /// `runImperativeReload` can wait for a publish at (or past) that
+  /// generation rather than returning while a concurrent subscription
+  /// re-apply is still recomputing (#1209 follow-up).
+  @discardableResult
   func applySnapshot(
     _ snapshot: TransactionPage, observedCount: Int, fetchMs: Int
-  ) async {
+  ) async -> UInt64 {
     await withReactiveStoreSignpost("transaction-store-apply") {
       lastSnapshotPage = snapshot
       // A new snapshot supersedes any recompute still suspended in the
       // conversion layer — bump so their stale publish is dropped (#1209).
       bumpSnapshotGeneration()
+      let snapshotGen = snapshotGeneration
       setCurrentTargetInstrument(snapshot.targetInstrument)
       setHasMore(snapshot.transactions.count >= pageSize * pageWindow)
       setLoadedCount(snapshot.transactions.count)
@@ -265,6 +301,7 @@ extension TransactionStore {
         totalLoaded: loadedCount)
       testObservationTickContinuation.yield(())
       wakePendingLoadAwaiters()
+      return snapshotGen
     }
   }
 
@@ -291,6 +328,7 @@ extension TransactionStore {
     // would clobber the fresher list, so drop this pass (#1209). The
     // superseding recompute publishes the authoritative rows.
     guard generation == snapshotGeneration else { return }
+    recordPublishedGeneration(generation)
     setTransactions(result.rows)
     if let conversionError = result.firstConversionError {
       logger.error(
