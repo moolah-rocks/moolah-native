@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-import os
 
 @testable import Moolah
 
@@ -18,93 +17,6 @@ import os
 @Suite("AccountStore -- recompute race (#1209)")
 @MainActor
 struct AccountStoreRecomputeRaceTests {
-  /// A conversion double whose `convertResultBatch` can be paused mid-call
-  /// exactly once. Conversions are 1:1 passthrough; the gate is the only
-  /// interesting behaviour. `observeRates()` deliberately emits no initial
-  /// tick so the only recomputes are the ones the test drives explicitly.
-  private enum GatingConversionError: Error { case unavailable }
-
-  private final class GatingConversionService: InstrumentConversionService, @unchecked Sendable {
-    private let armed = OSAllocatedUnfairLock(initialState: false)
-    /// Instrument ids that fail conversion (either side). Toggle with
-    /// `setFailing(_:)` to model a provider outage that later recovers.
-    private let failing = OSAllocatedUnfairLock(initialState: Set<String>())
-    private let reached: AsyncStream<Void>
-    private let reachedContinuation: AsyncStream<Void>.Continuation
-    private let gate: AsyncStream<Void>
-    private let gateContinuation: AsyncStream<Void>.Continuation
-
-    init() {
-      let reachedPair = AsyncStream<Void>.makeStream()
-      reached = reachedPair.stream
-      reachedContinuation = reachedPair.continuation
-      let gatePair = AsyncStream<Void>.makeStream()
-      gate = gatePair.stream
-      gateContinuation = gatePair.continuation
-    }
-
-    /// Arm the gate so the *next* `convertResultBatch` call suspends.
-    func armGate() { armed.withLock { $0 = true } }
-
-    /// Suspends until a gated `convertResultBatch` call has begun — by which
-    /// point that recompute has already captured its accounts snapshot.
-    func waitUntilGateReached() async {
-      var iterator = reached.makeAsyncIterator()
-      _ = await iterator.next()
-    }
-
-    /// Releases the suspended `convertResultBatch` call.
-    func releaseGate() { gateContinuation.yield(()) }
-
-    /// Replace the runtime failing-instrument set. Pass `[]` to recover.
-    func setFailing(_ ids: Set<String>) { failing.withLock { $0 = ids } }
-
-    func convertResultBatch(
-      _ requests: [BatchConversionRequest]
-    ) async throws -> [BatchConversionOutcome] {
-      let shouldGate = armed.withLock { state -> Bool in
-        let value = state
-        state = false
-        return value
-      }
-      if shouldGate {
-        reachedContinuation.yield(())
-        var iterator = gate.makeAsyncIterator()
-        _ = await iterator.next()
-      }
-      let failingIds = failing.withLock { $0 }
-      return requests.map { request in
-        if failingIds.contains(request.amount.instrument.id)
-          || failingIds.contains(request.target.id)
-        {
-          return .failure(GatingConversionError.unavailable)
-        }
-        return .value(
-          InstrumentAmount(quantity: request.amount.quantity, instrument: request.target))
-      }
-    }
-
-    func convert(
-      _ quantity: Decimal, from: Instrument, to: Instrument, on date: Date
-    ) async throws -> Decimal { quantity }
-
-    func convertAmount(
-      _ amount: InstrumentAmount, to instrument: Instrument, on date: Date
-    ) async throws -> InstrumentAmount {
-      InstrumentAmount(quantity: amount.quantity, instrument: instrument)
-    }
-
-    func convertResult(
-      _ amount: InstrumentAmount, to instrument: Instrument, on date: Date
-    ) async throws -> ConversionResult {
-      .value(InstrumentAmount(quantity: amount.quantity, instrument: instrument))
-    }
-
-    func invalidateCache(for instrument: Instrument) async {}
-    func observeRates() -> AsyncStream<Void> { AsyncStream { $0.finish() } }
-    func observeErrors() -> AsyncStream<any Error> { AsyncStream { $0.finish() } }
-  }
-
   @Test
   func staleRecomputeDoesNotClobberFresherSnapshot() async throws {
     let aud = Instrument.AUD
