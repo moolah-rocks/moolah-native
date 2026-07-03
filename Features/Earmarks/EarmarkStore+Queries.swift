@@ -5,6 +5,10 @@ extension EarmarkStore {
   // `EarmarkStore.swift` and the SwiftUI views need them across file
   // boundaries. Treat them as the store's read-only query surface.
 
+  var visibleEarmarks: [Earmark] {
+    earmarks.filter { showHidden || !$0.isHidden }
+  }
+
   func convertedBalance(for earmarkId: UUID) -> InstrumentAmount? {
     convertedBalances[earmarkId]
   }

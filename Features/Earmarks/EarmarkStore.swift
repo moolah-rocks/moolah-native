@@ -61,12 +61,14 @@ final class EarmarkStore {
   /// alongside `observationTask`.
   private var instrumentChangeObservationTask: Task<Void, Never>?
 
-  /// Monotonic counter over authoritative `observeAll()` snapshots. The
-  /// instrument-registry refresh path captures it before its `fetchAll()`
-  /// and drops a stale refetch that raced a fresher snapshot — see
-  /// `applyInstrumentRegistryRefresh` (mirrors `AccountStore`). `private(set)`
-  /// (only `bumpSnapshotGeneration()` writes it) + `@ObservationIgnored`
-  /// (a pure guard counter no view reads).
+  /// Monotonic counter over authoritative `observeAll()` snapshots. Two
+  /// sites capture it before suspending and drop their work if a fresher
+  /// snapshot lands meanwhile: the instrument-registry refresh
+  /// (`applyInstrumentRegistryRefresh`) before its `fetchAll()`, and the
+  /// conversion recompute (`runConversionAttempt`) before it suspends in the
+  /// conversion service (#1209). `private(set)` (only
+  /// `bumpSnapshotGeneration()` writes it) + `@ObservationIgnored` (a pure
+  /// guard counter no view reads).
   @ObservationIgnored private(set) var snapshotGeneration: UInt64 = 0
 
   /// The single increment path for `snapshotGeneration` — internal so the
@@ -218,10 +220,6 @@ final class EarmarkStore {
     }
   }
 
-  var visibleEarmarks: [Earmark] {
-    earmarks.filter { showHidden || !$0.isHidden }
-  }
-
   /// Applies position deltas to earmark balances, saved, and spent.
   /// Used by `TransactionStore` to keep the sidebar fresh between a
   /// write and the next observation emission. The reactive observation
@@ -264,11 +262,18 @@ final class EarmarkStore {
   /// `convertedTotalBalance` is only published when *all* contributing
   /// earmarks succeed (an inaccurate total is worse than no total).
   func recomputeConvertedTotals() async {
-    let anyFailed = await withReactiveStoreSignpost("earmark-store-recompute") {
-      let failed = await runConversionAttempt()
+    // Capture the generation before reading `earmarks` (no suspension
+    // intervenes) so `runConversionAttempt` can drop its publish if a
+    // fresher snapshot lands while it is suspended (see #1209).
+    let generation = snapshotGeneration
+    let result = await withReactiveStoreSignpost("earmark-store-recompute") {
+      let failed = await runConversionAttempt(generation: generation)
       testObservationTickContinuation.yield(())
       return failed
     }
+    // A superseded pass (`nil`) published nothing — the pass that superseded it
+    // owns the retry decisions, so leave `conversionTask` untouched here.
+    guard let anyFailed = result else { return }
     if !anyFailed {
       // Success — kill any in-flight retry; nothing left to retry.
       conversionTask?.cancel()
@@ -297,8 +302,15 @@ final class EarmarkStore {
           return  // CancellationError — exit the retry loop immediately
         }
         guard !Task.isCancelled else { return }
-        let retryFailed = await self.runConversionAttempt()
+        // Re-capture per iteration: an earmarks change during the delay
+        // bumps the generation, so a retry that raced a fresher snapshot
+        // drops its publish rather than clobbering it (see #1209).
+        let generation = self.snapshotGeneration
+        let retryResult = await self.runConversionAttempt(generation: generation)
         self.testObservationTickContinuation.yield(())
+        // A superseded pass (`nil`) published nothing — keep the loop running
+        // rather than terminating on a stale success (see `runConversionAttempt`).
+        guard let retryFailed = retryResult else { continue }
         if !retryFailed {
           self.conversionTask = nil
           return
@@ -318,64 +330,25 @@ final class EarmarkStore {
     await task.value
   }
 
-  /// Single pass over every earmark; returns `true` if any conversion
-  /// failed. Always publishes the latest computed state, even if partial.
-  ///
-  /// Iterates all earmarks (not just `visibleEarmarks`) so per-earmark
-  /// balances populate regardless of `showHidden` — otherwise toggling
-  /// "Show Hidden" surfaces a permanent spinner on hidden rows that no
-  /// recompute ever filled in. The grand total still sums only visible
-  /// earmarks so it matches what the user sees.
-  private func runConversionAttempt() async -> Bool {
-    var anyFailed = false
-    var balances: [UUID: InstrumentAmount] = [:]
-    var saved: [UUID: InstrumentAmount] = [:]
-    var spent: [UUID: InstrumentAmount] = [:]
-    var grandTotal = InstrumentAmount.zero(instrument: targetInstrument)
-    var grandTotalValid = true
-    let zeroInTarget = InstrumentAmount.zero(instrument: targetInstrument)
-
-    for earmark in earmarks {
-      let isVisible = showHidden || !earmark.isHidden
-      do {
-        let totals = try await convertEarmarkPositions(earmark)
-        guard !Task.isCancelled else { return false }
-        balances[earmark.id] = totals.balance
-        saved[earmark.id] = totals.saved
-        spent[earmark.id] = totals.spent
-
-        // Only visible earmarks contribute to the displayed grand total.
-        // Clamp negative balances to zero so they don't reduce the total.
-        if isVisible, grandTotalValid {
-          let convertedToTarget = try await conversionService.convertAmount(
-            totals.balance, to: targetInstrument, on: Date())
-          guard !Task.isCancelled else { return false }
-          grandTotal += max(convertedToTarget, zeroInTarget)
-        }
-      } catch {
-        anyFailed = true
-        // A failure on a hidden earmark shouldn't blank the total — only
-        // visible earmarks contribute to it. Hidden-earmark failures still
-        // mark `anyFailed` so the retry loop kicks in (and a later toggle
-        // doesn't surface a spinner because no retry was scheduled).
-        if isVisible { grandTotalValid = false }
-        logger.warning(
-          "Conversion failed for earmark \(earmark.name): \(error.localizedDescription)")
-      }
-    }
-
-    guard !Task.isCancelled else { return false }
-
+  /// Publishes a freshly-computed conversion snapshot. Lives here (not on
+  /// the `+Conversion` extension that computes it) because the `converted*`
+  /// properties are `private(set)` — only this file may write them, mirroring
+  /// `setError`.
+  func publishConvertedTotals(
+    balances: [UUID: InstrumentAmount],
+    saved: [UUID: InstrumentAmount],
+    spent: [UUID: InstrumentAmount],
+    total: InstrumentAmount?
+  ) {
     convertedBalances = balances
     convertedSavedAmounts = saved
     convertedSpentAmounts = spent
-    convertedTotalBalance = grandTotalValid ? grandTotal : nil
-
-    return anyFailed
+    convertedTotalBalance = total
   }
 
   // Read-only query accessors live in `EarmarkStore+Queries.swift`.
-  // Per-earmark conversion helpers live in `EarmarkStore+Conversion.swift`.
+  // The `runConversionAttempt` recompute pass lives in
+  // `EarmarkStore+Conversion.swift` alongside `convertEarmarkPositions`.
   // Mutation methods live in `EarmarkStore+Mutations.swift`.
   // Budget CRUD lives in `EarmarkStore+Budget.swift`.
 
