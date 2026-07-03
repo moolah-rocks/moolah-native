@@ -22,8 +22,13 @@ struct AccountStoreRecomputeRaceTests {
   /// exactly once. Conversions are 1:1 passthrough; the gate is the only
   /// interesting behaviour. `observeRates()` deliberately emits no initial
   /// tick so the only recomputes are the ones the test drives explicitly.
+  private enum GatingConversionError: Error { case unavailable }
+
   private final class GatingConversionService: InstrumentConversionService, @unchecked Sendable {
     private let armed = OSAllocatedUnfairLock(initialState: false)
+    /// Instrument ids that fail conversion (either side). Toggle with
+    /// `setFailing(_:)` to model a provider outage that later recovers.
+    private let failing = OSAllocatedUnfairLock(initialState: Set<String>())
     private let reached: AsyncStream<Void>
     private let reachedContinuation: AsyncStream<Void>.Continuation
     private let gate: AsyncStream<Void>
@@ -51,6 +56,9 @@ struct AccountStoreRecomputeRaceTests {
     /// Releases the suspended `convertResultBatch` call.
     func releaseGate() { gateContinuation.yield(()) }
 
+    /// Replace the runtime failing-instrument set. Pass `[]` to recover.
+    func setFailing(_ ids: Set<String>) { failing.withLock { $0 = ids } }
+
     func convertResultBatch(
       _ requests: [BatchConversionRequest]
     ) async throws -> [BatchConversionOutcome] {
@@ -64,8 +72,15 @@ struct AccountStoreRecomputeRaceTests {
         var iterator = gate.makeAsyncIterator()
         _ = await iterator.next()
       }
-      return requests.map {
-        .value(InstrumentAmount(quantity: $0.amount.quantity, instrument: $0.target))
+      let failingIds = failing.withLock { $0 }
+      return requests.map { request in
+        if failingIds.contains(request.amount.instrument.id)
+          || failingIds.contains(request.target.id)
+        {
+          return .failure(GatingConversionError.unavailable)
+        }
+        return .value(
+          InstrumentAmount(quantity: request.amount.quantity, instrument: request.target))
       }
     }
 
@@ -146,5 +161,67 @@ struct AccountStoreRecomputeRaceTests {
     let settledBalance = try #require(
       store.convertedBalances[account.id], "balance must survive the stale publish")
     #expect(settledBalance.quantity == 999)
+  }
+
+  /// A superseded stale recompute must not cancel the retry loop that a
+  /// fresher, *failing* pass started. The stale pass "succeeds" over old data,
+  /// but reporting that success would cancel the retry the failing account
+  /// needs, leaving its balance blank forever.
+  @Test
+  func staleRecomputeDoesNotCancelFreshRetry() async throws {
+    let aud = Instrument.AUD
+    let usd = Instrument.USD
+    let account = Account(name: "AUD Bank", type: .bank, instrument: aud)
+
+    let (backend, database) = try TestBackend.create()
+    TestBackend.seed(accounts: [account], in: database)
+    TestBackend.seed(
+      transactions: [
+        Transaction(
+          date: Date(),
+          legs: [
+            TransactionLeg(
+              accountId: account.id, instrument: aud,
+              quantity: Decimal(100), type: .openingBalance)
+          ])
+      ], in: database)
+
+    let conversion = GatingConversionService()
+    let store = AccountStore(
+      repository: backend.accounts,
+      conversionService: conversion,
+      targetInstrument: aud,
+      retryDelay: .milliseconds(200))
+
+    await expectEventually("initial balance settles") {
+      store.convertedBalances[account.id]?.quantity == 100
+    }
+
+    // Hold a stale recompute suspended over the current (AUD-only, cleanly
+    // converting) accounts.
+    conversion.armGate()
+    let staleRecompute = Task { await store.recomputeForRateTick() }
+    await conversion.waitUntilGateReached()
+
+    // A fresher authoritative snapshot lands whose account now needs a USD
+    // conversion that fails, so the fresh pass fails and starts the retry loop.
+    conversion.setFailing([usd.id])
+    let freshAccount = Account(
+      id: account.id, name: account.name, type: .bank, instrument: aud,
+      positions: [Position(instrument: usd, quantity: Decimal(50))])
+    store.bumpSnapshotGeneration()
+    await store.apply(accounts: [freshAccount])
+    #expect(store.convertedBalances[account.id] == nil)
+
+    // Recover the service, then release the stale pass. Its stale "success"
+    // must not cancel the fresh pass's retry.
+    conversion.setFailing([])
+    conversion.releaseGate()
+    await staleRecompute.value
+
+    // The retry loop survives and repopulates the balance once it fires.
+    await expectEventually("retry repopulates the failing account's balance") {
+      store.convertedBalances[account.id]?.quantity == 50
+    }
   }
 }

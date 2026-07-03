@@ -31,7 +31,7 @@ extension AccountStore {
     }
 
     do {
-      let created = try await mutationRepository.create(
+      let created = try await repository.create(
         toCreate, openingBalance: openingBalance)
       mutationLogger.debug("Created account: \(created.name)")
       return created
@@ -47,7 +47,7 @@ extension AccountStore {
   func update(_ account: Account) async throws -> Account {
     setError(nil)
     do {
-      let updated = try await mutationRepository.update(account)
+      let updated = try await repository.update(account)
       mutationLogger.debug("Updated account: \(updated.name)")
       return updated
     } catch {
@@ -85,7 +85,7 @@ extension AccountStore {
       var updated = account
       updated.position = positionOffset + index
       do {
-        _ = try await mutationRepository.update(updated)
+        _ = try await repository.update(updated)
       } catch {
         mutationLogger.error(
           "Failed to persist account reorder for \(updated.id): \(error)")
@@ -102,7 +102,7 @@ extension AccountStore {
   func delete(id: UUID) async throws {
     setError(nil)
     do {
-      try await mutationRepository.delete(id: id)
+      try await repository.delete(id: id)
       mutationLogger.debug("Deleted account: \(id)")
     } catch {
       mutationLogger.error("Failed to delete account: \(error.localizedDescription)")

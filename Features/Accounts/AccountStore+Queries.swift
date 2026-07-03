@@ -5,6 +5,11 @@ extension AccountStore {
   // `AccountStore.swift` and the SwiftUI views need them across file
   // boundaries. Treat them as the store's read-only query surface.
 
+  /// Externally-set values for investment accounts (e.g. mark-to-market share
+  /// prices set via `InvestmentStore`). Forwards to `investmentValueCache`;
+  /// call sites inspect the map directly without an additional wrapper.
+  var investmentValues: [UUID: InstrumentAmount] { investmentValueCache.values }
+
   /// Current-bucket accounts, honouring `showHidden`.
   var currentAccounts: [Account] {
     accounts.filter { $0.bucket == .current && (showHidden || !$0.isHidden) }
