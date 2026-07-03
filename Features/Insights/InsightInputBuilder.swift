@@ -38,7 +38,7 @@ struct InsightInputBuilder: Sendable {
       windowDays: window.sampleDays,
       maxPerCategory: window.maxSamplesPerCategory,
       context: context)
-    async let incomeSamples = source.incomeSamples(
+    async let incomeSourceSamples = source.incomeSourceSamples(
       windowDays: window.sampleDays, maxCount: window.maxIncomeSamples, context: context)
     async let feeCategorySpend = source.categorySpend(
       windowDays: window.categorySpendDays, categories: categories, context: context)
@@ -59,7 +59,7 @@ struct InsightInputBuilder: Sendable {
       dailyTotals: try await dailyTotals,
       payees: try await payees,
       categorySamples: try await categorySamples,
-      incomeSamples: try await incomeSamples,
+      incomeSourceSamples: try await incomeSourceSamples,
       feeCategorySpend: try await feeCategorySpend,
       unbudgetedCategorySpend: try await unbudgetedCategorySpend,
       accountSpend: try await accountSpend,

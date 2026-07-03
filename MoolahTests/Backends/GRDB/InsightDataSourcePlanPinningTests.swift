@@ -129,17 +129,18 @@ struct InsightDataSourcePlanPinningTests {
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
   }
 
-  @Test("incomeSamples window-function projection avoids a leg table scan")
-  func incomeSamplesAvoidsScan() throws {
+  @Test("incomeSourceSamples window-function projection avoids a leg table scan")
+  func incomeSourceSamplesAvoidsScan() throws {
     let database = try makeDatabase()
     let detail = try planDetail(
       database,
       query: """
-        SELECT day, instrument_id, quantity
+        SELECT day, instrument_id, quantity, payee
         FROM (
           SELECT DATE(t.date)       AS day,
                  leg.instrument_id  AS instrument_id,
                  leg.quantity       AS quantity,
+                 t.payee            AS payee,
                  ROW_NUMBER() OVER (
                    ORDER BY t.date DESC, leg.transaction_id DESC
                  ) AS rn

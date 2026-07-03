@@ -116,6 +116,19 @@ struct CategorySpendSamples: Sendable, Hashable {
   let magnitudes: [Decimal]
 }
 
+/// A bounded sample of recent income magnitudes for one source (normalized
+/// payee), the baseline distribution the windfall detector scores a deposit
+/// against. Grouping per source keeps the reported "typical" honest: a
+/// regular salary is compared against *that source's* prior deposits, not the
+/// median of every income stream pooled together.
+struct IncomeSourceSamples: Sendable, Hashable {
+  /// The `PayeeNormalizer` key the deposits clustered under. Empty for income
+  /// with no payee.
+  let normalizedPayee: String
+  /// Positive income magnitudes in the reporting currency, most-recent first.
+  let magnitudes: [Decimal]
+}
+
 /// Cadence and totals for one normalized payee within the bounded cadence
 /// window, the workhorse input for the merchant and subscription detectors.
 struct PayeeSummary: Sendable, Hashable {

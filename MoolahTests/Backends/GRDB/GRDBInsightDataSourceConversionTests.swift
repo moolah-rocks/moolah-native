@@ -54,10 +54,10 @@ struct GRDBInsightDataSourceConversionTests {
     #expect(try #require(totals.last).spendMagnitude == 200)
   }
 
-  // MARK: - incomeSamples
+  // MARK: - incomeSourceSamples
 
-  @Test("incomeSamples converts each leg at its own day's rate")
-  func incomeSamplesConvertsPerDay() async throws {
+  @Test("incomeSourceSamples converts each leg at its own day's rate")
+  func incomeSourceSamplesConvertsPerDay() async throws {
     let dayOne = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 10)
     let dayTwo = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 11)
     // dayOne rate: 1 USD → 1.5 AUD; dayTwo rate: 1 USD → 2.0 AUD.
@@ -79,12 +79,14 @@ struct GRDBInsightDataSourceConversionTests {
         legs: [leg(100, type: .income, instrument: usd)]))
 
     let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
-    let samples = try await backend.insightDataSource.incomeSamples(
+    let samples = try await backend.insightDataSource.incomeSourceSamples(
       windowDays: 365, maxCount: 50, context: context(now: now))
 
-    // SQL orders most-recent first (dayTwo rn=1, dayOne rn=2).
+    // SQL orders most-recent first (dayTwo rn=1, dayOne rn=2), and the two
+    // deposits are from distinct sources.
     // dayTwo: 100 USD × 2.0 = 200 AUD; dayOne: 100 USD × 1.5 = 150 AUD.
-    #expect(samples == [200, 150])
-    #expect(samples.allSatisfy { $0 > 0 })
+    #expect(samples.map(\.normalizedPayee) == ["daytwobonus", "dayonesalary"])
+    #expect(samples.flatMap(\.magnitudes) == [200, 150])
+    #expect(samples.flatMap(\.magnitudes).allSatisfy { $0 > 0 })
   }
 }

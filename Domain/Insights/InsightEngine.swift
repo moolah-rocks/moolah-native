@@ -147,7 +147,7 @@ struct InsightEngine: Sendable {
     insights += IncomeInsights.detect(incomeStreams: incomeStreams, context: context)
     insights += IncomeExtraInsights.windfall(
       recentCandidates: input.recentCandidates,
-      incomeSamples: input.incomeSamples,
+      incomeSourceSamples: input.incomeSourceSamples,
       context: context)
     insights += IncomeExtraInsights.payRateChange(incomeStreams: incomeStreams, context: context)
     return insights

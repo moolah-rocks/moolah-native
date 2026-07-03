@@ -77,10 +77,10 @@ struct InsightInput: Sendable {
   /// baseline for large-transaction and new-merchant magnitude scoring.
   let categorySamples: [CategorySpendSamples]
 
-  /// Capped income-magnitude samples, the robust-z baseline the windfall
-  /// detector scores recent deposits against. All values are positive
-  /// magnitudes.
-  let incomeSamples: [Decimal]
+  /// Capped income-magnitude samples grouped per source (normalized payee),
+  /// the robust-z baseline the windfall detector scores recent deposits
+  /// against. All values are positive magnitudes.
+  let incomeSourceSamples: [IncomeSourceSamples]
 
   /// Per-category expense totals over the trailing 365 days. Drives the
   /// fee-spend detector.
@@ -145,7 +145,7 @@ struct InsightInput: Sendable {
     dailyTotals: [DailySpendSummary] = [],
     payees: [PayeeSummary] = [],
     categorySamples: [CategorySpendSamples] = [],
-    incomeSamples: [Decimal] = [],
+    incomeSourceSamples: [IncomeSourceSamples] = [],
     feeCategorySpend: [CategorySpendSummary] = [],
     unbudgetedCategorySpend: [CategorySpendSummary] = [],
     accountSpend: [AccountSpendSummary] = [],
@@ -169,7 +169,7 @@ struct InsightInput: Sendable {
     self.dailyTotals = dailyTotals
     self.payees = payees
     self.categorySamples = categorySamples
-    self.incomeSamples = incomeSamples
+    self.incomeSourceSamples = incomeSourceSamples
     self.feeCategorySpend = feeCategorySpend
     self.unbudgetedCategorySpend = unbudgetedCategorySpend
     self.accountSpend = accountSpend

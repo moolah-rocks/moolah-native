@@ -82,16 +82,61 @@ struct AdditionalInsightTests {
   // MARK: - Income extensions
 
   @Test
-  func windfallFlagsLargeDeposit() throws {
-    // Slightly varying paychecks (realistic) so the MAD is non-zero.
-    let incomeSamples: [Decimal] = [3000, 3050, 2980, 3020, 3000, 2990, 3010, 3030]
-    let bonus = InsightTestSupport.income(12000, payee: "Bonus", daysAgo: 3)
+  func windfallFlagsSpikeAgainstItsOwnSourceHistory() throws {
+    // A source that usually pays ~$500 suddenly pays $12,000. The candidate is
+    // part of its own source's sample set (as it is in production).
+    let samples = [
+      IncomeSourceSamples(
+        normalizedPayee: "client", magnitudes: [12000, 500, 480, 520, 510, 490, 505])
+    ]
+    let spike = InsightTestSupport.income(12000, payee: "Client", daysAgo: 3)
     let insight = try #require(
       IncomeExtraInsights.windfall(
-        recentCandidates: [bonus], incomeSamples: incomeSamples, context: context
+        recentCandidates: [spike], incomeSourceSamples: samples, context: context
       ).first)
     #expect(insight.kind == .windfallIncome)
     #expect(insight.framing == .positive)
+    // "Typical" is this source's own median (~$500), never a global pool.
+    let typical = try #require(insight.facts.first { $0.label == "Typical income" }?.value)
+    #expect(typical.contains("505"))
+  }
+
+  @Test
+  func windfallIgnoresRegularSalaryEvenWhenItDwarfsOtherIncome() throws {
+    // Regression for the reported bug: a regular ~$35k salary was flagged
+    // "well above your typical $1,111" because it was scored against the median
+    // of ALL income (salary + many small deposits) pooled together. Scoring the
+    // deposit against its OWN source's history — where a paycheck with normal
+    // month-to-month variation is unremarkable — must not flag it, even though
+    // it dwarfs the small deposits from every other source.
+    let samples = [
+      IncomeSourceSamples(
+        normalizedPayee: "op labs",
+        magnitudes: [35275, 34000, 36000, 33500, 35500, 34800, 35200]),
+      // The small, frequent income that used to drag the global median down.
+      IncomeSourceSamples(normalizedPayee: "interest", magnitudes: [50, 45, 55, 48, 52, 49]),
+    ]
+    let paycheck = InsightTestSupport.income(35275, payee: "OP Labs", daysAgo: 2)
+    #expect(
+      IncomeExtraInsights.windfall(
+        recentCandidates: [paycheck], incomeSourceSamples: samples, context: context
+      ).isEmpty)
+  }
+
+  @Test
+  func windfallIgnoresLargeDepositFromSourceWithoutEnoughHistory() throws {
+    // A brand-new source has no baseline to call a deposit unusual *for that
+    // source* — skipped, mirroring the large-transaction detector's
+    // sparse-category rule. A first-ever windfall is the accepted trade-off.
+    let samples = [
+      IncomeSourceSamples(
+        normalizedPayee: "employer", magnitudes: [3000, 3050, 2980, 3020, 3000, 2990])
+    ]
+    let oneOff = InsightTestSupport.income(50000, payee: "Lottery", daysAgo: 1)
+    #expect(
+      IncomeExtraInsights.windfall(
+        recentCandidates: [oneOff], incomeSourceSamples: samples, context: context
+      ).isEmpty)
   }
 
   @Test
