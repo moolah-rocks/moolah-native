@@ -164,7 +164,32 @@ struct TransactionListView: View {
       }
   }
 
-  var body: some View {
+  /// Focused-scene action for Transaction > Merge as Transfer, or nil
+  /// when the multi-selection is not a valid transfer pair. Extracted
+  /// from `body` so the modifier chain stays within the SwiftUI
+  /// type-checker's expression-complexity budget.
+  private var mergeAsTransferSceneAction: (() -> Void)? {
+    manualMergePair.map { pair in
+      { Task { await transactionStore.manualMerge(pair.0, pair.1) } }
+    }
+  }
+
+  /// Focused-scene action for Transaction > Merge Transactions, or nil
+  /// when the multi-selection is not a valid general-merge candidate.
+  /// Extracted alongside `mergeAsTransferSceneAction` for the same
+  /// type-checker-budget reason.
+  private var mergeTransactionsSceneAction: (() -> Void)? {
+    let selection = mergeSelection
+    guard !selection.isEmpty else { return nil }
+    return { Task { await transactionStore.mergeTransactions(selection) } }
+  }
+
+  /// The list plus its inspector and the focused-scene command values.
+  /// Split out of `body` (which continues with the alert / confirmation
+  /// dialogs / CSV addons) so each half stays within the SwiftUI
+  /// type-checker's expression-complexity budget — the same two-pass
+  /// rationale as `spamFilteredList`.
+  private var listWithFocusedCommands: some View {
     spamFilteredList
       .modifier(
         OptionalTransactionInspector(
@@ -191,12 +216,8 @@ struct TransactionListView: View {
       .focusedSceneValue(\.selectedTransaction, selectedTransactionBinding)
       .focusedSceneValue(\.selectedTransactionID, selectedTransaction?.id)
       .focusedSceneValue(\.transferMergeSelection, transferMergeSelection)
-      .focusedSceneValue(
-        \.mergeAsTransferAction,
-        manualMergePair.map { pair in
-          { Task { await transactionStore.manualMerge(pair.0, pair.1) } }
-        }
-      )
+      .focusedSceneValue(\.mergeAsTransferAction, mergeAsTransferSceneAction)
+      .focusedSceneValue(\.mergeTransactionsAction, mergeTransactionsSceneAction)
       .focusedSceneValue(
         \.unmergeTransferAction,
         selectedTransaction?.isMergedTransfer == true
@@ -225,6 +246,10 @@ struct TransactionListView: View {
           ? { transactionPendingDelete = selectedTransaction?.id }
           : nil
       )
+  }
+
+  var body: some View {
+    listWithFocusedCommands
       .alert("Error", isPresented: $showError) {
         Button("OK", role: .cancel) {}
       } message: {

@@ -29,22 +29,6 @@ extension TransactionListView {
     )
   }
 
-  /// The two transactions the user has multi-selected for a manual
-  /// merge, resolved from the loaded projection, or `nil` when the
-  /// selection is not exactly a valid candidate pair. Shared by the
-  /// list toolbar and the row context menu so the gate logic is not
-  /// duplicated; the menu-bar command applies the same
-  /// `Transaction.canManualMerge` predicate over the focused value.
-  var manualMergePair: (Transaction, Transaction)? {
-    guard transferMergeSelection.count == 2 else { return nil }
-    let selected = transactionStore.transactions
-      .map(\.transaction)
-      .filter { transferMergeSelection.contains($0.id) }
-    guard selected.count == 2 else { return nil }
-    guard Transaction.canManualMerge(selected[0], with: selected[1]) else { return nil }
-    return (selected[0], selected[1])
-  }
-
   // MARK: - Top-Level View Composition
 
   /// Module-internal (not `private`) because `TransactionListView.body` in
@@ -356,6 +340,13 @@ extension TransactionListView {
         Task { await transactionStore.manualMerge(pair.0, pair.1) }
       }
       .accessibilityIdentifier(UITestIdentifiers.TransferDetection.merge(transaction.id))
+    }
+    let mergeCandidates = mergeSelection
+    if mergeCandidates.contains(where: { $0.id == transaction.id }) {
+      Button("Merge Transactions", systemImage: "arrow.triangle.merge") {
+        Task { await transactionStore.mergeTransactions(mergeCandidates) }
+      }
+      .accessibilityIdentifier(UITestIdentifiers.TransactionMerge.merge(transaction.id))
     }
     if transaction.isMergedTransfer {
       Button(
