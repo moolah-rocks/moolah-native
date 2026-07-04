@@ -171,7 +171,8 @@ struct EditAccountView: View {
   // MARK: - Sections
 
   private var detailsSection: some View {
-    Section {
+    let canToggleHidden = accountStore.canToggleHidden(account.id)
+    return Section {
       TextField("Name", text: $name, prompt: Text("e.g. Savings Account"))
         .focused($focusedField, equals: .name)
         .accessibilityLabel("Account name")
@@ -182,11 +183,8 @@ struct EditAccountView: View {
       }
       InstrumentPickerField(label: "Currency", kinds: [.fiatCurrency], selection: $currency)
       Toggle("Hidden", isOn: $isHidden)
-        .disabled(!accountStore.canDelete(account.id))
-        .accessibilityHint(
-          !accountStore.canDelete(account.id)
-            ? "Account must have zero balance to hide"
-            : "")
+        .disabled(!canToggleHidden)
+        .accessibilityHint(canToggleHidden ? "" : "Account must have zero balance to hide")
     }
   }
 

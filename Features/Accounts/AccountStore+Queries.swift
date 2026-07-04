@@ -50,6 +50,17 @@ extension AccountStore {
     return account.positions.isEmpty || account.positions.allSatisfy { $0.quantity == 0 }
   }
 
+  /// Whether the "Hidden" flag may be changed for an account.
+  ///
+  /// Hiding a live account is disallowed (same zero-balance rule as
+  /// ``canDelete(_:)``), but an already-hidden account may *always* be
+  /// unhidden — even if it has since regained a balance — otherwise it
+  /// would be stuck hidden with no way to bring it back into view.
+  func canToggleHidden(_ accountId: UUID) -> Bool {
+    guard let account = accounts.by(id: accountId) else { return false }
+    return account.isHidden || canDelete(accountId)
+  }
+
   /// Positions for a given account. Returns empty array if not loaded.
   func positions(for accountId: UUID) -> [Position] {
     accounts.by(id: accountId)?.positions ?? []
