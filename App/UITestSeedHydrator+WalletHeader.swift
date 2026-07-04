@@ -56,6 +56,23 @@ extension UITestSeedHydrator {
         lastErrorJson: errorJson,
         in: profileDatabase)
     }
+
+    // Seed a dummy Alchemy key into the test-local (non-iCloud-synced)
+    // KeychainStore so `SyncedAccountHeaderLogic.hasCredential` evaluates
+    // to `true` after the view's `.task` fires. Without this, the missing-
+    // credential hint renders instead of the error caption, making
+    // `testErrorCaptionIsPresentOnSyncErrorAccount` racy.
+    //
+    // The store's service string ("com.moolah.api-keys.ui-test") is
+    // distinct from the production store ("com.moolah.api-keys.development"
+    // / ".production") so this write never touches the user's real key.
+    // `ProfileSession.makeRegistryWiring` uses the same override store
+    // (via `UITestSeedCryptoOverrides.alchemyKeyStore(for:)`) when
+    // building `CryptoTokenStore` for this seed.
+    // swiftlint:disable:next force_unwrapping
+    let alchemyKeyStore = UITestSeedCryptoOverrides.alchemyKeyStore(for: .walletHeaderSyncError)!
+    try alchemyKeyStore.saveString("ui-test-alchemy-key")
+
     return profile
   }
 

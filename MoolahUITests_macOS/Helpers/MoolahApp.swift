@@ -102,6 +102,11 @@ final class MoolahApp {
   /// profile is active and the sidebar is visible.
   var syncFooter: SyncFooterScreen { SyncFooterScreen(app: self) }
 
+  /// `SyncedAccountHeaderView` bar rendered above the transaction list on
+  /// a synced (`.crypto` or `.exchange`) account. Available after
+  /// navigating to a synced account via `sidebar.switchToAccount(_:)`.
+  var syncedAccountHeader: SyncedAccountHeaderScreen { SyncedAccountHeaderScreen(app: self) }
+
   /// `CreateAccountView` sheet. Open it by calling `createAccount.open(...)`.
   var createAccount: CreateAccountScreen { CreateAccountScreen(app: self) }
 
