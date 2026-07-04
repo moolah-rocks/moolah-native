@@ -63,6 +63,9 @@ struct LiveAlchemyClient: Sendable {
   /// local stack frame of the in-flight request.
   private let apiKeyProvider: @Sendable () -> String?
   private let rateLimiter: RateLimiter
+  /// Injected sleep for the 429 backoff so tests drive the retry loop
+  /// without real wall-clock delay. Live callers get `Task.sleep`.
+  private let sleeper: @Sendable (TimeInterval) async throws -> Void
   private let logger: Logger
 
   /// - Parameters:
@@ -73,15 +76,23 @@ struct LiveAlchemyClient: Sendable {
   ///     is visible without rebuilding the client; never caches the
   ///     value on the struct. Never logged.
   ///   - rateLimiter: Shared `RateLimiter` actor — caller is responsible
-  ///     for sizing it to the Alchemy plan in use (25 req/s on free tier).
+  ///     for sizing it to the Alchemy plan in use. Wire it with a small
+  ///     `burstCapacity` so the launch-time fan-out across accounts is
+  ///     spaced rather than fired as a single burst.
+  ///   - sleeper: Backoff sleep for the 429 retry loop. Defaults to
+  ///     `Task.sleep`; tests pass an instant no-op.
   init(
     session: URLSession = .shared,
     apiKeyProvider: @escaping @Sendable () -> String?,
-    rateLimiter: RateLimiter
+    rateLimiter: RateLimiter,
+    sleeper: @escaping @Sendable (TimeInterval) async throws -> Void = {
+      try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000))
+    }
   ) {
     self.session = session
     self.apiKeyProvider = apiKeyProvider
     self.rateLimiter = rateLimiter
+    self.sleeper = sleeper
     self.logger = Logger(subsystem: "com.moolah.app", category: "AlchemyClient")
   }
 
@@ -105,7 +116,6 @@ struct LiveAlchemyClient: Sendable {
         name: "alchemy.getTransactionReceipt",
         signpostID: signpostID)
     }
-    try await rateLimiter.acquire()
     let body = AlchemyJSONRPCRequest<AlchemyJSONRPCParams>(
       method: "eth_getTransactionReceipt",
       params: .transactionReceipt(hash: hash)
@@ -196,7 +206,6 @@ struct LiveAlchemyClient: Sendable {
     if chain.supportsInternalTransfers {
       categories.append(.internal)
     }
-    try await rateLimiter.acquire()
     let body = AlchemyJSONRPCRequest<AlchemyJSONRPCParams>(
       method: "alchemy_getAssetTransfers",
       params: .assetTransfers(
@@ -236,7 +245,48 @@ struct LiveAlchemyClient: Sendable {
     }
   }
 
+  /// Sends `request` through the shared `withRetry` backoff, retrying only
+  /// Alchemy's own HTTP 429 before surfacing `.rateLimited`. `acquire()` sits
+  /// *inside* the retried operation so every attempt — including retries — is
+  /// spaced by the same shared `RateLimiter`; a retry can't bypass the
+  /// de-burst and re-create the simultaneous fan-out this client is tuned to
+  /// avoid. Non-429 errors are classified terminal and propagate on the first
+  /// attempt. This is the recovery path for the residual 429s that still slip
+  /// through the proactive limiter, so a transient throttle no longer freezes
+  /// an account's sync until the next launch.
   private func send(request: URLRequest, stage: String) async throws -> Data {
+    try await withRetry(
+      policy: Self.retryPolicy,
+      classify: { Self.retryDecision(for: $0) },
+      sleep: sleeper,
+      operation: {
+        try await self.rateLimiter.acquire()
+        return try await self.performRequest(request, stage: stage)
+      }
+    )
+  }
+
+  /// Bounded backoff for the residual 429s that slip past the proactive
+  /// `RateLimiter`: 1 initial attempt + 3 retries, exponential (0.5s base,
+  /// 8s cap). Alchemy's 429 carries no `Retry-After`, so in-place honouring
+  /// stays off and backoff is always the policy's.
+  private static let retryPolicy = HTTPRetryPolicy(
+    maxAttempts: 4, backoffBase: 0.5, backoffCap: 8)
+
+  /// Retry only `.rateLimited` (Alchemy's 429). Every other `WalletSyncError`
+  /// — and any non-`WalletSyncError` such as `CancellationError` — is terminal
+  /// on the first attempt.
+  private static func retryDecision(for error: any Error) -> HTTPRetryDecision {
+    guard let walletError = error as? WalletSyncError,
+      case .rateLimited = walletError.kind
+    else { return .doNotRetry }
+    return .retryAfterBackoff
+  }
+
+  /// One transport attempt: 2xx returns the body; a non-2xx status is mapped
+  /// to a typed `WalletSyncError` by `validate`; a cancelled transfer maps to
+  /// `CancellationError`; any other transport failure to `.network`.
+  private func performRequest(_ request: URLRequest, stage: String) async throws -> Data {
     let data: Data
     let response: URLResponse
     do {

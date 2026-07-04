@@ -359,24 +359,37 @@ struct LiveBlockscoutClient: Sendable {
 
 Used by: `LiveBlockscoutClient`.
 
-### Sanctioned shape #4 — token-bucket RPC
+### Sanctioned shape #4 — token-bucket RPC (+ shape #3 retry)
 
-For paid-tier APIs with explicit req/s quotas (Alchemy's 25 req/s free tier):
+For APIs with an explicit per-second quota, throttle proactively with a shared
+`RateLimiter` token bucket, and compose shape #3's `withRetry` on top for the
+residual 429s the bucket can't prevent (e.g. the provider's global-traffic
+throttle):
 
 ```swift
 struct LiveAlchemyClient: Sendable {
   private let session: URLSession
-  private let rateLimiter: RateLimiter  // token bucket actor
+  private let rateLimiter: RateLimiter  // token-bucket actor, shared
 
-  func fetchReceipt(…) async throws -> AlchemyTransactionReceipt {
-    try await rateLimiter.acquire()
-    let (data, _) = try await session.data(for: request)
-    …
+  private func send(request: URLRequest, stage: String) async throws -> Data {
+    try await withRetry(
+      policy: Self.retryPolicy,
+      classify: { Self.retryDecision(for: $0) },
+      sleep: sleeper,
+      operation: {
+        try await self.rateLimiter.acquire()  // re-acquire on every attempt
+        return try await self.performRequest(request, stage: stage)
+      })
   }
 }
 ```
 
-- `RateLimiter` is a token-bucket actor sized for the API plan (e.g. 25 req/s); not the same as the reactive `RateLimitGate`.
+- `RateLimiter` is a token-bucket actor sized for the API plan; not the same as
+  the reactive `RateLimitGate`. A small `burstCapacity` spaces the launch-time
+  fan-out so many account syncs don't fire at once and trip the provider's
+  per-second burst cap.
+- `acquire()` sits *inside* the retried `operation`, so a retry re-acquires a
+  permit and can't bypass the limiter to re-create the burst.
 - Translates to a provider-specific error vocabulary (`WalletSyncError`).
 
 Used by: `LiveAlchemyClient`.

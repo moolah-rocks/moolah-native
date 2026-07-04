@@ -63,8 +63,12 @@ extension ProfileSession {
   ///
   /// Live wiring uses:
   ///
-  /// - `RateLimiter(permitsPerSecond: 25)` matching Alchemy's free-tier
-  ///   ceiling (design §"Concurrency model").
+  /// - `RateLimiter(permitsPerSecond: 5, burstCapacity: 1)` for Alchemy.
+  ///   `burstCapacity: 1` strictly spaces calls ~200ms apart so the
+  ///   launch-time fan-out across every crypto account (all sharing this one
+  ///   limiter and client) can't fire simultaneously and trip Alchemy's
+  ///   per-second burst cap — the free tier rejects the burst, not the
+  ///   volume. Steady 5 req/s stays well under the sustained ceiling.
   /// - `RateLimiter(permitsPerSecond: 5)` for Blockscout public
   ///   unauthenticated tier (~5 req/s per IP).
   /// - `LiveAlchemyClient` — same shape as `Backends/CoinGecko/CoinGeckoClient`.
@@ -89,7 +93,7 @@ extension ProfileSession {
     canonicalResolver: CanonicalInstrumentResolver = CanonicalInstrumentResolver()
   ) -> CryptoSyncWiring? {
     guard let registry else { return nil }
-    let rateLimiter = RateLimiter(permitsPerSecond: 25)
+    let rateLimiter = RateLimiter(permitsPerSecond: 5, burstCapacity: 1)
     let alchemy: any AlchemyClient = LiveAlchemyClient(
       // Closure (not a resolved value): a key entered in Settings after this
       // wiring is built is visible on the next sync cycle without a rebuild,
