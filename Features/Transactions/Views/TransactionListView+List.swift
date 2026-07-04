@@ -29,6 +29,16 @@ extension TransactionListView {
     )
   }
 
+  /// The account universe offered to the filter dialog, derived from the
+  /// immutable navigation context (`baseFilter`) — not `activeFilter` — so
+  /// the group's full member set stays available even after the user
+  /// narrows the selection. Empty for the global transaction list.
+  private var filterScopeAccountIds: Set<UUID> {
+    var scope = baseFilter.accountIds
+    if let id = baseFilter.accountId { scope.insert(id) }
+    return scope
+  }
+
   // MARK: - Top-Level View Composition
 
   /// Module-internal (not `private`) because `TransactionListView.body` in
@@ -55,6 +65,7 @@ extension TransactionListView {
     .sheet(isPresented: $showFilterSheet) {
       TransactionFilterView(
         filter: activeFilter,
+        scopeAccountIds: filterScopeAccountIds,
         accounts: accounts,
         categories: categories,
         earmarks: earmarks,
