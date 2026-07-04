@@ -13,6 +13,9 @@ enum SidebarAccount {
   /// The Brokerage account from the `.tradeReady` seed (different UUID from
   /// `.brokerage`, which uses the `.tradeBaseline` seed fixture).
   case tradeReadyBrokerage
+  /// The Ethereum wallet from the `.walletHeaderSyncError` seed. Used by
+  /// `SyncedAccountHeaderTests` to navigate to the crypto account detail.
+  case walletWithSyncError
 
   /// The fixed UUID written to the seeded `ProfileContainerManager` by
   /// `UITestSeedHydrator`.
@@ -22,6 +25,7 @@ enum SidebarAccount {
     case .brokerage: return UITestFixtures.TradeBaseline.brokerageAccountId
     case .tradesBrokerage: return UITestFixtures.TradeBaseline.tradesBrokerageAccountId
     case .tradeReadyBrokerage: return UITestFixtures.TradeReady.brokerageAccountId
+    case .walletWithSyncError: return UITestFixtures.WalletHeaderSyncError.walletAccountId
     }
   }
 }

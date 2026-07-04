@@ -211,6 +211,19 @@ extension MoolahUITestCase {
         + "dialog's default [now − 1 month, now] range matches all three")
   }
 
+  func appendWalletHeaderFixtures(into lines: inout [String]) {
+    let fixtures = UITestFixtures.WalletHeaderSyncError.self
+    lines.append("# fixtures — crypto wallet with a seeded sync error")
+    lines.append("profile.id       = \(fixtures.profileId)")
+    lines.append("profile.label    = \(fixtures.profileLabel)")
+    lines.append("profile.currency = \(fixtures.profileCurrencyCode)")
+    lines.append("wallet.id        = \(fixtures.walletAccountId)")
+    lines.append("wallet.name      = \(fixtures.walletAccountName)")
+    lines.append("wallet.address   = \(fixtures.walletAddress)")
+    lines.append("wallet.chainId   = \(fixtures.walletChainId)")
+    lines.append("# wallet_sync_state: seeded WalletSyncError.network, lastSyncedAt=.distantPast")
+  }
+
   func appendPendingWebImportFixtures(into lines: inout [String]) {
     let fixtures = UITestFixtures.PendingWebImportOneChaseInbox.self
     lines.append("# fixtures — tradeBaseline profile + one pre-written inbox payload")

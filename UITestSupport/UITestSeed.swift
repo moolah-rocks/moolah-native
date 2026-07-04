@@ -147,6 +147,15 @@ public enum UITestSeed: String, CaseIterable, Sendable {
   /// members and never surface the outsider's transaction. See
   /// `UITestFixtures.GroupFilterScope` for the full fixture table.
   case groupFilterScope = "group-filter-scope"
+
+  /// A CloudKit-backed AUD profile with one Ethereum crypto wallet account
+  /// whose `wallet_sync_state` row carries a seeded `network` sync error.
+  /// Drives `SyncedAccountHeaderTests`: opening the account's detail view
+  /// must surface `UITestIdentifiers.WalletAccountHeader.errorCaption` in
+  /// the header row, proving the caption element exists and is identified
+  /// through the inline-layout change. See
+  /// `UITestFixtures.WalletHeaderSyncError` for the full fixture table.
+  case walletHeaderSyncError = "wallet-header-sync-error"
 }
 
 /// Fixtures for the first-run Welcome seeds. Defined here so both the

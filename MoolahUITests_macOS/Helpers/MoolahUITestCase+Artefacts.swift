@@ -192,9 +192,9 @@ extension MoolahUITestCase {
     return lines.joined(separator: "\n") + "\n"
   }
 
+  // swiftlint:disable cyclomatic_complexity
   /// Per-seed fixture-text dispatch, factored out of `seedText(for:)` so
-  /// the top-level helper stays under SwiftLint's
-  /// cyclomatic-complexity threshold as new seeds are added. Welcome
+  /// the top-level helper stays manageable as new seeds are added. Welcome
   /// seeds share one sub-dispatch and sidebar-footer seeds share one
   /// helper so each adds only a single case to the outer switch.
   private func appendFixtures(for seed: UITestSeed, into lines: inout [String]) {
@@ -220,8 +220,11 @@ extension MoolahUITestCase {
       appendInsightsForYouFixtures(into: &lines)
     case .groupFilterScope:
       appendGroupFilterScopeFixtures(into: &lines)
+    case .walletHeaderSyncError:
+      appendWalletHeaderFixtures(into: &lines)
     }
   }
+  // swiftlint:enable cyclomatic_complexity
 
   /// Sub-dispatch for the four `welcomeXxx` seeds so the outer switch
   /// only consumes one cyclomatic-complexity unit for the whole family.

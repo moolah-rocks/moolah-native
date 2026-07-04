@@ -25,7 +25,8 @@ enum UITestSeedInsightOverrides {
       .incompatibleProfile,
       .pendingWebImportOneChaseInbox,
       .transferDetectionBaseline,
-      .groupFilterScope:
+      .groupFilterScope,
+      .walletHeaderSyncError:
       return nil
     }
   }
@@ -53,7 +54,8 @@ enum UITestSeedInsightOverrides {
         .incompatibleProfile,
         .pendingWebImportOneChaseInbox,
         .transferDetectionBaseline,
-        .groupFilterScope:
+        .groupFilterScope,
+        .walletHeaderSyncError:
         return nil
       }
     }
@@ -82,7 +84,8 @@ enum UITestSeedInsightOverrides {
         .incompatibleProfile,
         .pendingWebImportOneChaseInbox,
         .transferDetectionBaseline,
-        .groupFilterScope:
+        .groupFilterScope,
+        .walletHeaderSyncError:
         return nil
       }
     }

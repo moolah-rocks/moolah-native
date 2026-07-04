@@ -138,7 +138,8 @@ extension MoolahApp {
       .transferDetectionBaseline,
       .pendingWebImportOneChaseInbox,
       .insightsForYouBaseline,
-      .groupFilterScope:
+      .groupFilterScope,
+      .walletHeaderSyncError:
       break
     case .welcomeDownloading:
       // Override iCloudAvailability to `.available` so the WelcomeStateResolver

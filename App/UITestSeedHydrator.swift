@@ -64,6 +64,8 @@ enum UITestSeedHydrator {
       let profile = try hydrateTradeBaseline(into: manager)
       try seedPendingWebImportInbox()
       return profile
+    case .walletHeaderSyncError:
+      return try hydrateWalletHeaderSyncError(into: manager)
     }
   }
 
