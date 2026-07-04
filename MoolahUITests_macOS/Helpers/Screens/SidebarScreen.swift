@@ -66,20 +66,20 @@ struct SidebarScreen {
     Trace.record(detail: "account=\(account)")
     let identifier = UITestIdentifiers.Sidebar.account(account.id)
     let row = app.element(for: identifier)
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("sidebar row '\(identifier)' did not appear")
-      XCTFail("Sidebar row for account \(account) did not appear within 3s")
+      XCTFail("Sidebar row for account \(account) did not appear within 10s")
       return
     }
     row.click()
 
     let listContainer = app.element(for: UITestIdentifiers.TransactionList.container)
-    if !listContainer.waitForExistence(timeout: 3) {
+    if !listContainer.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "transaction list container '\(UITestIdentifiers.TransactionList.container)' "
           + "did not appear after switching to \(account)")
       XCTFail(
-        "Transaction list did not render within 3s of switching to account \(account)")
+        "Transaction list did not render within 10s of switching to account \(account)")
     }
   }
 

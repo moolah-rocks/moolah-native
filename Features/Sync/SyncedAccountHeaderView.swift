@@ -178,11 +178,11 @@ extension SyncedAccountHeaderView {
           statusLeadingGroup(presentation)
           Spacer(minLength: 0)
         }
+        inlineCaption(presentation)
         HStack(spacing: 12) {
           statusTrailingGroup(presentation)
           Spacer(minLength: 0)
         }
-        inlineCaption(presentation)
       }
     }
   }
