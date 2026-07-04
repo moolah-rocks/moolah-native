@@ -32,7 +32,7 @@ struct TransactionListScreen {
     let row = app.element(for: identifier)
     if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("transaction row '\(identifier)' did not appear")
-      XCTFail("Transaction list row for \(entry) did not appear within 3s")
+      XCTFail("Transaction list row for \(entry) did not appear within 10s")
       return
     }
     row.click()
@@ -74,7 +74,7 @@ struct TransactionListScreen {
     let button = app.element(for: UITestIdentifiers.TransactionList.filterButton)
     if !button.waitForExistence(timeout: 10) {
       Trace.recordFailure("filter toolbar button did not appear")
-      XCTFail("Transaction list Filter button did not appear within 3s")
+      XCTFail("Transaction list Filter button did not appear within 10s")
       return TransactionFilterScreen(app: app)
     }
     button.click()
@@ -82,7 +82,7 @@ struct TransactionListScreen {
     let apply = app.element(for: UITestIdentifiers.TransactionFilter.apply)
     if !apply.waitForExistence(timeout: 10) {
       Trace.recordFailure("filter sheet Apply button did not appear after opening filter")
-      XCTFail("Filter sheet did not present within 3s of tapping Filter")
+      XCTFail("Filter sheet did not present within 10s of tapping Filter")
     }
     return TransactionFilterScreen(app: app)
   }
@@ -93,7 +93,7 @@ struct TransactionListScreen {
   // preceding action's reload is asynchronous) but never mutate state and
   // never record a trace breadcrumb — per the driver invariants.
 
-  /// Asserts the given transaction's row is present, waiting up to 3s for
+  /// Asserts the given transaction's row is present, waiting up to 10s for
   /// the (asynchronous) filtered reload to surface it.
   func expectTransactionVisible(_ transactionId: UUID) {
     let identifier = UITestIdentifiers.TransactionList.transaction(transactionId)
