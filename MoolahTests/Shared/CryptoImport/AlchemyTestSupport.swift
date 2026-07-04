@@ -16,11 +16,13 @@ enum AlchemyTestSupport {
   static func makeClient(
     apiKey: String = "test-key",
     permitsPerSecond: Double = 1_000,
+    sleeper: @escaping @Sendable (TimeInterval) async throws -> Void = { _ in },
     handler: @escaping @Sendable (URLRequest) throws -> (HTTPURLResponse, Data)
   ) -> LiveAlchemyClient {
     makeClient(
       apiKeyProvider: { apiKey },
       permitsPerSecond: permitsPerSecond,
+      sleeper: sleeper,
       handler: handler)
   }
 
@@ -30,6 +32,7 @@ enum AlchemyTestSupport {
   static func makeClient(
     apiKeyProvider: @escaping @Sendable () -> String?,
     permitsPerSecond: Double = 1_000,
+    sleeper: @escaping @Sendable (TimeInterval) async throws -> Void = { _ in },
     handler: @escaping @Sendable (URLRequest) throws -> (HTTPURLResponse, Data)
   ) -> LiveAlchemyClient {
     let config = URLSessionConfiguration.ephemeral
@@ -40,7 +43,10 @@ enum AlchemyTestSupport {
     AlchemyURLProtocolStub.requestHandler = handler
     let limiter = RateLimiter(permitsPerSecond: permitsPerSecond)
     return LiveAlchemyClient(
-      session: session, apiKeyProvider: apiKeyProvider, rateLimiter: limiter)
+      session: session,
+      apiKeyProvider: apiKeyProvider,
+      rateLimiter: limiter,
+      sleeper: sleeper)
   }
 
   /// Build a 200 OK JSON response for the URL of an inbound request. The

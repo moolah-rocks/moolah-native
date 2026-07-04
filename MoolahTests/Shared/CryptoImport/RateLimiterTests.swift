@@ -109,6 +109,48 @@ struct RateLimiterTests {
       }
     }
   }
+
+  @Test
+  func burstCapacityCapsTheInitialBurstBelowTheRefillRate() async throws {
+    let clock = TestClock(start: Date(timeIntervalSince1970: 1_000_000))
+    // High refill rate but a burst capacity of 1: only one call may fire
+    // before throttling forces spacing, regardless of `permitsPerSecond`.
+    // This is the launch-time de-burst that stops every account's first
+    // request firing simultaneously onto one shared limiter.
+    let limiter = RateLimiter(permitsPerSecond: 25, burstCapacity: 1) { clock.now() }
+
+    // The single burst permit is consumed with no clock advance…
+    try await withTimeout(seconds: 1) {
+      try await limiter.acquire()
+    }
+
+    // …and the very next acquire must wait, because the bucket is empty and
+    // the clock has not advanced to refill it.
+    let task = Task { try await limiter.acquire() }
+    for _ in 0..<5 {
+      await Task.yield()
+    }
+    #expect(task.isCancelled == false)
+    task.cancel()
+    await #expect(throws: CancellationError.self) {
+      try await task.value
+    }
+  }
+
+  @Test
+  func burstCapacityRefillsAtPermitsPerSecondNotCapacity() async throws {
+    let clock = TestClock(start: Date(timeIntervalSince1970: 1_000_000))
+    let limiter = RateLimiter(permitsPerSecond: 10, burstCapacity: 1) { clock.now() }
+
+    // Burn the single permit.
+    try await limiter.acquire()
+    // At 10 permits/sec, 0.1s refills exactly one — spacing is 1 / rate,
+    // decoupled from the burst capacity.
+    clock.advance(by: 0.1)
+    try await withTimeout(seconds: 1) {
+      try await limiter.acquire()
+    }
+  }
 }
 
 // MARK: - Test helpers
