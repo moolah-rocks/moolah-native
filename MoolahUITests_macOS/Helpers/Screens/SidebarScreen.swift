@@ -141,13 +141,17 @@ enum SidebarEarmark {
   }
 }
 
-/// Symbolic reference to a sidebar account group seeded by `TradeBaseline`.
+/// Symbolic reference to a sidebar account group.
 enum SidebarGroup {
+  /// `.tradeBaseline`'s empty rename-target group.
   case renameTarget
+  /// `.groupFilterScope`'s two-member "Filter Group".
+  case filterGroup
 
   var id: UUID {
     switch self {
     case .renameTarget: return UITestFixtures.TradeBaseline.renameTargetGroupId
+    case .filterGroup: return UITestFixtures.GroupFilterScope.filterGroupId
     }
   }
 }

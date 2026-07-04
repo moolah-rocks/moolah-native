@@ -24,6 +24,10 @@ extension UITestSeedHydrator {
     /// behaviour. Pass `.calculatedFromTrades` for accounts seeded for
     /// the EditAccountView visibility tests.
     let valuationMode: ValuationMode
+    /// Optional back-reference into `account_group.id`. `nil` for a
+    /// standalone account; set to the owning group's id to make the
+    /// account a member (drives the group-scope filter test).
+    let groupId: UUID?
 
     init(
       id: UUID,
@@ -31,7 +35,8 @@ extension UITestSeedHydrator {
       type: AccountType,
       instrumentId: String,
       position: Int,
-      valuationMode: ValuationMode = .recordedValue
+      valuationMode: ValuationMode = .recordedValue,
+      groupId: UUID? = nil
     ) {
       self.id = id
       self.name = name
@@ -39,6 +44,7 @@ extension UITestSeedHydrator {
       self.instrumentId = instrumentId
       self.position = position
       self.valuationMode = valuationMode
+      self.groupId = groupId
     }
   }
 
@@ -132,7 +138,8 @@ extension UITestSeedHydrator {
       position: spec.position,
       isHidden: false,
       encodedSystemFields: nil,
-      valuationMode: spec.valuationMode.rawValue)
+      valuationMode: spec.valuationMode.rawValue,
+      groupId: spec.groupId)
     try row.upsert(database)
   }
 
