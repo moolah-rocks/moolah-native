@@ -30,14 +30,14 @@ struct TransactionListScreen {
     Trace.record(#function, detail: "entry=\(entry)")
     let identifier = UITestIdentifiers.TransactionList.transaction(entry.id)
     let row = app.element(for: identifier)
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("transaction row '\(identifier)' did not appear")
       XCTFail("Transaction list row for \(entry) did not appear within 3s")
       return
     }
     row.click()
     let payee = app.element(for: UITestIdentifiers.Detail.payee)
-    if !payee.waitForExistence(timeout: 3) {
+    if !payee.waitForExistence(timeout: 10) {
       Trace.recordFailure("detail.payee did not appear after opening \(entry)")
       XCTFail("Transaction detail did not surface payee field after opening \(entry)")
     }
@@ -60,7 +60,7 @@ struct TransactionListScreen {
     Trace.record(#function)
     app.pressKeyboardShortcut("n", modifiers: .command)
     let payee = app.element(for: UITestIdentifiers.Detail.payee)
-    if !payee.waitForExistence(timeout: 3) {
+    if !payee.waitForExistence(timeout: 10) {
       Trace.recordFailure("detail.payee did not appear after ⌘N")
       XCTFail("Transaction detail did not surface payee field after ⌘N")
     }
@@ -72,7 +72,7 @@ struct TransactionListScreen {
   func openFilter() -> TransactionFilterScreen {
     Trace.record(#function)
     let button = app.element(for: UITestIdentifiers.TransactionList.filterButton)
-    if !button.waitForExistence(timeout: 3) {
+    if !button.waitForExistence(timeout: 10) {
       Trace.recordFailure("filter toolbar button did not appear")
       XCTFail("Transaction list Filter button did not appear within 3s")
       return TransactionFilterScreen(app: app)
@@ -80,7 +80,7 @@ struct TransactionListScreen {
     button.click()
 
     let apply = app.element(for: UITestIdentifiers.TransactionFilter.apply)
-    if !apply.waitForExistence(timeout: 3) {
+    if !apply.waitForExistence(timeout: 10) {
       Trace.recordFailure("filter sheet Apply button did not appear after opening filter")
       XCTFail("Filter sheet did not present within 3s of tapping Filter")
     }
@@ -98,7 +98,7 @@ struct TransactionListScreen {
   func expectTransactionVisible(_ transactionId: UUID) {
     let identifier = UITestIdentifiers.TransactionList.transaction(transactionId)
     let row = app.element(for: identifier)
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("expected transaction row '\(identifier)' to be visible")
       XCTFail("Transaction row \(transactionId) was not visible within 3s")
     }

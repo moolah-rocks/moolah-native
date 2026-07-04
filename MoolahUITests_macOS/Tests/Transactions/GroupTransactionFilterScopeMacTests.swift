@@ -9,9 +9,10 @@ import XCTest
 /// "Member Two", plus a standalone "Outsider" account, each carrying one
 /// dated expense inside the filter dialog's default date window. See
 /// `UITestFixtures.GroupFilterScope`.
+@MainActor
 final class GroupTransactionFilterScopeMacTests: MoolahUITestCase {
 
-  func testApplyingDateFilterKeepsGroupScope() {
+  func testApplyingDateFilterKeepsGroupScope() throws {
     let app = launch(seed: .groupFilterScope)
     app.sidebar.openGroup(.filterGroup)
 
@@ -34,7 +35,7 @@ final class GroupTransactionFilterScopeMacTests: MoolahUITestCase {
     list.expectTransactionAbsent(fixtures.outsiderTxnId)
   }
 
-  func testNarrowingToOneMemberShowsOnlyThatMember() {
+  func testNarrowingToOneMemberShowsOnlyThatMember() throws {
     let app = launch(seed: .groupFilterScope)
     app.sidebar.openGroup(.filterGroup)
 

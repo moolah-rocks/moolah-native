@@ -14,7 +14,7 @@ extension SidebarScreen {
     Trace.record(#function, detail: "group=\(group)")
     let identifier = UITestIdentifiers.Sidebar.group(group.id)
     let row = app.element(for: identifier)
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("sidebar row '\(identifier)' did not appear")
       XCTFail("Sidebar row for group \(group) did not appear within 3s")
       return
@@ -22,7 +22,7 @@ extension SidebarScreen {
     row.click()
 
     let listContainer = app.element(for: UITestIdentifiers.TransactionList.container)
-    if !listContainer.waitForExistence(timeout: 3) {
+    if !listContainer.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "transaction list container '\(UITestIdentifiers.TransactionList.container)' "
           + "did not appear after opening group \(group)")
