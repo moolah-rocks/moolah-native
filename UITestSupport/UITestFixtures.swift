@@ -342,6 +342,30 @@ public enum UITestFixtures {
     /// metadata that gets surfaced into the `seed.txt` artefact.
     public static let expectedBannerText = "1 pending import from \(sourceHost)"
   }
+
+  /// Fixtures for the `.walletHeaderSyncError` seed.
+  ///
+  /// Entities (all fixed, deterministic):
+  ///   - Profile `personal` — label "Personal", currency AUD,
+  ///     CloudKit-backed (a `cryptoSyncStore` is only built for CloudKit
+  ///     profiles; `CryptoWalletAccountView.walletHeader` returns
+  ///     `EmptyView` otherwise).
+  ///   - Account `wallet` — "Ethereum Wallet", crypto, AUD denomination,
+  ///     `chainId = 1` (Ethereum mainnet), `walletAddress` set to a
+  ///     deterministic 42-char hex address.
+  ///   - `wallet_sync_state` row — seeded with a `network` error so
+  ///     `SyncedAccountHeaderView.errorCaption` is non-nil at first paint.
+  public enum WalletHeaderSyncError {
+    public static let profileId = uuidLiteral("E1000000-0000-0000-0000-000000000001")
+    public static let profileLabel = "Personal"
+    public static let profileCurrencyCode = "AUD"
+
+    public static let walletAccountId = uuidLiteral("E1000000-0000-0000-0000-000000000010")
+    public static let walletAccountName = "Ethereum Wallet"
+    /// Deterministic 42-char Ethereum address. Not a real wallet.
+    public static let walletAddress = "0xe1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1e1"
+    public static let walletChainId = 1
+  }
 }
 
 /// Environment-variable names the app and UI-test target both read.

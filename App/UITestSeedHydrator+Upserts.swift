@@ -28,6 +28,10 @@ extension UITestSeedHydrator {
     /// standalone account; set to the owning group's id to make the
     /// account a member (drives the group-scope filter test).
     let groupId: UUID?
+    /// `0x…` lowercased wallet address. Required when `type == .crypto`.
+    let walletAddress: String?
+    /// EVM chain ID (1 = Ethereum). Required when `type == .crypto`.
+    let chainId: Int?
 
     init(
       id: UUID,
@@ -36,7 +40,9 @@ extension UITestSeedHydrator {
       instrumentId: String,
       position: Int,
       valuationMode: ValuationMode = .recordedValue,
-      groupId: UUID? = nil
+      groupId: UUID? = nil,
+      walletAddress: String? = nil,
+      chainId: Int? = nil
     ) {
       self.id = id
       self.name = name
@@ -45,6 +51,8 @@ extension UITestSeedHydrator {
       self.position = position
       self.valuationMode = valuationMode
       self.groupId = groupId
+      self.walletAddress = walletAddress
+      self.chainId = chainId
     }
   }
 
@@ -139,7 +147,28 @@ extension UITestSeedHydrator {
       isHidden: false,
       encodedSystemFields: nil,
       valuationMode: spec.valuationMode.rawValue,
+      walletAddress: spec.walletAddress,
+      chainId: spec.chainId,
       groupId: spec.groupId)
+    try row.upsert(database)
+  }
+
+  /// Upserts a `wallet_sync_state` row for the given account. Idempotent
+  /// via `upsert` on the primary key. `lastErrorJson` must be valid JSON
+  /// (the table has a `json_valid` CHECK) or `nil` for no error.
+  ///
+  /// SAFETY: synchronous GRDB write inside a database.write block — same
+  /// constraint as all other upsert helpers in this file.
+  static func upsertWalletSyncState(
+    accountId: UUID,
+    lastErrorJson: String?,
+    in database: Database
+  ) throws {
+    let row = WalletSyncStateRow(
+      accountId: accountId,
+      lastSyncedBlockNumber: 0,
+      lastSyncedAt: .distantPast,
+      lastErrorJson: lastErrorJson)
     try row.upsert(database)
   }
 

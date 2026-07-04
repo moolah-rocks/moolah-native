@@ -127,16 +127,6 @@ struct SyncedAccountHeaderView: View {
         addressSection
       }
       statusRow(presentation)
-      // Status bar below the header showing whichever of (a) the per-
-      // account sync error and (b) the missing-credential hint applies.
-      // The hint takes precedence: if no credential is configured the
-      // user has one fix path and the per-account error is a downstream
-      // consequence — surfacing both would just duplicate the prompt.
-      if let hint = presentation.missingCredentialHint {
-        missingCredentialHint(hint)
-      } else if let errorCaption {
-        errorCaptionView(errorCaption)
-      }
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 8)
@@ -172,13 +162,14 @@ extension SyncedAccountHeaderView {
   /// `account.type` — that branching stays in
   /// `SyncableAccountPresentation`.
   private func statusRow(_ presentation: SyncableAccountPresentation) -> some View {
-    // Single line when it fits; at accessibility Dynamic Type sizes the
-    // four elements no longer fit one row, so fall back to a two-row
-    // arrangement (context+link above, timestamp+button below) rather
-    // than letting them overlap or clip.
+    // The caption (missing-credential hint takes precedence over sync
+    // error — same rule as `body`) rides inline in the status row's empty
+    // middle when everything fits on one line; at cramped widths /
+    // accessibility Dynamic Type it drops to its own row.
     ViewThatFits(in: .horizontal) {
       HStack(spacing: 12) {
         statusLeadingGroup(presentation)
+        inlineCaption(presentation)
         Spacer(minLength: 12)
         statusTrailingGroup(presentation)
       }
@@ -191,7 +182,20 @@ extension SyncedAccountHeaderView {
           statusTrailingGroup(presentation)
           Spacer(minLength: 0)
         }
+        inlineCaption(presentation)
       }
+    }
+  }
+
+  /// The missing-credential hint (precedence) or the sync-error caption,
+  /// or `EmptyView` when neither applies. Reused in both `ViewThatFits`
+  /// branches so the same element renders inline or wrapped.
+  @ViewBuilder
+  private func inlineCaption(_ presentation: SyncableAccountPresentation) -> some View {
+    if let hint = presentation.missingCredentialHint {
+      missingCredentialHint(hint)
+    } else if let errorCaption {
+      errorCaptionView(errorCaption)
     }
   }
 
@@ -268,7 +272,7 @@ extension SyncedAccountHeaderView {
           .accessibilityIdentifier(UITestIdentifiers.WalletAccountHeader.missingApiKeyHintLink)
         }
       #endif
-      Spacer()
+      Spacer(minLength: 0)
     }
     .accessibilityIdentifier(UITestIdentifiers.WalletAccountHeader.missingApiKeyHint)
   }
