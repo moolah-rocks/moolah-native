@@ -59,8 +59,17 @@ The decision is to **remove CryptoCompare entirely**.
   **local-first → CoinGecko contract → Binance pair.**
 - `App/ProfileSession+CatalogFactory.swift` — remove `makeCryptoCompareCache(...)`.
 - `App/ProfileSession+RegistryWiring.swift` — remove the `cryptoCompareCache` wiring.
-- `App/PreloadedTokenResolutionClient.swift`, `ProfileSession.swift`,
-  `ProfileSession+CryptoPresets.swift` — remove `cryptocompareSymbol` carry-through.
+- `App/ProfileSession.swift` — remove the `cryptoCompareCache` property.
+- `App/PreloadedTokenResolutionClient.swift`, `ProfileSession+CryptoPresets.swift`
+  — remove `cryptocompareSymbol` / cache carry-through.
+- `Domain/Repositories/ProviderCatalogLookups.swift` — remove the
+  `cryptoCompare: any CryptoCompareSymbolLookup` member from the catalog bundle and
+  fix every construction site.
+- `Domain/Repositories/InstrumentRegistryRepository+Reconcile.swift` — remove the
+  three `catalogs.cryptoCompare` branches (symbol-by-contract, `allSymbols`,
+  `nativeSymbols`). Reconcile's symbol resolution then relies on the surviving
+  catalog lookups (Binance) only — a detection change, same class as consequence 1.
+  Update `MoolahTests/Domain/InstrumentRegistryReconcileTests.swift`.
 
 ### Settings / secrets
 - `Features/Settings/CryptoTokenStore.swift` — remove `cryptocompareKeyStore` and the
@@ -85,9 +94,11 @@ The decision is to **remove CryptoCompare entirely**.
   longer set or consume the key. No field deletion, no prod gate.
 - `Domain/Models/CryptoProviderMapping.swift` — remove the `cryptocompareSymbol`
   property and its use in `hasProviderMapping` / `assetKey`.
-- `Domain/Models/SyncProvider.swift` — remove the `.cryptoCompare` case **after
-  verifying `syncProvider` is not persisted** (it reads as an in-memory
-  error-attribution label; confirm before deleting).
+- `Domain/Models/SyncProvider.swift` — remove the `.cryptoCompare` case + its
+  `displayName`. **Confirmed safe:** `syncProvider` is a runtime-only
+  `CryptoPriceClient` attribution property, not persisted (grep found no record/row
+  column; the enum's own doc comment notes adding a case doesn't touch
+  `DataFormatVersion`).
 
 ### Docs / help
 - Delete `site/help/get-a-cryptocompare-api-key.html` (+ `_src` source).
