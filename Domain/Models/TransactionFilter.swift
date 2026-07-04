@@ -54,3 +54,26 @@ extension TransactionFilter {
     accountId != nil || !accountIds.isEmpty
   }
 }
+
+extension TransactionFilter {
+  /// Resolves a scope-aware account-picker selection into the `accountIds`
+  /// set to store on the filter.
+  ///
+  /// `selection` follows the multi-select convention where an empty set
+  /// means "all available". Both an empty selection and a selection that
+  /// covers every available account resolve to `scope` — so applying a
+  /// filter inside an account group can never widen the result past the
+  /// group's members. A global view (empty `scope`) resolves the same
+  /// "all" cases back to an empty set, i.e. all accounts. A strict subset
+  /// is stored verbatim.
+  static func resolveScopedAccountIds(
+    selection: Set<UUID>,
+    scope: Set<UUID>,
+    available: Set<UUID>
+  ) -> Set<UUID> {
+    if selection.isEmpty || selection == available {
+      return scope
+    }
+    return selection
+  }
+}
