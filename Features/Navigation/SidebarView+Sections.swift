@@ -7,6 +7,7 @@
 // platforms wire it into `sharedBodyModifiers`.
 
 import SwiftUI
+import os
 
 extension SidebarView {
   // MARK: - Cross-platform helpers
@@ -20,6 +21,9 @@ extension SidebarView {
 }
 
 #if os(iOS)
+  private let droppedImportLogger = Logger(
+    subsystem: "com.moolah.app", category: "SidebarView.DroppedImport")
+
   extension SidebarView {
     // MARK: - Sections
 
@@ -28,7 +32,8 @@ extension SidebarView {
       let groupAware = accountStore.accounts.groupAwareSidebar(
         groups: accountGroupStore.groups,
         excluding: nil,
-        alwaysInclude: nil
+        alwaysInclude: nil,
+        showHidden: showHidden
       )
       return Section {
         ForEach(groupAware.current, id: \.bucketEntryId) { entry in
@@ -68,7 +73,8 @@ extension SidebarView {
       let groupAware = accountStore.accounts.groupAwareSidebar(
         groups: accountGroupStore.groups,
         excluding: nil,
-        alwaysInclude: nil
+        alwaysInclude: nil,
+        showHidden: showHidden
       )
       return Section("Investments") {
         ForEach(groupAware.investments, id: \.bucketEntryId) { entry in
@@ -176,7 +182,15 @@ extension SidebarView {
         defer {
           if didStart { url.stopAccessingSecurityScopedResource() }
         }
-        guard let data = try? Data(contentsOf: url) else { continue }
+        let data: Data
+        do {
+          data = try Data(contentsOf: url)
+        } catch {
+          droppedImportLogger.warning(
+            "Skipping dropped file \(url.lastPathComponent, privacy: .public): could not read (\(error.localizedDescription, privacy: .public))"
+          )
+          continue
+        }
         _ = await importStore.ingest(
           data: data,
           source: .droppedFile(url: url, forcedAccountId: forcedAccountId))

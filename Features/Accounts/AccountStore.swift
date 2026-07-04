@@ -240,8 +240,8 @@ final class AccountStore {
   }
 
   // Read-only query helpers (`currentAccounts`, `investmentAccounts`,
-  // `displayBalance`, `hasUnrecordedValue`, `canDelete`, `positions(for:)`)
-  // live in `AccountStore+Queries.swift`.
+  // `displayBalance`, `hasUnrecordedValue`, `canDelete`, `canToggleHidden`,
+  // `positions(for:)`) live in `AccountStore+Queries.swift`.
 
   // MARK: - Balance recomputation
 
