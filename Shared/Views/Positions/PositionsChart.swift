@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Accessibility
 import Charts
 import SwiftUI
@@ -114,6 +115,11 @@ struct PositionsChart: View {
           }
         }
       }
+      .chartYScale(
+        domain: PositionsChartYDomain.domain(
+          values: rows.map(\.value),
+          baselines: showBaseline ? rows.compactMap(\.baseline) : [])
+      )
       .frame(height: 220)
       .accessibilityChartDescriptor(self)
 
