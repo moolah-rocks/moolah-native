@@ -117,6 +117,7 @@ extension TransactionListView {
             ? "line.3.horizontal.decrease.circle.fill"
             : "line.3.horizontal.decrease.circle")
       }
+      .accessibilityIdentifier(UITestIdentifiers.TransactionList.filterButton)
     }
 
     ToolbarItem(placement: .automatic) {

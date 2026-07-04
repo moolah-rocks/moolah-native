@@ -138,6 +138,15 @@ public enum UITestSeed: String, CaseIterable, Sendable {
   /// renders the fixtures, dismiss removes one, and the navigable row deep-links
   /// to the checking account. See `UITestFixtures.InsightsForYou`.
   case insightsForYouBaseline = "insights-for-you-baseline"
+
+  /// An AUD profile with an account group ("Filter Group") holding two
+  /// bank accounts ("Member One", "Member Two") plus a standalone
+  /// non-member account ("Outsider"), each carrying one dated expense.
+  /// Drives `GroupTransactionFilterScopeMacTests`: applying a filter while
+  /// viewing the group must keep the transaction list scoped to the two
+  /// members and never surface the outsider's transaction. See
+  /// `UITestFixtures.GroupFilterScope` for the full fixture table.
+  case groupFilterScope = "group-filter-scope"
 }
 
 /// Fixtures for the first-run Welcome seeds. Defined here so both the

@@ -58,6 +58,8 @@ enum UITestSeedHydrator {
       return nil
     case .transferDetectionBaseline:
       return try hydrateTransferDetectionBaseline(into: manager)
+    case .groupFilterScope:
+      return try hydrateGroupFilterScope(into: manager)
     case .pendingWebImportOneChaseInbox:
       let profile = try hydrateTradeBaseline(into: manager)
       try seedPendingWebImportInbox()

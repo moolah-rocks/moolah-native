@@ -26,14 +26,41 @@ struct AccountMultiSelectPicker: View {
   var body: some View {
     VStack(spacing: 0) {
       header
+      #if os(macOS)
+        searchField
+      #endif
       list
     }
-    .searchable(text: $searchText, prompt: "Search accounts")
     #if os(iOS)
+      // `.searchable` installs a search item into the surrounding
+      // navigation/toolbar. That is fine for the iOS `NavigationLink`
+      // host, but on macOS this picker is presented inside a `.popover`,
+      // where routing a search item through the window's `NSToolbar`
+      // bridge crashes (`-[NSToolbar _insertNewItemWithItemIdentifier:…]`
+      // during the popover's preference update). macOS therefore uses the
+      // inline `searchField` above instead.
+      .searchable(text: $searchText, prompt: "Search accounts")
       .navigationTitle("Accounts")
       .navigationBarTitleDisplayMode(.inline)
     #endif
   }
+
+  #if os(macOS)
+    /// Inline search field for the macOS popover host — see the note on
+    /// `.searchable` in `body` for why the toolbar-backed modifier can't
+    /// be used here.
+    private var searchField: some View {
+      HStack(spacing: 6) {
+        Image(systemName: "magnifyingglass")
+          .foregroundStyle(.secondary)
+          .accessibilityHidden(true)
+        TextField("Search accounts", text: $searchText)
+          .textFieldStyle(.plain)
+      }
+      .padding(.horizontal, 12)
+      .padding(.vertical, 8)
+    }
+  #endif
 
   // Inline header rather than `.toolbar`: SwiftUI toolbar items don't
   // render inside a macOS popover, so a toolbar Clear would be invisible

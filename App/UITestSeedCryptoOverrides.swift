@@ -42,7 +42,8 @@ enum UITestSeedCryptoOverrides {
       .incompatibleProfile,
       .transferDetectionBaseline,
       .pendingWebImportOneChaseInbox,
-      .insightsForYouBaseline:
+      .insightsForYouBaseline,
+      .groupFilterScope:
       return nil
     }
   }

@@ -65,4 +65,73 @@ struct TransactionListScreen {
       XCTFail("Transaction detail did not surface payee field after ⌘N")
     }
   }
+
+  /// Opens the transaction filter sheet from the toolbar Filter button and
+  /// returns a driver bound to it. Returns once the sheet's Apply button is
+  /// in the accessibility tree — the "sheet presented" post-condition.
+  func openFilter() -> TransactionFilterScreen {
+    Trace.record(#function)
+    let button = app.element(for: UITestIdentifiers.TransactionList.filterButton)
+    if !button.waitForExistence(timeout: 3) {
+      Trace.recordFailure("filter toolbar button did not appear")
+      XCTFail("Transaction list Filter button did not appear within 3s")
+      return TransactionFilterScreen(app: app)
+    }
+    button.click()
+
+    let apply = app.element(for: UITestIdentifiers.TransactionFilter.apply)
+    if !apply.waitForExistence(timeout: 3) {
+      Trace.recordFailure("filter sheet Apply button did not appear after opening filter")
+      XCTFail("Filter sheet did not present within 3s of tapping Filter")
+    }
+    return TransactionFilterScreen(app: app)
+  }
+
+  // MARK: - Row visibility expectations
+  //
+  // Expectation methods: they carry a bounded post-condition wait (the
+  // preceding action's reload is asynchronous) but never mutate state and
+  // never record a trace breadcrumb — per the driver invariants.
+
+  /// Asserts the given transaction's row is present, waiting up to 3s for
+  /// the (asynchronous) filtered reload to surface it.
+  func expectTransactionVisible(_ transactionId: UUID) {
+    let identifier = UITestIdentifiers.TransactionList.transaction(transactionId)
+    let row = app.element(for: identifier)
+    if !row.waitForExistence(timeout: 3) {
+      Trace.recordFailure("expected transaction row '\(identifier)' to be visible")
+      XCTFail("Transaction row \(transactionId) was not visible within 3s")
+    }
+  }
+
+  /// Asserts the given transaction's row is (and stays) absent after a
+  /// filter is applied.
+  ///
+  /// Filtered reloads are asynchronous, so a naive `exists == false` check
+  /// races the reload two ways: a row that *should* stay absent (the
+  /// scope-preserving case) could pass before a buggy widening reload
+  /// surfaces it, and a row that *should* disappear (the narrowing case)
+  /// starts out present. This handles both: it first gives the reload a
+  /// bounded window to surface the row; if the row never appears it is
+  /// correctly absent, and if it does appear it must then disappear once
+  /// the (scope-preserving) reload settles — otherwise scope was lost and
+  /// the assertion fails.
+  ///
+  /// Worst-case budget is 6 s (two sequential 3 s windows); the common
+  /// correctly-absent path returns in ~0 ms.
+  func expectTransactionAbsent(_ transactionId: UUID) {
+    let identifier = UITestIdentifiers.TransactionList.transaction(transactionId)
+    let row = app.element(for: identifier)
+    // Bounded window for an asynchronous (possibly buggy) reload to
+    // surface the row. Never appearing within it = correctly absent.
+    guard row.waitForExistence(timeout: 3) else { return }
+    // It is present (either already, in the narrowing case, or via a
+    // scope-losing reload). It must now settle to absent.
+    let predicate = NSPredicate(format: "exists == false")
+    let expectation = XCTNSPredicateExpectation(predicate: predicate, object: row)
+    if XCTWaiter.wait(for: [expectation], timeout: 3) != .completed {
+      Trace.recordFailure("expected transaction row '\(identifier)' to be absent")
+      XCTFail("Transaction row \(transactionId) was unexpectedly visible")
+    }
+  }
 }

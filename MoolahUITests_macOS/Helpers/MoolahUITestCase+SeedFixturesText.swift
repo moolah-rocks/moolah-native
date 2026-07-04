@@ -183,6 +183,34 @@ extension MoolahUITestCase {
         + "→ has an inline chart Button that zooms to the detail sheet")
   }
 
+  func appendGroupFilterScopeFixtures(into lines: inout [String]) {
+    let fixtures = UITestFixtures.GroupFilterScope.self
+    lines.append("# fixtures")
+    lines.append("profile.id       = \(fixtures.profileId)")
+    lines.append("profile.label    = \(fixtures.profileLabel)")
+    lines.append("profile.currency = \(fixtures.profileCurrencyCode)")
+    lines.append("group.id/name    = \(fixtures.filterGroupId) / \(fixtures.filterGroupName)")
+    lines.append(
+      "memberOne.id/name = \(fixtures.memberOneId) / \(fixtures.memberOneName) (in group)")
+    lines.append(
+      "memberTwo.id/name = \(fixtures.memberTwoId) / \(fixtures.memberTwoName) (in group)")
+    lines.append(
+      "outsider.id/name  = \(fixtures.outsiderId) / \(fixtures.outsiderName) (standalone)")
+    lines.append("expense.amount.cents = \(fixtures.expenseAmountCents)")
+    lines.append(
+      "memberOneTxn.id/payee/daysAgo = \(fixtures.memberOneTxnId) "
+        + "/ \(fixtures.memberOneTxnPayee) / \(fixtures.memberOneTxnDaysAgo)")
+    lines.append(
+      "memberTwoTxn.id/payee/daysAgo = \(fixtures.memberTwoTxnId) "
+        + "/ \(fixtures.memberTwoTxnPayee) / \(fixtures.memberTwoTxnDaysAgo)")
+    lines.append(
+      "outsiderTxn.id/payee/daysAgo  = \(fixtures.outsiderTxnId) "
+        + "/ \(fixtures.outsiderTxnPayee) / \(fixtures.outsiderTxnDaysAgo)")
+    lines.append(
+      "# transaction dates are anchored days-before-launch so the filter "
+        + "dialog's default [now − 1 month, now] range matches all three")
+  }
+
   func appendPendingWebImportFixtures(into lines: inout [String]) {
     let fixtures = UITestFixtures.PendingWebImportOneChaseInbox.self
     lines.append("# fixtures — tradeBaseline profile + one pre-written inbox payload")
