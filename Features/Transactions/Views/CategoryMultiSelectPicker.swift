@@ -10,8 +10,10 @@ struct CategoryMultiSelectPicker: View {
   var body: some View {
     VStack(spacing: 0) {
       header
+      Divider()
       #if os(macOS)
         searchField
+        Divider()
       #endif
       list
     }
@@ -41,7 +43,10 @@ struct CategoryMultiSelectPicker: View {
         TextField("Search categories", text: $searchText)
           .textFieldStyle(.plain)
       }
-      .padding(.horizontal, 12)
+      .padding(.horizontal, 8)
+      .padding(.vertical, 5)
+      .background(.quinary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+      .padding(.horizontal, 16)
       .padding(.vertical, 8)
     }
   #endif
@@ -65,7 +70,7 @@ struct CategoryMultiSelectPicker: View {
         .help("Clear all selected categories")
         .accessibilityLabel("Clear selected categories")
     }
-    .padding(.horizontal, 12)
+    .padding(.horizontal, 16)
     .padding(.vertical, 8)
   }
 

@@ -100,7 +100,7 @@ struct TransactionListScreen {
     let row = app.element(for: identifier)
     if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("expected transaction row '\(identifier)' to be visible")
-      XCTFail("Transaction row \(transactionId) was not visible within 3s")
+      XCTFail("Transaction row \(transactionId) was not visible within 10s")
     }
   }
 

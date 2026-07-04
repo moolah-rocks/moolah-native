@@ -26,8 +26,10 @@ struct AccountMultiSelectPicker: View {
   var body: some View {
     VStack(spacing: 0) {
       header
+      Divider()
       #if os(macOS)
         searchField
+        Divider()
       #endif
       list
     }
@@ -57,7 +59,10 @@ struct AccountMultiSelectPicker: View {
         TextField("Search accounts", text: $searchText)
           .textFieldStyle(.plain)
       }
-      .padding(.horizontal, 12)
+      .padding(.horizontal, 8)
+      .padding(.vertical, 5)
+      .background(.quinary, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+      .padding(.horizontal, 16)
       .padding(.vertical, 8)
     }
   #endif
@@ -81,7 +86,7 @@ struct AccountMultiSelectPicker: View {
         .help("Clear all selected accounts")
         .accessibilityLabel("Clear selected accounts")
     }
-    .padding(.horizontal, 12)
+    .padding(.horizontal, 16)
     .padding(.vertical, 8)
   }
 
