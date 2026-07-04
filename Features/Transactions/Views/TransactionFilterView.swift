@@ -196,8 +196,8 @@ struct TransactionFilterView: View {
       dateRange = lower...upper
     }
 
-    let resolvedAccountIds = TransactionFilter.resolveScopedAccountIds(
-      selection: selectedAccountIds,
+    let resolvedAccountIds = TransactionFilter.scopedAccountIds(
+      forSelection: selectedAccountIds,
       scope: scopeAccountIds,
       available: availableAccountIds)
 
@@ -269,6 +269,7 @@ extension TransactionFilterView {
         LabeledContent("Accounts", value: summary)
       }
       .accessibilityIdentifier(UITestIdentifiers.TransactionFilter.accountPicker)
+      .accessibilityHint("Opens the account picker")
     #endif
   }
 
@@ -315,35 +316,35 @@ extension TransactionFilterView {
       } label: {
         LabeledContent("Categories", value: summary)
       }
+      .accessibilityHint("Opens the category picker")
     #endif
   }
 }
 
 #Preview {
-  let accountId = UUID()
-  let categoryId = UUID()
-  let earmarkId = UUID()
-
   let accounts = Accounts(from: [
     Account(
-      id: accountId,
+      id: UUID(),
       name: "Checking",
       type: .bank,
       instrument: .AUD,
       positions: [Position(instrument: .AUD, quantity: 2449.77)]
-    )
+    ),
+    Account(
+      id: UUID(),
+      name: "Savings",
+      type: .bank,
+      instrument: .AUD,
+      positions: [Position(instrument: .AUD, quantity: 8150.00)]
+    ),
   ])
 
   let categories = Categories(from: [
-    Category(id: categoryId, name: "Groceries", parentId: nil),
+    Category(id: UUID(), name: "Groceries", parentId: nil),
     Category(id: UUID(), name: "Transport", parentId: nil),
   ])
 
-  let earmarks = Earmarks(from: [
-    Earmark(
-      id: earmarkId, name: "Emergency Fund", instrument: .AUD
-    )
-  ])
+  let earmarks = Earmarks(from: [Earmark(id: UUID(), name: "Emergency Fund", instrument: .AUD)])
 
   TransactionFilterView(
     filter: TransactionFilter(),

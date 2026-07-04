@@ -17,7 +17,7 @@ struct TransactionFilterScreen {
     let toggle = app.element(for: UITestIdentifiers.TransactionFilter.dateToggle)
     if !toggle.waitForExistence(timeout: 10) {
       Trace.recordFailure("filter date toggle did not appear")
-      XCTFail("Filter 'Filter by Date' toggle did not appear within 3s")
+      XCTFail("Filter 'Filter by Date' toggle did not appear within 10s")
       return
     }
     if isOn(toggle) != enabled {
@@ -27,7 +27,7 @@ struct TransactionFilterScreen {
     let expectation = XCTNSPredicateExpectation(predicate: predicate, object: toggle)
     if XCTWaiter.wait(for: [expectation], timeout: 10) != .completed {
       Trace.recordFailure("filter date toggle did not settle to on=\(enabled)")
-      XCTFail("Filter date toggle did not reach on=\(enabled) within 3s")
+      XCTFail("Filter date toggle did not reach on=\(enabled) within 10s")
     }
   }
 
@@ -39,7 +39,7 @@ struct TransactionFilterScreen {
     let picker = app.element(for: UITestIdentifiers.TransactionFilter.accountPicker)
     if !picker.waitForExistence(timeout: 10) {
       Trace.recordFailure("account picker trigger did not appear")
-      XCTFail("Filter account picker did not appear within 3s")
+      XCTFail("Filter account picker did not appear within 10s")
       return
     }
     picker.click()
@@ -47,7 +47,7 @@ struct TransactionFilterScreen {
     let row = app.element(for: UITestIdentifiers.TransactionFilter.account(accountId))
     if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("account row '\(accountId)' did not appear in the picker")
-      XCTFail("Account row \(accountId) did not appear in the picker within 3s")
+      XCTFail("Account row \(accountId) did not appear in the picker within 10s")
       return
     }
     row.click()
@@ -59,7 +59,7 @@ struct TransactionFilterScreen {
     let expectation = XCTNSPredicateExpectation(predicate: predicate, object: app.popover)
     if XCTWaiter.wait(for: [expectation], timeout: 10) != .completed {
       Trace.recordFailure("account picker popover did not close")
-      XCTFail("Account picker popover did not close within 3s")
+      XCTFail("Account picker popover did not close within 10s")
     }
   }
 
@@ -74,7 +74,7 @@ struct TransactionFilterScreen {
     let applyButton = app.element(for: UITestIdentifiers.TransactionFilter.apply)
     if !applyButton.waitForExistence(timeout: 10) {
       Trace.recordFailure("filter Apply button did not appear")
-      XCTFail("Filter Apply button did not appear within 3s")
+      XCTFail("Filter Apply button did not appear within 10s")
       return
     }
     applyButton.click()
@@ -84,7 +84,7 @@ struct TransactionFilterScreen {
       predicate: dismissed, object: applyButton)
     if XCTWaiter.wait(for: [dismissExpectation], timeout: 10) != .completed {
       Trace.recordFailure("filter sheet did not dismiss after Apply")
-      XCTFail("Filter sheet did not dismiss within 3s of tapping Apply")
+      XCTFail("Filter sheet did not dismiss within 10s of tapping Apply")
     }
   }
 

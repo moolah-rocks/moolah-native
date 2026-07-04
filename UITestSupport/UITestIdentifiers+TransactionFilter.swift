@@ -14,7 +14,7 @@ extension UITestIdentifiers {
 
     /// A single account row inside the account multi-select.
     public static func account(_ id: UUID) -> String {
-      "transactionFilter.account.\(id.uuidString)"
+      "transactionFilter.account.\(id.uuidString.lowercased())"
     }
   }
 }
