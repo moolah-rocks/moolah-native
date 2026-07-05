@@ -93,12 +93,14 @@ extension ProfileSession {
   /// - `WalletApplyEngine` — `@MainActor` apply pass with
   ///   `NoOpWalletImportRulesEngine`.
   ///
-  /// The keychain read is best-effort: the live `LiveAlchemyClient` is
-  /// constructed even when the key is missing or empty so the build
-  /// phase throws a typed `.invalidApiKey` (HTTP 401/403) on the first
-  /// account, the store records it, and the user sees a banner asking
-  /// them to set the key. This avoids a `nil`-ChainDataClient branch that
-  /// would silently skip every crypto account.
+  /// On-chain calls are routed per chain rather than hard-wired to Alchemy:
+  /// a user-configured custom endpoint (matched by probing `eth_chainId`)
+  /// wins if one is set; otherwise a present Alchemy key routes the chain to
+  /// `alchemyClient`; otherwise the chain falls back to its default
+  /// publicnode.com endpoint over direct JSON-RPC. So a missing Alchemy key
+  /// no longer fails sync — ERC-20 discovery still succeeds via the public
+  /// endpoint, just with extra one-time latency on the first sync since a
+  /// public node is slower to scan than Alchemy's indexed API.
   @MainActor
   static func makeCryptoSyncWiring(
     backend: BackendProvider,
