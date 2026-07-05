@@ -138,6 +138,14 @@ public enum UITestFixtures {
     public static let splitShopLegAAmountCents = 3_000  // 30.00 AUD
     public static let splitShopLegBAmountCents = 2_000  // 20.00 AUD
 
+    /// The most-recent "Woolworths" expense (2026-03-20) — the only
+    /// historical expense carrying `groceriesCategoryId`. Named so the
+    /// Reports drill-down UI test can assert it surfaces when the Groceries
+    /// top-level header is tapped (it is directly categorised under
+    /// Groceries, with no intervening subcategory).
+    public static let woolworthsGroceriesExpenseId =
+      uuidLiteral("A1000000-0000-0000-0000-000000000033")
+
     /// Four historical expense transactions from `checking`, ordered by
     /// date. Payee frequency is the only axis `fetchPayeeSuggestions` sorts
     /// on; "Woolworths" appears twice so it ranks strictly above
@@ -164,7 +172,7 @@ public enum UITestFixtures {
         date: Date(timeIntervalSince1970: 1_773_532_800)  // 2026-03-15 UTC
       ),
       UITestHistoricalExpense(
-        id: uuidLiteral("A1000000-0000-0000-0000-000000000033"),
+        id: woolworthsGroceriesExpenseId,
         payee: "Woolworths",
         date: Date(timeIntervalSince1970: 1_773_964_800),  // 2026-03-20 UTC
         categoryId: groceriesCategoryId
