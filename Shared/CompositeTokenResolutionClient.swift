@@ -113,8 +113,8 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
       result.resolvedName = lookup.name
       result.resolvedSymbol = result.resolvedSymbol ?? lookup.symbol.uppercased()
       result.resolvedDecimals = lookup.decimals
-    } catch is CancellationError {
-      throw CancellationError()
+    } catch let error as CancellationError {
+      throw error
     } catch {
       // CoinGecko resolution is best-effort.
     }

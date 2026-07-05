@@ -150,6 +150,43 @@ final class CoinGeckoContractLookupTests {
     #expect(result.binanceSymbol == nil)
   }
 
+  /// Happy path: CoinGecko confirms the ERC-20 contract (sets
+  /// `resolvedSymbol`) and Binance lists the resulting `<SYMBOL>USDT` pair,
+  /// so `binanceSymbol` is attributed. This exercises the complete
+  /// CoinGecko → Binance flow that replaced the old CryptoCompare path.
+  @Test
+  func resolve_contractToken_findsCoinGeckoAndBinance() async throws {
+    let binanceInfo = Data(
+      #"""
+      {"symbols":[{"symbol":"LINKUSDT","baseAsset":"LINK","quoteAsset":"USDT","status":"TRADING"}]}
+      """#.utf8)
+    stubAssetPlatforms(
+      #"[{"id": "ethereum", "chain_identifier": 1, "name": "Ethereum"}]"#)
+    stubContractLookup(
+      platform: "ethereum",
+      contract: "0x514910771af9ca656af840dff83e8264ecf986ca",
+      json:
+        #"{"id":"chainlink","symbol":"link","name":"Chainlink","detail_platforms":{"ethereum":{"decimal_place":18}}}"#
+    )
+
+    let client = CompositeTokenResolutionClient(
+      exchangeInfoData: binanceInfo,
+      coinGeckoApiKeyProvider: { "" },
+      networking: makeNetworking()
+    )
+    let result = try await client.resolve(
+      chainId: 1,
+      contractAddress: "0x514910771af9ca656af840dff83e8264ecf986ca",
+      symbol: "LINK",
+      isNative: false
+    )
+
+    #expect(result.coingeckoId == "chainlink")
+    #expect(result.resolvedSymbol == "LINK")
+    #expect(result.binanceSymbol == "LINKUSDT")
+    #expect(result.cryptocompareSymbol == nil)
+  }
+
   /// Issue #790 safety: a spam ERC-20 whose user-supplied ticker
   /// collides with a real token must NOT inherit the legitimate token's
   /// Binance attribution. CoinGecko can't verify the spam contract,
