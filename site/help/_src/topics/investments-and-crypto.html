@@ -18,7 +18,7 @@
   </ul>
 
   <h2>How crypto wallet sync works</h2>
-  <p>A crypto wallet account holds a 0x address on one of the supported chains. Moolah pulls on-chain activity from two providers on every sync, and they cover different things. Blockscout supplies the native and internal ETH activity — it's the authoritative source, so if it can't be reached the sync stops with an error. Alchemy supplies the ERC-20 token transfers. The Alchemy API key is yours — you create it on Alchemy and paste it into Moolah; Blockscout needs no key. Token prices come from CoinGecko (and CryptoCompare or Binance as fallbacks). Moolah doesn't sit in the middle of any of these calls.</p>
+  <p>A crypto wallet account holds a 0x address on one of the supported chains. Moolah pulls on-chain activity from two providers on every sync, and they cover different things. Blockscout supplies the native and internal ETH activity — it's the authoritative source, so if it can't be reached the sync stops with an error. Alchemy supplies the ERC-20 token transfers. The Alchemy API key is yours — you create it on Alchemy and paste it into Moolah; Blockscout needs no key. Token prices come from DefiLlama and CoinGecko, with Binance as a fallback. Moolah doesn't sit in the middle of any of these calls.</p>
 
   <h2>How exchange sync works</h2>
   <p>An exchange account uses a read-only API token you create in your Coinstash account. The token lives in iCloud Keychain on your devices. Moolah queries Coinstash directly from your device for your trade history.</p>
