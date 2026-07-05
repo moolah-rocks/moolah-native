@@ -33,6 +33,11 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
   /// before it reaches the valuator so multi-account group hosts never stamp a
   /// misleading chain.
   let accountChainId: Int?
+  /// `true` for investment `.calculatedFromTrades` hosts: forces the
+  /// performance tiles + positions pane on even when only host currency
+  /// remains (every holding sold). Other hosts leave it `false` and gate
+  /// each element on whether the account actually holds non-host positions.
+  let alwaysShowsFullSurface: Bool
 
   @Environment(ProfileSession.self) private var session: ProfileSession?
 
@@ -44,10 +49,12 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
     subsystem: "com.moolah.app", category: "MultiInstrumentPositionsSplitModifier")
 
   private var hasPositions: Bool {
-    AccountDetailLayout.hasNonHostHoldings(
-      rawPositions: positions,
-      hostCurrency: hostCurrency,
-      positionsInput: positionsInput)
+    AccountDetailLayout.showsFullSurface(
+      alwaysShowsFullSurface: alwaysShowsFullSurface,
+      otherwiseShows: AccountDetailLayout.hasNonHostHoldings(
+        rawPositions: positions,
+        hostCurrency: hostCurrency,
+        positionsInput: positionsInput))
   }
 
   func body(content: Content) -> some View {
@@ -97,8 +104,8 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       // Nothing to value (no conversion service, or an account with no
       // positions). Settle to an empty input so the always-present Chart
       // tab renders a header rather than a perpetual loading spinner.
-      positionsInput = PositionsViewInput(
-        title: title, hostCurrency: hostCurrency, positions: [], historicalValue: nil)
+      positionsInput = loadingBaseInput(
+        rows: [], assetKeys: [:], historicalValue: nil, isHistoryLoading: false)
       return
     }
     let valuator = PositionsValuator(conversionService: conversionService)
@@ -175,6 +182,7 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       positions: rows,
       historicalValue: historicalValue,
       assetKeysByInstrumentId: assetKeys,
+      alwaysShowsFullSurface: alwaysShowsFullSurface,
       isHistoryLoading: isHistoryLoading)
   }
 
@@ -210,7 +218,7 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       accountIds: accountIdSet,
       assetKeysByInstrumentId: assetKeys,
       performance: performance,
-      alwaysShowsFullSurface: false)
+      alwaysShowsFullSurface: alwaysShowsFullSurface)
     let input = await assembler.assemble(
       context: context,
       valuedRows: rows,
@@ -234,8 +242,10 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
     conversionService: any InstrumentConversionService
   ) async -> AccountPerformance? {
     guard
-      AccountDetailLayout.showsPerformanceTiles(
-        valuedRows: rows, hostCurrency: hostCurrency)
+      AccountDetailLayout.showsFullSurface(
+        alwaysShowsFullSurface: alwaysShowsFullSurface,
+        otherwiseShows: AccountDetailLayout.showsPerformanceTiles(
+          valuedRows: rows, hostCurrency: hostCurrency))
     else { return nil }
     do {
       return try await AccountPerformanceCalculator.computeMultiInstrument(
@@ -274,7 +284,8 @@ extension View {
     conversionService: (any InstrumentConversionService)?,
     registrationsVersion: Int = 0,
     accountIds: [UUID] = [],
-    accountChainId: Int? = nil
+    accountChainId: Int? = nil,
+    alwaysShowsFullSurface: Bool = false
   ) -> some View {
     modifier(
       MultiInstrumentPositionsSplitModifier(
@@ -284,7 +295,8 @@ extension View {
         conversionService: conversionService,
         registrationsVersion: registrationsVersion,
         accountIds: accountIds,
-        accountChainId: accountChainId))
+        accountChainId: accountChainId,
+        alwaysShowsFullSurface: alwaysShowsFullSurface))
   }
 }
 
