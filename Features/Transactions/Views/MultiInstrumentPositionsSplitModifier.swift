@@ -58,14 +58,10 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
     hostCurrency: Instrument,
     positionsInput: PositionsViewInput?
   ) -> Bool {
-    if let positionsInput {
-      return !positionsInput.shouldHide
-    }
-    guard !rawPositions.isEmpty else { return false }
-    let nonZeroInstruments = Set(
-      rawPositions.lazy.filter { $0.quantity != 0 }.map(\.instrument)
-    )
-    return nonZeroInstruments != [hostCurrency]
+    AccountDetailLayout.hasNonHostHoldings(
+      rawPositions: rawPositions,
+      hostCurrency: hostCurrency,
+      positionsInput: positionsInput)
   }
 
   private var shouldShow: Bool {
