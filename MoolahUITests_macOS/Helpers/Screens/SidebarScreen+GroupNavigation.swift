@@ -6,7 +6,7 @@ extension SidebarScreen {
   /// Switches the centre column to the given account group's composite
   /// detail (the group's merged, member-scoped transaction list). Clicking
   /// the group row sets `SidebarSelection.group(id)`, which routes to
-  /// `GroupDetailView` → a `TransactionListView` scoped to the group's
+  /// `AccountDetailView` → a `TransactionListView` scoped to the group's
   /// members. Returns once that list's container is in the accessibility
   /// tree — the same "list re-rendered" post-condition as
   /// `switchToAccount(_:)`.
