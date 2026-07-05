@@ -222,6 +222,39 @@ struct LiveJSONRPCClientBatchTests {
     #expect(params[0] as? String == "0xabc123")
   }
 
+  // MARK: - getLogs
+
+  @Test
+  func getLogsDecodesTwoLogs() async throws {
+    let client = makeClient { request in
+      JSONRPCBatchURLProtocolStub.captureRequest(request)
+      return (
+        AlchemyTestSupport.okResponse(for: request),
+        Data(
+          """
+          {"jsonrpc":"2.0","id":1,"result":[
+            {"address":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+             "topics":["0x1111","0x2222","0x3333"],"data":"0xdead",
+             "blockNumber":"0x10","transactionHash":"0xhash1","logIndex":"0x0"},
+            {"address":"0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+             "topics":["0x4444"],"data":"0xbeef",
+             "blockNumber":"0x11","transactionHash":"0xhash2","logIndex":"0x1"}
+          ]}
+          """.utf8)
+      )
+    }
+    let filter = RPCLogFilter(
+      fromBlock: "0x0", toBlock: "0x10", address: nil, topics: [nil])
+    let logs = try await client.getLogs(filter)
+    #expect(logs.count == 2)
+    #expect(logs[0].topics == ["0x1111", "0x2222", "0x3333"])
+    #expect(logs[0].transactionHash == "0xhash1")
+    #expect(logs[1].transactionHash == "0xhash2")
+    let object = try #require(JSONRPCBatchURLProtocolStub.lastRequestBody as? [String: Any])
+    #expect(object["method"] as? String == "eth_getLogs")
+    #expect((object["params"] as? [Any])?.count == 1)
+  }
+
   @Test
   func transactionReceiptWithNullResultThrowsProviderMalformedResponse() async throws {
     let client = makeClient { request in

@@ -155,6 +155,13 @@ struct LiveJSONRPCClient: Sendable {
       stage: "getTransactionReceipt")
   }
 
+  /// `eth_getLogs` for a single filter, wrapped in the one-element
+  /// positional params array (`[filter]`) the spec requires. Decodes the
+  /// result as `[RPCLog]`; malformed → `.providerMalformedResponse("getLogs")`.
+  func getLogs(_ filter: RPCLogFilter) async throws -> [RPCLog] {
+    try await call(method: "eth_getLogs", params: [filter], stage: "getLogs")
+  }
+
   // MARK: - Internals
 
   /// One JSON-RPC round-trip: encodes `{method, params}` as a single (non-batch)
