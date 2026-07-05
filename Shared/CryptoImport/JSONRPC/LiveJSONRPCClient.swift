@@ -14,10 +14,10 @@ import OSLog
 /// responses (as `LiveBlockscoutClient` does for public, unauthenticated
 /// endpoints) rather than always failing to a fixed exponential backoff.
 ///
-/// Only `chainId()` and `blockNumber()` ship in this task. `send`/`call` are
-/// structured so `getLogs`, `blockTimestamps` (batch), `call(to:data:)`, and
-/// `transactionReceipt(hash:)` extend cleanly in later tasks without
-/// reshaping the transport.
+/// `chainId()`, `blockNumber()`, `blockTimestamps(_:)` (batched), and
+/// `call(to:data:)` ship so far. `send`/`call`/`callBatch` are structured so
+/// `getLogs` and `transactionReceipt(hash:)` extend cleanly in later tasks
+/// without reshaping the transport.
 struct LiveJSONRPCClient: Sendable {
   private let endpoint: URL
   private let session: URLSession
@@ -86,6 +86,56 @@ struct LiveJSONRPCClient: Sendable {
     return value
   }
 
+  /// Fetches each block's Unix timestamp as a single JSON-RPC batch — one
+  /// HTTP request regardless of how many blocks are asked for. Each request
+  /// is `eth_getBlockByNumber(blockHex, false)` (`false` = omit full
+  /// transaction bodies, since only `timestamp` is decoded); responses are
+  /// re-correlated to `blocks`' order via `JSONRPCEnvelope.correlate`, so a
+  /// provider that returns the batch out of order or reshuffled is handled
+  /// the same as one that preserves order. Returns `[:]` without issuing a
+  /// request for empty input.
+  func blockTimestamps(_ blocks: [UInt64]) async throws -> [UInt64: Date] {
+    guard !blocks.isEmpty else { return [:] }
+    let requests = blocks.enumerated().map { offset, block in
+      JSONRPCRequest(
+        id: offset + 1,
+        method: "eth_getBlockByNumber",
+        params: BlockByNumberParams(blockHex: RPCHex.hexQuantity(block)))
+    }
+    let responses: [JSONRPCResponse<BlockTimestampResult>] = try await callBatch(
+      requests: requests, stage: "blockTimestamps")
+    let correlated = try JSONRPCEnvelope.correlate(requests: requests, responses: responses)
+    var timestampsByBlock: [UInt64: Date] = [:]
+    timestampsByBlock.reserveCapacity(blocks.count)
+    for (block, response) in zip(blocks, correlated) {
+      if let error = response.error {
+        logger.error(
+          "JSON-RPC blockTimestamps provider error \(error.code, privacy: .public) for block \(block, privacy: .public): \(error.message, privacy: .public)"
+        )
+        throw WalletSyncError.providerMalformedResponse(stage: "blockTimestamps")
+      }
+      guard let result = response.result, let seconds = RPCHex.parseUInt64(result.timestamp)
+      else {
+        logger.error(
+          "JSON-RPC blockTimestamps: malformed/missing timestamp for block \(block, privacy: .public)"
+        )
+        throw WalletSyncError.providerMalformedResponse(stage: "blockTimestamps")
+      }
+      timestampsByBlock[block] = Date(timeIntervalSince1970: TimeInterval(seconds))
+    }
+    return timestampsByBlock
+  }
+
+  /// `eth_call` against the current chain tip (`"latest"`) — a read-only
+  /// contract invocation, used for `decimals()`/`symbol()`/`balanceOf()`
+  /// style calls the higher-level provider APIs don't expose directly.
+  /// Returns the raw `0x`-prefixed result hex string; callers decode it
+  /// according to the ABI of the call they made.
+  func call(to: String, data: String) async throws -> String {
+    try await call(
+      method: "eth_call", params: EthCallParams(to: to, data: data), stage: "call")
+  }
+
   // MARK: - Internals
 
   /// One JSON-RPC round-trip: encodes `{method, params}` as a single (non-batch)
@@ -103,6 +153,24 @@ struct LiveJSONRPCClient: Sendable {
     logger.debug("JSON-RPC \(stage, privacy: .public): \(method, privacy: .public)")
     let data = try await send(request: request, stage: stage)
     return try decodeResponse(data, stage: stage)
+  }
+
+  /// One JSON-RPC round-trip carrying a batch of `requests` as a single
+  /// top-level JSON array — one HTTP request regardless of batch size.
+  /// Unlike `call`, this does not itself throw on a per-item `error`/`null`
+  /// result: the caller re-correlates responses to `requests` by id (via
+  /// `JSONRPCEnvelope.correlate`) and applies its own per-item error
+  /// handling, since a batch response can legitimately mix successes and
+  /// per-call errors.
+  private func callBatch<Params: Encodable & Sendable, ResultValue: Decodable & Sendable>(
+    requests: [JSONRPCRequest<Params>],
+    stage: String
+  ) async throws -> [JSONRPCResponse<ResultValue>] {
+    let request = try buildRequest(body: requests)
+    logger.debug(
+      "JSON-RPC \(stage, privacy: .public): batch of \(requests.count, privacy: .public)")
+    let data = try await send(request: request, stage: stage)
+    return try decodeBatchResponse(data, stage: stage)
   }
 
   private func decodeResponse<ResultValue: Decodable & Sendable>(
@@ -130,8 +198,26 @@ struct LiveJSONRPCClient: Sendable {
     return result
   }
 
-  private func buildRequest<Params: Encodable & Sendable>(
-    body: JSONRPCRequest<Params>
+  /// Decodes a batch response body — a top-level JSON array of response
+  /// envelopes, one per request — without inspecting individual `error`/
+  /// `result` fields; that per-item handling is the batch caller's job (see
+  /// `callBatch`). Only the outer decode (malformed/non-array JSON) is
+  /// treated as fatal here.
+  private func decodeBatchResponse<ResultValue: Decodable & Sendable>(
+    _ data: Data, stage: String
+  ) throws -> [JSONRPCResponse<ResultValue>] {
+    do {
+      return try JSONDecoder().decode([JSONRPCResponse<ResultValue>].self, from: data)
+    } catch {
+      logger.error(
+        "JSON-RPC \(stage, privacy: .public) batch decode failed: \(error.localizedDescription, privacy: .public)"
+      )
+      throw WalletSyncError.providerMalformedResponse(stage: stage)
+    }
+  }
+
+  private func buildRequest<Body: Encodable & Sendable>(
+    body: Body
   ) throws -> URLRequest {
     var request = URLRequest(url: endpoint)
     request.httpMethod = "POST"
@@ -230,5 +316,49 @@ struct LiveJSONRPCClient: Sendable {
       )
       throw WalletSyncError.network(underlyingDescription: "HTTP \(http.statusCode)")
     }
+  }
+}
+
+/// `eth_getBlockByNumber` params: a positional `[blockHex, includeTransactions]`
+/// pair, not a keyed object — the second element is always `false` since
+/// `blockTimestamps` only reads the block header's `timestamp`, never full
+/// transaction bodies.
+private struct BlockByNumberParams: Encodable, Sendable {
+  let blockHex: String
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.unkeyedContainer()
+    try container.encode(blockHex)
+    try container.encode(false)
+  }
+}
+
+/// Decode-only slice of an `eth_getBlockByNumber` result — only the field
+/// `blockTimestamps` needs. The full block payload (hash, parent, gas
+/// fields, transaction list, …) is irrelevant to this caller.
+private struct BlockTimestampResult: Decodable, Sendable {
+  let timestamp: String
+}
+
+/// `eth_call` params: a positional `[{to, data}, blockTag]` pair. `blockTag`
+/// is hardcoded `"latest"` — `call(to:data:)` only supports reading current
+/// chain state, matching every caller so far (token `decimals()`/`symbol()`/
+/// `balanceOf()` at the sync-time chain tip).
+private struct EthCallParams: Encodable, Sendable {
+  private struct CallObject: Encodable, Sendable {
+    let to: String
+    let data: String
+  }
+
+  private let object: CallObject
+
+  init(to: String, data: String) {
+    self.object = CallObject(to: to, data: data)
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.unkeyedContainer()
+    try container.encode(object)
+    try container.encode("latest")
   }
 }
