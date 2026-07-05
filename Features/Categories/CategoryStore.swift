@@ -52,12 +52,26 @@ final class CategoryStore {
   let testObservationTickStream: AsyncStream<Void>
   private let testObservationTickContinuation: AsyncStream<Void>.Continuation
 
+  /// Interval that `debouncedSave` waits before invoking the action.
+  /// Production wires the 300ms default; tests pass `.zero` so the
+  /// debounced task completes as soon as it's scheduled and can be
+  /// awaited deterministically rather than via a wall-clock sleep.
+  /// Mirrors `TransactionStore.debounceInterval`.
+  let debounceInterval: Duration
+
+  /// Pending debounced save from the detail inspector, cancelled and
+  /// replaced by each `debouncedSave` call. `@ObservationIgnored` — no
+  /// view reads it, so it must not participate in observation tracking.
+  @ObservationIgnored private var saveTask: Task<Void, Never>?
+
   init(
     repository: any CategoryRepository,
-    instrumentChanges: (any InstrumentChangeObserving)? = nil
+    instrumentChanges: (any InstrumentChangeObserving)? = nil,
+    debounceInterval: Duration = .milliseconds(300)
   ) {
     self.repository = repository
     self.instrumentChanges = instrumentChanges
+    self.debounceInterval = debounceInterval
     let pair = AsyncStream<Void>.makeStream()
     self.testObservationTickStream = pair.stream
     self.testObservationTickContinuation = pair.continuation
@@ -90,6 +104,7 @@ final class CategoryStore {
     MainActor.assumeIsolated {
       observationTask?.cancel()
       instrumentChangeObservationTask?.cancel()
+      saveTask?.cancel()
       testObservationTickContinuation.finish()
     }
   }
@@ -195,6 +210,7 @@ final class CategoryStore {
   func stopObserving() {
     observationTask?.cancel()
     instrumentChangeObservationTask?.cancel()
+    saveTask?.cancel()
   }
 
   /// Test-only. Awaits the observation tasks to fully terminate after
@@ -227,6 +243,10 @@ final class CategoryStore {
   /// and the method returns `nil` for the caller.
   func create(_ category: Moolah.Category) async -> Moolah.Category? {
     error = nil
+    guard !category.name.isEmpty else {
+      logger.error("Rejected create of category with empty name")
+      return nil
+    }
     do {
       let created = try await repository.create(category)
       logger.debug("Created category: \(created.name)")
@@ -242,6 +262,10 @@ final class CategoryStore {
   /// reactive observation delivers the updated category.
   func update(_ category: Moolah.Category) async -> Moolah.Category? {
     error = nil
+    guard !category.name.isEmpty else {
+      logger.error("Rejected update of category with empty name")
+      return nil
+    }
     do {
       let updated = try await repository.update(category)
       logger.debug("Updated category: \(updated.name)")
@@ -270,5 +294,25 @@ final class CategoryStore {
       self.error = error
       return false
     }
+  }
+
+  // MARK: - Debounced Save
+
+  /// Debounces save calls from the detail inspector so keystroke-driven
+  /// auto-save coalesces into one write: cancels any pending save, waits
+  /// `debounceInterval` (300ms in production), then runs the callback on
+  /// the main actor. Returns the spawned task so tests can await the live
+  /// (uncancelled) save deterministically; production fires-and-forgets.
+  /// Mirrors `TransactionStore.debouncedSave`.
+  @discardableResult
+  func debouncedSave(perform action: @escaping @MainActor () -> Void) -> Task<Void, Never> {
+    saveTask?.cancel()
+    let task = Task { [debounceInterval] in
+      try? await Task.sleep(for: debounceInterval)
+      guard !Task.isCancelled else { return }
+      action()
+    }
+    saveTask = task
+    return task
   }
 }
