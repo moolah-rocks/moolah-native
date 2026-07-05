@@ -88,6 +88,11 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
   }
 
   private func valuatePositions() async {
+    // A superseded task (SwiftUI cancels the old `.task(id:)` before starting
+    // the new one) must not run its body at all — otherwise the early-return
+    // empty-seed below could land after a newer task's correct write and clobber
+    // it to blank until the next key change. Mirrors the post-`await` guards.
+    guard !Task.isCancelled else { return }
     guard let conversionService, !positions.isEmpty else {
       // Nothing to value (no conversion service, or an account with no
       // positions). Settle to an empty input so the always-present Chart
