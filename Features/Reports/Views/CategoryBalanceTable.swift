@@ -293,6 +293,33 @@ struct UncategorisedDrillDown: Hashable {
   .frame(width: 500, height: 400)
 }
 
+#Preview("No uncategorised activity") {
+  // `uncategorised: nil` means no uncategorised legs in range — the row
+  // must be omitted entirely rather than rendered as a zero (see the
+  // `uncategorised` doc comment above).
+  let salaryId = UUID()
+  let incomeId = UUID()
+  let categories = Categories(from: [
+    Category(id: incomeId, name: "Income"),
+    Category(id: salaryId, name: "Salary", parentId: incomeId),
+  ])
+  let balances: [UUID: InstrumentAmount] = [
+    salaryId: InstrumentAmount(quantity: 4200, instrument: .AUD)
+  ]
+  let start = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+  CategoryBalanceTable(
+    title: "Income",
+    balances: balances,
+    categories: categories,
+    dateRange: start...Date(),
+    profileInstrument: .AUD,
+    uncategorised: nil,
+    transactionType: .income,
+    hasUnavailableData: false
+  )
+  .frame(width: 500, height: 400)
+}
+
 #Preview("Unavailable data") {
   let salaryId = UUID()
   let incomeId = UUID()

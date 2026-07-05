@@ -99,7 +99,7 @@ struct TransactionRepositoryFilterTests {
     }
   }
 
-  @Test("filters by uncategorizedLegType (type-scoped)")
+  @Test("filters by uncategorisedLegType (type-scoped)")
   func testFiltersByUncategorizedLegType() async throws {
     let accountId = UUID()
     let categoryId = UUID()
@@ -132,7 +132,7 @@ struct TransactionRepositoryFilterTests {
       initialTransactions: [uncategorisedIncome, uncategorisedExpense, categorisedIncome])
 
     let incomePage = try await repository.fetch(
-      filter: TransactionFilter(uncategorizedLegType: .income),
+      filter: TransactionFilter(uncategorisedLegType: .income),
       page: 0,
       pageSize: 50
     )
@@ -140,7 +140,7 @@ struct TransactionRepositoryFilterTests {
     #expect(incomePage.transactions.first?.payee == "Uncategorised Income")
 
     let expensePage = try await repository.fetch(
-      filter: TransactionFilter(uncategorizedLegType: .expense),
+      filter: TransactionFilter(uncategorisedLegType: .expense),
       page: 0,
       pageSize: 50
     )

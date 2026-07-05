@@ -162,7 +162,7 @@ struct CategoriesOverTimeCard: View {
   }
 
   private func categoryLabel(for id: UUID?) -> String {
-    guard let id, let category = categories.by(id: id) else { return "Uncategorized" }
+    guard let id, let category = categories.by(id: id) else { return "Uncategorised" }
     return categories.path(for: category)
   }
 }

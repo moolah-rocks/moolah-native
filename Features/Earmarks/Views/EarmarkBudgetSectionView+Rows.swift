@@ -38,6 +38,10 @@ extension EarmarkBudgetSectionView {
 
         ForEach(lineItems) { lineItem in
           budgetRow(lineItem)
+            // The synthesized "Uncategorised" row has no backing budget item
+            // to remove (see `deleteBudgetItems`) — suppress the swipe
+            // affordance instead of silently no-oping on it.
+            .deleteDisabled(lineItem.id == BudgetLineItem.uncategorisedId)
         }
         .onDelete { offsets in
           deleteBudgetItems(at: offsets)
@@ -92,7 +96,10 @@ extension EarmarkBudgetSectionView {
 
       Group {
         if isUncategorisedRow {
-          InstrumentAmountView(amount: lineItem.budgeted, colorOverride: .primary)
+          // `.secondary` (rather than the editable rows' `.primary`) signals
+          // this cell is non-interactive — there is no budget item behind
+          // the synthesized "Uncategorised" row to edit.
+          InstrumentAmountView(amount: lineItem.budgeted, colorOverride: .secondary)
         } else {
           Button {
             editingLineItem = lineItem

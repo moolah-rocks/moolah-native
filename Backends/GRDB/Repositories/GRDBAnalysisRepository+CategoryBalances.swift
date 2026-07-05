@@ -21,6 +21,8 @@ import GRDB
 /// `plans/2026-07-05-reports-uncategorised-row-plan.md`, "Design
 /// (revised — single combined query)").
 extension GRDBAnalysisRepository {
+  // MARK: - Row / Aggregation Types
+
   /// One row of the SQL aggregation that drives `fetchCategoryBalances`.
   /// `day` is the ISO-8601 `YYYY-MM-DD` string returned by `DATE(t.date)`
   /// — parsed in Swift on the way out of the read closure so the
@@ -80,6 +82,8 @@ extension GRDBAnalysisRepository {
     let payee: String?
     let categoryIds: Set<UUID>
   }
+
+  // MARK: - Query Building
 
   /// Runs the per-(day, category, instrument) SUM(quantity) aggregation
   /// pinned by
@@ -201,6 +205,8 @@ extension GRDBAnalysisRepository {
       """
     return SQLRequest<Row>(literal: literal)
   }
+
+  // MARK: - Assembly
 
   /// The batch plan for the category-balances walk: the rows that parsed
   /// (retained so the index-aligned outcome can rebuild each bucket and
