@@ -33,16 +33,18 @@ struct SyncedAccountStorePriceWarmingTests {
   private func makeStore(
     backend: CloudKitBackend, priceWarmer: any PriceWarming
   ) -> SyncedAccountStore {
+    let checkpoints = InMemoryWalletSyncCheckpointRepository()
     let walletApplyEngine = WalletApplyEngine(
       transactions: backend.transactions,
       walletSyncState: backend.walletSyncState,
-      checkpoints: InMemoryWalletSyncCheckpointRepository(),
+      checkpoints: checkpoints,
       importRules: NoOpWalletImportRulesEngine(),
       clock: { Self.pinnedNow })
     return SyncedAccountStore(
       sources: [],
       walletApplyEngine: walletApplyEngine,
       walletSyncState: backend.walletSyncState,
+      walletSyncCheckpoints: checkpoints,
       accounts: backend.accounts,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,

@@ -187,6 +187,7 @@ final class CryptoSyncBenchmarks: XCTestCase {
       sources: [WalletSyncSource(engine: walletSyncEngine)],
       walletApplyEngine: walletApplyEngine,
       walletSyncState: backend.walletSyncState,
+      walletSyncCheckpoints: backend.walletSyncCheckpoints,
       accounts: backend.accounts,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,

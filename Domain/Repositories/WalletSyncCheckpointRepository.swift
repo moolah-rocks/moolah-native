@@ -31,4 +31,18 @@ protocol WalletSyncCheckpointRepository: Sendable {
   /// so a concurrently-applied higher peer value is never clobbered downward. Only marks the
   /// row for CloudKit push / fires the change hook when the stored value actually increases.
   func raiseToMax(accountId: UUID, blockNumber: UInt64) async throws
+
+  /// Removes an account's synced checkpoint and tombstones the shared row via
+  /// CloudKit. Called alongside `WalletSyncStateRepository.delete` when a
+  /// user triggers a full resync: `WalletSyncEngine.build` derives
+  /// `fromBlock` from `max(localState, syncedCheckpoint)`, so clearing only
+  /// the local state would leave the synced checkpoint in place and the
+  /// resync would still start from that watermark instead of genesis.
+  /// Clearing this checkpoint too makes THIS device re-fetch from genesis;
+  /// any peer device still holds its own last-seen value, but the tombstone
+  /// propagates via CloudKit and peers self-heal back to the correct shared
+  /// maximum via `raiseToMax` on their own next sync cycle. Idempotent — a
+  /// no-op when no row exists (mirrors `WalletSyncStateRepository.delete`'s
+  /// absorption of the account-deletion race).
+  func delete(accountId: UUID) async throws
 }

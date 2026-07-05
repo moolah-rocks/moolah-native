@@ -23,6 +23,11 @@ struct SyncedAccountStoreFullResyncTests {
     let backend: CloudKitBackend
     let database: DatabaseQueue
     let alchemy: RecordingAlchemyClientStub
+    /// The same checkpoint instance wired into `walletSyncEngine`,
+    /// `walletApplyEngine`, and `store` — so a full-resync test can assert
+    /// the synced checkpoint is actually torn down, not just the local
+    /// `WalletSyncState`.
+    let checkpoints: InMemoryWalletSyncCheckpointRepository
   }
 
   private func makeStore() throws -> Fixture {
@@ -33,12 +38,13 @@ struct SyncedAccountStoreFullResyncTests {
     let discovery = CryptoTokenDiscoveryService(
       registry: registry,
       resolver: CountingRegistrationResolver())
+    let checkpoints = InMemoryWalletSyncCheckpointRepository()
     let walletSyncEngine = WalletSyncEngine(
       alchemy: alchemy,
       blockExplorer: BlockExplorerTestDoubles.empty,
       discovery: discovery,
       walletSyncState: backend.walletSyncState,
-      checkpoints: InMemoryWalletSyncCheckpointRepository(),
+      checkpoints: checkpoints,
       importOriginFactory: { accountId in
         ImportOrigin(
           rawDescription: "wallet:\(accountId.uuidString)",
@@ -50,13 +56,14 @@ struct SyncedAccountStoreFullResyncTests {
     let walletApplyEngine = WalletApplyEngine(
       transactions: backend.transactions,
       walletSyncState: backend.walletSyncState,
-      checkpoints: InMemoryWalletSyncCheckpointRepository(),
+      checkpoints: checkpoints,
       importRules: NoOpWalletImportRulesEngine(),
       clock: { Self.pinnedNow })
     let store = SyncedAccountStore(
       sources: [WalletSyncSource(engine: walletSyncEngine)],
       walletApplyEngine: walletApplyEngine,
       walletSyncState: backend.walletSyncState,
+      walletSyncCheckpoints: checkpoints,
       accounts: backend.accounts,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,
@@ -64,7 +71,8 @@ struct SyncedAccountStoreFullResyncTests {
         clock: { Self.pinnedNow }),
       clock: { Self.pinnedNow })
     return Fixture(
-      store: store, backend: backend, database: database, alchemy: alchemy)
+      store: store, backend: backend, database: database, alchemy: alchemy,
+      checkpoints: checkpoints)
   }
 
   private func seedCryptoAccount(
@@ -159,6 +167,8 @@ struct SyncedAccountStoreFullResyncTests {
       WalletSyncState(
         id: account.id, lastSyncedBlockNumber: 5_000,
         lastSyncedAt: Self.pinnedNow, lastError: nil))
+    try await fixture.checkpoints.save(
+      WalletSyncCheckpoint(id: account.id, lastSyncedBlockNumber: 5_000))
     await fixture.store.loadInitialState()
 
     // Force the build phase to fail for this account's wallet.
@@ -175,5 +185,44 @@ struct SyncedAccountStoreFullResyncTests {
       try await fixture.backend.walletSyncState.load(accountId: account.id))
     #expect(saved.lastSyncedBlockNumber == 0)
     #expect(saved.lastError == .invalidApiKey)
+    // The synced checkpoint must also be gone — a failed build produces no
+    // `AccountInput` for this account, so `WalletApplyEngine.updateSyncState`
+    // never re-raises it, and it stays deleted rather than being silently
+    // resurrected at the stale 5_000 value.
+    let checkpoint = try await fixture.checkpoints.load(accountId: account.id)
+    #expect(checkpoint == nil)
+  }
+
+  // MARK: - Synced checkpoint teardown (also fixes full-resync correctness)
+
+  @Test(
+    "syncAccount(fullResync: true) also clears the synced WalletSyncCheckpoint"
+  )
+  func fullResyncClearsSyncedCheckpoint() async throws {
+    // Without also clearing the synced checkpoint, `WalletSyncEngine.build`
+    // derives `fromBlock` from `max(localState, syncedCheckpoint)`, so a
+    // resync that only reset the local `WalletSyncState` would still start
+    // from the synced checkpoint's block instead of genesis — the resync
+    // wouldn't actually re-fetch anything.
+    let fixture = try makeStore()
+    let account = seedCryptoAccount(in: fixture.database)
+    try await fixture.backend.walletSyncState.save(
+      WalletSyncState(
+        id: account.id, lastSyncedBlockNumber: 5_000,
+        lastSyncedAt: Self.pinnedNow, lastError: nil))
+    try await fixture.checkpoints.save(
+      WalletSyncCheckpoint(id: account.id, lastSyncedBlockNumber: 5_000))
+    await fixture.store.loadInitialState()
+
+    await fixture.store.syncAccount(account, fullResync: true)
+
+    #expect(fixture.alchemy.recordedCalls.first?.fromBlock == 0)
+    // A successful build's apply pass re-establishes a fresh checkpoint
+    // post-reset (at the new cycle's head, block 0 here since the stub
+    // returns no transfers) — this asserts the pre-reset 5_000 value was
+    // torn down and rebuilt from genesis, not silently kept.
+    let checkpoint = try #require(
+      try await fixture.checkpoints.load(accountId: account.id))
+    #expect(checkpoint.lastSyncedBlockNumber == 0)
   }
 }

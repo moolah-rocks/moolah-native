@@ -54,4 +54,8 @@ final class InMemoryWalletSyncCheckpointRepository:
       raiseToMaxCount += 1
     }
   }
+
+  func delete(accountId: UUID) async throws {
+    lock.withLock { checkpoints[accountId] = nil }
+  }
 }

@@ -60,6 +60,7 @@ private func syncedAccountHeaderPreview(width: CGFloat = 720) -> some View {
       checkpoints: session.backend.walletSyncCheckpoints,
       importRules: NoOpWalletImportRulesEngine()),
     walletSyncState: session.backend.walletSyncState,
+    walletSyncCheckpoints: session.backend.walletSyncCheckpoints,
     accounts: session.backend.accounts,
     transferDetection: TransferDetectionCoordinator(
       transactions: session.backend.transactions,
