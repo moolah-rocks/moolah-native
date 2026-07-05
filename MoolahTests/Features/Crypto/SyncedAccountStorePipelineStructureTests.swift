@@ -55,10 +55,11 @@ struct SyncedAccountStorePipelineStructureTests {
           parserIdentifier: "alchemy-wallet-sync")
       })
     let merger = RecordingCrossAccountTransferMerger()
+    let checkpoints = InMemoryWalletSyncCheckpointRepository()
     let walletApplyEngine = WalletApplyEngine(
       transactions: backend.transactions,
       walletSyncState: backend.walletSyncState,
-      checkpoints: InMemoryWalletSyncCheckpointRepository(),
+      checkpoints: checkpoints,
       importRules: NoOpWalletImportRulesEngine(),
       merger: merger,
       clock: { Self.pinnedNow })
@@ -66,6 +67,7 @@ struct SyncedAccountStorePipelineStructureTests {
       sources: [WalletSyncSource(engine: walletSyncEngine)],
       walletApplyEngine: walletApplyEngine,
       walletSyncState: backend.walletSyncState,
+      walletSyncCheckpoints: checkpoints,
       accounts: backend.accounts,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,

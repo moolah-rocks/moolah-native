@@ -62,16 +62,18 @@ struct SyncedAccountTransferTriggerTests {
           importSessionId: UUID(),
           parserIdentifier: "alchemy-wallet-sync")
       })
+    let checkpoints = InMemoryWalletSyncCheckpointRepository()
     let walletApplyEngine = WalletApplyEngine(
       transactions: backend.transactions,
       walletSyncState: backend.walletSyncState,
-      checkpoints: InMemoryWalletSyncCheckpointRepository(),
+      checkpoints: checkpoints,
       importRules: NoOpWalletImportRulesEngine(),
       clock: { Self.pinnedNow })
     let store = SyncedAccountStore(
       sources: [WalletSyncSource(engine: walletSyncEngine)],
       walletApplyEngine: walletApplyEngine,
       walletSyncState: backend.walletSyncState,
+      walletSyncCheckpoints: checkpoints,
       accounts: backend.accounts,
       transferDetection: TransferDetectionCoordinator(
         transactions: backend.transactions,

@@ -46,33 +46,45 @@ extension SyncedAccountStore {
   /// task wins; the user-initiated one collapses to a no-op rather than
   /// queueing a duplicate write).
   ///
-  /// `fullResync: true` first deletes the persisted `WalletSyncState`
-  /// checkpoint and drops the account's cached entry in
-  /// `statePerAccount`, so the build phase finds no watermark (neither
-  /// persisted nor cached) and computes `fromBlock == 0` (full-history
-  /// re-fetch), recovering transfers an earlier incremental sync
-  /// skipped. Safe to repeat: the apply pass dedups on
-  /// `(accountId, externalId)`, and a failed resync build leaves the
-  /// watermark at genesis rather than resurrecting the prior block —
-  /// dropping the in-memory cache entry means `runParallelBuilds`'s
-  /// `priorState` snapshot is `nil`, so `persistError` writes
-  /// `lastSyncedBlockNumber: 0` instead of the pre-reset value, and a
-  /// later sync of either kind still does the full re-fetch. Benign
-  /// TOCTOU: a sync racing the in-flight guard above can still see the
-  /// deleted checkpoint after this call collapses to a no-op below; the
-  /// next sync of either kind simply refetches from block 0 — accepted
-  /// rather than adding locking.
+  /// `fullResync: true` first deletes both the persisted `WalletSyncState`
+  /// AND the synced `WalletSyncCheckpoint`, and drops the account's cached
+  /// entry in `statePerAccount`, so the build phase finds no watermark
+  /// anywhere (local, synced, or cached) and computes `fromBlock == 0`
+  /// (full-history re-fetch), recovering transfers an earlier incremental
+  /// sync skipped. Clearing only the local `WalletSyncState` would NOT be
+  /// enough: `WalletSyncEngine.build` derives `fromBlock` from
+  /// `max(localState, syncedCheckpoint)`, so the resync would still resume
+  /// from the synced checkpoint. Clearing that checkpoint tombstones the
+  /// shared row via CloudKit; a peer that hasn't seen the tombstone yet
+  /// still holds its own last-seen value, but self-heals back to the
+  /// correct shared maximum via `raiseToMax` on its own next cycle. Safe to
+  /// repeat: the apply pass dedups on `(accountId, externalId)`, and a
+  /// failed resync build leaves both watermarks at genesis rather than
+  /// resurrecting the prior block — dropping the in-memory cache entry
+  /// means `persistError` sees a `nil` `priorState` and writes
+  /// `lastSyncedBlockNumber: 0`. Benign TOCTOU: a sync racing the
+  /// in-flight guard below can still see the deleted checkpoints after
+  /// this call collapses to a no-op; either kind simply refetches from
+  /// block 0 — accepted rather than adding locking.
   func syncAccount(_ account: Account, fullResync: Bool = false) async {
     guard source(for: account) != nil else { return }
     guard !inProgressAccountIds.contains(account.id) else { return }
     if fullResync {
+      // Both deletes are non-fatal: a failure falls back to an incremental
+      // sync (resuming from whatever watermark remains) rather than
+      // aborting the user's request outright.
       do {
         try await walletSyncState.delete(accountId: account.id)
       } catch {
-        // Non-fatal: fall back to an incremental sync rather than
-        // aborting the user's request.
         Self.internalsLogger.error(
           "Full-resync checkpoint reset failed for account \(account.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
+        )
+      }
+      do {
+        try await walletSyncCheckpoints.delete(accountId: account.id)
+      } catch {
+        Self.internalsLogger.error(
+          "Full-resync synced-checkpoint reset failed for account \(account.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
         )
       }
       // Drop the cached checkpoint too — otherwise a build failure's
@@ -288,32 +300,26 @@ extension SyncedAccountStore {
 
   /// Updates `globalError` based on the build phase's per-account
   /// outcomes, **scoped to crypto accounts**. The banner powers
-  /// `CryptoSettingsView.alchemyStatusBadge`, which is Alchemy-specific:
-  /// the shared Alchemy key means an `.invalidApiKey` / `.missingApiKey`
-  /// from any one *crypto* account implies no crypto account can sync,
-  /// so we surface it once — preferring `.missingApiKey` over
-  /// `.invalidApiKey` when both are present because the former gives
-  /// the user a clearer instruction (add a key) than the latter
-  /// (replace a key). An exchange account's per-account token failure
-  /// (`.invalidApiKey` / `.missingApiKey` from `CoinstashSyncSource`)
-  /// is deliberately ignored here — folding it in would tell the user
-  /// the Alchemy key is broken when it is fine.
+  /// `CryptoSettingsView.alchemyStatusBadge` (Alchemy-specific): the
+  /// shared Alchemy key means an `.invalidApiKey` / `.missingApiKey` from
+  /// any one *crypto* account implies no crypto account can sync, so we
+  /// surface it once — preferring `.missingApiKey` (add a key) over
+  /// `.invalidApiKey` (replace a key) when both are present. An exchange
+  /// account's per-account token failure is deliberately ignored here —
+  /// folding it in would wrongly blame the Alchemy key.
   ///
-  /// When no crypto process-wide error appears in this cycle's outcomes
-  /// the banner clears. Per-account errors (`.network`, `.rateLimited`,
-  /// `.providerMalformedResponse`) are surfaced via the per-row
-  /// `WalletSyncState.lastError`, not the banner.
+  /// Clears when no crypto process-wide error appears this cycle.
+  /// Per-account errors (`.network`, `.rateLimited`,
+  /// `.providerMalformedResponse`) go on the per-row
+  /// `WalletSyncState.lastError` instead, not the banner.
   func updateGlobalError(from results: [PerAccountBuildResult]) {
     var sawMissing = false
     var sawInvalid = false
     for result in results {
       if case let .failed(_, error, accountType) = result, accountType == .crypto {
-        // Match on `.kind`, not the whole `WalletSyncError`: production
-        // errors are stamped with a `provider` at the client boundary
-        // (e.g. `attributingErrors(to: .alchemy)`), so a whole-value
-        // expression-pattern match against the unattributed
-        // `WalletSyncError.missingApiKey` factory would never fire on a
-        // real Alchemy failure and the global banner would silently break.
+        // Match `.kind`, not the whole value: production errors are
+        // stamped with a `provider`, so a whole-value match against the
+        // unattributed `.missingApiKey` factory would never fire.
         switch error.kind {
         case .missingApiKey:
           sawMissing = true
@@ -349,26 +355,21 @@ extension SyncedAccountStore {
   /// is never re-evaluated, so a dismissed/merged pair is never
   /// re-suggested (the record model has no negative-assertion tombstone).
   ///
-  /// `windowLowerBound` is the lower bound the coordinator applies to
-  /// its `existingNearby` counterpart fetch — the maximum age of a
-  /// candidate counterpart for a freshly-imported transaction.
+  /// `windowLowerBound` bounds the coordinator's `existingNearby`
+  /// counterpart fetch — the maximum age of a candidate counterpart.
   ///
-  /// The pre-check on `transferDetection.isMutating` exists so a
-  /// background sync pass does not write `mutationInProgress` into the
-  /// coordinator's user-visible `error` when the user is mid-merge /
-  /// mid-dismiss or an overlapping detection pass is in flight. The
+  /// The `transferDetection.isMutating` pre-check keeps a background sync
+  /// pass from writing `mutationInProgress` into the coordinator's
+  /// user-visible `error` while the user is mid-merge/dismiss; the
   /// coordinator's `mutate` gate remains the final arbiter.
   func runTransferDetection(
     genuinelyNew: [Transaction], participatingAccountIds: Set<UUID>
   ) async {
     guard !transferDetection.isMutating else {
-      // Under the no-window design the genuinely-new survivor set is
-      // computed once per sync pass and never re-fetched, so a skipped
-      // pass means these rows are never evaluated for detection (no
-      // later window scan catches them). The trigger (a sync pass
-      // finishing while the user is mid-merge / mid-dismiss) is rare
-      // enough to accept rather than buffer-and-replay; revisit if a
-      // missed suggestion proves user-visible.
+      // Computed once per pass and never re-fetched, so a skipped pass
+      // means these rows are never evaluated for detection. Rare trigger
+      // (sync finishing mid-merge/dismiss); accepted rather than
+      // buffer-and-replay.
       Self.internalsLogger.notice(
         "Transfer detection skipped — coordinator busy; genuinely-new rows from this pass will not be evaluated"
       )

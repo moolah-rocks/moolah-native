@@ -165,6 +165,7 @@ extension ProfileSession {
       sources: [WalletSyncSource(engine: walletSyncEngine), coinstashSource],
       walletApplyEngine: walletApplyEngine,
       walletSyncState: backend.walletSyncState,
+      walletSyncCheckpoints: backend.walletSyncCheckpoints,
       accounts: backend.accounts,
       transferDetection: transferDetection,
       priceWarmer: priceWarmer)

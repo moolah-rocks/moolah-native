@@ -46,38 +46,34 @@ final class SyncedAccountStore {
   /// without another round-trip.
   private(set) var statePerAccount: [UUID: WalletSyncState] = [:]
 
-  /// Monotonic guard for `reloadStatePerAccount`. A stale full-map refresh
-  /// resuming after a fresher one could clobber a concurrent pass's checkpoint,
-  /// so a reload bumps on entry and `replaceStatePerAccount` on publish (#1209).
+  /// Monotonic guard for `reloadStatePerAccount`: bumps on entry so a stale
+  /// full-map refresh resuming after a fresher one can't clobber it (#1209).
   @ObservationIgnored private var loadGeneration: UInt64 = 0
 
   /// Banner-level error visible across the crypto-settings UI when a
-  /// process-wide Alchemy-key failure (`.missingApiKey` /
-  /// `.invalidApiKey`) means no **crypto** account can sync at all. Set
-  /// by `updateGlobalError(from:)` after every build phase, scoped to
-  /// crypto accounts only — the banner powers
-  /// `CryptoSettingsView.alchemyStatusBadge`, which is Alchemy-specific;
-  /// an exchange credential failure must not light it. Cleared back to
-  /// `nil` on the next cycle with no such crypto failure. Per-account
-  /// network / rate-limit / malformed errors are stored on
+  /// process-wide Alchemy-key failure (`.missingApiKey` / `.invalidApiKey`)
+  /// means no **crypto** account can sync at all. Set by
+  /// `updateGlobalError(from:)`, scoped to crypto accounts — the banner
+  /// powers `CryptoSettingsView.alchemyStatusBadge` (Alchemy-specific); an
+  /// exchange credential failure must not light it. Per-account
+  /// network / rate-limit / malformed errors go on
   /// `statePerAccount[id].lastError` instead.
   private(set) var globalError: WalletSyncError?
 
-  // Internal (default) access so the helpers in
-  // `SyncedAccountStore+Internals.swift` can read these without
-  // bouncing through accessor methods. The properties remain `let` so
-  // the store is still effectively immutable from outside this
-  // module's extensions.
+  // Internal (default) access so `SyncedAccountStore+Internals.swift` can
+  // read these without accessor methods; the store is still effectively
+  // immutable from outside this module's extensions.
   //
-  // `sources` is the provider-neutral seam: each `AccountSyncSource`
-  // claims the accounts it can sync via `handles(_:)`. The store never
-  // inspects `account.type` — it asks the sources. `private(set) var`
-  // (not `let`) only so the test-only `appendSourceForTesting(_:)` can
-  // register an extra source post-construction; production sets it once
-  // in `init`.
+  // `sources` is the provider-neutral seam: each `AccountSyncSource` claims
+  // the accounts it can sync via `handles(_:)` — the store never inspects
+  // `account.type`. `private(set) var` only so the test-only
+  // `appendSourceForTesting(_:)` can register an extra source post-init.
   private(set) var sources: [any AccountSyncSource]
   let walletApplyEngine: WalletApplyEngine
   let walletSyncState: any WalletSyncStateRepository
+  /// Synced cross-device checkpoint store — cleared alongside
+  /// `walletSyncState` on a full resync (see its protocol doc comment).
+  let walletSyncCheckpoints: any WalletSyncCheckpointRepository
   let accounts: any AccountRepository
 
   /// Cross-account transfer-detection coordinator. Owns every detection
@@ -144,6 +140,8 @@ final class SyncedAccountStore {
   ///   - walletApplyEngine: Sequential `@MainActor` apply pass — runs
   ///     after the parallel build phase completes.
   ///   - walletSyncState: Per-device sync checkpoint store.
+  ///   - walletSyncCheckpoints: Synced cross-device checkpoint store,
+  ///     cleared alongside `walletSyncState` on a full resync.
   ///   - accounts: Account repository — read on every stale check to
   ///     filter to syncable accounts (via `sources`).
   ///   - transferDetection: Cross-account transfer-detection
@@ -166,6 +164,7 @@ final class SyncedAccountStore {
     sources: [any AccountSyncSource],
     walletApplyEngine: WalletApplyEngine,
     walletSyncState: any WalletSyncStateRepository,
+    walletSyncCheckpoints: any WalletSyncCheckpointRepository,
     accounts: any AccountRepository,
     transferDetection: TransferDetectionCoordinator,
     clock: @Sendable @escaping () -> Date = { Date() },
@@ -177,6 +176,7 @@ final class SyncedAccountStore {
     self.sources = sources
     self.walletApplyEngine = walletApplyEngine
     self.walletSyncState = walletSyncState
+    self.walletSyncCheckpoints = walletSyncCheckpoints
     self.accounts = accounts
     self.transferDetection = transferDetection
     self.clock = clock
@@ -393,8 +393,7 @@ final class SyncedAccountStore {
     }
   }
 
-  /// The remaining implementation helpers (parallel build, apply pass,
-  /// timer loop) live in `SyncedAccountStore+Internals.swift`; the
-  /// background price-warm trigger lives in
+  /// Remaining helpers (parallel build, apply pass, timer loop) live in
+  /// `SyncedAccountStore+Internals.swift`; price-warming lives in
   /// `SyncedAccountStore+PriceWarming.swift`.
 }
