@@ -14,10 +14,10 @@ import OSLog
 /// responses (as `LiveBlockscoutClient` does for public, unauthenticated
 /// endpoints) rather than always failing to a fixed exponential backoff.
 ///
-/// `chainId()`, `blockNumber()`, `blockTimestamps(_:)` (batched), and
-/// `call(to:data:)` ship so far. `send`/`call`/`callBatch` are structured so
-/// `getLogs` and `transactionReceipt(hash:)` extend cleanly in later tasks
-/// without reshaping the transport.
+/// `chainId()`, `blockNumber()`, `blockTimestamps(_:)` (batched),
+/// `call(to:data:)`, and `transactionReceipt(hash:)` ship so far. `send`/
+/// `call`/`callBatch` are structured so `getLogs` extends cleanly in a later
+/// task without reshaping the transport.
 struct LiveJSONRPCClient: Sendable {
   private let endpoint: URL
   private let session: URLSession
@@ -140,6 +140,19 @@ struct LiveJSONRPCClient: Sendable {
   func call(to: String, data: String) async throws -> String {
     try await call(
       method: "eth_call", params: EthCallParams(to: to, data: data), stage: "call")
+  }
+
+  /// `eth_getTransactionReceipt` for a single transaction hash, decoding the
+  /// full `RPCReceipt` including its `logs` array. A `result: null` response
+  /// — the hash isn't on chain yet, or the node has pruned it — is not
+  /// distinguished from any other malformed response; both throw
+  /// `.providerMalformedResponse(stage: "getTransactionReceipt")`, mirroring
+  /// `AlchemyClient.fetchReceipt`'s handling of the same provider behaviour.
+  func transactionReceipt(hash: String) async throws -> RPCReceipt {
+    try await call(
+      method: "eth_getTransactionReceipt",
+      params: TransactionReceiptParams(hash: hash),
+      stage: "getTransactionReceipt")
   }
 
   // MARK: - Internals
@@ -366,5 +379,15 @@ private struct EthCallParams: Encodable, Sendable {
     var container = encoder.unkeyedContainer()
     try container.encode(object)
     try container.encode("latest")
+  }
+}
+
+/// `eth_getTransactionReceipt` params: a single positional `[hash]` element.
+private struct TransactionReceiptParams: Encodable, Sendable {
+  let hash: String
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.unkeyedContainer()
+    try container.encode(hash)
   }
 }

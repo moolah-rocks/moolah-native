@@ -155,6 +155,92 @@ struct LiveJSONRPCClientBatchTests {
     #expect(callObject["data"] as? String == "0xa9059cbb")
     #expect(params[1] as? String == "latest")
   }
+
+  // MARK: - transactionReceipt
+
+  private static let receiptFixture = Data(
+    """
+    {
+      "jsonrpc":"2.0",
+      "id":1,
+      "result": {
+        "transactionHash":"0xabc123",
+        "from":"0x1111111111111111111111111111111111111111",
+        "gasUsed":"0x5208",
+        "effectiveGasPrice":"0x3b9aca00",
+        "logs":[
+          {
+            "address":"0x2222222222222222222222222222222222222222",
+            "topics":["0xaaaa","0xbbbb"],
+            "data":"0xdead",
+            "logIndex":"0x0"
+          },
+          {
+            "address":"0x3333333333333333333333333333333333333333",
+            "topics":["0xcccc"],
+            "data":"0xbeef",
+            "logIndex":"0x1"
+          }
+        ]
+      }
+    }
+    """.utf8)
+
+  @Test
+  func transactionReceiptDecodesResultIncludingLogs() async throws {
+    let client = makeClient { request in
+      (AlchemyTestSupport.okResponse(for: request), Self.receiptFixture)
+    }
+    let receipt = try await client.transactionReceipt(hash: "0xabc123")
+    #expect(receipt.transactionHash == "0xabc123")
+    #expect(receipt.from == "0x1111111111111111111111111111111111111111")
+    #expect(receipt.gasUsed == "0x5208")
+    #expect(receipt.effectiveGasPrice == "0x3b9aca00")
+    #expect(receipt.logs.count == 2)
+    #expect(receipt.logs[0].address == "0x2222222222222222222222222222222222222222")
+    #expect(receipt.logs[0].topics == ["0xaaaa", "0xbbbb"])
+    #expect(receipt.logs[0].data == "0xdead")
+    #expect(receipt.logs[0].logIndex == "0x0")
+    #expect(receipt.logs[1].address == "0x3333333333333333333333333333333333333333")
+    #expect(receipt.logs[1].topics == ["0xcccc"])
+    #expect(receipt.logs[1].data == "0xbeef")
+    #expect(receipt.logs[1].logIndex == "0x1")
+  }
+
+  @Test
+  func transactionReceiptRequestBodyEncodesPositionalHashParam() async throws {
+    let client = makeClient { request in
+      JSONRPCBatchURLProtocolStub.captureRequest(request)
+      return (AlchemyTestSupport.okResponse(for: request), Self.receiptFixture)
+    }
+    _ = try await client.transactionReceipt(hash: "0xabc123")
+    let body = try #require(JSONRPCBatchURLProtocolStub.lastRequestBody)
+    let object = try #require(body as? [String: Any])
+    #expect(object["method"] as? String == "eth_getTransactionReceipt")
+    let params = try #require(object["params"] as? [Any])
+    #expect(params.count == 1)
+    #expect(params[0] as? String == "0xabc123")
+  }
+
+  @Test
+  func transactionReceiptWithNullResultThrowsProviderMalformedResponse() async throws {
+    let client = makeClient { request in
+      (
+        AlchemyTestSupport.okResponse(for: request),
+        Data(#"{"jsonrpc":"2.0","id":1,"result":null}"#.utf8)
+      )
+    }
+    do {
+      _ = try await client.transactionReceipt(hash: "0xabc123")
+      Issue.record("Expected WalletSyncError.providerMalformedResponse")
+    } catch let error as WalletSyncError {
+      guard case .providerMalformedResponse(let stage) = error.kind else {
+        Issue.record("Expected .providerMalformedResponse, got \(error.kind)")
+        return
+      }
+      #expect(stage == "getTransactionReceipt")
+    }
+  }
 }
 
 /// Dedicated `URLProtocol` stub for the batch-oriented `LiveJSONRPCClient`
