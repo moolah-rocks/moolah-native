@@ -77,6 +77,72 @@ struct CategoryStoreTests {
   }
 
   @Test
+  func testCreateRejectsEmptyName() async throws {
+    let (backend, _) = try TestBackend.create()
+    let store = CategoryStore(repository: backend.categories)
+    try await store.waitForFirstEmission()
+
+    let result = await store.create(Moolah.Category(name: ""))
+
+    #expect(result == nil)
+    // Validation rejection is distinct from a repository failure — it must
+    // not surface on `store.error`.
+    #expect(store.error == nil)
+    #expect(store.categories.roots.isEmpty)
+  }
+
+  @Test
+  func testUpdateRejectsEmptyName() async throws {
+    let cat = Moolah.Category(name: "Groceries")
+    let (backend, database) = try TestBackend.create()
+    TestBackend.seed(categories: [cat], in: database)
+    let store = CategoryStore(repository: backend.categories)
+    try await store.waitForFirstEmission()
+
+    var blanked = cat
+    blanked.name = ""
+    let result = await store.update(blanked)
+
+    #expect(result == nil)
+    // Validation rejection is distinct from a repository failure — it must
+    // not surface on `store.error`.
+    #expect(store.error == nil)
+    #expect(store.categories.by(id: cat.id)?.name == "Groceries")
+  }
+
+  /// The detail inspector fires `onUpdate` on every keystroke; the store
+  /// debounce must coalesce a rapid burst into a single save that runs
+  /// the last action only. `.zero` short-circuits the production 300ms
+  /// wait — the task still hops the executor, so earlier saves are
+  /// cancelled before they run.
+  @Test
+  func testDebouncedSaveOnlyRunsLastAction() async throws {
+    let (backend, _) = try TestBackend.create()
+    let store = CategoryStore(repository: backend.categories, debounceInterval: .zero)
+
+    var callCount = 0
+    var lastValue = ""
+
+    store.debouncedSave {
+      callCount += 1
+      lastValue = "first"
+    }
+    store.debouncedSave {
+      callCount += 1
+      lastValue = "second"
+    }
+    let liveSave = store.debouncedSave {
+      callCount += 1
+      lastValue = "third"
+    }
+
+    await liveSave.value
+
+    #expect(callCount == 1)
+    #expect(lastValue == "third")
+  }
+
+  @Test
   func testDeleteRemovesCategory() async throws {
     let cat = Moolah.Category(name: "Groceries")
     let (backend, database) = try TestBackend.create()
