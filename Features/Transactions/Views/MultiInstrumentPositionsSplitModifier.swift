@@ -198,12 +198,18 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       txns = []
     }
     guard !Task.isCancelled else { return }
+    let performance = await computePerformance(
+      accountIds: accountIdSet,
+      transactions: txns,
+      rows: rows,
+      conversionService: service)
+    guard !Task.isCancelled else { return }
     let context = PositionsAssemblyContext(
       title: title,
       hostCurrency: hostCurrency,
       accountIds: accountIdSet,
       assetKeysByInstrumentId: assetKeys,
-      performance: nil,
+      performance: performance,
       alwaysShowsFullSurface: false)
     let input = await assembler.assemble(
       context: context,
@@ -212,6 +218,37 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       range: positionsRange)
     guard !Task.isCancelled else { return }
     positionsInput = input
+  }
+
+  /// Computes the account-level `AccountPerformance` that feeds the Chart
+  /// pane's tiles. Gated so fiat-only accounts skip it (→ `nil` → the pane
+  /// falls back to the plain `PositionsHeader`) and never pay for the flow
+  /// conversions. Returns `nil` on cancellation so a superseding valuator
+  /// pass owns the write. Reuses
+  /// `AccountPerformanceCalculator.computeMultiInstrument` — no
+  /// Modified-Dietz reimplementation here.
+  private func computePerformance(
+    accountIds: Set<UUID>,
+    transactions: [Transaction],
+    rows: [ValuedPosition],
+    conversionService: any InstrumentConversionService
+  ) async -> AccountPerformance? {
+    guard
+      AccountDetailLayout.showsPerformanceTiles(
+        valuedRows: rows, hostCurrency: hostCurrency)
+    else { return nil }
+    do {
+      return try await AccountPerformanceCalculator.computeMultiInstrument(
+        accountIds: accountIds,
+        transactions: transactions,
+        valuedPositions: rows,
+        profileCurrency: hostCurrency,
+        conversionService: conversionService)
+    } catch {
+      // `computeMultiInstrument` throws only `CancellationError`: a
+      // superseding pass owns the write now, so drop this one.
+      return nil
+    }
   }
 }
 

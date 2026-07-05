@@ -32,6 +32,24 @@ enum AccountDetailLayout {
   /// carrying just the toggle.
   static func macShowsPinnedPositions(hasPositions: Bool) -> Bool { hasPositions }
 
+  /// Whether the Chart pane shows the `AccountPerformanceTiles` strip
+  /// (value / P&L / return) rather than the plain total-only
+  /// `PositionsHeader`. `true` iff the account holds at least one non-zero
+  /// position in an instrument other than the host currency — i.e. it has
+  /// real invested / P&L data (crypto, exchange, mixed group). Fiat-only
+  /// accounts fall back to the header.
+  ///
+  /// Reads the *valued* rows (post-valuation), so `.knownZero` / `.spam`
+  /// crypto the valuator already dropped can't keep the tiles alive — this
+  /// keeps the strip's presence aligned with the assembled input's
+  /// `shouldHide`, hence with the pinned Positions pane: tiles and pane
+  /// appear together.
+  static func showsPerformanceTiles(
+    valuedRows: [ValuedPosition], hostCurrency: Instrument
+  ) -> Bool {
+    valuedRows.contains { $0.quantity != 0 && $0.instrument != hostCurrency }
+  }
+
   /// Whether the account has holdings worth surfacing in a positions
   /// table — at least one non-zero position in an instrument other than
   /// the host currency. Drives Positions-tab / pinned-pane presence only;
