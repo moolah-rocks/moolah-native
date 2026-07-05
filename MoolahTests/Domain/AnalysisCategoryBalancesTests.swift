@@ -5,7 +5,9 @@ import Testing
 
 /// Contract tests for `AnalysisRepository.fetchCategoryBalances` — grouping,
 /// scheduled-transaction exclusion, transaction-type filtering, date-range
-/// filtering, additional filters, and category-required behaviour.
+/// filtering, and additional filters. The `CategoryBalances.uncategorised`
+/// contract (routing, `nil`-when-absent, byCategory independence) is a
+/// separate suite: `CategoryBalancesUncategorisedTests`.
 @Suite("AnalysisRepository Contract Tests — Category Balances")
 struct AnalysisCategoryBalancesTests {
 
@@ -28,7 +30,7 @@ struct AnalysisCategoryBalancesTests {
     try await seedFlatMappingTransactions(
       backend: backend, account: account, cat1: cat1, cat2: cat2, date: today)
 
-    let balances = try await backend.analysis.fetchCategoryBalances(
+    let result = try await backend.analysis.fetchCategoryBalances(
       dateRange: dateRange,
       transactionType: .expense,
       filters: nil,
@@ -36,9 +38,14 @@ struct AnalysisCategoryBalancesTests {
     )
 
     #expect(
-      balances[cat1.id] == InstrumentAmount(quantity: -70, instrument: .defaultTestInstrument))
+      result.byCategory[cat1.id]
+        == InstrumentAmount(quantity: -70, instrument: .defaultTestInstrument))
     #expect(
-      balances[cat2.id] == InstrumentAmount(quantity: -30, instrument: .defaultTestInstrument))
+      result.byCategory[cat2.id]
+        == InstrumentAmount(quantity: -30, instrument: .defaultTestInstrument))
+    // No uncategorised legs were seeded — `uncategorised` must be `nil`,
+    // not `.zero`.
+    #expect(result.uncategorised == nil)
   }
 
   @Test("fetchCategoryBalances excludes scheduled transactions")
@@ -78,7 +85,7 @@ struct AnalysisCategoryBalancesTests {
       transactionType: .expense,
       filters: nil,
       targetInstrument: .defaultTestInstrument
-    )
+    ).byCategory
 
     #expect(
       balances[cat.id] == InstrumentAmount(quantity: -1000, instrument: .defaultTestInstrument))
@@ -117,7 +124,8 @@ struct AnalysisCategoryBalancesTests {
 
     let incomeBalances = try await backend.analysis.fetchCategoryBalances(
       dateRange: dateRange, transactionType: .income,
-      filters: nil, targetInstrument: .defaultTestInstrument)
+      filters: nil, targetInstrument: .defaultTestInstrument
+    ).byCategory
 
     #expect(
       incomeBalances[cat.id]
@@ -125,7 +133,8 @@ struct AnalysisCategoryBalancesTests {
 
     let expenseBalances = try await backend.analysis.fetchCategoryBalances(
       dateRange: dateRange, transactionType: .expense,
-      filters: nil, targetInstrument: .defaultTestInstrument)
+      filters: nil, targetInstrument: .defaultTestInstrument
+    ).byCategory
 
     #expect(
       expenseBalances[cat.id]
@@ -166,7 +175,8 @@ struct AnalysisCategoryBalancesTests {
 
     let balances = try await backend.analysis.fetchCategoryBalances(
       dateRange: yesterday...today, transactionType: .expense,
-      filters: nil, targetInstrument: .defaultTestInstrument)
+      filters: nil, targetInstrument: .defaultTestInstrument
+    ).byCategory
 
     #expect(
       balances[cat.id]
@@ -211,49 +221,9 @@ struct AnalysisCategoryBalancesTests {
     let balances = try await backend.analysis.fetchCategoryBalances(
       dateRange: dateRange, transactionType: .expense,
       filters: TransactionFilter(accountId: account1.id),
-      targetInstrument: .defaultTestInstrument)
+      targetInstrument: .defaultTestInstrument
+    ).byCategory
 
-    #expect(
-      balances[cat.id]
-        == InstrumentAmount(quantity: -50, instrument: .defaultTestInstrument))
-  }
-
-  @Test("fetchCategoryBalances excludes transactions without category")
-  func categoryBalancesRequiresCategory() async throws {
-    let backend = try CloudKitAnalysisTestBackend()
-    let account = Account(
-      id: UUID(), name: "Test Account", type: .bank, instrument: .defaultTestInstrument)
-    _ = try await backend.accounts.create(account)
-
-    let cat = Category(id: UUID(), name: "Misc")
-    _ = try await backend.categories.create(cat)
-
-    let today = AnalysisTestHelpers.currentCalendar.startOfDay(for: Date())
-    let dateRange = today...today
-
-    _ = try await backend.transactions.create(
-      Transaction(
-        date: today, payee: "Store",
-        legs: [
-          TransactionLeg(
-            accountId: account.id, instrument: .defaultTestInstrument,
-            quantity: -50, type: .expense, categoryId: cat.id)
-        ]))
-
-    _ = try await backend.transactions.create(
-      Transaction(
-        date: today, payee: "Uncategorized",
-        legs: [
-          TransactionLeg(
-            accountId: account.id, instrument: .defaultTestInstrument,
-            quantity: -30, type: .expense)
-        ]))
-
-    let balances = try await backend.analysis.fetchCategoryBalances(
-      dateRange: dateRange, transactionType: .expense,
-      filters: nil, targetInstrument: .defaultTestInstrument)
-
-    #expect(balances.count == 1)
     #expect(
       balances[cat.id]
         == InstrumentAmount(quantity: -50, instrument: .defaultTestInstrument))
@@ -265,11 +235,12 @@ struct AnalysisCategoryBalancesTests {
     let today = AnalysisTestHelpers.currentCalendar.startOfDay(for: Date())
     let dateRange = today...today
 
-    let balances = try await backend.analysis.fetchCategoryBalances(
+    let result = try await backend.analysis.fetchCategoryBalances(
       dateRange: dateRange, transactionType: .expense,
       filters: nil, targetInstrument: .defaultTestInstrument)
 
-    #expect(balances.isEmpty)
+    #expect(result.byCategory.isEmpty)
+    #expect(result.uncategorised == nil)
   }
 
   // MARK: - Helpers

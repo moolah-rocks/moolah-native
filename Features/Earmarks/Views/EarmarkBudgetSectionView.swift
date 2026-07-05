@@ -246,12 +246,13 @@ struct EarmarkBudgetSectionView: View {
     let distantPast = Date.distantPast
     let now = Date()
     do {
-      categoryBalances = try await analysisRepository.fetchCategoryBalances(
-        dateRange: distantPast...now,
-        transactionType: .expense,
-        filters: TransactionFilter(earmarkId: earmark.id),
-        targetInstrument: earmark.instrument
-      )
+      categoryBalances =
+        try await analysisRepository.fetchCategoryBalances(
+          dateRange: distantPast...now,
+          transactionType: .expense,
+          filters: TransactionFilter(earmarkId: earmark.id),
+          targetInstrument: earmark.instrument
+        ).byCategory
     } catch {
       categoryBalances = [:]
     }

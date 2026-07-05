@@ -17,7 +17,7 @@ import Testing
 struct ProfileSchemaV20DropCryptoCompareTests {
   @Test("schema version reflects the latest migration")
   func versionIsLatest() {
-    // Bumped alongside `v21_leg_analysis_uncategorised` — see
+    // Bumped alongside `v21_leg_analysis_category_include_null` — see
     // `ProfileSchema.version`'s doc comment ("bumped each time a
     // migration is added").
     #expect(ProfileSchema.version == 21)

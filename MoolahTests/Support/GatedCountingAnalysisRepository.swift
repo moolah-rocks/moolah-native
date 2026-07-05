@@ -60,7 +60,7 @@ actor GatedCountingAnalysisRepository: AnalysisRepository {
     transactionType: TransactionType,
     filters: TransactionFilter?,
     targetInstrument: Instrument
-  ) async throws -> [UUID: InstrumentAmount] {
-    [:]
+  ) async throws -> CategoryBalances {
+    CategoryBalances(byCategory: [:], uncategorised: nil)
   }
 }

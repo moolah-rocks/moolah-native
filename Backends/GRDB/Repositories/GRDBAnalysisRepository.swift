@@ -35,16 +35,12 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
   // `+CategoryBalances.swift` — `fetchCategoryBalancesAggregation`,
   // `assembleCategoryBalances`, `CategoryBalancesRow`,
   // `CategoryBalancesAggregation`, `CategoryBalancesHandlers`,
-  // `CategoryBalancesFilterArgs`. Same shape as `+ExpenseBreakdown`.
-  //
-  // `+UncategorisedBalances.swift` — the "Uncategorised" Reports-row
-  // sibling of `+CategoryBalances.swift`:
-  // `fetchUncategorisedBalancesAggregation`,
-  // `assembleUncategorisedBalances`, `UncategorisedBalancesRow`,
-  // `UncategorisedBalancesAggregation`, `UncategorisedBalancesHandlers`,
-  // `UncategorisedBalancesFilterArgs`. Only reached from
-  // `fetchCategoryBalancesByType` below — `fetchCategoryBalances` itself
-  // is unchanged and keeps excluding uncategorised legs.
+  // `CategoryBalancesFilterArgs`. Same shape as `+ExpenseBreakdown`, but
+  // the SQL has no `category_id IS NOT NULL` filter: null-category rows
+  // are the "Uncategorised" Reports total, assembled in the same pass as
+  // the categorised `CategoryBalances.byCategory` map. There is no
+  // GRDB-specific `fetchCategoryBalancesByType` override — the protocol
+  // extension's default (two `fetchCategoryBalances` calls) is used as-is.
   //
   // `+IncomeAndExpense.swift` — types (`IncomeAndExpenseRow`,
   // `IncomeAndExpenseAggregation`, `IncomeAndExpenseHandlers`,
@@ -266,7 +262,7 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
     transactionType: TransactionType,
     filters: TransactionFilter?,
     targetInstrument: Instrument
-  ) async throws -> [UUID: InstrumentAmount] {
+  ) async throws -> CategoryBalances {
     let args = CategoryBalancesFilterArgs(
       dateRange: dateRange,
       transactionType: transactionType,
@@ -289,7 +285,7 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
         logger.error(
           """
           fetchCategoryBalances: conversion failed for day=\(context.day, privacy: .public) \
-          category=\(context.categoryId, privacy: .public) \
+          category=\(context.categoryId?.uuidString ?? "none", privacy: .public) \
           instrument=\(context.instrumentId, privacy: .public): \
           \(error.localizedDescription, privacy: .public)
           """)
@@ -299,102 +295,5 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
       targetInstrument: targetInstrument,
       conversionService: conversionService,
       handlers: handlers)
-  }
-
-  /// Concrete override of the protocol-extension default: runs the two
-  /// per-category fetches (unchanged; pinned by
-  /// `AnalysisCategoryBalancesTests.categoryBalancesRequiresCategory`,
-  /// relied on by earmark budgets) and the two uncategorised-total
-  /// fetches concurrently. `fetchUncategorisedBalances` below is
-  /// best-effort (see its doc comment) because these four races share
-  /// one `await` tuple: a throw from any one fails all of them, which
-  /// would otherwise blank the categorised totals over an
-  /// uncategorised-only error.
-  func fetchCategoryBalancesByType(
-    dateRange: ClosedRange<Date>,
-    filters: TransactionFilter?,
-    targetInstrument: Instrument
-  ) async throws -> CategoryBalancesByType {
-    async let incomeResult = fetchCategoryBalances(
-      dateRange: dateRange,
-      transactionType: .income,
-      filters: filters,
-      targetInstrument: targetInstrument)
-    async let expenseResult = fetchCategoryBalances(
-      dateRange: dateRange,
-      transactionType: .expense,
-      filters: filters,
-      targetInstrument: targetInstrument)
-    async let incomeUncategorisedResult = fetchUncategorisedBalances(
-      dateRange: dateRange,
-      transactionType: .income,
-      filters: filters,
-      targetInstrument: targetInstrument)
-    async let expenseUncategorisedResult = fetchUncategorisedBalances(
-      dateRange: dateRange,
-      transactionType: .expense,
-      filters: filters,
-      targetInstrument: targetInstrument)
-    let (income, expense, incomeUncategorised, expenseUncategorised) = try await (
-      incomeResult, expenseResult, incomeUncategorisedResult, expenseUncategorisedResult
-    )
-    return CategoryBalancesByType(
-      income: income,
-      expense: expense,
-      incomeUncategorised: incomeUncategorised,
-      expenseUncategorised: expenseUncategorised)
-  }
-
-  /// Fetches the uncategorised total for one transaction type — legs
-  /// with no `category_id`, converted to `targetInstrument` and summed.
-  /// `nil` when there are no uncategorised legs in range, **or** when
-  /// the fetch fails: a non-cancellation error is logged and folded to
-  /// `nil` rather than rethrown (see `fetchCategoryBalancesByType`'s doc
-  /// comment for why). `CancellationError` always propagates.
-  private func fetchUncategorisedBalances(
-    dateRange: ClosedRange<Date>,
-    transactionType: TransactionType,
-    filters: TransactionFilter?,
-    targetInstrument: Instrument
-  ) async throws -> InstrumentAmount? {
-    let args = UncategorisedBalancesFilterArgs(
-      dateRange: dateRange,
-      transactionType: transactionType,
-      accountId: filters?.accountId,
-      earmarkId: filters?.earmarkId,
-      payee: filters?.payee)
-    let logger = self.logger
-    do {
-      // Hoisted ahead of the snapshot — same cross-database reason as
-      // `fetchDailyBalances(after:forecastUntil:)`.
-      let instruments = try await instrumentResolver.instrumentMap()
-      let aggregation = try await Self.fetchUncategorisedBalancesAggregation(
-        database: database, instruments: instruments, args: args)
-      let handlers = UncategorisedBalancesHandlers(
-        handleUnparseableDay: { day in
-          logger.error(
-            "fetchUncategorisedBalances: skipping row with unparseable day '\(day)'")
-        },
-        handleConversionFailure: { error, context in
-          logger.error(
-            """
-            fetchUncategorisedBalances: conversion failed for day=\(context.day, privacy: .public) \
-            instrument=\(context.instrumentId, privacy: .public): \
-            \(error.localizedDescription, privacy: .public)
-            """)
-        })
-      return try await Self.assembleUncategorisedBalances(
-        aggregation: aggregation,
-        targetInstrument: targetInstrument,
-        conversionService: conversionService,
-        handlers: handlers)
-    } catch let cancellation as CancellationError {
-      throw cancellation
-    } catch {
-      logger.error(
-        "fetchUncategorisedBalances: fetch failed for type=\(transactionType.rawValue, privacy: .public): \(error.localizedDescription, privacy: .public); omitting the row"
-      )
-      return nil
-    }
   }
 }

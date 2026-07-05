@@ -161,15 +161,23 @@ struct AnalysisAggregationPlanPinningTests {
     // Mirrors the exact SQL shape used by
     // `GRDBAnalysisRepository.fetchCategoryBalances(...)` with no
     // optional filters set: GROUP BY `(DATE(t.date), category_id,
-    // instrument_id)` restricted to non-scheduled categorised legs of
-    // a given type in a date range. The aggregation does not join
-    // to `account` — investment-account legs are intentionally
-    // included alongside the rest (matches
-    // `fetchIncomeAndExpense`'s contract). Without the LEFT JOIN
-    // the plan resolves to `USING COVERING INDEX` on
-    // `leg_analysis_by_type_category` because every leg column
-    // touched (`type`, `category_id`, `instrument_id`,
-    // `transaction_id`, `quantity`) sits in the composite.
+    // instrument_id)` restricted to non-scheduled legs of a given type
+    // in a date range. There is deliberately NO `category_id IS NOT
+    // NULL` predicate — this is the combined query that buckets
+    // null-category rows into the "Uncategorised" Reports total in the
+    // same pass as the categorised totals (see
+    // `plans/2026-07-05-reports-uncategorised-row-plan.md`, "Design
+    // (revised — single combined query)"). The aggregation does not
+    // join to `account` — investment-account legs are intentionally
+    // included alongside the rest (matches `fetchIncomeAndExpense`'s
+    // contract).
+    //
+    // `leg_analysis_by_type_category` is a FULL (non-partial) index as
+    // of `v21_leg_analysis_category_include_null` — widened specifically
+    // so this null-inclusive query stays `USING COVERING INDEX`: every
+    // leg column touched (`type`, `category_id`, `instrument_id`,
+    // `transaction_id`, `quantity`) sits in the composite regardless of
+    // whether `category_id` is NULL.
     let detail = try planDetail(
       database,
       query: """
@@ -182,7 +190,6 @@ struct AnalysisAggregationPlanPinningTests {
         WHERE t.recur_period IS NULL
           AND t.date >= ? AND t.date <= ?
           AND leg.type = ?
-          AND leg.category_id IS NOT NULL
         GROUP BY DATE(t.date), leg.category_id, leg.instrument_id
         ORDER BY DATE(t.date) ASC, leg.category_id ASC
         """,
@@ -220,7 +227,6 @@ struct AnalysisAggregationPlanPinningTests {
         WHERE t.recur_period IS NULL
           AND t.date >= ? AND t.date <= ?
           AND leg.type = ?
-          AND leg.category_id IS NOT NULL
           AND leg.account_id = ?
         GROUP BY DATE(t.date), leg.category_id, leg.instrument_id
         ORDER BY DATE(t.date) ASC, leg.category_id ASC
@@ -308,7 +314,6 @@ struct AnalysisAggregationPlanPinningTests {
         WHERE t.recur_period IS NULL
           AND t.date >= ? AND t.date <= ?
           AND leg.type = ?
-          AND leg.category_id IS NOT NULL
           AND leg.earmark_id = ?
         GROUP BY DATE(t.date), leg.category_id, leg.instrument_id
         ORDER BY DATE(t.date) ASC, leg.category_id ASC

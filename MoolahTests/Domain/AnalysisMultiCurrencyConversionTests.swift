@@ -116,7 +116,8 @@ struct AnalysisMultiCurrencyConversionTests {
       dateRange: today...today,
       transactionType: .expense,
       filters: nil,
-      targetInstrument: .defaultTestInstrument)
+      targetInstrument: .defaultTestInstrument
+    ).byCategory
 
     // -40 USD * 1.5 = -60 AUD
     #expect(

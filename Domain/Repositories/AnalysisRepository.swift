@@ -42,8 +42,11 @@ protocol AnalysisRepository: Sendable {
 
   /// Fetch category balances (total amounts per category) for a date range and transaction type.
   ///
-  /// Returns a flat dictionary mapping category IDs to total monetary amounts.
-  /// The client is responsible for grouping subcategories under root categories.
+  /// A single aggregation covers both categorised and uncategorised legs: rows with a
+  /// non-null category land in `CategoryBalances.byCategory`; rows with no category land in
+  /// `CategoryBalances.uncategorised`. `byCategory` excludes uncategorised legs — that
+  /// exclusion is its contract, unchanged from before this field existed. The client is
+  /// responsible for grouping subcategories under root categories.
   ///
   /// - Parameters:
   ///   - dateRange: Date range to analyze (inclusive on both ends).
@@ -54,27 +57,29 @@ protocol AnalysisRepository: Sendable {
   ///     comparable to the earmark's budget items (see
   ///     `guides/INSTRUMENT_CONVERSION_GUIDE.md` Rule 1/2). Single-instrument backends
   ///     require this to match the profile instrument.
-  /// - Returns: Dictionary where keys are category UUIDs and values are total
-  ///   `InstrumentAmount`s in `targetInstrument`.
+  /// - Returns: `CategoryBalances` — `byCategory` maps category UUIDs to total
+  ///   `InstrumentAmount`s in `targetInstrument`; `uncategorised` is the total of legs with
+  ///   no category (`nil` when there are none).
   /// - Throws: BackendError on network/auth failure.
   func fetchCategoryBalances(
     dateRange: ClosedRange<Date>,
     transactionType: TransactionType,
     filters: TransactionFilter?,
     targetInstrument: Instrument
-  ) async throws -> [UUID: InstrumentAmount]
+  ) async throws -> CategoryBalances
 
   /// Fetch category balances for both income and expense in a single pass.
   ///
-  /// More efficient than calling `fetchCategoryBalances` twice because backends that
-  /// compute locally only need to load and filter transactions once.
+  /// The protocol-extension default below composes this from two `fetchCategoryBalances`
+  /// calls (one per `TransactionType`) — every backend gets the combined uncategorised
+  /// totals for free, with no backend-specific override needed.
   ///
   /// - Parameters:
   ///   - dateRange: Date range to analyze (inclusive on both ends).
   ///   - filters: Optional additional filters (account, earmark, payee, etc.).
   ///   - targetInstrument: Instrument the aggregated amounts are expressed in.
   /// - Returns: `CategoryBalancesByType` with per-category income/expense totals, plus
-  ///   optional uncategorised totals (backend-dependent; `nil` when not computed).
+  ///   uncategorised totals (`nil` when there are no uncategorised legs of that type).
   /// - Throws: BackendError on network/auth failure.
   func fetchCategoryBalancesByType(
     dateRange: ClosedRange<Date>,
@@ -101,12 +106,25 @@ struct AnalysisData: Sendable {
   let incomeAndExpense: [MonthlyIncomeExpense]
 }
 
-/// Result of `fetchCategoryBalancesByType`: per-category income/expense totals for the
-/// Reports screen, plus optional uncategorised totals.
+/// Result of `fetchCategoryBalances`: per-category totals for one transaction type, plus the
+/// total of legs that carry no category.
 ///
-/// `incomeUncategorised` / `expenseUncategorised` are `nil` when the backend hasn't computed
-/// uncategorised totals (the safe default) — the Reports screen omits the "Uncategorised"
-/// row in that case, rather than treating `nil` as zero.
+/// `byCategory` **excludes** uncategorised legs — that exclusion is unconditional and
+/// unaffected by whether any uncategorised legs exist in range. `uncategorised` is `nil`
+/// when there are no such legs (rather than `.zero`) so callers can distinguish "no
+/// uncategorised activity" from "an uncategorised total of zero" and omit UI for the
+/// former.
+struct CategoryBalances: Sendable {
+  let byCategory: [UUID: InstrumentAmount]
+  let uncategorised: InstrumentAmount?
+}
+
+/// Result of `fetchCategoryBalancesByType`: per-category income/expense totals for the
+/// Reports screen, plus uncategorised totals.
+///
+/// `incomeUncategorised` / `expenseUncategorised` are `nil` when there are no uncategorised
+/// legs of that type in range — the Reports screen omits the "Uncategorised" row in that
+/// case, rather than treating `nil` as zero.
 struct CategoryBalancesByType: Sendable {
   let income: [UUID: InstrumentAmount]
   let expense: [UUID: InstrumentAmount]
@@ -128,10 +146,10 @@ extension AnalysisRepository {
       targetInstrument: targetInstrument)
     let (income, expense) = try await (incomeResult, expenseResult)
     return CategoryBalancesByType(
-      income: income,
-      expense: expense,
-      incomeUncategorised: nil,
-      expenseUncategorised: nil
+      income: income.byCategory,
+      expense: expense.byCategory,
+      incomeUncategorised: income.uncategorised,
+      expenseUncategorised: expense.uncategorised
     )
   }
 

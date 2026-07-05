@@ -75,12 +75,72 @@ struct GRDBCategoryBalancesConversionTests {
       transactionType: .expense,
       filters: nil,
       targetInstrument: .defaultTestInstrument
-    )
+    ).byCategory
 
     // Each day uses its own rate: -100 * 1.5 + -100 * 2.0 = -350.
     #expect(balances.count == 1)
     #expect(
       balances[category.id]
+        == InstrumentAmount(quantity: -350, instrument: .defaultTestInstrument))
+  }
+
+  @Test("uncategorised legs convert each day's USD amount at that day's rate")
+  func uncategorisedConvertPerDayRate() async throws {
+    // Sibling of `categoryBalancesConvertPerDayRate`, but the two legs
+    // carry no `categoryId` — proving the null-category bucket shares the
+    // SAME per-day batch-conversion path as the categorised bucket (one
+    // query, one `convertResultBatch` call; see
+    // `GRDBAnalysisRepository+CategoryBalances.swift`'s
+    // `assembleCategoryBalances`).
+    let dayOne = try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 20, hour: 12)
+    let dayTwo = try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 21, hour: 12)
+    let rateOne = try AnalysisTestHelpers.decimal("1.5")
+    let rateTwo = try AnalysisTestHelpers.decimal("2.0")
+
+    let conversion = FakeConversionService.dateRates([
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 20, hour: 0): [
+        "USD": rateOne
+      ],
+      try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 21, hour: 0): [
+        "USD": rateTwo
+      ],
+    ])
+    let backend = try CloudKitAnalysisTestBackend(conversionService: conversion)
+
+    let account = Account(
+      id: UUID(), name: "USD Account", type: .bank, instrument: .defaultTestInstrument)
+    _ = try await backend.accounts.create(account)
+
+    let usd = Instrument.fiat(code: "USD")
+
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: dayOne, payee: "US Store (uncategorised)",
+        legs: [
+          TransactionLeg(
+            accountId: account.id, instrument: usd,
+            quantity: -100, type: .expense)
+        ]))
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: dayTwo, payee: "US Store (uncategorised)",
+        legs: [
+          TransactionLeg(
+            accountId: account.id, instrument: usd,
+            quantity: -100, type: .expense)
+        ]))
+
+    let result = try await backend.analysis.fetchCategoryBalances(
+      dateRange: dayOne...dayTwo,
+      transactionType: .expense,
+      filters: nil,
+      targetInstrument: .defaultTestInstrument
+    )
+
+    // Each day uses its own rate: -100 * 1.5 + -100 * 2.0 = -350.
+    #expect(result.byCategory.isEmpty)
+    #expect(
+      result.uncategorised
         == InstrumentAmount(quantity: -350, instrument: .defaultTestInstrument))
   }
 
@@ -127,7 +187,7 @@ struct GRDBCategoryBalancesConversionTests {
       transactionType: .expense,
       filters: nil,
       targetInstrument: .defaultTestInstrument
-    )
+    ).byCategory
 
     // Both legs count: -25 + -100 = -125.
     #expect(
@@ -167,7 +227,7 @@ struct GRDBCategoryBalancesConversionTests {
       transactionType: .income,
       filters: nil,
       targetInstrument: .defaultTestInstrument
-    )
+    ).byCategory
 
     #expect(
       balances[dividends.id]
@@ -178,8 +238,7 @@ struct GRDBCategoryBalancesConversionTests {
   func categoryBalancesIncludeAccountlessCategorisedLegs() async throws {
     // A categorised expense leg with `accountId == nil` is included.
     // The SQL aggregation does not join to `account`, so account-less
-    // legs naturally fall through the `leg.category_id IS NOT NULL`
-    // guard and contribute to the breakdown.
+    // legs contribute to the breakdown same as any other leg.
     let day = try AnalysisTestHelpers.utcDate(year: 2025, month: 8, day: 12, hour: 12)
     let backend = try CloudKitAnalysisTestBackend()
 
@@ -203,7 +262,7 @@ struct GRDBCategoryBalancesConversionTests {
       transactionType: .expense,
       filters: nil,
       targetInstrument: .defaultTestInstrument
-    )
+    ).byCategory
 
     #expect(
       balances[category.id]
@@ -251,7 +310,8 @@ struct GRDBCategoryBalancesConversionTests {
       dateRange: day...day,
       transactionType: .expense,
       filters: TransactionFilter(categoryIds: []),
-      targetInstrument: .defaultTestInstrument)
+      targetInstrument: .defaultTestInstrument
+    ).byCategory
     #expect(unfiltered.count == 4)
 
     // Single-id set: only that category appears.
@@ -259,7 +319,8 @@ struct GRDBCategoryBalancesConversionTests {
       dateRange: day...day,
       transactionType: .expense,
       filters: TransactionFilter(categoryIds: [cat1.id]),
-      targetInstrument: .defaultTestInstrument)
+      targetInstrument: .defaultTestInstrument
+    ).byCategory
     #expect(single.count == 1)
     #expect(
       single[cat1.id]
@@ -270,7 +331,8 @@ struct GRDBCategoryBalancesConversionTests {
       dateRange: day...day,
       transactionType: .expense,
       filters: TransactionFilter(categoryIds: [cat1.id, cat2.id, cat3.id]),
-      targetInstrument: .defaultTestInstrument)
+      targetInstrument: .defaultTestInstrument
+    ).byCategory
     #expect(triple.count == 3)
     #expect(triple[cat4.id] == nil)
   }
