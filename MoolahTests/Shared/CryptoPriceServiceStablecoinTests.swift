@@ -41,7 +41,7 @@ struct CryptoPriceServiceStablecoinTests {
     let frozen = try midnight("2024-03-01")
     let failingStub = FixedCryptoPriceClient(
       shouldFail: true, failureError: URLError(.notConnectedToInternet),
-      syncProvider: .cryptoCompare)
+      syncProvider: .coinGecko)
     let service = try makeService(
       clients: [failingStub, StablecoinPriceClient()], database: database, now: { frozen })
 
@@ -66,7 +66,7 @@ struct CryptoPriceServiceStablecoinTests {
           "2024-01-03": dec("0.88"),
         ]
       ],
-      syncProvider: .cryptoCompare)
+      syncProvider: .coinGecko)
     let service = try makeService(
       clients: [realStub, StablecoinPriceClient()], database: database, now: { frozen })
 

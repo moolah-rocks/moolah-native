@@ -13,7 +13,7 @@ enum RateLimitGateError: Error, Equatable {
 /// Per-client cooldown gate that prevents repeated requests to a remote
 /// API after it has rate-limited us.
 ///
-/// Each upstream price client (CoinGecko, CryptoCompare, Binance, Yahoo
+/// Each upstream price client (CoinGecko, Binance, Yahoo
 /// Finance, Frankfurter) owns one gate. On a `429` (or `418`, or `503`
 /// carrying a `Retry-After` header) the gate is closed until a deadline:
 /// either the value of `Retry-After` or — if absent — an exponential

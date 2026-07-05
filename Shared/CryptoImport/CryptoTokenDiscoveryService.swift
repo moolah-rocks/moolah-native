@@ -14,7 +14,7 @@ import OSLog
 ///
 /// 1. Fast path — return any existing registration from the registry.
 /// 2. Resolve provider mappings via `CryptoRegistrationResolver`
-///    (CoinGecko by contract → CryptoCompare → Binance).
+///    (CoinGecko by contract → Binance).
 /// 3. Apply the design's status precedence (issue #1102):
 ///    - `CanonicalTokenRegistry.isImpersonation` → `.spam` (a token reusing
 ///      a popular token's symbol at a non-canonical address, ahead of even a
@@ -44,7 +44,7 @@ actor CryptoTokenDiscoveryService {
 
   /// - Parameters:
   ///   - registry: Backing store for resolved registrations.
-  ///   - resolver: Provider-mapping resolver (CoinGecko → CryptoCompare → Binance).
+  ///   - resolver: Provider-mapping resolver (CoinGecko → Binance).
   ///   - canonicalResolver: Redirects L2 instruments to their canonical mainnet id
   ///     (e.g. OP native ETH → `1:native`). Defaults to a resolver with only the
   ///     static base canonicalization layer; the shared app resolver (with dynamic

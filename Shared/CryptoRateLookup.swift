@@ -6,8 +6,8 @@ import OSLog
 ///
 /// Used to price the Binance USDT/USD conversion rate through the same
 /// provider precedence the main price chain uses, ending in
-/// `StablecoinPriceClient`. That way a CryptoCompare outage falls through to
-/// CoinGecko's real USDT price before assuming parity, and the $1 last resort
+/// `StablecoinPriceClient`. That way a CoinGecko outage falls through to
+/// Binance's real USDT price before assuming parity, and the $1 last resort
 /// comes from the single canonical peg source rather than a literal at the
 /// call site. The `default` is a final safety net only — for a canonical
 /// stablecoin the peg always answers, so it is unreachable in practice; a

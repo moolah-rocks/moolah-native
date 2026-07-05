@@ -12,7 +12,6 @@ struct SyncProviderTests {
     #expect(SyncProvider.blockExplorer.rawValue == "blockExplorer")
     #expect(SyncProvider.coinstash.rawValue == "coinstash")
     #expect(SyncProvider.coinGecko.rawValue == "coinGecko")
-    #expect(SyncProvider.cryptoCompare.rawValue == "cryptoCompare")
     #expect(SyncProvider.binance.rawValue == "binance")
     #expect(SyncProvider.defiLlama.rawValue == "defiLlama")
   }
@@ -23,7 +22,6 @@ struct SyncProviderTests {
     #expect(SyncProvider.blockExplorer.displayName == "Blockscout")
     #expect(SyncProvider.coinstash.displayName == "Coinstash")
     #expect(SyncProvider.coinGecko.displayName == "CoinGecko")
-    #expect(SyncProvider.cryptoCompare.displayName == "CryptoCompare")
     #expect(SyncProvider.binance.displayName == "Binance")
     #expect(SyncProvider.defiLlama.displayName == "DefiLlama")
   }

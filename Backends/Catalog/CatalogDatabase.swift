@@ -3,7 +3,7 @@ import SQLite3
 import os
 
 /// Provider-neutral error surfaced by the catalog SQLite engine and the
-/// providers that build on it (CoinGecko, CryptoCompare, Binance). Lives at
+/// providers that build on it (CoinGecko, Binance). Lives at
 /// module scope so every provider shares one error type rather than nesting
 /// its own.
 enum CatalogError: Error, Equatable {

@@ -10,7 +10,7 @@ import Testing
 /// `prices(for:mapping:in:)`'s `fetchRange`). When *all* price clients
 /// fail, the thrown error must be a `WalletSyncError` attributed to the
 /// LAST provider attempted — production order is
-/// CoinGecko → CryptoCompare → Binance, so `.binance` is last.
+/// DefiLlama → CoinGecko → Binance → stablecoin peg, so `.binance` is last.
 @Suite("CryptoPriceService last-provider attribution")
 struct CryptoPriceServiceAttributionTests {
   private let ethInstrument = Instrument.crypto(
@@ -28,13 +28,13 @@ struct CryptoPriceServiceAttributionTests {
   }
 
   /// All clients throw; ordered so the last is `.binance`, matching the
-  /// production fallback chain (CoinGecko → CryptoCompare → Binance).
+  /// production fallback chain (DefiLlama → CoinGecko → Binance).
   private func makeFailingService(now: @Sendable @escaping () -> Date) throws -> CryptoPriceService
   {
     let database = try ProfileIndexDatabase.openInMemory()
     let clients: [CryptoPriceClient] = [
       FixedCryptoPriceClient(shouldFail: true, syncProvider: .coinGecko),
-      FixedCryptoPriceClient(shouldFail: true, syncProvider: .cryptoCompare),
+      FixedCryptoPriceClient(shouldFail: true, syncProvider: .coinGecko),
       FixedCryptoPriceClient(shouldFail: true, syncProvider: .binance),
     ]
     return CryptoPriceService(
@@ -87,7 +87,7 @@ struct CryptoPriceServiceAttributionTests {
     let clients: [CryptoPriceClient] = [
       FixedCryptoPriceClient(shouldFail: true, syncProvider: .coinGecko),
       FixedCryptoPriceClient(
-        shouldFail: true, failureError: noMapping, syncProvider: .cryptoCompare),
+        shouldFail: true, failureError: noMapping, syncProvider: .coinGecko),
       FixedCryptoPriceClient(
         shouldFail: true, failureError: noMapping, syncProvider: .binance),
     ]
@@ -116,7 +116,7 @@ struct CryptoPriceServiceAttributionTests {
     let clients: [CryptoPriceClient] = [
       FixedCryptoPriceClient(shouldFail: true, syncProvider: .coinGecko),
       FixedCryptoPriceClient(
-        shouldFail: true, failureError: noMapping, syncProvider: .cryptoCompare),
+        shouldFail: true, failureError: noMapping, syncProvider: .coinGecko),
       FixedCryptoPriceClient(
         shouldFail: true, failureError: noMapping, syncProvider: .binance),
     ]

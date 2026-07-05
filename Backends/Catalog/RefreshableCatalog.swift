@@ -1,7 +1,7 @@
 import Foundation
 
 /// A provider catalog whose contents can be refreshed from the network on a
-/// staleness schedule. Conformers (CoinGecko, CryptoCompare, Binance) own a
+/// staleness schedule. Conformers (CoinGecko, Binance) own a
 /// `CatalogDatabase` and delegate the conditional-GET / ETag / `last_fetched`
 /// loop to `CatalogRefresh`.
 ///

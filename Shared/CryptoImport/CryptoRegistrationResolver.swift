@@ -8,8 +8,8 @@ import Foundation
 /// inject a counting / throwing stub.
 protocol CryptoRegistrationResolver: Sendable {
   /// Resolves a token to a `CryptoRegistration` via the configured provider
-  /// pipeline (CoinGecko by contract → CryptoCompare coin list → Binance
-  /// pair). Throws when no provider can identify the token; the discovery
+  /// pipeline (CoinGecko by contract → Binance pair). Throws when no provider
+  /// can identify the token; the discovery
   /// service treats a thrown error here as "no mapping" and proceeds to
   /// the spam / unpriced classification branches.
   func resolveRegistration(
