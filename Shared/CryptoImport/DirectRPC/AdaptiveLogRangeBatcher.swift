@@ -81,7 +81,9 @@ struct AdaptiveLogRangeBatcher: Sendable {
     }
     return results
   }
+}
 
+extension AdaptiveLogRangeBatcher {
   /// The inclusive end of a chunk starting at `from` with width `span`,
   /// clamped to `upperBound` and guarded against overflow when `from` is
   /// already close to `UInt64.max`.

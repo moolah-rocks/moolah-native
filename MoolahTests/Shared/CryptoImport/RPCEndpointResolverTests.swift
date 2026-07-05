@@ -203,6 +203,63 @@ struct RPCEndpointResolverTests {
 
     #expect(recorder.count(for: Self.customEndpoint) == 1)
   }
+
+  @Test
+  func multipleMatchingCustomEndpointsPreferFirstInUserOrder() async throws {
+    let second = "https://second.custom.test"
+    let (resolver, recorder) = makeResolver(
+      customEndpoints: [Self.customEndpoint, second]
+    ) { request in
+      switch request.url?.absoluteString {
+      case Self.customEndpoint, second:
+        return (
+          AlchemyTestSupport.okResponse(for: request),
+          Data(#"{"jsonrpc":"2.0","id":1,"result":"0xa"}"#.utf8)
+        )
+      default:
+        return (AlchemyTestSupport.response(for: request, statusCode: 404), Data())
+      }
+    }
+    let resolved = await resolver.client(for: .optimism)
+    guard case .direct(let client) = resolved else {
+      Issue.record("Expected .direct, got \(resolved)")
+      return
+    }
+    // Resolution stops at the first matching endpoint without even
+    // probing the second.
+    #expect(recorder.count(for: Self.customEndpoint) == 1)
+    #expect(recorder.count(for: second) == 0)
+    // Confirm the returned client actually targets the first endpoint (not
+    // merely that resolution stopped there) by issuing a request through
+    // it and checking which endpoint received it.
+    _ = try await client.chainId()
+    #expect(recorder.count(for: Self.customEndpoint) == 2)
+    #expect(recorder.count(for: second) == 0)
+  }
+
+  @Test
+  func alchemyKeyPresenceIsEvaluatedAtResolutionTimeNotConstructionTime() async throws {
+    let keyPresent = MutableFlag(true)
+    let (resolver, _) = makeResolver(
+      customEndpoints: [],
+      alchemyKeyPresent: { keyPresent.value },
+      handler: { request in
+        (AlchemyTestSupport.response(for: request, statusCode: 404), Data())
+      })
+
+    let firstResolved = await resolver.client(for: .ethereum)
+    guard case .alchemy = firstResolved else {
+      Issue.record("Expected .alchemy, got \(firstResolved)")
+      return
+    }
+
+    keyPresent.value = false
+    let secondResolved = await resolver.client(for: .ethereum)
+    guard case .direct = secondResolved else {
+      Issue.record("Expected .direct (default publicnode), got \(secondResolved)")
+      return
+    }
+  }
 }
 
 private typealias Probe = RPCEndpointResolver.Probe
@@ -231,6 +288,31 @@ private final class RequestRecorder: @unchecked Sendable {
     lock.lock()
     defer { lock.unlock() }
     return urls.count
+  }
+}
+
+/// Thread-safe mutable flag for scripting `alchemyKeyPresent` differently
+/// across two `client(for:)` calls in the same test — proves the closure is
+/// invoked at resolution time rather than captured once at construction.
+private final class MutableFlag: @unchecked Sendable {
+  private let lock = NSLock()
+  private var storedValue: Bool
+
+  init(_ value: Bool) {
+    self.storedValue = value
+  }
+
+  var value: Bool {
+    get {
+      lock.lock()
+      defer { lock.unlock() }
+      return storedValue
+    }
+    set {
+      lock.lock()
+      defer { lock.unlock() }
+      storedValue = newValue
+    }
   }
 }
 

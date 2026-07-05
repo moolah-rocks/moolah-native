@@ -4,7 +4,7 @@ import Testing
 
 @testable import Moolah
 
-@Suite("LiveBlockscoutClient")
+@Suite("LiveBlockscoutClient", .serialized)
 struct LiveBlockscoutClientTests {
   private func makeClient(
     handler: @escaping @Sendable (URLRequest) throws -> (HTTPURLResponse, Data)
@@ -116,9 +116,10 @@ struct LiveBlockscoutClientTests {
 /// Dedicated URLProtocol stub for the Blockscout live-client tests, with its
 /// own static handler state so it cannot race `AlchemyURLProtocolStub` when
 /// Swift Testing runs suites in parallel. `nonisolated(unsafe)` on the statics
-/// is safe because all tests within a @Suite run sequentially: the handler is
-/// assigned in `makeClient` before any stub invocation, and no two tests in
-/// this suite touch the statics concurrently.
+/// is safe because the enclosing `@Suite` is marked `.serialized` — Swift
+/// Testing runs tests within a suite concurrently by default, but here the
+/// handler is assigned in `makeClient` before any stub invocation, and no two
+/// tests in this suite touch the statics concurrently.
 class BlockscoutURLProtocolStub: URLProtocol {
   nonisolated(unsafe) static var requestHandler:
     (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?
