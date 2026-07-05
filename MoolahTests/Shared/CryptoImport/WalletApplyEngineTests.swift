@@ -195,6 +195,71 @@ struct WalletApplyEngineTests {
     #expect(calls[0].count == 1)
   }
 
+  // MARK: - Sync-state writes are best-effort
+
+  @Test(
+    "A throwing WalletSyncState write for one account does not stop apply() from returning persisted transactions"
+  )
+  func syncStateWriteFailureDoesNotThrowOrDropPersistedTransactions() async throws {
+    let setup = try makeSetup(walletSyncState: ThrowingWalletSyncStateRepository())
+    let account = try setup.seedCryptoAccount()
+    let candidate = makeBuilt(accountId: account.id, hash: "0xbest-effort", quantity: 1)
+
+    // `apply` must not throw even though the sync-state write for `account`
+    // always fails — the transactions it already persisted must still come
+    // back so `SyncedAccountStore.runApplyPass` doesn't discard them from
+    // transfer detection.
+    let persisted = try await setup.engine.apply(perAccount: [
+      .init(account: account, headBlockNumber: 42, candidates: [candidate])
+    ])
+
+    #expect(persisted.count == 1)
+    let stored = try await setup.backend.transactions.fetchAll(filter: .init())
+    #expect(stored.count == 1)
+  }
+
+  @Test(
+    "A throwing checkpoint raiseToMax for one account does not stop apply() from returning persisted transactions"
+  )
+  func checkpointRaiseToMaxFailureDoesNotThrowOrDropPersistedTransactions() async throws {
+    let setup = try makeSetup(checkpoints: ThrowingWalletSyncCheckpointRepository())
+    let account = try setup.seedCryptoAccount()
+    let candidate = makeBuilt(accountId: account.id, hash: "0xbest-effort-2", quantity: 1)
+
+    let persisted = try await setup.engine.apply(perAccount: [
+      .init(account: account, headBlockNumber: 42, candidates: [candidate])
+    ])
+
+    #expect(persisted.count == 1)
+    // The local WalletSyncState write (which precedes the failing
+    // checkpoint raise in `updateSyncState`) still landed — only the
+    // synced-checkpoint side failed.
+    let state = try #require(
+      try await setup.backend.walletSyncState.load(accountId: account.id))
+    #expect(state.lastSyncedBlockNumber == 42)
+  }
+
+  @Test(
+    "One account's sync-state failure doesn't stop another account's sync-state write"
+  )
+  func oneAccountFailureDoesNotBlockAnotherAccountsSyncStateWrite() async throws {
+    let throwing = SelectiveWalletSyncStateRepository()
+    let setup = try makeSetup(walletSyncState: throwing)
+    let failingAccount = try setup.seedCryptoAccount()
+    let workingAccount = try setup.seedCryptoAccount()
+    await throwing.failSaves(for: failingAccount.id)
+
+    _ = try await setup.engine.apply(perAccount: [
+      .init(account: failingAccount, headBlockNumber: 10, candidates: []),
+      .init(account: workingAccount, headBlockNumber: 20, candidates: []),
+    ])
+
+    let workingState = try #require(await throwing.savedState(for: workingAccount.id))
+    #expect(workingState.lastSyncedBlockNumber == 20)
+    let failingState = await throwing.savedState(for: failingAccount.id)
+    #expect(failingState == nil)
+  }
+
   // MARK: - Empty-candidate accounts
 
   @Test("Account with no candidates still updates WalletSyncState; other accounts persist")
@@ -243,12 +308,13 @@ struct WalletApplyEngineTests {
 
   private func makeSetup(
     importRules: any WalletImportRulesEngine = NoOpWalletImportRulesEngine(),
-    checkpoints: (any WalletSyncCheckpointRepository)? = nil
+    checkpoints: (any WalletSyncCheckpointRepository)? = nil,
+    walletSyncState: (any WalletSyncStateRepository)? = nil
   ) throws -> Setup {
     let (backend, database) = try TestBackend.create()
     let engine = WalletApplyEngine(
       transactions: backend.transactions,
-      walletSyncState: backend.walletSyncState,
+      walletSyncState: walletSyncState ?? backend.walletSyncState,
       checkpoints: checkpoints ?? backend.walletSyncCheckpoints,
       importRules: importRules,
       clock: { Self.pinnedNow })

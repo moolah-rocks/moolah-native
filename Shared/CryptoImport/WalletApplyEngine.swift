@@ -15,6 +15,8 @@ import os
 /// property is itself a `Sendable` reference.
 @MainActor
 final class WalletApplyEngine {
+  private static let logger = Logger(
+    subsystem: "com.moolah.app", category: "WalletApplyEngine")
 
   /// Per-account input to the apply pass. `SyncedAccountStore`
   /// builds one entry per account that completed its build pass
@@ -65,9 +67,13 @@ final class WalletApplyEngine {
   /// still get their `WalletSyncState` updated so the next cycle's
   /// `fromBlock` advances.
   ///
-  /// Throws on repository failure during merge / dedup / persist /
-  /// sync-state. Stage 9's orchestrator owns per-account error
-  /// containment; this method either succeeds or throws as a unit.
+  /// Throws on repository failure during merge / dedup / persist — those
+  /// steps happen before anything is durably saved, so failing the whole
+  /// cycle is correct. The trailing sync-state update is best-effort per
+  /// account instead (see `updateSyncState`'s doc comment): by the time it
+  /// runs, `persist(_:)` has already committed this cycle's transactions,
+  /// so a watermark-write failure must not make `apply()` throw and thereby
+  /// discard the already-persisted survivors it's about to return.
   func apply(perAccount: [AccountInput]) async throws -> [Transaction] {
     let signpostID = OSSignpostID(log: Signposts.cryptoSync)
     os_signpost(
@@ -91,7 +97,7 @@ final class WalletApplyEngine {
     let deduped = try await runDedupSignposted(merged, signpostID: signpostID)
     let persisted = try await runPersistSignposted(deduped, signpostID: signpostID)
     let ruled = try await runRulesSignposted(persisted, signpostID: signpostID)
-    try await updateSyncState(for: perAccount)
+    await updateSyncState(for: perAccount)
     return ruled
   }
 
@@ -263,18 +269,36 @@ final class WalletApplyEngine {
   /// arrive via CloudKit sync of the `TransactionRecord`s, and any re-fetch
   /// dedups against the persisted legs by `externalId`, so no duplicate and
   /// no permanent gap results.
-  private func updateSyncState(for perAccount: [AccountInput]) async throws {
+  ///
+  /// Best-effort per account, not per-cycle: `persist(_:)` has already
+  /// committed this cycle's transactions by the time this runs, so a
+  /// watermark-write failure for one account (GRDB error, CloudKit hook
+  /// throwing, …) is logged and the loop moves on to the next account
+  /// rather than rethrowing. A rethrow here would make `apply()` throw, and
+  /// `SyncedAccountStore.runApplyPass` treats a throwing apply pass as
+  /// "nothing persisted" and returns `[]` — silently dropping this cycle's
+  /// `genuinelyNew` transactions from transfer detection even though
+  /// they're already durably saved. A failed account simply retries its
+  /// watermark write next cycle (from whatever the last successfully-saved
+  /// value was); every other account's write still lands.
+  private func updateSyncState(for perAccount: [AccountInput]) async {
     let now = clock()
     for input in perAccount {
-      let state = WalletSyncState(
-        id: input.account.id,
-        lastSyncedBlockNumber: input.headBlockNumber,
-        lastSyncedAt: now,
-        lastError: nil)
-      try await walletSyncState.save(state)
+      do {
+        let state = WalletSyncState(
+          id: input.account.id,
+          lastSyncedBlockNumber: input.headBlockNumber,
+          lastSyncedAt: now,
+          lastError: nil)
+        try await walletSyncState.save(state)
 
-      try await checkpoints.raiseToMax(
-        accountId: input.account.id, blockNumber: input.headBlockNumber)
+        try await checkpoints.raiseToMax(
+          accountId: input.account.id, blockNumber: input.headBlockNumber)
+      } catch {
+        Self.logger.error(
+          "updateSyncState failed for account \(input.account.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
+        )
+      }
     }
   }
 }
