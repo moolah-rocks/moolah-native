@@ -104,7 +104,13 @@ struct LiveJSONRPCClient: Sendable {
     }
     let responses: [JSONRPCResponse<BlockTimestampResult>] = try await callBatch(
       requests: requests, stage: "blockTimestamps")
-    let correlated = try JSONRPCEnvelope.correlate(requests: requests, responses: responses)
+    let correlated: [JSONRPCResponse<BlockTimestampResult>]
+    do {
+      correlated = try JSONRPCEnvelope.correlate(requests: requests, responses: responses)
+    } catch {
+      logger.error("JSON-RPC blockTimestamps: batch/request id mismatch")
+      throw WalletSyncError.providerMalformedResponse(stage: "blockTimestamps")
+    }
     var timestampsByBlock: [UInt64: Date] = [:]
     timestampsByBlock.reserveCapacity(blocks.count)
     for (block, response) in zip(blocks, correlated) {
