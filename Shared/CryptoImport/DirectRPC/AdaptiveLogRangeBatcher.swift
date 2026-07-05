@@ -61,6 +61,10 @@ struct AdaptiveLogRangeBatcher: Sendable {
     var currentSpan = maxRange
 
     while true {
+      // Explicit per-iteration cancellation check — a URLSession fetch
+      // cancels as URLError(.cancelled), not CancellationError, so don't
+      // rely on the catch arm.
+      try Task.checkCancellation()
       let chunkTo = chunkEnd(from: position, span: currentSpan, upperBound: to)
       do {
         let chunkResults = try await fetch(position, chunkTo)
