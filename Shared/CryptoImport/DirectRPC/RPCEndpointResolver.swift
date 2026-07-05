@@ -59,6 +59,15 @@ actor RPCEndpointResolver {
   /// `await`, so a second caller arriving while the first is still running
   /// sees the in-flight task rather than racing past it.
   private var inFlight: [String: Task<Probe, Never>] = [:]
+  /// Bumped on every `reset(customEndpoints:)`. `probe(_:)` captures this
+  /// before awaiting its `eth_chainId` round trip and compares it after; a
+  /// mismatch means a `reset` ran while the probe was in flight, so its
+  /// `cache`/`parsedURLs` writes are skipped — otherwise a probe that
+  /// started before the reset would resume afterward and repopulate `cache`
+  /// without repopulating `parsedURLs` (which the reset cleared), leaving
+  /// `client(for:)` unable to match the entry back to a `URL` and silently
+  /// falling through to Alchemy/default for a still-valid custom endpoint.
+  private var resetGeneration: UInt64 = 0
 
   /// - Parameters:
   ///   - customEndpoints: User-configured JSON-RPC endpoint strings, in
@@ -88,6 +97,7 @@ actor RPCEndpointResolver {
     cache.removeAll()
     parsedURLs.removeAll()
     inFlight.removeAll()
+    resetGeneration &+= 1
   }
 
   /// Probes every custom endpoint's `eth_chainId`, in `customEndpoints`
@@ -149,7 +159,16 @@ actor RPCEndpointResolver {
       }
     }
     inFlight[endpoint] = task
+    let generation = resetGeneration
     let probe = await task.value
+    guard generation == resetGeneration else {
+      // A `reset(customEndpoints:)` ran while this probe was in flight and
+      // already cleared `cache`/`parsedURLs`/`inFlight`. Don't repopulate
+      // them from this now-superseded result — the next `probe(_:)` call
+      // for this endpoint starts a fresh round trip against the current
+      // generation instead.
+      return probe
+    }
     inFlight[endpoint] = nil
     cache[endpoint] = probe
     return probe
