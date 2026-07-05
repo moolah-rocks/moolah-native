@@ -22,6 +22,7 @@ struct WalletSyncEngineBlockscoutTests {
       blockExplorer: blockExplorer,
       discovery: subject.service,
       walletSyncState: syncState,
+      checkpoints: InMemoryWalletSyncCheckpointRepository(),
       importOriginFactory: { accountId in makeWalletImportOrigin(for: accountId) })
   }
 

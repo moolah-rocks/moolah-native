@@ -69,6 +69,10 @@ extension ProfileDataSyncHandler {
       return { handler in
         handler.applyBatchSaveInsightDismissal(ckRecords:systemFields:in:)
       }
+    case WalletSyncCheckpointRow.recordType:
+      return { handler in
+        handler.applyBatchSaveWalletSyncCheckpoint(ckRecords:systemFields:in:)
+      }
     default:
       return nil
     }
@@ -120,7 +124,9 @@ extension ProfileDataSyncHandler {
   nonisolated private func uuidDeleter(
     for recordType: String
   ) -> ((ProfileDataSyncHandler, [UUID], Database) throws -> Void)? {
-    referenceDeleter(for: recordType) ?? domainDeleter(for: recordType)
+    referenceDeleter(for: recordType)
+      ?? domainDeleter(for: recordType)
+      ?? syncMetadataDeleter(for: recordType)
   }
 
   /// Reference-data side of the `uuidDeleter` lookup.
@@ -167,6 +173,26 @@ extension ProfileDataSyncHandler {
       return { handler, ids, database in
         try handler.writeRemote(site: "applyGRDBBatchDeletion[InsightDismissal]") {
           try handler.grdbRepositories.insightDismissals.applyRemoteChangesSync(
+            saved: [], deleted: ids, in: database)
+        }
+      }
+    default:
+      return nil
+    }
+  }
+
+  /// Sync-metadata side of the `uuidDeleter` lookup. Split out of
+  /// `referenceDeleter` so that switch stays under the function-body-length
+  /// ceiling — `WalletSyncCheckpointRecord` is neither user reference data
+  /// nor a financial-graph row but synced sync-bookkeeping.
+  nonisolated private func syncMetadataDeleter(
+    for recordType: String
+  ) -> ((ProfileDataSyncHandler, [UUID], Database) throws -> Void)? {
+    switch recordType {
+    case WalletSyncCheckpointRow.recordType:
+      return { handler, ids, database in
+        try handler.writeRemote(site: "applyGRDBBatchDeletion[WalletSyncCheckpoint]") {
+          try handler.grdbRepositories.walletSyncCheckpoints.applyRemoteChangesSync(
             saved: [], deleted: ids, in: database)
         }
       }

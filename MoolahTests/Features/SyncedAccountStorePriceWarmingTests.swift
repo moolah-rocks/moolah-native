@@ -36,6 +36,7 @@ struct SyncedAccountStorePriceWarmingTests {
     let walletApplyEngine = WalletApplyEngine(
       transactions: backend.transactions,
       walletSyncState: backend.walletSyncState,
+      checkpoints: InMemoryWalletSyncCheckpointRepository(),
       importRules: NoOpWalletImportRulesEngine(),
       clock: { Self.pinnedNow })
     return SyncedAccountStore(

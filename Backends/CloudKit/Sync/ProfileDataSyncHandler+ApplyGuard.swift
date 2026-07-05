@@ -44,6 +44,8 @@ extension ProfileDataSyncHandler {
       return { try repos.accountGroups.dirtyIdsSync(from: $0, in: $1) }
     case InsightDismissalRow.recordType:
       return { try repos.insightDismissals.dirtyIdsSync(from: $0, in: $1) }
+    case WalletSyncCheckpointRow.recordType:
+      return { try repos.walletSyncCheckpoints.dirtyIdsSync(from: $0, in: $1) }
     default:
       return nil
     }
@@ -161,6 +163,8 @@ extension ProfileDataSyncHandler {
       return { try repos.accountGroups.clearNeedsPushBatchSync($0, in: database) }
     case InsightDismissalRow.recordType:
       return { try repos.insightDismissals.clearNeedsPushBatchSync($0, in: database) }
+    case WalletSyncCheckpointRow.recordType:
+      return { try repos.walletSyncCheckpoints.clearNeedsPushBatchSync($0, in: database) }
     default:
       return nil
     }
@@ -207,6 +211,8 @@ extension ProfileDataSyncHandler {
       return { try repos.accountGroups.clearNeedsPushBatchSync($0) }
     case InsightDismissalRow.recordType:
       return { try repos.insightDismissals.clearNeedsPushBatchSync($0) }
+    case WalletSyncCheckpointRow.recordType:
+      return { try repos.walletSyncCheckpoints.clearNeedsPushBatchSync($0) }
     default:
       return nil
     }
@@ -278,6 +284,8 @@ extension ProfileDataSyncHandler {
       return { try repos.accountGroups.setEncodedSystemFieldsBatchSync($0, in: $1) }
     case InsightDismissalRow.recordType:
       return { try repos.insightDismissals.setEncodedSystemFieldsBatchSync($0, in: $1) }
+    case WalletSyncCheckpointRow.recordType:
+      return { try repos.walletSyncCheckpoints.setEncodedSystemFieldsBatchSync($0, in: $1) }
     default:
       return nil
     }

@@ -73,6 +73,7 @@ extension ProfileDataSyncHandler {
     collectCategoryIds(source: source, into: &recordIDs)
     collectAccountGroupIds(source: source, into: &recordIDs)
     collectInsightDismissalIds(source: source, into: &recordIDs)
+    collectWalletSyncCheckpointIds(source: source, into: &recordIDs)
     collectAccountIds(source: source, into: &recordIDs)
     collectEarmarkIds(source: source, into: &recordIDs)
     collectEarmarkBudgetItemIds(source: source, into: &recordIDs)
@@ -136,6 +137,20 @@ extension ProfileDataSyncHandler {
     }
     collectAllGRDBUUIDs(
       ids: ids, recordType: InsightDismissalRow.recordType, into: &recordIDs)
+  }
+
+  private func collectWalletSyncCheckpointIds(
+    source: GRDBIdSource, into recordIDs: inout [CKRecord.ID]
+  ) {
+    let repo = grdbRepositories.walletSyncCheckpoints
+    let ids: () throws -> [UUID] = {
+      switch source {
+      case .all: return try repo.allRowIdsSync()
+      case .unsynced: return try repo.unsyncedRowIdsSync()
+      }
+    }
+    collectAllGRDBUUIDs(
+      ids: ids, recordType: WalletSyncCheckpointRow.recordType, into: &recordIDs)
   }
 
   private func collectEarmarkIds(
@@ -291,6 +306,10 @@ extension ProfileDataSyncHandler {
       (
         InsightDismissalRow.recordType,
         { try self.grdbRepositories.insightDismissals.deleteAllSync() }
+      ),
+      (
+        WalletSyncCheckpointRow.recordType,
+        { try self.grdbRepositories.walletSyncCheckpoints.deleteAllSync() }
       ),
       (AccountRow.recordType, { try self.grdbRepositories.accounts.deleteAllSync() }),
       (EarmarkRow.recordType, { try self.grdbRepositories.earmarks.deleteAllSync() }),

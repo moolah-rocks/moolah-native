@@ -38,6 +38,7 @@ final class SyncDownloadBenchmarks: XCTestCase {
       accounts: result.backend.grdbAccounts,
       accountGroups: result.backend.grdbAccountGroups,
       insightDismissals: result.backend.grdbInsightDismissals,
+      walletSyncCheckpoints: result.backend.grdbWalletSyncCheckpoints,
       earmarks: result.backend.grdbEarmarks,
       earmarkBudgetItems: result.backend.grdbEarmarkBudgetItems,
       investmentValues: result.backend.grdbInvestments,

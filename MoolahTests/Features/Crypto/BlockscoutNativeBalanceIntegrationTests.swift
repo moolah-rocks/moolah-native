@@ -176,6 +176,7 @@ struct BlockscoutNativeBalanceIntegrationTests {
       blockExplorer: blockscout,
       discovery: subject.service,
       walletSyncState: RecordingWalletSyncStateRepository(),
+      checkpoints: InMemoryWalletSyncCheckpointRepository(),
       importOriginFactory: { accountId in makeWalletImportOrigin(for: accountId) })
     return try await engine.build(account: account, chain: .ethereum)
   }
@@ -189,6 +190,7 @@ struct BlockscoutNativeBalanceIntegrationTests {
     let engine = WalletApplyEngine(
       transactions: backend.transactions,
       walletSyncState: backend.walletSyncState,
+      checkpoints: InMemoryWalletSyncCheckpointRepository(),
       importRules: NoOpWalletImportRulesEngine(),
       clock: { Self.pinnedNow })
     return try await engine.apply(perAccount: [

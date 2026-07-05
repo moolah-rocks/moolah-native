@@ -154,6 +154,7 @@ private struct FailingDismissalBackend: BackendProvider, @unchecked Sendable {
   var csvImportProfiles: any CSVImportProfileRepository { inner.csvImportProfiles }
   var importRules: any ImportRuleRepository { inner.importRules }
   var walletSyncState: any WalletSyncStateRepository { inner.walletSyncState }
+  var walletSyncCheckpoints: any WalletSyncCheckpointRepository { inner.walletSyncCheckpoints }
   var groupUIState: any GroupUIStateRepository { inner.groupUIState }
 }
 

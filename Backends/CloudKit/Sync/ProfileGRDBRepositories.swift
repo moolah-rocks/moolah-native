@@ -26,6 +26,7 @@ struct ProfileGRDBRepositories: Sendable {
   let accounts: GRDBAccountRepository
   let accountGroups: GRDBAccountGroupRepository
   let insightDismissals: GRDBInsightDismissalRepository
+  let walletSyncCheckpoints: GRDBWalletSyncCheckpointRepository
   let earmarks: GRDBEarmarkRepository
   let earmarkBudgetItems: GRDBEarmarkBudgetItemRepository
   let investmentValues: GRDBInvestmentRepository
@@ -92,6 +93,7 @@ extension ProfileGRDBRepositories {
         instrumentRegistrar: registrar),
       accountGroups: GRDBAccountGroupRepository(database: database),
       insightDismissals: GRDBInsightDismissalRepository(database: database),
+      walletSyncCheckpoints: GRDBWalletSyncCheckpointRepository(database: database),
       earmarks: GRDBEarmarkRepository(
         database: database,
         defaultInstrument: placeholderInstrument,
