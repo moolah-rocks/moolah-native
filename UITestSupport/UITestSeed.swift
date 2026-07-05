@@ -210,7 +210,8 @@ extension UITestSeed {
       .welcomeMultipleCloudProfiles, .welcomeDownloading, .sidebarFooterUpToDate,
       .sidebarFooterReceiving, .sidebarFooterSending, .tradeReady, .incompatibleProfile,
       .transferDetectionBaseline, .pendingWebImportOneChaseInbox,
-      .insightsForYouBaseline, .groupFilterScope, .walletHeaderSyncError:
+      .insightsForYouBaseline, .groupFilterScope, .walletHeaderSyncError,
+      .accountDetailLayout:
       return false
     }
   }
