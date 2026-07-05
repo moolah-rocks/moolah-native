@@ -58,13 +58,14 @@ struct PositionsHistoryBuilderTests {
     // First holding is day 1 (BHP buy), so total range is days 1..5 = 5 points.
     #expect(series.totalSeries.count == 5)
 
-    // Last day = both holdings priced.
+    // Last day = both holdings priced. Cash balance = -(4_000 + 5_000) = -9_000
+    // (the buy helper spends AUD from the same account). Total-value incl. cash.
     let last = try #require(series.totalSeries.last)
-    #expect(last.value == 100 * Decimal(50) + 50 * Decimal(110))
+    #expect(last.value == 100 * Decimal(50) + 50 * Decimal(110) - 9_000)
 
-    // Day 1 (only BHP held).
+    // Day 1 (only BHP held; AUD balance = -4_000 from the buy).
     let firstAggregate = try #require(series.totalSeries.first)
-    #expect(firstAggregate.value == 100 * Decimal(50))
+    #expect(firstAggregate.value == 100 * Decimal(50) - 4_000)
   }
 
   @Test("cost-basis points appear at every event plus a closing point")
@@ -234,11 +235,13 @@ struct PositionsHistoryBuilderTests {
     #expect(bhpSeries[1].value == 100 * Decimal(60))
     #expect(bhpSeries[2].value == 100 * Decimal(70))
 
-    // Aggregate series mirrors the per-instrument series for a single
-    // non-host instrument account.
+    // Aggregate series includes the AUD cash balance (-4_000, the fiat
+    // leg of the buy). Total-value = BHP market value + AUD balance.
+    // A regression to "always use today's rate" would emit three equal
+    // totals of 100 × 70 − 4_000 = 3_000.
     #expect(series.totalSeries.count == 3)
-    #expect(series.totalSeries[0].value == 100 * Decimal(50))
-    #expect(series.totalSeries[1].value == 100 * Decimal(60))
-    #expect(series.totalSeries[2].value == 100 * Decimal(70))
+    #expect(series.totalSeries[0].value == 100 * Decimal(50) - 4_000)
+    #expect(series.totalSeries[1].value == 100 * Decimal(60) - 4_000)
+    #expect(series.totalSeries[2].value == 100 * Decimal(70) - 4_000)
   }
 }

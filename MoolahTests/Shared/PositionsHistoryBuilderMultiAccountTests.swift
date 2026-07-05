@@ -62,9 +62,11 @@ struct PositionsHistoryBuilderMultiAccountTests {
     // 3 days in range (days 1, 2, 3).
     #expect(series.totalSeries.count == 3)
 
-    // Aggregate on any day = convert(3 BTC) = 3 × 15_000 = 45_000.
+    // Aggregate on any day = 3 BTC × 15_000 + AUD cash balance.
+    // A buys 1 BTC with -10_000 AUD; B buys 2 BTC with -20_000 AUD → total AUD = -30_000.
+    // Total-value incl. cash: 3 × 15_000 − 30_000 = 15_000.
     let last = try #require(series.totalSeries.last)
-    #expect(last.value == 3 * Decimal(15_000))
+    #expect(last.value == 3 * Decimal(15_000) - 30_000)
   }
 
   /// An internal transfer of the same instrument between two members nets
@@ -99,9 +101,10 @@ struct PositionsHistoryBuilderMultiAccountTests {
       now: now
     )
 
-    // All points should show 1 BTC (the group's total is unchanged by
-    // the internal transfer).
-    let expected = 1 * Decimal(12_000)
+    // All points should show the same total value (group BTC unchanged by
+    // the internal transfer). AUD cash = -10_000 (from accountA's buy).
+    // Total-value incl. cash: 1 × 12_000 − 10_000 = 2_000.
+    let expected = 1 * Decimal(12_000) - 10_000
     #expect(series.totalSeries.count == 3)
     for point in series.totalSeries {
       #expect(point.value == expected)
@@ -156,12 +159,14 @@ struct PositionsHistoryBuilderMultiAccountTests {
     )
 
     // Three points (days 1, 2, 3). Group holds 2 BTC on each day, but
-    // the value steps up with each day's rate. A regression to "always use
-    // today's rate" would produce three identical values of 2 × 30_000 = 60_000.
+    // the value steps up with each day's rate. AUD cash balance:
+    // A buys 1 BTC with -10_000 AUD; B buys 1 BTC with -10_000 AUD → total = -20_000.
+    // Total-value incl. cash = 2 × rate − 20_000. A regression to "always use
+    // today's rate" would produce three identical totals of 2 × 30_000 − 20_000 = 40_000.
     #expect(series.totalSeries.count == 3)
-    #expect(series.totalSeries[0].value == 2 * Decimal(10_000))
-    #expect(series.totalSeries[1].value == 2 * Decimal(20_000))
-    #expect(series.totalSeries[2].value == 2 * Decimal(30_000))
+    #expect(series.totalSeries[0].value == 2 * Decimal(10_000) - 20_000)
+    #expect(series.totalSeries[1].value == 2 * Decimal(20_000) - 20_000)
+    #expect(series.totalSeries[2].value == 2 * Decimal(30_000) - 20_000)
   }
 
   /// The single-account convenience overload still produces the same series

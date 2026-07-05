@@ -90,8 +90,8 @@ struct PositionsContributionsTests {
   func contributionsOpeningBalance() async throws {
     let txns = try [
       openingBalance(in: aud, qty: 1_000, daysAfterEpoch: 0),
-      // A buy is needed for the aggregate to emit a point — opening
-      // balance alone with no holdings yields no aggregate output.
+      // The buy seeds a BHP holding so we can verify the opening-balance
+      // contribution is carried on subsequent non-cash days too.
       buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
     ]
     let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])

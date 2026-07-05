@@ -217,16 +217,17 @@ struct PositionsHistoryBuilder: Sendable {
   /// and contributions accumulator.
   ///
   /// Quantities update directly from the account's signed leg quantities
-  /// (so an ETH→BTC swap subtracts ETH and adds BTC). Cost basis updates
-  /// via the shared `TradeEventClassifier`, which handles fiat-paired
-  /// trades AND crypto-to-crypto swaps — for a swap, ETH gets a sell event
-  /// (proceeds = host-currency value of ETH on this date) and BTC gets a
-  /// buy event (cost = host-currency value of BTC on this date).
+  /// (so an ETH→BTC swap subtracts ETH and adds BTC, and a cash deposit
+  /// increments the host-currency balance). Cost basis updates via the
+  /// shared `TradeEventClassifier`, which handles fiat-paired trades AND
+  /// crypto-to-crypto swaps — for a swap, ETH gets a sell event (proceeds =
+  /// host-currency value of ETH on this date) and BTC gets a buy event (cost
+  /// = host-currency value of BTC on this date).
   ///
-  /// Host-currency legs (cash outflows / inflows) are excluded from
-  /// `quantities` because the chart tracks non-cash *position* holdings.
-  /// Their contribution is captured by the cost basis via
-  /// `TradeEventClassifier`.
+  /// Host-currency (cash) legs are included in `quantities` so the value
+  /// line reflects the true total account balance — cash holdings plus
+  /// non-cash position value. Cost basis is still derived exclusively via
+  /// `TradeEventClassifier` (unchanged).
   ///
   /// Contributions are folded via `foldContributions(transaction:accountIds:hostCurrency:state:)`.
   /// Throws `CancellationError` (and only `CancellationError`); general
@@ -240,7 +241,7 @@ struct PositionsHistoryBuilder: Sendable {
     let accountLegs = transaction.legs.filter {
       $0.accountId.map { accountIds.contains($0) } ?? false
     }
-    for leg in accountLegs where leg.instrument != hostCurrency {
+    for leg in accountLegs {
       state.quantities[leg.instrument, default: 0] += leg.quantity
     }
 

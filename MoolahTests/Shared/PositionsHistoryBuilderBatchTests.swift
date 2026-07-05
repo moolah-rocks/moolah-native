@@ -45,8 +45,9 @@ struct PositionsHistoryBuilderBatchTests {
       transactions: txns, accountId: accountId, hostCurrency: aud,
       range: .oneMonth, now: date(daysAfterEpoch: 5))
     // Exactly one flat batch, not N serial convertResult hops.
+    // Requests: BHP days 1..5 (5) + CBA days 2..5 (4) + AUD days 1..5 (5, identity) = 14.
     #expect(service.recordedBatches.count == 1)
-    #expect(service.recordedBatches.first?.count == 9)
+    #expect(service.recordedBatches.first?.count == 14)
   }
 
   @Test("knownZero instrument contributes 0 and keeps the day's aggregate")
@@ -65,8 +66,9 @@ struct PositionsHistoryBuilderBatchTests {
     // Aggregate kept on every day (unlike a .failure which would drop days ≥ 2):
     // days 1..5 all have a total point.
     #expect(series.totalSeries.count == 5)
-    // Day 5 total = BHP 100×50 + CBA 0 = 5000.
-    #expect(series.totalSeries.last?.value == 100 * Decimal(50))
+    // Day 5 total = BHP 100×50 + CBA 0 + AUD cash balance (-(4_000+5_000)=-9_000) = -4_000.
+    // Total-value now includes the AUD cash leg (identity conversion).
+    #expect(series.totalSeries.last?.value == 100 * Decimal(50) - 9_000)
     // CBA (knownZero) still gets its own per-instrument point, valued at 0.
     let cbaSeries = series.series(forInstrumentIds: [cba.id])
     #expect(!cbaSeries.isEmpty)
