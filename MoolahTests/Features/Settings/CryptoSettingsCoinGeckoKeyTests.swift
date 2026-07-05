@@ -37,20 +37,16 @@ struct CryptoSettingsCoinGeckoKeyTests {
       clients: [FixedCryptoPriceClient()], database: database)
     let alchemyService = "com.moolah.test.alchemy.\(UUID().uuidString)"
     let coingeckoService = "com.moolah.test.coingecko.\(UUID().uuidString)"
-    let cryptocompareService = "com.moolah.test.cryptocompare.\(UUID().uuidString)"
     let alchemyKeychain = KeychainStore(
       service: alchemyService, account: "alchemy", synchronizable: false)
     let coingeckoKeychain = KeychainStore(
       service: coingeckoService, account: "coingecko", synchronizable: false)
-    let cryptocompareKeychain = KeychainStore(
-      service: cryptocompareService, account: "cryptocompare", synchronizable: false)
     let store = CryptoTokenStore(
       registry: registry,
       cryptoPriceService: priceService,
       conversionService: FakeConversionService.passthrough,
       apiKeyStore: coingeckoKeychain,
-      alchemyKeyStore: alchemyKeychain,
-      cryptocompareKeyStore: cryptocompareKeychain)
+      alchemyKeyStore: alchemyKeychain)
     return Fixture(store: store, coingeckoKeychain: coingeckoKeychain)
   }
 
