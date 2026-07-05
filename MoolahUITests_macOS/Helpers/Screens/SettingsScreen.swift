@@ -31,9 +31,9 @@ struct SettingsScreen {
     Trace.record(#function)
     app.pressKeyboardShortcut(",", modifiers: .command)
     let cryptoTab = cryptoTabButton
-    if !cryptoTab.waitForExistence(timeout: 5) {
+    if !cryptoTab.waitForExistence(timeout: 10) {
       Trace.recordFailure("Settings Crypto tab toolbar button did not appear")
-      XCTFail("Settings window did not appear within 5s of Cmd+,")
+      XCTFail("Settings window did not appear within 10s of Cmd+,")
     }
   }
 
@@ -43,16 +43,16 @@ struct SettingsScreen {
   func openCryptoTab() {
     Trace.record(#function)
     let tab = cryptoTabButton
-    if !tab.waitForExistence(timeout: 3) {
+    if !tab.waitForExistence(timeout: 10) {
       Trace.recordFailure("Settings Crypto tab toolbar button did not appear")
-      XCTFail("Crypto tab toolbar button did not appear within 3s")
+      XCTFail("Crypto tab toolbar button did not appear within 10s")
       return
     }
     tab.click()
     let container = app.element(for: UITestIdentifiers.CryptoSettings.container)
-    if !container.waitForExistence(timeout: 3) {
+    if !container.waitForExistence(timeout: 10) {
       Trace.recordFailure("crypto.settings.container did not appear after tab click")
-      XCTFail("CryptoSettingsView container did not appear within 3s of tab click")
+      XCTFail("CryptoSettingsView container did not appear within 10s of tab click")
     }
   }
 

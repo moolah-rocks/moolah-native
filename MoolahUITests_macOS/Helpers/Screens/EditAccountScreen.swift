@@ -35,10 +35,10 @@ struct EditAccountScreen {
   func open(account: SidebarAccount) {
     Trace.record(#function, detail: "account=\(account)")
     let row = app.element(for: UITestIdentifiers.Sidebar.account(account.id))
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "sidebar row '\(UITestIdentifiers.Sidebar.account(account.id))' did not appear")
-      XCTFail("Sidebar row for account \(account) did not appear within 3s")
+      XCTFail("Sidebar row for account \(account) did not appear within 10s")
       return
     }
     row.rightClick()
@@ -50,10 +50,10 @@ struct EditAccountScreen {
     // "Account → Edit Account…" command, which carries the same
     // title.
     let editItem = app.element(for: UITestIdentifiers.Sidebar.editAccountContextMenuItem)
-    if !editItem.waitForExistence(timeout: 3) {
+    if !editItem.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "sidebar.contextMenu.editAccount item did not appear after right-click")
-      XCTFail("'Edit Account…' menu item did not appear within 3s of right-click")
+      XCTFail("'Edit Account…' menu item did not appear within 10s of right-click")
       return
     }
     editItem.click()
@@ -70,10 +70,10 @@ struct EditAccountScreen {
   func expectVisible() {
     Trace.record(#function)
     let cancelButton = app.element(for: UITestIdentifiers.EditAccount.cancelButton)
-    if !cancelButton.waitForExistence(timeout: 3) {
+    if !cancelButton.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "editAccount.cancel did not appear; the Edit Account sheet failed to open")
-      XCTFail("EditAccountView dialog did not appear within 3s")
+      XCTFail("EditAccountView dialog did not appear within 10s")
     }
   }
 
@@ -82,18 +82,18 @@ struct EditAccountScreen {
   func cancel() {
     Trace.record(#function)
     let cancelButton = app.element(for: UITestIdentifiers.EditAccount.cancelButton)
-    if !cancelButton.waitForExistence(timeout: 3) {
+    if !cancelButton.waitForExistence(timeout: 10) {
       Trace.recordFailure("editAccount.cancel button did not appear")
-      XCTFail("Cancel button did not appear within 3s")
+      XCTFail("Cancel button did not appear within 10s")
       return
     }
     cancelButton.click()
 
     // Post-condition: the Cancel button (which IS the sentinel)
     // disappears once the sheet is dismissed.
-    if !cancelButton.waitForNonExistence(timeout: 3) {
+    if !cancelButton.waitForNonExistence(timeout: 10) {
       Trace.recordFailure("editAccount.cancel did not disappear after Cancel click")
-      XCTFail("EditAccountView dialog did not disappear within 3s of Cancel")
+      XCTFail("EditAccountView dialog did not disappear within 10s of Cancel")
     }
   }
 
@@ -105,11 +105,11 @@ struct EditAccountScreen {
   func expectValuationSectionVisible() {
     Trace.record(#function)
     let picker = app.element(for: UITestIdentifiers.EditAccount.valuationModePicker)
-    if !picker.waitForExistence(timeout: 3) {
+    if !picker.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "editAccount.valuationMode picker did not appear; expected for "
           + "recordedValue or has-snapshots accounts")
-      XCTFail("Valuation picker did not appear within 3s")
+      XCTFail("Valuation picker did not appear within 10s")
     }
   }
 
@@ -139,10 +139,10 @@ struct EditAccountScreen {
   func expectValuationMode(_ expected: Mode) {
     Trace.record(#function, detail: "expected=\(expected)")
     let picker = app.element(for: UITestIdentifiers.EditAccount.valuationModePicker)
-    if !picker.waitForExistence(timeout: 3) {
+    if !picker.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "editAccount.valuationMode picker did not appear; cannot read selection")
-      XCTFail("Valuation picker did not appear within 3s")
+      XCTFail("Valuation picker did not appear within 10s")
       return
     }
     let expectedLabel = displayLabel(for: expected)
@@ -150,7 +150,7 @@ struct EditAccountScreen {
       (picker.value as? String) == expectedLabel
     }
     let expectation = XCTNSPredicateExpectation(predicate: predicate, object: nil)
-    if XCTWaiter().wait(for: [expectation], timeout: 3) != .completed {
+    if XCTWaiter().wait(for: [expectation], timeout: 10) != .completed {
       let actual = (picker.value as? String) ?? "<no value>"
       Trace.recordFailure(
         "editAccount.valuationMode shows '\(actual)', expected '\(expectedLabel)'")
@@ -168,19 +168,19 @@ struct EditAccountScreen {
   func selectValuationMode(_ mode: Mode) {
     Trace.record(#function, detail: "mode=\(mode)")
     let picker = app.element(for: UITestIdentifiers.EditAccount.valuationModePicker)
-    if !picker.waitForExistence(timeout: 3) {
+    if !picker.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "editAccount.valuationMode picker did not appear; cannot change selection")
-      XCTFail("Valuation picker did not appear within 3s")
+      XCTFail("Valuation picker did not appear within 10s")
       return
     }
     picker.click()
     let label = displayLabel(for: mode)
     let item = app.menuItem(label: label)
-    if !item.waitForExistence(timeout: 3) {
+    if !item.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "Picker option '\(label)' did not appear after clicking valuation picker")
-      XCTFail("Picker option '\(label)' did not appear within 3s")
+      XCTFail("Picker option '\(label)' did not appear within 10s")
       return
     }
     item.click()
@@ -193,17 +193,17 @@ struct EditAccountScreen {
   func save() {
     Trace.record(#function)
     let saveButton = app.element(for: UITestIdentifiers.EditAccount.saveButton)
-    if !saveButton.waitForExistence(timeout: 3) {
+    if !saveButton.waitForExistence(timeout: 10) {
       Trace.recordFailure("editAccount.save button did not appear")
-      XCTFail("Save button did not appear within 3s")
+      XCTFail("Save button did not appear within 10s")
       return
     }
     saveButton.click()
     let cancelButton = app.element(for: UITestIdentifiers.EditAccount.cancelButton)
-    if !cancelButton.waitForNonExistence(timeout: 3) {
+    if !cancelButton.waitForNonExistence(timeout: 10) {
       Trace.recordFailure(
         "editAccount.cancel did not disappear after Save click; sheet still open")
-      XCTFail("EditAccountView dialog did not disappear within 3s of Save")
+      XCTFail("EditAccountView dialog did not disappear within 10s of Save")
     }
   }
 

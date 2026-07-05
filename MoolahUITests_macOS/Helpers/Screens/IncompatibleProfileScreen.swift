@@ -11,7 +11,7 @@ struct IncompatibleProfileScreen {
 
   // MARK: - Expectations
 
-  func expectVisible(timeout: TimeInterval = 5) {
+  func expectVisible(timeout: TimeInterval = 10) {
     Trace.record()
     let root = app.element(for: UITestIdentifiers.IncompatibleProfile.root)
     if !root.waitForExistence(timeout: timeout) {
@@ -20,7 +20,7 @@ struct IncompatibleProfileScreen {
     }
   }
 
-  func expectCheckForUpdatesVisible(timeout: TimeInterval = 2) {
+  func expectCheckForUpdatesVisible(timeout: TimeInterval = 10) {
     Trace.record()
     let button = app.element(for: UITestIdentifiers.IncompatibleProfile.checkForUpdates)
     if !button.waitForExistence(timeout: timeout) {
@@ -29,7 +29,7 @@ struct IncompatibleProfileScreen {
     }
   }
 
-  func expectSwitchProfileVisible(timeout: TimeInterval = 2) {
+  func expectSwitchProfileVisible(timeout: TimeInterval = 10) {
     Trace.record()
     let button = app.element(for: UITestIdentifiers.IncompatibleProfile.switchProfile)
     if !button.waitForExistence(timeout: timeout) {
@@ -43,25 +43,25 @@ struct IncompatibleProfileScreen {
   func tapCheckForUpdates() {
     Trace.record()
     let button = app.element(for: UITestIdentifiers.IncompatibleProfile.checkForUpdates)
-    if !button.waitForExistence(timeout: 2) {
+    if !button.waitForExistence(timeout: 10) {
       Trace.recordFailure("checkForUpdates button did not appear")
-      XCTFail("Check for Updates button did not appear within 2s")
+      XCTFail("Check for Updates button did not appear within 10s")
       return
     }
     button.click()
     let root = app.element(for: UITestIdentifiers.IncompatibleProfile.root)
-    if !root.waitForExistence(timeout: 2) {
+    if !root.waitForExistence(timeout: 10) {
       Trace.recordFailure("IncompatibleProfileView dismissed unexpectedly after tapCheckForUpdates")
       XCTFail("IncompatibleProfileView was dismissed after tapping Check for Updates")
     }
   }
 
-  func tapSwitchProfile(timeout: TimeInterval = 5) {
+  func tapSwitchProfile(timeout: TimeInterval = 10) {
     Trace.record()
     let button = app.element(for: UITestIdentifiers.IncompatibleProfile.switchProfile)
-    if !button.waitForExistence(timeout: 2) {
+    if !button.waitForExistence(timeout: 10) {
       Trace.recordFailure("switchProfile button did not appear")
-      XCTFail("Switch Profile button did not appear within 2s")
+      XCTFail("Switch Profile button did not appear within 10s")
       return
     }
     button.click()

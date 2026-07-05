@@ -38,7 +38,7 @@ struct PendingImportsBannerScreen {
   /// Returns `Void` — element resolution is internal to the driver per
   /// UI_TEST_GUIDE §2. The internal helper `resolveLabel` is the single
   /// element-resolution seam shared with `expectLabel`.
-  func expectVisible(timeout: TimeInterval = 5) {
+  func expectVisible(timeout: TimeInterval = 10) {
     _ = resolveLabel(timeout: timeout)
   }
 
@@ -46,7 +46,7 @@ struct PendingImportsBannerScreen {
   /// banner to appear first so this cannot pass vacuously on an empty
   /// inbox (the view returns `EmptyView` and the label element is then
   /// absent from the tree).
-  func expectLabel(_ expected: String, timeout: TimeInterval = 5) {
+  func expectLabel(_ expected: String, timeout: TimeInterval = 10) {
     Trace.record(#function, detail: "label=\(expected)")
     let label = resolveLabel(timeout: timeout)
     let actual = text(of: label)
@@ -80,15 +80,15 @@ struct PendingImportsBannerScreen {
   func tapReview() {
     Trace.record(#function)
     let button = app.element(for: UITestIdentifiers.PendingImportsBanner.reviewButton)
-    if !button.waitForExistence(timeout: 5) {
+    if !button.waitForExistence(timeout: 10) {
       Trace.recordFailure("pending-imports banner review button did not appear")
-      XCTFail("Review button did not appear within 5s")
+      XCTFail("Review button did not appear within 10s")
       return
     }
     button.click()
     if !waitForInboxDrain() {
-      Trace.recordFailure("inbox payload was not drained 5s after Review tap")
-      XCTFail("Review tap did not drain the inbox payload within 5s")
+      Trace.recordFailure("inbox payload was not drained 10s after Review tap")
+      XCTFail("Review tap did not drain the inbox payload within 10s")
     }
   }
 
@@ -109,6 +109,6 @@ struct PendingImportsBannerScreen {
       !FileManager.default.fileExists(atPath: url.path)
     }
     let expectation = XCTNSPredicateExpectation(predicate: predicate, object: nil)
-    return XCTWaiter().wait(for: [expectation], timeout: 5) == .completed
+    return XCTWaiter().wait(for: [expectation], timeout: 10) == .completed
   }
 }

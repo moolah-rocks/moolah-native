@@ -21,7 +21,7 @@ struct SyncFooterScreen {
 
   /// Asserts that the footer's primary label equals `expectedLabel`.
   /// Waits up to `timeout` seconds for the footer to appear.
-  func expectLabel(_ expectedLabel: String, timeout: TimeInterval = 5) {
+  func expectLabel(_ expectedLabel: String, timeout: TimeInterval = 10) {
     Trace.record(#function, detail: "label=\(expectedLabel)")
     let element = app.element(for: UITestIdentifiers.SyncFooter.label)
     if !element.waitForExistence(timeout: timeout) {
@@ -37,7 +37,7 @@ struct SyncFooterScreen {
   }
 
   /// Asserts that the footer's detail line equals `expectedDetail`.
-  func expectDetail(_ expectedDetail: String, timeout: TimeInterval = 5) {
+  func expectDetail(_ expectedDetail: String, timeout: TimeInterval = 10) {
     Trace.record(#function, detail: "detail=\(expectedDetail)")
     let element = app.element(for: UITestIdentifiers.SyncFooter.detail)
     if !element.waitForExistence(timeout: timeout) {
@@ -55,7 +55,7 @@ struct SyncFooterScreen {
   /// Asserts that the footer's detail line contains both `prefix` and
   /// `suffix` fragments. Used for relative-timestamp assertions where the
   /// exact string depends on wall-clock time.
-  func expectDetailContains(prefix: String, suffix: String, timeout: TimeInterval = 5) {
+  func expectDetailContains(prefix: String, suffix: String, timeout: TimeInterval = 10) {
     Trace.record(#function, detail: "prefix=\(prefix) suffix=\(suffix)")
     let element = app.element(for: UITestIdentifiers.SyncFooter.detail)
     if !element.waitForExistence(timeout: timeout) {

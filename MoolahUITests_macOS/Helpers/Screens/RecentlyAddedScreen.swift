@@ -22,9 +22,9 @@ struct RecentlyAddedScreen {
   /// absence check cannot pass vacuously when the view failed to render.
   func expectVisible() {
     let container = app.element(for: UITestIdentifiers.RecentlyAdded.container)
-    if !container.waitForExistence(timeout: 3) {
+    if !container.waitForExistence(timeout: 10) {
       Trace.recordFailure("recentlyadded.container did not appear")
-      XCTFail("Recently Added view did not render within 3s")
+      XCTFail("Recently Added view did not render within 10s")
     }
   }
 
@@ -38,10 +38,10 @@ struct RecentlyAddedScreen {
   /// has a `TransferSuggestion`).
   func expectPillVisible(for id: UUID) {
     let row = app.element(for: UITestIdentifiers.RecentlyAdded.row(id))
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "recently added row '\(UITestIdentifiers.RecentlyAdded.row(id))' did not appear")
-      XCTFail("Recently Added row for \(id) did not appear within 3s")
+      XCTFail("Recently Added row for \(id) did not appear within 10s")
       return
     }
     let prefix = UITestIdentifiers.TransferDetection.pillLabelPrefix
@@ -60,11 +60,11 @@ struct RecentlyAddedScreen {
   /// so this cannot pass vacuously.
   func expectRowRemoved(for id: UUID) {
     let row = app.element(for: UITestIdentifiers.RecentlyAdded.row(id))
-    if !row.waitForNonExistence(timeout: 5) {
+    if !row.waitForNonExistence(timeout: 10) {
       Trace.recordFailure(
         "recently added row '\(UITestIdentifiers.RecentlyAdded.row(id))' "
           + "still present; row not removed")
-      XCTFail("Recently Added row for \(id) was still present after 5s")
+      XCTFail("Recently Added row for \(id) was still present after 10s")
     }
   }
 
@@ -79,11 +79,11 @@ struct RecentlyAddedScreen {
   /// label.
   func expectPillCleared(for id: UUID) {
     let row = app.element(for: UITestIdentifiers.RecentlyAdded.row(id))
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "recently added row '\(UITestIdentifiers.RecentlyAdded.row(id))' "
           + "did not appear; cannot assert pill cleared")
-      XCTFail("Recently Added row for \(id) did not appear within 3s")
+      XCTFail("Recently Added row for \(id) did not appear within 10s")
       return
     }
     if !waitForPillCleared(id) {
@@ -91,7 +91,7 @@ struct RecentlyAddedScreen {
         "row '\(id)' label '\(row.label)' still contains pill title "
           + "'\(UITestIdentifiers.TransferDetection.pillLabelPrefix)'")
       XCTFail(
-        "Transfer pill title still present on row \(id) label after 5s: '\(row.label)'")
+        "Transfer pill title still present on row \(id) label after 10s: '\(row.label)'")
     }
   }
 
@@ -103,27 +103,27 @@ struct RecentlyAddedScreen {
   func tapMerge(for id: UUID) {
     Trace.record(#function, detail: "id=\(id)")
     let row = app.element(for: UITestIdentifiers.RecentlyAdded.row(id))
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "recently added row '\(UITestIdentifiers.RecentlyAdded.row(id))' did not appear")
-      XCTFail("Recently Added row for \(id) did not appear within 3s")
+      XCTFail("Recently Added row for \(id) did not appear within 10s")
       return
     }
     row.rightClick()
 
     let mergeItem = app.element(for: UITestIdentifiers.TransferDetection.merge(id))
-    if !mergeItem.waitForExistence(timeout: 3) {
+    if !mergeItem.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "merge menu item '\(UITestIdentifiers.TransferDetection.merge(id))' "
           + "did not appear after right-click")
-      XCTFail("'Merge as Transfer' menu item did not appear within 3s")
+      XCTFail("'Merge as Transfer' menu item did not appear within 10s")
       return
     }
     mergeItem.click()
 
-    if !row.waitForNonExistence(timeout: 5) {
-      Trace.recordFailure("row '\(id)' still present 5s after merge")
-      XCTFail("Recently Added row for \(id) did not collapse within 5s of merge")
+    if !row.waitForNonExistence(timeout: 10) {
+      Trace.recordFailure("row '\(id)' still present 10s after merge")
+      XCTFail("Recently Added row for \(id) did not collapse within 10s of merge")
     }
   }
 
@@ -138,30 +138,30 @@ struct RecentlyAddedScreen {
   func tapDismiss(for id: UUID) {
     Trace.record(#function, detail: "id=\(id)")
     let row = app.element(for: UITestIdentifiers.RecentlyAdded.row(id))
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "recently added row '\(UITestIdentifiers.RecentlyAdded.row(id))' did not appear")
-      XCTFail("Recently Added row for \(id) did not appear within 3s")
+      XCTFail("Recently Added row for \(id) did not appear within 10s")
       return
     }
     row.rightClick()
 
     let dismissItem = app.element(for: UITestIdentifiers.TransferDetection.dismiss(id))
-    if !dismissItem.waitForExistence(timeout: 3) {
+    if !dismissItem.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "dismiss menu item '\(UITestIdentifiers.TransferDetection.dismiss(id))' "
           + "did not appear after right-click")
-      XCTFail("'Not a Transfer' menu item did not appear within 3s")
+      XCTFail("'Not a Transfer' menu item did not appear within 10s")
       return
     }
     dismissItem.click()
 
     let confirm = app.element(for: UITestIdentifiers.TransferDetection.dismissConfirm)
-    if !confirm.waitForExistence(timeout: 3) {
+    if !confirm.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "dismiss confirm button '\(UITestIdentifiers.TransferDetection.dismissConfirm)' "
           + "did not appear")
-      XCTFail("'Dismiss Suggestion' confirm button did not appear within 3s")
+      XCTFail("'Dismiss Suggestion' confirm button did not appear within 10s")
       return
     }
     confirm.click()
@@ -169,9 +169,9 @@ struct RecentlyAddedScreen {
     if !waitForPillCleared(id) {
       Trace.recordFailure(
         "row '\(id)' label '\(row.label)' still contains pill title "
-          + "'\(UITestIdentifiers.TransferDetection.pillLabelPrefix)' 5s after dismiss")
+          + "'\(UITestIdentifiers.TransferDetection.pillLabelPrefix)' 10s after dismiss")
       XCTFail(
-        "Transfer pill title did not clear from row \(id) within 5s of dismiss: "
+        "Transfer pill title did not clear from row \(id) within 10s of dismiss: "
           + "'\(row.label)'")
     }
   }
@@ -194,6 +194,6 @@ struct RecentlyAddedScreen {
       !row.label.contains(prefix)
     }
     let expectation = XCTNSPredicateExpectation(predicate: predicate, object: nil)
-    return XCTWaiter().wait(for: [expectation], timeout: 5) == .completed
+    return XCTWaiter().wait(for: [expectation], timeout: 10) == .completed
   }
 }

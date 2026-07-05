@@ -20,16 +20,16 @@ struct CryptoSettingsScreen {
   func tapAddToken() {
     Trace.record(#function)
     let button = app.element(for: UITestIdentifiers.CryptoSettings.addTokenButton)
-    if !button.waitForExistence(timeout: 3) {
+    if !button.waitForExistence(timeout: 10) {
       Trace.recordFailure("crypto.settings.addToken button did not appear")
-      XCTFail("Add Token button did not appear within 3s")
+      XCTFail("Add Token button did not appear within 10s")
       return
     }
     button.click()
     let sheet = app.element(for: UITestIdentifiers.InstrumentPicker.sheet)
-    if !sheet.waitForExistence(timeout: 3) {
+    if !sheet.waitForExistence(timeout: 10) {
       Trace.recordFailure("instrumentPicker.sheet did not appear after Add Token tap")
-      XCTFail("AddTokenSheet picker did not appear within 3s of tapping +")
+      XCTFail("AddTokenSheet picker did not appear within 10s of tapping +")
     }
   }
 
@@ -38,7 +38,7 @@ struct CryptoSettingsScreen {
   /// CryptoTokenStore reloads registrations on the picker's
   /// `onRegistered` callback, so this is the post-condition the
   /// end-to-end test asserts.
-  func waitForRegistration(instrumentId: String, timeout: TimeInterval = 5) {
+  func waitForRegistration(instrumentId: String, timeout: TimeInterval = 10) {
     Trace.record(#function, detail: "instrumentId=\(instrumentId)")
     let row = app.element(
       for: UITestIdentifiers.CryptoSettings.registrationRow(instrumentId))

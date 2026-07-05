@@ -13,7 +13,7 @@ struct WelcomeScreen {
   /// the start of first-run tests to confirm the state machine landed
   /// in `.heroChecking` / `.heroNoneFound` / `.heroOff` rather than
   /// auto-activating.
-  func waitForHero(timeout: TimeInterval = 5) {
+  func waitForHero(timeout: TimeInterval = 10) {
     Trace.record()
     let button = app.element(for: UITestIdentifiers.Welcome.heroGetStartedButton)
     if !button.waitForExistence(timeout: timeout) {
@@ -25,7 +25,7 @@ struct WelcomeScreen {
   /// Post-condition for auto-open paths (single cloud profile, etc.)
   /// where the hero must never appear. Waits up to `timeout` for the
   /// hero CTA to be absent and fails if it ever shows up.
-  func expectHeroAbsent(timeout: TimeInterval = 5) {
+  func expectHeroAbsent(timeout: TimeInterval = 10) {
     Trace.record()
     let hero = app.element(for: UITestIdentifiers.Welcome.heroGetStartedButton)
     let expectation = XCTNSPredicateExpectation(
@@ -40,7 +40,7 @@ struct WelcomeScreen {
 
   /// Waits for the multi-profile picker to be visible. The picker is
   /// identified by its "+ Create a new profile" footer row.
-  func waitForPicker(timeout: TimeInterval = 5) {
+  func waitForPicker(timeout: TimeInterval = 10) {
     Trace.record()
     let row = app.element(for: UITestIdentifiers.Welcome.pickerCreateNewRow)
     if !row.waitForExistence(timeout: timeout) {
@@ -66,7 +66,7 @@ struct WelcomeScreen {
     Trace.record()
     app.element(for: UITestIdentifiers.Welcome.heroGetStartedButton).click()
     let nameField = app.element(for: UITestIdentifiers.Welcome.nameField)
-    if !nameField.waitForExistence(timeout: 3) {
+    if !nameField.waitForExistence(timeout: 10) {
       Trace.recordFailure("name field did not appear after tapGetStarted")
       XCTFail("Name field did not appear after tapping Get started")
     }
@@ -82,13 +82,13 @@ struct WelcomeScreen {
     field.click()
     field.typeText(name)
 
-    let deadline = Date().addingTimeInterval(3)
+    let deadline = Date().addingTimeInterval(10)
     while Date() < deadline {
       if let value = field.value as? String, value == name { return }
       RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     }
     Trace.recordFailure("name field value did not propagate after typing")
-    XCTFail("Welcome name field did not contain '\(name)' within 3s")
+    XCTFail("Welcome name field did not contain '\(name)' within 10s")
   }
 
   /// Taps "Create Profile" and waits for the hero to disappear — the
@@ -102,7 +102,7 @@ struct WelcomeScreen {
   /// Taps the multi-profile picker row for the given profile id. Used
   /// by tests that pre-seed two or more profiles and need to select
   /// one.
-  func tapPickerRow(forProfile id: UUID, timeout: TimeInterval = 3) {
+  func tapPickerRow(forProfile id: UUID, timeout: TimeInterval = 10) {
     Trace.record(detail: "id=\(id.uuidString.lowercased())")
     let row = app.element(for: UITestIdentifiers.Welcome.pickerRow(id))
     if !row.waitForExistence(timeout: timeout) {

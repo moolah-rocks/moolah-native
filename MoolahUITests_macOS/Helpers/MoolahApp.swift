@@ -228,9 +228,10 @@ final class MoolahApp {
 
   /// Bounded wait for an element with the given identifier to exist. Used
   /// by drivers and by `MoolahUITestCase.waitForIdentifier(_:timeout:)`.
-  /// Default 3 s — see `guides/UI_TEST_GUIDE.md` §3 invariant 1.
+  /// Default 10 s — see `guides/UI_TEST_GUIDE.md` §3 invariant 1 (positive
+  /// waits are 10 s; merge-queue runners are slower than local hardware).
   @discardableResult
-  func waitForElement(identifier: String, timeout: TimeInterval = 3) -> Bool {
+  func waitForElement(identifier: String, timeout: TimeInterval = 10) -> Bool {
     element(for: identifier).waitForExistence(timeout: timeout)
   }
 

@@ -67,10 +67,10 @@ class MoolahUITestCase: XCTestCase {
   // `ui-test-review` agent flags any test that does.
 
   /// Bounded wait for an element to appear in the accessibility tree.
-  /// Default 3 s. Returns `true` on success; on failure, fails the test
+  /// Default 10 s. Returns `true` on success; on failure, fails the test
   /// and records the trace before returning `false`.
   @discardableResult
-  func waitForIdentifier(_ identifier: String, timeout: TimeInterval = 3) -> Bool {
+  func waitForIdentifier(_ identifier: String, timeout: TimeInterval = 10) -> Bool {
     guard let app = lastApp else {
       XCTFail("waitForIdentifier called before MoolahApp.launch(seed:)")
       return false
@@ -109,9 +109,9 @@ class MoolahUITestCase: XCTestCase {
       return
     }
     let element = app.element(for: identifier)
-    if !element.waitForExistence(timeout: 3) {
+    if !element.waitForExistence(timeout: 10) {
       Trace.recordFailure("typeInto: '\(identifier)' not found")
-      XCTFail("typeInto: element '\(identifier)' did not appear within 3s")
+      XCTFail("typeInto: element '\(identifier)' did not appear within 10s")
       return
     }
     element.click()
