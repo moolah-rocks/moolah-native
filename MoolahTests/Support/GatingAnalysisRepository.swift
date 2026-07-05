@@ -86,4 +86,4 @@ final class GatingAnalysisRepository: AnalysisRepository {
   }
 }
 
-extension GatingAnalysisRepository: @unchecked Sendable {}
+extension GatingAnalysisRepository: Sendable {}
