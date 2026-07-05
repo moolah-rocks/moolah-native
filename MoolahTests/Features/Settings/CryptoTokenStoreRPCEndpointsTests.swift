@@ -1,6 +1,7 @@
 // MoolahTests/Features/Settings/CryptoTokenStoreRPCEndpointsTests.swift
 import Foundation
 import GRDB
+import Security
 import Testing
 
 @testable import Moolah
@@ -23,11 +24,26 @@ import Testing
 /// `CryptoSettingsAPIKeyTests`.
 #if os(macOS)
 
+  /// Deterministic `CryptoRPCEndpointsStoring` double whose `save(_:)`
+  /// always fails, so tests can exercise `addRPCEndpoint`/
+  /// `removeRPCEndpoint`'s rollback-on-failure path without depending on
+  /// a genuine (and CI-flaky) Keychain error.
+  private struct FailingRPCEndpointsStore: CryptoRPCEndpointsStoring {
+    let seeded: [String]
+
+    func load() -> [String] { seeded }
+
+    func save(_ endpoints: [String]) throws {
+      throw KeychainError.saveFailed(errSecParam)
+    }
+  }
+
   @Suite("CryptoTokenStore+RPCEndpoints")
   @MainActor
   struct CryptoTokenStoreRPCEndpointsTests {
     private func makeStore(
-      seedEndpoints: [String] = []
+      seedEndpoints: [String] = [],
+      rpcEndpointsStore overrideStore: (any CryptoRPCEndpointsStoring)? = nil
     ) throws -> (store: CryptoTokenStore, keychain: KeychainStore) {
       let keychain = KeychainStore(
         service: "com.moolah.test.rpc-endpoints-store.\(UUID().uuidString)",
@@ -50,7 +66,7 @@ import Testing
         alchemyKeyStore: KeychainStore(
           service: "com.moolah.test.rpc-endpoints-alchemy.\(UUID().uuidString)",
           account: "alchemy", synchronizable: false),
-        rpcEndpointsStore: endpointsStore)
+        rpcEndpointsStore: overrideStore ?? endpointsStore)
       return (store, keychain)
     }
 
@@ -125,6 +141,28 @@ import Testing
       #expect(store.rpcEndpoints == ["https://a.example.com"])
     }
 
+    // MARK: - Rollback on persistence failure
+
+    @Test("addRPCEndpoint reverts rpcEndpoints and sets error when persistence fails")
+    func addRPCEndpointRevertsOnPersistFailure() throws {
+      let (store, keychain) = try makeStore(
+        rpcEndpointsStore: FailingRPCEndpointsStore(seeded: ["https://existing.example.com"]))
+      defer { keychain.clear() }
+      store.addRPCEndpoint("https://new.example.com")
+      #expect(store.rpcEndpoints == ["https://existing.example.com"])
+      #expect(store.error != nil)
+    }
+
+    @Test("removeRPCEndpoint reverts rpcEndpoints and sets error when persistence fails")
+    func removeRPCEndpointRevertsOnPersistFailure() throws {
+      let (store, keychain) = try makeStore(
+        rpcEndpointsStore: FailingRPCEndpointsStore(seeded: ["https://existing.example.com"]))
+      defer { keychain.clear() }
+      store.removeRPCEndpoint("https://existing.example.com")
+      #expect(store.rpcEndpoints == ["https://existing.example.com"])
+      #expect(store.error != nil)
+    }
+
     // MARK: - probeEndpoints (via rpcProbeOverride)
 
     @Test("probeEndpoints stores the override's results in rpcProbes")
@@ -155,6 +193,33 @@ import Testing
       }
       await store.probeEndpoints()
       #expect(store.rpcProbes.map(\.url) == ["https://rpc.example.com"])
+    }
+
+    // MARK: - addRPCEndpointAndProbe / removeRPCEndpointAndProbe
+
+    @Test("addRPCEndpointAndProbe adds the endpoint and refreshes rpcProbes")
+    func addRPCEndpointAndProbeAddsAndProbes() async throws {
+      let (store, keychain) = try makeStore()
+      defer { keychain.clear() }
+      store.rpcProbeOverride = { endpoints in
+        endpoints.map { RPCEndpointResolver.Probe(url: $0, reachable: true, chainId: 1) }
+      }
+      await store.addRPCEndpointAndProbe("https://rpc.example.com")
+      #expect(store.rpcEndpoints == ["https://rpc.example.com"])
+      #expect(store.rpcProbes.map(\.url) == ["https://rpc.example.com"])
+    }
+
+    @Test("removeRPCEndpointAndProbe removes the endpoint and refreshes rpcProbes")
+    func removeRPCEndpointAndProbeRemovesAndProbes() async throws {
+      let (store, keychain) = try makeStore(
+        seedEndpoints: ["https://a.example.com", "https://b.example.com"])
+      defer { keychain.clear() }
+      store.rpcProbeOverride = { endpoints in
+        endpoints.map { RPCEndpointResolver.Probe(url: $0, reachable: true, chainId: 1) }
+      }
+      await store.removeRPCEndpointAndProbe("https://a.example.com")
+      #expect(store.rpcEndpoints == ["https://b.example.com"])
+      #expect(store.rpcProbes.map(\.url) == ["https://b.example.com"])
     }
 
     // MARK: - RPCEndpointStatus

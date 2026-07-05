@@ -73,6 +73,10 @@ public enum UITestSeed: String, CaseIterable, Sendable {
   /// the complete fixture (instrumentId, chainId, contractAddress, provider
   /// IDs) so the `seed.txt` artefact reader can resolve every reference
   /// without cross-file lookup.
+  ///
+  /// Also reused (via `needsStubbedRPCProbe`) as the seed for the Custom
+  /// RPC Endpoints Settings section test, since it's already a network-free
+  /// Settings → Crypto tab seed.
   case cryptoCatalogPreloaded
 
   /// A CloudKit-backed AUD profile with one bank account named "Brokerage",

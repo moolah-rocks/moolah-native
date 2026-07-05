@@ -96,26 +96,27 @@ final class CryptoTokenStore {
   /// RPC Endpoints" Settings section). Internal (not `private`) so the
   /// `CryptoTokenStore+RPCEndpoints` extension — split into its own file
   /// to keep this file under the file-length limit — can read it.
-  let rpcEndpointsStore: CryptoRPCEndpointsStore
+  /// Typed as the protocol (not the concrete `CryptoRPCEndpointsStore`)
+  /// so store-level tests can inject a double whose `save(_:)` throws
+  /// deterministically, exercising the rollback-on-failure path.
+  let rpcEndpointsStore: any CryptoRPCEndpointsStoring
 
   /// Cached copy of `rpcEndpointsStore.load()`, refreshed by every
   /// `addRPCEndpoint`/`removeRPCEndpoint` call. Unlike the API-key
   /// `has…` properties (which re-read the Keychain on every access
   /// because they're single booleans), the endpoint list is an array
   /// worth showing in a `ForEach`, so it's cached rather than reloaded
-  /// on every render. `internal` (not `private(set)`, unlike `error`'s
-  /// `setError(_:)` seam) because `CryptoTokenStore+RPCEndpoints` — a
-  /// sibling file — is the sole mutator and adding a one-line pass-
-  /// through setter method would add indirection without adding safety;
-  /// the view only ever reads it (`store.rpcEndpoints`), never assigns.
-  var rpcEndpoints: [String]
+  /// on every render. `private(set)`, like `error`; `CryptoTokenStore
+  /// +RPCEndpoints` — a sibling file — mutates it only through the
+  /// `setRPCEndpoints(_:)` seam below.
+  private(set) var rpcEndpoints: [String]
 
   /// Latest probe results from `probeEndpoints()`, keyed implicitly by
   /// `Probe.url`. The Settings screen's per-row status badge looks up
   /// the matching entry; an endpoint with no matching `Probe` (not yet
-  /// probed) renders as "not probed" rather than "unreachable". Same
-  /// internal-not-private(set) reasoning as `rpcEndpoints` above.
-  var rpcProbes: [RPCEndpointResolver.Probe] = []
+  /// probed) renders as "not probed" rather than "unreachable".
+  /// `private(set)`; mutated only through `setRPCProbes(_:)` below.
+  private(set) var rpcProbes: [RPCEndpointResolver.Probe] = []
 
   /// Test seam for `probeEndpoints()`: when non-`nil`, its result is used
   /// instead of building a live `RPCEndpointResolver`. Store-level tests
@@ -146,7 +147,7 @@ final class CryptoTokenStore {
     conversionService: any InstrumentConversionService,
     apiKeyStore: KeychainStore,
     alchemyKeyStore: KeychainStore,
-    rpcEndpointsStore: CryptoRPCEndpointsStore = CryptoRPCEndpointsStore(),
+    rpcEndpointsStore: any CryptoRPCEndpointsStoring = CryptoRPCEndpointsStore(),
     sharedStore: SharedRegistryStore? = nil
   ) {
     self.registry = registry
@@ -197,7 +198,7 @@ final class CryptoTokenStore {
     registry: any InstrumentRegistryRepository,
     cryptoPriceService: CryptoPriceService,
     conversionService: any InstrumentConversionService,
-    rpcEndpointsStore: CryptoRPCEndpointsStore = CryptoRPCEndpointsStore(),
+    rpcEndpointsStore: any CryptoRPCEndpointsStoring = CryptoRPCEndpointsStore(),
     sharedStore: SharedRegistryStore? = nil
   ) {
     self.init(
@@ -376,5 +377,17 @@ final class CryptoTokenStore {
   /// clear / set the error string.
   func setError(_ message: String?) {
     self.error = message
+  }
+
+  /// Internal write seam for `rpcEndpoints`, used by
+  /// `CryptoTokenStore+RPCEndpoints` (a sibling file) which cannot reach
+  /// the `private(set)` setter directly. Mirrors `setError(_:)`.
+  func setRPCEndpoints(_ endpoints: [String]) {
+    self.rpcEndpoints = endpoints
+  }
+
+  /// Internal write seam for `rpcProbes`, mirroring `setRPCEndpoints(_:)`.
+  func setRPCProbes(_ probes: [RPCEndpointResolver.Probe]) {
+    self.rpcProbes = probes
   }
 }

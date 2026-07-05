@@ -5,6 +5,19 @@ import Security
 private let cryptoRPCEndpointsLogger = Logger(
   subsystem: "com.moolah.app", category: "CryptoRPCEndpointsStore")
 
+/// Persistence seam for the custom JSON-RPC endpoint list, matching the
+/// `any InstrumentRegistryRepository` / `any InstrumentConversionService`
+/// shape `CryptoTokenStore` already injects its other dependencies
+/// through. `CryptoTokenStore` holds this as `any CryptoRPCEndpointsStoring`
+/// rather than the concrete `CryptoRPCEndpointsStore` so store-level tests
+/// can inject a double whose `save(_:)` throws deterministically —
+/// exercising `addRPCEndpoint`/`removeRPCEndpoint`'s rollback-on-failure
+/// path without depending on a genuine (and CI-flaky) Keychain error.
+protocol CryptoRPCEndpointsStoring: Sendable {
+  func load() -> [String]
+  func save(_ endpoints: [String]) throws
+}
+
 /// Persists the user's list of custom JSON-RPC endpoint URLs for direct
 /// on-chain wallet sync.
 ///
@@ -63,3 +76,5 @@ struct CryptoRPCEndpointsStore: Sendable {
     try store.saveString(json)
   }
 }
+
+extension CryptoRPCEndpointsStore: CryptoRPCEndpointsStoring {}

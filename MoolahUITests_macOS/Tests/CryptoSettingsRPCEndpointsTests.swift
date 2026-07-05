@@ -20,13 +20,21 @@ import XCTest
 final class CryptoSettingsRPCEndpointsTests: MoolahUITestCase {
   private static let endpointURL = "https://custom-node.example.com/v1"
 
-  func testAddingEndpointShowsResolvedStatusThenRemoveHidesRow() {
+  func testAddingEndpointShowsResolvedStatus() {
     let app = launch(seed: .cryptoCatalogPreloaded)
 
     app.settings.open()
     app.settings.openCryptoTab()
     app.cryptoSettings.addRPCEndpoint(Self.endpointURL)
     app.cryptoSettings.waitForRPCEndpointStatus(url: Self.endpointURL, chainName: "Ethereum")
+  }
+
+  func testRemovingEndpointHidesRow() {
+    let app = launch(seed: .cryptoCatalogPreloaded)
+
+    app.settings.open()
+    app.settings.openCryptoTab()
+    app.cryptoSettings.addRPCEndpoint(Self.endpointURL)
 
     app.cryptoSettings.removeRPCEndpoint(Self.endpointURL)
   }

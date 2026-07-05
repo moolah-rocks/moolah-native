@@ -32,19 +32,44 @@ extension CryptoTokenStore {
   /// or already-present (post-trim) input is a no-op — duplicates would
   /// collide on the same accessibility identifier and status badge, and
   /// `RPCEndpointResolver` gains nothing from probing the same URL twice.
+  ///
+  /// If persistence fails (e.g. a Keychain write error), the in-memory
+  /// list reverts to its prior value rather than drifting out of sync
+  /// with what's actually saved — the UI and Keychain must agree.
   func addRPCEndpoint(_ url: String) {
     let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty, !rpcEndpoints.contains(trimmed) else { return }
-    rpcEndpoints.append(trimmed)
-    persistRPCEndpoints()
+    let previous = rpcEndpoints
+    setRPCEndpoints(previous + [trimmed])
+    persistRPCEndpoints(revertingTo: previous)
   }
 
   /// Removes `url` from the persisted custom endpoint list. Matches by
   /// exact string equality — the same value `addRPCEndpoint` stored and
   /// the view's `ForEach` keys rows by.
+  ///
+  /// Reverts on a persistence failure — see `addRPCEndpoint`'s doc.
   func removeRPCEndpoint(_ url: String) {
-    rpcEndpoints.removeAll { $0 == url }
-    persistRPCEndpoints()
+    let previous = rpcEndpoints
+    setRPCEndpoints(previous.filter { $0 != url })
+    persistRPCEndpoints(revertingTo: previous)
+  }
+
+  /// Adds `url` and immediately re-probes every configured endpoint, so
+  /// the Settings screen's status badges reflect the change in a single
+  /// async action. Consolidates what would otherwise be view-level
+  /// orchestration (mutate, then separately launch a probe `Task`) into
+  /// the store — the view only triggers this one call.
+  func addRPCEndpointAndProbe(_ url: String) async {
+    addRPCEndpoint(url)
+    await probeEndpoints()
+  }
+
+  /// Removes `url` and immediately re-probes every configured endpoint.
+  /// Mirrors `addRPCEndpointAndProbe(_:)`.
+  func removeRPCEndpointAndProbe(_ url: String) async {
+    removeRPCEndpoint(url)
+    await probeEndpoints()
   }
 
   /// Probes every configured custom endpoint's `eth_chainId`, refreshing
@@ -65,13 +90,14 @@ extension CryptoTokenStore {
   /// — the same "env var instead of real I/O" shape as `hasAlchemyApiKey`.
   func probeEndpoints() async {
     if let override = rpcProbeOverride {
-      rpcProbes = await override(rpcEndpoints)
+      setRPCProbes(await override(rpcEndpoints))
       return
     }
     if ProcessInfo.processInfo.environment[UITestEnvironment.rpcProbeStubbedReachable] == "1" {
-      rpcProbes = rpcEndpoints.map {
-        RPCEndpointResolver.Probe(url: $0, reachable: true, chainId: 1)
-      }
+      setRPCProbes(
+        rpcEndpoints.map {
+          RPCEndpointResolver.Probe(url: $0, reachable: true, chainId: 1)
+        })
       return
     }
     let endpoints = rpcEndpoints
@@ -88,20 +114,23 @@ extension CryptoTokenStore {
       alchemyKeyPresent: { alchemyPresent },
       makeRPC: { LiveJSONRPCClient(endpoint: $0, rateLimiter: RateLimiter(permitsPerSecond: 5)) }
     )
-    rpcProbes = await resolver.probeAll()
+    setRPCProbes(await resolver.probeAll())
   }
 
   /// Persists the current `rpcEndpoints` to `rpcEndpointsStore`. Sets
   /// `error` (without logging the endpoint URLs themselves — they can
   /// carry an embedded API key) on failure, mirroring
-  /// `saveAlchemyApiKey`'s error-surfacing shape.
-  private func persistRPCEndpoints() {
+  /// `saveAlchemyApiKey`'s error-surfacing shape. On failure the
+  /// in-memory list is reverted to `previous` so the UI never shows a
+  /// change that didn't actually persist.
+  private func persistRPCEndpoints(revertingTo previous: [String]) {
     do {
       try rpcEndpointsStore.save(rpcEndpoints)
       setError(nil)
     } catch {
       logger.error(
         "Failed to save RPC endpoint list: \(error.localizedDescription, privacy: .public)")
+      setRPCEndpoints(previous)
       setError("Failed to save RPC endpoint: \(error.localizedDescription)")
     }
   }
