@@ -13,12 +13,13 @@ extension UITestIdentifiers {
     /// companion in the bottom toggle pane.
     public static let chartPane = "accountDetail.chartPane"
 
-    /// The transactions surface — iOS `Transactions` tab (default) / macOS
-    /// Transactions option in the bottom toggle pane.
-    public static let transactionsPane = "accountDetail.transactionsPane"
-
     /// The segmented tab picker (iOS full tab set / macOS bottom-pane
     /// `[Transactions | Chart]` toggle).
     public static let tabPicker = "accountDetail.tabPicker"
+
+    /// Visible label of the "Transactions" segment in the bottom-pane toggle.
+    public static let transactionsSegmentLabel = "Transactions"
+    /// Visible label of the "Chart" segment in the bottom-pane toggle.
+    public static let chartSegmentLabel = "Chart"
   }
 }
