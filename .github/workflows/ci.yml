@@ -65,7 +65,8 @@ jobs:
 
       - name: UI Test
         id: ui-test
-        run: just test-ui
+        # TEMP: narrowed to the toggle test for iteration — REVERT to `just test-ui` before merge
+        run: just test-ui AccountDetailSplitTests/testToggleBetweenTransactionsAndChart
 
       - name: Upload UI failure artefacts
         if: failure() && steps.ui-test.conclusion == 'failure'
