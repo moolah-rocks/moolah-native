@@ -45,29 +45,35 @@ struct PositionsChartPane: View {
 }
 
 #Preview("Chart pane — with chart") {
-  PositionsChartPane(
+  // The series points and positions are built as typed `let`s before the
+  // initializer so the type-checker solves each sub-expression on its own.
+  // Inlining the `(0..<30).map { ... }` into the nested
+  // PositionsViewInput/HistoricalValueSeries/PositionsChartPane call produces
+  // a single expression SourceKit flags as "unable to type-check in
+  // reasonable time" — a slow-compile / CI-failure hazard.
+  let total: [HistoricalValueSeries.Point] = (0..<30).map { offset in
+    HistoricalValueSeries.Point(
+      date: Calendar(identifier: .gregorian)
+        .date(byAdding: .day, value: -29 + offset, to: Date()) ?? Date(),
+      value: 9_800 + Decimal(offset) * 15,
+      cost: 9_500,
+      contributions: nil)
+  }
+  let positions: [ValuedPosition] = [
+    ValuedPosition(
+      instrument: Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP"),
+      quantity: 100,
+      unitPrice: nil,
+      costBasis: InstrumentAmount(quantity: 9_500, instrument: .AUD),
+      value: InstrumentAmount(quantity: 10_200, instrument: .AUD))
+  ]
+  return PositionsChartPane(
     input: PositionsViewInput(
       title: "Brokerage",
       hostCurrency: .AUD,
-      positions: [
-        ValuedPosition(
-          instrument: Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP"),
-          quantity: 100,
-          unitPrice: nil,
-          costBasis: InstrumentAmount(quantity: 9_500, instrument: .AUD),
-          value: InstrumentAmount(quantity: 10_200, instrument: .AUD))
-      ],
+      positions: positions,
       historicalValue: HistoricalValueSeries(
-        hostCurrency: .AUD,
-        total: (0..<30).map { offset in
-          HistoricalValueSeries.Point(
-            date: Calendar(identifier: .gregorian)
-              .date(byAdding: .day, value: -29 + offset, to: Date()) ?? Date(),
-            value: 9_800 + Decimal(offset) * 15,
-            cost: 9_500,
-            contributions: nil)
-        },
-        perInstrument: [:])),
+        hostCurrency: .AUD, total: total, perInstrument: [:])),
     range: .constant(.oneMonth),
     selection: .constant(nil)
   )
