@@ -1,4 +1,4 @@
-// Backends/GRDB/ProfileIndexSchema+DropCryptoccompareSymbol.swift
+// Backends/GRDB/ProfileIndexSchema+DropCryptoCompareSymbol.swift
 
 import Foundation
 import GRDB
@@ -16,7 +16,7 @@ extension ProfileIndexSchema {
   /// profile's per-profile `data.sqlite` instrument table (that table was
   /// dropped by v10_drop_shared_instrument_legacy, so only the index copy
   /// needs this migration).
-  static func dropCryptocomplareSymbolColumn(_ database: Database) throws {
+  static func dropCryptoCompareSymbolColumn(_ database: Database) throws {
     try database.execute(
       sql: """
         ALTER TABLE instrument DROP COLUMN cryptocompare_symbol;

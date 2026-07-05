@@ -88,6 +88,26 @@ struct InstrumentRecordCryptoFieldsTests {
     let decoded = try #require(InstrumentRow.fieldValues(from: ckRecord))
     #expect(decoded.coingeckoId == "tether")
     #expect(decoded.binanceSymbol == "USDTUSDT")
+    #expect(decoded.kind == "cryptoToken")
+    #expect(decoded.name == "Tether")
+    #expect(decoded.decimals == 6)
+  }
+
+  @Test
+  func ckRecordRoundTripPreservesSpamPricingStatus() throws {
+    // The decoder has a `?? "priced"` default; verify a non-default pricingStatus
+    // round-trips correctly and is not silently overwritten by that default.
+    var row = makeInstrumentRow(
+      id: "1:0x1234",
+      kind: "cryptoToken",
+      name: "Spam Token",
+      decimals: 18)
+    row.pricingStatus = TokenPricingStatus.spam.rawValue
+    let zoneID = CKRecordZone.ID(zoneName: "test", ownerName: CKCurrentUserDefaultName)
+    let ckRecord = row.toCKRecord(in: zoneID)
+
+    let decoded = try #require(InstrumentRow.fieldValues(from: ckRecord))
+    #expect(decoded.pricingStatus == TokenPricingStatus.spam.rawValue)
   }
 
   @Test

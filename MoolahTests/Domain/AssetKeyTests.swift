@@ -13,15 +13,7 @@ struct AssetKeyTests {
   }
 
   @Test
-  func fallsBackToCryptocompareWhenCoingeckoAbsent() {
-    let mapping = CryptoProviderMapping(
-      instrumentId: "1:native", coingeckoId: nil,
-      binanceSymbol: "ETHUSDT")
-    #expect(mapping.assetKey == "ETH")
-  }
-
-  @Test
-  func fallsBackToBinanceWhenCryptocompareAlsoAbsent() {
+  func fallsBackToBinanceWhenCoingeckoAbsent() {
     let mapping = CryptoProviderMapping(
       instrumentId: "1:native", coingeckoId: nil,
       binanceSymbol: "ETHUSDT")

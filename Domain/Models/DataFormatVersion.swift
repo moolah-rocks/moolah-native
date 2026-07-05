@@ -22,6 +22,13 @@
 ///      the "deprecated field is suddenly invisible" race.
 ///
 /// History (newest first):
+/// - 7: CryptoCompare provider removal. The `cryptocompareSymbol` field
+///      on `InstrumentRecord` is marked `// DEPRECATED` in `schema.ckdb`
+///      (the wire-struct generator drops it; older builds still write
+///      it). The deprecation race over the dropped field is rubric item
+///      6; the bump fences it off from this build forward. The
+///      `cryptocompare_symbol` GRDB column is also dropped (local-only,
+///      no rubric item).
 /// - 6: insight dismissals. Adds the synced `InsightDismissalRecord` type
 ///      (one tally per `InsightKind`). Older builds don't know the record
 ///      type and would silently discard downloaded dismissal records, losing
@@ -77,5 +84,5 @@
 /// cloud without a `dataFormatVersion` field reads as `0` and is
 /// trivially compatible with any v1+ build.
 enum DataFormatVersion {
-  static let current: Int = 6
+  static let current: Int = 7
 }

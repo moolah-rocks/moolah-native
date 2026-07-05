@@ -1,4 +1,4 @@
-// Backends/GRDB/ProfileSchema+DropCryptoccompareSymbol.swift
+// Backends/GRDB/ProfileSchema+DropCryptoCompareSymbol.swift
 
 import Foundation
 import GRDB
@@ -22,7 +22,7 @@ extension ProfileSchema {
   ///
   /// The corresponding `ProfileIndexSchema` v10 migration drops the column
   /// from the shared instrument registry, which IS the live table.
-  static func dropCryptocomplareSymbolColumn(_ database: Database) throws {
+  static func dropCryptoCompareSymbolColumn(_ database: Database) throws {
     guard try database.tableExists("instrument") else { return }
     let columns = try database.columns(in: "instrument")
     guard columns.contains(where: { $0.name == "cryptocompare_symbol" }) else { return }

@@ -164,7 +164,7 @@ enum ProfileSchema {
     migrator.registerMigration(
       "v19_transaction_by_date_id", migrate: addTransactionByDateIdIndex)
     migrator.registerMigration(
-      "v20_drop_cryptocompare_symbol", migrate: dropCryptocomplareSymbolColumn)
+      "v20_drop_cryptocompare_symbol", migrate: dropCryptoCompareSymbolColumn)
 
     return migrator
   }
