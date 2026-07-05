@@ -10,10 +10,14 @@ on:
   merge_group:     # native GitHub merge queue; CI runs against gh-readonly-queue/* branches
 
 jobs:
-  test:
-    name: Test
+  # Fast, platform-independent gates (formatting, App Store rules, TODO
+  # convention, the Node import-extension plugin tests). Split out of the
+  # old single "Test" job so it runs in parallel with the platform test
+  # jobs instead of serially ahead of them.
+  checks:
+    name: Checks
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
@@ -32,6 +36,13 @@ jobs:
       - name: Verify no SwiftData imports
         run: just no-swiftdata
 
+      # Import-extension plugin parser tests (Node + jsdom). Previously ran
+      # as a dependency of `just test`; the platform test jobs below call
+      # `just test-mac` / `just test-ios`, which do not include it, so it is
+      # run here to keep the coverage.
+      - name: Plugin tests
+        run: just plugin-test
+
       # Fork PRs: format-only (no network, no token). Keeps the TODO
       # convention enforced while never exposing GITHUB_TOKEN to untrusted
       # code from forks.
@@ -47,8 +58,65 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: just validate-todos
 
-      - name: Test
-        run: just test
+  # macOS unit tests on their own runner. Split from iOS (they used to share
+  # one runner via `just test`'s in-process parallelism, which contended for
+  # CPU and pushed the combined job up against the 30-minute timeout).
+  test-mac:
+    name: Test (macOS)
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install tools
+        run: bash scripts/install-ci-tools.sh
+
+      - name: Generate Xcode project
+        run: just generate
+
+      - name: Test (macOS)
+        run: just test-mac
+
+  # iOS Simulator unit tests on their own runner.
+  test-ios:
+    name: Test (iOS)
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install tools
+        run: bash scripts/install-ci-tools.sh
+
+      - name: Generate Xcode project
+        run: just generate
+
+      - name: Test (iOS)
+        run: just test-ios
+
+  # Aggregate gate. Keeps the required "Test" status check (see the branch
+  # ruleset) green iff Checks + both platform test jobs pass, so the split
+  # needs no ruleset change. `if: always()` ensures it reports an explicit
+  # success/failure rather than being skipped when a dependency fails (a
+  # skipped required check would otherwise not gate the merge queue).
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: [checks, test-mac, test-ios]
+    if: always()
+    steps:
+      - name: Verify test jobs succeeded
+        run: |
+          if [ "${{ needs.checks.result }}" != "success" ] \
+            || [ "${{ needs.test-mac.result }}" != "success" ] \
+            || [ "${{ needs.test-ios.result }}" != "success" ]; then
+            echo "One or more required test jobs did not succeed:"
+            echo "  checks=${{ needs.checks.result }}"
+            echo "  test-mac=${{ needs.test-mac.result }}"
+            echo "  test-ios=${{ needs.test-ios.result }}"
+            exit 1
+          fi
+          echo "Checks, macOS, and iOS test jobs all passed."
 
   ui-test:
     name: UI Test
