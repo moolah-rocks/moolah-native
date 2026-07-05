@@ -11,18 +11,23 @@ import Testing
 /// The per-profile `instrument` table was dropped by v10 on every live
 /// database, so the migration is effectively a no-op for all existing
 /// profiles. This test confirms the migrator applies all migrations
-/// through v20 without error.
+/// through v20 (and, transitively, every migration registered after it)
+/// without error.
 @Suite("ProfileSchema — v20_drop_cryptocompare_symbol")
 struct ProfileSchemaV20DropCryptoCompareTests {
-  @Test("schema version reflects the v20 migration")
+  @Test("schema version reflects the latest migration")
   func versionIsLatest() {
-    #expect(ProfileSchema.version == 20)
+    // Bumped alongside `v21_leg_analysis_uncategorised` — see
+    // `ProfileSchema.version`'s doc comment ("bumped each time a
+    // migration is added").
+    #expect(ProfileSchema.version == 21)
   }
 
   @Test("v20 migration runs cleanly (per-profile instrument table was already dropped by v10)")
   func migrationRunsCleanly() throws {
     let queue = try DatabaseQueue()
-    // Runs all migrations v1 through v20; must complete without error.
+    // Runs all registered migrations (v1 through the latest); must
+    // complete without error.
     try ProfileSchema.migrator.migrate(queue)
     // The per-profile instrument table was dropped by v10_drop_shared_instrument_legacy
     // before v20 fires, so the v20 migration is a guarded no-op and the table is absent.

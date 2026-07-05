@@ -99,6 +99,15 @@ import GRDB
 /// single-column `transaction_by_date` index covers `date` only; the
 /// `id` tiebreaker among equal dates forces a temp B-tree sort without
 /// this index. See `ProfileSchema+TransactionByDateId.swift`.
+/// `v20_drop_cryptocompare_symbol` — drops the `cryptocompare_symbol`
+/// column now that CryptoCompare has been retired as a price provider.
+/// See `ProfileSchema+DropCryptoCompareSymbol.swift`.
+/// `v21_leg_analysis_uncategorised` — adds the partial covering index
+/// `leg_analysis_by_type_uncategorised` on `transaction_leg` (`type`,
+/// `category_id`, `instrument_id`, `transaction_id`, `quantity`) `WHERE
+/// category_id IS NULL`, the symmetric counterpart to
+/// `leg_analysis_by_type_category` for the "Uncategorised" Reports row.
+/// See `ProfileSchema+UncategorisedLegAnalysisIndex.swift`.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -119,7 +128,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 20
+  static let version = 21
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -165,6 +174,8 @@ enum ProfileSchema {
       "v19_transaction_by_date_id", migrate: addTransactionByDateIdIndex)
     migrator.registerMigration(
       "v20_drop_cryptocompare_symbol", migrate: dropCryptoCompareSymbolColumn)
+    migrator.registerMigration(
+      "v21_leg_analysis_uncategorised", migrate: addUncategorisedLegAnalysisIndex)
 
     return migrator
   }

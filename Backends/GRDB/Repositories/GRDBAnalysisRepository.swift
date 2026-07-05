@@ -302,14 +302,14 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
   }
 
   /// Concrete override of the protocol-extension default: runs the two
-  /// per-category fetches **and** the two uncategorised-total fetches
-  /// (income + expense) concurrently, fully populating
-  /// `CategoryBalancesByType` rather than leaving the uncategorised
-  /// fields `nil`. The per-category fetches reuse the public
-  /// `fetchCategoryBalances(dateRange:transactionType:filters:targetInstrument:)`
-  /// above unchanged — its excludes-uncategorised contract is pinned by
-  /// `AnalysisCategoryBalancesTests.categoryBalancesRequiresCategory` and
-  /// relied on by earmark budgets, so this override must not alter it.
+  /// per-category fetches (unchanged; pinned by
+  /// `AnalysisCategoryBalancesTests.categoryBalancesRequiresCategory`,
+  /// relied on by earmark budgets) and the two uncategorised-total
+  /// fetches concurrently. `fetchUncategorisedBalances` below is
+  /// best-effort (see its doc comment) because these four races share
+  /// one `await` tuple: a throw from any one fails all of them, which
+  /// would otherwise blank the categorised totals over an
+  /// uncategorised-only error.
   func fetchCategoryBalancesByType(
     dateRange: ClosedRange<Date>,
     filters: TransactionFilter?,
@@ -345,13 +345,12 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
       expenseUncategorised: expenseUncategorised)
   }
 
-  /// Fetches the uncategorised total for one transaction type — the total
-  /// of income/expense legs with no `category_id`, converted to
-  /// `targetInstrument` and summed to a single amount. `nil` when there
-  /// are no uncategorised legs in range, so the Reports screen can omit
-  /// the row. Only called from `fetchCategoryBalancesByType`; mirrors
-  /// `fetchCategoryBalances`'s hoist-instruments / aggregate / assemble
-  /// shape.
+  /// Fetches the uncategorised total for one transaction type — legs
+  /// with no `category_id`, converted to `targetInstrument` and summed.
+  /// `nil` when there are no uncategorised legs in range, **or** when
+  /// the fetch fails: a non-cancellation error is logged and folded to
+  /// `nil` rather than rethrown (see `fetchCategoryBalancesByType`'s doc
+  /// comment for why). `CancellationError` always propagates.
   private func fetchUncategorisedBalances(
     dateRange: ClosedRange<Date>,
     transactionType: TransactionType,
@@ -364,29 +363,38 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
       accountId: filters?.accountId,
       earmarkId: filters?.earmarkId,
       payee: filters?.payee)
-    // Hoisted ahead of the snapshot for the same cross-database reason
-    // as `fetchDailyBalances(after:forecastUntil:)`.
-    let instruments = try await instrumentResolver.instrumentMap()
-    let aggregation = try await Self.fetchUncategorisedBalancesAggregation(
-      database: database, instruments: instruments, args: args)
     let logger = self.logger
-    let handlers = UncategorisedBalancesHandlers(
-      handleUnparseableDay: { day in
-        logger.error(
-          "fetchUncategorisedBalances: skipping row with unparseable day '\(day)'")
-      },
-      handleConversionFailure: { error, context in
-        logger.error(
-          """
-          fetchUncategorisedBalances: conversion failed for day=\(context.day, privacy: .public) \
-          instrument=\(context.instrumentId, privacy: .public): \
-          \(error.localizedDescription, privacy: .public)
-          """)
-      })
-    return try await Self.assembleUncategorisedBalances(
-      aggregation: aggregation,
-      targetInstrument: targetInstrument,
-      conversionService: conversionService,
-      handlers: handlers)
+    do {
+      // Hoisted ahead of the snapshot — same cross-database reason as
+      // `fetchDailyBalances(after:forecastUntil:)`.
+      let instruments = try await instrumentResolver.instrumentMap()
+      let aggregation = try await Self.fetchUncategorisedBalancesAggregation(
+        database: database, instruments: instruments, args: args)
+      let handlers = UncategorisedBalancesHandlers(
+        handleUnparseableDay: { day in
+          logger.error(
+            "fetchUncategorisedBalances: skipping row with unparseable day '\(day)'")
+        },
+        handleConversionFailure: { error, context in
+          logger.error(
+            """
+            fetchUncategorisedBalances: conversion failed for day=\(context.day, privacy: .public) \
+            instrument=\(context.instrumentId, privacy: .public): \
+            \(error.localizedDescription, privacy: .public)
+            """)
+        })
+      return try await Self.assembleUncategorisedBalances(
+        aggregation: aggregation,
+        targetInstrument: targetInstrument,
+        conversionService: conversionService,
+        handlers: handlers)
+    } catch let cancellation as CancellationError {
+      throw cancellation
+    } catch {
+      logger.error(
+        "fetchUncategorisedBalances: fetch failed for type=\(transactionType.rawValue, privacy: .public): \(error.localizedDescription, privacy: .public); omitting the row"
+      )
+      return nil
+    }
   }
 }
