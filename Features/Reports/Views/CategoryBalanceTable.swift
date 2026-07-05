@@ -9,6 +9,15 @@ struct CategoryBalanceTable: View {
   let dateRange: ClosedRange<Date>
   let profileInstrument: Instrument
 
+  // Tappable-header vertical padding. Touch platforms need a taller target
+  // (44pt HIG minimum) than the pointer-driven Mac; both scale with Dynamic
+  // Type. Mirrors `TransactionRowView`'s row-padding convention.
+  #if os(macOS)
+    @ScaledMetric private var headerVerticalPadding: CGFloat = 8
+  #else
+    @ScaledMetric private var headerVerticalPadding: CGFloat = 12
+  #endif
+
   private var reportData: [CategoryGroup] {
     // Group subcategories under roots
     var roots: [UUID: CategoryGroup] = [:]
@@ -128,13 +137,29 @@ struct CategoryBalanceTable: View {
         }
       }
     } header: {
-      HStack {
-        Text(group.name).font(.headline)
-        Spacer()
-        InstrumentAmountView(amount: group.totalAmount, font: .headline)
+      NavigationLink(
+        value: CategoryDrillDown(
+          categoryId: group.categoryId, dateRange: dateRange, includeDescendants: true)
+      ) {
+        HStack {
+          Text(group.name).font(.headline)
+          Spacer()
+          InstrumentAmountView(amount: group.totalAmount, font: .headline)
+          // Explicit disclosure cue: a bold `List` section header otherwise
+          // reads as a static group title, giving no hint that the whole
+          // header now drills into the category's transactions.
+          Image(systemName: "chevron.forward")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
+        }
+        // Guarantee a comfortable tap target: section headers render more
+        // compact than data rows, but this one is now a navigation control.
+        .padding(.vertical, headerVerticalPadding)
+        .contentShape(Rectangle())
       }
-      .accessibilityElement(children: .combine)
       .accessibilityLabel("\(group.name), \(group.totalAmount.formatted)")
+      .accessibilityIdentifier(UITestIdentifiers.Reports.categoryHeader(group.categoryId))
     }
   }
 
@@ -170,6 +195,17 @@ struct CategoryChild: Identifiable {
 struct CategoryDrillDown: Hashable {
   let categoryId: UUID
   let dateRange: ClosedRange<Date>
+  /// When set, the drill-down covers `categoryId` plus every descendant
+  /// (used by tappable root headers); otherwise only the exact category.
+  var includeDescendants = false
+
+  /// The category ids the drill-down's transaction list filters on. A root
+  /// header (`includeDescendants`) covers the whole subtree so its list
+  /// matches the aggregated header total; a subcategory row matches only its
+  /// own directly-categorised transactions.
+  func categoryIds(in categories: Categories) -> Set<UUID> {
+    includeDescendants ? categories.subtreeIds(of: categoryId) : [categoryId]
+  }
 }
 
 #Preview {

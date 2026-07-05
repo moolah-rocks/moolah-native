@@ -109,7 +109,7 @@ struct ReportsView: View {
       title: categoryName,
       filter: TransactionFilter(
         dateRange: drillDown.dateRange,
-        categoryIds: [drillDown.categoryId]),
+        categoryIds: drillDown.categoryIds(in: categories)),
       accounts: accounts,
       categories: categories,
       earmarks: earmarks,

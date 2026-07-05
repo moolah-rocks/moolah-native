@@ -91,9 +91,10 @@ extension MoolahUITestCase {
     lines.append("trade.date      = \(fixtures.bhpPurchaseDate)")
     lines.append("historical.amount.cents = \(fixtures.historicalExpenseAmountCents)")
     for (index, historical) in fixtures.historicalPayees.enumerated() {
+      let category = historical.categoryId.map(String.init(describing:)) ?? "nil"
       lines.append(
-        "historical[\(index)].id/payee/date = "
-          + "\(historical.id) / \(historical.payee) / \(historical.date)"
+        "historical[\(index)].id/payee/date/category = "
+          + "\(historical.id) / \(historical.payee) / \(historical.date) / \(category)"
       )
     }
     lines.append(

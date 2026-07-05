@@ -87,6 +87,10 @@ final class MoolahApp {
   /// Centre column listing transactions for the current sidebar selection.
   var transactionList: TransactionListScreen { TransactionListScreen(app: self) }
 
+  /// Reports view category tables (Income / Expenses). Available after
+  /// `sidebar.switchToNamed(.reports)` has selected the Reports leaf.
+  var reports: ReportsScreen { ReportsScreen(app: self) }
+
   /// Recently Added landing page (`RecentlyAddedView`): imported-row
   /// list with the passive transfer pill and the row context-menu
   /// merge / dismiss actions.
