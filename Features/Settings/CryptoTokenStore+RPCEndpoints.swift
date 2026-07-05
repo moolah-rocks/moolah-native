@@ -118,20 +118,23 @@ extension CryptoTokenStore {
   }
 
   /// Persists the current `rpcEndpoints` to `rpcEndpointsStore`. Sets
-  /// `error` (without logging the endpoint URLs themselves — they can
-  /// carry an embedded API key) on failure, mirroring
-  /// `saveAlchemyApiKey`'s error-surfacing shape. On failure the
-  /// in-memory list is reverted to `previous` so the UI never shows a
+  /// `rpcEndpointsError` (without logging the endpoint URLs themselves —
+  /// they can carry an embedded API key) on failure, mirroring
+  /// `saveAlchemyApiKey`'s error-surfacing shape but scoped to this
+  /// section's own error slot rather than the shared Alchemy-section
+  /// `error` — so a failed endpoint save is attributed to the "Custom RPC
+  /// Endpoints" footer only, not also to the Alchemy footer. On failure
+  /// the in-memory list is reverted to `previous` so the UI never shows a
   /// change that didn't actually persist.
   private func persistRPCEndpoints(revertingTo previous: [String]) {
     do {
       try rpcEndpointsStore.save(rpcEndpoints)
-      setError(nil)
+      setRPCEndpointsError(nil)
     } catch {
       logger.error(
         "Failed to save RPC endpoint list: \(error.localizedDescription, privacy: .public)")
       setRPCEndpoints(previous)
-      setError("Failed to save RPC endpoint: \(error.localizedDescription)")
+      setRPCEndpointsError("Failed to save RPC endpoint: \(error.localizedDescription)")
     }
   }
 }
