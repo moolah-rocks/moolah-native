@@ -21,6 +21,12 @@ extension ProfileSchema {
   /// `WITHOUT ROWID`): GRDB's `upsert` emits `RETURNING "rowid"` and
   /// `ValueObservation` hooks require a rowid table — same constraint as the
   /// v16 `insight_dismissal` synced table.
+  ///
+  /// Retention: one row per account, keyed by account id. AccountRepository.delete(_:)
+  /// must also delete the corresponding wallet_sync_checkpoint row (and, once wired,
+  /// queue a CloudKit delete) — otherwise deleted accounts leave orphaned synced rows.
+  /// No FK constraint (per-profile schema is FK-free); cascade is a repository-layer
+  /// contract, wired in the checkpoint repository work.
   static func addWalletSyncCheckpoint(_ database: Database) throws {
     try database.execute(
       sql: """

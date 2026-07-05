@@ -22,6 +22,10 @@
 ///      the "deprecated field is suddenly invisible" race.
 ///
 /// History (newest first):
+/// - 8: wallet sync checkpoint. Adds the synced `WalletSyncCheckpointRecord`
+///      type (cross-device highest-confirmed-block bootstrap for auto-imported
+///      accounts). Older builds don't know the record type and would silently
+///      discard downloaded checkpoints, losing the cross-device bootstrap.
 /// - 7: CryptoCompare provider removal. The `cryptocompareSymbol` field
 ///      on `InstrumentRecord` is marked `// DEPRECATED` in `schema.ckdb`
 ///      (the wire-struct generator drops it; older builds still write
@@ -84,5 +88,5 @@
 /// cloud without a `dataFormatVersion` field reads as `0` and is
 /// trivially compatible with any v1+ build.
 enum DataFormatVersion {
-  static let current: Int = 7
+  static let current: Int = 8
 }
