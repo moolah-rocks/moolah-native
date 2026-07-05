@@ -78,3 +78,18 @@ struct CryptoRPCEndpointsStore: Sendable {
 }
 
 extension CryptoRPCEndpointsStore: CryptoRPCEndpointsStoring {}
+
+/// In-memory endpoint list for UI tests. The production store writes to the
+/// synchronizable Keychain, which fails on a headless CI runner (no iCloud
+/// keychain) and — because `addRPCEndpoint` reverts on a save failure — would
+/// make every added row vanish immediately. UI tests inject this instead so
+/// add/remove work in-process, mirroring how `alchemyKeyPresent` keeps API-key
+/// handling off the system keychain in the UI-test launch environment.
+final class InMemoryCryptoRPCEndpointsStore: CryptoRPCEndpointsStoring, @unchecked Sendable {
+  private let lock = NSLock()
+  private var endpoints: [String] = []
+
+  func load() -> [String] { lock.withLock { endpoints } }
+
+  func save(_ endpoints: [String]) throws { lock.withLock { self.endpoints = endpoints } }
+}
