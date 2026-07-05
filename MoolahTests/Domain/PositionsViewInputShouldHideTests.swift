@@ -3,7 +3,7 @@ import Testing
 
 @testable import Moolah
 
-/// Tests for `PositionsViewInput.shouldHide`, which suppresses `PositionsView`
+/// Tests for `PositionsViewInput.shouldHide`, which suppresses the positions surface
 /// when it would be redundant with the host surface's already-visible balance.
 /// Lives in its own file to keep `PositionsViewInputTests.swift` within the
 /// file-length / type-body-length budgets.

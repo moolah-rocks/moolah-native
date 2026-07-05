@@ -1,7 +1,7 @@
 import Foundation
 
 /// The six time-range options the chart picker offers, scoped to
-/// `PositionsView`. Distinct from `Domain/Models/TimePeriod.swift` (which
+/// `PositionsChartPane`. Distinct from `Domain/Models/TimePeriod.swift` (which
 /// covers a wider grid for reporting) so we don't over-fit the global type
 /// to one screen's needs.
 enum PositionsTimeRange: Hashable, Sendable, CaseIterable, Identifiable {

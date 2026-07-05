@@ -1,6 +1,6 @@
 import Foundation
 
-/// Immutable input passed to `PositionsView`. Computed properties on this type
+/// Immutable input for the positions panes. Computed properties on this type
 /// are the single place where header / chart visibility rules live, so the
 /// view itself stays a thin renderer with no policy.
 ///
@@ -154,7 +154,7 @@ struct PositionsViewInput: Sendable, Hashable {
     return kinds.count > 1
   }
 
-  /// `true` when `PositionsView` should render nothing. Two cases:
+  /// `true` when the positions surface should render nothing. Two cases:
   /// 1. There are no positions at all (nothing to show).
   /// 2. Every non-zero-quantity position is in `hostCurrency` — the host
   ///    surface's balance already surfaces this, so a second "100 AUD" row
@@ -171,7 +171,7 @@ struct PositionsViewInput: Sendable, Hashable {
     return nonZeroInstruments == [hostCurrency]
   }
 
-  /// `true` when `PositionsView` collapses to `EmptyView`. `shouldHide`
+  /// `true` when the positions surface collapses to `EmptyView`. `shouldHide`
   /// marks the positions list redundant with the host surface's balance,
   /// but position-tracked investment-account hosts
   /// (`alwaysShowsFullSurface`) override that and always render the full

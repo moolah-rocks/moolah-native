@@ -16,7 +16,7 @@ struct PositionsAssemblyContext: Sendable {
   /// Empty (the default) means no rollup — each position stands alone.
   let assetKeysByInstrumentId: [String: String]
   /// Account-level performance numbers, if available. Non-nil triggers the
-  /// three-tile performance strip in `PositionsView`.
+  /// three-tile performance strip in the positions pane.
   let performance: AccountPerformance?
   /// `true` for investment-account hosts, where the full surface renders
   /// even with no open positions. Other callers pass `false` (the default).

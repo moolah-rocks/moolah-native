@@ -2,7 +2,7 @@ import Foundation
 import OSLog
 
 /// Pure, async, throws-never helper that builds `[ValuedPosition]` for
-/// `PositionsView` from a list of raw `Position`s plus an optional cost-basis
+/// the positions surface from a list of raw `Position`s plus an optional cost-basis
 /// snapshot keyed by `Instrument.id`.
 ///
 /// Per `guides/INSTRUMENT_CONVERSION_GUIDE.md`:

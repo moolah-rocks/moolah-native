@@ -1,7 +1,7 @@
 import Foundation
 
 /// Daily (or sampled) `(value, cost)` time series in a single host currency,
-/// driving the chart in `PositionsView`.
+/// driving the chart in `PositionsChartPane`.
 ///
 /// `total` is the account-wide aggregate: at each sample date `value` is the
 /// sum of converted per-instrument values and `cost` is the sum of remaining

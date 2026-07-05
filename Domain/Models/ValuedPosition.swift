@@ -1,6 +1,6 @@
 import Foundation
 
-/// One row in a `PositionsView`: instrument identity + quantity, plus the
+/// One row in the positions table: instrument identity + quantity, plus the
 /// current unit price, cost basis, and total value all expressed in the host
 /// currency. `value`, `unitPrice`, and `costBasis` are independently optional
 /// so callers can supply only what they have:
