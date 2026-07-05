@@ -1,5 +1,6 @@
 // Shared/CryptoImport/DirectRPC/RPCEndpointResolver.swift
 import Foundation
+import OSLog
 
 /// Resolves, per chain, which JSON-RPC client should serve it: a
 /// user-supplied custom endpoint (matched by probing `eth_chainId`) takes
@@ -17,6 +18,8 @@ import Foundation
 /// rather than each issuing their own — mirroring `TokenMetadataResolver`'s
 /// in-flight-`Task` coalescing.
 actor RPCEndpointResolver {
+  private static let logger = Logger(subsystem: "com.moolah.app", category: "RPCEndpointResolver")
+
   /// Result of probing one custom endpoint's `eth_chainId`.
   struct Probe: Sendable, Equatable {
     /// The endpoint string as configured by the user (not a parsed `URL`),
@@ -122,6 +125,9 @@ actor RPCEndpointResolver {
         let chainId = try await client.chainId()
         return Probe(url: endpoint, reachable: true, chainId: chainId)
       } catch {
+        Self.logger.debug(
+          "Probe failed for endpoint \(endpoint, privacy: .public): \(String(describing: error), privacy: .public)"
+        )
         return Probe(url: endpoint, reachable: false, chainId: nil)
       }
     }
