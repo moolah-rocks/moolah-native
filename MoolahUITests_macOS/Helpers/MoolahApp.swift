@@ -115,6 +115,10 @@ final class MoolahApp {
   /// navigating to a synced account via `sidebar.switchToAccount(_:)`.
   var syncedAccountHeader: SyncedAccountHeaderScreen { SyncedAccountHeaderScreen(app: self) }
 
+  /// `PositionsChartTransactionsSplit`, the unified account-detail container.
+  /// Available after navigating to an account via `sidebar.switchToAccount(_:)`.
+  var accountDetail: AccountDetailScreen { AccountDetailScreen(app: self) }
+
   /// `CreateAccountView` sheet. Open it by calling `createAccount.open(...)`.
   var createAccount: CreateAccountScreen { CreateAccountScreen(app: self) }
 
@@ -177,6 +181,17 @@ final class MoolahApp {
   /// through this method so the single-resolver invariant is preserved.
   func menuItem(label: String) -> XCUIElement {
     application.menuItems[label]
+  }
+
+  /// Segment resolver for `Picker.segmented` controls on macOS.
+  /// macOS maps each segment of an `NSSegmentedControl` (in select-one
+  /// mode) to a radio-button element accessible by its visible label text.
+  /// Routing label-based picker lookups through this method (rather than
+  /// direct `application.radioButtons[label]` references in drivers)
+  /// preserves the single-resolver invariant (UI_TEST_GUIDE §3 #5) —
+  /// same rationale as `toolbarButton` and `menuItem`.
+  func pickerSegment(label: String) -> XCUIElement {
+    application.radioButtons[label]
   }
 
   // MARK: - Predicate-based escape hatches

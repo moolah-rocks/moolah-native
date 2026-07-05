@@ -66,6 +66,8 @@ enum UITestSeedHydrator {
       return profile
     case .walletHeaderSyncError:
       return try hydrateWalletHeaderSyncError(into: manager)
+    case .accountDetailLayout:
+      return try hydrateAccountDetailLayout(into: manager)
     }
   }
 
