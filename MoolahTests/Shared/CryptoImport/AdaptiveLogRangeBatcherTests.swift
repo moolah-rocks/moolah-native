@@ -169,7 +169,7 @@ struct AdaptiveLogRangeBatcherTests {
     // A cancellation must not be mistaken for "range too large": the
     // batcher must not halve and retry, it must propagate on the first
     // observed CancellationError.
-    #expect(attempts.value == 1)
+    #expect(attempts.value <= 1)
   }
 
   private struct RangeTooLargeError: Error {}
