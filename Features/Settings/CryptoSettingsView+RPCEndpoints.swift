@@ -89,28 +89,41 @@ extension CryptoSettingsView {
   /// `alchemyStatusBadge`'s `Label(text, systemImage:)` + colour shape.
   /// The precedence itself is computed off-view by `RPCEndpointStatus`;
   /// this just maps each case to presentation.
-  @ViewBuilder
   func rpcEndpointStatusBadge(for url: String) -> some View {
     let status = RPCEndpointStatus(probe: store.rpcProbes.first { $0.url == url })
-    Group {
-      switch status {
-      case .notYetProbed:
-        Label("Not probed", systemImage: "circle")
-          .foregroundStyle(.secondary)
-      case .unreachable:
-        Label("Unreachable", systemImage: "xmark.circle.fill")
-          .foregroundStyle(.red)
-      case .reachable(let chainName):
-        Label(chainName, systemImage: "checkmark.circle.fill")
-          .foregroundStyle(.green)
-      case .reachableUnknownChain(let chainId):
-        Label("Unknown chain (id \(chainId))", systemImage: "questionmark.circle.fill")
-          .foregroundStyle(.orange)
-      }
+    let text: String
+    let symbol: String
+    let color: Color
+    switch status {
+    case .notYetProbed:
+      text = "Not probed"
+      symbol = "circle"
+      color = .secondary
+    case .unreachable:
+      text = "Unreachable"
+      symbol = "xmark.circle.fill"
+      color = .red
+    case .reachable(let chainName):
+      text = chainName
+      symbol = "checkmark.circle.fill"
+      color = .green
+    case .reachableUnknownChain(let chainId):
+      text = "Unknown chain (id \(chainId))"
+      symbol = "questionmark.circle.fill"
+      color = .orange
     }
-    .labelStyle(.titleAndIcon)
-    .font(.caption)
-    .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.rpcEndpointStatusLabel(url))
+    // Collapse the icon+title into ONE accessibility element with a
+    // deterministic label so the badge is queryable by identifier in UI
+    // tests (a bare `Label` + `.accessibilityIdentifier` is not reliably
+    // exposed as a single queryable element), and colour is never the
+    // only signal.
+    return Label(text, systemImage: symbol)
+      .labelStyle(.titleAndIcon)
+      .font(.caption)
+      .foregroundStyle(color)
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(text)
+      .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.rpcEndpointStatusLabel(url))
   }
 }
 
