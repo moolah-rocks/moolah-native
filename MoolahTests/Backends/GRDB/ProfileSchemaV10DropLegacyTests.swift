@@ -79,6 +79,9 @@ struct ProfileSchemaV10DropLegacyTests {
     "insight_dismissal",
     // v18 durable deletion journal (local-only; issue #1090)
     "deletion_journal",
+    // v20 cross-device wallet sync checkpoint (synced; highest confirmed
+    // block per auto-imported account, max-merged across devices)
+    "wallet_sync_checkpoint",
     "grdb_migrations",
   ]
 
