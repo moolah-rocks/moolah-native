@@ -32,17 +32,9 @@ final class SidebarDragAndDropMacTests: MoolahUITestCase {
     // The strongest end-to-end signal is the inline rename field
     // materialising on the new group's row — that exercises the drop,
     // the group creation, and the `onCreatedGroup → editingRowId`
-    // callback in one assertion. The group id is non-deterministic so
-    // we resolve via the shared `renameNameField` identifier the
-    // inline-rename plumbing publishes.
-    let renameField = app.element(for: UITestIdentifiers.Sidebar.renameNameField)
-    let predicate = NSPredicate(format: "exists == true")
-    let expectation = XCTNSPredicateExpectation(
-      predicate: predicate, object: renameField)
-    XCTAssertEqual(
-      XCTWaiter.wait(for: [expectation], timeout: 3),
-      .completed,
-      "Inline rename TextField did not appear on the new group within 3s")
+    // callback in one assertion. The driver resolves it via the shared
+    // `renameNameField` identifier (the group id is non-deterministic).
+    app.sidebar.expectRenameFieldVisible()
   }
 
   func testDragAccountOntoGroupJoinsIt() {
@@ -58,15 +50,7 @@ final class SidebarDragAndDropMacTests: MoolahUITestCase {
     // the drop, combined with the unit-test coverage of
     // `SidebarDropDispatch.dropOntoGroup`, is the end-to-end signal that
     // the drop landed without crashing or unmounting the row.
-    let memberRow = app.element(
-      for: UITestIdentifiers.Sidebar.account(SidebarAccount.tradesBrokerage.id))
-    let predicate = NSPredicate(format: "exists == true")
-    let expectation = XCTNSPredicateExpectation(
-      predicate: predicate, object: memberRow)
-    XCTAssertEqual(
-      XCTWaiter.wait(for: [expectation], timeout: 3),
-      .completed,
-      "Dragged account row was not present after the drop within 3s")
+    app.sidebar.expectAccountVisible(.tradesBrokerage)
   }
 
   func testDragReordersStandaloneAccounts() {
@@ -82,14 +66,7 @@ final class SidebarDragAndDropMacTests: MoolahUITestCase {
     // `SidebarOutlineDropCoordinatorCommitTests.commitReorderRoot`.
     app.sidebar.dragAccount(.brokerage, ontoAccount: .tradesBrokerage)
 
-    let renameField = app.element(for: UITestIdentifiers.Sidebar.renameNameField)
-    let predicate = NSPredicate(format: "exists == true")
-    let expectation = XCTNSPredicateExpectation(
-      predicate: predicate, object: renameField)
-    XCTAssertEqual(
-      XCTWaiter.wait(for: [expectation], timeout: 3),
-      .completed,
-      "Inline rename TextField did not appear on the new group within 3s")
+    app.sidebar.expectRenameFieldVisible()
   }
 
   /// Cross-group drop-onto: drag the sole member of a 1-member group onto
@@ -114,13 +91,6 @@ final class SidebarDragAndDropMacTests: MoolahUITestCase {
     app.sidebar.dragAccount(.brokerage, ontoAccount: .tradesBrokerage)
 
     // Post-condition: the renameTarget group row disappears.
-    let groupRow = app.element(
-      for: UITestIdentifiers.Sidebar.group(SidebarGroup.renameTarget.id))
-    let groupGone = XCTNSPredicateExpectation(
-      predicate: NSPredicate(format: "exists == false"), object: groupRow)
-    XCTAssertEqual(
-      XCTWaiter.wait(for: [groupGone], timeout: 3),
-      .completed,
-      "renameTarget group row still present 3s after sole member dragged out")
+    app.sidebar.expectGroupGone(.renameTarget)
   }
 }
