@@ -64,6 +64,13 @@ struct ChainConfigTests {
   }
 
   @Test
+  func defaultRPCURLPerChain() {
+    #expect(ChainConfig.config(for: 1)?.defaultRPCURL.host == "ethereum-rpc.publicnode.com")
+    #expect(ChainConfig.config(for: 10)?.defaultRPCURL.host == "optimism-rpc.publicnode.com")
+    #expect(ChainConfig.config(for: 8453)?.defaultRPCURL.host == "base-rpc.publicnode.com")
+  }
+
+  @Test
   func lookupByIdReturnsNilForUnsupportedChain() {
     #expect(ChainConfig.config(for: 0) == nil)
     #expect(ChainConfig.config(for: 137) == nil)  // Polygon (no public Blockscout — unsupported)

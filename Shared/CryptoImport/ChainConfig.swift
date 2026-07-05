@@ -49,6 +49,10 @@ struct ChainConfig: Sendable, Hashable {
   /// why it is not a supported chain.
   let blockscoutAPIBaseURL: URL
 
+  /// Default public JSON-RPC endpoint (publicnode.com), used for direct
+  /// on-chain calls that don't go through Alchemy.
+  let defaultRPCURL: URL
+
   /// Human-readable name for the chain picker / settings UI.
   let displayName: String
 
@@ -77,6 +81,7 @@ extension ChainConfig {
     chargesL1DataFee: false,
     blockExplorerBaseURL: requireURL("https://etherscan.io"),
     blockscoutAPIBaseURL: requireURL("https://eth.blockscout.com"),
+    defaultRPCURL: requireURL("https://ethereum-rpc.publicnode.com"),
     displayName: "Ethereum"
   )
 
@@ -99,6 +104,7 @@ extension ChainConfig {
     // now 301-redirects every path to explorer.optimism.io. Point directly
     // at the canonical host (Ethereum/Base still use *.blockscout.com).
     blockscoutAPIBaseURL: requireURL("https://explorer.optimism.io"),
+    defaultRPCURL: requireURL("https://optimism-rpc.publicnode.com"),
     displayName: "OP Mainnet"
   )
 
@@ -118,6 +124,7 @@ extension ChainConfig {
     chargesL1DataFee: true,
     blockExplorerBaseURL: requireURL("https://basescan.org"),
     blockscoutAPIBaseURL: requireURL("https://base.blockscout.com"),
+    defaultRPCURL: requireURL("https://base-rpc.publicnode.com"),
     displayName: "Base"
   )
 
