@@ -122,16 +122,13 @@ struct PositionsChartTransactionsSplit<Transactions: View, Positions: View, Char
 
     private var bottomToggle: some View {
       VStack(spacing: 0) {
-        Picker("Show", selection: $bottomTab) {
-          ForEach(AccountDetailLayout.macBottomTabs, id: \.self) { tab in
-            Text(label(for: tab)).tag(tab)
-          }
-        }
-        .pickerStyle(.segmented)
-        .accessibilityLabel("Account detail section")
-        .accessibilityIdentifier(UITestIdentifiers.AccountDetail.tabPicker)
-        .padding(.horizontal)
-        .padding(.vertical, 8)
+        // The segmented toggle is extracted into an `Equatable` view and
+        // wrapped in `.equatable()` so that content-only re-renders of the
+        // surrounding panes do NOT re-render the `Picker`. See
+        // `BottomTabToggle` for why re-rendering it mid-click drops the
+        // selection change under load.
+        BottomTabToggle(selection: bottomTab, binding: $bottomTab)
+          .equatable()
 
         Divider()
 
@@ -165,14 +162,64 @@ struct PositionsChartTransactionsSplit<Transactions: View, Positions: View, Char
       .accessibilityIdentifier(UITestIdentifiers.AccountDetail.chartPane)
   }
 
-  private func label(for tab: AccountDetailTab) -> String {
-    switch tab {
-    case .transactions: return "Transactions"
-    case .positions: return "Positions"
-    case .chart: return "Chart"
-    }
+}
+
+/// Visible label for a bottom-pane / tab segment. File-scoped so both the
+/// iOS `Picker` and the macOS `BottomTabToggle` share one mapping.
+private func label(for tab: AccountDetailTab) -> String {
+  switch tab {
+  case .transactions: return "Transactions"
+  case .positions: return "Positions"
+  case .chart: return "Chart"
   }
 }
+
+#if os(macOS)
+  /// The macOS `[Transactions | Chart]` segmented toggle, extracted into an
+  /// `Equatable` view (used with `.equatable()`) so unrelated re-renders of
+  /// the surrounding panes don't disturb the underlying `NSSegmentedControl`.
+  ///
+  /// The bottom pane's `positionsInput` is written progressively by the async
+  /// valuator + performance pipeline. Each write re-renders the container; if
+  /// the segmented `Picker` re-rendered with it, AppKit would re-apply
+  /// `selectedSegment` from `selection` (`updateNSView`). When that re-apply
+  /// lands in the window of a segment click — common under load, and made more
+  /// likely by the per-account performance compute delaying the final write to
+  /// around the second toggle click — it reverts the in-flight click and the
+  /// selection binding never updates, so the tab silently fails to switch (the
+  /// observed CI flake). Comparing only the selected value keeps the control
+  /// stable across content-only re-renders while still updating on a genuine
+  /// selection change.
+  private struct BottomTabToggle {
+    /// The current selection as an immutable `Sendable` value so `==` can read
+    /// it from the nonisolated `Equatable` requirement (`binding` is a
+    /// `MainActor`-isolated `var` and can't be read there). `binding` is used
+    /// only to write the owner's `@State` back and is excluded from `==`.
+    let selection: AccountDetailTab
+    @Binding var binding: AccountDetailTab
+  }
+
+  extension BottomTabToggle: View {
+    var body: some View {
+      Picker("Show", selection: $binding) {
+        ForEach(AccountDetailLayout.macBottomTabs, id: \.self) { tab in
+          Text(label(for: tab)).tag(tab)
+        }
+      }
+      .pickerStyle(.segmented)
+      .accessibilityLabel("Account detail section")
+      .accessibilityIdentifier(UITestIdentifiers.AccountDetail.tabPicker)
+      .padding(.horizontal)
+      .padding(.vertical, 8)
+    }
+  }
+
+  extension BottomTabToggle: Equatable {
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
+      lhs.selection == rhs.selection
+    }
+  }
+#endif
 
 #Preview("Multi-instrument — pinned split / 3 tabs") {
   PositionsChartTransactionsSplit(hasPositions: true) {
