@@ -224,6 +224,8 @@ extension MoolahUITestCase {
       appendWalletHeaderFixtures(into: &lines)
     case .accountDetailLayout:
       appendAccountDetailLayoutFixtures(into: &lines)
+    case .investmentTradeReady:
+      appendInvestmentTradeReadyFixtures(into: &lines)
     }
   }
   // swiftlint:enable cyclomatic_complexity

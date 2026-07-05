@@ -170,6 +170,15 @@ public enum UITestSeed: String, CaseIterable, Sendable {
   /// list and balance chart both have data. Drives `AccountDetailSplitTests`.
   /// See `UITestFixtures.AccountDetailLayout` for the full fixture table.
   case accountDetailLayout = "account-detail-layout"
+
+  /// A CloudKit-backed AUD profile with one `.investment` account in
+  /// `.calculatedFromTrades` mode. Two buy trade transactions produce a
+  /// net 30 VGS.AX position (non-host holding), which exercises the
+  /// Increment-4 `AccountDetailView(alwaysShowsFullSurface: true)` routing
+  /// and the macOS pinned-positions layout. Drives
+  /// `AccountDetailUnifiedLayoutTests`. See
+  /// `UITestFixtures.InvestmentTradeReady` for the full fixture table.
+  case investmentTradeReady = "investment-trade-ready"
 }
 
 extension UITestSeed {
@@ -190,7 +199,8 @@ extension UITestSeed {
       .welcomeDownloading, .sidebarFooterUpToDate, .sidebarFooterReceiving,
       .sidebarFooterSending, .tradeReady, .incompatibleProfile,
       .transferDetectionBaseline, .pendingWebImportOneChaseInbox,
-      .insightsForYouBaseline, .groupFilterScope, .accountDetailLayout:
+      .insightsForYouBaseline, .groupFilterScope, .accountDetailLayout,
+      .investmentTradeReady:
       return false
     }
   }

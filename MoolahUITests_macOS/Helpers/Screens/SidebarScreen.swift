@@ -24,6 +24,12 @@ enum SidebarAccount {
   /// (AUD denomination, no non-host holdings). Drives the macOS
   /// single-toggle-pane layout in `AccountDetailSplitTests`.
   case everydayFiat
+  /// The Portfolio account from the `.investmentTradeReady` seed. Type
+  /// `.investment`, `valuationMode = .calculatedFromTrades`, with two buy
+  /// trades producing a net VGS.AX position (non-host holding). Drives
+  /// `AccountDetailUnifiedLayoutTests` to exercise the Increment-4
+  /// `AccountDetailView(alwaysShowsFullSurface: true)` dispatch path.
+  case investmentPortfolio
 
   /// The fixed UUID written to the seeded `ProfileContainerManager` by
   /// `UITestSeedHydrator`.
@@ -36,6 +42,7 @@ enum SidebarAccount {
     case .walletWithSyncError: return UITestFixtures.WalletHeaderSyncError.walletAccountId
     case .multiCurrency: return UITestFixtures.AccountDetailLayout.multiCurrencyAccountId
     case .everydayFiat: return UITestFixtures.AccountDetailLayout.everydayAccountId
+    case .investmentPortfolio: return UITestFixtures.InvestmentTradeReady.portfolioAccountId
     }
   }
 }
