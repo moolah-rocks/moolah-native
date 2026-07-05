@@ -236,6 +236,22 @@ extension MoolahUITestCase {
     lines.append("expected.banner.label = \(fixtures.expectedBannerText)")
   }
 
+  func appendInvestmentTradeReadyFixtures(into lines: inout [String]) {
+    let fixtures = UITestFixtures.InvestmentTradeReady.self
+    lines.append("# fixtures — investment account (.calculatedFromTrades) + VGS.AX trades")
+    lines.append("profile.id       = \(fixtures.profileId)")
+    lines.append("profile.label    = \(fixtures.profileLabel)")
+    lines.append("profile.currency = \(fixtures.profileCurrencyCode)")
+    lines.append(
+      "portfolio.id/name = \(fixtures.portfolioAccountId) "
+        + "/ \(fixtures.portfolioAccountName) (investment, calculatedFromTrades)")
+    lines.append("instrument.id    = \(fixtures.vgsaxInstrumentId)")
+    lines.append("instrument.ticker  = \(fixtures.vgsaxTicker)")
+    lines.append("instrument.exchange = \(fixtures.vgsaxExchange)")
+    lines.append("trade1.id = \(fixtures.trade1Id) (14-Apr-26 buy: −$300 AUD → +20 VGS.AX)")
+    lines.append("trade2.id = \(fixtures.trade2Id) (21-Apr-26 buy: −$160 AUD → +10 VGS.AX)")
+  }
+
   func appendAccountDetailLayoutFixtures(into lines: inout [String]) {
     let fixtures = UITestFixtures.AccountDetailLayout.self
     lines.append("# fixtures — two bank accounts: multi-currency (AUD+USD) + fiat-only (AUD)")

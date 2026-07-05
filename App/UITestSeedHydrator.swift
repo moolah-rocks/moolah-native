@@ -12,6 +12,7 @@ import GRDB
 /// which keeps re-launches during driver iteration robust.
 @MainActor
 enum UITestSeedHydrator {
+  // swiftlint:disable cyclomatic_complexity
   /// Seeds `manager` from the given seed and returns the resulting `Profile`,
   /// or `nil` for seeds that start without an active profile (e.g. Welcome
   /// seeds that exercise the first-run experience before any profile is open).
@@ -68,8 +69,11 @@ enum UITestSeedHydrator {
       return try hydrateWalletHeaderSyncError(into: manager)
     case .accountDetailLayout:
       return try hydrateAccountDetailLayout(into: manager)
+    case .investmentTradeReady:
+      return try hydrateInvestmentTradeReady(into: manager)
     }
   }
+  // swiftlint:enable cyclomatic_complexity
 
   /// Dispatches the welcome-profile-picker seeds. Hydrates one or two
   /// `Profile` records into the index depending on the seed; either way

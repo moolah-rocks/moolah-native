@@ -45,7 +45,8 @@ enum UITestSeedCryptoOverrides {
       .insightsForYouBaseline,
       .groupFilterScope,
       .walletHeaderSyncError,
-      .accountDetailLayout:
+      .accountDetailLayout,
+      .investmentTradeReady:
       return nil
     }
   }

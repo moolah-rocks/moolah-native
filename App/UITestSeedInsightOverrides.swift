@@ -27,7 +27,8 @@ enum UITestSeedInsightOverrides {
       .transferDetectionBaseline,
       .groupFilterScope,
       .walletHeaderSyncError,
-      .accountDetailLayout:
+      .accountDetailLayout,
+      .investmentTradeReady:
       return nil
     }
   }
@@ -57,7 +58,8 @@ enum UITestSeedInsightOverrides {
         .transferDetectionBaseline,
         .groupFilterScope,
         .walletHeaderSyncError,
-        .accountDetailLayout:
+        .accountDetailLayout,
+        .investmentTradeReady:
         return nil
       }
     }
@@ -88,7 +90,8 @@ enum UITestSeedInsightOverrides {
         .transferDetectionBaseline,
         .groupFilterScope,
         .walletHeaderSyncError,
-        .accountDetailLayout:
+        .accountDetailLayout,
+        .investmentTradeReady:
         return nil
       }
     }

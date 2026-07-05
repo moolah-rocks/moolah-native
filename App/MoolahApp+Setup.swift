@@ -140,7 +140,8 @@ extension MoolahApp {
       .insightsForYouBaseline,
       .groupFilterScope,
       .walletHeaderSyncError,
-      .accountDetailLayout:
+      .accountDetailLayout,
+      .investmentTradeReady:
       break
     case .welcomeDownloading:
       // Override iCloudAvailability to `.available` so the WelcomeStateResolver
