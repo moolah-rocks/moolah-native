@@ -92,6 +92,39 @@ final class CryptoTokenStore {
   /// the synced keychain in CI.
   let alchemyKeyStore: KeychainStore
 
+  /// Backing store for the custom JSON-RPC endpoint list (the "Custom
+  /// RPC Endpoints" Settings section). Internal (not `private`) so the
+  /// `CryptoTokenStore+RPCEndpoints` extension — split into its own file
+  /// to keep this file under the file-length limit — can read it.
+  let rpcEndpointsStore: CryptoRPCEndpointsStore
+
+  /// Cached copy of `rpcEndpointsStore.load()`, refreshed by every
+  /// `addRPCEndpoint`/`removeRPCEndpoint` call. Unlike the API-key
+  /// `has…` properties (which re-read the Keychain on every access
+  /// because they're single booleans), the endpoint list is an array
+  /// worth showing in a `ForEach`, so it's cached rather than reloaded
+  /// on every render. `internal` (not `private(set)`, unlike `error`'s
+  /// `setError(_:)` seam) because `CryptoTokenStore+RPCEndpoints` — a
+  /// sibling file — is the sole mutator and adding a one-line pass-
+  /// through setter method would add indirection without adding safety;
+  /// the view only ever reads it (`store.rpcEndpoints`), never assigns.
+  var rpcEndpoints: [String]
+
+  /// Latest probe results from `probeEndpoints()`, keyed implicitly by
+  /// `Probe.url`. The Settings screen's per-row status badge looks up
+  /// the matching entry; an endpoint with no matching `Probe` (not yet
+  /// probed) renders as "not probed" rather than "unreachable". Same
+  /// internal-not-private(set) reasoning as `rpcEndpoints` above.
+  var rpcProbes: [RPCEndpointResolver.Probe] = []
+
+  /// Test seam for `probeEndpoints()`: when non-`nil`, its result is used
+  /// instead of building a live `RPCEndpointResolver`. Store-level tests
+  /// (and the UI-test harness) inject a fake here to get deterministic
+  /// `Probe` results without a network round trip. `internal` (not
+  /// `private`) so both the sibling extension file and `@testable`
+  /// test targets can set it.
+  var rpcProbeOverride: (@Sendable ([String]) async -> [RPCEndpointResolver.Probe])?
+
   /// Subscription to the registry's change stream so per-session side
   /// effects fire when ANY session (including this one) mutates the
   /// shared registry. The `onRegistrationsChanged` callback drives
@@ -113,6 +146,7 @@ final class CryptoTokenStore {
     conversionService: any InstrumentConversionService,
     apiKeyStore: KeychainStore,
     alchemyKeyStore: KeychainStore,
+    rpcEndpointsStore: CryptoRPCEndpointsStore = CryptoRPCEndpointsStore(),
     sharedStore: SharedRegistryStore? = nil
   ) {
     self.registry = registry
@@ -120,6 +154,8 @@ final class CryptoTokenStore {
     self.conversionService = conversionService
     self.apiKeyStore = apiKeyStore
     self.alchemyKeyStore = alchemyKeyStore
+    self.rpcEndpointsStore = rpcEndpointsStore
+    self.rpcEndpoints = rpcEndpointsStore.load()
     self.sharedStore = sharedStore
     // Migration cleanup: CryptoCompare is not a supported provider and
     // its keychain entry may linger in iCloud keychains. `clear()` is
@@ -161,6 +197,7 @@ final class CryptoTokenStore {
     registry: any InstrumentRegistryRepository,
     cryptoPriceService: CryptoPriceService,
     conversionService: any InstrumentConversionService,
+    rpcEndpointsStore: CryptoRPCEndpointsStore = CryptoRPCEndpointsStore(),
     sharedStore: SharedRegistryStore? = nil
   ) {
     self.init(
@@ -171,6 +208,7 @@ final class CryptoTokenStore {
         service: KeychainServices.apiKeys, account: "coingecko", synchronizable: true),
       alchemyKeyStore: KeychainStore(
         service: KeychainServices.apiKeys, account: "alchemy", synchronizable: true),
+      rpcEndpointsStore: rpcEndpointsStore,
       sharedStore: sharedStore)
   }
 
