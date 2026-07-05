@@ -30,6 +30,7 @@ struct AccountPerformanceTiles: View {
     .padding(.horizontal)
     .padding(.vertical, 12)
     .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+    .accessibilityIdentifier(UITestIdentifiers.AccountDetail.performanceTiles)
   }
 
   // MARK: - Tiles
