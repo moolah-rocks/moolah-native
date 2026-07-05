@@ -73,13 +73,14 @@ protocol AnalysisRepository: Sendable {
   ///   - dateRange: Date range to analyze (inclusive on both ends).
   ///   - filters: Optional additional filters (account, earmark, payee, etc.).
   ///   - targetInstrument: Instrument the aggregated amounts are expressed in.
-  /// - Returns: Tuple of income and expense dictionaries mapping category UUIDs to totals.
+  /// - Returns: `CategoryBalancesByType` with per-category income/expense totals, plus
+  ///   optional uncategorised totals (backend-dependent; `nil` when not computed).
   /// - Throws: BackendError on network/auth failure.
   func fetchCategoryBalancesByType(
     dateRange: ClosedRange<Date>,
     filters: TransactionFilter?,
     targetInstrument: Instrument
-  ) async throws -> (income: [UUID: InstrumentAmount], expense: [UUID: InstrumentAmount])
+  ) async throws -> CategoryBalancesByType
 
   /// Load all analysis data in a single batch, avoiding redundant fetches.
   ///
@@ -100,19 +101,38 @@ struct AnalysisData: Sendable {
   let incomeAndExpense: [MonthlyIncomeExpense]
 }
 
+/// Result of `fetchCategoryBalancesByType`: per-category income/expense totals for the
+/// Reports screen, plus optional uncategorised totals.
+///
+/// `incomeUncategorised` / `expenseUncategorised` are `nil` when the backend hasn't computed
+/// uncategorised totals (the safe default) — the Reports screen omits the "Uncategorised"
+/// row in that case, rather than treating `nil` as zero.
+struct CategoryBalancesByType: Sendable {
+  let income: [UUID: InstrumentAmount]
+  let expense: [UUID: InstrumentAmount]
+  let incomeUncategorised: InstrumentAmount?
+  let expenseUncategorised: InstrumentAmount?
+}
+
 extension AnalysisRepository {
   func fetchCategoryBalancesByType(
     dateRange: ClosedRange<Date>,
     filters: TransactionFilter?,
     targetInstrument: Instrument
-  ) async throws -> (income: [UUID: InstrumentAmount], expense: [UUID: InstrumentAmount]) {
+  ) async throws -> CategoryBalancesByType {
     async let incomeResult = fetchCategoryBalances(
       dateRange: dateRange, transactionType: .income, filters: filters,
       targetInstrument: targetInstrument)
     async let expenseResult = fetchCategoryBalances(
       dateRange: dateRange, transactionType: .expense, filters: filters,
       targetInstrument: targetInstrument)
-    return try await (income: incomeResult, expense: expenseResult)
+    let (income, expense) = try await (incomeResult, expenseResult)
+    return CategoryBalancesByType(
+      income: income,
+      expense: expense,
+      incomeUncategorised: nil,
+      expenseUncategorised: nil
+    )
   }
 
   func loadAll(
