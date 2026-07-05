@@ -36,6 +36,11 @@ struct WalletSyncEngine: Sendable {
   private let discovery: CryptoTokenDiscoveryService
   private let walletSyncState: any WalletSyncStateRepository
   private let importOriginFactory: @Sendable (UUID) -> ImportOrigin
+  /// Recovers the WETH leg a native-only wrap/unwrap movement omits.
+  /// Derived from `alchemy` — the same `ChainDataClient` already used for
+  /// ERC-20 fetch and receipts — so no separate dependency needs wiring
+  /// at construction sites.
+  private let wrapUnwrapDetector: WrapUnwrapDetector
   /// Shared static `Logger` — `Logger` is `Sendable`, so a static let is
   /// safe across actor boundaries without per-instance allocation.
   private static let logger = Logger(
@@ -67,6 +72,7 @@ struct WalletSyncEngine: Sendable {
     self.discovery = discovery
     self.walletSyncState = walletSyncState
     self.importOriginFactory = importOriginFactory
+    self.wrapUnwrapDetector = WrapUnwrapDetector(chainClient: alchemy)
   }
 
   /// Runs the build phase for a single crypto account. Returns the
@@ -109,11 +115,20 @@ struct WalletSyncEngine: Sendable {
     let adapted = try await fetchBlockscout(
       chain: chain, walletAddress: walletAddress, fromBlock: fromBlock)
 
-    // 3b. ERC-20 only from Alchemy — Blockscout owns native/internal.
+    // 3b. Wrap/unwrap synthesis: recovers the WETH leg a native-only view
+    //     of an ETH↔WETH movement omits (invisible to both Alchemy's
+    //     transfer API and the mint/burn guard). Runs off the Blockscout
+    //     native set fetched above.
+    try Task.checkCancellation()
+    let wrapUnwrap = try await wrapUnwrapDetector.detect(
+      nativeTransfers: adapted.transfers, chain: chain, walletAddress: walletAddress)
+
+    // 3c. ERC-20 only from Alchemy — Blockscout owns native/internal.
     try Task.checkCancellation()
     let alchemyAll = try await alchemy.getAssetTransfers(
       chain: chain, walletAddress: walletAddress, fromBlock: fromBlock)
-    let transfers = adapted.transfers + alchemyAll.filter { $0.category == .erc20 }
+    let transfers =
+      adapted.transfers + wrapUnwrap + alchemyAll.filter { $0.category == .erc20 }
     try Task.checkCancellation()
 
     // 4. Head block over the merged set (Blockscout blockNum included).
