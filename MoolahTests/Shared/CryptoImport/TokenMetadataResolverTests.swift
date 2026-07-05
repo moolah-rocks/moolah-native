@@ -208,6 +208,40 @@ struct TokenMetadataResolverTests {
   }
 
   @Test
+  func symbolRevertIsCachedWithoutReissuingTheCall() async throws {
+    // A symbol() revert is a PERMANENT failure (unlike a transient
+    // rate-limit/network error) — it resolves with the known-good decimals
+    // and a nil symbol, and that result is cached: a second lookup for the
+    // same contract must not re-issue either `eth_call`.
+    let resolver = Self.makeResolver { request in
+      guard let selector = Support.selector(from: request) else {
+        Issue.record("Missing eth_call selector in request body")
+        throw URLError(.unknown)
+      }
+      switch selector {
+      case Support.decimalsSelector:
+        return Support.okResponse(
+          for: request, body: #"{"jsonrpc":"2.0","id":1,"result":"0x8"}"#)
+      case Support.symbolSelector:
+        return Support.okResponse(
+          for: request,
+          body: #"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"execution reverted"}}"#
+        )
+      default:
+        Issue.record("Unexpected selector \(selector)")
+        throw URLError(.unknown)
+      }
+    }
+    let first = await resolver.metadata(for: Support.contract)
+    #expect(first == .init(decimals: 8, symbol: nil))
+    let callsAfterFirstLookup = TokenMetadataResolverURLProtocolStub.requestCount
+
+    let second = await resolver.metadata(for: Support.contract)
+    #expect(second == .init(decimals: 8, symbol: nil))
+    #expect(TokenMetadataResolverURLProtocolStub.requestCount == callsAfterFirstLookup)
+  }
+
+  @Test
   func legacyBytes32SymbolDecodesAsRightPaddedASCII() async throws {
     // MKR-style legacy encoding: symbol() returns a fixed bytes32, not the
     // standard dynamic string — just the right-zero-padded ASCII bytes with

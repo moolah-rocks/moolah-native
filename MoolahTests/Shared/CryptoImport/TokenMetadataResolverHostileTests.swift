@@ -119,6 +119,48 @@ struct TokenMetadataResolverHostileTests {
     // budget of `eth_call`s rather than returning an already-cached `nil`.
     #expect(TokenMetadataHostileURLProtocolStub.requestCount == callsAfterFirstLookup * 2)
   }
+
+  @Test
+  func transientSymbolRateLimitFailureIsNotCachedAndRetriesOnNextLookup() async throws {
+    // decimals() always succeeds; every symbol() attempt 429s until the
+    // retry budget (4 attempts) is exhausted, so `rpc.call` ultimately
+    // throws `WalletSyncError.rateLimited` for the symbol leg. That must
+    // NOT be cached as `Metadata(decimals:, symbol: nil)` — the whole
+    // contract defers so a later lookup gets another chance at the symbol,
+    // rather than permanently forgetting it never actually resolved.
+    let resolver = Self.makeResolver { request in
+      guard let selector = Support.selector(from: request) else {
+        Issue.record("Missing eth_call selector in request body")
+        throw URLError(.unknown)
+      }
+      switch selector {
+      case Support.decimalsSelector:
+        return Support.okResponse(
+          for: request, body: #"{"jsonrpc":"2.0","id":1,"result":"0x6"}"#)
+      case Support.symbolSelector:
+        return (
+          AlchemyTestSupport.response(
+            for: request, statusCode: 429, headerFields: ["Retry-After": "1"]),
+          Data()
+        )
+      default:
+        Issue.record("Unexpected selector \(selector)")
+        throw URLError(.unknown)
+      }
+    }
+    let first = await resolver.metadata(for: Support.contract)
+    #expect(first == nil)
+    let callsAfterFirstLookup = TokenMetadataHostileURLProtocolStub.requestCount
+    // 1 decimals() call + the retry policy's full 4-attempt symbol() budget.
+    #expect(callsAfterFirstLookup == 5)
+
+    let second = await resolver.metadata(for: Support.contract)
+    #expect(second == nil)
+    // Not negative-cached: the second lookup re-issues both calls (its own
+    // decimals() call plus a fresh full symbol() retry budget) rather than
+    // returning an already-cached result.
+    #expect(TokenMetadataHostileURLProtocolStub.requestCount == callsAfterFirstLookup * 2)
+  }
 }
 
 /// Dedicated `URLProtocol` stub for `TokenMetadataResolverHostileTests`

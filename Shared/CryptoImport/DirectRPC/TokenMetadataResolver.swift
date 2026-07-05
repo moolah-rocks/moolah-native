@@ -119,7 +119,28 @@ actor TokenMetadataResolver {
         )
         return .permanentFailure
       }
-      let symbol = await fetchSymbol(rpc: rpc, contract: contract)
+      let symbol: String?
+      do {
+        symbol = try await fetchSymbol(rpc: rpc, contract: contract)
+      } catch {
+        // A transient symbol() failure (rate limit/network/cancellation)
+        // must defer the WHOLE contract, not just resolve with a nil
+        // symbol — decimals is already known-good here, and caching
+        // `Metadata(decimals:, symbol: nil)` would permanently forget that
+        // the symbol lookup never actually got to run. A later
+        // `metadata(for:)` call re-issues both calls (see
+        // `metadata(for:)`'s cache-skip on `isTransientFailure`).
+        if isTransient(error) {
+          logger.debug(
+            "Deferring contract \(contract, privacy: .public): transient symbol() failure, will retry"
+          )
+          return .transientFailure
+        }
+        // Permanent (revert/malformed) — best-effort per `Metadata.symbol`'s
+        // doc comment: decimals is what scaling depends on, so a token
+        // missing only its symbol is still usable.
+        symbol = nil
+      }
       return .resolved(Metadata(decimals: decimals, symbol: symbol))
     } catch {
       if isTransient(error) {
@@ -167,14 +188,16 @@ actor TokenMetadataResolver {
     return decimals
   }
 
-  /// Fetches and decodes `symbol()`. `symbol` is best-effort (see
-  /// `Metadata`'s doc comment), so any failure — transient or permanent —
-  /// simply yields `nil` here rather than failing the whole contract
-  /// resolution; only `decimals()` failures are classified/negative-cached.
-  private static func fetchSymbol(rpc: LiveJSONRPCClient, contract: String) async -> String? {
-    guard let hex = try? await rpc.call(to: contract, data: symbolSelector) else {
-      return nil
-    }
+  /// Fetches and decodes `symbol()`. Propagates any `rpc.call` error —
+  /// `resolve(rpc:contract:)` is the one that classifies it as transient
+  /// (worth retrying, not cached) vs. permanent (best-effort `nil` symbol,
+  /// cached alongside the known-good `decimals`; see `Metadata`'s doc
+  /// comment). Only a successful call whose result doesn't decode to a
+  /// usable string returns `nil` directly — that's a genuine "no symbol",
+  /// not a failure worth retrying.
+  private static func fetchSymbol(rpc: LiveJSONRPCClient, contract: String) async throws -> String?
+  {
+    let hex = try await rpc.call(to: contract, data: symbolSelector)
     return decodeABIString(hex)
   }
 
