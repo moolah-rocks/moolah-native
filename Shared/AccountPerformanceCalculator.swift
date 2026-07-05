@@ -79,6 +79,10 @@ enum AccountPerformanceCalculator {
   ///      (that would paint an airdrop wallet's entire value as gain).
   ///   2. **Flow conversion failed** — a rate lookup for a historical flow
   ///      threw; contributions are unavailable, but the current value is not.
+  ///   3. **Row value in wrong instrument** — a `ValuedPosition` whose `value`
+  ///      is not in `profileCurrency` (aggregate would trap on `+=`); routes
+  ///      through `assemble` with `currentValue: nil`, yielding
+  ///      `totalContributions` with `profitLoss`/`annualisedReturn` nil.
   ///
   /// Throws only `CancellationError` (propagated so a superseded valuator pass
   /// abandons cleanly); every other failure degrades in place.
@@ -226,6 +230,10 @@ enum AccountPerformanceCalculator {
     var total = InstrumentAmount.zero(instrument: profileCurrency)
     for row in valued {
       guard let value = row.value else { return nil }
+      // Rule 11: a row valued in a different instrument cannot be safely added
+      // to `total` (InstrumentAmount.+ traps on instrument mismatch). Treat
+      // the mismatched row as unavailable so the aggregate degrades cleanly.
+      guard value.instrument == profileCurrency else { return nil }
       total += value
     }
     return total
