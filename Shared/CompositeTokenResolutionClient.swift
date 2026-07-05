@@ -1,7 +1,7 @@
 import Foundation
 
-/// Production token resolution client that queries CryptoCompare, Binance, and optionally CoinGecko
-/// to populate provider-specific identifiers for a token.
+/// Production token resolution client that queries CoinGecko (by contract
+/// address) and Binance to populate provider-specific identifiers for a token.
 struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
   private let networking: NetworkingServices
   /// Resolves the CoinGecko key per request (not once at construction) so a
@@ -16,41 +16,31 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
   /// is priced immediately. `nil` disables the local-first path (e.g. tests).
   private let localResolver: LocalContractResolver?
 
-  /// Self-refreshing CryptoCompare coin-list cache, consulted in place of an
-  /// ad-hoc full coin-list download when present. `nil` falls back to the
-  /// preloaded-`Data` parse path (tests) or a live download (no preloaded
-  /// data) so existing behaviour is preserved.
-  private let cryptoCompareLookup: (any CryptoCompareSymbolLookup)?
   /// Self-refreshing Binance USDT-pair cache, consulted in place of an ad-hoc
   /// full `exchangeInfo` download when present. `nil` falls back to the
   /// preloaded-`Data` parse path or a live download.
   private let binanceLookup: (any BinancePairLookup)?
 
-  // For testing: inject pre-parsed reference data
-  private let preloadedCoinList: Data?
+  // For testing: inject pre-parsed Binance reference data
   private let preloadedExchangeInfo: Data?
 
   init(
     networking: NetworkingServices,
     coinGeckoApiKeyProvider: @Sendable @escaping () -> String? = { nil },
     localResolver: LocalContractResolver? = nil,
-    cryptoCompareLookup: (any CryptoCompareSymbolLookup)? = nil,
     binanceLookup: (any BinancePairLookup)? = nil
   ) {
     self.networking = networking
     self.coinGeckoApiKeyProvider = coinGeckoApiKeyProvider
     self.localResolver = localResolver
-    self.cryptoCompareLookup = cryptoCompareLookup
     self.binanceLookup = binanceLookup
-    self.preloadedCoinList = nil
     self.preloadedExchangeInfo = nil
   }
 
-  /// Test initializer with pre-loaded reference data. Accepts an optional
-  /// `networking` so tests that exercise the CoinGecko-dependent paths can
-  /// plug a `StubURLProtocol`-backed `NetworkingServices` in.
+  /// Test initializer with pre-loaded Binance reference data. Accepts an
+  /// optional `networking` so tests that exercise the CoinGecko-dependent
+  /// paths can plug a `StubURLProtocol`-backed `NetworkingServices` in.
   init(
-    coinListData: Data,
     exchangeInfoData: Data,
     coinGeckoApiKeyProvider: @Sendable @escaping () -> String?,
     networking: NetworkingServices = NetworkingServices(),
@@ -59,9 +49,7 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
     self.networking = networking
     self.coinGeckoApiKeyProvider = coinGeckoApiKeyProvider
     self.localResolver = localResolver
-    self.cryptoCompareLookup = nil
     self.binanceLookup = nil
-    self.preloadedCoinList = coinListData
     self.preloadedExchangeInfo = exchangeInfoData
   }
 
@@ -86,25 +74,10 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
       return result
     }
 
-    // Fetch the coin list only when no CryptoCompare lookup is injected; the
-    // lookup is a self-refreshing cache that replaces the ad-hoc download. The
-    // preloaded-`Data` test init has no lookup, so it still parses `Data`.
-    let coinListData = cryptoCompareLookup == nil ? try await fetchCoinListData() : nil
-
-    await resolveFromCryptoCompare(
-      coinListData: coinListData,
-      contractAddress: contractAddress,
-      symbol: symbol,
-      isNative: isNative,
-      result: &result)
-
     if !isNative, let contractAddress {
-      await resolveFromCoinGecko(
+      try await resolveFromCoinGecko(
         chainId: chainId, contractAddress: contractAddress, result: &result)
     }
-
-    await postConfirmCryptoCompareBySymbol(
-      coinListData: coinListData, isNative: isNative, result: &result)
 
     try await resolveBinancePair(
       inputSymbol: symbol, isNative: isNative, result: &result)
@@ -114,50 +87,7 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
 
   // MARK: - Provider steps
 
-  /// Step 1: CryptoCompare's coin list — natives match by symbol; ERC-20s
-  /// match only by `(chainId, contractAddress)`. The user-supplied ticker
-  /// is untrusted for ERC-20s (a spam contract can claim any ticker), so
-  /// a ticker-only fallback is intentionally excluded here.
-  private func resolveFromCryptoCompare(
-    coinListData: Data?,
-    contractAddress: String?,
-    symbol: String?,
-    isNative: Bool,
-    result: inout TokenResolutionResult
-  ) async {
-    if isNative, let symbol {
-      let upper = symbol.uppercased()
-      let matches: Bool
-      if let lookup = cryptoCompareLookup {
-        matches = await lookup.nativeSymbols().contains(upper)
-      } else if let coinListData {
-        let nativeSymbols = (try? CryptoCompareClient.parseNativeSymbols(coinListData)) ?? []
-        matches = nativeSymbols.contains(upper)
-      } else {
-        matches = false
-      }
-      if matches {
-        result.cryptocompareSymbol = upper
-        result.resolvedSymbol = upper
-      }
-    } else if let contractAddress {
-      let ccSymbol: String?
-      if let lookup = cryptoCompareLookup {
-        ccSymbol = await lookup.symbol(forContract: contractAddress)
-      } else if let coinListData {
-        let index = (try? CryptoCompareClient.parseCoinListResponse(coinListData)) ?? [:]
-        ccSymbol = index[contractAddress.lowercased()]
-      } else {
-        ccSymbol = nil
-      }
-      if let ccSymbol {
-        result.cryptocompareSymbol = ccSymbol
-        result.resolvedSymbol = ccSymbol
-      }
-    }
-  }
-
-  /// Step 2: CoinGecko contract-based lookup (ERC-20s only). Runs before
+  /// Step 1: CoinGecko contract-based lookup (ERC-20s only). Runs before
   /// Binance so a CG-confirmed symbol can authorise the Binance pair
   /// attribution (#790). An empty key (`""`) falls through to the free
   /// public CoinGecko endpoint so users without a Pro key still get tokens
@@ -168,7 +98,7 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
   /// the free-tier path. Resolution is best-effort — any error is swallowed.
   private func resolveFromCoinGecko(
     chainId: Int, contractAddress: String, result: inout TokenResolutionResult
-  ) async {
+  ) async throws {
     guard let apiKey = coinGeckoApiKeyProvider() else { return }
     do {
       let platformMapping = try await fetchAssetPlatforms(apiKey: apiKey)
@@ -183,48 +113,20 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
       result.resolvedName = lookup.name
       result.resolvedSymbol = result.resolvedSymbol ?? lookup.symbol.uppercased()
       result.resolvedDecimals = lookup.decimals
+    } catch is CancellationError {
+      throw CancellationError()
     } catch {
       // CoinGecko resolution is best-effort.
     }
   }
 
-  /// Step 2b: CryptoCompare post-confirm by symbol. The contract-address
-  /// index (step 1) misses stablecoins like USDT/USDC/DAI whose
-  /// CryptoCompare entries are chain-agnostic primary listings with no
-  /// `SmartContractAddress` field. Once CoinGecko has verified
-  /// `(chainId, contractAddress) → resolvedSymbol`, attempt a by-symbol
-  /// match against the same coin list. Safe re #790: a spam ERC-20
-  /// whose ticker collides with a legit token's never reaches this
-  /// branch because CoinGecko's contract lookup would not have set
-  /// `result.resolvedSymbol` for the spam contract.
-  private func postConfirmCryptoCompareBySymbol(
-    coinListData: Data?, isNative: Bool, result: inout TokenResolutionResult
-  ) async {
-    guard !isNative, result.cryptocompareSymbol == nil,
-      let confirmedSymbol = result.resolvedSymbol
-    else { return }
-    let contains: Bool
-    if let lookup = cryptoCompareLookup {
-      contains = await lookup.allSymbols().contains(confirmedSymbol)
-    } else if let coinListData {
-      let symbols = (try? CryptoCompareClient.parseCoinSymbols(coinListData)) ?? []
-      contains = symbols.contains(confirmedSymbol)
-    } else {
-      contains = false
-    }
-    if contains {
-      result.cryptocompareSymbol = confirmedSymbol
-    }
-  }
-
-  /// Step 3: Binance exchange info. Binance has no notion of `(chainId,
+  /// Step 2: Binance exchange info. Binance has no notion of `(chainId,
   /// contractAddress)`, so for ERC-20s we only attempt the lookup when a
-  /// contract-based provider (CryptoCompare or CoinGecko) has already
-  /// confirmed the symbol's identity for this exact contract. Without
-  /// that gate, a spam ERC-20 with a copied ticker inherits the
-  /// legitimate token's `<TICKER>USDT` mapping and poisons the running
-  /// balance — see #790. Native tokens may fall back to the input symbol
-  /// because `(chainId, isNative)` already pins identity.
+  /// contract-based provider (CoinGecko) has already confirmed the symbol's
+  /// identity for this exact contract. Without that gate, a spam ERC-20 with
+  /// a copied ticker inherits the legitimate token's `<TICKER>USDT` mapping
+  /// and poisons the running balance — see #790. Native tokens may fall back
+  /// to the input symbol because `(chainId, isNative)` already pins identity.
   private func resolveBinancePair(
     inputSymbol: String?, isNative: Bool, result: inout TokenResolutionResult
   ) async throws {
@@ -247,14 +149,6 @@ struct CompositeTokenResolutionClient: TokenResolutionClient, Sendable {
   }
 
   // MARK: - Reference data fetching
-
-  private func fetchCoinListData() async throws -> Data {
-    if let preloaded = preloadedCoinList { return preloaded }
-    let url = CryptoCompareClient.coinListURL()
-    let http = networking.client(forHost: "min-api.cryptocompare.com")
-    let (data, _) = try await http.data(for: URLRequest(url: url))
-    return data
-  }
 
   private func fetchExchangeInfoData() async throws -> Data {
     if let preloaded = preloadedExchangeInfo { return preloaded }

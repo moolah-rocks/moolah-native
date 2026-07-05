@@ -26,24 +26,6 @@ extension ProfileSession {
     }
   }
 
-  /// Returns the live CryptoCompare API key from the keychain, or `nil` when
-  /// no key is configured. `nonisolated` so the `@Sendable` key-provider
-  /// closure passed to `CryptoCompareClient` can resolve it per request — a
-  /// key entered in Settings then takes effect on the next price fetch
-  /// without rebuilding the client. CryptoCompare's `min-api` host now 401s
-  /// keyless requests, so this key is what restores deep-history backfill.
-  nonisolated static func resolveCryptoCompareApiKey() -> String? {
-    let store = KeychainStore(
-      service: KeychainServices.apiKeys, account: "cryptocompare", synchronizable: true)
-    do {
-      return try store.restoreString()
-    } catch {
-      logger.error(
-        "CryptoCompare keychain read failed: \(error.localizedDescription, privacy: .public)")
-      return nil
-    }
-  }
-
   /// Returns the live CoinGecko API key from the keychain, or `nil` when no
   /// key is configured. `nonisolated` so the `@Sendable` key-provider closure
   /// threaded into the CoinGecko price client, token resolver, and discovery

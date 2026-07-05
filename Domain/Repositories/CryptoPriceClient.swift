@@ -27,7 +27,7 @@ extension CryptoPriceError: LocalizedError {
 }
 
 /// Abstraction for fetching cryptocurrency prices from an external source.
-/// Implementations: CryptoCompareClient (default), BinanceClient (fallback), CoinGeckoClient (premium).
+/// Implementations: DefiLlamaClient, CoinGeckoClient, BinanceClient, StablecoinPriceClient.
 /// All prices are denominated in USD.
 protocol CryptoPriceClient: Sendable {
   /// Which provider this client represents, used to attribute a

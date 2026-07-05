@@ -12,9 +12,9 @@ extension ProfileSession {
   /// the very first time a profile reads them — issue #791.
   ///
   /// Then runs `reconcileProviderMappings` so already-registered tokens
-  /// (e.g. coingecko-only RPL / ILV / IMX) gain newly-cached Binance /
-  /// CryptoCompare mappings on the next launch — deep history resolves
-  /// and months stop rendering "—" (issue #1140).
+  /// (e.g. coingecko-only RPL / ILV / IMX) gain newly-cached Binance
+  /// mappings on the next launch — deep history resolves and months stop
+  /// rendering "—" (issue #1140).
   ///
   /// Both steps share one `Task` tracked in `crossStoreUpdateTasks` so
   /// `cleanupSync` cancels in-flight work when the session tears down.
@@ -50,19 +50,17 @@ extension ProfileSession {
   }
 
   /// Re-detection pass: upgrade already-registered tokens (e.g.
-  /// coingecko-only RPL / ILV / IMX) with newly-cached Binance /
-  /// CryptoCompare mappings so deep history resolves and months stop
-  /// rendering "—" (issue #1140). Requires both provider caches; skipped
-  /// if either is unavailable (degraded open). CoinGecko ids are already
-  /// resolved at registration time, so the CoinGecko resolver is optional —
-  /// the live `SQLiteCoinGeckoCatalog` also conforms to
+  /// coingecko-only RPL / ILV / IMX) with newly-cached Binance mappings so
+  /// deep history resolves and months stop rendering "—" (issue #1140).
+  /// Requires the Binance cache; skipped if it is unavailable (degraded open).
+  /// CoinGecko ids are already resolved at registration time, so the CoinGecko
+  /// resolver is optional — the live `SQLiteCoinGeckoCatalog` also conforms to
   /// `LocalContractResolver`, so it is passed when the down-cast succeeds.
   private func reconcileFromCaches(
     registry: any InstrumentRegistryRepository
   ) async {
-    guard let cryptoCompareCache, let binanceCache else { return }
+    guard let binanceCache else { return }
     let lookups = ProviderCatalogLookups(
-      cryptoCompare: cryptoCompareCache,
       binance: binanceCache,
       coinGecko: coinGeckoCatalog as? any LocalContractResolver)
     await registry.reconcileProviderMappings(using: lookups)

@@ -36,7 +36,6 @@ final class CompositeTokenResolutionLocalFirstTests {
     let local = StubLocalContractResolver(
       match: LocalContractMatch(coingeckoId: "usd-coin", symbol: "USDC", name: "USDC"))
     let client = CompositeTokenResolutionClient(
-      coinListData: Data(#"{"Data":{}}"#.utf8),
       exchangeInfoData: Data(#"{"symbols":[]}"#.utf8),
       coinGeckoApiKeyProvider: { nil },
       localResolver: local
@@ -81,7 +80,6 @@ final class CompositeTokenResolutionLocalFirstTests {
   func nativeBypassesLocal() async throws {
     let local = StubLocalContractResolver(match: nil)
     let client = CompositeTokenResolutionClient(
-      coinListData: Data(#"{"Data":{}}"#.utf8),
       exchangeInfoData: Data(#"{"symbols":[]}"#.utf8),
       coinGeckoApiKeyProvider: { nil },
       localResolver: local

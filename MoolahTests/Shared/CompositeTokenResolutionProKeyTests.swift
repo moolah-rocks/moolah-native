@@ -42,7 +42,6 @@ final class CompositeTokenResolutionProKeyTests {
     }
 
     let client = CompositeTokenResolutionClient(
-      coinListData: Data(#"{ "Data": {} }"#.utf8),
       exchangeInfoData: Data(#"{ "symbols": [] }"#.utf8),
       coinGeckoApiKeyProvider: { "prokey" },
       networking: makeNetworking()
