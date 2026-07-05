@@ -138,7 +138,18 @@ struct PositionsChartTransactionsSplit<Transactions: View, Positions: View, Char
             transactions()
               .environment(\.transactionScrollCollapse, scrollCollapse)
           case .chart:
-            chartPane
+            // The chart pane's intrinsic height (perf tiles + total + value
+            // chart) can exceed the resizable bottom pane. A `ScrollView` is
+            // greedy along its scroll axis, so it fills exactly the height the
+            // pane offers below the pinned picker + Divider, keeping the
+            // VStack's total height equal to the pane. That pins the
+            // `[Transactions | Chart]` picker at the pane's top edge (hittable)
+            // and scrolls any chart overflow instead of centring the whole
+            // VStack — which previously floated the picker above the pane,
+            // behind the pinned positions pane, where CI couldn't tap it. The
+            // transactions case is NOT wrapped: `TransactionListView` already
+            // scrolls, so a second `ScrollView` would nest scroll views.
+            ScrollView { chartPane }
           case .positions:
             // Not reachable — the bottom toggle only offers Transactions /
             // Chart; positions is the pinned top pane.
