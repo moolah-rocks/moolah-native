@@ -19,6 +19,7 @@ struct AccountPerformanceTiles: View {
       Text(title)
         .font(.headline)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier(UITestIdentifiers.AccountDetail.performanceTiles)
       HStack(spacing: 0) {
         currentValueTile
         Divider().frame(height: tileDividerHeight)
@@ -30,7 +31,6 @@ struct AccountPerformanceTiles: View {
     .padding(.horizontal)
     .padding(.vertical, 12)
     .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-    .accessibilityIdentifier(UITestIdentifiers.AccountDetail.performanceTiles)
   }
 
   // MARK: - Tiles
