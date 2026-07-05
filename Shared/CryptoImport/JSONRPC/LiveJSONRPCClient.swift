@@ -69,11 +69,11 @@ struct LiveJSONRPCClient: Sendable {
 
   func chainId() async throws -> Int {
     let hex: String = try await call(method: "eth_chainId", params: [String](), stage: "chainId")
-    guard let value = RPCHex.parseUInt64(hex) else {
+    guard let value = RPCHex.parseUInt64(hex), let chainId = Int(exactly: value) else {
       logger.error("JSON-RPC chainId: malformed hex quantity \(hex, privacy: .public)")
       throw WalletSyncError.providerMalformedResponse(stage: "chainId")
     }
-    return Int(value)
+    return chainId
   }
 
   func blockNumber() async throws -> UInt64 {
