@@ -71,5 +71,9 @@ struct AccountPerformanceInvestmentEquivalenceTests {
     #expect(single.profitLoss == InstrumentAmount(quantity: 500, instrument: aud))
     #expect(multi.profitLoss == nil)
     #expect(multi.currentValue == InstrumentAmount(quantity: 500, instrument: aud))
+    #expect(multi.totalContributions == nil)
+    #expect(multi.profitLossPercent == nil)
+    #expect(multi.annualisedReturn == nil)
+    #expect(multi.firstFlowDate == nil)
   }
 }
