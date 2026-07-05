@@ -35,6 +35,9 @@ final class CryptoSettingsRPCEndpointsTests: MoolahUITestCase {
     app.settings.open()
     app.settings.openCryptoTab()
     app.cryptoSettings.addRPCEndpoint(Self.endpointURL)
+    // Wait for the add's probe to resolve before removing, so the
+    // remove doesn't race the in-flight add/probe round trip.
+    app.cryptoSettings.waitForRPCEndpointStatus(url: Self.endpointURL, chainName: "Ethereum")
 
     app.cryptoSettings.removeRPCEndpoint(Self.endpointURL)
   }

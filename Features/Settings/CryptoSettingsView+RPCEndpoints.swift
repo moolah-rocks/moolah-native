@@ -18,15 +18,16 @@ extension CryptoSettingsView {
       Text("Custom RPC Endpoints")
     } footer: {
       VStack(alignment: .leading, spacing: 6) {
-        if let error = store.error {
+        if let error = store.rpcEndpointsError {
           Text(error)
             .foregroundStyle(.red)
             .textSelection(.enabled)
         }
         Text(
           "Advanced. Route on-chain calls for wallets on a matching chain through your own "
-            + "JSON-RPC node instead of Alchemy or a public node. Changes here update the status "
-            + "below immediately; wallet sync picks up an edited list the next time sync runs."
+            + "JSON-RPC node instead of Alchemy or a public node. The connection status above "
+            + "updates immediately; wallet sync uses an edited endpoint list after you relaunch "
+            + "the app or switch profiles."
         )
       }
     }
@@ -130,6 +131,19 @@ private func previewRPCEndpointProbe(for url: String) -> RPCEndpointResolver.Pro
   }
 }
 
+/// In-memory `CryptoRPCEndpointsStoring` double for `#Preview` use only.
+/// `previewRPCEndpointsStore()` seeds its `CryptoTokenStore` with this
+/// instead of the default `CryptoRPCEndpointsStore()`, whose `save(_:)`
+/// writes the iCloud-synced Keychain entry backing the real "Custom RPC
+/// Endpoints" list — rendering the preview must never touch that entry.
+/// `load()` always returns `[]`; the preview's seed endpoints are
+/// populated purely in-memory via `addRPCEndpoint`, and `save(_:)` is a
+/// no-op so those calls never reach the Keychain.
+private struct PreviewRPCEndpointsStore: CryptoRPCEndpointsStoring {
+  func load() -> [String] { [] }
+  func save(_ endpoints: [String]) throws {}
+}
+
 /// Builds a `CryptoTokenStore` seeded with one endpoint per badge state,
 /// wired to `previewRPCEndpointProbe(for:)` instead of a live resolver.
 @MainActor
@@ -143,7 +157,8 @@ private func previewRPCEndpointsStore() -> CryptoTokenStore {
   let store = CryptoTokenStore(
     registry: registry,
     cryptoPriceService: priceService,
-    conversionService: backend.conversionService)
+    conversionService: backend.conversionService,
+    rpcEndpointsStore: PreviewRPCEndpointsStore())
   store.addRPCEndpoint("https://eth.example.com")
   store.addRPCEndpoint(
     "https://a-very-long-custom-node-hostname.example.com/v1/rpc/overflowing-path-segment")

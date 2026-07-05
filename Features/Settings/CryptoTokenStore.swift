@@ -85,9 +85,8 @@ final class CryptoTokenStore {
   /// Keychain entry for the Alchemy API key, used by the crypto-wallet
   /// auto-import. Service / account strings are pinned to the values
   /// `ProfileSession+CryptoSync` reads on the sync side so reads pick
-  /// up whatever the settings UI writes here. Production wires this
-  /// to the iCloud-synced keychain (`synchronizable: true`); tests
-  /// inject a
+  /// up whatever the settings UI writes here. Production wires this to
+  /// the iCloud-synced keychain (`synchronizable: true`); tests inject a
   /// non-synced `KeychainStore` since the test runner cannot write to
   /// the synced keychain in CI.
   let alchemyKeyStore: KeychainStore
@@ -102,13 +101,10 @@ final class CryptoTokenStore {
   let rpcEndpointsStore: any CryptoRPCEndpointsStoring
 
   /// Cached copy of `rpcEndpointsStore.load()`, refreshed by every
-  /// `addRPCEndpoint`/`removeRPCEndpoint` call. Unlike the API-key
-  /// `has…` properties (which re-read the Keychain on every access
-  /// because they're single booleans), the endpoint list is an array
-  /// worth showing in a `ForEach`, so it's cached rather than reloaded
-  /// on every render. `private(set)`, like `error`; `CryptoTokenStore
-  /// +RPCEndpoints` — a sibling file — mutates it only through the
-  /// `setRPCEndpoints(_:)` seam below.
+  /// `addRPCEndpoint`/`removeRPCEndpoint` call — an array worth showing
+  /// in a `ForEach`, so it's cached rather than reloaded on every render
+  /// (unlike the single-boolean API-key `has…` properties). `private(set)`,
+  /// like `error`; mutated only through `setRPCEndpoints(_:)` below.
   private(set) var rpcEndpoints: [String]
 
   /// Latest probe results from `probeEndpoints()`, keyed implicitly by
@@ -117,6 +113,13 @@ final class CryptoTokenStore {
   /// probed) renders as "not probed" rather than "unreachable".
   /// `private(set)`; mutated only through `setRPCProbes(_:)` below.
   private(set) var rpcProbes: [RPCEndpointResolver.Probe] = []
+
+  /// Error from the most recent `addRPCEndpoint`/`removeRPCEndpoint`
+  /// persistence attempt, surfaced by the RPC section's own footer —
+  /// kept separate from `error` (the Alchemy section's slot) so a failed
+  /// save isn't mis-attributed to both sections. Mutated only through
+  /// `setRPCEndpointsError(_:)` below.
+  private(set) var rpcEndpointsError: String?
 
   /// Test seam for `probeEndpoints()`: when non-`nil`, its result is used
   /// instead of building a live `RPCEndpointResolver`. Store-level tests
@@ -370,24 +373,25 @@ final class CryptoTokenStore {
     onRegistrationsChanged?()
   }
 
-  /// Internal write seam for the `error` published state, used by the
-  /// `CryptoTokenStore+APIKeys` extension (a sibling file) which cannot
-  /// reach the `private(set)` setter directly. Keeps the public read
-  /// surface `private(set)` while allowing the split-out key methods to
-  /// clear / set the error string.
+  /// Internal write seam for `error`, used by `CryptoTokenStore+APIKeys`
+  /// (a sibling file) which cannot reach the `private(set)` setter
+  /// directly.
   func setError(_ message: String?) {
     self.error = message
   }
 
-  /// Internal write seam for `rpcEndpoints`, used by
-  /// `CryptoTokenStore+RPCEndpoints` (a sibling file) which cannot reach
-  /// the `private(set)` setter directly. Mirrors `setError(_:)`.
+  /// Internal write seam for `rpcEndpoints`, mirroring `setError(_:)`.
   func setRPCEndpoints(_ endpoints: [String]) {
     self.rpcEndpoints = endpoints
   }
 
-  /// Internal write seam for `rpcProbes`, mirroring `setRPCEndpoints(_:)`.
+  /// Internal write seam for `rpcProbes`, mirroring `setError(_:)`.
   func setRPCProbes(_ probes: [RPCEndpointResolver.Probe]) {
     self.rpcProbes = probes
+  }
+
+  /// Internal write seam for `rpcEndpointsError`, mirroring `setError(_:)`.
+  func setRPCEndpointsError(_ message: String?) {
+    self.rpcEndpointsError = message
   }
 }

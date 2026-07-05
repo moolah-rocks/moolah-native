@@ -150,7 +150,7 @@ import Testing
       defer { keychain.clear() }
       store.addRPCEndpoint("https://new.example.com")
       #expect(store.rpcEndpoints == ["https://existing.example.com"])
-      #expect(store.error != nil)
+      #expect(store.rpcEndpointsError != nil)
     }
 
     @Test("removeRPCEndpoint reverts rpcEndpoints and sets error when persistence fails")
@@ -160,7 +160,7 @@ import Testing
       defer { keychain.clear() }
       store.removeRPCEndpoint("https://existing.example.com")
       #expect(store.rpcEndpoints == ["https://existing.example.com"])
-      #expect(store.error != nil)
+      #expect(store.rpcEndpointsError != nil)
     }
 
     // MARK: - probeEndpoints (via rpcProbeOverride)
