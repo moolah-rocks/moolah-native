@@ -37,6 +37,8 @@ struct AlchemyTransactionReceiptDecodingTests {
     // wire and must decode to `nil`, not `0`.
     #expect(receipt.l1FeeWei == nil)
     #expect(receipt.from == "0x1111111111111111111111111111111111111111")
+    // Fixture's `logs` key is present but empty.
+    #expect(receipt.logs.isEmpty)
   }
 
   @Test

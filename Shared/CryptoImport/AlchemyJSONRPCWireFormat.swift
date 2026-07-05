@@ -175,6 +175,17 @@ enum AlchemyResponseValidator {
 /// value decodes to `nil` (normal). A *present but unparseable* `l1Fee`
 /// is rejected like the required fields — silently dropping it would
 /// re-introduce the OP-stack gas under-count (#920).
+///
+/// `logs` is decoded as absent-or-empty ⇒ `[]` (SwiftLint's
+/// `discouraged_optional_collection` rules out an `Optional` array
+/// stored property, so the missing-key case is collapsed to `[]` in a
+/// custom `init(from:)` rather than surfacing as `nil`). Unlike the gas
+/// fields above, a malformed individual log entry is dropped rather
+/// than failing the whole receipt: nothing in the gas-leg path reads
+/// `logs` today, so a bad `logIndex` on one entry shouldn't turn a
+/// legitimate gas leg into a sync failure. The wrap/unwrap detector
+/// that consumes `logs` treats a dropped event the same as an absent
+/// one.
 struct AlchemyTransactionReceiptPayload: Decodable, Sendable {
   let gasUsed: String
   let effectiveGasPrice: String
@@ -184,6 +195,23 @@ struct AlchemyTransactionReceiptPayload: Decodable, Sendable {
   /// OP-stack L1 data fee as a 0x-hex string. Absent on Ethereum /
   /// Polygon receipts (the chain has no L1 data fee).
   let l1Fee: String?
+  /// Event logs emitted by the transaction. Absent on some minimal
+  /// wire shapes (e.g. hand-built test payloads) — the custom
+  /// `init(from:)` below maps a missing key to `[]`.
+  let logs: [ReceiptLogPayload]
+
+  private enum CodingKeys: String, CodingKey {
+    case gasUsed, effectiveGasPrice, from, l1Fee, logs
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    gasUsed = try container.decode(String.self, forKey: .gasUsed)
+    effectiveGasPrice = try container.decode(String.self, forKey: .effectiveGasPrice)
+    from = try container.decode(String.self, forKey: .from)
+    l1Fee = try container.decodeIfPresent(String.self, forKey: .l1Fee)
+    logs = try container.decodeIfPresent([ReceiptLogPayload].self, forKey: .logs) ?? []
+  }
 
   func toReceipt(hash: String) throws -> AlchemyTransactionReceipt {
     guard
@@ -198,12 +226,37 @@ struct AlchemyTransactionReceiptPayload: Decodable, Sendable {
       }
       return parsed
     }
+    let logValues = logs.compactMap { $0.toReceiptLog() }
     return AlchemyTransactionReceipt(
       hash: hash,
       gasUsed: gasUsedValue,
       effectiveGasPrice: effectiveGasPriceValue,
       from: from.lowercased(),
-      l1FeeWei: l1FeeValue
+      l1FeeWei: l1FeeValue,
+      logs: logValues
+    )
+  }
+}
+
+/// Wire-format payload for a single entry in a receipt's `logs` array.
+/// `logIndex` is decoded as a 0x-hex string per the JSON-RPC spec.
+struct ReceiptLogPayload: Decodable, Sendable {
+  let address: String
+  let topics: [String]
+  let data: String
+  let logIndex: String
+
+  /// Maps to the domain `ReceiptLog`, parsing `logIndex` from hex.
+  /// Returns `nil` on a malformed `logIndex` so the caller can drop
+  /// just this entry — see the leniency rationale on
+  /// `AlchemyTransactionReceiptPayload.logs`.
+  func toReceiptLog() -> ReceiptLog? {
+    guard let index = HexDecimal.parseInt(logIndex) else { return nil }
+    return ReceiptLog(
+      address: address.lowercased(),
+      topics: topics,
+      data: data,
+      logIndex: index
     )
   }
 }
