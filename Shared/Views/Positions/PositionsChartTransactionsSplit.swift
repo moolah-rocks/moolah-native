@@ -69,6 +69,7 @@ struct PositionsChartTransactionsSplit<Transactions: View, Positions: View, Char
           }
         }
         .pickerStyle(.segmented)
+        .accessibilityLabel("Account detail section")
         .accessibilityIdentifier(UITestIdentifiers.AccountDetail.tabPicker)
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -89,7 +90,7 @@ struct PositionsChartTransactionsSplit<Transactions: View, Positions: View, Char
 
     @ViewBuilder private var selectedContent: some View {
       switch selectedTab {
-      case .transactions: transactions()
+      case .transactions: transactionsPane
       case .positions: positionsPane
       case .chart: chartPane
       }
@@ -126,6 +127,7 @@ struct PositionsChartTransactionsSplit<Transactions: View, Positions: View, Char
           }
         }
         .pickerStyle(.segmented)
+        .accessibilityLabel("Account detail section")
         .accessibilityIdentifier(UITestIdentifiers.AccountDetail.tabPicker)
         .padding(.horizontal)
         .padding(.vertical, 8)
@@ -134,7 +136,7 @@ struct PositionsChartTransactionsSplit<Transactions: View, Positions: View, Char
 
         switch bottomTab {
         case .transactions:
-          transactions()
+          transactionsPane
             .environment(\.transactionScrollCollapse, scrollCollapse)
         case .chart:
           chartPane
@@ -157,6 +159,11 @@ struct PositionsChartTransactionsSplit<Transactions: View, Positions: View, Char
   private var chartPane: some View {
     chart()
       .accessibilityIdentifier(UITestIdentifiers.AccountDetail.chartPane)
+  }
+
+  private var transactionsPane: some View {
+    transactions()
+      .accessibilityIdentifier(UITestIdentifiers.AccountDetail.transactionsPane)
   }
 
   private func label(for tab: AccountDetailTab) -> String {
