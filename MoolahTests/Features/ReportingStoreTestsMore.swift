@@ -202,5 +202,64 @@ struct ReportingStoreTestsMore {
     #expect(store.incomeBalances[incomeCategory.id]?.quantity == 1000)
     #expect(store.expenseBalances[expenseCategory.id]?.quantity == -50)
   }
+
+  @Test @MainActor func loadCategoryBalances_populatesUncategorisedAndUnavailableFlags()
+    async throws
+  {
+    let income = CategoryBalances(
+      byCategory: [:],
+      uncategorised: InstrumentAmount(quantity: 250, instrument: aud),
+      hasUnavailableData: true
+    )
+    let expense = CategoryBalances(
+      byCategory: [:],
+      uncategorised: InstrumentAmount(quantity: -75, instrument: aud),
+      hasUnavailableData: false
+    )
+    let repository = StubCategoryBalancesAnalysisRepository(income: income, expense: expense)
+    let (backend, _) = try TestBackend.create()
+    let store = ReportingStore(
+      transactionRepository: backend.transactions,
+      analysisRepository: repository,
+      conversionService: FakeConversionService.fixedRates([:]),
+      profileCurrency: aud
+    )
+
+    let today = Date()
+    let from = try #require(Calendar.current.date(byAdding: .day, value: -1, to: today))
+    let to = try #require(Calendar.current.date(byAdding: .day, value: 1, to: today))
+    await store.loadCategoryBalances(dateRange: from...to)
+
+    #expect(!store.isLoadingCategoryBalances)
+    #expect(store.categoryBalancesError == nil)
+    #expect(store.incomeUncategorised?.quantity == 250)
+    #expect(store.expenseUncategorised?.quantity == -75)
+    #expect(store.incomeHasUnavailableData == true)
+    #expect(store.expenseHasUnavailableData == false)
+  }
+
+  @Test @MainActor func loadCategoryBalances_noUncategorisedLegs_leavesFieldsNilAndFalse()
+    async throws
+  {
+    let empty = CategoryBalances(byCategory: [:], uncategorised: nil)
+    let repository = StubCategoryBalancesAnalysisRepository(income: empty, expense: empty)
+    let (backend, _) = try TestBackend.create()
+    let store = ReportingStore(
+      transactionRepository: backend.transactions,
+      analysisRepository: repository,
+      conversionService: FakeConversionService.fixedRates([:]),
+      profileCurrency: aud
+    )
+
+    let today = Date()
+    let from = try #require(Calendar.current.date(byAdding: .day, value: -1, to: today))
+    let to = try #require(Calendar.current.date(byAdding: .day, value: 1, to: today))
+    await store.loadCategoryBalances(dateRange: from...to)
+
+    #expect(store.incomeUncategorised == nil)
+    #expect(store.expenseUncategorised == nil)
+    #expect(store.incomeHasUnavailableData == false)
+    #expect(store.expenseHasUnavailableData == false)
+  }
 }
 // swiftlint:enable attributes
