@@ -2,9 +2,9 @@ import Foundation
 
 /// Last-resort price source that reports a flat USD $1 for canonical USDC /
 /// USDT deployments. Stablecoins track their peg, so when every market-data
-/// provider declines a recognised stablecoin (e.g. an L2 USDC that
-/// CryptoCompare omits from its contract index and CoinGecko rate-limits), the
-/// peg is a safe fallback rather than leaving the token unpriced.
+/// provider declines a recognised stablecoin (e.g. an L2 USDC that the
+/// upstream price providers don't index or rate-limit), the peg is a safe
+/// fallback rather than leaving the token unpriced.
 ///
 /// Membership is gated through `CanonicalTokenRegistry`, which only recognises
 /// the *legitimate* deployment addresses for each protected symbol — so a
