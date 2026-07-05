@@ -30,8 +30,8 @@ struct SyncedAccountHeaderScreen {
           + "a seeded sync error. "
           + "Check that SyncedAccountHeaderView renders errorCaptionView for a crypto account "
           + "whose wallet_sync_state has a non-nil lastErrorJson and whose hasCredential "
-          + "evaluates to true (the .walletHeaderSyncError seed seeds a local Alchemy key "
-          + "override via UITestSeedCryptoOverrides so the .task result is true).")
+          + "evaluates to true (the .walletHeaderSyncError seed injects an Alchemy key via "
+          + "launchEnvironment so the .task result is true).")
     }
   }
 }

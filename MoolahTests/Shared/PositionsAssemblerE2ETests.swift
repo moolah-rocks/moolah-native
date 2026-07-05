@@ -52,19 +52,22 @@ struct PositionsAssemblerE2ETests {
     return offset.addingTimeInterval(12 * 3600)
   }
 
-  /// A fiat-paired buy transaction for one account.
-  private func buy(
+  /// A receive-only (income) transaction for one account — no host-currency
+  /// cost leg. Used in tests that pin pure position value rather than
+  /// cost-adjusted balance: `PositionsHistoryBuilder` now tracks host-currency
+  /// legs in quantities, so a fiat-paired buy would reduce the total by the
+  /// AUD cost and break assertions of the form `value == qty × rate`.
+  private func receive(
     instrument: Instrument,
     qty: Decimal,
-    fiat: Decimal,
     accountId: UUID,
     daysAgo: Int
   ) -> Transaction {
     Transaction(
       date: noonUTCDaysAgo(daysAgo),
       legs: [
-        TransactionLeg(accountId: accountId, instrument: instrument, quantity: qty, type: .trade),
-        TransactionLeg(accountId: accountId, instrument: aud, quantity: -fiat, type: .trade),
+        TransactionLeg(accountId: accountId, instrument: instrument, quantity: qty, type: .income),
+        TransactionLeg(accountId: UUID(), instrument: instrument, quantity: -qty, type: .expense),
       ]
     )
   }
@@ -113,7 +116,7 @@ struct PositionsAssemblerE2ETests {
     let qty: Decimal = 2
     let rate: Decimal = 50_000
     _ = try await backend.transactions.create(
-      buy(instrument: btc, qty: qty, fiat: 80_000, accountId: accountId, daysAgo: 5))
+      receive(instrument: btc, qty: qty, accountId: accountId, daysAgo: 5))
 
     let conversionService = FakeConversionService.fixedRates([btc.id: rate])
     let assembler = MultiInstrumentPositionsAssembler(conversionService: conversionService)
@@ -154,9 +157,9 @@ struct PositionsAssemblerE2ETests {
     let qtyB: Decimal = 3
     let rate: Decimal = 60_000
     _ = try await backend.transactions.create(
-      buy(instrument: btc, qty: qtyA, fiat: 40_000, accountId: accountAId, daysAgo: 5))
+      receive(instrument: btc, qty: qtyA, accountId: accountAId, daysAgo: 5))
     _ = try await backend.transactions.create(
-      buy(instrument: btc, qty: qtyB, fiat: 120_000, accountId: accountBId, daysAgo: 5))
+      receive(instrument: btc, qty: qtyB, accountId: accountBId, daysAgo: 5))
 
     let conversionService = FakeConversionService.fixedRates([btc.id: rate])
     let assembler = MultiInstrumentPositionsAssembler(conversionService: conversionService)
@@ -185,7 +188,7 @@ struct PositionsAssemblerE2ETests {
 
   // MARK: - Test 3: internal transfer between group members does not change aggregate
 
-  /// Account A buys 2 BTC, then transfers 1 BTC to Account B (both in group).
+  /// Account A receives 2 BTC, then transfers 1 BTC to Account B (both in group).
   /// The group's last-day aggregate value stays equal to 2 BTC × rate — the
   /// internal transfer nets out on every point in the series.
   @Test("internal transfer between group members: group value unchanged after transfer")
@@ -199,7 +202,7 @@ struct PositionsAssemblerE2ETests {
     let transferQty: Decimal = 1
     let rate: Decimal = 55_000
     _ = try await backend.transactions.create(
-      buy(instrument: btc, qty: totalQty, fiat: 90_000, accountId: accountAId, daysAgo: 7))
+      receive(instrument: btc, qty: totalQty, accountId: accountAId, daysAgo: 7))
     _ = try await backend.transactions.create(
       Transaction(
         date: noonUTCDaysAgo(3),
