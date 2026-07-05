@@ -96,6 +96,32 @@ struct LiveJSONRPCClientBatchTests {
   }
 
   @Test
+  func blockTimestampsWithMismatchedBatchIdsThrowsProviderMalformedResponse() async throws {
+    let client = makeClient { request in
+      (
+        AlchemyTestSupport.okResponse(for: request),
+        Data(
+          """
+          [
+            {"jsonrpc":"2.0","id":1,"result":{"timestamp":"0x60"}},
+            {"jsonrpc":"2.0","id":1,"result":{"timestamp":"0x60"}}
+          ]
+          """.utf8)
+      )
+    }
+    do {
+      _ = try await client.blockTimestamps([16, 17])
+      Issue.record("Expected WalletSyncError.providerMalformedResponse")
+    } catch let error as WalletSyncError {
+      guard case .providerMalformedResponse(let stage) = error.kind else {
+        Issue.record("Expected .providerMalformedResponse, got \(error.kind)")
+        return
+      }
+      #expect(stage == "blockTimestamps")
+    }
+  }
+
+  @Test
   func blockTimestampsWithEmptyInputReturnsEmptyWithoutARequest() async throws {
     let client = makeClient { _ in
       Issue.record("Expected no HTTP request for empty input")
@@ -136,7 +162,7 @@ struct LiveJSONRPCClientBatchTests {
 /// `JSONRPCURLProtocolStub` (or any other suite's stub) when Swift Testing
 /// runs suites in parallel. `nonisolated(unsafe)` is safe because the
 /// enclosing `@Suite` is `.serialized`.
-class JSONRPCBatchURLProtocolStub: URLProtocol {
+final class JSONRPCBatchURLProtocolStub: URLProtocol {
   nonisolated(unsafe) static var requestHandler:
     (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?
   nonisolated(unsafe) static var lastRequest: URLRequest?
@@ -157,8 +183,8 @@ class JSONRPCBatchURLProtocolStub: URLProtocol {
     }
   }
 
-  override class func canInit(with request: URLRequest) -> Bool { true }
-  override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+  override static func canInit(with request: URLRequest) -> Bool { true }
+  override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
   override func startLoading() {
     JSONRPCBatchURLProtocolStub.requestCount += 1
