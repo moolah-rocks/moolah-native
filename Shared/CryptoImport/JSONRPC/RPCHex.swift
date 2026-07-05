@@ -25,12 +25,8 @@ enum RPCHex {
   /// into a `UInt64`. Returns `nil` on malformed input — callers log/skip
   /// rather than failing the whole sync. Mirrors the parse rule in
   /// `WalletSyncEngine.parseHexUInt64`.
-  static func parseUInt64(_ string: String) -> UInt64? {
-    let trimmed: Substring =
-      string.hasPrefix("0x") || string.hasPrefix("0X")
-      ? string.dropFirst(2)
-      : Substring(string)
-    return UInt64(trimmed, radix: 16)
+  static func parseUInt64(_ raw: String) -> UInt64? {
+    UInt64(stripHexPrefix(raw), radix: 16)
   }
 
   /// Encodes a `UInt64` in the same quantity form as `hexQuantity`, for
@@ -47,10 +43,7 @@ enum RPCHex {
   /// result. Assumes a well-formed address — the wallet addresses this
   /// feeds are already validated where they're synced/entered.
   static func addressTopic(_ address: String) -> String {
-    let trimmed: Substring =
-      address.hasPrefix("0x") || address.hasPrefix("0X")
-      ? address.dropFirst(2)
-      : Substring(address)
+    let trimmed = stripHexPrefix(address)
     let padded = String(repeating: "0", count: max(0, 64 - trimmed.count)) + trimmed
     return "0x" + padded.lowercased()
   }
@@ -59,10 +52,13 @@ enum RPCHex {
   /// `eth_getLogs` topic — the last 40 hex characters (the address is
   /// right-aligned within the zero-padded topic).
   static func addressFromTopic(_ topic: String) -> String {
-    let trimmed: Substring =
-      topic.hasPrefix("0x") || topic.hasPrefix("0X")
-      ? topic.dropFirst(2)
-      : Substring(topic)
+    let trimmed = stripHexPrefix(topic)
     return "0x" + trimmed.suffix(40).lowercased()
+  }
+}
+
+extension RPCHex {
+  private static func stripHexPrefix(_ raw: String) -> Substring {
+    raw.hasPrefix("0x") || raw.hasPrefix("0X") ? raw.dropFirst(2) : Substring(raw)
   }
 }
