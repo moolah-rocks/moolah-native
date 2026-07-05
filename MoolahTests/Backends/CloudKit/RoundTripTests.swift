@@ -38,4 +38,29 @@ struct RoundTripTests {
     let record = row.toCKRecord(in: Self.zoneID)
     #expect(record["lastSyncedBlockNumber"] as? Int64 == 42)
   }
+
+  @Test("WalletSyncCheckpoint fieldValues returns nil for record ID without prefix")
+  func walletSyncCheckpointFieldValuesReturnsNilForRecordIDWithoutPrefix() {
+    // A bare-UUID recordName returns nil — `recordID.uuid` requires the
+    // `<TYPE>|<UUID>` prefix.
+    let recordID = CKRecord.ID(recordName: UUID().uuidString, zoneID: Self.zoneID)
+    let ckRecord = CKRecord(
+      recordType: WalletSyncCheckpointRow.recordType, recordID: recordID)
+    ckRecord["lastSyncedBlockNumber"] = Int64(21_000_000) as CKRecordValue
+
+    let restored = WalletSyncCheckpointRow.fieldValues(from: ckRecord)
+    #expect(restored == nil, "Bare-UUID recordName must be rejected — caller logs and skips")
+  }
+
+  @Test("WalletSyncCheckpoint missing lastSyncedBlockNumber falls back to 0")
+  func walletSyncCheckpointMissingFieldFallsBack() throws {
+    let recordID = CKRecord.ID(
+      recordType: WalletSyncCheckpointRow.recordType, uuid: UUID(), zoneID: Self.zoneID)
+    let ckRecord = CKRecord(
+      recordType: WalletSyncCheckpointRow.recordType, recordID: recordID)
+    // lastSyncedBlockNumber intentionally not set
+
+    let restored = try #require(WalletSyncCheckpointRow.fieldValues(from: ckRecord))
+    #expect(restored.lastSyncedBlockNumber == 0)
+  }
 }
