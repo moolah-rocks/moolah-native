@@ -5,7 +5,7 @@ import Foundation
 /// 1:1 redeemable for their chain's native asset.
 ///
 /// Wrapped-native tokens have no third-party price feed of their own
-/// (no CoinGecko/CryptoCompare/Binance id), so without this they fail
+/// (no CoinGecko/Binance id), so without this they fail
 /// to price entirely — surfacing on the Analysis page as a sync error.
 /// They are economically identical to the native asset, so we price
 /// them via a canonical native instrument id, reusing that native

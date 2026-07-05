@@ -166,7 +166,7 @@ struct CryptoFetchRangeErrorClassificationTests {
       prices: [:],
       shouldFail: true,
       failureError: URLError(.timedOut),
-      syncProvider: .cryptoCompare
+      syncProvider: .coinGecko
     )
     let service = try makeService(clients: [missingKeyClient, networkClient])
 

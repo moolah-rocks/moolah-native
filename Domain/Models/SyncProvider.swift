@@ -11,7 +11,6 @@ enum SyncProvider: String {
   case blockExplorer
   case coinstash
   case coinGecko
-  case cryptoCompare
   case binance
   case peggedStablecoin
   case defiLlama
@@ -26,7 +25,6 @@ enum SyncProvider: String {
     case .blockExplorer: return "Blockscout"
     case .coinstash: return "Coinstash"
     case .coinGecko: return "CoinGecko"
-    case .cryptoCompare: return "CryptoCompare"
     case .binance: return "Binance"
     case .peggedStablecoin: return "Pegged Stablecoin"
     case .defiLlama: return "DefiLlama"

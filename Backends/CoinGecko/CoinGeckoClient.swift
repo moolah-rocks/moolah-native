@@ -10,7 +10,7 @@ struct CoinGeckoClient: CryptoPriceClient, Sendable {
   /// Public free-tier base URL. Used when no API key is configured; no
   /// auth query item is sent. Subject to CoinGecko's anonymous rate
   /// limits (~30 req/min) — the price-service falls back to
-  /// CryptoCompare / Binance if a request 429s.
+  /// Binance if a request 429s.
   private static let publicBaseURL =
     URL(string: "https://api.coingecko.com/api/v3") ?? URL(fileURLWithPath: "/")
   /// Resolves the key per request (not once at construction) so a Pro key

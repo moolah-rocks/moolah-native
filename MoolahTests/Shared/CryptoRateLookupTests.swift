@@ -24,7 +24,7 @@ struct CryptoRateLookupTests {
     let date = try day("2024-01-01")
     let first = FixedCryptoPriceClient(
       prices: ["1:0xdac17f958d2ee523a2206206994597c13d831ec7": ["2024-01-01": dec("0.97")]],
-      syncProvider: .cryptoCompare)
+      syncProvider: .coinGecko)
     let second = FixedCryptoPriceClient(
       prices: ["1:0xdac17f958d2ee523a2206206994597c13d831ec7": ["2024-01-01": dec("1.50")]],
       syncProvider: .coinGecko)
@@ -38,7 +38,7 @@ struct CryptoRateLookupTests {
   @Test("Skips a failing client and uses the next that succeeds")
   func fallsThroughToNextClient() async throws {
     let date = try day("2024-01-01")
-    let failing = FixedCryptoPriceClient(shouldFail: true, syncProvider: .cryptoCompare)
+    let failing = FixedCryptoPriceClient(shouldFail: true, syncProvider: .coinGecko)
     let working = FixedCryptoPriceClient(
       prices: ["1:0xdac17f958d2ee523a2206206994597c13d831ec7": ["2024-01-01": dec("0.99")]],
       syncProvider: .coinGecko)
@@ -52,7 +52,7 @@ struct CryptoRateLookupTests {
   @Test("Returns the default when every client fails")
   func allFailReturnsDefault() async throws {
     let date = try day("2024-01-01")
-    let failingCC = FixedCryptoPriceClient(shouldFail: true, syncProvider: .cryptoCompare)
+    let failingCC = FixedCryptoPriceClient(shouldFail: true, syncProvider: .coinGecko)
     let failingCG = FixedCryptoPriceClient(shouldFail: true, syncProvider: .coinGecko)
 
     let rate = await CryptoRateLookup.firstAvailableRate(
@@ -64,7 +64,7 @@ struct CryptoRateLookupTests {
   @Test("The stablecoin peg supplies $1 for canonical USDT before the default")
   func pegSuppliesOneForCanonicalUsdt() async throws {
     let date = try day("2024-01-01")
-    let failingCC = FixedCryptoPriceClient(shouldFail: true, syncProvider: .cryptoCompare)
+    let failingCC = FixedCryptoPriceClient(shouldFail: true, syncProvider: .coinGecko)
     let failingCG = FixedCryptoPriceClient(shouldFail: true, syncProvider: .coinGecko)
 
     // A deliberately wrong default proves the value came from the peg, not it.
