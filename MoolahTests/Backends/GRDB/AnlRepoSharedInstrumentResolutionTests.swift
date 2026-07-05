@@ -71,7 +71,8 @@ struct AnlRepoSharedInstrumentResolutionTests {
       dateRange: day.addingTimeInterval(-86_400)...day.addingTimeInterval(86_400),
       transactionType: .expense,
       filters: nil,
-      targetInstrument: eth)
+      targetInstrument: eth
+    ).byCategory
 
     let amount = try #require(balances[categoryId])
     #expect(amount.instrument == eth)

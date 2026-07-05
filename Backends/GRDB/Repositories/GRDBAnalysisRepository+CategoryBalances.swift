@@ -8,19 +8,29 @@ import GRDB
 /// conversion service) as parameters so this sibling-file extension
 /// doesn't reach into the main class's `private` stored properties.
 ///
-/// The SQL groups by `(DATE(t.date), category_id, instrument_id)` and
-/// the per-row conversion runs in Swift so the per-day rate-cache
-/// equivalence (Rule 5 of `INSTRUMENT_CONVERSION_GUIDE.md`) holds: each
-/// summed `(day, category, instrument)` tuple converts at the rate
-/// effective on `day`.
+/// The SQL groups by `(DATE(t.date), category_id, instrument_id)` — with
+/// NO `category_id IS NOT NULL` filter — and the per-row conversion runs
+/// in Swift so the per-day rate-cache equivalence (Rule 5 of
+/// `INSTRUMENT_CONVERSION_GUIDE.md`) holds: each summed
+/// `(day, category, instrument)` tuple converts at the rate effective on
+/// `day`. `assembleCategoryBalances` routes null-`category_id` rows into
+/// `CategoryBalances.uncategorised` and non-null rows into
+/// `CategoryBalances.byCategory` — one query and one batch conversion
+/// serve both the Reports categorised breakdown and the "Uncategorised"
+/// row (see
+/// `plans/2026-07-05-reports-uncategorised-row-plan.md`, "Design
+/// (revised — single combined query)").
 extension GRDBAnalysisRepository {
   /// One row of the SQL aggregation that drives `fetchCategoryBalances`.
   /// `day` is the ISO-8601 `YYYY-MM-DD` string returned by `DATE(t.date)`
   /// — parsed in Swift on the way out of the read closure so the
   /// `Database` reference doesn't escape into the conversion service.
+  /// `categoryId` is nullable — a `nil` row is an uncategorised leg,
+  /// routed to `CategoryBalances.uncategorised` by
+  /// `assembleCategoryBalances`.
   struct CategoryBalancesRow: Sendable {
     let day: String
-    let categoryId: UUID
+    let categoryId: UUID?
     let instrumentId: String
     let qty: Int64
   }
@@ -40,12 +50,12 @@ extension GRDBAnalysisRepository {
   /// Diagnostic context passed to the conversion-failure handler so the
   /// caller's logger can identify which `(day, category, instrument)`
   /// tuple failed without coupling this helper to a `Logger` instance.
-  /// Mirrors `ConversionFailureContext` on `+ExpenseBreakdown.swift`
-  /// but with a non-optional `categoryId` — `fetchCategoryBalances`'s
-  /// SQL filters out null categories at source.
+  /// Mirrors `ConversionFailureContext` on `+ExpenseBreakdown.swift`;
+  /// `categoryId` is nullable — a failing uncategorised row logs with
+  /// `categoryId == nil`.
   struct CategoryBalancesFailureContext: Sendable {
     let day: String
-    let categoryId: UUID
+    let categoryId: UUID?
     let instrumentId: String
   }
 
@@ -75,17 +85,21 @@ extension GRDBAnalysisRepository {
   /// pinned by
   /// `AnalysisAggregationPlanPinningTests.fetchCategoryBalancesUsesCategoryIndex`.
   ///
-  /// **Account-type neutral.** Every categorised income/expense leg
-  /// counts toward the breakdown regardless of which account holds it
-  /// — a dividend or brokerage fee booked against an investment
-  /// account belongs in the income/expense report just like a salary
-  /// or a grocery shop on a bank account. This matches
-  /// `fetchIncomeAndExpense`'s contract (see
-  /// `+IncomeAndExpenseAggregation.swift`). Trade and transfer legs
-  /// are excluded by `leg.type = ?` (the bound `transactionType` is
-  /// always `.income` or `.expense`); the `leg.category_id IS NOT NULL`
-  /// guard is a defensive filter for income/expense legs that happen
-  /// to lack a category.
+  /// **Account-type neutral.** Every income/expense leg counts toward
+  /// the breakdown regardless of which account holds it — a dividend
+  /// or brokerage fee booked against an investment account belongs in
+  /// the income/expense report just like a salary or a grocery shop on
+  /// a bank account. This matches `fetchIncomeAndExpense`'s contract
+  /// (see `+IncomeAndExpenseAggregation.swift`). Trade and transfer
+  /// legs are excluded by `leg.type = ?` (the bound `transactionType`
+  /// is always `.income` or `.expense`).
+  ///
+  /// **No `category_id` filter.** The query intentionally does NOT
+  /// restrict `category_id` — null-category rows are the "Uncategorised"
+  /// total, aggregated in this same pass (see `assembleCategoryBalances`).
+  /// `category_id` is still selected and grouped on so the Swift assembly
+  /// can route each row to `CategoryBalances.byCategory` or
+  /// `.uncategorised`.
   ///
   /// **`categoryIds` parameterisation.** SQLite cannot bind a
   /// variable-length array to a single named parameter; an
@@ -107,9 +121,12 @@ extension GRDBAnalysisRepository {
       rows.reserveCapacity(sqlRows.count)
       for row in sqlRows {
         guard let day: String = row["day"] else { continue }
-        guard let categoryId: UUID = row["category_id"] else { continue }
         guard let instrumentId: String = row["instrument_id"] else { continue }
         guard let qty: Int64 = row["qty"] else { continue }
+        // `category_id` is genuinely nullable here — a `nil` row is an
+        // uncategorised leg, not a parse failure, so it must NOT be
+        // dropped by a `guard let`.
+        let categoryId: UUID? = row["category_id"]
         rows.append(
           CategoryBalancesRow(
             day: day,
@@ -175,7 +192,6 @@ extension GRDBAnalysisRepository {
       WHERE t.recur_period IS NULL
         AND t.date >= \(lower) AND t.date <= \(upper)
         AND leg.type = \(typeRaw)
-        AND leg.category_id IS NOT NULL
         \(accountClause)
         \(earmarkClause)
         \(payeeClause)
@@ -197,10 +213,19 @@ extension GRDBAnalysisRepository {
   }
 
   /// Walks the SQL aggregation rows, converts each `(qty, instrument)`
-  /// to the target instrument on its own day, and accumulates totals
-  /// per `categoryId`. Conversion runs outside the `database.read`
+  /// to the target instrument on its own day, and accumulates totals —
+  /// per `categoryId` for non-null rows, into a single running total for
+  /// null-`categoryId` rows. Conversion runs outside the `database.read`
   /// closure (in this async helper) so the `Database` reference stays
   /// inside the snapshot.
+  ///
+  /// The `uncategorised` accumulator starts `nil` and is only seeded
+  /// (`.zero(instrument: targetInstrument)` plus the row's converted
+  /// amount) the first time a null-`categoryId` row contributes — so
+  /// `CategoryBalances.uncategorised == nil` means "no uncategorised legs
+  /// in range" and callers can omit UI for that case rather than treating
+  /// a `.zero` total as "there were uncategorised legs that happened to
+  /// net to zero".
   ///
   /// Mirrors `assembleExpenseBreakdown`'s per-row error contract:
   /// `handleUnparseableDay` and `handleConversionFailure` are invoked
@@ -211,7 +236,10 @@ extension GRDBAnalysisRepository {
   /// contract while still delivering the per-row detail required by
   /// `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11. A `CancellationError` is
   /// rethrown immediately (it propagates straight out of the batch call)
-  /// and never folded into the conversion-failure path.
+  /// and never folded into the conversion-failure path. Categorised and
+  /// uncategorised rows share this one batch conversion, so a conversion
+  /// failure fails the whole call exactly as before this field existed —
+  /// there is no partial-failure surface between the two buckets.
   ///
   /// All rows' `(qty, instrument, day)` conversions resolve in a single
   /// `convertResultBatch(_:)` — the row order of the request list is
@@ -223,7 +251,7 @@ extension GRDBAnalysisRepository {
     targetInstrument: Instrument,
     conversionService: any InstrumentConversionService,
     handlers: CategoryBalancesHandlers
-  ) async throws -> [UUID: InstrumentAmount] {
+  ) async throws -> CategoryBalances {
     let plan = Self.planCategoryBalances(
       aggregation: aggregation, targetInstrument: targetInstrument)
     for dayString in plan.unparseableDays {
@@ -233,7 +261,8 @@ extension GRDBAnalysisRepository {
     // propagates straight out (never reaching the per-row failure path).
     let outcomes = try await conversionService.convertResultBatch(plan.requests)
 
-    var balances: [UUID: InstrumentAmount] = [:]
+    var byCategory: [UUID: InstrumentAmount] = [:]
+    var uncategorised: InstrumentAmount?
     var firstConversionError: Error?
     for (row, outcome) in zip(plan.parsedRows, outcomes) {
       let amount: InstrumentAmount
@@ -255,16 +284,20 @@ extension GRDBAnalysisRepository {
         }
         continue
       }
-      let current =
-        balances[row.categoryId] ?? .zero(instrument: targetInstrument)
-      balances[row.categoryId] = current + amount
+      if let categoryId = row.categoryId {
+        let current = byCategory[categoryId] ?? .zero(instrument: targetInstrument)
+        byCategory[categoryId] = current + amount
+      } else {
+        let current = uncategorised ?? .zero(instrument: targetInstrument)
+        uncategorised = current + amount
+      }
     }
     if let firstConversionError {
       // Preserve the existing observable behaviour (throws on the first
       // conversion error) while having logged every per-row failure.
       throw firstConversionError
     }
-    return balances
+    return CategoryBalances(byCategory: byCategory, uncategorised: uncategorised)
   }
 
   /// Parse every row's day, resolve its source instrument, and build the

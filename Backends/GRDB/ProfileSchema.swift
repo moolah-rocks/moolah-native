@@ -102,12 +102,16 @@ import GRDB
 /// `v20_drop_cryptocompare_symbol` — drops the `cryptocompare_symbol`
 /// column now that CryptoCompare has been retired as a price provider.
 /// See `ProfileSchema+DropCryptoCompareSymbol.swift`.
-/// `v21_leg_analysis_uncategorised` — adds the partial covering index
-/// `leg_analysis_by_type_uncategorised` on `transaction_leg` (`type`,
-/// `category_id`, `instrument_id`, `transaction_id`, `quantity`) `WHERE
-/// category_id IS NULL`, the symmetric counterpart to
-/// `leg_analysis_by_type_category` for the "Uncategorised" Reports row.
-/// See `ProfileSchema+UncategorisedLegAnalysisIndex.swift`.
+/// `v21_leg_analysis_category_include_null` — widens
+/// `leg_analysis_by_type_category` from a *partial* index (`WHERE
+/// category_id IS NOT NULL`) to a full index over every row, same name
+/// and same columns (`type`, `category_id`, `instrument_id`,
+/// `transaction_id`, `quantity`). The combined `fetchCategoryBalances`
+/// query no longer filters `category_id` at the SQL layer — it groups
+/// null-category rows into the "Uncategorised" Reports total in the same
+/// pass as the categorised totals — so the read needs a covering index
+/// that also serves rows with a NULL `category_id`. See
+/// `ProfileSchema+LegAnalysisCategoryIncludeNull.swift`.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -175,7 +179,8 @@ enum ProfileSchema {
     migrator.registerMigration(
       "v20_drop_cryptocompare_symbol", migrate: dropCryptoCompareSymbolColumn)
     migrator.registerMigration(
-      "v21_leg_analysis_uncategorised", migrate: addUncategorisedLegAnalysisIndex)
+      "v21_leg_analysis_category_include_null",
+      migrate: widenLegAnalysisByTypeCategoryIndex)
 
     return migrator
   }

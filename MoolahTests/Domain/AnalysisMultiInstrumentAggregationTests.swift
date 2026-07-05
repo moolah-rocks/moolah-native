@@ -192,7 +192,8 @@ struct AnalysisMultiInstrumentAggregationTests {
 
     let balances = try await backend.analysis.fetchCategoryBalances(
       dateRange: day1...day10, transactionType: .expense,
-      filters: nil, targetInstrument: .defaultTestInstrument)
+      filters: nil, targetInstrument: .defaultTestInstrument
+    ).byCategory
 
     #expect(balances[food.id]?.quantity == -190)
     #expect(balances[travel.id]?.quantity == -52)
@@ -232,7 +233,8 @@ struct AnalysisMultiInstrumentAggregationTests {
 
     let balances = try await backend.analysis.fetchCategoryBalances(
       dateRange: today...today, transactionType: .expense,
-      filters: nil, targetInstrument: usd)
+      filters: nil, targetInstrument: usd
+    ).byCategory
 
     // -40 AUD * 0.5 = -20 USD; -30 USD passes through. Sum = -50 USD.
     #expect(balances[category.id] == InstrumentAmount(quantity: -50, instrument: usd))

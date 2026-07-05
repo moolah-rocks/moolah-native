@@ -59,8 +59,8 @@ actor GatedAnalysisRepository: AnalysisRepository {
     transactionType: TransactionType,
     filters: TransactionFilter?,
     targetInstrument: Instrument
-  ) async throws -> [UUID: InstrumentAmount] {
+  ) async throws -> CategoryBalances {
     try await gateThenCancelCheck()
-    return [:]
+    return CategoryBalances(byCategory: [:], uncategorised: nil)
   }
 }
