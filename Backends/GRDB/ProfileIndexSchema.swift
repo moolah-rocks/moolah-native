@@ -88,7 +88,7 @@ enum ProfileIndexSchema {
     migrator.registerMigration(
       "v9_add_instrument_alias_of", migrate: addInstrumentAliasOf)
     migrator.registerMigration(
-      "v10_drop_cryptocompare_symbol", migrate: dropCryptocomplareSymbolColumn)
+      "v10_drop_cryptocompare_symbol", migrate: dropCryptoCompareSymbolColumn)
 
     return migrator
   }

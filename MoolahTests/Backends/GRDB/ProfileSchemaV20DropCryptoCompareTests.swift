@@ -1,4 +1,4 @@
-// MoolahTests/Backends/GRDB/ProfileSchemaV20DropCryptoccompareTests.swift
+// MoolahTests/Backends/GRDB/ProfileSchemaV20DropCryptoCompareTests.swift
 
 import Foundation
 import GRDB
@@ -13,7 +13,7 @@ import Testing
 /// profiles. This test confirms the migrator applies all migrations
 /// through v20 without error.
 @Suite("ProfileSchema — v20_drop_cryptocompare_symbol")
-struct ProfileSchemaV20DropCryptoccompareTests {
+struct ProfileSchemaV20DropCryptoCompareTests {
   @Test("schema version reflects the v20 migration")
   func versionIsLatest() {
     #expect(ProfileSchema.version == 20)
@@ -24,6 +24,9 @@ struct ProfileSchemaV20DropCryptoccompareTests {
     let queue = try DatabaseQueue()
     // Runs all migrations v1 through v20; must complete without error.
     try ProfileSchema.migrator.migrate(queue)
-    #expect(Bool(true))  // Reaching here means no migration threw.
+    // The per-profile instrument table was dropped by v10_drop_shared_instrument_legacy
+    // before v20 fires, so the v20 migration is a guarded no-op and the table is absent.
+    let tableExists = try queue.read { database in try database.tableExists("instrument") }
+    #expect(!tableExists)
   }
 }
