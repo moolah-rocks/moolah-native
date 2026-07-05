@@ -146,6 +146,35 @@ struct WalletApplyEngineTests {
     #expect(checkpoint.lastSyncedBlockNumber == 2500)
   }
 
+  @Test("A trailing head never lowers an already-raised checkpoint (in-memory double)")
+  func syncedCheckpointNeverLowers() async throws {
+    // Exercises `InMemoryWalletSyncCheckpointRepository.raiseToMax` directly
+    // (rather than the GRDB-backed repository the other checkpoint tests
+    // use) so the double's own atomic compare-then-set is under test, not
+    // just the production repository.
+    let checkpoints = InMemoryWalletSyncCheckpointRepository()
+    let setup = try makeSetup(checkpoints: checkpoints)
+    let account = try setup.seedCryptoAccount()
+
+    _ = try await setup.engine.apply(perAccount: [
+      .init(account: account, headBlockNumber: 2000, candidates: [])
+    ])
+    let raisedTo2000 = try #require(try await checkpoints.load(accountId: account.id))
+    #expect(raisedTo2000.lastSyncedBlockNumber == 2000)
+
+    // A later cycle's head trails the checkpoint already recorded (e.g. a
+    // peer advanced it further in the meantime) — must not lower it.
+    _ = try await setup.engine.apply(perAccount: [
+      .init(account: account, headBlockNumber: 1500, candidates: [])
+    ])
+
+    let checkpoint = try #require(try await checkpoints.load(accountId: account.id))
+    #expect(checkpoint.lastSyncedBlockNumber == 2000)
+    // Only the genuine raise (0 → 2000) should have counted; the no-op
+    // second call must not bump the counter or re-queue a CloudKit push.
+    #expect(checkpoints.raiseToMaxCount == 1)
+  }
+
   // MARK: - Import rules
 
   @Test("WalletImportRulesEngine is invoked exactly once with the persisted transactions")
@@ -213,13 +242,14 @@ struct WalletApplyEngineTests {
   }
 
   private func makeSetup(
-    importRules: any WalletImportRulesEngine = NoOpWalletImportRulesEngine()
+    importRules: any WalletImportRulesEngine = NoOpWalletImportRulesEngine(),
+    checkpoints: (any WalletSyncCheckpointRepository)? = nil
   ) throws -> Setup {
     let (backend, database) = try TestBackend.create()
     let engine = WalletApplyEngine(
       transactions: backend.transactions,
       walletSyncState: backend.walletSyncState,
-      checkpoints: backend.walletSyncCheckpoints,
+      checkpoints: checkpoints ?? backend.walletSyncCheckpoints,
       importRules: importRules,
       clock: { Self.pinnedNow })
     return Setup(backend: backend, database: database, engine: engine)

@@ -65,6 +65,38 @@ final class GRDBWalletSyncCheckpointRepository: WalletSyncCheckpointRepository, 
     onRecordChanged(WalletSyncCheckpointRow.recordType, row.id)
   }
 
+  /// Atomically raises the checkpoint to `max(existing, blockNumber)` inside
+  /// ONE write transaction, so a peer's higher value applied concurrently via
+  /// `applyRemoteChangesSync` (the CKSyncEngine apply path, off `@MainActor`)
+  /// can never be clobbered back down by this device's own read-then-save.
+  /// GRDB's writer queue serializes this transaction against that apply
+  /// writer, closing the TOCTOU window a separate `load` + `save` pair left
+  /// open. Only marks the row `needs_push` / fires `onRecordChanged` when the
+  /// stored value actually increases (or the row is new) — an unchanged
+  /// checkpoint on an inactive account must not queue a redundant CloudKit
+  /// upload every sync cycle.
+  func raiseToMax(accountId: UUID, blockNumber: UInt64) async throws {
+    let changedRowId: UUID? = try await database.write { database -> UUID? in
+      let existingRow =
+        try WalletSyncCheckpointRow
+        .filter(WalletSyncCheckpointRow.Columns.id == accountId)
+        .fetchOne(database)
+      var row =
+        existingRow
+        ?? WalletSyncCheckpointRow(
+          checkpoint: WalletSyncCheckpoint(id: accountId, lastSyncedBlockNumber: blockNumber))
+      let newValue = Swift.max(row.lastSyncedBlockNumber, Int64(blockNumber))
+      guard existingRow == nil || newValue > row.lastSyncedBlockNumber else { return nil }
+      row.lastSyncedBlockNumber = newValue
+      try row.upsert(database)
+      try markNeedsPushSync(id: row.id, in: database)
+      return row.id
+    }
+    if let changedRowId {
+      onRecordChanged(WalletSyncCheckpointRow.recordType, changedRowId)
+    }
+  }
+
   /// Removes a checkpoint by account id and fires `onRecordDeleted` so the
   /// coordinator queues a CloudKit tombstone. Idempotent — a no-op when no
   /// row exists (absorbs the account-deletion / in-flight-sync race).

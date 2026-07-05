@@ -34,5 +34,12 @@ struct WalletSyncEngineCheckpointTests {
 
     // priorBlock = max(local 0, synced 1000) = 1000 → fromBlock 1000 - 32.
     #expect(alchemy.recordedCalls.first?.fromBlock == 968)
+    // `build` is the read side of the checkpoint contract — it derives
+    // `fromBlock` from the synced value but never writes it. Only
+    // `WalletApplyEngine.updateSyncState` (the write side) calls
+    // `raiseToMax`; a build pass calling either write method would mean the
+    // read path is mutating shared cross-device state on every sync cycle.
+    #expect(checkpoints.saveCount == 0)
+    #expect(checkpoints.raiseToMaxCount == 0)
   }
 }
