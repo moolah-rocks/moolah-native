@@ -73,7 +73,7 @@ struct AlchemyTransactionReceipt: Sendable, Hashable {
   }
 }
 
-/// Lenient `0x`-prefixed hex parser shared by the `AlchemyClient`
+/// Lenient `0x`-prefixed hex parser shared by the `ChainDataClient`
 /// receipt decoder and the `AlchemyTransfer.RawContract` value
 /// accessors. Returns `nil` on malformed input so callers can log and
 /// skip without failing the whole sync.

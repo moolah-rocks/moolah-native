@@ -97,7 +97,7 @@ extension ProfileSession {
   /// constructed even when the key is missing or empty so the build
   /// phase throws a typed `.invalidApiKey` (HTTP 401/403) on the first
   /// account, the store records it, and the user sees a banner asking
-  /// them to set the key. This avoids a `nil`-AlchemyClient branch that
+  /// them to set the key. This avoids a `nil`-ChainDataClient branch that
   /// would silently skip every crypto account.
   @MainActor
   static func makeCryptoSyncWiring(
@@ -109,7 +109,7 @@ extension ProfileSession {
   ) -> CryptoSyncWiring? {
     guard let registry else { return nil }
     let rateLimiter = RateLimiter(permitsPerSecond: 5, burstCapacity: 1)
-    let alchemy: any AlchemyClient = LiveAlchemyClient(
+    let alchemy: any ChainDataClient = LiveAlchemyClient(
       // Closure (not a resolved value): a key entered in Settings after this
       // wiring is built is visible on the next sync cycle without a rebuild,
       // and the key never lives on the client object itself.
@@ -155,7 +155,7 @@ extension ProfileSession {
 
   @MainActor
   private static func makeWalletSyncEngine(
-    alchemy: any AlchemyClient,
+    alchemy: any ChainDataClient,
     blockExplorer: any BlockExplorerClient,
     discovery: CryptoTokenDiscoveryService,
     backend: BackendProvider

@@ -37,7 +37,7 @@ enum TransferReceiptCoalescer {
     extraSignedHashes: [String] = [],
     walletAddress: String,
     chain: ChainConfig,
-    alchemy: any AlchemyClient
+    alchemy: any ChainDataClient
   ) async throws -> [String: AlchemyTransactionReceipt] {
     var hashes = outboundHashes(in: groups, walletAddress: walletAddress)
     var seen = Set(hashes)
@@ -71,7 +71,7 @@ enum TransferReceiptCoalescer {
   private static func fetchOne(
     hash: String,
     chain: ChainConfig,
-    alchemy: any AlchemyClient
+    alchemy: any ChainDataClient
   ) async throws -> AlchemyTransactionReceipt? {
     do {
       return try await alchemy.getTransactionReceipt(chain: chain, hash: hash)
