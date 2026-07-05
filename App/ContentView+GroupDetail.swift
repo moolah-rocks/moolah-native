@@ -14,13 +14,21 @@ extension ContentView {
       groups: accountGroupStore.groups,
       syncStatuses: groupSyncStatuses(for: id))
     {
-      GroupDetailView(
-        context: context,
+      AccountDetailView(
+        title: context.displayName,
+        transactionFilter: TransactionFilter(accountIds: Set(context.accountIds)),
+        positions: aggregatedGroupPositions(across: context.accountIds, in: accountStore.accounts),
+        hostCurrency: context.displayInstrument,
+        accountIds: context.accountIds,
+        conversionService: session.backend.conversionService,
+        registrationsVersion: 0,
+        accountChainId: nil,
+        alwaysShowsFullSurface: false,
+        syncedHeaderAccount: nil,
         accounts: accountStore.accounts,
         categories: categoryStore.categories,
         earmarks: earmarkStore.earmarks,
-        transactionStore: transactionStore,
-        conversionService: session.backend.conversionService)
+        transactionStore: transactionStore)
     } else {
       ContentUnavailableView(
         "Group not found",

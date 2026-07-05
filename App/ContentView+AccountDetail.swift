@@ -20,14 +20,21 @@ extension ContentView {
       case .exchange:
         syncedAccountDetailView(for: account, accountChainId: nil)
       default:
-        StandardAccountView(
-          account: account,
+        AccountDetailView(
+          title: account.name,
+          transactionFilter: TransactionFilter(accountId: account.id),
           positions: accountStore.positions(for: account.id),
+          hostCurrency: account.instrument,
+          accountIds: [account.id],
+          conversionService: session.backend.conversionService,
+          registrationsVersion: session.cryptoTokenStore?.registrationsVersion ?? 0,
+          accountChainId: nil,
+          alwaysShowsFullSurface: false,
+          syncedHeaderAccount: nil,
           accounts: accountStore.accounts,
           categories: categoryStore.categories,
           earmarks: earmarkStore.earmarks,
-          transactionStore: transactionStore,
-          conversionService: session.backend.conversionService)
+          transactionStore: transactionStore)
       }
     }
   }
