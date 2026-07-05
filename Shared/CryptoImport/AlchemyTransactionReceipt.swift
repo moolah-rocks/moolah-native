@@ -41,6 +41,12 @@ struct AlchemyTransactionReceipt: Sendable, Hashable {
   /// `l2ExecutionFeeWei` because the receipt is chain-agnostic — only
   /// the gas-leg builder knows whether this chain charges it.
   let l1FeeWei: Decimal?
+  /// Event logs emitted by the transaction, in on-chain order. Empty
+  /// for receipts that don't need them (the gas-leg builder never reads
+  /// this field) and defaulted to `[]` in the memberwise init below so
+  /// every pre-existing call site is unaffected. Read by the wrap/unwrap
+  /// detector to find WETH `Deposit`/`Withdrawal` events.
+  let logs: [ReceiptLog]
 
   /// L2 execution fee — `gasUsed * effectiveGasPrice` in wei. This is
   /// the *whole* transaction fee on Ethereum / Polygon, but only the L2
@@ -63,14 +69,33 @@ struct AlchemyTransactionReceipt: Sendable, Hashable {
     gasUsed: Decimal,
     effectiveGasPrice: Decimal,
     from: String,
-    l1FeeWei: Decimal? = nil
+    l1FeeWei: Decimal? = nil,
+    logs: [ReceiptLog] = []
   ) {
     self.hash = hash
     self.gasUsed = gasUsed
     self.effectiveGasPrice = effectiveGasPrice
     self.from = from
     self.l1FeeWei = l1FeeWei
+    self.logs = logs
   }
+}
+
+/// A single event log entry from a transaction receipt. Used by the
+/// wrap/unwrap detector to recognise WETH `Deposit`/`Withdrawal` events
+/// (`topics[0]` is the event signature hash; `address` identifies the
+/// emitting contract).
+struct ReceiptLog: Sendable, Hashable {
+  /// Contract address that emitted the log (lowercased on decode).
+  let address: String
+  /// Indexed event topics, `0x`-prefixed. `topics[0]` is conventionally
+  /// the event signature hash for non-anonymous events.
+  let topics: [String]
+  /// ABI-encoded non-indexed event data, `0x`-prefixed hex.
+  let data: String
+  /// Position of this log within the transaction's full log list.
+  /// Decoded from the `logIndex` 0x-hex field.
+  let logIndex: Int
 }
 
 /// Lenient `0x`-prefixed hex parser shared by the `ChainDataClient`
