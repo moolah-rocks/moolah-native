@@ -135,4 +135,22 @@ struct JSONRPCEnvelopeTests {
       try JSONRPCEnvelope.correlate(requests: requests, responses: responses)
     }
   }
+
+  @Test("A duplicate response id throws batchIdMismatch")
+  func duplicateResponseIdThrows() throws {
+    // A single request (id 1) paired with two responses that both claim id
+    // 1. The unique-id count (1) would coincidentally equal
+    // `requests.count` (1), so this path is only caught by the explicit
+    // duplicate-id guard, not the response-count check below it.
+    let requests = [
+      JSONRPCRequest(id: 1, method: "eth_chainId", params: [String]())
+    ]
+    let responses = [
+      JSONRPCResponse(id: 1, result: HexResult(value: "0x1"), error: nil),
+      JSONRPCResponse(id: 1, result: HexResult(value: "0x1"), error: nil),
+    ]
+    #expect(throws: JSONRPCTransportError.batchIdMismatch) {
+      try JSONRPCEnvelope.correlate(requests: requests, responses: responses)
+    }
+  }
 }
