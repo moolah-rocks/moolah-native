@@ -10,15 +10,40 @@ struct ReportsView: View {
 
   @Environment(ProfileSession.self) private var session
 
-  @State private var dateRange: DateRange = .last12Months
-  @State private var customFrom: Date =
-    Calendar.current.date(byAdding: .year, value: -1, to: Date()) ?? Date()
-  @State private var customTo = Date()
+  /// Last-used range, persisted locally so a relative preset restores as the
+  /// relative preset (re-resolved against today), not the fixed dates it
+  /// referred to when picked. Read/written via `ReportsPeriodStorage`.
+  @State private var dateRange: DateRange
+  @State private var customFrom: Date
+  @State private var customTo: Date
 
   /// Resolved date range, computed once when dateRange or custom dates change.
   /// Stored in @State to avoid re-evaluating Date() on every SwiftUI render cycle.
-  @State private var resolvedFrom: Date = DateRange.last12Months.startDate()
-  @State private var resolvedTo: Date = DateRange.last12Months.endDate()
+  @State private var resolvedFrom: Date
+  @State private var resolvedTo: Date
+
+  init(
+    reportingStore: ReportingStore,
+    categories: Categories,
+    accounts: Accounts,
+    earmarks: Earmarks,
+    transactionStore: TransactionStore
+  ) {
+    self.reportingStore = reportingStore
+    self.categories = categories
+    self.accounts = accounts
+    self.earmarks = earmarks
+    self.transactionStore = transactionStore
+
+    // Seed all range state from the persisted preference so the first render
+    // loads the restored window with no flash of the default range.
+    let seed = ReportsPeriodStorage.seed()
+    _dateRange = State(initialValue: seed.dateRange)
+    _customFrom = State(initialValue: seed.customFrom)
+    _customTo = State(initialValue: seed.customTo)
+    _resolvedFrom = State(initialValue: seed.resolvedFrom)
+    _resolvedTo = State(initialValue: seed.resolvedTo)
+  }
 
   var body: some View {
     NavigationStack {
@@ -40,16 +65,19 @@ struct ReportsView: View {
       ReportsRouteParams(from: resolvedFrom, to: resolvedTo)
     )
     .onChange(of: dateRange) { _, newValue in
+      ReportsPeriodStorage.persist(range: newValue)
       guard newValue != .custom else { return }
       resolvedFrom = newValue.startDate()
       resolvedTo = newValue.endDate()
     }
     .onChange(of: customFrom) { _, newValue in
       guard dateRange == .custom else { return }
+      ReportsPeriodStorage.persistCustomFrom(newValue)
       resolvedFrom = newValue
     }
     .onChange(of: customTo) { _, newValue in
       guard dateRange == .custom else { return }
+      ReportsPeriodStorage.persistCustomTo(newValue)
       resolvedTo = newValue
     }
   }
