@@ -132,7 +132,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 21
+  static let version = 22
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -181,6 +181,8 @@ enum ProfileSchema {
     migrator.registerMigration(
       "v21_leg_analysis_category_include_null",
       migrate: widenLegAnalysisByTypeCategoryIndex)
+    migrator.registerMigration(
+      "v22_wallet_sync_checkpoint", migrate: addWalletSyncCheckpoint)
 
     return migrator
   }

@@ -45,6 +45,7 @@ extension EarmarkBudgetItemRow: IdentifiableRecord {}
 extension InvestmentValueRow: IdentifiableRecord {}
 extension CSVImportProfileRow: IdentifiableRecord {}
 extension ImportRuleRow: IdentifiableRecord {}
+extension WalletSyncCheckpointRow: IdentifiableRecord {}
 
 /// Protocol exposing the cached CKRecord change-tag blob from a GRDB
 /// row struct. All record types (including `ProfileRow`) write system
@@ -71,6 +72,7 @@ extension EarmarkBudgetItemRow: ValueTypeSystemFieldsReadable {}
 extension TransactionRow: ValueTypeSystemFieldsReadable {}
 extension TransactionLegRow: ValueTypeSystemFieldsReadable {}
 extension InvestmentValueRow: ValueTypeSystemFieldsReadable {}
+extension WalletSyncCheckpointRow: ValueTypeSystemFieldsReadable {}
 
 // MARK: - CKRecord System Fields
 
@@ -148,5 +150,6 @@ enum RecordTypeRegistry: Sendable {
     InvestmentValueRow.recordType: InvestmentValueRow.self,
     CSVImportProfileRow.recordType: CSVImportProfileRow.self,
     ImportRuleRow.recordType: ImportRuleRow.self,
+    WalletSyncCheckpointRow.recordType: WalletSyncCheckpointRow.self,
   ]
 }
