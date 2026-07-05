@@ -26,7 +26,8 @@ enum UITestSeedInsightOverrides {
       .pendingWebImportOneChaseInbox,
       .transferDetectionBaseline,
       .groupFilterScope,
-      .walletHeaderSyncError:
+      .walletHeaderSyncError,
+      .accountDetailLayout:
       return nil
     }
   }
@@ -55,7 +56,8 @@ enum UITestSeedInsightOverrides {
         .pendingWebImportOneChaseInbox,
         .transferDetectionBaseline,
         .groupFilterScope,
-        .walletHeaderSyncError:
+        .walletHeaderSyncError,
+        .accountDetailLayout:
         return nil
       }
     }
@@ -85,7 +87,8 @@ enum UITestSeedInsightOverrides {
         .pendingWebImportOneChaseInbox,
         .transferDetectionBaseline,
         .groupFilterScope,
-        .walletHeaderSyncError:
+        .walletHeaderSyncError,
+        .accountDetailLayout:
         return nil
       }
     }

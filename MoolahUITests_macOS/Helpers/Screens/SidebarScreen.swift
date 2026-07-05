@@ -16,6 +16,14 @@ enum SidebarAccount {
   /// The Ethereum wallet from the `.walletHeaderSyncError` seed. Used by
   /// `SyncedAccountHeaderTests` to navigate to the crypto account detail.
   case walletWithSyncError
+  /// The multi-currency bank account from the `.accountDetailLayout` seed
+  /// (AUD denomination + USD position). Drives the macOS pinned-positions
+  /// layout in `AccountDetailSplitTests`.
+  case multiCurrency
+  /// The fiat-only checking account from the `.accountDetailLayout` seed
+  /// (AUD denomination, no non-host holdings). Drives the macOS
+  /// single-toggle-pane layout in `AccountDetailSplitTests`.
+  case everydayFiat
 
   /// The fixed UUID written to the seeded `ProfileContainerManager` by
   /// `UITestSeedHydrator`.
@@ -26,6 +34,8 @@ enum SidebarAccount {
     case .tradesBrokerage: return UITestFixtures.TradeBaseline.tradesBrokerageAccountId
     case .tradeReadyBrokerage: return UITestFixtures.TradeReady.brokerageAccountId
     case .walletWithSyncError: return UITestFixtures.WalletHeaderSyncError.walletAccountId
+    case .multiCurrency: return UITestFixtures.AccountDetailLayout.multiCurrencyAccountId
+    case .everydayFiat: return UITestFixtures.AccountDetailLayout.everydayAccountId
     }
   }
 }

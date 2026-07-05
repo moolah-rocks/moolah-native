@@ -44,7 +44,8 @@ enum UITestSeedCryptoOverrides {
       .pendingWebImportOneChaseInbox,
       .insightsForYouBaseline,
       .groupFilterScope,
-      .walletHeaderSyncError:
+      .walletHeaderSyncError,
+      .accountDetailLayout:
       return nil
     }
   }

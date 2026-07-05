@@ -156,6 +156,16 @@ public enum UITestSeed: String, CaseIterable, Sendable {
   /// through the inline-layout change. See
   /// `UITestFixtures.WalletHeaderSyncError` for the full fixture table.
   case walletHeaderSyncError = "wallet-header-sync-error"
+
+  /// A CloudKit-backed AUD profile with two bank accounts:
+  ///   - "Multi-Currency" — AUD host + a USD position (non-host holding)
+  ///     → macOS layout pins the Positions pane above `[Transactions | Chart]`.
+  ///   - "Everyday" — AUD-only positions (host-only) → macOS layout renders
+  ///     a single toggle pane with no Positions surface.
+  /// Each account carries 2–3 deterministic transactions so the transaction
+  /// list and balance chart both have data. Drives `AccountDetailSplitTests`.
+  /// See `UITestFixtures.AccountDetailLayout` for the full fixture table.
+  case accountDetailLayout = "account-detail-layout"
 }
 
 extension UITestSeed {
@@ -176,7 +186,7 @@ extension UITestSeed {
       .welcomeDownloading, .sidebarFooterUpToDate, .sidebarFooterReceiving,
       .sidebarFooterSending, .tradeReady, .incompatibleProfile,
       .transferDetectionBaseline, .pendingWebImportOneChaseInbox,
-      .insightsForYouBaseline, .groupFilterScope:
+      .insightsForYouBaseline, .groupFilterScope, .accountDetailLayout:
       return false
     }
   }

@@ -222,6 +222,8 @@ extension MoolahUITestCase {
       appendGroupFilterScopeFixtures(into: &lines)
     case .walletHeaderSyncError:
       appendWalletHeaderFixtures(into: &lines)
+    case .accountDetailLayout:
+      appendAccountDetailLayoutFixtures(into: &lines)
     }
   }
   // swiftlint:enable cyclomatic_complexity

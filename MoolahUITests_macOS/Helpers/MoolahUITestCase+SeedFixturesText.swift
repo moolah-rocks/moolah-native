@@ -235,4 +235,37 @@ extension MoolahUITestCase {
     lines.append("payload.capturedAt = \(fixtures.capturedAt)")
     lines.append("expected.banner.label = \(fixtures.expectedBannerText)")
   }
+
+  func appendAccountDetailLayoutFixtures(into lines: inout [String]) {
+    let fixtures = UITestFixtures.AccountDetailLayout.self
+    lines.append("# fixtures — two bank accounts: multi-currency (AUD+USD) + fiat-only (AUD)")
+    lines.append("profile.id       = \(fixtures.profileId)")
+    lines.append("profile.label    = \(fixtures.profileLabel)")
+    lines.append("profile.currency = \(fixtures.profileCurrencyCode)")
+    lines.append(
+      "multiCurrency.id/name = \(fixtures.multiCurrencyAccountId) "
+        + "/ \(fixtures.multiCurrencyAccountName) (AUD host + USD position)")
+    lines.append(
+      "everyday.id/name      = \(fixtures.everydayAccountId) "
+        + "/ \(fixtures.everydayAccountName) (AUD-only)")
+    lines.append(
+      "multiCurrency.txn1.id/payee/date = \(fixtures.multiCurrencyTxn1Id) "
+        + "/ \(fixtures.multiCurrencyTxn1Payee) / \(fixtures.multiCurrencyTxn1Date)")
+    lines.append(
+      "multiCurrency.txn2.id/payee/date = \(fixtures.multiCurrencyTxn2Id) "
+        + "/ \(fixtures.multiCurrencyTxn2Payee) / \(fixtures.multiCurrencyTxn2Date)")
+    lines.append(
+      "multiCurrency.txn3.id/payee/date = \(fixtures.multiCurrencyTxn3Id) "
+        + "/ \(fixtures.multiCurrencyTxn3Payee) / \(fixtures.multiCurrencyTxn3Date) "
+        + "(USD income — creates non-host position)")
+    lines.append(
+      "everyday.txn1.id/payee/date = \(fixtures.everydayTxn1Id) "
+        + "/ \(fixtures.everydayTxn1Payee) / \(fixtures.everydayTxn1Date)")
+    lines.append(
+      "everyday.txn2.id/payee/date = \(fixtures.everydayTxn2Id) "
+        + "/ \(fixtures.everydayTxn2Payee) / \(fixtures.everydayTxn2Date)")
+    lines.append(
+      "everyday.txn3.id/payee/date = \(fixtures.everydayTxn3Id) "
+        + "/ \(fixtures.everydayTxn3Payee) / \(fixtures.everydayTxn3Date)")
+  }
 }
