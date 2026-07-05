@@ -45,6 +45,11 @@ extension CryptoSettingsView {
         Text(url)
           .lineLimit(1)
           .truncationMode(.middle)
+          // Row identifier lives on this leaf, not the enclosing VStack: a
+          // container-level identifier makes SwiftUI merge the row's
+          // non-control children into one element, which hides the status
+          // badge Label from `.accessibilityIdentifier` queries in UI tests.
+          .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.rpcEndpointRow(url))
         Spacer()
         rpcEndpointStatusBadge(for: url)
       }
@@ -59,7 +64,6 @@ extension CryptoSettingsView {
       }
     }
     .padding(.vertical, 4)
-    .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.rpcEndpointRow(url))
   }
 
   @ViewBuilder var addRPCEndpointRow: some View {
