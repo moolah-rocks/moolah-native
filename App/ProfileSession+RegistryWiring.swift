@@ -86,10 +86,19 @@ extension ProfileSession {
     // true` (e.g. `.walletHeaderSyncError`) can signal that via env var
     // without writing to the system keychain — which can trigger
     // interactive authorization dialogs in headless CI environments.
+    // Custom RPC endpoints normally persist to the synchronizable Keychain.
+    // In UI tests that write fails on a headless CI runner and, because an
+    // add reverts on save failure, the row would vanish — so under the same
+    // env flag that stubs the endpoint probe we use an in-memory store.
+    let rpcEndpointsStore: any CryptoRPCEndpointsStoring =
+      ProcessInfo.processInfo.environment[UITestEnvironment.rpcProbeStubbedReachable] == "1"
+      ? InMemoryCryptoRPCEndpointsStore()
+      : CryptoRPCEndpointsStore()
     let store = CryptoTokenStore(
       registry: cloudBackend.instrumentRegistryRepository,
       cryptoPriceService: cryptoPriceService,
       conversionService: cloudBackend.conversionService,
+      rpcEndpointsStore: rpcEndpointsStore,
       sharedStore: sharedRegistryStore)
     let searchService = InstrumentSearchService(
       registry: cloudBackend.instrumentRegistryRepository,
