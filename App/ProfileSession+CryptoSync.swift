@@ -68,6 +68,13 @@ extension ProfileSession {
   struct CryptoSyncWiring {
     let store: SyncedAccountStore
     let discovery: CryptoTokenDiscoveryService
+    /// Re-reads the persisted custom endpoint list and resets the live
+    /// routing resolver + memoized per-chain clients in place, so an
+    /// endpoint edit in Settings reaches wallet sync on its next sync
+    /// without rebuilding the whole wiring (no relaunch). Fired by
+    /// `ProfileSession` when `CryptoTokenStore.onRPCEndpointsChanged` reports
+    /// a successful persist.
+    let reloadRPCEndpoints: @Sendable () async -> Void
   }
 
   /// Builds the `SyncedAccountStore` (and exposes the underlying
@@ -121,22 +128,12 @@ extension ProfileSession {
       // and the key never lives on the client object itself.
       apiKeyProvider: { ProfileSession.resolveAlchemyApiKey() },
       rateLimiter: alchemyRateLimiter)
-    let resolver = RPCEndpointResolver(
-      customEndpoints: CryptoRPCEndpointsStore().load(),
-      alchemyKeyPresent: { ProfileSession.resolveAlchemyApiKey() != nil },
-      makeRPC: { url in
-        LiveJSONRPCClient(endpoint: url, rateLimiter: RateLimiter(permitsPerSecond: 5))
-      })
     // With no custom endpoint and an Alchemy key present, every chain resolves
     // to `.alchemy`, so on-chain calls go through `alchemyClient`. A configured
-    // custom endpoint (or a missing Alchemy key) routes the matching chain to
-    // a direct JSON-RPC client.
-    let chainClient: any ChainDataClient = RoutingChainDataClient(
-      resolver: resolver,
-      makeAlchemy: { alchemyClient },
-      makeDirect: { rpc in
-        DirectRPCChainClient(rpc: rpc, metadata: TokenMetadataResolver(rpc: rpc))
-      })
+    // custom endpoint (or a missing Alchemy key) routes the matching chain to a
+    // direct JSON-RPC client. `reloadRPCEndpoints` resets that routing in place
+    // when the user edits the endpoint list (see `makeRPCRouting`).
+    let (chainClient, reloadRPCEndpoints) = makeRPCRouting(alchemyClient: alchemyClient)
     let discovery = CryptoTokenDiscoveryService(
       registry: registry, resolver: cryptoPriceService, canonicalResolver: canonicalResolver)
     let walletSyncEngine = makeWalletSyncEngine(
@@ -169,7 +166,61 @@ extension ProfileSession {
       accounts: backend.accounts,
       transferDetection: transferDetection,
       priceWarmer: priceWarmer)
-    return CryptoSyncWiring(store: store, discovery: discovery)
+    return CryptoSyncWiring(
+      store: store, discovery: discovery, reloadRPCEndpoints: reloadRPCEndpoints)
+  }
+
+  /// Wires the crypto-token-store side effects. When a registration's
+  /// `pricingStatus` flips (e.g. the user marks a token `.spam` from
+  /// preferences), the loaded investment account re-valuates so the spam
+  /// position drops out of `valuedPositions` without navigating away and
+  /// back (Issue #790). And when the user edits the custom RPC endpoint list,
+  /// the live sync routing resolver is reset in place so wallet sync picks
+  /// the new list up on its next run without a relaunch. Both spawned Tasks
+  /// are tracked in `crossStoreUpdateTasks` so `cleanupSync` can cancel them
+  /// on session teardown.
+  func wireCrossStoreSideEffects() {
+    let investmentStore = self.investmentStore
+    self.cryptoTokenStore?.onRegistrationsChanged = { [weak self] in
+      let task = Task { @MainActor in
+        await investmentStore.revaluateLoadedPositions()
+      }
+      self?.crossStoreUpdateTasks.append(task)
+    }
+    self.cryptoTokenStore?.onRPCEndpointsChanged = { [weak self] in
+      guard let reload = self?.reloadRPCEndpoints else { return }
+      let task = Task { await reload() }
+      self?.crossStoreUpdateTasks.append(task)
+    }
+  }
+
+  /// Builds the per-chain routing client plus a closure that re-reads the
+  /// persisted custom endpoint list and resets the routing resolver + memoized
+  /// per-chain clients *in place*. Both are actors, so the reset reaches the
+  /// same instances the returned client injects into the sync engine — no
+  /// rebuild, so an endpoint edit reaches wallet sync on its next run without
+  /// a relaunch. With no custom endpoint and an Alchemy key present, every
+  /// chain resolves to `.alchemy` exactly as at construction time.
+  @MainActor
+  private static func makeRPCRouting(
+    alchemyClient: LiveAlchemyClient
+  ) -> (chainClient: any ChainDataClient, reloadRPCEndpoints: @Sendable () async -> Void) {
+    let resolver = RPCEndpointResolver(
+      customEndpoints: CryptoRPCEndpointsStore().load(),
+      alchemyKeyPresent: { ProfileSession.resolveAlchemyApiKey() != nil },
+      makeRPC: { url in
+        LiveJSONRPCClient(endpoint: url, rateLimiter: RateLimiter(permitsPerSecond: 5))
+      })
+    let routing = RoutingChainDataClient(
+      resolver: resolver,
+      makeAlchemy: { alchemyClient },
+      makeDirect: { rpc in
+        DirectRPCChainClient(rpc: rpc, metadata: TokenMetadataResolver(rpc: rpc))
+      })
+    let reloadRPCEndpoints: @Sendable () async -> Void = {
+      await routing.invalidate(customEndpoints: CryptoRPCEndpointsStore().load())
+    }
+    return (routing, reloadRPCEndpoints)
   }
 
   @MainActor

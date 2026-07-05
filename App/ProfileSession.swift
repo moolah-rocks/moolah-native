@@ -76,6 +76,13 @@ final class ProfileSession: Identifiable {
   /// Token resolver shared with the inbox UI. Nil with `cryptoSyncStore`.
   /// Same lifecycle pattern as `cryptoSyncStore`.
   private(set) var cryptoTokenDiscovery: CryptoTokenDiscoveryService?
+
+  /// Resets the live wallet-sync routing resolver to the freshly-persisted
+  /// endpoint list in place; fired by `onRPCEndpointsChanged` so an edit
+  /// reaches sync on its next run. `nil` without crypto sync wiring.
+  /// `private(set)` so the `ProfileSession+CryptoSync` extension (which owns
+  /// `wireCrossStoreSideEffects`) can read it; only `finishInit` assigns it.
+  private(set) var reloadRPCEndpoints: (@Sendable () async -> Void)?
   let importStore: ImportStore
   let importRuleStore: ImportRuleStore
   let importPreferences: ImportPreferences
@@ -324,30 +331,10 @@ final class ProfileSession: Identifiable {
       canonicalResolver: canonicalResolver)
     self.cryptoSyncStore = cryptoWiring?.store
     self.cryptoTokenDiscovery = cryptoWiring?.discovery
+    self.reloadRPCEndpoints = cryptoWiring?.reloadRPCEndpoints
   }
 
-  /// Wires the crypto-token-store -> investment-store hook: when a
-  /// registration's `pricingStatus` flips (e.g. user marks a token as
-  /// `.spam` from preferences), the loaded investment account
-  /// re-valuates so the spam position drops out of `valuedPositions`
-  /// without the user having to navigate away and back. Issue #790.
-  ///
-  /// The investment-store -> account-store fan-out is reactive:
-  /// AccountStore subscribes to
-  /// `investmentRepository.observeAllValues()` and refreshes its cache
-  /// directly, so a write to `investment_value` reaches the sidebar
-  /// without a callback. The spawned crypto-token Task is tracked in
-  /// `crossStoreUpdateTasks` so `cleanupSync` can cancel in-flight
-  /// revaluations on session teardown.
-  private func wireCrossStoreSideEffects() {
-    let investmentStore = self.investmentStore
-    self.cryptoTokenStore?.onRegistrationsChanged = { [weak self] in
-      let task = Task { @MainActor in
-        await investmentStore.revaluateLoadedPositions()
-      }
-      self?.crossStoreUpdateTasks.append(task)
-    }
-  }
+  // `wireCrossStoreSideEffects()` lives in `ProfileSession+CryptoSync.swift`.
 
   // `cleanupSync(coordinator:)` and `updateProfile(_:)` live in
   // `ProfileSession+SyncCleanup.swift`.

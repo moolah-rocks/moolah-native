@@ -12,19 +12,15 @@ import Foundation
 /// probe status shown in Settings) update immediately — `addRPCEndpoint`/
 /// `removeRPCEndpoint` mutate the cached array synchronously and
 /// `probeEndpoints()` always builds a fresh `RPCEndpointResolver` from the
-/// current list. Wallet-sync *routing*, however, is wired once per
-/// `ProfileSession` — `ProfileSession.makeCryptoSyncWiring` reads
-/// `CryptoRPCEndpointsStore().load()` a single time when it builds the
-/// resolver that `RoutingChainDataClient` uses for the rest of the
-/// session. So a saved endpoint change is picked up by the Settings
-/// probe right away, but by wallet sync only the next time that wiring
-/// is constructed — the next app launch or profile activation. This is a
-/// deliberate scope decision for an advanced, opt-in setting rather than
-/// a limitation to route around: rebuilding the live sync wiring
-/// mid-session would need to reach into `ProfileSession`'s stored
-/// `cryptoSyncStore`/`cryptoTokenDiscovery` and any in-flight sync task,
-/// which is a bigger, riskier change than this Settings-only section
-/// warrants.
+/// current list. Wallet-sync *routing* picks the edit up on its next sync:
+/// a successful add/remove fires `onRPCEndpointsChanged`, which
+/// `ProfileSession` wires to reset the live `RoutingChainDataClient`'s
+/// resolver and memoized per-chain clients in place (both are actors held
+/// by the session's sync wiring). So the next `getAssetTransfers`/
+/// `getTransactionReceipt` re-resolves against the edited list — no app
+/// relaunch or profile switch required. The reset runs only after the list
+/// is durably saved; a failed persist reverts the cached list and leaves
+/// routing untouched.
 extension CryptoTokenStore {
 
   /// Adds `url` to the persisted custom endpoint list. Trims surrounding
@@ -130,6 +126,11 @@ extension CryptoTokenStore {
     do {
       try rpcEndpointsStore.save(rpcEndpoints)
       setRPCEndpointsError(nil)
+      // Only after the list is durably saved: tell wallet sync to re-read it
+      // on its next run. Deliberately not fired on the revert path below — a
+      // failed save leaves the persisted list unchanged, so routing has
+      // nothing new to pick up.
+      onRPCEndpointsChanged?()
     } catch {
       logger.error(
         "Failed to save RPC endpoint list: \(error.localizedDescription, privacy: .public)")

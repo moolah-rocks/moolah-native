@@ -38,6 +38,16 @@ import Testing
     }
   }
 
+  /// Main-actor call counter for the `onRPCEndpointsChanged` hook, so a test
+  /// can assert the callback fired (or didn't) without mutating a captured
+  /// `var` from an escaping closure.
+  @MainActor
+  private final class FireCounter {
+    private(set) var value = 0
+
+    func increment() { value += 1 }
+  }
+
   @Suite("CryptoTokenStore+RPCEndpoints")
   @MainActor
   struct CryptoTokenStoreRPCEndpointsTests {
@@ -161,6 +171,50 @@ import Testing
       store.removeRPCEndpoint("https://existing.example.com")
       #expect(store.rpcEndpoints == ["https://existing.example.com"])
       #expect(store.rpcEndpointsError != nil)
+    }
+
+    // MARK: - onRPCEndpointsChanged
+
+    @Test("addRPCEndpoint fires onRPCEndpointsChanged on a successful persist")
+    func addRPCEndpointFiresChangedOnSuccess() throws {
+      let (store, keychain) = try makeStore()
+      defer { keychain.clear() }
+      let counter = FireCounter()
+      store.onRPCEndpointsChanged = { counter.increment() }
+      store.addRPCEndpoint("https://rpc.example.com")
+      #expect(counter.value == 1)
+    }
+
+    @Test("removeRPCEndpoint fires onRPCEndpointsChanged on a successful persist")
+    func removeRPCEndpointFiresChangedOnSuccess() throws {
+      let (store, keychain) = try makeStore(seedEndpoints: ["https://a.example.com"])
+      defer { keychain.clear() }
+      let counter = FireCounter()
+      store.onRPCEndpointsChanged = { counter.increment() }
+      store.removeRPCEndpoint("https://a.example.com")
+      #expect(counter.value == 1)
+    }
+
+    @Test("addRPCEndpoint does not fire onRPCEndpointsChanged when persistence fails")
+    func addRPCEndpointDoesNotFireChangedOnFailure() throws {
+      let (store, keychain) = try makeStore(
+        rpcEndpointsStore: FailingRPCEndpointsStore(seeded: ["https://existing.example.com"]))
+      defer { keychain.clear() }
+      let counter = FireCounter()
+      store.onRPCEndpointsChanged = { counter.increment() }
+      store.addRPCEndpoint("https://new.example.com")
+      #expect(counter.value == 0)
+    }
+
+    @Test("removeRPCEndpoint does not fire onRPCEndpointsChanged when persistence fails")
+    func removeRPCEndpointDoesNotFireChangedOnFailure() throws {
+      let (store, keychain) = try makeStore(
+        rpcEndpointsStore: FailingRPCEndpointsStore(seeded: ["https://existing.example.com"]))
+      defer { keychain.clear() }
+      let counter = FireCounter()
+      store.onRPCEndpointsChanged = { counter.increment() }
+      store.removeRPCEndpoint("https://existing.example.com")
+      #expect(counter.value == 0)
     }
 
     // MARK: - probeEndpoints (via rpcProbeOverride)
