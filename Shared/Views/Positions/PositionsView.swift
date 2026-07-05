@@ -21,29 +21,7 @@ struct PositionsView: View {
       EmptyView()
     } else {
       VStack(spacing: 0) {
-        if let performance = input.performance {
-          AccountPerformanceTiles(title: input.title, performance: performance)
-        } else {
-          PositionsHeader(input: input)
-        }
-        if input.showsChart {
-          Divider()
-          PositionsChart(
-            input: input,
-            range: $range,
-            selection: $selection
-          )
-          .padding(.vertical, 8)
-        } else if input.showsChartLoadingPlaceholder {
-          Divider()
-          // Matches PositionsChart's footprint (header + 220pt chartBody +
-          // rangePicker, plus this container's own vertical padding) so
-          // swapping placeholder → chart doesn't jump the table below it.
-          ProgressView()
-            .frame(maxWidth: .infinity, minHeight: 280)
-            .padding(.vertical, 8)
-            .accessibilityLabel("Loading chart")
-        }
+        PositionsChartPane(input: input, range: $range, selection: $selection)
         Divider()
         PositionsTable(input: input, selection: $selection)
       }
