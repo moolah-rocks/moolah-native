@@ -87,6 +87,22 @@ import SwiftUI
       let bottomHost = NSHostingView(rootView: bottom())
       topHost.translatesAutoresizingMaskIntoConstraints = false
       bottomHost.translatesAutoresizingMaskIntoConstraints = false
+      // Each pane's height is governed entirely by the divider position, so
+      // the hosting views must lay their SwiftUI content out to fill the
+      // frame the split view assigns — never at the content's intrinsic
+      // size. With the default sizing options an `NSHostingView` whose
+      // content is *taller* than its frame lays the content out at its ideal
+      // height and centres it, so the overflow spills equally off the top and
+      // bottom of the pane. For the bottom pane this pushes the pinned
+      // `[Transactions | Chart]` picker (the first child) above the divider
+      // and behind the top positions pane, leaving it invisible and
+      // unreachable when the chart content is taller than the pane. Clearing
+      // `sizingOptions`
+      // makes each host propose its actual bounds to SwiftUI, so the content
+      // top-anchors and compresses to fit and the picker stays pinned and
+      // clickable at any window height.
+      topHost.sizingOptions = []
+      bottomHost.sizingOptions = []
 
       split.addArrangedSubview(topHost)
       split.addArrangedSubview(bottomHost)
