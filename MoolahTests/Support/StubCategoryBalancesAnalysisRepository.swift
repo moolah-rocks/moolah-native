@@ -39,7 +39,8 @@ actor StubCategoryBalancesAnalysisRepository: AnalysisRepository {
     switch transactionType {
     case .income: return income
     case .expense: return expense
-    default: return CategoryBalances(byCategory: [:], uncategorised: nil)
+    case .transfer, .openingBalance, .trade:
+      return CategoryBalances(byCategory: [:], uncategorised: nil)
     }
   }
 }

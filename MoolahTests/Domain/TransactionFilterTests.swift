@@ -37,9 +37,9 @@ struct TransactionFilterTests {
     #expect(filter.hasActiveFilters == true)
   }
 
-  @Test("Filter with uncategorizedLegType is active")
+  @Test("Filter with uncategorisedLegType is active")
   func testFilterWithUncategorizedLegTypeIsActive() {
-    let filter = TransactionFilter(uncategorizedLegType: .expense)
+    let filter = TransactionFilter(uncategorisedLegType: .expense)
     #expect(filter.hasActiveFilters == true)
   }
 

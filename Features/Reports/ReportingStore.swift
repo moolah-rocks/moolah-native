@@ -35,6 +35,24 @@ final class ReportingStore {
   private let userDefaults: UserDefaults
   private let logger = Logger(subsystem: "com.moolah.app", category: "ReportingStore")
 
+  /// Monotonic counters guarding against a superseded load clobbering fresher
+  /// published state (issue #1209 class) — same shape as
+  /// `AccountStore.snapshotGeneration`. Each `load…` function bumps its
+  /// counter *before* suspending and captures the post-bump value; every
+  /// publish after an `await` checks the captured value still matches the
+  /// live counter before writing, so a call superseded by a newer one
+  /// (e.g. `ReportsView`'s `.task(id:)` racing the "Try Again" button) drops
+  /// its stale result instead of publishing over the newer one.
+  ///
+  /// `loadCategoryBalances` gets its own counter (`categoryBalancesGeneration`)
+  /// since it publishes an independent set of properties
+  /// (`incomeBalances`/`expenseBalances`/…/`isLoadingCategoryBalances`).
+  /// `loadProfitLoss` and `loadCapitalGains` share `reportGeneration` because
+  /// they publish to the same `isLoading`/`error` pair — a call to either
+  /// should be able to supersede the other.
+  @ObservationIgnored private var categoryBalancesGeneration: UInt64 = 0
+  @ObservationIgnored private var reportGeneration: UInt64 = 0
+
   /// `true` while the one-shot cross-chain identity migration has not yet
   /// completed. Capital-gains FIFO results are gated on this flag: lots for
   /// the same asset may still be split across retired + canonical ids, so any
@@ -67,6 +85,9 @@ final class ReportingStore {
       logger.error("loadCategoryBalances called without analysisRepository")
       return
     }
+    // Bump-then-capture: see the `categoryBalancesGeneration` doc comment.
+    categoryBalancesGeneration &+= 1
+    let generation = categoryBalancesGeneration
     isLoadingCategoryBalances = true
     categoryBalancesError = nil
     do {
@@ -75,6 +96,7 @@ final class ReportingStore {
         filters: TransactionFilter(),
         targetInstrument: profileCurrency
       )
+      guard generation == categoryBalancesGeneration else { return }
       incomeBalances = result.income
       expenseBalances = result.expense
       incomeUncategorised = result.incomeUncategorised
@@ -88,35 +110,46 @@ final class ReportingStore {
       // it as a normal lifecycle event — surfacing it would render
       // "Swift.CancellationError error 1" in the view. A re-mount /
       // re-keyed `.task` issues its own load.
+      guard generation == categoryBalancesGeneration else { return }
       isLoadingCategoryBalances = false
       return
     } catch {
+      guard generation == categoryBalancesGeneration else { return }
       logger.error("Failed to load category balances: \(error)")
       categoryBalancesError = error
     }
+    guard generation == categoryBalancesGeneration else { return }
     isLoadingCategoryBalances = false
   }
 
   func loadProfitLoss() async {
+    // Bump-then-capture: see the `reportGeneration` doc comment.
+    reportGeneration &+= 1
+    let generation = reportGeneration
     isLoading = true
     error = nil
     do {
       let transactions = try await loadAllLegTransactions()
-      profitLoss = try await ProfitLossCalculator.compute(
+      let result = try await ProfitLossCalculator.compute(
         transactions: transactions,
         profileCurrency: profileCurrency,
         conversionService: conversionService,
         asOfDate: Date()
       )
+      guard generation == reportGeneration else { return }
+      profitLoss = result
     } catch is CancellationError {
       // View teardown / supersession — never surface; the next mount
       // issues its own load.
+      guard generation == reportGeneration else { return }
       isLoading = false
       return
     } catch {
+      guard generation == reportGeneration else { return }
       logger.error("Failed to load P&L: \(error)")
       self.error = error
     }
+    guard generation == reportGeneration else { return }
     isLoading = false
   }
 
@@ -132,6 +165,9 @@ final class ReportingStore {
         "loadCapitalGains: skipping — cross-chain identity migration not yet complete")
       return
     }
+    // Bump-then-capture: see the `reportGeneration` doc comment.
+    reportGeneration &+= 1
+    let generation = reportGeneration
     isLoading = true
     error = nil
     do {
@@ -146,6 +182,7 @@ final class ReportingStore {
           from: DateComponents(year: financialYear, month: 6, day: 30))
       else {
         logger.error("Could not compute financial year \(financialYear) date range")
+        guard generation == reportGeneration else { return }
         isLoading = false
         return
       }
@@ -156,6 +193,7 @@ final class ReportingStore {
         conversionService: conversionService,
         sellDateRange: fyStart...fyEnd
       )
+      guard generation == reportGeneration else { return }
       capitalGainsResult = result
       capitalGainsSummary = CapitalGainsSummary(
         shortTermGain: result.shortTermGain,
@@ -166,12 +204,15 @@ final class ReportingStore {
     } catch is CancellationError {
       // View teardown / supersession — never surface; the next mount
       // issues its own load.
+      guard generation == reportGeneration else { return }
       isLoading = false
       return
     } catch {
+      guard generation == reportGeneration else { return }
       logger.error("Failed to load capital gains: \(error)")
       self.error = error
     }
+    guard generation == reportGeneration else { return }
     isLoading = false
   }
 

@@ -150,3 +150,142 @@ struct EarmarkBudgetSectionView: View {
     }
   }
 }
+
+private struct EarmarkBudgetPreviewIds {
+  let groceriesId = UUID()
+  let diningId = UUID()
+}
+
+@MainActor
+private func seedEarmarkBudgetPreview(
+  backend: any BackendProvider,
+  earmark: Earmark,
+  earmarkStore: EarmarkStore,
+  ids: EarmarkBudgetPreviewIds
+) async {
+  let accountId = UUID()
+  _ = try? await backend.accounts.create(
+    Account(id: accountId, name: "Test", type: .bank, instrument: .AUD))
+  _ = try? await backend.earmarks.create(earmark)
+  _ = try? await backend.categories.create(Category(id: ids.groceriesId, name: "Groceries"))
+  _ = try? await backend.categories.create(Category(id: ids.diningId, name: "Dining"))
+
+  // Budgeted category with spend against it.
+  await earmarkStore.addBudgetItem(
+    earmarkId: earmark.id,
+    categoryId: ids.groceriesId,
+    amount: InstrumentAmount(quantity: 300, instrument: .AUD))
+  _ = try? await backend.transactions.create(
+    Transaction(
+      date: Date(),
+      payee: "Supermarket",
+      legs: [
+        TransactionLeg(
+          accountId: accountId,
+          instrument: .AUD,
+          quantity: -150,
+          type: .expense,
+          categoryId: ids.groceriesId,
+          earmarkId: earmark.id)
+      ]))
+
+  // Spend in a category with no budget item ("unbudgeted" row).
+  _ = try? await backend.transactions.create(
+    Transaction(
+      date: Date().addingTimeInterval(-86400),
+      payee: "Restaurant",
+      legs: [
+        TransactionLeg(
+          accountId: accountId,
+          instrument: .AUD,
+          quantity: -60,
+          type: .expense,
+          categoryId: ids.diningId,
+          earmarkId: earmark.id)
+      ]))
+
+  // Spend with no category at all — synthesizes the "Uncategorised" row.
+  _ = try? await backend.transactions.create(
+    Transaction(
+      date: Date().addingTimeInterval(-2 * 86400),
+      payee: "Cash Withdrawal",
+      legs: [
+        TransactionLeg(
+          accountId: accountId,
+          instrument: .AUD,
+          quantity: -40,
+          type: .expense,
+          earmarkId: earmark.id)
+      ]))
+}
+
+#Preview {
+  let backend = PreviewBackend.create()
+  let earmark = Earmark(name: "Holiday Fund", instrument: .AUD)
+  let earmarkStore = EarmarkStore(
+    repository: backend.earmarks,
+    conversionService: backend.conversionService,
+    targetInstrument: .AUD)
+  let ids = EarmarkBudgetPreviewIds()
+  let categories = Categories(from: [
+    Category(id: ids.groceriesId, name: "Groceries"),
+    Category(id: ids.diningId, name: "Dining"),
+  ])
+  return NavigationStack {
+    EarmarkBudgetSectionView(
+      earmark: earmark,
+      categories: categories,
+      analysisRepository: backend.analysis
+    )
+    .environment(earmarkStore)
+  }
+  .previewProfileEnvironment()
+  .task {
+    await seedEarmarkBudgetPreview(
+      backend: backend, earmark: earmark, earmarkStore: earmarkStore, ids: ids)
+  }
+}
+
+/// `AnalysisRepository` double that always fails `fetchCategoryBalances`, so
+/// this preview can exercise `EarmarkBudgetSectionView`'s `loadError` /
+/// "Try Again" `ContentUnavailableView` branch without a real backend error.
+private struct FailingCategoryBalancesRepository: AnalysisRepository {
+  struct PreviewError: Error, LocalizedError {
+    var errorDescription: String? { "Preview-only failure" }
+  }
+
+  func fetchDailyBalances(after: Date?, forecastUntil: Date?) async throws -> [DailyBalance] { [] }
+  func fetchExpenseBreakdown(monthEnd: Int, after: Date?) async throws -> [ExpenseBreakdown] { [] }
+  func fetchIncomeAndExpense(
+    monthEnd: Int, after: Date?
+  ) async throws -> [MonthlyIncomeExpense] { [] }
+  func fetchCategoryBalances(
+    dateRange: ClosedRange<Date>,
+    transactionType: TransactionType,
+    filters: TransactionFilter?,
+    targetInstrument: Instrument
+  ) async throws -> CategoryBalances {
+    throw PreviewError()
+  }
+}
+
+#Preview("Load error") {
+  let backend = PreviewBackend.create()
+  let earmark = Earmark(name: "Holiday Fund", instrument: .AUD)
+  let earmarkStore = EarmarkStore(
+    repository: backend.earmarks,
+    conversionService: backend.conversionService,
+    targetInstrument: .AUD)
+  return NavigationStack {
+    EarmarkBudgetSectionView(
+      earmark: earmark,
+      categories: Categories(from: []),
+      analysisRepository: FailingCategoryBalancesRepository()
+    )
+    .environment(earmarkStore)
+  }
+  .previewProfileEnvironment()
+  .task {
+    _ = try? await backend.earmarks.create(earmark)
+  }
+}
