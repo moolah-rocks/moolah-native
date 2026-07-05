@@ -99,6 +99,55 @@ struct TransactionRepositoryFilterTests {
     }
   }
 
+  @Test("filters by uncategorizedLegType (type-scoped)")
+  func testFiltersByUncategorizedLegType() async throws {
+    let accountId = UUID()
+    let categoryId = UUID()
+    let date = try #require(
+      Calendar.current.date(from: DateComponents(year: 2024, month: 6, day: 15)))
+
+    let uncategorisedIncome = Transaction(
+      date: date, payee: "Uncategorised Income",
+      legs: [
+        makeContractTestLeg(
+          accountId: accountId, quantity: try #require(Decimal(string: "100.00")),
+          type: .income)
+      ])
+    let uncategorisedExpense = Transaction(
+      date: date, payee: "Uncategorised Expense",
+      legs: [
+        makeContractTestLeg(
+          accountId: accountId, quantity: try #require(Decimal(string: "-50.00")),
+          type: .expense)
+      ])
+    let categorisedIncome = Transaction(
+      date: date, payee: "Categorised Income",
+      legs: [
+        makeContractTestLeg(
+          accountId: accountId, quantity: try #require(Decimal(string: "200.00")),
+          type: .income, categoryId: categoryId)
+      ])
+
+    let repository = try makeContractCloudKitTransactionRepository(
+      initialTransactions: [uncategorisedIncome, uncategorisedExpense, categorisedIncome])
+
+    let incomePage = try await repository.fetch(
+      filter: TransactionFilter(uncategorizedLegType: .income),
+      page: 0,
+      pageSize: 50
+    )
+    #expect(incomePage.transactions.count == 1)
+    #expect(incomePage.transactions.first?.payee == "Uncategorised Income")
+
+    let expensePage = try await repository.fetch(
+      filter: TransactionFilter(uncategorizedLegType: .expense),
+      page: 0,
+      pageSize: 50
+    )
+    #expect(expensePage.transactions.count == 1)
+    #expect(expensePage.transactions.first?.payee == "Uncategorised Expense")
+  }
+
   @Test("returns empty when no matches")
   func testReturnsEmptyWhenNoMatches() async throws {
     let repository = try makeContractCloudKitTransactionRepository(

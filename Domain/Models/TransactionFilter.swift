@@ -16,6 +16,10 @@ struct TransactionFilter: Sendable, Equatable {
   var dateRange: ClosedRange<Date>?
   var categoryIds: Set<UUID>
   var payee: String?
+  /// Type-scoped drill-down filter for the Reports "Uncategorised" row:
+  /// when set, restricts the result to transactions having a leg with
+  /// `categoryId == nil` and this `TransactionType`.
+  var uncategorizedLegType: TransactionType?
 
   init(
     accountId: UUID? = nil,
@@ -24,7 +28,8 @@ struct TransactionFilter: Sendable, Equatable {
     scheduled: ScheduledFilter = .all,
     dateRange: ClosedRange<Date>? = nil,
     categoryIds: Set<UUID> = [],
-    payee: String? = nil
+    payee: String? = nil,
+    uncategorizedLegType: TransactionType? = nil
   ) {
     self.accountId = accountId
     self.accountIds = accountIds
@@ -33,6 +38,7 @@ struct TransactionFilter: Sendable, Equatable {
     self.dateRange = dateRange
     self.categoryIds = categoryIds
     self.payee = payee
+    self.uncategorizedLegType = uncategorizedLegType
   }
 }
 
@@ -41,6 +47,7 @@ extension TransactionFilter {
     accountId != nil || !accountIds.isEmpty || earmarkId != nil
       || scheduled != .all
       || dateRange != nil || !categoryIds.isEmpty || payee != nil
+      || uncategorizedLegType != nil
   }
 
   /// True when *any* account-scoped predicate is present — a single
