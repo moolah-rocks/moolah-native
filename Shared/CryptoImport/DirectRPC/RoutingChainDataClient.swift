@@ -9,8 +9,8 @@ import Foundation
 /// or a `makeDirect(rpc)` client for `.direct(rpc)`.
 ///
 /// With no custom endpoint configured and an Alchemy key present, every chain
-/// resolves to `.alchemy`, so this behaves exactly as the previous single
-/// `LiveAlchemyClient` wiring did — no behaviour change on that path.
+/// resolves to `.alchemy`, so every call routes to a single shared Alchemy
+/// client — no behaviour difference from calling that client directly.
 ///
 /// The concrete resolved client is memoized per `chain.chainId` in a small
 /// private `actor` (the struct itself stays `Sendable`; the actor is a shared
@@ -18,7 +18,7 @@ import Foundation
 /// many `getTransactionReceipt` calls for the same chain; reusing one concrete
 /// client across them keeps the direct path's `TokenMetadataResolver` cache
 /// warm rather than rebuilding a fresh (empty) metadata cache per receipt.
-struct RoutingChainDataClient: ChainDataClient {
+struct RoutingChainDataClient {
   private let resolver: RPCEndpointResolver
   private let makeAlchemy: @Sendable () -> any ChainDataClient
   private let makeDirect: @Sendable (LiveJSONRPCClient) -> any ChainDataClient
@@ -42,23 +42,6 @@ struct RoutingChainDataClient: ChainDataClient {
     self.makeDirect = makeDirect
   }
 
-  func getAssetTransfers(
-    chain: ChainConfig,
-    walletAddress: String,
-    fromBlock: UInt64
-  ) async throws -> [AlchemyTransfer] {
-    try await client(for: chain)
-      .getAssetTransfers(
-        chain: chain, walletAddress: walletAddress, fromBlock: fromBlock)
-  }
-
-  func getTransactionReceipt(
-    chain: ChainConfig,
-    hash: String
-  ) async throws -> AlchemyTransactionReceipt {
-    try await client(for: chain).getTransactionReceipt(chain: chain, hash: hash)
-  }
-
   /// Returns the concrete client for `chain`, resolving (and memoizing) it on
   /// first use. On a cache miss the resolver picks `.alchemy` / `.direct`, the
   /// matching factory builds the client, and `storeIfAbsent` records it — that
@@ -77,6 +60,27 @@ struct RoutingChainDataClient: ChainDataClient {
       built = makeDirect(rpc)
     }
     return await cache.storeIfAbsent(built, forChainId: chain.chainId)
+  }
+}
+
+// MARK: - ChainDataClient
+
+extension RoutingChainDataClient: ChainDataClient {
+  func getAssetTransfers(
+    chain: ChainConfig,
+    walletAddress: String,
+    fromBlock: UInt64
+  ) async throws -> [AlchemyTransfer] {
+    try await client(for: chain)
+      .getAssetTransfers(
+        chain: chain, walletAddress: walletAddress, fromBlock: fromBlock)
+  }
+
+  func getTransactionReceipt(
+    chain: ChainConfig,
+    hash: String
+  ) async throws -> AlchemyTransactionReceipt {
+    try await client(for: chain).getTransactionReceipt(chain: chain, hash: hash)
   }
 }
 

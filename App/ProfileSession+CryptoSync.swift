@@ -110,8 +110,8 @@ extension ProfileSession {
     guard let registry else { return nil }
     // Shared Alchemy de-burst limiter: `burstCapacity: 1` strictly spaces the
     // launch-time fan-out across every crypto account ~200ms apart. All chains
-    // that resolve to Alchemy share this one client (and limiter), exactly as
-    // before the routing client was introduced.
+    // that resolve to Alchemy share this one client and limiter, so the
+    // launch-time fan-out stays de-bursted.
     let alchemyRateLimiter = RateLimiter(permitsPerSecond: 5, burstCapacity: 1)
     let alchemyClient = LiveAlchemyClient(
       // Closure (not a resolved value): a key entered in Settings after this
@@ -126,9 +126,9 @@ extension ProfileSession {
         LiveJSONRPCClient(endpoint: url, rateLimiter: RateLimiter(permitsPerSecond: 5))
       })
     // With no custom endpoint and an Alchemy key present, every chain resolves
-    // to `.alchemy`, so on-chain calls go through `alchemyClient` exactly as
-    // the previous single-client wiring did. A configured custom endpoint (or a
-    // missing Alchemy key) routes the matching chain to a direct JSON-RPC client.
+    // to `.alchemy`, so on-chain calls go through `alchemyClient`. A configured
+    // custom endpoint (or a missing Alchemy key) routes the matching chain to
+    // a direct JSON-RPC client.
     let chainClient: any ChainDataClient = RoutingChainDataClient(
       resolver: resolver,
       makeAlchemy: { alchemyClient },

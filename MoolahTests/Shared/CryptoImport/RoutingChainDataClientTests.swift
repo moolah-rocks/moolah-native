@@ -137,7 +137,7 @@ struct RoutingChainDataClientTests {
 /// routing test can assert the dispatch target. Reference type (the routing
 /// client hands back a shared instance from the factory closures); lock-guarded
 /// to satisfy `Sendable`.
-private final class RecordingChainDataClient: ChainDataClient, @unchecked Sendable {
+private final class RecordingChainDataClient: @unchecked Sendable {
   let label: String
   private let lock = NSLock()
   private var transfers: [Int] = []
@@ -157,6 +157,24 @@ private final class RecordingChainDataClient: ChainDataClient, @unchecked Sendab
     return receipts
   }
 
+  /// Synchronous mutators so the lock is never taken from an `async` frame
+  /// (`NSLock.lock()` is unavailable there).
+  private func recordTransfer(_ chainId: Int) {
+    lock.lock()
+    defer { lock.unlock() }
+    transfers.append(chainId)
+  }
+
+  private func recordReceipt(_ chainId: Int) {
+    lock.lock()
+    defer { lock.unlock() }
+    receipts.append(chainId)
+  }
+}
+
+// MARK: - ChainDataClient
+
+extension RecordingChainDataClient: ChainDataClient {
   func getAssetTransfers(
     chain: ChainConfig,
     walletAddress: String,
@@ -173,20 +191,6 @@ private final class RecordingChainDataClient: ChainDataClient, @unchecked Sendab
     recordReceipt(chain.chainId)
     return AlchemyTransactionReceipt(
       hash: hash, gasUsed: 0, effectiveGasPrice: 0, from: "0x", l1FeeWei: nil, logs: [])
-  }
-
-  /// Synchronous mutators so the lock is never taken from an `async` frame
-  /// (`NSLock.lock()` is unavailable there).
-  private func recordTransfer(_ chainId: Int) {
-    lock.lock()
-    defer { lock.unlock() }
-    transfers.append(chainId)
-  }
-
-  private func recordReceipt(_ chainId: Int) {
-    lock.lock()
-    defer { lock.unlock() }
-    receipts.append(chainId)
   }
 }
 
