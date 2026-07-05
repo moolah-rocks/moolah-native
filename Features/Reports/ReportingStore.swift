@@ -15,6 +15,16 @@ final class ReportingStore {
   /// Category balances for the Reports view, bucketed by transaction type.
   private(set) var incomeBalances: [UUID: InstrumentAmount] = [:]
   private(set) var expenseBalances: [UUID: InstrumentAmount] = [:]
+  /// Total of income/expense legs with no category, `nil` when there are
+  /// none of that type in range (the Reports view omits the row in that
+  /// case rather than treating `nil` as zero).
+  private(set) var incomeUncategorised: InstrumentAmount?
+  private(set) var expenseUncategorised: InstrumentAmount?
+  /// Mirrors `CategoryBalances.hasUnavailableData` (Rule 11) per column —
+  /// true when a transient conversion failure caused some rows to be
+  /// skipped, so the corresponding totals may be understated.
+  private(set) var incomeHasUnavailableData = false
+  private(set) var expenseHasUnavailableData = false
   private(set) var isLoadingCategoryBalances = false
   private(set) var categoryBalancesError: Error?
 
@@ -49,8 +59,9 @@ final class ReportingStore {
   }
 
   /// Loads income + expense category balances for a date range. Results are
-  /// published to `incomeBalances` / `expenseBalances`; failures land on
-  /// `categoryBalancesError`.
+  /// published to `incomeBalances` / `expenseBalances` (plus
+  /// `incomeUncategorised` / `expenseUncategorised` and the
+  /// `*HasUnavailableData` flags); failures land on `categoryBalancesError`.
   func loadCategoryBalances(dateRange: ClosedRange<Date>) async {
     guard let analysisRepository else {
       logger.error("loadCategoryBalances called without analysisRepository")
@@ -66,6 +77,10 @@ final class ReportingStore {
       )
       incomeBalances = result.income
       expenseBalances = result.expense
+      incomeUncategorised = result.incomeUncategorised
+      expenseUncategorised = result.expenseUncategorised
+      incomeHasUnavailableData = result.incomeHasUnavailableData
+      expenseHasUnavailableData = result.expenseHasUnavailableData
     } catch is CancellationError {
       // `ReportsView`'s `.task(id:)` is cancelled whenever the user
       // changes the date range or navigates away; the cancellation
