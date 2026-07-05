@@ -186,7 +186,7 @@ enum AlchemyResponseValidator {
 /// legitimate gas leg into a sync failure. The wrap/unwrap detector
 /// that consumes `logs` treats a dropped event the same as an absent
 /// one.
-struct AlchemyTransactionReceiptPayload: Decodable, Sendable {
+struct AlchemyTransactionReceiptPayload: Sendable {
   let gasUsed: String
   let effectiveGasPrice: String
   /// EOA that signed the transaction. Decoded raw; lowercased at
@@ -200,18 +200,7 @@ struct AlchemyTransactionReceiptPayload: Decodable, Sendable {
   /// `init(from:)` below maps a missing key to `[]`.
   let logs: [ReceiptLogPayload]
 
-  private enum CodingKeys: String, CodingKey {
-    case gasUsed, effectiveGasPrice, from, l1Fee, logs
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    gasUsed = try container.decode(String.self, forKey: .gasUsed)
-    effectiveGasPrice = try container.decode(String.self, forKey: .effectiveGasPrice)
-    from = try container.decode(String.self, forKey: .from)
-    l1Fee = try container.decodeIfPresent(String.self, forKey: .l1Fee)
-    logs = try container.decodeIfPresent([ReceiptLogPayload].self, forKey: .logs) ?? []
-  }
+  private static let logger = Logger(subsystem: "com.moolah.app", category: "AlchemyReceipt")
 
   func toReceipt(hash: String) throws -> AlchemyTransactionReceipt {
     guard
@@ -227,6 +216,12 @@ struct AlchemyTransactionReceiptPayload: Decodable, Sendable {
       return parsed
     }
     let logValues = logs.compactMap { $0.toReceiptLog() }
+    let droppedCount = logs.count - logValues.count
+    if droppedCount > 0 {
+      Self.logger.notice(
+        "Alchemy getTransactionReceipt: dropped \(droppedCount, privacy: .public) malformed log entry(ies)"
+      )
+    }
     return AlchemyTransactionReceipt(
       hash: hash,
       gasUsed: gasUsedValue,
@@ -235,6 +230,21 @@ struct AlchemyTransactionReceiptPayload: Decodable, Sendable {
       l1FeeWei: l1FeeValue,
       logs: logValues
     )
+  }
+}
+
+extension AlchemyTransactionReceiptPayload: Decodable {
+  private enum CodingKeys: String, CodingKey {
+    case gasUsed, effectiveGasPrice, from, l1Fee, logs
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    gasUsed = try container.decode(String.self, forKey: .gasUsed)
+    effectiveGasPrice = try container.decode(String.self, forKey: .effectiveGasPrice)
+    from = try container.decode(String.self, forKey: .from)
+    l1Fee = try container.decodeIfPresent(String.self, forKey: .l1Fee)
+    logs = try container.decodeIfPresent([ReceiptLogPayload].self, forKey: .logs) ?? []
   }
 }
 
