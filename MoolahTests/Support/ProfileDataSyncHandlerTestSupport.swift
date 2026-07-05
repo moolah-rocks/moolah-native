@@ -272,6 +272,7 @@ enum ProfileDataSyncHandlerTestSupport {
         instrumentRegistrar: registry),
       accountGroups: GRDBAccountGroupRepository(database: database),
       insightDismissals: GRDBInsightDismissalRepository(database: database),
+      walletSyncCheckpoints: GRDBWalletSyncCheckpointRepository(database: database),
       earmarks: GRDBEarmarkRepository(
         database: database,
         defaultInstrument: instrument,

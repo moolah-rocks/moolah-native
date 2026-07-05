@@ -18,7 +18,8 @@ struct WalletSyncEngineTests {
   private func makeEngine(
     alchemy: RecordingAlchemyClientStub = .init(),
     blockExplorer: RecordingBlockExplorerClientStub = BlockExplorerTestDoubles.empty,
-    syncState: RecordingWalletSyncStateRepository = .init()
+    syncState: RecordingWalletSyncStateRepository = .init(),
+    checkpoints: InMemoryWalletSyncCheckpointRepository = .init()
   ) -> (WalletSyncEngine, CryptoTokenDiscoverySubject) {
     let subject = makeDiscoverySubject()
     let engine = WalletSyncEngine(
@@ -26,6 +27,7 @@ struct WalletSyncEngineTests {
       blockExplorer: blockExplorer,
       discovery: subject.service,
       walletSyncState: syncState,
+      checkpoints: checkpoints,
       importOriginFactory: { accountId in
         makeWalletImportOrigin(for: accountId)
       })

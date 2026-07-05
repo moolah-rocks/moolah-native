@@ -25,6 +25,7 @@ struct CloudKitAnalysisTestBackend: BackendProvider, @unchecked Sendable {
   let csvImportProfiles: any CSVImportProfileRepository
   let importRules: any ImportRuleRepository
   let walletSyncState: any WalletSyncStateRepository
+  let walletSyncCheckpoints: any WalletSyncCheckpointRepository
   let groupUIState: any GroupUIStateRepository
 
   /// The GRDB queue backing every repository — exposed so tests can seed
@@ -88,6 +89,7 @@ struct CloudKitAnalysisTestBackend: BackendProvider, @unchecked Sendable {
     self.csvImportProfiles = backend.csvImportProfiles
     self.importRules = backend.importRules
     self.walletSyncState = backend.walletSyncState
+    self.walletSyncCheckpoints = backend.walletSyncCheckpoints
     self.groupUIState = backend.groupUIState
   }
 }

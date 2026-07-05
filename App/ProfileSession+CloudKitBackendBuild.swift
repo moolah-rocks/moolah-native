@@ -108,6 +108,8 @@ extension ProfileSession {
       onAccountGroupDeleted: hooks.deleted,
       onInsightDismissalChanged: hooks.changed,
       onInsightDismissalDeleted: hooks.deleted,
+      onWalletSyncCheckpointChanged: hooks.changed,
+      onWalletSyncCheckpointDeleted: hooks.deleted,
       onCategoryChanged: hooks.changed,
       onCategoryDeleted: hooks.deleted,
       onTransferSuggestionChanged: hooks.changed,

@@ -49,6 +49,8 @@ extension ProfileDataSyncHandler {
       return try repos.accountGroups.fetchRowSync(id: uuid, in: database).map(builtRecord)
     case InsightDismissalRow.recordType:
       return try repos.insightDismissals.fetchRowSync(id: uuid, in: database).map(builtRecord)
+    case WalletSyncCheckpointRow.recordType:
+      return try repos.walletSyncCheckpoints.fetchRowSync(id: uuid, in: database).map(builtRecord)
     case CSVImportProfileRow.recordType:
       return try repos.csvImportProfiles.fetchRowSync(id: uuid, in: database).map(builtRecord)
     case ImportRuleRow.recordType:
@@ -189,6 +191,9 @@ extension ProfileDataSyncHandler {
       return try repos.accountGroups.fetchRowSync(id: id, in: database)?.encodedSystemFields
     case InsightDismissalRow.recordType:
       return try repos.insightDismissals.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    case WalletSyncCheckpointRow.recordType:
+      return try repos.walletSyncCheckpoints.fetchRowSync(id: id, in: database)?
+        .encodedSystemFields
     case CSVImportProfileRow.recordType:
       return try repos.csvImportProfiles.fetchRowSync(id: id, in: database)?.encodedSystemFields
     case ImportRuleRow.recordType:

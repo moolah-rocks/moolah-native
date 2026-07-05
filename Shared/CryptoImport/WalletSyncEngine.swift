@@ -35,6 +35,7 @@ struct WalletSyncEngine: Sendable {
   private let blockExplorer: any BlockExplorerClient
   private let discovery: CryptoTokenDiscoveryService
   private let walletSyncState: any WalletSyncStateRepository
+  private let checkpoints: any WalletSyncCheckpointRepository
   private let importOriginFactory: @Sendable (UUID) -> ImportOrigin
   /// Recovers the WETH leg a native-only wrap/unwrap movement omits.
   /// Derived from `alchemy` — the same `ChainDataClient` already used for
@@ -57,6 +58,9 @@ struct WalletSyncEngine: Sendable {
   ///   - walletSyncState: Per-device sync checkpoint store. The engine
   ///     reads `lastSyncedBlockNumber` to compute `fromBlock`; **it does
   ///     not write back** — Stage 7's apply pass is the single writer.
+  ///   - checkpoints: Cross-device synced checkpoint store. Read (never
+  ///     written here) so `fromBlock` can start from a peer's higher
+  ///     checkpoint when this device's local state trails or is absent.
   ///   - importOriginFactory: Builds an `ImportOrigin` keyed to the
   ///     account being synced. Stage 9 supplies a closure that captures
   ///     the per-cycle session id; tests pass a deterministic factory.
@@ -65,12 +69,14 @@ struct WalletSyncEngine: Sendable {
     blockExplorer: any BlockExplorerClient,
     discovery: CryptoTokenDiscoveryService,
     walletSyncState: any WalletSyncStateRepository,
+    checkpoints: any WalletSyncCheckpointRepository,
     importOriginFactory: @Sendable @escaping (UUID) -> ImportOrigin
   ) {
     self.alchemy = alchemy
     self.blockExplorer = blockExplorer
     self.discovery = discovery
     self.walletSyncState = walletSyncState
+    self.checkpoints = checkpoints
     self.importOriginFactory = importOriginFactory
     self.wrapUnwrapDetector = WrapUnwrapDetector(chainClient: alchemy)
   }
@@ -103,9 +109,8 @@ struct WalletSyncEngine: Sendable {
 
     // 2. Determine fromBlock (reorg window — re-fetch covers the last
     //    32 blocks below the prior checkpoint).
-    let state = try await walletSyncState.load(accountId: account.id)
-    let priorBlock = state?.lastSyncedBlockNumber ?? 0
-    let fromBlock = state.map { Self.subtractingReorgWindow($0.lastSyncedBlockNumber) } ?? 0
+    let priorBlock = try await resolvePriorBlock(for: account)
+    let fromBlock = priorBlock == 0 ? 0 : Self.subtractingReorgWindow(priorBlock)
 
     // 3. Native + internal ETH from Blockscout (authoritative tx index;
     //    sees approve()/failed/zero-movement #919 and OP-stack internal
@@ -165,6 +170,19 @@ struct WalletSyncEngine: Sendable {
       )
     }
     return WalletSyncBuildResult(candidates: built, headBlockNumber: headBlock)
+  }
+
+  /// The higher of this device's local `WalletSyncState` and the
+  /// cross-device synced checkpoint. A device whose local state trails (or
+  /// is absent) starts its fetch from a peer's checkpoint instead of a
+  /// genesis-style scan. The synced load is best-effort (`try?`): a
+  /// transient checkpoint read failure falls back to the local watermark
+  /// rather than failing the whole sync cycle.
+  private func resolvePriorBlock(for account: Account) async throws -> UInt64 {
+    let localState = try await walletSyncState.load(accountId: account.id)
+    let syncedBlock =
+      (try? await checkpoints.load(accountId: account.id))?.lastSyncedBlockNumber ?? 0
+    return max(localState?.lastSyncedBlockNumber ?? 0, syncedBlock)
   }
 
   /// Fetches native and internal transfers from Blockscout and returns the

@@ -60,6 +60,7 @@ struct SyncedAccountStoreTests {
       blockExplorer: BlockExplorerTestDoubles.empty,
       discovery: discovery,
       walletSyncState: backend.walletSyncState,
+      checkpoints: InMemoryWalletSyncCheckpointRepository(),
       importOriginFactory: { accountId in
         ImportOrigin(
           rawDescription: "wallet:\(accountId.uuidString)",
@@ -71,6 +72,7 @@ struct SyncedAccountStoreTests {
     let walletApplyEngine = WalletApplyEngine(
       transactions: backend.transactions,
       walletSyncState: backend.walletSyncState,
+      checkpoints: InMemoryWalletSyncCheckpointRepository(),
       importRules: NoOpWalletImportRulesEngine(),
       clock: clock)
     let store = SyncedAccountStore(

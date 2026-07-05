@@ -104,6 +104,48 @@ struct WalletApplyEngineTests {
     #expect(stateB.lastSyncedAt == Self.pinnedNow)
   }
 
+  // MARK: - Synced checkpoint (max-merge)
+
+  @Test("Existing synced checkpoint higher than head is kept (never lowered)")
+  func syncedCheckpointKeepsHigherExisting() async throws {
+    let setup = try makeSetup()
+    let account = try setup.seedCryptoAccount()
+    // A peer already advanced the shared checkpoint to 2000.
+    try await setup.backend.walletSyncCheckpoints.save(
+      WalletSyncCheckpoint(id: account.id, lastSyncedBlockNumber: 2000))
+
+    // This cycle's head trails the peer's checkpoint.
+    _ = try await setup.engine.apply(perAccount: [
+      .init(account: account, headBlockNumber: 1500, candidates: [])
+    ])
+
+    let checkpoint = try #require(
+      try await setup.backend.walletSyncCheckpoints.load(accountId: account.id))
+    // max(existing 2000, head 1500) — never lowered.
+    #expect(checkpoint.lastSyncedBlockNumber == 2000)
+    // Local per-device state still records this device's own head.
+    let localState = try #require(
+      try await setup.backend.walletSyncState.load(accountId: account.id))
+    #expect(localState.lastSyncedBlockNumber == 1500)
+  }
+
+  @Test("Head higher than existing synced checkpoint raises the shared value")
+  func syncedCheckpointRaisesToHead() async throws {
+    let setup = try makeSetup()
+    let account = try setup.seedCryptoAccount()
+    try await setup.backend.walletSyncCheckpoints.save(
+      WalletSyncCheckpoint(id: account.id, lastSyncedBlockNumber: 2000))
+
+    _ = try await setup.engine.apply(perAccount: [
+      .init(account: account, headBlockNumber: 2500, candidates: [])
+    ])
+
+    let checkpoint = try #require(
+      try await setup.backend.walletSyncCheckpoints.load(accountId: account.id))
+    // max(existing 2000, head 2500) — raised.
+    #expect(checkpoint.lastSyncedBlockNumber == 2500)
+  }
+
   // MARK: - Import rules
 
   @Test("WalletImportRulesEngine is invoked exactly once with the persisted transactions")
@@ -177,6 +219,7 @@ struct WalletApplyEngineTests {
     let engine = WalletApplyEngine(
       transactions: backend.transactions,
       walletSyncState: backend.walletSyncState,
+      checkpoints: backend.walletSyncCheckpoints,
       importRules: importRules,
       clock: { Self.pinnedNow })
     return Setup(backend: backend, database: database, engine: engine)

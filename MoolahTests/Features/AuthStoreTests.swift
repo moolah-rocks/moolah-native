@@ -128,6 +128,7 @@ private struct TestAuthBackend: BackendProvider {
   let csvImportProfiles: any CSVImportProfileRepository
   let importRules: any ImportRuleRepository
   let walletSyncState: any WalletSyncStateRepository
+  let walletSyncCheckpoints: any WalletSyncCheckpointRepository
   let groupUIState: any GroupUIStateRepository
 
   init(auth: any AuthProvider) throws {
@@ -147,6 +148,7 @@ private struct TestAuthBackend: BackendProvider {
     self.csvImportProfiles = backend.csvImportProfiles
     self.importRules = backend.importRules
     self.walletSyncState = backend.walletSyncState
+    self.walletSyncCheckpoints = backend.walletSyncCheckpoints
     self.groupUIState = backend.groupUIState
   }
 }

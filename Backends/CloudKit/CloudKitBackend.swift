@@ -18,6 +18,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let importRules: any ImportRuleRepository
   let instrumentRegistryRepository: any InstrumentRegistryRepository
   let walletSyncState: any WalletSyncStateRepository
+  let walletSyncCheckpoints: any WalletSyncCheckpointRepository
   let groupUIState: any GroupUIStateRepository
 
   /// `BackendProvider` change-notification seam: the shared
@@ -48,6 +49,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let grdbAccounts: GRDBAccountRepository
   let grdbAccountGroups: GRDBAccountGroupRepository
   let grdbInsightDismissals: GRDBInsightDismissalRepository
+  let grdbWalletSyncCheckpoints: GRDBWalletSyncCheckpointRepository
   let grdbCategories: GRDBCategoryRepository
   let grdbTransferSuggestions: GRDBTransferSuggestionRepository
   let grdbEarmarks: GRDBEarmarkRepository
@@ -73,6 +75,8 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     let onAccountGroupDeleted: @Sendable (String, UUID) -> Void
     let onInsightDismissalChanged: @Sendable (String, UUID) -> Void
     let onInsightDismissalDeleted: @Sendable (String, UUID) -> Void
+    let onWalletSyncCheckpointChanged: @Sendable (String, UUID) -> Void
+    let onWalletSyncCheckpointDeleted: @Sendable (String, UUID) -> Void
     let onCategoryChanged: @Sendable (String, UUID) -> Void
     let onCategoryDeleted: @Sendable (String, UUID) -> Void
     let onTransferSuggestionChanged: @Sendable (String, UUID) -> Void
@@ -99,6 +103,8 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
       onAccountGroupDeleted: { _, _ in },
       onInsightDismissalChanged: { _, _ in },
       onInsightDismissalDeleted: { _, _ in },
+      onWalletSyncCheckpointChanged: { _, _ in },
+      onWalletSyncCheckpointDeleted: { _, _ in },
       onCategoryChanged: { _, _ in },
       onCategoryDeleted: { _, _ in },
       onTransferSuggestionChanged: { _, _ in },
@@ -132,9 +138,19 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
         resolver: instrumentRegistry, registrar: instrumentRegistry),
       hooks: hooks)
 
+    // The synced wallet-sync checkpoint repo is built here (not in
+    // `makeRepositories`) because it needs the same push/delete hooks the
+    // other synced repos take, and its only read-side consumers are the
+    // crypto-sync engines — no instrument-resolving seams to plumb.
+    let walletSyncCheckpoints = GRDBWalletSyncCheckpointRepository(
+      database: database,
+      onRecordChanged: hooks.onWalletSyncCheckpointChanged,
+      onRecordDeleted: hooks.onWalletSyncCheckpointDeleted)
+
     self.grdbAccounts = repos.accounts
     self.grdbAccountGroups = repos.accountGroups
     self.grdbInsightDismissals = repos.insightDismissals
+    self.grdbWalletSyncCheckpoints = walletSyncCheckpoints
     self.grdbTransactions = repos.transactions
     self.grdbCategories = repos.categories
     self.grdbTransferSuggestions = repos.transferSuggestions
@@ -161,6 +177,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.instrumentRegistryRepository = instrumentRegistry
     self.conversionService = conversionService
     self.walletSyncState = GRDBWalletSyncStateRepository(database: database)
+    self.walletSyncCheckpoints = walletSyncCheckpoints
     self.groupUIState = GRDBGroupUIStateRepository(database: database)
   }
 

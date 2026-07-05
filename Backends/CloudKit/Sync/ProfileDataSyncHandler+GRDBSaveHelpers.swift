@@ -166,6 +166,30 @@ extension ProfileDataSyncHandler {
     }
   }
 
+  nonisolated func applyBatchSaveWalletSyncCheckpoint(
+    ckRecords: [CKRecord], systemFields: [String: Data], in database: Database
+  ) throws {
+    let context = GRDBBatchSaveContext(
+      ckRecords: ckRecords,
+      systemFields: systemFields,
+      site: "applyGRDBBatchSave[WalletSyncCheckpoint]")
+    let rows = mapRows(
+      context: context,
+      fieldValues: WalletSyncCheckpointRow.fieldValues(from:),
+      idKey: { $0.id.uuidString },
+      stamp: stampSystemFields)
+    // Plain upsert (no apply-time max-merge): the never-lower-the-shared-value
+    // rule is enforced on the write side (`WalletApplyEngine.updateSyncState`
+    // saves `max(existing, head)`), so an inbound record already carries the
+    // max its origin device knew. A stale lower echo is rejected by the
+    // `needs_push` apply guard and the modification-date gate, exactly like
+    // every other synced row.
+    try writeRemote(site: context.site) {
+      try grdbRepositories.walletSyncCheckpoints.applyRemoteChangesSync(
+        saved: rows, deleted: [], in: database)
+    }
+  }
+
   nonisolated func applyBatchSaveEarmark(
     ckRecords: [CKRecord], systemFields: [String: Data], in database: Database
   ) throws {

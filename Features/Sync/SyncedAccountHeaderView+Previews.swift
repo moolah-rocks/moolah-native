@@ -57,6 +57,7 @@ private func syncedAccountHeaderPreview(width: CGFloat = 720) -> some View {
     walletApplyEngine: WalletApplyEngine(
       transactions: session.backend.transactions,
       walletSyncState: session.backend.walletSyncState,
+      checkpoints: session.backend.walletSyncCheckpoints,
       importRules: NoOpWalletImportRulesEngine()),
     walletSyncState: session.backend.walletSyncState,
     accounts: session.backend.accounts,

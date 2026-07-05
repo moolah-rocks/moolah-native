@@ -141,10 +141,12 @@ extension ProfileSession {
       alchemy: chainClient,
       blockExplorer: makeLiveBlockExplorer(),
       discovery: discovery,
-      backend: backend)
+      backend: backend,
+      checkpoints: backend.walletSyncCheckpoints)
     let walletApplyEngine = WalletApplyEngine(
       transactions: backend.transactions,
       walletSyncState: backend.walletSyncState,
+      checkpoints: backend.walletSyncCheckpoints,
       importRules: NoOpWalletImportRulesEngine())
     let coinstashSource = makeCoinstashSource(
       registry: registry,
@@ -178,7 +180,8 @@ extension ProfileSession {
     alchemy: any ChainDataClient,
     blockExplorer: any BlockExplorerClient,
     discovery: CryptoTokenDiscoveryService,
-    backend: BackendProvider
+    backend: BackendProvider,
+    checkpoints: any WalletSyncCheckpointRepository
   ) -> WalletSyncEngine {
     let importOriginFactory: @Sendable (UUID) -> ImportOrigin = { accountId in
       ImportOrigin(
@@ -193,6 +196,7 @@ extension ProfileSession {
       blockExplorer: blockExplorer,
       discovery: discovery,
       walletSyncState: backend.walletSyncState,
+      checkpoints: checkpoints,
       importOriginFactory: importOriginFactory)
   }
 

@@ -43,6 +43,7 @@ struct CryptoAccountCreationStoreTests {
       blockExplorer: BlockExplorerTestDoubles.empty,
       discovery: discovery,
       walletSyncState: backend.walletSyncState,
+      checkpoints: InMemoryWalletSyncCheckpointRepository(),
       importOriginFactory: { accountId in
         ImportOrigin(
           rawDescription: "wallet:\(accountId.uuidString)",
@@ -54,6 +55,7 @@ struct CryptoAccountCreationStoreTests {
     let walletApplyEngine = WalletApplyEngine(
       transactions: backend.transactions,
       walletSyncState: backend.walletSyncState,
+      checkpoints: InMemoryWalletSyncCheckpointRepository(),
       importRules: NoOpWalletImportRulesEngine(),
       clock: { Self.pinnedNow })
     let cryptoSyncStore = SyncedAccountStore(

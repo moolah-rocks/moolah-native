@@ -31,6 +31,10 @@ extension ProfileDataSyncHandler {
         InsightDismissalRow.recordType,
         grdbRepositories.insightDismissals.clearAllSystemFieldsSync
       ),
+      (
+        WalletSyncCheckpointRow.recordType,
+        grdbRepositories.walletSyncCheckpoints.clearAllSystemFieldsSync
+      ),
       (EarmarkRow.recordType, grdbRepositories.earmarks.clearAllSystemFieldsSync),
       (
         EarmarkBudgetItemRow.recordType,
@@ -343,6 +347,8 @@ extension ProfileDataSyncHandler {
       return { try repos.accountGroups.setEncodedSystemFieldsBatchSync($0) }
     case InsightDismissalRow.recordType:
       return { try repos.insightDismissals.setEncodedSystemFieldsBatchSync($0) }
+    case WalletSyncCheckpointRow.recordType:
+      return { try repos.walletSyncCheckpoints.setEncodedSystemFieldsBatchSync($0) }
     default:
       return nil
     }

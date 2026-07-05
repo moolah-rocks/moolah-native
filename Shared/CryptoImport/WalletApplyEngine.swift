@@ -29,6 +29,7 @@ final class WalletApplyEngine {
 
   private let transactions: any TransactionRepository
   private let walletSyncState: any WalletSyncStateRepository
+  private let checkpoints: any WalletSyncCheckpointRepository
   private let importRules: any WalletImportRulesEngine
   private let merger: any CrossAccountTransferMerger
   private let clock: @Sendable () -> Date
@@ -36,12 +37,14 @@ final class WalletApplyEngine {
   init(
     transactions: any TransactionRepository,
     walletSyncState: any WalletSyncStateRepository,
+    checkpoints: any WalletSyncCheckpointRepository,
     importRules: any WalletImportRulesEngine,
     merger: any CrossAccountTransferMerger = LiveCrossAccountTransferMerger(),
     clock: @Sendable @escaping () -> Date = { Date() }
   ) {
     self.transactions = transactions
     self.walletSyncState = walletSyncState
+    self.checkpoints = checkpoints
     self.importRules = importRules
     self.merger = merger
     self.clock = clock
@@ -237,6 +240,22 @@ final class WalletApplyEngine {
     try await transactions.createMany(candidates.map(\.transaction))
   }
 
+  /// Writes both the per-device `WalletSyncState` and the cross-device synced
+  /// `WalletSyncCheckpoint` for every account that participated in the cycle.
+  ///
+  /// The synced checkpoint is max-merged (`max(existing, head)`) so a device
+  /// whose fetch trailed a peer never lowers the shared value — the read side
+  /// (`WalletSyncEngine.build`) trusts the checkpoint to skip re-scanning
+  /// blocks a peer already covered.
+  ///
+  /// Eventual-consistency caveat: a synced checkpoint can arrive on a peer
+  /// device *before* the transactions it summarises (CloudKit delivers the
+  /// two record types independently and out of order). That peer would then
+  /// start its next fetch from the higher `fromBlock` and could skip the
+  /// still-in-flight transactions — but they converge: the transactions
+  /// arrive via CloudKit sync of the `TransactionRecord`s, and any re-fetch
+  /// dedups against the persisted legs by `externalId`, so no duplicate and
+  /// no permanent gap results.
   private func updateSyncState(for perAccount: [AccountInput]) async throws {
     let now = clock()
     for input in perAccount {
@@ -246,6 +265,13 @@ final class WalletApplyEngine {
         lastSyncedAt: now,
         lastError: nil)
       try await walletSyncState.save(state)
+
+      let existing =
+        (try? await checkpoints.load(accountId: input.account.id))?.lastSyncedBlockNumber ?? 0
+      try await checkpoints.save(
+        WalletSyncCheckpoint(
+          id: input.account.id,
+          lastSyncedBlockNumber: max(existing, input.headBlockNumber)))
     }
   }
 }

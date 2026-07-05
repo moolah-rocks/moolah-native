@@ -26,6 +26,10 @@ protocol BackendProvider: Sendable {
   /// (not synced via CKSyncEngine — see `WalletSyncStateRepository`
   /// doc-comment).
   var walletSyncState: any WalletSyncStateRepository { get }
+  /// Cross-device synced sync checkpoints for auto-imported accounts. Synced
+  /// via CKSyncEngine (`WalletSyncCheckpointRecord`) so a device can bootstrap
+  /// `fromBlock` from a peer's checkpoint — see `WalletSyncCheckpointRepository`.
+  var walletSyncCheckpoints: any WalletSyncCheckpointRepository { get }
   /// Per-device sidebar expand / collapse state for `AccountGroup` rows.
   /// Local-only (not synced via CKSyncEngine — expand state is per-device
   /// UX preference, not data). See `GroupUIStateRepository` doc-comment.

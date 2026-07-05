@@ -168,6 +168,7 @@ final class CryptoSyncBenchmarks: XCTestCase {
       blockExplorer: EmptyBlockExplorerStub(),
       discovery: discovery,
       walletSyncState: backend.walletSyncState,
+      checkpoints: backend.walletSyncCheckpoints,
       importOriginFactory: { accountId in
         ImportOrigin(
           rawDescription: "wallet:\(accountId.uuidString)",
@@ -179,6 +180,7 @@ final class CryptoSyncBenchmarks: XCTestCase {
     let walletApplyEngine = WalletApplyEngine(
       transactions: backend.transactions,
       walletSyncState: backend.walletSyncState,
+      checkpoints: backend.walletSyncCheckpoints,
       importRules: NoOpWalletImportRulesEngine(),
       clock: { Self.pinnedNow })
     return SyncedAccountStore(

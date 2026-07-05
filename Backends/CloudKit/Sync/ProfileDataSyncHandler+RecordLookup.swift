@@ -157,6 +157,8 @@ extension ProfileDataSyncHandler {
     case TransferSuggestionRow.recordType: return built(try fetchTransferSuggestionRow(id: uuid))
     case AccountGroupRow.recordType: return built(try fetchAccountGroupRow(id: uuid))
     case InsightDismissalRow.recordType: return built(try fetchInsightDismissalRow(id: uuid))
+    case WalletSyncCheckpointRow.recordType:
+      return built(try fetchWalletSyncCheckpointRow(id: uuid))
     case CSVImportProfileRow.recordType: return built(try fetchCSVImportProfileRow(id: uuid))
     case ImportRuleRow.recordType: return built(try fetchImportRuleRow(id: uuid))
     default: return nil
@@ -234,6 +236,11 @@ extension ProfileDataSyncHandler {
     case InsightDismissalRow.recordType:
       return {
         self.mapBuiltRows(try self.grdbRepositories.insightDismissals.fetchRowsSync(ids: ids))
+      }
+    case WalletSyncCheckpointRow.recordType:
+      return {
+        self.mapBuiltRows(
+          try self.grdbRepositories.walletSyncCheckpoints.fetchRowsSync(ids: ids))
       }
     case CSVImportProfileRow.recordType:
       return {
@@ -322,6 +329,10 @@ extension ProfileDataSyncHandler {
 
   private func fetchInsightDismissalRow(id: UUID) throws -> InsightDismissalRow? {
     try grdbRepositories.insightDismissals.fetchRowSync(id: id)
+  }
+
+  private func fetchWalletSyncCheckpointRow(id: UUID) throws -> WalletSyncCheckpointRow? {
+    try grdbRepositories.walletSyncCheckpoints.fetchRowSync(id: id)
   }
 
   private func fetchEarmarkRow(id: UUID) throws -> EarmarkRow? {
