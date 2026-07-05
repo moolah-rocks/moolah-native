@@ -138,43 +138,43 @@ public enum UITestFixtures {
     public static let splitShopLegAAmountCents = 3_000  // 30.00 AUD
     public static let splitShopLegBAmountCents = 2_000  // 20.00 AUD
 
-    /// The most-recent "Woolworths" expense (2026-03-20) — the only
-    /// historical expense carrying `groceriesCategoryId`. Named so the
-    /// Reports drill-down UI test can assert it surfaces when the Groceries
-    /// top-level header is tapped (it is directly categorised under
-    /// Groceries, with no intervening subcategory).
+    /// The most-recent "Woolworths" expense — the only historical expense
+    /// carrying `groceriesCategoryId`. Named so the Reports drill-down UI
+    /// test can assert it surfaces when the Groceries top-level header is
+    /// tapped (it is directly categorised under Groceries, with no
+    /// intervening subcategory).
     public static let woolworthsGroceriesExpenseId =
       uuidLiteral("A1000000-0000-0000-0000-000000000033")
 
-    /// Four historical expense transactions from `checking`, ordered by
-    /// date. Payee frequency is the only axis `fetchPayeeSuggestions` sorts
-    /// on; "Woolworths" appears twice so it ranks strictly above
-    /// "Woolworths Metro" for the prefix "Wool".
-    ///
-    /// The most recent "Woolworths" (2026-03-20) carries `groceriesCategoryId`
-    /// so the autofill flow has a category to copy when a user selects the
-    /// "Woolworths" suggestion. The earlier entries leave the category nil so
-    /// the seed still exercises the common "no prior category" path.
+    /// Four historical `checking` expenses, oldest to newest. Dated as
+    /// day-offsets before launch (see `UITestHistoricalExpense.daysAgo`) so
+    /// they stay inside rolling windows — notably the Reports view's default
+    /// `.last12Months`, which the drill-down UI test relies on — whenever the
+    /// suite runs. Payee frequency is the only axis `fetchPayeeSuggestions`
+    /// sorts on; "Woolworths" appears twice so it ranks above "Woolworths
+    /// Metro". The most recent "Woolworths" (smallest `daysAgo`) carries
+    /// `groceriesCategoryId` for the autofill flow; the earlier entries leave
+    /// it nil to also exercise the "no prior category" path.
     public static let historicalPayees: [UITestHistoricalExpense] = [
       UITestHistoricalExpense(
         id: uuidLiteral("A1000000-0000-0000-0000-000000000030"),
         payee: "Coles",
-        date: Date(timeIntervalSince1970: 1_772_668_800)  // 2026-03-05 UTC
+        daysAgo: 35
       ),
       UITestHistoricalExpense(
         id: uuidLiteral("A1000000-0000-0000-0000-000000000031"),
         payee: "Woolworths",
-        date: Date(timeIntervalSince1970: 1_773_100_800)  // 2026-03-10 UTC
+        daysAgo: 30
       ),
       UITestHistoricalExpense(
         id: uuidLiteral("A1000000-0000-0000-0000-000000000032"),
         payee: "Woolworths Metro",
-        date: Date(timeIntervalSince1970: 1_773_532_800)  // 2026-03-15 UTC
+        daysAgo: 25
       ),
       UITestHistoricalExpense(
         id: woolworthsGroceriesExpenseId,
         payee: "Woolworths",
-        date: Date(timeIntervalSince1970: 1_773_964_800),  // 2026-03-20 UTC
+        daysAgo: 20,
         categoryId: groceriesCategoryId
       ),
     ]
