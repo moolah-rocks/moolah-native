@@ -110,7 +110,6 @@ struct ProfileIndexInstrumentDispatchTests {
         instrumentId:
           "1:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
         coingeckoId: "weth",
-        cryptocompareSymbol: nil,
         binanceSymbol: nil))
 
     let recordID = CKRecord.ID(
@@ -146,7 +145,6 @@ struct ProfileIndexInstrumentDispatchTests {
       mapping: CryptoProviderMapping(
         instrumentId: "1:0xabc",
         coingeckoId: "abc",
-        cryptocompareSymbol: nil,
         binanceSymbol: nil))
 
     let ids = harness.handler.queueAllExistingRecords()
@@ -176,7 +174,6 @@ struct ProfileIndexInstrumentDispatchTests {
       mapping: CryptoProviderMapping(
         instrumentId: "1:0xdef",
         coingeckoId: "def",
-        cryptocompareSymbol: nil,
         binanceSymbol: nil))
 
     // Synthesise a server-returned record with encoded_system_fields.

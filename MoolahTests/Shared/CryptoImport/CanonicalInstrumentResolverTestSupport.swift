@@ -37,7 +37,7 @@ func reg(
       chainId: chainId, contractAddress: address, symbol: "X", name: "X", decimals: 18),
     mapping: CryptoProviderMapping(
       instrumentId: id, coingeckoId: coingeckoId,
-      cryptocompareSymbol: nil, binanceSymbol: nil))
+      binanceSymbol: nil))
 }
 
 // MARK: - ThrowingCryptoRegistryStub

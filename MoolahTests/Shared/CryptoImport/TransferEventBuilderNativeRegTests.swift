@@ -62,7 +62,7 @@ struct TransferEventBuilderNativeRegTests {
     let subject = makeDiscoverySubject()
     subject.resolver.script(
       .init(chainId: 10, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: "usd-coin", cryptocompare: nil, binance: nil))
+      .success(coingecko: "usd-coin", binance: nil))
     let account = makeCryptoAccount(walletAddress: Self.wallet, chain: .optimism)
     let origin = makeWalletImportOrigin(for: account.id)
     let transfer = makeAlchemyTransfer(

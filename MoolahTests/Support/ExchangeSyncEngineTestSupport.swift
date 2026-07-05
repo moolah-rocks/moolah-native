@@ -34,7 +34,7 @@ func makeExchangeSyncEngine(
     resolverToUse = regResolver
   } else {
     let defaultResolver = CountingRegistrationResolver()
-    defaultResolver.setDefault(.success(coingecko: "id", cryptocompare: nil, binance: nil))
+    defaultResolver.setDefault(.success(coingecko: "id", binance: nil))
     resolverToUse = defaultResolver
   }
   let discovery = CryptoTokenDiscoveryService(

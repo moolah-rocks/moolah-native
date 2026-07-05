@@ -30,7 +30,7 @@ struct ExportImportIntegrationTests4 {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
     let seeded = try await seedMultiCurrencyBackend(
       backend: backend, aud: aud, usd: usd, bhp: bhp, eth: eth)
 

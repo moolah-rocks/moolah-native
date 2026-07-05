@@ -23,7 +23,7 @@ struct ConvertCacheInvalidationTests {
       instrument: eth,
       mapping: CryptoProviderMapping(
         instrumentId: "1:native", coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+        binanceSymbol: "ETHUSDT"
       )
     )
   }

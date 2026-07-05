@@ -20,7 +20,6 @@ struct AutomationServiceInstrumentsTests {
         name: "Starknet",
         decimals: 18,
         coingeckoId: "starknet",
-        cryptocompareSymbol: nil,
         binanceSymbol: nil))
 
     // Id is chain:lowercased-contract.
@@ -44,7 +43,7 @@ struct AutomationServiceInstrumentsTests {
       profileIdentifier: "Test",
       spec: CryptoInstrumentSpec(
         chainId: 324, contractAddress: nil, symbol: "ZK", name: "ZKsync",
-        decimals: 18, coingeckoId: "zksync", cryptocompareSymbol: nil, binanceSymbol: nil))
+        decimals: 18, coingeckoId: "zksync", binanceSymbol: nil))
 
     #expect(instrument.id == "324:native")
   }
@@ -57,7 +56,7 @@ struct AutomationServiceInstrumentsTests {
       profileIdentifier: "Test",
       spec: CryptoInstrumentSpec(
         chainId: 9999, contractAddress: "   ", symbol: "FUEL", name: "Fuel Network",
-        decimals: 9, coingeckoId: "fuel-network", cryptocompareSymbol: nil, binanceSymbol: nil))
+        decimals: 9, coingeckoId: "fuel-network", binanceSymbol: nil))
 
     #expect(instrument.id == "9999:native")
   }
@@ -71,7 +70,7 @@ struct AutomationServiceInstrumentsTests {
         profileIdentifier: "Test",
         spec: CryptoInstrumentSpec(
           chainId: 1, contractAddress: nil, symbol: "FOO", name: "Foo",
-          decimals: 18, coingeckoId: nil, cryptocompareSymbol: "   ", binanceSymbol: nil))
+          decimals: 18, coingeckoId: nil, binanceSymbol: nil))
     }
   }
 
@@ -84,7 +83,7 @@ struct AutomationServiceInstrumentsTests {
         profileIdentifier: "Test",
         spec: CryptoInstrumentSpec(
           chainId: 1, contractAddress: nil, symbol: "  ", name: "Foo",
-          decimals: 18, coingeckoId: "foo", cryptocompareSymbol: nil, binanceSymbol: nil))
+          decimals: 18, coingeckoId: "foo", binanceSymbol: nil))
     }
   }
 
@@ -96,17 +95,22 @@ struct AutomationServiceInstrumentsTests {
       profileIdentifier: "Test",
       spec: CryptoInstrumentSpec(
         chainId: 1, contractAddress: "0xABC", symbol: "TIA", name: "Celestia",
-        decimals: 6, coingeckoId: "celestia", cryptocompareSymbol: nil, binanceSymbol: nil))
+        decimals: 6, coingeckoId: "celestia", binanceSymbol: nil))
+    // Re-register same id (lowercased address) with a binanceSymbol added.
+    // The upsert should merge: coingeckoId preserved, binanceSymbol added.
     let second = try await service.registerCryptoInstrument(
       profileIdentifier: "Test",
       spec: CryptoInstrumentSpec(
         chainId: 1, contractAddress: "0xabc", symbol: "TIA", name: "Celestia",
-        decimals: 6, coingeckoId: nil, cryptocompareSymbol: "TIA", binanceSymbol: nil))
+        decimals: 6, coingeckoId: nil, binanceSymbol: "TIAUSDT"))
 
     let registry = try #require(session.instrumentRegistry)
     let matches = try await registry.all().filter { $0.id == second.id }
     #expect(matches.count == 1)
     let registration = try await registry.cryptoRegistration(byId: second.id)
-    #expect(registration?.mapping.cryptocompareSymbol == "TIA")
+    // coingeckoId from the first call is preserved through the upsert.
+    #expect(registration?.mapping.coingeckoId == "celestia")
+    // binanceSymbol from the second call is added.
+    #expect(registration?.mapping.binanceSymbol == "TIAUSDT")
   }
 }

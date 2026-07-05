@@ -54,7 +54,6 @@ extension MoolahUITestCase {
     lines.append("instrument.id       = \(fixtures.instrumentId)")
     lines.append("# Resolution stub: PreloadedTokenResolutionClient")
     lines.append("resolve.coingeckoId        = \(fixtures.coingeckoMappingId)")
-    lines.append("resolve.cryptocompareSymbol = \(fixtures.cryptocompareSymbol)")
     lines.append("resolve.binanceSymbol      = \(fixtures.binanceSymbol)")
   }
 

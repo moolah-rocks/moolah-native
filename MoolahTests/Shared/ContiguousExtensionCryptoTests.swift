@@ -81,7 +81,7 @@ struct ContiguousExtensionCryptoTests {
   {
     CryptoProviderMapping(
       instrumentId: instrument.id, coingeckoId: nil,
-      cryptocompareSymbol: nil, binanceSymbol: binanceSymbol
+      binanceSymbol: binanceSymbol
     )
   }
 

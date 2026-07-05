@@ -72,7 +72,6 @@ struct InstrumentSyncPricingStatusMergeTests {
   ) -> InstrumentRow {
     var row = InstrumentRow(domain: registration.instrument)
     row.coingeckoId = registration.mapping.coingeckoId
-    row.cryptocompareSymbol = registration.mapping.cryptocompareSymbol
     row.binanceSymbol = registration.mapping.binanceSymbol
     row.pricingStatus = status.rawValue
     return row
@@ -145,7 +144,6 @@ struct InstrumentSyncPricingStatusMergeTests {
     // affects only `pricingStatus`.
     var incoming = InstrumentRow(domain: registration.instrument)
     incoming.coingeckoId = registration.mapping.coingeckoId
-    incoming.cryptocompareSymbol = registration.mapping.cryptocompareSymbol
     incoming.binanceSymbol = registration.mapping.binanceSymbol
     incoming.name = "Renamed-By-Other-Device"
     incoming.pricingStatus = TokenPricingStatus.priced.rawValue

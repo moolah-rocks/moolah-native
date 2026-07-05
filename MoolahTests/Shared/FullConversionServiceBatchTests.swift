@@ -78,7 +78,7 @@ struct FullConversionServiceBatchTests {
       instrument: eth,
       mapping: CryptoProviderMapping(
         instrumentId: "1:native", coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+        binanceSymbol: "ETHUSDT"
       ),
       pricingStatus: .priced
     )
@@ -180,7 +180,7 @@ struct FullConversionServiceBatchTests {
       instrument: eth,
       mapping: CryptoProviderMapping(
         instrumentId: "1:native", coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+        binanceSymbol: "ETHUSDT"
       ),
       pricingStatus: .unpriced
     )

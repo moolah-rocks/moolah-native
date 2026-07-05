@@ -11,7 +11,7 @@ struct CryptoFirstTradedOnPersistenceTests {
   )
   private let ethMapping = CryptoProviderMapping(
     instrumentId: "1:native", coingeckoId: "ethereum",
-    cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+    binanceSymbol: "ETHUSDT"
   )
 
   private func makeService(

@@ -103,21 +103,19 @@ struct GRDBInstrumentRegistryBatchTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: "ETH",
-        binanceSymbol: "ETHUSDT"))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: "ETHUSDT"))
 
     // A thin all-nil re-register via the batch path must merge, not blank.
     try await registry.registerCryptoBatch([
       (
         instrument: eth,
         mapping: CryptoProviderMapping(
-          instrumentId: eth.id, coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil)
+          instrumentId: eth.id, coingeckoId: nil, binanceSymbol: nil)
       )
     ])
 
     let reg = try await registry.cryptoRegistration(byId: eth.id)
     #expect(reg?.mapping.coingeckoId == "ethereum")
-    #expect(reg?.mapping.cryptocompareSymbol == "ETH")
     #expect(reg?.mapping.binanceSymbol == "ETHUSDT")
   }
 
@@ -136,8 +134,7 @@ struct GRDBInstrumentRegistryBatchTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil))
 
     // Aborts the fresh `9:native` INSERT the second batch element performs.
     try await registry.database.write { database in
@@ -164,13 +161,12 @@ struct GRDBInstrumentRegistryBatchTests {
           instrument: eth,
           mapping: CryptoProviderMapping(
             instrumentId: eth.id, coingeckoId: "MUST-NOT-LAND",
-            cryptocompareSymbol: nil, binanceSymbol: nil)
+            binanceSymbol: nil)
         ),
         (
           instrument: failing,
           mapping: CryptoProviderMapping(
-            instrumentId: failing.id, coingeckoId: "fail", cryptocompareSymbol: nil,
-            binanceSymbol: nil)
+            instrumentId: failing.id, coingeckoId: "fail", binanceSymbol: nil)
         ),
       ])
     }

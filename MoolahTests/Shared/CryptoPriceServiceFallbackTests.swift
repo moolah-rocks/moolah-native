@@ -19,7 +19,7 @@ struct CryptoPriceServiceFallbackTests {
   )
   private let ethMapping = CryptoProviderMapping(
     instrumentId: "1:native", coingeckoId: "ethereum",
-    cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+    binanceSymbol: "ETHUSDT"
   )
 
   private func date(_ string: String) throws -> Date {

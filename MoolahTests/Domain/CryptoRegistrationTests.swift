@@ -77,7 +77,7 @@ struct CryptoRegistrationTests {
         symbol: "WTF", name: "Spam Token", decimals: 18),
       mapping: CryptoProviderMapping(
         instrumentId: "1:0x1234567890abcdef1234567890abcdef12345678",
-        coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil),
+        coingeckoId: nil, binanceSymbol: nil),
       pricingStatus: .spam
     )
     let data = try JSONEncoder().encode(registration)

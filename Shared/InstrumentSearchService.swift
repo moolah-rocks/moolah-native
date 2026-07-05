@@ -121,7 +121,7 @@ struct InstrumentSearchService: Sendable {
   ///
   /// `requiresResolution: true` signals to the picker that this row must call
   /// `TokenResolutionClient.resolve(...)` before it can be persisted (decimals
-  /// and the cryptocompare/binance ids are resolved at registration time).
+  /// and the coingecko/binance ids are resolved at registration time).
   ///
   /// When `catalog` is `nil` (e.g. catalog init failed), this returns
   /// the empty list — crypto search degrades to the registry/Yahoo paths only.
@@ -203,7 +203,6 @@ struct InstrumentSearchService: Sendable {
       let mapping = CryptoProviderMapping(
         instrumentId: instrument.id,
         coingeckoId: coingeckoId,
-        cryptocompareSymbol: result.cryptocompareSymbol,
         binanceSymbol: result.binanceSymbol
       )
       return [

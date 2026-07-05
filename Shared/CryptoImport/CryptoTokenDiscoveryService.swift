@@ -310,7 +310,6 @@ actor CryptoTokenDiscoveryService {
     CryptoProviderMapping(
       instrumentId: instrumentId,
       coingeckoId: nil,
-      cryptocompareSymbol: nil,
       binanceSymbol: nil)
   }
 

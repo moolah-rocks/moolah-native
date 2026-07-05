@@ -45,7 +45,6 @@ struct InstrumentOutOfOrderEchoTests {
       chainId: 1,
       contractAddress: "0x0000000000000000000000000000000000000abc",
       coingeckoId: coingeckoId,
-      cryptocompareSymbol: nil,
       binanceSymbol: nil,
       encodedSystemFields: nil,
       pricingStatus: status.rawValue)

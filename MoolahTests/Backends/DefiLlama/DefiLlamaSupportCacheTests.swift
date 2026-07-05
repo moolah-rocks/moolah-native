@@ -85,7 +85,7 @@ final class DefiLlamaSupportCacheTests {
       chainId: chainId, contractAddress: contract, symbol: "TKN", name: "Token", decimals: 18)
     let mapping = CryptoProviderMapping(
       instrumentId: instrument.id, coingeckoId: coingeckoId,
-      cryptocompareSymbol: nil, binanceSymbol: nil)
+      binanceSymbol: nil)
     return CryptoRegistration(
       instrument: instrument, mapping: mapping, pricingStatus: pricingStatus)
   }

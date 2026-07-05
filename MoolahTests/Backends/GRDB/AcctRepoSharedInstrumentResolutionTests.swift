@@ -35,7 +35,7 @@ struct AcctRepoSharedInstrumentResolutionTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"))
+        binanceSymbol: "ETHUSDT"))
 
     let repo = GRDBAccountRepository(
       database: perProfile, instrumentResolver: registry,
@@ -80,7 +80,7 @@ struct AcctRepoSharedInstrumentResolutionTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"))
+        binanceSymbol: "ETHUSDT"))
 
     let repo = GRDBAccountRepository(
       database: perProfile, instrumentResolver: registry,

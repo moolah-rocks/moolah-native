@@ -12,7 +12,7 @@ struct CryptoPriceServiceTests {
   )
   private let ethMapping = CryptoProviderMapping(
     instrumentId: "1:native", coingeckoId: "ethereum",
-    cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+    binanceSymbol: "ETHUSDT"
   )
 
   private let btcInstrument = Instrument.crypto(
@@ -20,7 +20,7 @@ struct CryptoPriceServiceTests {
   )
   private let btcMapping = CryptoProviderMapping(
     instrumentId: "0:native", coingeckoId: "bitcoin",
-    cryptocompareSymbol: "BTC", binanceSymbol: "BTCUSDT"
+    binanceSymbol: "BTCUSDT"
   )
 
   private var ethRegistration: CryptoRegistration {

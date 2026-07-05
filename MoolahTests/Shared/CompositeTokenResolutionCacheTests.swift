@@ -46,7 +46,6 @@ final class CompositeTokenResolutionCacheTests {
       chainId: 0, contractAddress: nil, symbol: "BTC", isNative: true)
 
     #expect(result.binanceSymbol == "BTCUSDT")
-    #expect(result.cryptocompareSymbol == nil)
   }
 
   @Test("Unknown native token returns empty result from Binance cache with no network")
@@ -62,7 +61,6 @@ final class CompositeTokenResolutionCacheTests {
       chainId: 0, contractAddress: nil, symbol: "NOPE", isNative: true)
 
     #expect(result.binanceSymbol == nil)
-    #expect(result.cryptocompareSymbol == nil)
     #expect(!result.hasAnyProviderId)
   }
 }

@@ -117,7 +117,7 @@ struct ProfileSessionTests {
       chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
     let mapping = CryptoProviderMapping(
       instrumentId: eth.id, coingeckoId: "ethereum",
-      cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT")
+      binanceSymbol: "ETHUSDT")
     let registry = try #require(session.instrumentRegistry)
     try await registry.registerCrypto(eth, mapping: mapping, forcingStatus: .spam)
 

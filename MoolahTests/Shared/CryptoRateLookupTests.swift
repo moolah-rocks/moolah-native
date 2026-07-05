@@ -10,7 +10,7 @@ import Testing
 struct CryptoRateLookupTests {
   private let usdtMapping = CryptoProviderMapping(
     instrumentId: "1:0xdac17f958d2ee523a2206206994597c13d831ec7",
-    coingeckoId: "tether", cryptocompareSymbol: "USDT", binanceSymbol: nil
+    coingeckoId: "tether", binanceSymbol: nil
   )
 
   private func day(_ string: String) throws -> Date {

@@ -11,7 +11,7 @@ struct CryptoFetchRangeErrorClassificationTests {
   )
   private let ethMapping = CryptoProviderMapping(
     instrumentId: "1:native", coingeckoId: "ethereum",
-    cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+    binanceSymbol: "ETHUSDT"
   )
 
   private func makeService(clients: [any CryptoPriceClient]) throws -> CryptoPriceService {

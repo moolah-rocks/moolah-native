@@ -46,7 +46,7 @@ struct InvRepoSharedInstrumentResolutionTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"))
+        binanceSymbol: "ETHUSDT"))
 
     let repo = GRDBInvestmentRepository(
       database: perProfile,

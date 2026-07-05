@@ -42,7 +42,6 @@ struct ProfileIndexInstrumentLifecycleTests {
       mapping: CryptoProviderMapping(
         instrumentId: "1:0xfff",
         coingeckoId: "fff-old",
-        cryptocompareSymbol: nil,
         binanceSymbol: nil))
 
     let serverRecord = Self.makeInstrumentRecord(
@@ -82,7 +81,6 @@ struct ProfileIndexInstrumentLifecycleTests {
       mapping: CryptoProviderMapping(
         instrumentId: "1:0xccc",
         coingeckoId: "ccc",
-        cryptocompareSymbol: nil,
         binanceSymbol: nil))
 
     try await harness.queue.write { database in
@@ -142,7 +140,6 @@ struct ProfileIndexInstrumentLifecycleTests {
       mapping: CryptoProviderMapping(
         instrumentId: "1:0xeee",
         coingeckoId: "eee",
-        cryptocompareSymbol: nil,
         binanceSymbol: nil))
 
     harness.handler.deleteLocalData()

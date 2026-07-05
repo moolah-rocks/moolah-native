@@ -153,6 +153,7 @@ DEFINE SCHEMA
         chainId             INT64 QUERYABLE SORTABLE,
         coingeckoId         STRING QUERYABLE SEARCHABLE SORTABLE,
         contractAddress     STRING QUERYABLE SEARCHABLE SORTABLE,
+        // DEPRECATED: CryptoCompare provider removed 2026-07; field retained for CloudKit additive-only invariant
         cryptocompareSymbol STRING QUERYABLE SEARCHABLE SORTABLE,
         decimals            INT64 QUERYABLE SORTABLE,
         exchange            STRING QUERYABLE SEARCHABLE SORTABLE,

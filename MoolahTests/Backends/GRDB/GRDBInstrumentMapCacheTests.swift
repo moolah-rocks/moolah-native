@@ -50,8 +50,7 @@ struct GRDBInstrumentMapCacheTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil))
 
     let afterMutation = try await registry.instrumentMap()
     #expect(registry.instrumentMapDBReadCountForTesting == 2)
@@ -66,8 +65,7 @@ struct GRDBInstrumentMapCacheTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil))
 
     // Prime the cache.
     _ = try await registry.instrumentMap()
@@ -77,8 +75,7 @@ struct GRDBInstrumentMapCacheTests {
       CryptoRegistration(
         instrument: eth,
         mapping: CryptoProviderMapping(
-          instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-          binanceSymbol: nil),
+          instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil),
         pricingStatus: .spam))
 
     let rebuilt = try await registry.instrumentMap()
@@ -112,8 +109,7 @@ struct GRDBInstrumentMapCacheTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil))
 
     _ = try await registry.instrumentMap()
     let primedCount = registry.instrumentMapDBReadCountForTesting
@@ -151,8 +147,7 @@ struct GRDBInstrumentMapCacheTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil))
 
     let primed = try await registry.instrumentMap()
     #expect(primed[eth.id]?.kind == .cryptoToken)
@@ -172,8 +167,7 @@ struct GRDBInstrumentMapCacheTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil))
 
     _ = try await registry.instrumentMap()
     let primedCount = registry.instrumentMapDBReadCountForTesting
@@ -194,8 +188,7 @@ struct GRDBInstrumentMapCacheTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil))
 
     let primed = try await registry.instrumentMap()
     #expect(primed[eth.id]?.kind == .cryptoToken)

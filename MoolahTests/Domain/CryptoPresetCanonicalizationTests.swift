@@ -22,7 +22,7 @@ struct CryptoPresetCanonicalizationTests {
       .crypto(chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
       mapping: CryptoProviderMapping(
         instrumentId: "1:native", coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"))
+        binanceSymbol: "ETHUSDT"))
     // A hypothetical non-canonical same-asset preset must NOT be minted.
     await registry.registerBuiltInPresetsIfMissing(
       presets: [
@@ -31,7 +31,7 @@ struct CryptoPresetCanonicalizationTests {
             chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
           mapping: CryptoProviderMapping(
             instrumentId: "10:native", coingeckoId: "ethereum",
-            cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"))
+            binanceSymbol: "ETHUSDT"))
       ])
     #expect(try await registry.cryptoRegistration(byId: "10:native") == nil)
   }
@@ -49,7 +49,7 @@ struct CryptoPresetCanonicalizationTests {
             symbol: "WTF", name: "Weird Token", decimals: 18),
           mapping: CryptoProviderMapping(
             instrumentId: "1:0x1234567890abcdef1234567890abcdef12345678",
-            coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil))
+            coingeckoId: nil, binanceSymbol: nil))
       ])
     #expect(
       try await registry.cryptoRegistration(

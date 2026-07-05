@@ -29,7 +29,6 @@ struct InstrumentRow {
     case chainId = "chain_id"
     case contractAddress = "contract_address"
     case coingeckoId = "coingecko_id"
-    case cryptocompareSymbol = "cryptocompare_symbol"
     case binanceSymbol = "binance_symbol"
     case encodedSystemFields = "encoded_system_fields"
     case pricingStatus = "pricing_status"
@@ -46,7 +45,6 @@ struct InstrumentRow {
     case chainId = "chain_id"
     case contractAddress = "contract_address"
     case coingeckoId = "coingecko_id"
-    case cryptocompareSymbol = "cryptocompare_symbol"
     case binanceSymbol = "binance_symbol"
     case encodedSystemFields = "encoded_system_fields"
     case pricingStatus = "pricing_status"
@@ -69,7 +67,6 @@ struct InstrumentRow {
   /// `registerStock(_:)`. Plain `Instrument` rows synthesised via
   /// `init(domain:)` carry `nil` here.
   var coingeckoId: String?
-  var cryptocompareSymbol: String?
   var binanceSymbol: String?
   var encodedSystemFields: Data?
   /// Raw value of `TokenPricingStatus` (`"priced"`, `"unpriced"`,

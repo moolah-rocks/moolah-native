@@ -25,7 +25,6 @@ struct GRDBInstrumentRegistryUpsertMergeTests {
       mapping: CryptoProviderMapping(
         instrumentId: eth.id,
         coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH",
         binanceSymbol: "ETHUSDT"))
 
     // Simulates `registerResolvable`'s all-nil crypto publish for the same id.
@@ -34,12 +33,10 @@ struct GRDBInstrumentRegistryUpsertMergeTests {
       mapping: CryptoProviderMapping(
         instrumentId: eth.id,
         coingeckoId: nil,
-        cryptocompareSymbol: nil,
         binanceSymbol: nil))
 
     let reg = try await registry.cryptoRegistration(byId: eth.id)
     #expect(reg?.mapping.coingeckoId == "ethereum")
-    #expect(reg?.mapping.cryptocompareSymbol == "ETH")
     #expect(reg?.mapping.binanceSymbol == "ETHUSDT")
   }
 
@@ -49,15 +46,13 @@ struct GRDBInstrumentRegistryUpsertMergeTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "old", cryptocompareSymbol: nil, binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "old", binanceSymbol: nil))
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: "ETH",
-        binanceSymbol: "ETHUSDT"))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: "ETHUSDT"))
     let reg = try await registry.cryptoRegistration(byId: eth.id)
     #expect(reg?.mapping.coingeckoId == "ethereum")
-    #expect(reg?.mapping.cryptocompareSymbol == "ETH")
     #expect(reg?.mapping.binanceSymbol == "ETHUSDT")
   }
 
@@ -67,16 +62,13 @@ struct GRDBInstrumentRegistryUpsertMergeTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "old-cg", cryptocompareSymbol: "ETH",
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "old-cg", binanceSymbol: nil))
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil))
     let reg = try await registry.cryptoRegistration(byId: eth.id)
     #expect(reg?.mapping.coingeckoId == "ethereum")  // updated
-    #expect(reg?.mapping.cryptocompareSymbol == "ETH")  // preserved, not clobbered by nil
     #expect(reg?.mapping.binanceSymbol == nil)  // stays nil
   }
 
@@ -86,16 +78,14 @@ struct GRDBInstrumentRegistryUpsertMergeTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil))
     let thin = Instrument(
       id: eth.id, kind: .cryptoToken, name: "", decimals: 18,
       ticker: nil, exchange: nil, chainId: 1, contractAddress: nil)
     try await registry.registerCrypto(
       thin,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: nil, cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: nil, binanceSymbol: nil))
     let reg = try await registry.cryptoRegistration(byId: eth.id)
     #expect(reg?.instrument.name == "Ethereum")  // preserved
   }
@@ -106,16 +96,14 @@ struct GRDBInstrumentRegistryUpsertMergeTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil))
     let thin = Instrument(
       id: eth.id, kind: .cryptoToken, name: "", decimals: 18,
       ticker: nil, exchange: nil, chainId: 1, contractAddress: nil)
     try await registry.registerCrypto(
       thin,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: nil, cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: nil, binanceSymbol: nil))
     let reg = try await registry.cryptoRegistration(byId: eth.id)
     #expect(reg?.instrument.ticker == "ETH")  // preserved
   }
@@ -130,8 +118,7 @@ struct GRDBInstrumentRegistryUpsertMergeTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: nil, cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: nil, binanceSymbol: nil))
     // Precondition: project() filters this shape → invisible to conversion.
     try #require(try await registry.cryptoRegistration(byId: eth.id) == nil)
     try #require(!(try await registry.allCryptoRegistrations().contains { $0.id == eth.id }))
@@ -143,8 +130,7 @@ struct GRDBInstrumentRegistryUpsertMergeTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: "ETH",
-        binanceSymbol: "ETHUSDT"))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: "ETHUSDT"))
     let reg = try await registry.cryptoRegistration(byId: eth.id)
     #expect(reg?.mapping.coingeckoId == "ethereum")
     #expect(try await registry.allCryptoRegistrations().contains { $0.id == eth.id })
@@ -156,16 +142,14 @@ struct GRDBInstrumentRegistryUpsertMergeTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil))
     let blob = Data([0xCA, 0xFE, 0xBA, 0xBE])
     _ = try registry.setEncodedSystemFieldsSync(id: eth.id, data: blob)
     // All-nil publish (the `registerResolvable` crypto pattern) must not blank it.
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: nil, cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: nil, binanceSymbol: nil))
     #expect(try registry.fetchRowSync(id: eth.id)?.encodedSystemFields == blob)
   }
 
@@ -180,16 +164,14 @@ struct GRDBInstrumentRegistryUpsertMergeTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil))
     let blob = Data([0xCA, 0xFE, 0xBA, 0xBE])
     _ = try registry.setEncodedSystemFieldsSync(id: eth.id, data: blob)
 
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: "ETH",
-        binanceSymbol: nil),
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil),
       forcingStatus: .spam)
 
     let row = try #require(try registry.fetchRowSync(id: eth.id))

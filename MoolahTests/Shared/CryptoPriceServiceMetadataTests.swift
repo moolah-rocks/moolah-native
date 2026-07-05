@@ -14,7 +14,7 @@ struct CryptoPriceServiceMetadataTests {
     symbol: "WETH", name: "Wrapped Ether", decimals: 18)
   private let ethMapping = CryptoProviderMapping(
     instrumentId: "1:native", coingeckoId: "ethereum",
-    cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT")
+    binanceSymbol: "ETHUSDT")
 
   private func date(_ string: String) -> Date {
     let formatter = ISO8601DateFormatter()

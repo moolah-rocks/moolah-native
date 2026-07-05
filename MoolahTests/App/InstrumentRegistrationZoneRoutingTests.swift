@@ -88,7 +88,6 @@ struct InstrumentRegistrationZoneRoutingTests {
       mapping: CryptoProviderMapping(
         instrumentId: usdc.id,
         coingeckoId: "usd-coin",
-        cryptocompareSymbol: "USDC",
         binanceSymbol: nil))
 
     try await drainHookHops()

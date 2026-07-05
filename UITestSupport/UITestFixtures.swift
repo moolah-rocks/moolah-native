@@ -184,9 +184,9 @@ public enum UITestFixtures {
   ///     resulting Instrument id is
   ///     `1:0x1f9840a85d5af5bf1d1762f925bdaddc4201f984`.
   ///   - Resolution result: the deterministic
-  ///     `(coingeckoId="uniswap", cryptocompareSymbol="UNI",
-  ///     binanceSymbol="UNIUSDT")` triple returned by the stubbed
-  ///     `TokenResolutionClient` for the matching `(chainId, contract)`.
+  ///     `(coingeckoId="uniswap", binanceSymbol="UNIUSDT")` pair returned
+  ///     by the stubbed `TokenResolutionClient` for the matching
+  ///     `(chainId, contract)`.
   public enum CryptoCatalogPreloaded {
     public static let profileId = UITestFixtures.TradeBaseline.profileId
     public static let profileLabel = UITestFixtures.TradeBaseline.profileLabel
@@ -209,7 +209,6 @@ public enum UITestFixtures {
     /// Provider IDs the stubbed `TokenResolutionClient` returns for the
     /// matching `(chainId, contract)` pair.
     public static let coingeckoMappingId = "uniswap"
-    public static let cryptocompareSymbol = "UNI"
     public static let binanceSymbol = "UNIUSDT"
   }
 

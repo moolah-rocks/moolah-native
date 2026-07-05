@@ -26,7 +26,6 @@ struct CompositeTokenResolutionClientTests {
       chainId: 0, contractAddress: nil, symbol: "BTC", isNative: true
     )
     #expect(result.binanceSymbol == "BTCUSDT")
-    #expect(result.cryptocompareSymbol == nil)
   }
 
   @Test
@@ -44,7 +43,6 @@ struct CompositeTokenResolutionClientTests {
     let result = try await client.resolve(
       chainId: 999, contractAddress: "0xunknown", symbol: "NOPE", isNative: false
     )
-    #expect(result.cryptocompareSymbol == nil)
     #expect(result.binanceSymbol == nil)
     #expect(result.coingeckoId == nil)
   }
@@ -80,7 +78,6 @@ struct CompositeTokenResolutionClientTests {
       symbol: "OP",
       isNative: false
     )
-    #expect(spam.cryptocompareSymbol == nil)
     #expect(spam.binanceSymbol == nil)
     #expect(spam.coingeckoId == nil)
     #expect(!spam.hasAnyProviderId)
@@ -144,7 +141,6 @@ final class CoinGeckoContractLookupTests {
     )
 
     #expect(result.coingeckoId == "tether")
-    #expect(result.cryptocompareSymbol == nil)
     // USDT is the quote asset on Binance — USDTUSDT pair doesn't exist
     // and `binanceSymbol` must stay nil.
     #expect(result.binanceSymbol == nil)
@@ -184,7 +180,6 @@ final class CoinGeckoContractLookupTests {
     #expect(result.coingeckoId == "chainlink")
     #expect(result.resolvedSymbol == "LINK")
     #expect(result.binanceSymbol == "LINKUSDT")
-    #expect(result.cryptocompareSymbol == nil)
   }
 
   /// Issue #790 safety: a spam ERC-20 whose user-supplied ticker
@@ -221,7 +216,6 @@ final class CoinGeckoContractLookupTests {
     )
 
     #expect(result.coingeckoId == nil)
-    #expect(result.cryptocompareSymbol == nil)
     #expect(result.binanceSymbol == nil)
     #expect(!result.hasAnyProviderId)
   }

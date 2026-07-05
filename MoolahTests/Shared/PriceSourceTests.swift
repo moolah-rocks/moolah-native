@@ -14,7 +14,7 @@ struct PriceSourceTests {
     chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
   private let ethMapping = CryptoProviderMapping(
     instrumentId: "1:native", coingeckoId: "ethereum",
-    cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT")
+    binanceSymbol: "ETHUSDT")
 
   /// Builds the single `YYYY-MM-DD` parser/formatter for the suite. Pinned to
   /// UTC per `guides/DATE_TIME_GUIDE.md` so the timezoneless day labels parse

@@ -101,7 +101,7 @@ struct SyncedAccountStoreExchangeTests {
     // crypto registrations land in the same DB the transaction reader resolves from.
     let registry = fixture.backend.grdbInstruments
     let regResolver = CountingRegistrationResolver()
-    regResolver.setDefault(.success(coingecko: "id", cryptocompare: nil, binance: nil))
+    regResolver.setDefault(.success(coingecko: "id", binance: nil))
     let discovery = CryptoTokenDiscoveryService(
       registry: registry, resolver: regResolver)
     fixture.store.appendSourceForTesting(

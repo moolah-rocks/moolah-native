@@ -15,8 +15,7 @@ struct GRDBInstrumentMapResolvingTests {
     try await registry.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "ethereum", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: nil))
     return try await (registry as any InstrumentMapResolving).instrumentMap()
   }
 

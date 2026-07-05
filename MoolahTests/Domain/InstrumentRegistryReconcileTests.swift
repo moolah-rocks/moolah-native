@@ -78,7 +78,7 @@ struct InstrumentRegistryReconcileTests {
       rpl,
       mapping: CryptoProviderMapping(
         instrumentId: rpl.id, coingeckoId: "rocket-pool",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
 
     let catalogs = ProviderCatalogLookups(
       binance: StubBinance(pairs: ["RPLUSDT"]),
@@ -88,7 +88,6 @@ struct InstrumentRegistryReconcileTests {
     let reg = try await reg(byId: rpl.id, in: repo)
     #expect(reg.mapping.coingeckoId == "rocket-pool")
     // cryptocompareSymbol is never filled by reconcile (CC removed)
-    #expect(reg.mapping.cryptocompareSymbol == nil)
     #expect(reg.mapping.binanceSymbol == "RPLUSDT")
   }
 
@@ -102,7 +101,7 @@ struct InstrumentRegistryReconcileTests {
       rpl,
       mapping: CryptoProviderMapping(
         instrumentId: rpl.id, coingeckoId: "rocket-pool",
-        cryptocompareSymbol: "RPL", binanceSymbol: "RPLUSDT"))
+        binanceSymbol: "RPLUSDT"))
     try await Task.sleep(for: .milliseconds(50))
     hooks.changedIds.removeAll()
 
@@ -118,7 +117,6 @@ struct InstrumentRegistryReconcileTests {
 
     let reg = try await reg(byId: rpl.id, in: repo)
     #expect(reg.mapping.coingeckoId == "rocket-pool")
-    #expect(reg.mapping.cryptocompareSymbol == "RPL")
     #expect(reg.mapping.binanceSymbol == "RPLUSDT")
 
     try await Task.sleep(for: .milliseconds(50))
@@ -135,7 +133,7 @@ struct InstrumentRegistryReconcileTests {
       rpl,
       mapping: CryptoProviderMapping(
         instrumentId: rpl.id, coingeckoId: "rocket-pool",
-        cryptocompareSymbol: "RPL", binanceSymbol: "RPLUSDT"))
+        binanceSymbol: "RPLUSDT"))
     try await Task.sleep(for: .milliseconds(50))
     hooks.changedIds.removeAll()
 
@@ -161,14 +159,13 @@ struct InstrumentRegistryReconcileTests {
       rpl,
       mapping: CryptoProviderMapping(
         instrumentId: rpl.id, coingeckoId: "rocket-pool",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
 
     let catalogs = ProviderCatalogLookups(binance: StubBinance(), coinGecko: StubCG())
     await repo.reconcileProviderMappings(using: catalogs)
 
     let reg = try await reg(byId: rpl.id, in: repo)
     #expect(reg.mapping.coingeckoId == "rocket-pool")
-    #expect(reg.mapping.cryptocompareSymbol == nil)
     #expect(reg.mapping.binanceSymbol == nil)
   }
 
@@ -182,7 +179,7 @@ struct InstrumentRegistryReconcileTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
 
     let catalogs = ProviderCatalogLookups(
       binance: StubBinance(pairs: ["ETHUSDT"]),
@@ -192,7 +189,6 @@ struct InstrumentRegistryReconcileTests {
     let reg = try await reg(byId: eth.id, in: repo)
     #expect(reg.mapping.coingeckoId == "ethereum")
     // cryptocompareSymbol is never filled by reconcile (CC removed)
-    #expect(reg.mapping.cryptocompareSymbol == nil)
     #expect(reg.mapping.binanceSymbol == "ETHUSDT")
   }
 
@@ -206,7 +202,7 @@ struct InstrumentRegistryReconcileTests {
       rpl,
       mapping: CryptoProviderMapping(
         instrumentId: rpl.id, coingeckoId: "rocket-pool",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
 
     let catalogs = ProviderCatalogLookups(
       binance: StubBinance(pairs: ["RPLUSDT"]),
@@ -237,7 +233,7 @@ struct InstrumentRegistryReconcileTests {
       fakeOp,
       mapping: CryptoProviderMapping(
         instrumentId: fakeOp.id, coingeckoId: nil,
-        cryptocompareSymbol: nil, binanceSymbol: nil),
+        binanceSymbol: nil),
       forcingStatus: .spam)
     try await Task.sleep(for: .milliseconds(50))
     hooks.changedIds.removeAll()
@@ -251,7 +247,6 @@ struct InstrumentRegistryReconcileTests {
     // guard at the top of the loop skips it).
     let reg = try await reg(byId: fakeOp.id, in: repo)
     #expect(reg.mapping.coingeckoId == nil)
-    #expect(reg.mapping.cryptocompareSymbol == nil)
     #expect(reg.mapping.binanceSymbol == nil)
     #expect(reg.pricingStatus == .spam)
 

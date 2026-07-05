@@ -108,7 +108,7 @@ struct BinanceClientTests {
   @Test
   func mappingWithoutBinanceSymbolThrows() async {
     let mapping = CryptoProviderMapping(
-      instrumentId: "1:0xabc", coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil
+      instrumentId: "1:0xabc", coingeckoId: nil, binanceSymbol: nil
     )
     let services = NetworkingServices(
       session: URLSession(configuration: .ephemeral))

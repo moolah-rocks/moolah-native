@@ -50,7 +50,6 @@ struct CoreFinancialGraphSyncRoundTripTests {
       chainId: 1,
       contractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
       coingeckoId: "usd-coin",
-      cryptocompareSymbol: "USDC",
       binanceSymbol: nil,
       encodedSystemFields: nil)
     let ckRecord = source.toCKRecord(in: Self.zoneID)

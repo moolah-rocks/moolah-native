@@ -104,7 +104,7 @@ struct GRDBInstrumentRegistryRollbackTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: nil, binanceSymbol: nil),
+        binanceSymbol: nil),
       forcingStatus: .spam)
 
     try await database.write { database in
@@ -124,7 +124,7 @@ struct GRDBInstrumentRegistryRollbackTests {
         eth,
         mapping: CryptoProviderMapping(
           instrumentId: eth.id, coingeckoId: "MUST-NOT-LAND",
-          cryptocompareSymbol: "MUST-NOT-LAND", binanceSymbol: nil),
+          binanceSymbol: nil),
         forcingStatus: .priced)
       Issue.record("registerCrypto(forcingStatus:) should have thrown")
     } catch {
@@ -150,7 +150,7 @@ struct GRDBInstrumentRegistryRollbackTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: nil, binanceSymbol: nil),
+        binanceSymbol: nil),
       forcingStatus: .spam)
 
     try await database.write { database in
@@ -170,7 +170,7 @@ struct GRDBInstrumentRegistryRollbackTests {
         eth,
         mapping: CryptoProviderMapping(
           instrumentId: eth.id, coingeckoId: "MUST-NOT-LAND",
-          cryptocompareSymbol: "MUST-NOT-LAND", binanceSymbol: nil))
+          binanceSymbol: nil))
       Issue.record("registerCrypto(_:mapping:) should have thrown")
     } catch {
       // Expected — trigger raises ABORT mid-transaction.

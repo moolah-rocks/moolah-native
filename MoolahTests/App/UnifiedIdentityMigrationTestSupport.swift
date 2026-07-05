@@ -328,7 +328,7 @@ extension CryptoRegistration {
       chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
     mapping: CryptoProviderMapping(
       instrumentId: "1:native", coingeckoId: "ethereum",
-      cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"))
+      binanceSymbol: "ETHUSDT"))
 
   /// ETH on Optimism — retired cross-chain id (`10:native`).
   static let ethOptimism = CryptoRegistration(
@@ -336,7 +336,7 @@ extension CryptoRegistration {
       chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
     mapping: CryptoProviderMapping(
       instrumentId: "10:native", coingeckoId: "ethereum",
-      cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"))
+      binanceSymbol: "ETHUSDT"))
 
   /// ETH on Base — retired cross-chain id (`8453:native`).
   static let ethBase = CryptoRegistration(
@@ -344,7 +344,7 @@ extension CryptoRegistration {
       chainId: 8453, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
     mapping: CryptoProviderMapping(
       instrumentId: "8453:native", coingeckoId: "ethereum",
-      cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"))
+      binanceSymbol: "ETHUSDT"))
 
   /// USDC on Ethereum mainnet — canonical.
   static let usdcMainnet = CryptoRegistration(
@@ -354,7 +354,7 @@ extension CryptoRegistration {
       symbol: "USDC", name: "USD Coin", decimals: 6),
     mapping: CryptoProviderMapping(
       instrumentId: "1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-      coingeckoId: "usd-coin", cryptocompareSymbol: "USDC", binanceSymbol: "USDCUSDT"))
+      coingeckoId: "usd-coin", binanceSymbol: "USDCUSDT"))
 
   /// USDC on Optimism — retired cross-chain id.
   static let usdcOptimism = CryptoRegistration(
@@ -364,7 +364,7 @@ extension CryptoRegistration {
       symbol: "USDC", name: "USD Coin", decimals: 6),
     mapping: CryptoProviderMapping(
       instrumentId: "10:0x0b2c639c533813f4aa9d7837caf62653d097ff85",
-      coingeckoId: "usd-coin", cryptocompareSymbol: "USDC", binanceSymbol: "USDCUSDT"))
+      coingeckoId: "usd-coin", binanceSymbol: "USDCUSDT"))
 
   /// A token with no provider mapping — stays chain-scoped; forms a
   /// singleton `assetKey` group so it is never aliased.
@@ -375,7 +375,7 @@ extension CryptoRegistration {
         symbol: "UNK", name: "Unknown Token", decimals: 18),
       mapping: CryptoProviderMapping(
         instrumentId: "\(chainId):\(address.lowercased())",
-        coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil))
+        coingeckoId: nil, binanceSymbol: nil))
   }
 }
 

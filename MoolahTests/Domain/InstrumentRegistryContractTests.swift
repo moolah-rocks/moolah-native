@@ -71,7 +71,6 @@ struct InstrumentRegistryContractTests {
     let mapping = CryptoProviderMapping(
       instrumentId: eth.id,
       coingeckoId: "ethereum",
-      cryptocompareSymbol: "ETH",
       binanceSymbol: "ETHUSDT")
     try await repo.registerCrypto(eth, mapping: mapping)
 
@@ -83,7 +82,6 @@ struct InstrumentRegistryContractTests {
     #expect(reg.instrument.name == "Ethereum")
     #expect(reg.instrument.decimals == 18)
     #expect(reg.mapping.coingeckoId == "ethereum")
-    #expect(reg.mapping.cryptocompareSymbol == "ETH")
     #expect(reg.mapping.binanceSymbol == "ETHUSDT")
     // Default pricingStatus on a freshly-registered crypto registration
     // is `.priced` — the existing column default in v8 plus the row
@@ -100,16 +98,15 @@ struct InstrumentRegistryContractTests {
       name: "Ethereum", decimals: 18)
     let first = CryptoProviderMapping(
       instrumentId: eth.id,
-      coingeckoId: "ethereum", cryptocompareSymbol: nil, binanceSymbol: nil)
+      coingeckoId: "ethereum", binanceSymbol: nil)
     let second = CryptoProviderMapping(
       instrumentId: eth.id,
-      coingeckoId: "ethereum", cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT")
+      coingeckoId: "ethereum", binanceSymbol: "ETHUSDT")
     try await repo.registerCrypto(eth, mapping: first)
     try await repo.registerCrypto(eth, mapping: second)
 
     let regs = try await repo.allCryptoRegistrations()
     #expect(regs.count == 1)
-    #expect(regs.first?.mapping.cryptocompareSymbol == "ETH")
     #expect(regs.first?.mapping.binanceSymbol == "ETHUSDT")
   }
 
@@ -123,7 +120,7 @@ struct InstrumentRegistryContractTests {
       name: "Ethereum", decimals: 18)
     let mapping = CryptoProviderMapping(
       instrumentId: eth.id,
-      coingeckoId: "ethereum", cryptocompareSymbol: nil, binanceSymbol: nil)
+      coingeckoId: "ethereum", binanceSymbol: nil)
 
     try await repo.registerCrypto(eth, mapping: mapping, forcingStatus: .unpriced)
 
@@ -159,16 +156,14 @@ struct InstrumentRegistryContractTests {
     try await repo.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "old", cryptocompareSymbol: nil,
-        binanceSymbol: nil))
+        instrumentId: eth.id, coingeckoId: "old", binanceSymbol: nil))
     try await Task.sleep(for: .milliseconds(50))
     hooks.changedIds.removeAll()
 
     try await repo.registerCrypto(
       eth,
       mapping: CryptoProviderMapping(
-        instrumentId: eth.id, coingeckoId: "new", cryptocompareSymbol: "ETH",
-        binanceSymbol: nil),
+        instrumentId: eth.id, coingeckoId: "new", binanceSymbol: nil),
       forcingStatus: .spam)
 
     let regs = try await repo.allCryptoRegistrations()
@@ -176,7 +171,6 @@ struct InstrumentRegistryContractTests {
     let reg = try #require(regs.first { $0.id == eth.id })
     #expect(reg.pricingStatus == .spam)
     #expect(reg.mapping.coingeckoId == "new")
-    #expect(reg.mapping.cryptocompareSymbol == "ETH")
 
     // Still exactly one fan-out for the upsert call — the stale-status
     // window the issue describes cannot exist. Not strictly
@@ -203,7 +197,7 @@ struct InstrumentRegistryContractTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: nil, binanceSymbol: nil),
+        binanceSymbol: nil),
       forcingStatus: .spam)
 
     // A plain mapping-only re-register must leave `.spam` intact.
@@ -211,12 +205,11 @@ struct InstrumentRegistryContractTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: nil))
+        binanceSymbol: nil))
 
     let regs = try await repo.allCryptoRegistrations()
     let reg = try #require(regs.first { $0.id == eth.id })
     #expect(reg.pricingStatus == .spam)
-    #expect(reg.mapping.cryptocompareSymbol == "ETH")
   }
 
   @Test("allCryptoRegistrations skips rows whose three mapping fields are all nil")
@@ -236,7 +229,6 @@ struct InstrumentRegistryContractTests {
       chainId: 1,
       contractAddress: nil,
       coingeckoId: nil,
-      cryptocompareSymbol: nil,
       binanceSymbol: nil,
       encodedSystemFields: nil)
     try await database.write { database in
@@ -279,7 +271,7 @@ struct InstrumentRegistryContractTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
     try await repo.remove(id: bhp.id)
 
     // Drain pending @MainActor hops from the sync-queue hook closures. Not

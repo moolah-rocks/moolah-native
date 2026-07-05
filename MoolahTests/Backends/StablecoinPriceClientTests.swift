@@ -17,7 +17,7 @@ struct StablecoinPriceClientTests {
 
   private func mapping(_ instrumentId: String) -> CryptoProviderMapping {
     CryptoProviderMapping(
-      instrumentId: instrumentId, coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil)
+      instrumentId: instrumentId, coingeckoId: nil, binanceSymbol: nil)
   }
 
   private func date(_ string: String) throws -> Date {

@@ -306,9 +306,6 @@
       <parameter name="coingecko" code="Rgcg" type="text" optional="yes" description="CoinGecko id price source (e.g. starknet).">
         <cocoa key="coingecko"/>
       </parameter>
-      <parameter name="cryptocompare" code="Rgcc" type="text" optional="yes" description="CryptoCompare symbol price source.">
-        <cocoa key="cryptocompare"/>
-      </parameter>
       <parameter name="binance" code="Rgbi" type="text" optional="yes" description="Binance symbol price source.">
         <cocoa key="binance"/>
       </parameter>

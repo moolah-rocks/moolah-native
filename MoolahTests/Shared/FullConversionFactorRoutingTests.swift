@@ -78,13 +78,13 @@ struct FullConversionFactorRoutingTests {
   private func ethMapping() -> CryptoProviderMapping {
     CryptoProviderMapping(
       instrumentId: "1:native", coingeckoId: "ethereum",
-      cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT")
+      binanceSymbol: "ETHUSDT")
   }
 
   private func btcMapping() -> CryptoProviderMapping {
     CryptoProviderMapping(
       instrumentId: "0:native", coingeckoId: "bitcoin",
-      cryptocompareSymbol: "BTC", binanceSymbol: "BTCUSDT")
+      binanceSymbol: "BTCUSDT")
   }
 
   // MARK: - fiat → fiat (direct pair, not USD-bridged)

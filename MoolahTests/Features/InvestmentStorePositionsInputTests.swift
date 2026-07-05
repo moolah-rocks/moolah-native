@@ -52,7 +52,7 @@ struct InvestmentStorePositionsInputTests {
       instrument,
       mapping: CryptoProviderMapping(
         instrumentId: instrument.id, coingeckoId: coingeckoId,
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
   }
 
   @Test("crypto-to-crypto swap shifts cost basis correctly")

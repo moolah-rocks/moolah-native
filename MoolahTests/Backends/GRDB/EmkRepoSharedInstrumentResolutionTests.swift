@@ -40,7 +40,7 @@ struct EmkRepoSharedInstrumentResolutionTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"))
+        binanceSymbol: "ETHUSDT"))
 
     let repo = GRDBEarmarkRepository(
       database: perProfile,

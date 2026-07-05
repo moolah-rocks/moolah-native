@@ -67,7 +67,7 @@ public enum UITestSeed: String, CaseIterable, Sendable {
   /// in place of the live `SQLiteCoinGeckoCatalog` /
   /// `CompositeTokenResolutionClient`. The catalogue contains exactly one
   /// row (Uniswap, ethereum chainId 1) and the stub resolver returns the
-  /// matching `(coingeckoId, cryptocompareSymbol, binanceSymbol)` triple.
+  /// matching `(coingeckoId, binanceSymbol)` pair.
   /// Drives the Settings → Crypto → Add Token end-to-end test without
   /// touching the network. See `UITestFixtures.CryptoCatalogPreloaded` for
   /// the complete fixture (instrumentId, chainId, contractAddress, provider

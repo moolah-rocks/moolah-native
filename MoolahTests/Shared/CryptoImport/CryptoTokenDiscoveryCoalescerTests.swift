@@ -18,7 +18,7 @@ struct CryptoTokenDiscoveryCoalescerTests {
     let subject = makeDiscoverySubject()
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: "usd-coin", cryptocompare: nil, binance: nil))
+      .success(coingecko: "usd-coin", binance: nil))
 
     let n = 100
     try await withThrowingTaskGroup(of: CryptoRegistration.self) { group in
@@ -57,7 +57,7 @@ struct CryptoTokenDiscoveryCoalescerTests {
     for (chain, address) in keys {
       subject.resolver.script(
         .init(chainId: chain.chainId, contractAddress: address.lowercased()),
-        .success(coingecko: "id-\(chain.chainId)", cryptocompare: nil, binance: nil))
+        .success(coingecko: "id-\(chain.chainId)", binance: nil))
     }
 
     let totalCalls = 1000

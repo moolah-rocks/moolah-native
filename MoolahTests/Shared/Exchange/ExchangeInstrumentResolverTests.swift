@@ -15,7 +15,7 @@ struct ExchangeInstrumentResolverTests {
       mapping: CryptoProviderMapping(
         instrumentId: inst.id,
         coingeckoId: mapped ? "optimism" : nil,
-        cryptocompareSymbol: nil, binanceSymbol: nil),
+        binanceSymbol: nil),
       pricingStatus: spam ? .spam : (mapped ? .priced : .unpriced))
   }
 

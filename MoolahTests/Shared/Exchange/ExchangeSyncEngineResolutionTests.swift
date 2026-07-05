@@ -123,7 +123,7 @@ struct ExchangeSyncEngineResolutionTests {
         name: "Solana", decimals: 9),
       mapping: CryptoProviderMapping(
         instrumentId: "1399:native", coingeckoId: "solana",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
     let registry = StubInstrumentRegistry(
       instruments: [real.instrument], cryptoRegistrations: [real])
     let meta = StubMetadataResolver([

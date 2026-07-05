@@ -58,7 +58,7 @@ struct FullConversionServiceConvertResultTests {
       instrument: eth,
       mapping: CryptoProviderMapping(
         instrumentId: "1:native", coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+        binanceSymbol: "ETHUSDT"
       ),
       pricingStatus: status
     )
@@ -198,7 +198,6 @@ struct FullConversionServiceConvertResultTests {
       mapping: CryptoProviderMapping(
         instrumentId: "10:native",
         coingeckoId: nil,
-        cryptocompareSymbol: "ETH",
         binanceSymbol: "ETHUSDT"),
       pricingStatus: .priced)
     let bundle = try makeService(

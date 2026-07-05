@@ -93,7 +93,7 @@ struct TransferEventBuilderGasAttributionTests {
     // ERC-20 needs the discovery resolver scripted (USDC).
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: "usd-coin", cryptocompare: nil, binance: nil))
+      .success(coingecko: "usd-coin", binance: nil))
     let alchemy = RecordingAlchemyClientStub()
     // Outer tx signed by the router — a third-party EOA / contract that
     // had prior approval to move wallet's USDC. Wallet did not pay gas.
@@ -150,7 +150,7 @@ struct TransferEventBuilderGasAttributionTests {
     let subject = makeDiscoverySubject()
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: "usd-coin", cryptocompare: nil, binance: nil))
+      .success(coingecko: "usd-coin", binance: nil))
     let alchemy = RecordingAlchemyClientStub()
     // Wallet signed the outer tx and paid the fee. The on-chain shape:
     // wallet calls a contract; the contract emits an ERC-20 `Transfer`

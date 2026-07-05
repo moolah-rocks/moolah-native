@@ -8,7 +8,7 @@ struct AssetKeyTests {
   func coingeckoIdWins() {
     let mapping = CryptoProviderMapping(
       instrumentId: "1:native", coingeckoId: "ethereum",
-      cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT")
+      binanceSymbol: "ETHUSDT")
     #expect(mapping.assetKey == "ethereum")
   }
 
@@ -16,7 +16,7 @@ struct AssetKeyTests {
   func fallsBackToCryptocompareWhenCoingeckoAbsent() {
     let mapping = CryptoProviderMapping(
       instrumentId: "1:native", coingeckoId: nil,
-      cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT")
+      binanceSymbol: "ETHUSDT")
     #expect(mapping.assetKey == "ETH")
   }
 
@@ -24,7 +24,7 @@ struct AssetKeyTests {
   func fallsBackToBinanceWhenCryptocompareAlsoAbsent() {
     let mapping = CryptoProviderMapping(
       instrumentId: "1:native", coingeckoId: nil,
-      cryptocompareSymbol: nil, binanceSymbol: "ETHUSDT")
+      binanceSymbol: "ETHUSDT")
     #expect(mapping.assetKey == "ETHUSDT")
   }
 
@@ -32,7 +32,7 @@ struct AssetKeyTests {
   func standsAloneWhenNoProviderId() {
     let mapping = CryptoProviderMapping(
       instrumentId: "1:0xabc", coingeckoId: nil,
-      cryptocompareSymbol: nil, binanceSymbol: nil)
+      binanceSymbol: nil)
     #expect(mapping.assetKey == "1:0xabc")
   }
 
@@ -55,13 +55,13 @@ struct AssetKeyTests {
         chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
       mapping: CryptoProviderMapping(
         instrumentId: "1:native", coingeckoId: "ethereum",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
     let second = CryptoRegistration(
       instrument: .crypto(
         chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
       mapping: CryptoProviderMapping(
         instrumentId: "1:native", coingeckoId: "ether-renamed",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
     let map = CryptoRegistration.assetKeys(from: [first, second])
     #expect(map["1:native"] == "ether-renamed")
   }
@@ -75,13 +75,13 @@ struct AssetKeyTests {
           chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
         mapping: CryptoProviderMapping(
           instrumentId: "1:native", coingeckoId: "ethereum",
-          cryptocompareSymbol: nil, binanceSymbol: nil)),
+          binanceSymbol: nil)),
       CryptoRegistration(
         instrument: .crypto(
           chainId: 10, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
         mapping: CryptoProviderMapping(
           instrumentId: "10:native", coingeckoId: "ethereum",
-          cryptocompareSymbol: nil, binanceSymbol: nil)),
+          binanceSymbol: nil)),
     ]
   }
 }

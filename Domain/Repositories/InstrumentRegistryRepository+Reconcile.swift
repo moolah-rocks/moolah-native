@@ -100,7 +100,6 @@ extension InstrumentRegistryRepository {
     let candidate = CryptoProviderMapping(
       instrumentId: mapping.instrumentId,
       coingeckoId: coinGecko,
-      cryptocompareSymbol: nil,
       binanceSymbol: binance)
     return mapping.merging(candidate)
   }

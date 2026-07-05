@@ -46,7 +46,6 @@ extension GRDBInstrumentRegistryRepository {
     } else {
       var row = InstrumentRow(domain: instrument)
       row.coingeckoId = mapping.coingeckoId
-      row.cryptocompareSymbol = mapping.cryptocompareSymbol
       row.binanceSymbol = mapping.binanceSymbol
       if let status { row.pricingStatus = status.rawValue }
       try row.insert(database)
@@ -83,7 +82,6 @@ extension GRDBInstrumentRegistryRepository {
       existing.contractAddress = contractAddress
     }
     existing.coingeckoId = mapping.coingeckoId ?? existing.coingeckoId
-    existing.cryptocompareSymbol = mapping.cryptocompareSymbol ?? existing.cryptocompareSymbol
     existing.binanceSymbol = mapping.binanceSymbol ?? existing.binanceSymbol
   }
 

@@ -47,7 +47,7 @@ struct InstrumentAliasOnApplyTests {
       id: "10:native", recordName: "10:native", kind: "cryptoToken",
       name: "Ethereum", decimals: 18, ticker: "ETH", exchange: nil,
       chainId: 10, contractAddress: nil,
-      coingeckoId: "ethereum", cryptocompareSymbol: nil, binanceSymbol: nil,
+      coingeckoId: "ethereum", binanceSymbol: nil,
       encodedSystemFields: nil, pricingStatus: "priced")
 
     try registry.applyRemoteChangesSync(saved: [row], deleted: [])
@@ -83,7 +83,7 @@ struct InstrumentAliasOnApplyTests {
       id: "10:native", recordName: "10:native", kind: "cryptoToken",
       name: "Ethereum", decimals: 18, ticker: "ETH", exchange: nil,
       chainId: 10, contractAddress: nil,
-      coingeckoId: "ethereum", cryptocompareSymbol: nil, binanceSymbol: nil,
+      coingeckoId: "ethereum", binanceSymbol: nil,
       encodedSystemFields: nil, pricingStatus: "priced")
     existing.encodedSystemFields =
       existing.toCKRecord(in: Self.zoneID)
@@ -97,7 +97,7 @@ struct InstrumentAliasOnApplyTests {
       id: "10:native", recordName: "10:native", kind: "cryptoToken",
       name: "Ethereum", decimals: 18, ticker: "ETH", exchange: nil,
       chainId: 10, contractAddress: nil,
-      coingeckoId: "ethereum", cryptocompareSymbol: nil, binanceSymbol: nil,
+      coingeckoId: "ethereum", binanceSymbol: nil,
       encodedSystemFields: nil, pricingStatus: "priced")
     incoming.encodedSystemFields =
       incoming.toCKRecord(in: Self.zoneID)
@@ -120,7 +120,7 @@ struct InstrumentAliasOnApplyTests {
       id: "1:native", recordName: "1:native", kind: "cryptoToken",
       name: "Ethereum", decimals: 18, ticker: "ETH", exchange: nil,
       chainId: 1, contractAddress: nil,
-      coingeckoId: "ethereum", cryptocompareSymbol: nil, binanceSymbol: nil,
+      coingeckoId: "ethereum", binanceSymbol: nil,
       encodedSystemFields: nil, pricingStatus: "priced")
 
     try registry.applyRemoteChangesSync(saved: [row], deleted: [])
@@ -143,7 +143,7 @@ struct InstrumentAliasOnApplyTests {
       id: "10:native", recordName: "10:native", kind: "cryptoToken",
       name: "Ethereum", decimals: 18, ticker: "ETH", exchange: nil,
       chainId: 10, contractAddress: nil,
-      coingeckoId: "ethereum", cryptocompareSymbol: nil, binanceSymbol: nil,
+      coingeckoId: "ethereum", binanceSymbol: nil,
       encodedSystemFields: nil, pricingStatus: "priced")
     try registry.applyRemoteChangesSync(saved: [row], deleted: [])
 
@@ -174,7 +174,7 @@ struct InstrumentAliasOnApplyTests {
       id: "10:native", recordName: "10:native", kind: "cryptoToken",
       name: "Ethereum", decimals: 18, ticker: "ETH", exchange: nil,
       chainId: 10, contractAddress: nil,
-      coingeckoId: "ethereum", cryptocompareSymbol: nil, binanceSymbol: nil,
+      coingeckoId: "ethereum", binanceSymbol: nil,
       encodedSystemFields: nil, pricingStatus: "priced")
     let serverRecord = row.toCKRecord(in: handler.zoneID)
 
@@ -198,7 +198,7 @@ struct InstrumentAliasOnApplyTests {
       id: "10:native", recordName: "10:native", kind: "cryptoToken",
       name: "Ethereum", decimals: 18, ticker: "ETH", exchange: nil,
       chainId: 10, contractAddress: nil,
-      coingeckoId: "ethereum", cryptocompareSymbol: nil, binanceSymbol: nil,
+      coingeckoId: "ethereum", binanceSymbol: nil,
       encodedSystemFields: originalFields, pricingStatus: "priced")
 
     // Seed the row directly (not via applyRemoteChangesSync) so we control
