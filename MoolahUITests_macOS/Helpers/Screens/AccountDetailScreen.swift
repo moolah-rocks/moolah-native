@@ -81,6 +81,37 @@ struct AccountDetailScreen {
     }
   }
 
+  /// Asserts the performance-tiles strip is present within `timeout` seconds.
+  /// The Chart pane must be showing first (call `toggleToChart()` on macOS).
+  /// Expected for accounts with non-host holdings (crypto / exchange / mixed).
+  func expectPerformanceTiles(timeout: TimeInterval = 10) {
+    Trace.record(#function)
+    let tiles = app.element(for: UITestIdentifiers.AccountDetail.performanceTiles)
+    if !tiles.waitForExistence(timeout: timeout) {
+      Trace.recordFailure("performance tiles did not appear")
+      XCTFail(
+        "Performance tiles did not appear within \(timeout)s on the Chart pane for a "
+          + "multi-instrument account. Check computePerformance feeds a non-nil "
+          + "AccountPerformance into PositionsAssemblyContext.")
+    }
+  }
+
+  /// Asserts the performance-tiles strip is absent (fiat-only account shows
+  /// the plain total header instead). The Chart pane must be showing first,
+  /// so the pane has rendered before asserting the strip's absence.
+  func expectNoPerformanceTiles(timeout: TimeInterval = 10) {
+    Trace.record(#function)
+    let chart = app.element(for: UITestIdentifiers.AccountDetail.chartPane)
+    if !chart.waitForExistence(timeout: timeout) {
+      Trace.recordFailure("chart pane did not appear")
+      XCTFail("Chart pane did not appear within \(timeout)s")
+      return
+    }
+    XCTAssertFalse(
+      app.element(for: UITestIdentifiers.AccountDetail.performanceTiles).exists,
+      "Performance tiles should be absent for a fiat-only account (no invested / P&L data).")
+  }
+
   /// Clicks the "Transactions" segment of the bottom toggle and waits for
   /// the transaction list to reappear.
   func toggleToTransactions(timeout: TimeInterval = 10) {

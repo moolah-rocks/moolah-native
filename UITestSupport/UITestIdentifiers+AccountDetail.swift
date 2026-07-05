@@ -21,5 +21,10 @@ extension UITestIdentifiers {
     public static let transactionsSegmentLabel = "Transactions"
     /// Visible label of the "Chart" segment in the bottom-pane toggle.
     public static let chartSegmentLabel = "Chart"
+
+    /// The `AccountPerformanceTiles` strip (value / P&L / return) at the top
+    /// of the Chart pane. Present only when the account has invested / P&L
+    /// data (crypto, exchange, mixed group); absent for fiat-only accounts.
+    public static let performanceTiles = "accountDetail.performanceTiles"
   }
 }
