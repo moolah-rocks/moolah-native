@@ -243,10 +243,17 @@ final class WalletApplyEngine {
   /// Writes both the per-device `WalletSyncState` and the cross-device synced
   /// `WalletSyncCheckpoint` for every account that participated in the cycle.
   ///
-  /// The synced checkpoint is max-merged (`max(existing, head)`) so a device
-  /// whose fetch trailed a peer never lowers the shared value — the read side
-  /// (`WalletSyncEngine.build`) trusts the checkpoint to skip re-scanning
-  /// blocks a peer already covered.
+  /// The synced checkpoint is raised atomically to `max(existing, head)` via
+  /// `WalletSyncCheckpointRepository.raiseToMax` — a single GRDB write
+  /// transaction — so a device whose fetch trailed a peer never lowers the
+  /// shared value. A separate `load` then `save` pair would leave a TOCTOU
+  /// window: the `wallet_sync_checkpoint` table has a second independent
+  /// writer (the CKSyncEngine apply path, off `@MainActor`), so a peer's
+  /// higher checkpoint could land between this device's read and its write
+  /// and get clobbered back down. `raiseToMax`'s single write transaction is
+  /// serialized against that apply writer by GRDB's writer queue, closing the
+  /// window. The read side (`WalletSyncEngine.build`) trusts the checkpoint
+  /// to skip re-scanning blocks a peer already covered.
   ///
   /// Eventual-consistency caveat: a synced checkpoint can arrive on a peer
   /// device *before* the transactions it summarises (CloudKit delivers the
@@ -266,12 +273,8 @@ final class WalletApplyEngine {
         lastError: nil)
       try await walletSyncState.save(state)
 
-      let existing =
-        (try? await checkpoints.load(accountId: input.account.id))?.lastSyncedBlockNumber ?? 0
-      try await checkpoints.save(
-        WalletSyncCheckpoint(
-          id: input.account.id,
-          lastSyncedBlockNumber: max(existing, input.headBlockNumber)))
+      try await checkpoints.raiseToMax(
+        accountId: input.account.id, blockNumber: input.headBlockNumber)
     }
   }
 }

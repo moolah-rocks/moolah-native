@@ -12,8 +12,10 @@ import Foundation
 ///
 /// The read side (`WalletSyncEngine.build`) takes the higher of the local
 /// `WalletSyncState` and this synced checkpoint when deriving `fromBlock`; the
-/// write side (`WalletApplyEngine.updateSyncState`) max-merges before saving so
-/// a device can never lower the shared value.
+/// write side (`WalletApplyEngine.updateSyncState`) atomically raises the
+/// checkpoint to `max(existing, head)` via `raiseToMax` so a device can never
+/// lower the shared value, even when a peer's higher checkpoint lands via the
+/// CloudKit apply path concurrently with this device's own write.
 protocol WalletSyncCheckpointRepository: Sendable {
   /// Returns one account's synced checkpoint, or `nil` when no device has
   /// ever recorded one for the account.
@@ -23,4 +25,10 @@ protocol WalletSyncCheckpointRepository: Sendable {
   /// fires the sync closure so the CKSyncEngine coordinator queues an
   /// upload — the same synced-mirror contract every other synced table uses.
   func save(_ checkpoint: WalletSyncCheckpoint) async throws
+
+  /// Atomically raises this account's checkpoint to max(existing, blockNumber) in a single
+  /// write transaction (serialized against the CloudKit apply writer by GRDB's writer queue),
+  /// so a concurrently-applied higher peer value is never clobbered downward. Only marks the
+  /// row for CloudKit push / fires the change hook when the stored value actually increases.
+  func raiseToMax(accountId: UUID, blockNumber: UInt64) async throws
 }

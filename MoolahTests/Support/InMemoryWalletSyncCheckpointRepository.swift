@@ -17,6 +17,7 @@ final class InMemoryWalletSyncCheckpointRepository:
   private let lock = NSLock()
   private var checkpoints: [UUID: WalletSyncCheckpoint] = [:]
   private(set) var saveCount = 0
+  private(set) var raiseToMaxCount = 0
 
   init(_ initial: [WalletSyncCheckpoint] = []) {
     for checkpoint in initial {
@@ -32,6 +33,25 @@ final class InMemoryWalletSyncCheckpointRepository:
     lock.withLock {
       checkpoints[checkpoint.id] = checkpoint
       saveCount += 1
+    }
+  }
+
+  /// Mirrors the real repository's atomic read-compare-write: holds the lock
+  /// across the whole compare-then-set so no interleaved `save`/`raiseToMax`
+  /// call can observe a torn state, and only bumps when the new value is
+  /// strictly greater than what's stored (or nothing is stored yet).
+  func raiseToMax(accountId: UUID, blockNumber: UInt64) async throws {
+    lock.withLock {
+      guard let existing = checkpoints[accountId] else {
+        checkpoints[accountId] = WalletSyncCheckpoint(
+          id: accountId, lastSyncedBlockNumber: blockNumber)
+        raiseToMaxCount += 1
+        return
+      }
+      guard blockNumber > existing.lastSyncedBlockNumber else { return }
+      checkpoints[accountId] = WalletSyncCheckpoint(
+        id: accountId, lastSyncedBlockNumber: blockNumber)
+      raiseToMaxCount += 1
     }
   }
 }
