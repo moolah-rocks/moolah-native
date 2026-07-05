@@ -58,37 +58,39 @@ extension DirectRPCChainClient: ChainDataClient {
     walletAddress: String,
     fromBlock: UInt64
   ) async throws -> [AlchemyTransfer] {
-    let head = try await rpc.blockNumber()
-    guard fromBlock <= head else { return [] }
+    try await attributingErrors(to: .directRPC) {
+      let head = try await rpc.blockNumber()
+      guard fromBlock <= head else { return [] }
 
-    let walletTopic = RPCHex.addressTopic(walletAddress)
-    async let outbound = fetchLogs(
-      from: fromBlock,
-      to: head,
-      topics: [DirectRPCConstants.transferTopic, walletTopic, nil])
-    async let inbound = fetchLogs(
-      from: fromBlock,
-      to: head,
-      topics: [DirectRPCConstants.transferTopic, nil, walletTopic])
-    let combined = try await outbound + inbound
+      let walletTopic = RPCHex.addressTopic(walletAddress)
+      async let outbound = fetchLogs(
+        from: fromBlock,
+        to: head,
+        topics: [DirectRPCConstants.transferTopic, walletTopic, nil])
+      async let inbound = fetchLogs(
+        from: fromBlock,
+        to: head,
+        topics: [DirectRPCConstants.transferTopic, nil, walletTopic])
+      let combined = try await outbound + inbound
 
-    let logs = deduplicated(combined).filter { isRelevant($0, chain: chain) }
-    guard !logs.isEmpty else { return [] }
+      let logs = deduplicated(combined).filter { isRelevant($0, chain: chain) }
+      guard !logs.isEmpty else { return [] }
 
-    let uniqueBlocks = Set(logs.compactMap { RPCHex.parseUInt64($0.blockNumber) })
-    let timestamps = try await rpc.blockTimestamps(Array(uniqueBlocks))
-    let metadataByContract = await resolveMetadata(for: logs)
+      let uniqueBlocks = Set(logs.compactMap { RPCHex.parseUInt64($0.blockNumber) })
+      let timestamps = try await rpc.blockTimestamps(Array(uniqueBlocks))
+      let metadataByContract = await resolveMetadata(for: logs)
 
-    return logs.compactMap { log -> AlchemyTransfer? in
-      guard let block = RPCHex.parseUInt64(log.blockNumber),
-        let timestamp = timestamps[block],
-        let tokenMetadata = metadataByContract[log.address.lowercased()]
-      else { return nil }
-      return LogTransferMapper.erc20Transfer(
-        from: log,
-        decimals: tokenMetadata.decimals,
-        symbol: tokenMetadata.symbol,
-        timestamp: timestamp)
+      return logs.compactMap { log -> AlchemyTransfer? in
+        guard let block = RPCHex.parseUInt64(log.blockNumber),
+          let timestamp = timestamps[block],
+          let tokenMetadata = metadataByContract[log.address.lowercased()]
+        else { return nil }
+        return LogTransferMapper.erc20Transfer(
+          from: log,
+          decimals: tokenMetadata.decimals,
+          symbol: tokenMetadata.symbol,
+          timestamp: timestamp)
+      }
     }
   }
 
@@ -96,25 +98,27 @@ extension DirectRPCChainClient: ChainDataClient {
     chain: ChainConfig,
     hash: String
   ) async throws -> AlchemyTransactionReceipt {
-    let receipt = try await rpc.transactionReceipt(hash: hash)
-    guard let gasUsed = HexDecimal.parse(receipt.gasUsed),
-      let effectiveGasPrice = HexDecimal.parse(receipt.effectiveGasPrice)
-    else {
-      throw WalletSyncError.providerMalformedResponse(stage: "getTransactionReceipt")
-    }
-    let l1FeeWei: Decimal? = try receipt.l1Fee.map { hex in
-      guard let parsed = HexDecimal.parse(hex) else {
+    try await attributingErrors(to: .directRPC) {
+      let receipt = try await rpc.transactionReceipt(hash: hash)
+      guard let gasUsed = HexDecimal.parse(receipt.gasUsed),
+        let effectiveGasPrice = HexDecimal.parse(receipt.effectiveGasPrice)
+      else {
         throw WalletSyncError.providerMalformedResponse(stage: "getTransactionReceipt")
       }
-      return parsed
+      let l1FeeWei: Decimal? = try receipt.l1Fee.map { hex in
+        guard let parsed = HexDecimal.parse(hex) else {
+          throw WalletSyncError.providerMalformedResponse(stage: "getTransactionReceipt")
+        }
+        return parsed
+      }
+      return AlchemyTransactionReceipt(
+        hash: receipt.transactionHash,
+        gasUsed: gasUsed,
+        effectiveGasPrice: effectiveGasPrice,
+        from: receipt.from.lowercased(),
+        l1FeeWei: l1FeeWei,
+        logs: mapLogs(receipt.logs))
     }
-    return AlchemyTransactionReceipt(
-      hash: receipt.transactionHash,
-      gasUsed: gasUsed,
-      effectiveGasPrice: effectiveGasPrice,
-      from: receipt.from.lowercased(),
-      l1FeeWei: l1FeeWei,
-      logs: mapLogs(receipt.logs))
   }
 
   /// Maps raw `eth_getTransactionReceipt` log entries into the domain
