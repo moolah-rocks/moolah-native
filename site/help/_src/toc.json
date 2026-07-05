@@ -47,7 +47,6 @@
     { "slug": "add-a-crypto-wallet", "title": "Add a crypto wallet account", "parent": "investments-and-crypto" },
     { "slug": "add-an-exchange-account", "title": "Add an exchange account", "parent": "investments-and-crypto" },
     { "slug": "manage-crypto-tokens", "title": "Manage crypto tokens, discovered tokens, and spam", "parent": "investments-and-crypto" },
-    { "slug": "get-a-cryptocompare-api-key", "title": "Get a CryptoCompare API key", "parent": "investments-and-crypto" },
 
     { "slug": "importing-data", "title": "Importing data", "parent": null },
     { "slug": "import-a-csv-file", "title": "Import a CSV file", "parent": "importing-data" },
