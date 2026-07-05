@@ -53,6 +53,99 @@ enum AccountPerformanceCalculator {
       now: now)
   }
 
+  // MARK: - Multi-instrument (unified account-detail path)
+
+  /// Computes account-level performance for the unified multi-instrument
+  /// account-detail path (crypto / exchange / standard / group hosts), which
+  /// carries a *set* of account ids rather than a single account.
+  ///
+  /// **Group boundary rule.** A transaction contributes external cash flows
+  /// only when it touches exactly one member of `accountIds` (one member ⇒
+  /// external counterparty; ≥2 members ⇒ an internal transfer between group
+  /// members, excluded). This mirrors
+  /// `PositionsHistoryBuilder.foldContributions`, so the tile's
+  /// `totalContributions` and the chart's contribution baseline never
+  /// disagree. For a single-account host (`accountIds.count == 1`) the rule
+  /// reduces to the single-account boundary-crossing predicate.
+  ///
+  /// **Graceful degradation (Rule 11).** `currentValue` is aggregated from the
+  /// already-valued `valuedPositions` (no further conversion), so it survives
+  /// even when the flow history cannot be converted. Two degraded shapes both
+  /// return `currentValue` with every other field `nil` — so the P&L and
+  /// annualised-return tiles hide rather than mislead:
+  ///   1. **No external flows** — a wallet funded solely by on-chain receives
+  ///      / airdrops has no known cost basis. Unlike the single-account
+  ///      `compute`, this path does NOT treat the whole balance as profit
+  ///      (that would paint an airdrop wallet's entire value as gain).
+  ///   2. **Flow conversion failed** — a rate lookup for a historical flow
+  ///      threw; contributions are unavailable, but the current value is not.
+  ///
+  /// Throws only `CancellationError` (propagated so a superseded valuator pass
+  /// abandons cleanly); every other failure degrades in place.
+  static func computeMultiInstrument(
+    accountIds: Set<UUID>,
+    transactions: [Transaction],
+    valuedPositions: [ValuedPosition],
+    profileCurrency: Instrument,
+    conversionService: any InstrumentConversionService,
+    now: Date = Date()
+  ) async throws -> AccountPerformance {
+    let currentValue = aggregatedValue(of: valuedPositions, in: profileCurrency)
+    let flows: [CashFlow]
+    do {
+      flows = try await extractGroupFlows(
+        from: transactions,
+        accountIds: accountIds,
+        profileCurrency: profileCurrency,
+        conversionService: conversionService)
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch {
+      logger.warning(
+        "Multi-instrument cash-flow conversion failed; showing current value only: \(error.localizedDescription, privacy: .public)"
+      )
+      return .currentValueOnly(currentValue, in: profileCurrency)
+    }
+    guard !flows.isEmpty else {
+      return .currentValueOnly(currentValue, in: profileCurrency)
+    }
+    return assemble(
+      flows: flows,
+      currentValue: currentValue,
+      profileCurrency: profileCurrency,
+      now: now)
+  }
+
+  /// Group-aware cash-flow extraction: applies the single-member-touch rule
+  /// (see `computeMultiInstrument`) then delegates the per-leg amount to the
+  /// shared `AccountCashFlows.flowAmounts(for:)` so the boundary-crossing +
+  /// on-date conversion logic lives in exactly one place. Per-leg `CashFlow`
+  /// granularity is preserved; all legs of a transaction date at
+  /// `transaction.date`.
+  private static func extractGroupFlows(
+    from transactions: [Transaction],
+    accountIds: Set<UUID>,
+    profileCurrency: Instrument,
+    conversionService: any InstrumentConversionService
+  ) async throws -> [CashFlow] {
+    var flows: [CashFlow] = []
+    let sorted = transactions.sorted { $0.date < $1.date }
+    for transaction in sorted {
+      let membersTouched = Set(transaction.legs.compactMap(\.accountId))
+        .intersection(accountIds)
+      guard membersTouched.count == 1, let member = membersTouched.first else { continue }
+      let amounts = try await AccountCashFlows.flowAmounts(
+        for: transaction,
+        accountId: member,
+        hostCurrency: profileCurrency,
+        service: conversionService)
+      for amount in amounts {
+        flows.append(CashFlow(date: transaction.date, amount: amount))
+      }
+    }
+    return flows
+  }
+
   // MARK: - Manual valuation
 
   /// Manual-valuation accounts (the legacy path): cash flows are derived
