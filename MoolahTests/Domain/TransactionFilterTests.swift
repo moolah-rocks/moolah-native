@@ -37,6 +37,12 @@ struct TransactionFilterTests {
     #expect(filter.hasActiveFilters == true)
   }
 
+  @Test("Filter with uncategorizedLegType is active")
+  func testFilterWithUncategorizedLegTypeIsActive() {
+    let filter = TransactionFilter(uncategorizedLegType: .expense)
+    #expect(filter.hasActiveFilters == true)
+  }
+
   @Test("Filter with non-empty accountIds is active")
   func testFilterWithAccountIdsIsActive() {
     let filter = TransactionFilter(accountIds: [UUID()])
