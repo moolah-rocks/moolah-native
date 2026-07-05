@@ -114,11 +114,12 @@ struct AccountPerformanceTiles: View {
       }
     }
     .accessibilityLabel(annualisedReturnAccessibilityLabel)
-    // Placed on this combined leaf (not a transparent container) so the
-    // identifier survives the outer `chartPane` parent's propagation.
-    // The `Tile` uses `.accessibilityElement(children: .combine)` which
+    // The `Tile` uses `.accessibilityElement(children: .combine)`, which
     // creates an opaque node with its own XCUI identity — unlike a plain
-    // `Text`, which inherits the nearest ancestor identifier instead.
+    // `Text`, which inherits the nearest ancestor identifier instead — so
+    // this identifier attaches to that leaf. The outer `chartPane` wrapper
+    // uses `.accessibilityElement(children: .contain)` to stop any ancestor
+    // identifier from propagating into this subtree.
     .accessibilityIdentifier(UITestIdentifiers.AccountDetail.performanceTiles)
 
     if performance.annualisedReturn == nil {

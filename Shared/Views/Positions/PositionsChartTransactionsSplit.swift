@@ -152,13 +152,23 @@ struct PositionsChartTransactionsSplit<Transactions: View, Positions: View, Char
 
   // MARK: - Shared pane wrappers
 
+  // `.accessibilityElement(children: .contain)` turns each wrapper into a
+  // single accessibility container carrying the pane identifier, while its
+  // descendants keep their own identities. Without it, a bare
+  // `.accessibilityIdentifier` on a container propagates down and stamps the
+  // pane id onto every descendant leaf — which overrode the `performanceTiles`
+  // identifier on the Annualised Return tile (it surfaced as `chartPane`
+  // instead). Containing the children lets both the pane id and the inner
+  // `performanceTiles` id surface as distinct, queryable elements.
   private var positionsPane: some View {
     positions()
+      .accessibilityElement(children: .contain)
       .accessibilityIdentifier(UITestIdentifiers.AccountDetail.positionsPane)
   }
 
   private var chartPane: some View {
     chart()
+      .accessibilityElement(children: .contain)
       .accessibilityIdentifier(UITestIdentifiers.AccountDetail.chartPane)
   }
 
