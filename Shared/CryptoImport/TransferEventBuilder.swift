@@ -79,12 +79,20 @@ struct TransferEventBuilder: Sendable {
   /// txs). Each signed tx still paid gas; the builder emits a gas-leg-only
   /// transaction for every such hash. Defaults to `[]` so existing callers
   /// that don't supply Blockscout data remain unaffected.
+  ///
+  /// `prefetchedReceipts` seeds the internal receipt cache with receipts
+  /// the caller already fetched — e.g. `WalletSyncEngine`'s
+  /// `WrapUnwrapDetector` pass fetches the receipt for an outbound wrap
+  /// candidate, which is also the hash's gas-leg receipt. Seeding here
+  /// means the coalescer skips re-fetching that hash. Defaults to `[:]`
+  /// so existing callers are unaffected.
   func build(
     transfers: [AlchemyTransfer],
     account: Account,
     services: BuilderServices,
     importOrigin: ImportOrigin,
-    signedGasTxs: [SignedGasTx] = []
+    signedGasTxs: [SignedGasTx] = [],
+    prefetchedReceipts: [String: AlchemyTransactionReceipt] = [:]
   ) async throws -> [BuiltTransaction] {
     let chain = services.chain
     let alchemy = services.alchemy
@@ -117,7 +125,8 @@ struct TransferEventBuilder: Sendable {
       transfers: transfers,
       signedGasTxs: signedGasTxs,
       context: context,
-      alchemy: alchemy)
+      alchemy: alchemy,
+      prefetchedReceipts: prefetchedReceipts)
   }
 
   // MARK: - Internals

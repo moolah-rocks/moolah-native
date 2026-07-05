@@ -25,6 +25,13 @@ enum TransferReceiptCoalescer {
   /// failed txs); deduplicated against and appended after the outbound
   /// hashes from `groups`, preserving order.
   ///
+  /// `prefetched` seeds the result with receipts the caller already
+  /// fetched this build pass (e.g. `WrapUnwrapDetector` fetches the
+  /// receipt for an outbound wrap candidate, which is also that hash's
+  /// gas-leg receipt) — any hash present in `prefetched` is excluded from
+  /// the fetch set entirely, so each unique hash's receipt is fetched at
+  /// most once per `WalletSyncEngine.build` pass.
+  ///
   /// Per-receipt fetch failures (network blip, rate limit on a single
   /// hash, malformed response) log and are dropped from the returned
   /// dictionary; affected events ship without a gas leg. This keeps a
@@ -37,16 +44,18 @@ enum TransferReceiptCoalescer {
     extraSignedHashes: [String] = [],
     walletAddress: String,
     chain: ChainConfig,
-    alchemy: any ChainDataClient
+    alchemy: any ChainDataClient,
+    prefetched: [String: AlchemyTransactionReceipt] = [:]
   ) async throws -> [String: AlchemyTransactionReceipt] {
     var hashes = outboundHashes(in: groups, walletAddress: walletAddress)
     var seen = Set(hashes)
     for hash in extraSignedHashes where seen.insert(hash).inserted {
       hashes.append(hash)
     }
-    guard !hashes.isEmpty else { return [:] }
-    var receipts: [String: AlchemyTransactionReceipt] = [:]
-    receipts.reserveCapacity(hashes.count)
+    hashes.removeAll { prefetched[$0] != nil }
+    var receipts = prefetched
+    guard !hashes.isEmpty else { return receipts }
+    receipts.reserveCapacity(hashes.count + prefetched.count)
     try await withThrowingTaskGroup(of: AlchemyTransactionReceipt?.self) { group in
       for hash in hashes {
         group.addTask {

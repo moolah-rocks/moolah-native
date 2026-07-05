@@ -119,6 +119,10 @@ struct WalletSyncEngineBlockscoutTests {
     #expect(ethLeg.instrument == ChainConfig.ethereum.nativeInstrument)
     #expect(ethLeg.quantity < 0)  // ETH leaves the wallet
     #expect(wethLeg.quantity > 0)  // WETH is credited back
+    // The wrap's receipt is fetched once by WrapUnwrapDetector and shared
+    // with TransferEventBuilder's gas-leg coalescer via prefetchedReceipts
+    // — it must not be fetched a second time for the same outbound hash.
+    #expect(alchemy.recordedReceiptCalls.filter { $0 == "0xwrap" }.count == 1)
   }
 
   @Test("Blockscout receives reorg-adjusted fromBlock from prior sync state")

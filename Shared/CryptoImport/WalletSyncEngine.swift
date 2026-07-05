@@ -133,7 +133,7 @@ struct WalletSyncEngine: Sendable {
     let alchemyAll = try await alchemy.getAssetTransfers(
       chain: chain, walletAddress: walletAddress, fromBlock: fromBlock)
     let transfers =
-      adapted.transfers + wrapUnwrap + alchemyAll.filter { $0.category == .erc20 }
+      adapted.transfers + wrapUnwrap.rows + alchemyAll.filter { $0.category == .erc20 }
     try Task.checkCancellation()
 
     // 4. Head block over the merged set (Blockscout blockNum included).
@@ -149,7 +149,8 @@ struct WalletSyncEngine: Sendable {
       services: BuilderServices(
         chain: chain, discovery: discovery, alchemy: alchemy),
       importOrigin: importOrigin,
-      signedGasTxs: adapted.signedGasTxs)
+      signedGasTxs: adapted.signedGasTxs,
+      prefetchedReceipts: wrapUnwrap.receipts)
 
     // 6. Observability for wire-format regressions: if Alchemy returned
     //    rows but every one dropped at the builder, that's the symptom

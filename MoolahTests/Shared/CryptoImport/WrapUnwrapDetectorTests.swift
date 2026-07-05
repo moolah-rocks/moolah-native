@@ -39,11 +39,11 @@ struct WrapUnwrapDetectorTests {
     let stub = StubChainClient(receipts: ["0xwrap": receipt])
     let detector = WrapUnwrapDetector(chainClient: stub)
 
-    let rows = try await detector.detect(
+    let result = try await detector.detect(
       nativeTransfers: [nativeSend], chain: .ethereum, walletAddress: Self.wallet)
 
-    #expect(rows.count == 1)
-    let row = try #require(rows.first)
+    #expect(result.rows.count == 1)
+    let row = try #require(result.rows.first)
     #expect(row.category == .erc20)
     #expect(row.from == Self.weth)
     #expect(row.to == Self.wallet)
@@ -54,6 +54,7 @@ struct WrapUnwrapDetectorTests {
     #expect(row.blockNum == "0x10")
     #expect(row.metadata.blockTimestamp == Self.blockTimestamp)
     #expect(await stub.receiptFetchCount == 1)
+    #expect(result.receipts["0xwrap"]?.hash == "0xwrap")
   }
 
   @Test
@@ -76,11 +77,11 @@ struct WrapUnwrapDetectorTests {
     let stub = StubChainClient(receipts: ["0xunwrap": receipt])
     let detector = WrapUnwrapDetector(chainClient: stub)
 
-    let rows = try await detector.detect(
+    let result = try await detector.detect(
       nativeTransfers: [nativeReceive], chain: .ethereum, walletAddress: Self.wallet)
 
-    #expect(rows.count == 1)
-    let row = try #require(rows.first)
+    #expect(result.rows.count == 1)
+    let row = try #require(result.rows.first)
     #expect(row.category == .erc20)
     #expect(row.from == Self.wallet)
     #expect(row.to == Self.weth)
@@ -100,10 +101,11 @@ struct WrapUnwrapDetectorTests {
     let stub = StubChainClient(receipts: [:])
     let detector = WrapUnwrapDetector(chainClient: stub)
 
-    let rows = try await detector.detect(
+    let result = try await detector.detect(
       nativeTransfers: [plainSend], chain: .ethereum, walletAddress: Self.wallet)
 
-    #expect(rows.isEmpty)
+    #expect(result.rows.isEmpty)
+    #expect(result.receipts.isEmpty)
     #expect(await stub.receiptFetchCount == 0)
   }
 
