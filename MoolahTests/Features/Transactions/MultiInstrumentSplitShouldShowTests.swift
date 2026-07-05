@@ -3,24 +3,23 @@ import Testing
 
 @testable import Moolah
 
-/// Tests for `MultiInstrumentPositionsSplitModifier.shouldShow`. The
-/// modifier wraps a transaction list in a positions/transactions split
-/// only when the account has positions worth surfacing alongside the
-/// transactions. Two inputs feed the decision:
+/// Tests for `AccountDetailLayout.hasNonHostHoldings`. The unified
+/// account-detail surface shows a Positions tab / pinned pane only
+/// when the account has positions worth surfacing. Two inputs feed
+/// the decision:
 ///
 /// - Raw `[Position]` from the repository (pre-valuation).
 /// - The valuated `PositionsViewInput`, populated asynchronously by
 ///   `PositionsValuator` after the modifier mounts. The valuator drops
 ///   `.knownZero` (`.unpriced` / `.spam` crypto) entries, so its
-///   `shouldHide` agrees with what `PositionsView` will actually
+///   `shouldHide` agrees with what the positions table will actually
 ///   render.
 ///
 /// Once `positionsInput` is available it is authoritative: relying on
-/// the raw heuristic alone could leave the split allocated for content
-/// the inner `PositionsView` will refuse to render — manifesting as a
-/// large blank section above the transactions list (the case fixed by
-/// this suite).
-@Suite("MultiInstrumentPositionsSplitModifier.shouldShow")
+/// the raw heuristic alone could leave the Positions tab allocated for
+/// content the table will refuse to render — manifesting as a blank
+/// pane (the case fixed by this suite).
+@Suite("AccountDetailLayout.hasNonHostHoldings")
 struct MultiInstrumentSplitShouldShowTests {
   let aud = Instrument.AUD
   let usd = Instrument.USD
@@ -60,7 +59,7 @@ struct MultiInstrumentSplitShouldShowTests {
       historicalValue: nil)
     #expect(input.shouldHide)
     #expect(
-      !MultiInstrumentPositionsSplitModifier.shouldShow(
+      !AccountDetailLayout.hasNonHostHoldings(
         rawPositions: rawPositions, hostCurrency: eth, positionsInput: input))
   }
 
@@ -82,7 +81,7 @@ struct MultiInstrumentSplitShouldShowTests {
       ],
       historicalValue: nil)
     #expect(
-      MultiInstrumentPositionsSplitModifier.shouldShow(
+      AccountDetailLayout.hasNonHostHoldings(
         rawPositions: [
           Position(instrument: aud, quantity: 1_000),
           Position(instrument: usd, quantity: 200),
@@ -98,7 +97,7 @@ struct MultiInstrumentSplitShouldShowTests {
   @Test("falls back to raw heuristic when positionsInput is nil — multi-instrument shows split")
   func fallbackShowsForMultiInstrumentRaw() {
     #expect(
-      MultiInstrumentPositionsSplitModifier.shouldShow(
+      AccountDetailLayout.hasNonHostHoldings(
         rawPositions: [
           Position(instrument: aud, quantity: 1_000),
           Position(instrument: usd, quantity: 200),
@@ -112,7 +111,7 @@ struct MultiInstrumentSplitShouldShowTests {
     "falls back to raw heuristic when positionsInput is nil — single host instrument hides split")
   func fallbackHidesForHostOnlyRaw() {
     #expect(
-      !MultiInstrumentPositionsSplitModifier.shouldShow(
+      !AccountDetailLayout.hasNonHostHoldings(
         rawPositions: [Position(instrument: aud, quantity: 1_000)],
         hostCurrency: aud, positionsInput: nil))
   }
@@ -121,7 +120,7 @@ struct MultiInstrumentSplitShouldShowTests {
   @Test("falls back to raw heuristic when positionsInput is nil — empty positions hides split")
   func fallbackHidesForEmptyRaw() {
     #expect(
-      !MultiInstrumentPositionsSplitModifier.shouldShow(
+      !AccountDetailLayout.hasNonHostHoldings(
         rawPositions: [], hostCurrency: aud, positionsInput: nil))
   }
 
@@ -131,7 +130,7 @@ struct MultiInstrumentSplitShouldShowTests {
   @Test("falls back to raw heuristic when positionsInput is nil — zero-qty rows are ignored")
   func fallbackIgnoresZeroQuantities() {
     #expect(
-      !MultiInstrumentPositionsSplitModifier.shouldShow(
+      !AccountDetailLayout.hasNonHostHoldings(
         rawPositions: [
           Position(instrument: aud, quantity: 1_000),
           Position(instrument: usd, quantity: 0),
