@@ -117,6 +117,25 @@ struct AnalysisData: Sendable {
 struct CategoryBalances: Sendable {
   let byCategory: [UUID: InstrumentAmount]
   let uncategorised: InstrumentAmount?
+
+  /// True when one or more rows contributing to this result could not be priced due to a
+  /// transient conversion error (e.g. crypto prices not yet warmed — see
+  /// `ConversionFailureClassifier.isTransient` and `guides/INSTRUMENT_CONVERSION_GUIDE.md`
+  /// Rule 11). The skipped row's contribution is missing from both `byCategory` and
+  /// `uncategorised`, so `byCategory` / `uncategorised` totals may be understated; callers
+  /// should surface this state rather than presenting them as complete.
+  ///
+  /// This is a *whole-result* flag, not per-category: a transient skip on any one category
+  /// marks the entire result unavailable. That is coarser than Rule 11's "keep independently
+  /// computable sibling totals rendering" ideal (the sibling `ExpenseBreakdown` scopes its
+  /// flag per-month). Refining to per-category unavailability requires reshaping this return
+  /// type and the ReportingStore/view plumbing that consumes it, deferred to the later
+  /// Reports-surfacing step; this data-layer step establishes the honest "something here is
+  /// unavailable" signal first. `var` (not `let`) so
+  /// the synthesized memberwise init keeps its default of `false` as a parameter default —
+  /// a `let` with an inline default is fixed at that value and drops out of the
+  /// memberwise init entirely, which would make every pre-existing call site un-updatable.
+  var hasUnavailableData: Bool = false
 }
 
 /// Result of `fetchCategoryBalancesByType`: per-category income/expense totals for the
@@ -130,6 +149,13 @@ struct CategoryBalancesByType: Sendable {
   let expense: [UUID: InstrumentAmount]
   let incomeUncategorised: InstrumentAmount?
   let expenseUncategorised: InstrumentAmount?
+
+  /// Per-column mirrors of `CategoryBalances.hasUnavailableData` (Strict Rule 11, #1077) — set
+  /// from the `income` / `expense` `fetchCategoryBalances` call respectively, so a transient
+  /// conversion failure in one column doesn't mark the other unavailable. `var` (not `let`)
+  /// for the same synthesized-memberwise-init reason as `CategoryBalances.hasUnavailableData`.
+  var incomeHasUnavailableData: Bool = false
+  var expenseHasUnavailableData: Bool = false
 }
 
 extension AnalysisRepository {
@@ -149,7 +175,9 @@ extension AnalysisRepository {
       income: income.byCategory,
       expense: expense.byCategory,
       incomeUncategorised: income.uncategorised,
-      expenseUncategorised: expense.uncategorised
+      expenseUncategorised: expense.uncategorised,
+      incomeHasUnavailableData: income.hasUnavailableData,
+      expenseHasUnavailableData: expense.hasUnavailableData
     )
   }
 

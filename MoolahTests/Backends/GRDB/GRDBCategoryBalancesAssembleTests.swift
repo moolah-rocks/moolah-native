@@ -131,4 +131,95 @@ struct GRDBCategoryBalancesAssembleTests {
     #expect(visited.snapshot().isEmpty)
     #expect(conversionService.callCount == 1)
   }
+
+  @Test("transient conversion failures degrade per-row — no rethrow")
+  func transientFailuresDoNotRethrow() async throws {
+    let aggregation = makeAggregation()
+    let conversionService = FakeConversionService.perCall { _ in
+      .failure(
+        WalletSyncError(provider: .binance, kind: .network(underlyingDescription: "cooldown")))
+    }
+    let failures = FailureLog()
+    let handlers = GRDBAnalysisRepository.CategoryBalancesHandlers(
+      handleUnparseableDay: { _ in },
+      handleConversionFailure: { _, _ in failures.append(0) })
+
+    let result = try await GRDBAnalysisRepository.assembleCategoryBalances(
+      aggregation: aggregation,
+      targetInstrument: .defaultTestInstrument,
+      conversionService: conversionService,
+      handlers: handlers)
+
+    // Every row was transient → none threw, none contributed. The result
+    // renders as empty (no rows survived) but is flagged unavailable —
+    // Strict Rule 11 (#1077): a transient skip flags the whole result
+    // unavailable rather than silently presenting an empty/zeroed total
+    // as if it were complete.
+    #expect(result.byCategory.isEmpty)
+    #expect(result.uncategorised == nil)
+    #expect(result.hasUnavailableData == true)
+    // Handler still fired for every failing row (diagnostics preserved).
+    #expect(!failures.snapshot().isEmpty)
+  }
+
+  @Test("structural conversion failures still rethrow")
+  func structuralFailuresRethrow() async throws {
+    let aggregation = makeAggregation()
+    let conversionService = FakeConversionService.perCall { _ in
+      .failure(ConversionError.unsupportedConversion(from: "A", to: "B"))
+    }
+    let handlers = GRDBAnalysisRepository.CategoryBalancesHandlers(
+      handleUnparseableDay: { _ in }, handleConversionFailure: { _, _ in })
+
+    await #expect(throws: ConversionError.self) {
+      _ = try await GRDBAnalysisRepository.assembleCategoryBalances(
+        aggregation: aggregation,
+        targetInstrument: .defaultTestInstrument,
+        conversionService: conversionService,
+        handlers: handlers)
+    }
+  }
+
+  @Test("one transient row is skipped while sibling categories still render")
+  func transientRowSkippedSiblingsStillRender() async throws {
+    // Row 0 (categoryA) is transient; rows 1-2 (categoryB, categoryC)
+    // succeed. Only categoryA's contribution should be missing —
+    // categoryB/categoryC must still render, and the whole result is
+    // flagged unavailable so the caller knows it's incomplete.
+    let aggregation = makeAggregation()
+    let conversionService = FakeConversionService.perCall { index in
+      index == 0
+        ? .failure(
+          WalletSyncError(provider: .binance, kind: .network(underlyingDescription: "cooldown")))
+        : .success(-1)
+    }
+    let handlers = GRDBAnalysisRepository.CategoryBalancesHandlers(
+      handleUnparseableDay: { _ in }, handleConversionFailure: { _, _ in })
+
+    let result = try await GRDBAnalysisRepository.assembleCategoryBalances(
+      aggregation: aggregation,
+      targetInstrument: .defaultTestInstrument,
+      conversionService: conversionService,
+      handlers: handlers)
+
+    #expect(result.byCategory.count == 2)
+    #expect(result.hasUnavailableData == true)
+  }
+
+  @Test("all rows converting successfully leaves hasUnavailableData false")
+  func allSuccessLeavesHasUnavailableDataFalse() async throws {
+    let aggregation = makeAggregation()
+    let conversionService = FakeConversionService.perCall { _ in .success(-1) }
+    let handlers = GRDBAnalysisRepository.CategoryBalancesHandlers(
+      handleUnparseableDay: { _ in }, handleConversionFailure: { _, _ in })
+
+    let result = try await GRDBAnalysisRepository.assembleCategoryBalances(
+      aggregation: aggregation,
+      targetInstrument: .defaultTestInstrument,
+      conversionService: conversionService,
+      handlers: handlers)
+
+    #expect(result.byCategory.count == 3)
+    #expect(result.hasUnavailableData == false)
+  }
 }

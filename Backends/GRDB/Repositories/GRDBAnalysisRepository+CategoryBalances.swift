@@ -230,16 +230,20 @@ extension GRDBAnalysisRepository {
   /// Mirrors `assembleExpenseBreakdown`'s per-row error contract:
   /// `handleUnparseableDay` and `handleConversionFailure` are invoked
   /// per failing row so each failure surfaces individually in
-  /// diagnostics; the walk continues processing remaining rows then
-  /// re-throws the first conversion error after the walk so the
-  /// function preserves its existing "throws on conversion error"
-  /// contract while still delivering the per-row detail required by
-  /// `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11. A `CancellationError` is
-  /// rethrown immediately (it propagates straight out of the batch call)
-  /// and never folded into the conversion-failure path. Categorised and
-  /// uncategorised rows share this one batch conversion, so a conversion
-  /// failure fails the whole call exactly as before this field existed —
-  /// there is no partial-failure surface between the two buckets.
+  /// diagnostics. Strict Rule 11 (#1077): a *transient* failure
+  /// (`ConversionFailureClassifier.isTransient`) degrades per-row — the
+  /// row's contribution is skipped (added to neither `byCategory` nor
+  /// `uncategorised`) and `hasUnavailableData` is flagged on the result
+  /// — while a *structural* failure preserves the loud rethrow that
+  /// signals a genuinely incomplete result: the walk continues
+  /// processing remaining rows then re-throws the first structural
+  /// error after the walk. A `CancellationError` is rethrown immediately
+  /// (it propagates straight out of the batch call) and never folded
+  /// into the conversion-failure path. Categorised and uncategorised
+  /// rows share this one batch conversion, so a structural failure
+  /// still fails the whole call exactly as before this field existed —
+  /// there is no partial-failure surface between the two buckets for
+  /// structural errors; only transient errors degrade per-row.
   ///
   /// All rows' `(qty, instrument, day)` conversions resolve in a single
   /// `convertResultBatch(_:)` — the row order of the request list is
@@ -264,6 +268,7 @@ extension GRDBAnalysisRepository {
     var byCategory: [UUID: InstrumentAmount] = [:]
     var uncategorised: InstrumentAmount?
     var firstConversionError: Error?
+    var hasUnavailableData = false
     for (row, outcome) in zip(plan.parsedRows, outcomes) {
       let amount: InstrumentAmount
       switch outcome {
@@ -279,7 +284,15 @@ extension GRDBAnalysisRepository {
           categoryId: row.categoryId,
           instrumentId: row.instrumentId)
         handlers.handleConversionFailure(error, context)
-        if firstConversionError == nil {
+        // Transient price-availability failures (a throttled provider, a
+        // day not yet warmed — issue #1075) degrade per-row: skip this
+        // row's contribution and render the rest. Only a *structural*
+        // failure preserves the loud rethrow that signals a genuinely
+        // incomplete result. Strict Rule 11 (#1077): a transient skip
+        // flags the whole result unavailable.
+        if ConversionFailureClassifier.isTransient(error) {
+          hasUnavailableData = true
+        } else if firstConversionError == nil {
           firstConversionError = error
         }
         continue
@@ -293,11 +306,13 @@ extension GRDBAnalysisRepository {
       }
     }
     if let firstConversionError {
-      // Preserve the existing observable behaviour (throws on the first
-      // conversion error) while having logged every per-row failure.
+      // Preserve the existing observable behaviour (throws on a
+      // structural conversion error) while having logged every per-row
+      // failure.
       throw firstConversionError
     }
-    return CategoryBalances(byCategory: byCategory, uncategorised: uncategorised)
+    return CategoryBalances(
+      byCategory: byCategory, uncategorised: uncategorised, hasUnavailableData: hasUnavailableData)
   }
 
   /// Parse every row's day, resolve its source instrument, and build the
