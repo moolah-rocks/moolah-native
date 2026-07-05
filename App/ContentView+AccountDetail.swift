@@ -16,15 +16,21 @@ extension ContentView {
           investmentStore: investmentStore,
           transactionStore: transactionStore)
       case .crypto:
-        CryptoWalletAccountView(
-          account: account,
+        AccountDetailView(
+          title: account.name,
+          transactionFilter: TransactionFilter(accountId: account.id),
+          positions: accountStore.positions(for: account.id),
+          hostCurrency: account.instrument,
+          accountIds: [account.id],
+          conversionService: session.backend.conversionService,
+          registrationsVersion: session.cryptoTokenStore?.registrationsVersion ?? 0,
+          accountChainId: account.chainId,
+          alwaysShowsFullSurface: false,
+          syncedHeaderAccount: account,
           accounts: accountStore.accounts,
           categories: categoryStore.categories,
           earmarks: earmarkStore.earmarks,
-          transactionStore: transactionStore,
-          positions: accountStore.positions(for: account.id),
-          conversionService: session.backend.conversionService,
-          session: session)
+          transactionStore: transactionStore)
       case .exchange:
         ExchangeAccountView(
           account: account,
