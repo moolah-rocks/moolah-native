@@ -14,12 +14,17 @@ import XCTest
 ///     is `false`, so only the toggle pane renders (no Positions surface).
 @MainActor
 final class AccountDetailSplitTests: MoolahUITestCase {
-  /// A multi-instrument account pins the Positions pane and defaults the
-  /// bottom toggle to Transactions.
-  func testMultiInstrumentAccountPinsPositionsAndDefaultsToTransactions() throws {
+  /// A multi-instrument account pins the Positions pane above the bottom toggle.
+  func testMultiInstrumentAccountPinsPositionsPane() throws {
     let app = launch(seed: .accountDetailLayout)
     app.sidebar.switchToAccount(.multiCurrency)
     app.accountDetail.expectPositionsPanePinned()
+  }
+
+  /// A multi-instrument account defaults the bottom toggle to Transactions.
+  func testMultiInstrumentAccountDefaultsToTransactions() throws {
+    let app = launch(seed: .accountDetailLayout)
+    app.sidebar.switchToAccount(.multiCurrency)
     app.accountDetail.expectTransactionsDefault()
   }
 

@@ -77,6 +77,7 @@ struct PositionsChartTransactionsSplit<Transactions: View, Positions: View, Char
         Divider()
 
         selectedContent
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
       }
       // If holdings disappear (e.g. the last non-host position is sold or
       // flagged spam) while the Positions tab is selected, fall back to
@@ -90,7 +91,7 @@ struct PositionsChartTransactionsSplit<Transactions: View, Positions: View, Char
 
     @ViewBuilder private var selectedContent: some View {
       switch selectedTab {
-      case .transactions: transactionsPane
+      case .transactions: transactions()
       case .positions: positionsPane
       case .chart: chartPane
       }
@@ -134,17 +135,20 @@ struct PositionsChartTransactionsSplit<Transactions: View, Positions: View, Char
 
         Divider()
 
-        switch bottomTab {
-        case .transactions:
-          transactionsPane
-            .environment(\.transactionScrollCollapse, scrollCollapse)
-        case .chart:
-          chartPane
-        case .positions:
-          // Not reachable — the bottom toggle only offers Transactions /
-          // Chart; positions is the pinned top pane.
-          EmptyView()
+        Group {
+          switch bottomTab {
+          case .transactions:
+            transactions()
+              .environment(\.transactionScrollCollapse, scrollCollapse)
+          case .chart:
+            chartPane
+          case .positions:
+            // Not reachable — the bottom toggle only offers Transactions /
+            // Chart; positions is the pinned top pane.
+            EmptyView()
+          }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
       }
     }
   #endif
@@ -159,11 +163,6 @@ struct PositionsChartTransactionsSplit<Transactions: View, Positions: View, Char
   private var chartPane: some View {
     chart()
       .accessibilityIdentifier(UITestIdentifiers.AccountDetail.chartPane)
-  }
-
-  private var transactionsPane: some View {
-    transactions()
-      .accessibilityIdentifier(UITestIdentifiers.AccountDetail.transactionsPane)
   }
 
   private func label(for tab: AccountDetailTab) -> String {

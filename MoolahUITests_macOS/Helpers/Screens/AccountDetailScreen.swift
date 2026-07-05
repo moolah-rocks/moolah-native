@@ -65,7 +65,7 @@ struct AccountDetailScreen {
   /// pane to appear.
   func toggleToChart(timeout: TimeInterval = 10) {
     Trace.record(#function)
-    let segment = app.pickerSegment(label: "Chart")
+    let segment = app.pickerSegment(label: UITestIdentifiers.AccountDetail.chartSegmentLabel)
     if !segment.waitForExistence(timeout: timeout) {
       Trace.recordFailure("Chart segment button did not appear")
       XCTFail(
@@ -85,7 +85,7 @@ struct AccountDetailScreen {
   /// the transaction list to reappear.
   func toggleToTransactions(timeout: TimeInterval = 10) {
     Trace.record(#function)
-    let segment = app.pickerSegment(label: "Transactions")
+    let segment = app.pickerSegment(label: UITestIdentifiers.AccountDetail.transactionsSegmentLabel)
     if !segment.waitForExistence(timeout: timeout) {
       Trace.recordFailure("Transactions segment button did not appear")
       XCTFail(
