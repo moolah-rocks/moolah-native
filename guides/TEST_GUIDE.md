@@ -92,6 +92,16 @@ A test that requires retries is hiding a missing post-condition wait somewhere u
 
 **Why this matters more than it looks.** Every retry mechanism in a test suite gradually erodes trust in the suite as a whole. Once "the test passes on rerun" is an accepted outcome, real failures and timing flakes become indistinguishable, and reviewers stop investigating. Holding the line on "wait for a real condition, fail loudly when it doesn't happen" is how the suite stays trustworthy.
 
+### Zero-tolerance flake policy
+
+**Flaky tests are not acceptable — fix the root cause.** A test that fails sometimes is a broken test; there is no such thing as a "known unrelated flake" that is safe to ignore or work around.
+
+- **Never `gh run rerun` to get a green.** Re-running CI to skip past a failure hides the defect and silently ships broken code. If a CI run fails, diagnose and fix it.
+- **Never mark a failure as "known flaky" and merge anyway.** Every unresolved flake makes the next real failure harder to spot.
+- **Fix the root cause, not the symptom.** Race conditions get a deterministic handshake (see `WalletSyncEngineTests` `CancellationHandshake`). Date-sensitive tests get fixed dates injected via a `now:` parameter. Tests that assume old behaviour get updated when production code intentionally changes.
+
+The merge queue will not tolerate a failing `Test` job regardless of the stated reason. Investigation and a deterministic fix are the only acceptable resolutions.
+
 ### Wait on the exact value you assert
 
 For reactive `@MainActor` store/service tests, poll the *whole asserted expression* — don't wait on a proxy and then read once. The "wait-then-read-once" shape (`await store.waitForNextEmission(matching: entityLoaded)` followed by a separate `#expect` on `convertedBalance`) is a flake: a racing observation pass can leave the separately-read value stale or `nil` in the gap. Derived/converted state often settles in a *later* async pass than the entities themselves, so wait on the converted value directly.

@@ -230,26 +230,30 @@ struct MultiInstrumentPositionsCoverageTests {
   // Two accounts each holding a different crypto instrument. The group's
   // `hostCurrency` is AUD. The last-day aggregate value must equal the sum
   // of each holding converted to AUD at the fixed per-instrument rate.
+  // Income (receive-only) legs are used so no host-currency cost leg is
+  // introduced — the test pins pure position value, not cost-adjusted balance.
   @Test("mixed-instrument group: aggregate last-day value equals sum converted to host")
   func mixedInstrumentGroupAggregatesInHostCurrency() async throws {
     let qtyBtc: Decimal = 1
     let qtyEth: Decimal = 5
     let rateBtc: Decimal = 50_000
     let rateEth: Decimal = 3_000
+    let externalA = UUID()
+    let externalB = UUID()
 
     let txns = [
       Transaction(
         date: date(daysAfterEpoch: 1),
         legs: [
-          TransactionLeg(accountId: accountA, instrument: btc, quantity: qtyBtc, type: .trade),
-          TransactionLeg(accountId: accountA, instrument: aud, quantity: -45_000, type: .trade),
+          TransactionLeg(accountId: accountA, instrument: btc, quantity: qtyBtc, type: .income),
+          TransactionLeg(accountId: externalA, instrument: btc, quantity: -qtyBtc, type: .expense),
         ]
       ),
       Transaction(
         date: date(daysAfterEpoch: 1),
         legs: [
-          TransactionLeg(accountId: accountB, instrument: eth, quantity: qtyEth, type: .trade),
-          TransactionLeg(accountId: accountB, instrument: aud, quantity: -12_000, type: .trade),
+          TransactionLeg(accountId: accountB, instrument: eth, quantity: qtyEth, type: .income),
+          TransactionLeg(accountId: externalB, instrument: eth, quantity: -qtyEth, type: .expense),
         ]
       ),
     ]

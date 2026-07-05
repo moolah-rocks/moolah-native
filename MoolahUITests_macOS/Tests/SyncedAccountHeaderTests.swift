@@ -14,8 +14,7 @@ import XCTest
 ///   - a `wallet_sync_state` row with `lastErrorJson` set to a
 ///     `WalletSyncError.network` payload so
 ///     `SyncedAccountHeaderView.errorCaption` is non-nil on first render.
-///   - a test-local (non-iCloud-synced) Alchemy key override via
-///     `UITestSeedCryptoOverrides.alchemyKeyStore(for:)` so
+///   - a synthetic Alchemy key injected via `launchEnvironment` so that
 ///     `SyncedAccountHeaderLogic.hasCredential` evaluates to `true` after
 ///     the view's `.task` fires — preventing the missing-credential hint
 ///     from replacing the error caption.

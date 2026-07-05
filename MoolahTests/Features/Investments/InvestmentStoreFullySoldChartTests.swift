@@ -86,10 +86,12 @@ struct InvestmentStoreFullySoldChartTests {
 
   @Test("fully-sold account reports hasAnyHistoricalActivity even on a narrow range")
   func fullySoldAccountReportsActivityOnNarrowRange() async throws {
-    // Regression for the production bug: the user's last sale predates the
-    // default `.threeMonths` window, so `hasHistoricalSeries` is false. The
-    // view layer needs a range-independent signal to keep the chart
-    // populated on a narrow range — `hasAnyHistoricalActivity`.
+    // The sell in 2020 leaves a net AUD cash balance of +1_000 in `quantities`
+    // (PositionsHistoryBuilder now includes host-currency legs). That cash
+    // balance carries forward into the current `.threeMonths` window, so the
+    // history series IS non-empty. The view-layer `hasAnyHistoricalActivity`
+    // signal is the range-independent flag for non-fiat trade legs, and it
+    // remains true regardless of the time range.
     let (store, account) = try await makeFullySoldAccount()
     let input = try await store.loadAndBuildPositionsInput(
       account: account, profileCurrency: aud, range: .threeMonths)
@@ -98,8 +100,8 @@ struct InvestmentStoreFullySoldChartTests {
       input.shouldHide,
       "host-currency-only positions should still trigger shouldHide")
     #expect(
-      !input.hasHistoricalSeries,
-      "trades from 2020 fall outside .threeMonths so the series is empty")
+      input.hasHistoricalSeries,
+      "the net AUD cash from the 2020 sell persists into the narrow range")
     #expect(
       input.hasAnyHistoricalActivity,
       "the non-host trade legs make the account chart-worthy even on a narrow range")
