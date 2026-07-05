@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Builds the `(value, cost)` time series the chart in `PositionsView` plots.
+/// Builds the `(value, cost)` time series the chart in `PositionsChartPane` plots.
 ///
 /// **Cost basis line is exact.** Cost only changes on transaction events, so
 /// we walk transactions chronologically through `CostBasisEngine` once and

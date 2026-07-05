@@ -9,7 +9,7 @@ import SwiftUI
 ///
 /// Hosted at the top of the Chart tab (iOS) / the Chart companion in the
 /// resizable bottom pane (macOS) by `PositionsChartTransactionsSplit`, and
-/// reused as the top group of `PositionsView` for the investment path.
+/// reused as the top group of the positions layout for the investment path.
 ///
 /// `selection` is a binding (not local state) so a position-row tap in a
 /// sibling pane filters this chart to that asset. `PositionsChart` reads it;

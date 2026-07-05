@@ -3,7 +3,7 @@ import Foundation
 // `PositionsViewInput` assembly + trade-based cost-basis snapshotting
 // for `InvestmentStore`.
 extension InvestmentStore {
-  // MARK: - PositionsView Input
+  // MARK: - Positions Input
 
   /// Coordinates the two-step "load then build positions input" sequence
   /// that the `InvestmentAccountView` runs from its `.task` and
