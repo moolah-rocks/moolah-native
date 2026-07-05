@@ -153,12 +153,14 @@ extension UITestSeedHydrator {
     try row.upsert(database)
   }
 
-  /// Upserts a `wallet_sync_state` row for the given account. Idempotent
-  /// via `upsert` on the primary key. `lastErrorJson` must be valid JSON
-  /// (the table has a `json_valid` CHECK) or `nil` for no error.
-  ///
-  /// SAFETY: synchronous GRDB write inside a database.write block — same
-  /// constraint as all other upsert helpers in this file.
+  /// Upserts a `wallet_sync_state` row (`lastErrorJson` must be valid
+  /// JSON per the `json_valid` CHECK, or `nil`). Uses `save`, NOT
+  /// `upsert`: this table is `WITHOUT ROWID`, and GRDB's `upsert`
+  /// appends `RETURNING "rowid"` to fire `didInsert` — SQLite rejects
+  /// that on a rowid-less table (`no such column: "rowid"`), which
+  /// crashed the app at launch during seed hydration. `save` is the same
+  /// idempotent update-or-insert sans `RETURNING`, matching production's
+  /// `GRDBWalletSyncStateRepository.save`. SAFETY: sync GRDB write.
   static func upsertWalletSyncState(
     accountId: UUID,
     lastErrorJson: String?,
@@ -169,7 +171,7 @@ extension UITestSeedHydrator {
       lastSyncedBlockNumber: 0,
       lastSyncedAt: .distantPast,
       lastErrorJson: lastErrorJson)
-    try row.upsert(database)
+    try row.save(database)
   }
 
   struct EarmarkSpec {
