@@ -26,19 +26,15 @@ private struct TimePeriodHitTarget: ViewModifier {
 /// Combined investment account view showing summary panels, chart with valuations list,
 /// and an embedded transaction list.
 struct InvestmentAccountView: View {
-  /// Composite identity used to drive `.task(id:)`. Re-fires when either the
-  /// account changes (navigation) or the valuation mode changes (sync push
-  /// from another device, or the user-facing Picker once it ships) so
-  /// `loadAllData` always runs against the active mode.
+  /// Composite identity used to drive `.task(id:)`. Re-fires when the account
+  /// changes (navigation). Carrying `mode` is a safety-net: if a sync push
+  /// delivers a mode change while the view is still mounted, `loadAllData`
+  /// re-runs before the dispatch boundary swaps views.
   private struct LoadKey: Equatable {
     let id: UUID
     let mode: ValuationMode
   }
 
-  // Properties accessed by the sibling `InvestmentAccountView+Loading.swift`
-  // extension are `internal` (no `private`) — Swift's `private` is
-  // file-scoped, so a cross-file extension can't reach a `private` member
-  // even on the same type.
   static let logger = Logger(
     subsystem: "com.moolah.app", category: "InvestmentAccountView")
 
@@ -52,24 +48,17 @@ struct InvestmentAccountView: View {
   @Environment(ProfileSession.self) var session
   @State private var showingAddValue = false
   @State private var selectedTransaction: Transaction?
-  @State var positionsInput = PositionsViewInput(
-    title: "", hostCurrency: .AUD, positions: [], historicalValue: nil)
-  @State var positionsRange: PositionsTimeRange = .threeMonths
-  @State var isLoadingPositions = false
   /// Tracks whether `loadAllData` has run at least once for this account.
-  /// Gates the body so `legacyValuationsLayout` vs `positionTrackedLayout`
-  /// is chosen *after* `investmentStore.values` is known — otherwise the
-  /// branch flips from position-tracked to legacy mid-layout, tearing down
-  /// and re-mounting the embedded `TransactionListView` with its `.toolbar`,
-  /// which double-registers items in SwiftUI's AppKit toolbar bridge and
-  /// crashes Release builds on accounts that have legacy investment values
-  /// (e.g. Test Profile → Crypto).
+  /// Gates the body so `legacyValuationsLayout` is shown only after data is
+  /// available — without this, the embedded `TransactionListView` with its
+  /// `.toolbar` would mount before the store is ready, potentially
+  /// double-registering toolbar items in SwiftUI's AppKit toolbar bridge and
+  /// crashing Release builds.
   @State private var initialLoadComplete = false
 
-  /// Anchor VoiceOver moves to whenever the layout changes — initial-load
-  /// completion or a switch between `recordedValue` / `calculatedFromTrades`.
-  /// Without this, focus lingers on a button or row from the previous layout
-  /// and reads back unrelated content.
+  /// Anchor VoiceOver moves to on initial-load completion.
+  /// Without this, focus lingers on a stale element and reads back
+  /// unrelated content.
   @AccessibilityFocusState private var focusAnchor: InvestmentAccountFocusAnchor?
 
   var body: some View {
@@ -79,14 +68,7 @@ struct InvestmentAccountView: View {
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .accessibilityLabel("Loading account data")
       } else {
-        switch account.valuationMode {
-        case .recordedValue:
-          legacyValuationsLayout
-            .id(ValuationMode.recordedValue)
-        case .calculatedFromTrades:
-          positionTrackedLayout
-            .id(ValuationMode.calculatedFromTrades)
-        }
+        legacyValuationsLayout
       }
     }
     .accessibilityFocused($focusAnchor, equals: .content)
@@ -105,39 +87,14 @@ struct InvestmentAccountView: View {
     }
     .task(id: LoadKey(id: account.id, mode: account.valuationMode)) {
       initialLoadComplete = false
-      await reloadPositions()
-      await maybeAutoWidenRange()
+      await investmentStore.loadAllData(
+        account: account, profileCurrency: session.profile.instrument)
       initialLoadComplete = true
-      // Move VoiceOver focus to the now-rendered content layout once the
-      // initial-load gate flips. Mirrored on layout-mode flips below.
-      focusAnchor = .content
-    }
-    .task(id: positionsRange) {
-      // Skip until loadAllData has populated the store; the .task(id:) keyed
-      // on (account.id, valuationMode) runs the first build. We only fire
-      // re-builds for subsequent range changes.
-      guard investmentStore.loadedAccountId != nil else { return }
-      do {
-        positionsInput = try await investmentStore.positionsViewInput(
-          title: account.name, range: positionsRange)
-      } catch is CancellationError {
-        return
-      } catch {
-        Self.logger.error(
-          "Unexpected error from positionsViewInput: \(error.localizedDescription, privacy: .public)"
-        )
-      }
-    }
-    .onChange(of: account.valuationMode) {
-      // Layout-mode flip: reanchor VoiceOver after the new layout mounts.
-      // The `.task(id:)` above also fires (LoadKey carries `mode`), so
-      // `focusAnchor = .content` is set there once the data load
-      // completes — but the reassignment here additionally guarantees a
-      // focus move when the data load is a no-op (already cached).
       focusAnchor = .content
     }
     .refreshable {
-      await reloadPositions()
+      await investmentStore.loadAllData(
+        account: account, profileCurrency: session.profile.instrument)
     }
   }
 }
@@ -158,39 +115,6 @@ extension InvestmentAccountView {
       transactionStore: transactionStore,
       selectedTransaction: $selectedTransaction
     )
-  }
-
-  /// The positions/transactions composition for position-tracked
-  /// accounts. The full `PositionsView` surface — performance tiles,
-  /// chart, and positions table — always renders, even when every
-  /// holding has been sold (`positionsInput.alwaysShowsFullSurface`
-  /// keeps `PositionsView` from collapsing). This is deliberately
-  /// unconditional: a consistent layout across every account state is
-  /// simpler and more predictable than branching the surface on whether
-  /// positions remain. While the first load is still running and there
-  /// are no rows yet, a `ProgressView` stands in for the top pane.
-  @ViewBuilder private var positionTrackedLayout: some View {
-    PositionsTransactionsSplit(
-      defaultTab: .positions,
-      // Distinct autosave key from the chartless multi-currency split so
-      // the saved divider position from each layout doesn't bleed into
-      // the other; the chart pushes the table off-screen at the
-      // chartless 180pt default.
-      autosaveName: "positions-transactions-split.with-chart",
-      // Header (~50pt) + chart (~250pt with padding) + a few table rows
-      // need ~530pt to render comfortably without the user dragging.
-      initialTopHeight: 540
-    ) {
-      if isLoadingPositions && positionsInput.positions.isEmpty {
-        ProgressView()
-          .frame(maxWidth: .infinity)
-          .padding()
-      } else {
-        PositionsView(input: positionsInput, range: $positionsRange)
-      }
-    } transactions: {
-      makeAccountTransactionList()
-    }
   }
 
   @ViewBuilder private var legacyValuationsLayout: some View {
@@ -333,5 +257,4 @@ extension InvestmentAccountView {
   }
 }
 
-// Private load/rebuild helpers live in `InvestmentAccountView+Loading.swift`.
 // Preview seeds and `#Preview` blocks live in `InvestmentAccountView+Previews.swift`.
