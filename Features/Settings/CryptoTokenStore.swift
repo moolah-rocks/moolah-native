@@ -66,6 +66,9 @@ final class CryptoTokenStore {
   /// `.spam` token from the account's position list. Issue #790.
   var onRegistrationsChanged: (@MainActor () -> Void)?
 
+  /// Fired after a successful RPC-endpoint edit (not the revert path); resets the live sync routing resolver.
+  var onRPCEndpointsChanged: (@MainActor () -> Void)?
+
   private let registry: any InstrumentRegistryRepository
   private let cryptoPriceService: CryptoPriceService
   private let conversionService: any InstrumentConversionService

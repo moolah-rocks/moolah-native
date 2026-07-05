@@ -35,7 +35,7 @@ actor RPCEndpointResolver {
     case alchemy
   }
 
-  private let customEndpoints: [String]
+  private var customEndpoints: [String]
   private let alchemyKeyPresent: @Sendable () -> Bool
   private let makeRPC: @Sendable (URL) -> LiveJSONRPCClient
 
@@ -78,6 +78,16 @@ actor RPCEndpointResolver {
     self.customEndpoints = customEndpoints
     self.alchemyKeyPresent = alchemyKeyPresent
     self.makeRPC = makeRPC
+  }
+
+  /// Replaces the endpoint list and drops all cached probe results so the
+  /// new list is re-probed on the next `client(for:)`/`probeAll`. Called when
+  /// the user edits the custom endpoints in Settings.
+  func reset(customEndpoints newEndpoints: [String]) {
+    customEndpoints = newEndpoints
+    cache.removeAll()
+    parsedURLs.removeAll()
+    inFlight.removeAll()
   }
 
   /// Probes every custom endpoint's `eth_chainId`, in `customEndpoints`

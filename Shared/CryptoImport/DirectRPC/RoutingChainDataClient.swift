@@ -61,6 +61,14 @@ struct RoutingChainDataClient {
     }
     return await cache.storeIfAbsent(built, forChainId: chain.chainId)
   }
+
+  /// Resets the endpoint resolver to `customEndpoints` and drops the memoized
+  /// per-chain clients, so the next `getAssetTransfers`/`getTransactionReceipt`
+  /// re-resolves against the edited endpoint list.
+  func invalidate(customEndpoints: [String]) async {
+    await resolver.reset(customEndpoints: customEndpoints)
+    await cache.clear()
+  }
 }
 
 // MARK: - ChainDataClient
@@ -103,5 +111,9 @@ private actor ResolvedClientCache {
     }
     clients[chainId] = client
     return client
+  }
+
+  func clear() {
+    clients.removeAll()
   }
 }

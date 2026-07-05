@@ -131,6 +131,35 @@ struct RoutingChainDataClientTests {
     #expect(harness.directStub.transferChains == [10])
     #expect(harness.directStub.receiptChains == [10])
   }
+
+  @Test
+  func invalidateReResolvesAgainstTheNewEndpointList() async throws {
+    // Alchemy key present; OP Mainnet starts routed to the custom endpoint.
+    let harness = makeHarness(alchemyKeyPresent: { true })
+
+    _ = try await harness.routing.getAssetTransfers(
+      chain: .optimism, walletAddress: Self.wallet, fromBlock: 0)
+    _ = try await harness.routing.getTransactionReceipt(chain: .optimism, hash: "0xabc")
+    #expect(harness.directStub.transferChains == [10])
+    #expect(harness.directStub.receiptChains == [10])
+    #expect(harness.alchemyStub.transferChains.isEmpty)
+
+    // Drop the custom endpoint. With the Alchemy key still present, OP now
+    // resolves to Alchemy — and the memoized direct client must be dropped so
+    // the next call re-resolves rather than reusing it.
+    await harness.routing.invalidate(customEndpoints: [])
+
+    _ = try await harness.routing.getAssetTransfers(
+      chain: .optimism, walletAddress: Self.wallet, fromBlock: 0)
+    _ = try await harness.routing.getTransactionReceipt(chain: .optimism, hash: "0xdef")
+
+    // Post-invalidate calls dispatched to Alchemy; the direct stub saw no new
+    // calls beyond the pre-invalidate ones.
+    #expect(harness.alchemyStub.transferChains == [10])
+    #expect(harness.alchemyStub.receiptChains == [10])
+    #expect(harness.directStub.transferChains == [10])
+    #expect(harness.directStub.receiptChains == [10])
+  }
 }
 
 /// Records which chains each `ChainDataClient` method was invoked for so a
