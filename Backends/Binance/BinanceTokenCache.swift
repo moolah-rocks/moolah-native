@@ -14,8 +14,8 @@ import os
 /// `CatalogDatabase`; this actor holds one and routes its Binance replace-all /
 /// lookup / refresh code through `database.exec/prepare/...`.
 ///
-/// Binance's `/api/v3/exchangeInfo` endpoint is keyless, so — unlike the
-/// CryptoCompare cache — there is no API key to resolve.
+/// Binance's `/api/v3/exchangeInfo` endpoint is keyless — there is no API key
+/// to resolve.
 actor BinanceTokenCache: RefreshableCatalog {
   /// Stateless `Logger`; `static` so every extension call site can emit on the
   /// same subsystem/category without rebuilding the logger.
