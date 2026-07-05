@@ -66,7 +66,8 @@ final class CryptoTokenStore {
   /// `.spam` token from the account's position list. Issue #790.
   var onRegistrationsChanged: (@MainActor () -> Void)?
 
-  /// Fired after a successful RPC-endpoint edit (not the revert path); resets the live sync routing resolver.
+  /// Fired after a successful RPC-endpoint edit (not the revert path) — wired
+  /// by `ProfileSession` to reset the live `RPCEndpointResolver`.
   var onRPCEndpointsChanged: (@MainActor () -> Void)?
 
   private let registry: any InstrumentRegistryRepository
@@ -383,17 +384,16 @@ final class CryptoTokenStore {
     self.error = message
   }
 
-  /// Internal write seam for `rpcEndpoints`, mirroring `setError(_:)`.
+  /// Internal write seams for `rpcEndpoints`/`rpcProbes`/`rpcEndpointsError`,
+  /// mirroring `setError(_:)` — used by `CryptoTokenStore+RPCEndpoints`.
   func setRPCEndpoints(_ endpoints: [String]) {
     self.rpcEndpoints = endpoints
   }
 
-  /// Internal write seam for `rpcProbes`, mirroring `setError(_:)`.
   func setRPCProbes(_ probes: [RPCEndpointResolver.Probe]) {
     self.rpcProbes = probes
   }
 
-  /// Internal write seam for `rpcEndpointsError`, mirroring `setError(_:)`.
   func setRPCEndpointsError(_ message: String?) {
     self.rpcEndpointsError = message
   }
