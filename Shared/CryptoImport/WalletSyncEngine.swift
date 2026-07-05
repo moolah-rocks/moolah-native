@@ -218,7 +218,7 @@ struct WalletSyncEngine: Sendable {
   static func maxBlockNumber(in transfers: [AlchemyTransfer]) -> UInt64? {
     var maximum: UInt64?
     for transfer in transfers {
-      guard let value = parseHexUInt64(transfer.blockNum) else { continue }
+      guard let value = RPCHex.parseUInt64(transfer.blockNum) else { continue }
       if let current = maximum {
         maximum = Swift.max(current, value)
       } else {
@@ -226,18 +226,5 @@ struct WalletSyncEngine: Sendable {
       }
     }
     return maximum
-  }
-
-  /// Parses a 0x-prefixed hex string into a `UInt64`. Returns `nil`
-  /// on malformed input — callers log/skip rather than failing the
-  /// entire sync. `private` because the only call site is the
-  /// in-engine head-block computation; the matching `Decimal` parse on
-  /// `AlchemyTransfer.RawContract` lives elsewhere.
-  private static func parseHexUInt64(_ raw: String) -> UInt64? {
-    let trimmed: Substring =
-      raw.hasPrefix("0x") || raw.hasPrefix("0X")
-      ? raw.dropFirst(2)
-      : Substring(raw)
-    return UInt64(trimmed, radix: 16)
   }
 }

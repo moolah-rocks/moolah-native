@@ -47,6 +47,12 @@ actor RPCEndpointResolver {
   /// creating a new resolver (or the user fixing the endpoint triggers a
   /// fresh app-state read that does the same).
   private var cache: [String: Probe] = [:]
+  /// The endpoint string parsed once per endpoint, alongside `cache` —
+  /// populated the same time as the `Probe` it corresponds to, so
+  /// `client(for:)` can reuse the already-parsed `URL` instead of calling
+  /// `URL(string:)` on the endpoint string a second time. Absent (or `nil`)
+  /// for an endpoint that failed to parse.
+  private var parsedURLs: [String: URL] = [:]
   /// In-flight probe per endpoint, so concurrent callers for the same
   /// not-yet-cached endpoint share one underlying `eth_chainId` round trip
   /// instead of each starting their own. Populated before the first
@@ -92,7 +98,7 @@ actor RPCEndpointResolver {
   func client(for chain: ChainConfig) async -> ResolvedClient {
     for endpoint in customEndpoints {
       let probe = await probe(endpoint)
-      if let chainId = probe.chainId, chainId == chain.chainId, let url = URL(string: endpoint) {
+      if let chainId = probe.chainId, chainId == chain.chainId, let url = parsedURLs[endpoint] {
         return .direct(makeRPC(url))
       }
     }
@@ -118,6 +124,7 @@ actor RPCEndpointResolver {
       cache[endpoint] = probe
       return probe
     }
+    parsedURLs[endpoint] = url
     let makeRPC = self.makeRPC
     let task = Task { () -> Probe in
       let client = makeRPC(url)

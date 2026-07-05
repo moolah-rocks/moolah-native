@@ -345,13 +345,13 @@ struct LiveJSONRPCClient: Sendable {
   }
 }
 
-/// `eth_getBlockByNumber` params: a positional `[blockHex, includeTransactions]`
-/// pair, not a keyed object — the second element is always `false` since
-/// `blockTimestamps` only reads the block header's `timestamp`, never full
-/// transaction bodies.
-private struct BlockByNumberParams: Encodable, Sendable {
+/// `eth_getBlockByNumber` params: positional `[blockHex, includeTransactions]`;
+/// second element is always `false` since only the header `timestamp` is read.
+private struct BlockByNumberParams: Sendable {
   let blockHex: String
+}
 
+extension BlockByNumberParams: Encodable {
   func encode(to encoder: Encoder) throws {
     var container = encoder.unkeyedContainer()
     try container.encode(blockHex)
@@ -360,17 +360,13 @@ private struct BlockByNumberParams: Encodable, Sendable {
 }
 
 /// Decode-only slice of an `eth_getBlockByNumber` result — only the field
-/// `blockTimestamps` needs. The full block payload (hash, parent, gas
-/// fields, transaction list, …) is irrelevant to this caller.
+/// `blockTimestamps` needs.
 private struct BlockTimestampResult: Decodable, Sendable {
   let timestamp: String
 }
 
-/// `eth_call` params: a positional `[{to, data}, blockTag]` pair. `blockTag`
-/// is hardcoded `"latest"` — `call(to:data:)` only supports reading current
-/// chain state, matching every caller so far (token `decimals()`/`symbol()`/
-/// `balanceOf()` at the sync-time chain tip).
-private struct EthCallParams: Encodable, Sendable {
+/// `eth_call` params: positional `[{to, data}, "latest"]` — `call(to:data:)` only reads current chain state.
+private struct EthCallParams: Sendable {
   private struct CallObject: Encodable, Sendable {
     let to: String
     let data: String
@@ -381,7 +377,9 @@ private struct EthCallParams: Encodable, Sendable {
   init(to: String, data: String) {
     self.object = CallObject(to: to, data: data)
   }
+}
 
+extension EthCallParams: Encodable {
   func encode(to encoder: Encoder) throws {
     var container = encoder.unkeyedContainer()
     try container.encode(object)
@@ -390,9 +388,11 @@ private struct EthCallParams: Encodable, Sendable {
 }
 
 /// `eth_getTransactionReceipt` params: a single positional `[hash]` element.
-private struct TransactionReceiptParams: Encodable, Sendable {
+private struct TransactionReceiptParams: Sendable {
   let hash: String
+}
 
+extension TransactionReceiptParams: Encodable {
   func encode(to encoder: Encoder) throws {
     var container = encoder.unkeyedContainer()
     try container.encode(hash)

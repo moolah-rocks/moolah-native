@@ -23,8 +23,8 @@ enum RPCHex {
 
   /// Parses a JSON-RPC quantity (0x-prefixed or bare hex, either case)
   /// into a `UInt64`. Returns `nil` on malformed input — callers log/skip
-  /// rather than failing the whole sync. Mirrors the parse rule in
-  /// `WalletSyncEngine.parseHexUInt64`.
+  /// rather than failing the whole sync. Also used by
+  /// `WalletSyncEngine.maxBlockNumber(in:)` for the same parse rule.
   static func parseUInt64(_ raw: String) -> UInt64? {
     UInt64(stripHexPrefix(raw), radix: 16)
   }
