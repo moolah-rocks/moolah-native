@@ -16,31 +16,9 @@ extension ContentView {
           investmentStore: investmentStore,
           transactionStore: transactionStore)
       case .crypto:
-        AccountDetailView(
-          title: account.name,
-          transactionFilter: TransactionFilter(accountId: account.id),
-          positions: accountStore.positions(for: account.id),
-          hostCurrency: account.instrument,
-          accountIds: [account.id],
-          conversionService: session.backend.conversionService,
-          registrationsVersion: session.cryptoTokenStore?.registrationsVersion ?? 0,
-          accountChainId: account.chainId,
-          alwaysShowsFullSurface: false,
-          syncedHeaderAccount: account,
-          accounts: accountStore.accounts,
-          categories: categoryStore.categories,
-          earmarks: earmarkStore.earmarks,
-          transactionStore: transactionStore)
+        syncedAccountDetailView(for: account, accountChainId: account.chainId)
       case .exchange:
-        ExchangeAccountView(
-          account: account,
-          accounts: accountStore.accounts,
-          categories: categoryStore.categories,
-          earmarks: earmarkStore.earmarks,
-          transactionStore: transactionStore,
-          positions: accountStore.positions(for: account.id),
-          conversionService: session.backend.conversionService,
-          session: session)
+        syncedAccountDetailView(for: account, accountChainId: nil)
       default:
         StandardAccountView(
           account: account,
@@ -52,5 +30,29 @@ extension ContentView {
           conversionService: session.backend.conversionService)
       }
     }
+  }
+
+  /// Builds an `AccountDetailView` for a synced account (`.crypto` or
+  /// `.exchange`). Extracted to keep `accountDetail(id:)`'s body under the
+  /// 50-line function_body_length limit.
+  private func syncedAccountDetailView(
+    for account: Account,
+    accountChainId: Int?
+  ) -> some View {
+    AccountDetailView(
+      title: account.name,
+      transactionFilter: TransactionFilter(accountId: account.id),
+      positions: accountStore.positions(for: account.id),
+      hostCurrency: account.instrument,
+      accountIds: [account.id],
+      conversionService: session.backend.conversionService,
+      registrationsVersion: session.cryptoTokenStore?.registrationsVersion ?? 0,
+      accountChainId: accountChainId,
+      alwaysShowsFullSurface: false,
+      syncedHeaderAccount: account,
+      accounts: accountStore.accounts,
+      categories: categoryStore.categories,
+      earmarks: earmarkStore.earmarks,
+      transactionStore: transactionStore)
   }
 }
