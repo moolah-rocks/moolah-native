@@ -37,6 +37,15 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
   // `CategoryBalancesAggregation`, `CategoryBalancesHandlers`,
   // `CategoryBalancesFilterArgs`. Same shape as `+ExpenseBreakdown`.
   //
+  // `+UncategorisedBalances.swift` — the "Uncategorised" Reports-row
+  // sibling of `+CategoryBalances.swift`:
+  // `fetchUncategorisedBalancesAggregation`,
+  // `assembleUncategorisedBalances`, `UncategorisedBalancesRow`,
+  // `UncategorisedBalancesAggregation`, `UncategorisedBalancesHandlers`,
+  // `UncategorisedBalancesFilterArgs`. Only reached from
+  // `fetchCategoryBalancesByType` below — `fetchCategoryBalances` itself
+  // is unchanged and keeps excluding uncategorised legs.
+  //
   // `+IncomeAndExpense.swift` — types (`IncomeAndExpenseRow`,
   // `IncomeAndExpenseAggregation`, `IncomeAndExpenseHandlers`,
   // `IncomeAndExpenseFailureContext`), `assembleIncomeAndExpense`, and
@@ -286,6 +295,95 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
           """)
       })
     return try await Self.assembleCategoryBalances(
+      aggregation: aggregation,
+      targetInstrument: targetInstrument,
+      conversionService: conversionService,
+      handlers: handlers)
+  }
+
+  /// Concrete override of the protocol-extension default: runs the two
+  /// per-category fetches **and** the two uncategorised-total fetches
+  /// (income + expense) concurrently, fully populating
+  /// `CategoryBalancesByType` rather than leaving the uncategorised
+  /// fields `nil`. The per-category fetches reuse the public
+  /// `fetchCategoryBalances(dateRange:transactionType:filters:targetInstrument:)`
+  /// above unchanged — its excludes-uncategorised contract is pinned by
+  /// `AnalysisCategoryBalancesTests.categoryBalancesRequiresCategory` and
+  /// relied on by earmark budgets, so this override must not alter it.
+  func fetchCategoryBalancesByType(
+    dateRange: ClosedRange<Date>,
+    filters: TransactionFilter?,
+    targetInstrument: Instrument
+  ) async throws -> CategoryBalancesByType {
+    async let incomeResult = fetchCategoryBalances(
+      dateRange: dateRange,
+      transactionType: .income,
+      filters: filters,
+      targetInstrument: targetInstrument)
+    async let expenseResult = fetchCategoryBalances(
+      dateRange: dateRange,
+      transactionType: .expense,
+      filters: filters,
+      targetInstrument: targetInstrument)
+    async let incomeUncategorisedResult = fetchUncategorisedBalances(
+      dateRange: dateRange,
+      transactionType: .income,
+      filters: filters,
+      targetInstrument: targetInstrument)
+    async let expenseUncategorisedResult = fetchUncategorisedBalances(
+      dateRange: dateRange,
+      transactionType: .expense,
+      filters: filters,
+      targetInstrument: targetInstrument)
+    let (income, expense, incomeUncategorised, expenseUncategorised) = try await (
+      incomeResult, expenseResult, incomeUncategorisedResult, expenseUncategorisedResult
+    )
+    return CategoryBalancesByType(
+      income: income,
+      expense: expense,
+      incomeUncategorised: incomeUncategorised,
+      expenseUncategorised: expenseUncategorised)
+  }
+
+  /// Fetches the uncategorised total for one transaction type — the total
+  /// of income/expense legs with no `category_id`, converted to
+  /// `targetInstrument` and summed to a single amount. `nil` when there
+  /// are no uncategorised legs in range, so the Reports screen can omit
+  /// the row. Only called from `fetchCategoryBalancesByType`; mirrors
+  /// `fetchCategoryBalances`'s hoist-instruments / aggregate / assemble
+  /// shape.
+  private func fetchUncategorisedBalances(
+    dateRange: ClosedRange<Date>,
+    transactionType: TransactionType,
+    filters: TransactionFilter?,
+    targetInstrument: Instrument
+  ) async throws -> InstrumentAmount? {
+    let args = UncategorisedBalancesFilterArgs(
+      dateRange: dateRange,
+      transactionType: transactionType,
+      accountId: filters?.accountId,
+      earmarkId: filters?.earmarkId,
+      payee: filters?.payee)
+    // Hoisted ahead of the snapshot for the same cross-database reason
+    // as `fetchDailyBalances(after:forecastUntil:)`.
+    let instruments = try await instrumentResolver.instrumentMap()
+    let aggregation = try await Self.fetchUncategorisedBalancesAggregation(
+      database: database, instruments: instruments, args: args)
+    let logger = self.logger
+    let handlers = UncategorisedBalancesHandlers(
+      handleUnparseableDay: { day in
+        logger.error(
+          "fetchUncategorisedBalances: skipping row with unparseable day '\(day)'")
+      },
+      handleConversionFailure: { error, context in
+        logger.error(
+          """
+          fetchUncategorisedBalances: conversion failed for day=\(context.day, privacy: .public) \
+          instrument=\(context.instrumentId, privacy: .public): \
+          \(error.localizedDescription, privacy: .public)
+          """)
+      })
+    return try await Self.assembleUncategorisedBalances(
       aggregation: aggregation,
       targetInstrument: targetInstrument,
       conversionService: conversionService,
