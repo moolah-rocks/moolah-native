@@ -147,7 +147,7 @@ struct LiveJSONRPCClient: Sendable {
   /// — the hash isn't on chain yet, or the node has pruned it — is not
   /// distinguished from any other malformed response; both throw
   /// `.providerMalformedResponse(stage: "getTransactionReceipt")`, mirroring
-  /// `AlchemyClient.fetchReceipt`'s handling of the same provider behaviour.
+  /// `LiveAlchemyClient.fetchReceipt`'s handling of the same provider behaviour.
   func transactionReceipt(hash: String) async throws -> RPCReceipt {
     try await call(
       method: "eth_getTransactionReceipt",

@@ -10,7 +10,7 @@ enum AlchemyJSONRPCWireFormat {}
 /// JSON-RPC envelope and wire-format payloads used by `LiveAlchemyClient`.
 ///
 /// Visibility: every type here is module-internal but unused outside
-/// `AlchemyClient.swift` and the test files. Keeping them at the file
+/// `ChainDataClient.swift` and the test files. Keeping them at the file
 /// scope (rather than nested inside `LiveAlchemyClient`) lets the
 /// generic `JSONRPCRequest` / `JSONRPCResponse` envelopes stay shared
 /// across the three JSON-RPC methods without re-declaring the wrapper.

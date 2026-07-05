@@ -1,12 +1,15 @@
-// Shared/CryptoImport/AlchemyClient.swift
+// Shared/CryptoImport/ChainDataClient.swift
 import Foundation
 import OSLog
 import os
 
-/// Public protocol so test stubs can replace the live client. Stage 6's
-/// `WalletSyncEngine` injects an `AlchemyClient` rather than a concrete
-/// struct; v1 ships only `LiveAlchemyClient` plus per-test stubs.
-protocol AlchemyClient: Sendable {
+/// Provider-neutral seam for on-chain data (asset transfers and transaction
+/// receipts). Alchemy is the only implementation today (`LiveAlchemyClient`);
+/// a direct JSON-RPC client is expected to conform later. Public protocol so
+/// test stubs can replace the live client. Stage 6's `WalletSyncEngine`
+/// injects a `ChainDataClient` rather than a concrete struct; v1 ships only
+/// `LiveAlchemyClient` plus per-test stubs.
+protocol ChainDataClient: Sendable {
   /// Returns transfers in `[fromBlock, latestBlock]` for `walletAddress`,
   /// in two passes: `fromAddress = walletAddress` and
   /// `toAddress = walletAddress`. Categories include `external` and
@@ -47,7 +50,7 @@ private struct AlchemyTransferQuery: Sendable {
   let apiKey: String
 }
 
-/// Live `AlchemyClient` over `URLSession`. Sendable struct — no mutable
+/// Live `ChainDataClient` over `URLSession`. Sendable struct — no mutable
 /// state; mirrors the shape of `Backends/CoinGecko/CoinGeckoClient.swift`.
 ///
 /// Privacy classifications follow the design table:
@@ -93,7 +96,7 @@ struct LiveAlchemyClient: Sendable {
     self.apiKeyProvider = apiKeyProvider
     self.rateLimiter = rateLimiter
     self.sleeper = sleeper
-    self.logger = Logger(subsystem: "com.moolah.app", category: "AlchemyClient")
+    self.logger = Logger(subsystem: "com.moolah.app", category: "LiveAlchemyClient")
   }
 
   private func fetchReceipt(
@@ -332,9 +335,9 @@ struct LiveAlchemyClient: Sendable {
   }
 }
 
-// MARK: - AlchemyClient
+// MARK: - ChainDataClient
 
-extension LiveAlchemyClient: AlchemyClient {
+extension LiveAlchemyClient: ChainDataClient {
   func getAssetTransfers(
     chain: ChainConfig,
     walletAddress: String,

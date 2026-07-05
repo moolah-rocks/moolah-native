@@ -31,7 +31,7 @@ struct WalletSyncBuildResult: Sendable, Hashable {
 /// it safe to call concurrently from `Stage 9`'s `withTaskGroup` parallel
 /// build phase.
 struct WalletSyncEngine: Sendable {
-  private let alchemy: any AlchemyClient
+  private let alchemy: any ChainDataClient
   private let blockExplorer: any BlockExplorerClient
   private let discovery: CryptoTokenDiscoveryService
   private let walletSyncState: any WalletSyncStateRepository
@@ -42,7 +42,7 @@ struct WalletSyncEngine: Sendable {
     subsystem: "com.moolah.app", category: "WalletSyncEngine")
 
   /// - Parameters:
-  ///   - alchemy: Stage 4's `AlchemyClient`. The engine itself doesn't
+  ///   - alchemy: Stage 4's `ChainDataClient`. The engine itself doesn't
   ///     hold the rate limiter — `LiveAlchemyClient` does, so callers
   ///     don't need to plumb it through here.
   ///   - blockExplorer: Authoritative index for native and internal ETH
@@ -56,7 +56,7 @@ struct WalletSyncEngine: Sendable {
   ///     account being synced. Stage 9 supplies a closure that captures
   ///     the per-cycle session id; tests pass a deterministic factory.
   init(
-    alchemy: any AlchemyClient,
+    alchemy: any ChainDataClient,
     blockExplorer: any BlockExplorerClient,
     discovery: CryptoTokenDiscoveryService,
     walletSyncState: any WalletSyncStateRepository,

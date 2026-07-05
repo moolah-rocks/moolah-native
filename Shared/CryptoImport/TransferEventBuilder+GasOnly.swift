@@ -10,7 +10,7 @@ extension TransferEventBuilder {
     transfers: [AlchemyTransfer],
     signedGasTxs: [SignedGasTx],
     context: BuildContext,
-    alchemy: any AlchemyClient
+    alchemy: any ChainDataClient
   ) async throws -> [BuiltTransaction] {
     // Stable order: group preserves first-seen order so test fixtures
     // and signposts are deterministic.

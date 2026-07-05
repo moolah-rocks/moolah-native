@@ -9,5 +9,5 @@ import Foundation
 struct BuilderServices: Sendable {
   let chain: ChainConfig
   let discovery: CryptoTokenDiscoveryService
-  let alchemy: any AlchemyClient
+  let alchemy: any ChainDataClient
 }

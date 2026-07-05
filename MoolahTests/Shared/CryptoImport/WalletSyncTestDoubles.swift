@@ -7,14 +7,14 @@ import Foundation
 /// alongside the loose top-level helpers and stubs declared below.
 enum WalletSyncTestDoubles {}
 
-/// Counting stub for `AlchemyClient` that returns a scripted transfer
+/// Counting stub for `ChainDataClient` that returns a scripted transfer
 /// list per `(chainId, walletAddress)` key. Records every call so tests
 /// can assert on `fromBlock` derivation and call counts.
 ///
 /// `@unchecked Sendable`: state lives behind an `NSLock`, mirroring the
 /// project convention for non-actor concurrent test stubs (see
 /// `AlchemyTestSupport.swift`, `CryptoTokenDiscoveryTestDoubles.swift`).
-final class RecordingAlchemyClientStub: AlchemyClient, @unchecked Sendable {
+final class RecordingAlchemyClientStub: ChainDataClient, @unchecked Sendable {
   struct AssetTransfersCall: Sendable, Hashable {
     let chainId: Int
     let walletAddress: String
@@ -228,13 +228,13 @@ func makeWalletImportOrigin(
     parserIdentifier: "alchemy-wallet-sync")
 }
 
-/// `AlchemyClient` that returns a zero-cost receipt for every receipt
+/// `ChainDataClient` that returns a zero-cost receipt for every receipt
 /// fetch and traps on the unrelated `getAssetTransfers` path. Used by
 /// `TransferEventBuilder` tests that only care about transfer-leg
 /// construction — a zero receipt produces no gas leg (the builder drops
 /// a non-positive total) so the legs the test actually inspects stay
 /// deterministic without extra plumbing.
-final class ZeroReceiptAlchemyStub: AlchemyClient, @unchecked Sendable {
+final class ZeroReceiptAlchemyStub: ChainDataClient, @unchecked Sendable {
   struct UnexpectedAssetTransfersCall: Error {}
 
   private let lock = NSLock()
