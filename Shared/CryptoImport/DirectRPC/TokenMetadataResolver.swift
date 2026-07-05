@@ -1,5 +1,6 @@
 // Shared/CryptoImport/DirectRPC/TokenMetadataResolver.swift
 import Foundation
+import OSLog
 
 /// Resolves ERC-20 `decimals()`/`symbol()` metadata per contract address via
 /// `eth_call`, caching each contract so the direct-RPC discovery pipeline
@@ -30,44 +31,79 @@ actor TokenMetadataResolver {
   private static let decimalsSelector = "0x313ce567"
   /// 4-byte selector for `symbol() returns (string)` — `keccak256("symbol()")[0..4]`.
   private static let symbolSelector = "0x95d89b41"
+  /// Valid range for `decimals()`'s declared `uint8` return type. A hostile
+  /// or buggy contract can return a value outside this range (e.g.
+  /// 5_000_000_000) that still parses as an `Int` — downstream `pow(10,
+  /// decimals)` amount scaling can't handle that safely, so it's rejected
+  /// here rather than trusted.
+  private static let validDecimalsRange = 0...255
+
+  private static let logger = Logger(
+    subsystem: "com.moolah.app", category: "TokenMetadataResolver")
 
   private let rpc: LiveJSONRPCClient
   /// Cache keyed by lowercased contract address. The value is itself
   /// optional (`Metadata?`) so a resolved-to-`nil` contract (decimals
   /// unreadable) is distinguished from "not yet looked up" — that negative
   /// result is cached too, deliberately: a contract whose `decimals()`
-  /// reverts or returns empty isn't going to start working later in the
-  /// same sync session, and without caching the negative result every log
-  /// naming that contract would re-issue the same failing `eth_call`.
+  /// reverts or returns empty/out-of-range isn't going to start working
+  /// later in the same sync session, and without caching the negative
+  /// result every log naming that contract would re-issue the same failing
+  /// `eth_call`. A *transient* failure (rate limit, network blip,
+  /// cancellation) is NOT cached here — see `ResolveOutcome` — so a later
+  /// log naming the same contract gets another attempt.
   private var cache: [String: Metadata?] = [:]
   /// In-flight resolution per contract, so concurrent callers for the same
   /// not-yet-cached contract share one underlying RPC round-trip pair
   /// instead of each starting their own.
-  private var inFlight: [String: Task<Metadata?, Never>] = [:]
+  private var inFlight: [String: Task<ResolveOutcome, Never>] = [:]
 
   init(rpc: LiveJSONRPCClient) {
     self.rpc = rpc
   }
 
   /// Resolves `decimals()`/`symbol()` for `contract`, case-insensitively
-  /// cached by address. Returns `nil` when `decimals()` reverts or returns
-  /// an empty/malformed result — the caller can't scale that token's raw
-  /// transfer amounts, so it drops the token's rows rather than guessing.
+  /// cached by address. Returns `nil` when `decimals()` reverts, returns an
+  /// empty/malformed/out-of-range result, or the lookup fails transiently
+  /// (rate limit/network/cancellation) — the caller can't scale that
+  /// token's raw transfer amounts, so it drops the token's rows rather than
+  /// guessing. Only a *permanent* failure is cached; a transient one is
+  /// retried on the next `metadata(for:)` call naming the same contract.
   func metadata(for contract: String) async -> Metadata? {
     let key = contract.lowercased()
     if let cached = cache[key] {
       return cached
     }
     if let pending = inFlight[key] {
-      return await pending.value
+      return await pending.value.metadata
     }
     let rpc = self.rpc
     let task = Task { await Self.resolve(rpc: rpc, contract: key) }
     inFlight[key] = task
-    let result = await task.value
-    cache[key] = result
+    let outcome = await task.value
     inFlight[key] = nil
-    return result
+    if !outcome.isTransientFailure {
+      cache[key] = outcome.metadata
+    }
+    return outcome.metadata
+  }
+
+  /// Outcome of one `resolve(rpc:contract:)` attempt. `metadata(for:)` uses
+  /// `isTransientFailure` to decide whether the result is worth
+  /// negative-caching — a permanent failure (revert, malformed/empty/
+  /// out-of-range result) is remembered as "this contract doesn't work",
+  /// while a transient one (rate limit, network blip, cancellation) is
+  /// not, so a later lookup for the same contract gets another attempt.
+  private struct ResolveOutcome: Sendable {
+    let metadata: Metadata?
+    let isTransientFailure: Bool
+
+    static func resolved(_ metadata: Metadata) -> ResolveOutcome {
+      ResolveOutcome(metadata: metadata, isTransientFailure: false)
+    }
+
+    static let permanentFailure = ResolveOutcome(metadata: nil, isTransientFailure: false)
+    static let transientFailure = ResolveOutcome(metadata: nil, isTransientFailure: true)
   }
 
   /// Performs the two `eth_call`s for one contract. `static` (not
@@ -75,21 +111,66 @@ actor TokenMetadataResolver {
   /// than hopping back onto the actor for every `await` inside it — the
   /// actor is only touched to read/write the cache and in-flight table in
   /// `metadata(for:)`.
-  private static func resolve(rpc: LiveJSONRPCClient, contract: String) async -> Metadata? {
-    guard let decimals = await fetchDecimals(rpc: rpc, contract: contract) else {
-      return nil
+  private static func resolve(rpc: LiveJSONRPCClient, contract: String) async -> ResolveOutcome {
+    do {
+      guard let decimals = try await fetchDecimals(rpc: rpc, contract: contract) else {
+        logger.debug(
+          "Dropping contract \(contract, privacy: .public): decimals() unreadable or out of uint8 range"
+        )
+        return .permanentFailure
+      }
+      let symbol = await fetchSymbol(rpc: rpc, contract: contract)
+      return .resolved(Metadata(decimals: decimals, symbol: symbol))
+    } catch {
+      if isTransient(error) {
+        logger.debug(
+          "Deferring contract \(contract, privacy: .public): transient decimals() failure, will retry"
+        )
+        return .transientFailure
+      }
+      logger.debug(
+        "Dropping contract \(contract, privacy: .public): decimals() call failed permanently (\(String(describing: error), privacy: .public))"
+      )
+      return .permanentFailure
     }
-    let symbol = await fetchSymbol(rpc: rpc, contract: contract)
-    return Metadata(decimals: decimals, symbol: symbol)
   }
 
-  private static func fetchDecimals(rpc: LiveJSONRPCClient, contract: String) async -> Int? {
-    guard let hex = try? await rpc.call(to: contract, data: decimalsSelector) else {
-      return nil
+  /// Classifies an error thrown by `rpc.call` as transient (rate limit,
+  /// network blip, task cancellation — worth retrying on a later lookup)
+  /// or permanent (contract revert/malformed response — this contract
+  /// truly doesn't support the call, worth remembering as such for the
+  /// rest of the sync session).
+  private static func isTransient(_ error: Error) -> Bool {
+    if error is CancellationError {
+      return true
     }
-    return HexDecimal.parseInt(hex)
+    guard let walletError = error as? WalletSyncError else {
+      return false
+    }
+    switch walletError.kind {
+    case .rateLimited, .network:
+      return true
+    case .missingApiKey, .invalidApiKey, .providerMalformedResponse:
+      return false
+    }
   }
 
+  /// Fetches and parses `decimals()`. Returns `nil` (a permanent failure,
+  /// not thrown) when the result is empty/unparseable or outside the ABI
+  /// `uint8` range; propagates any `rpc.call` error for the caller to
+  /// classify as transient vs. permanent.
+  private static func fetchDecimals(rpc: LiveJSONRPCClient, contract: String) async throws -> Int? {
+    let hex = try await rpc.call(to: contract, data: decimalsSelector)
+    guard let decimals = HexDecimal.parseInt(hex), validDecimalsRange.contains(decimals) else {
+      return nil
+    }
+    return decimals
+  }
+
+  /// Fetches and decodes `symbol()`. `symbol` is best-effort (see
+  /// `Metadata`'s doc comment), so any failure — transient or permanent —
+  /// simply yields `nil` here rather than failing the whole contract
+  /// resolution; only `decimals()` failures are classified/negative-cached.
   private static func fetchSymbol(rpc: LiveJSONRPCClient, contract: String) async -> String? {
     guard let hex = try? await rpc.call(to: contract, data: symbolSelector) else {
       return nil
@@ -118,14 +199,26 @@ actor TokenMetadataResolver {
 
   private static let abiWordHexLength = 64
 
+  /// Decodes the dynamic ABI `string` layout. `offsetBytes`/`lengthBytes`
+  /// come from a hostile contract's response and must be bounded against
+  /// the actual input length *before* they're multiplied by 2 (hex chars
+  /// per byte) — an unbounded `offsetBytes * 2`/`lengthBytes * 2` can
+  /// overflow-trap on a huge offset/length word (e.g. one near `Int.max`,
+  /// which `Int(word, radix: 16)` parses successfully) and crash the
+  /// entire sync.
   private static func decodeDynamicABIString(_ hex: String) -> String? {
-    guard hex.count >= abiWordHexLength * 2 else { return nil }
+    guard hex.count >= abiWordHexLength else { return nil }
+    let maxByteOffset = hex.count / 2
     let offsetWord = String(hex.prefix(abiWordHexLength))
-    guard let offsetBytes = Int(offsetWord, radix: 16) else { return nil }
+    guard let offsetBytes = Int(offsetWord, radix: 16), offsetBytes <= maxByteOffset else {
+      return nil
+    }
     let offsetHexIndex = offsetBytes * 2
     guard hex.count >= offsetHexIndex + abiWordHexLength else { return nil }
     let lengthWord = String(hex.dropFirst(offsetHexIndex).prefix(abiWordHexLength))
-    guard let lengthBytes = Int(lengthWord, radix: 16), lengthBytes > 0 else { return nil }
+    guard let lengthBytes = Int(lengthWord, radix: 16), lengthBytes > 0,
+      lengthBytes <= maxByteOffset
+    else { return nil }
     let dataStart = offsetHexIndex + abiWordHexLength
     let dataHexLength = lengthBytes * 2
     guard hex.count >= dataStart + dataHexLength else { return nil }
