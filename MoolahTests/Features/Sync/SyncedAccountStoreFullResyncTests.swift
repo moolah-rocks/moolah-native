@@ -27,10 +27,17 @@ struct SyncedAccountStoreFullResyncTests {
     /// `walletApplyEngine`, and `store` — so a full-resync test can assert
     /// the synced checkpoint is actually torn down, not just the local
     /// `WalletSyncState`.
-    let checkpoints: InMemoryWalletSyncCheckpointRepository
+    let checkpoints: any WalletSyncCheckpointRepository
   }
 
-  private func makeStore() throws -> Fixture {
+  /// - Parameter checkpoints: Defaults to a plain in-memory repository;
+  ///   tests that need to force a synced-checkpoint failure (e.g. a delete
+  ///   throwing) inject
+  ///   `WalletSyncRepositoryTestDoubles.ThrowingWalletSyncCheckpointRepository()`
+  ///   instead.
+  private func makeStore(
+    checkpoints: any WalletSyncCheckpointRepository = InMemoryWalletSyncCheckpointRepository()
+  ) throws -> Fixture {
     let (backend, database) = try TestBackend.create()
     let alchemy = RecordingAlchemyClientStub()
     alchemy.setTransfersResponse(.transfers([]))
@@ -38,7 +45,6 @@ struct SyncedAccountStoreFullResyncTests {
     let discovery = CryptoTokenDiscoveryService(
       registry: registry,
       resolver: CountingRegistrationResolver())
-    let checkpoints = InMemoryWalletSyncCheckpointRepository()
     let walletSyncEngine = WalletSyncEngine(
       alchemy: alchemy,
       blockExplorer: BlockExplorerTestDoubles.empty,
@@ -224,5 +230,41 @@ struct SyncedAccountStoreFullResyncTests {
     let checkpoint = try #require(
       try await fixture.checkpoints.load(accountId: account.id))
     #expect(checkpoint.lastSyncedBlockNumber == 0)
+  }
+
+  @Test(
+    "A failed synced-checkpoint delete during full resync surfaces on the account's lastError, even though the local watermark delete and the resync's own build succeeded"
+  )
+  func failedCheckpointDeleteSurfacesAccountError() async throws {
+    // `ThrowingWalletSyncCheckpointRepository` fails every `delete` (and
+    // `raiseToMax`) call; `backend.walletSyncState` is the real, non-throwing
+    // repository, so its own delete still succeeds and the resync's build
+    // still completes normally. Without the fix, that success would
+    // silently overwrite the checkpoint-delete failure with `lastError: nil`
+    // and the user would never learn the resync may have resumed from a
+    // stale synced checkpoint instead of genesis.
+    let fixture = try makeStore(
+      checkpoints: WalletSyncRepositoryTestDoubles.ThrowingWalletSyncCheckpointRepository())
+    let account = seedCryptoAccount(in: fixture.database)
+    try await fixture.backend.walletSyncState.save(
+      WalletSyncState(
+        id: account.id, lastSyncedBlockNumber: 5_000,
+        lastSyncedAt: Self.pinnedNow, lastError: nil))
+    await fixture.store.loadInitialState()
+
+    await fixture.store.syncAccount(account, fullResync: true)
+
+    // The local watermark delete ran and the build still succeeded from
+    // genesis — proving the failure surfaced below isn't just a build
+    // failure bleeding through.
+    #expect(fixture.alchemy.recordedCalls.first?.fromBlock == 0)
+    let saved = try #require(
+      try await fixture.backend.walletSyncState.load(accountId: account.id))
+    let kind = try #require(saved.lastError?.kind)
+    guard case .network = kind else {
+      Issue.record(
+        "Expected a .network lastError surfacing the checkpoint-reset failure, got \(kind)")
+      return
+    }
   }
 }

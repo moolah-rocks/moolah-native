@@ -201,7 +201,8 @@ struct WalletApplyEngineTests {
     "A throwing WalletSyncState write for one account does not stop apply() from returning persisted transactions"
   )
   func syncStateWriteFailureDoesNotThrowOrDropPersistedTransactions() async throws {
-    let setup = try makeSetup(walletSyncState: ThrowingWalletSyncStateRepository())
+    let setup = try makeSetup(
+      walletSyncState: WalletSyncRepositoryTestDoubles.ThrowingWalletSyncStateRepository())
     let account = try setup.seedCryptoAccount()
     let candidate = makeBuilt(accountId: account.id, hash: "0xbest-effort", quantity: 1)
 
@@ -222,7 +223,8 @@ struct WalletApplyEngineTests {
     "A throwing checkpoint raiseToMax for one account does not stop apply() from returning persisted transactions"
   )
   func checkpointRaiseToMaxFailureDoesNotThrowOrDropPersistedTransactions() async throws {
-    let setup = try makeSetup(checkpoints: ThrowingWalletSyncCheckpointRepository())
+    let setup = try makeSetup(
+      checkpoints: WalletSyncRepositoryTestDoubles.ThrowingWalletSyncCheckpointRepository())
     let account = try setup.seedCryptoAccount()
     let candidate = makeBuilt(accountId: account.id, hash: "0xbest-effort-2", quantity: 1)
 
@@ -243,7 +245,7 @@ struct WalletApplyEngineTests {
     "One account's sync-state failure doesn't stop another account's sync-state write"
   )
   func oneAccountFailureDoesNotBlockAnotherAccountsSyncStateWrite() async throws {
-    let throwing = SelectiveWalletSyncStateRepository()
+    let throwing = WalletSyncRepositoryTestDoubles.SelectiveWalletSyncStateRepository()
     let setup = try makeSetup(walletSyncState: throwing)
     let failingAccount = try setup.seedCryptoAccount()
     let workingAccount = try setup.seedCryptoAccount()
