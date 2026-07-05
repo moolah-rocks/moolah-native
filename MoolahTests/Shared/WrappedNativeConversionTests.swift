@@ -73,7 +73,7 @@ struct WrappedNativeConversionTests {
   private func nativeEthRegistration() -> CryptoProviderMapping {
     CryptoProviderMapping(
       instrumentId: "1:native", coingeckoId: "ethereum",
-      cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT")
+      binanceSymbol: "ETHUSDT")
   }
 
   /// Canonical Ethereum WETH has no price feed of its own but is 1:1

@@ -44,7 +44,6 @@ struct PreListingDailyBalanceTests {
   private let airdropMapping = CryptoProviderMapping(
     instrumentId: "1:0xairdrop",
     coingeckoId: "airdroptoken",
-    cryptocompareSymbol: "DROP",
     binanceSymbol: nil
   )
 

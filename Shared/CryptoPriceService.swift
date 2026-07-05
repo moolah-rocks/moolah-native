@@ -168,7 +168,6 @@ actor CryptoPriceService {
     let mapping = CryptoProviderMapping(
       instrumentId: instrument.id,
       coingeckoId: result.coingeckoId,
-      cryptocompareSymbol: result.cryptocompareSymbol,
       binanceSymbol: result.binanceSymbol
     )
     return CryptoRegistration(instrument: instrument, mapping: mapping)

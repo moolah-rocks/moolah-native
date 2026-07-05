@@ -19,7 +19,7 @@ struct TransferEventBuilderConcurrencyTests {
     let subject = makeDiscoverySubject()
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: "usd-coin", cryptocompare: nil, binance: nil))
+      .success(coingecko: "usd-coin", binance: nil))
 
     let account = makeCryptoAccount(walletAddress: Self.wallet, chain: .ethereum)
     let origin = makeWalletImportOrigin(for: account.id)

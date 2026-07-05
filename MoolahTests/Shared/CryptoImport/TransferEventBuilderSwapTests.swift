@@ -26,7 +26,7 @@ struct TransferEventBuilderSwapTests {
     let subject = makeDiscoverySubject()
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: "usd-coin", cryptocompare: nil, binance: nil))
+      .success(coingecko: "usd-coin", binance: nil))
 
     let account = makeCryptoAccount(walletAddress: Self.wallet, chain: .ethereum)
     let origin = makeWalletImportOrigin(for: account.id)
@@ -70,7 +70,7 @@ struct TransferEventBuilderSwapTests {
     let subject = makeDiscoverySubject()
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: "usd-coin", cryptocompare: nil, binance: nil))
+      .success(coingecko: "usd-coin", binance: nil))
 
     let alchemy = RecordingAlchemyClientStub()
     alchemy.setReceiptResponse(
@@ -123,10 +123,10 @@ struct TransferEventBuilderSwapTests {
     let subject = makeDiscoverySubject()
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: "usd-coin", cryptocompare: nil, binance: nil))
+      .success(coingecko: "usd-coin", binance: nil))
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.proveAddress.lowercased()),
-      .success(coingecko: "prove", cryptocompare: nil, binance: nil))
+      .success(coingecko: "prove", binance: nil))
 
     let alchemy = RecordingAlchemyClientStub()
     alchemy.setReceiptResponse(

@@ -201,7 +201,6 @@ struct BenchmarkRegistrationResolver: CryptoRegistrationResolver, Sendable {
     let mapping = CryptoProviderMapping(
       instrumentId: instrument.id,
       coingeckoId: "bench-\(resolvedSymbol)",
-      cryptocompareSymbol: nil,
       binanceSymbol: nil)
     return CryptoRegistration(instrument: instrument, mapping: mapping)
   }

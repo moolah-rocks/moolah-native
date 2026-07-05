@@ -119,7 +119,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 19
+  static let version = 20
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -163,6 +163,8 @@ enum ProfileSchema {
     migrator.registerMigration("v18_deletion_journal", migrate: addDeletionJournal)
     migrator.registerMigration(
       "v19_transaction_by_date_id", migrate: addTransactionByDateIdIndex)
+    migrator.registerMigration(
+      "v20_drop_cryptocompare_symbol", migrate: dropCryptocomplareSymbolColumn)
 
     return migrator
   }

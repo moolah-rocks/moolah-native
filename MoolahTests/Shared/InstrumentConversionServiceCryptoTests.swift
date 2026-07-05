@@ -83,7 +83,7 @@ struct InstrumentConversionServiceCryptoTests {
       providerMappings: [
         CryptoProviderMapping(
           instrumentId: "1:native", coingeckoId: "ethereum",
-          cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+          binanceSymbol: "ETHUSDT"
         )
       ]
     )
@@ -104,7 +104,7 @@ struct InstrumentConversionServiceCryptoTests {
       providerMappings: [
         CryptoProviderMapping(
           instrumentId: "1:native", coingeckoId: "ethereum",
-          cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+          binanceSymbol: "ETHUSDT"
         )
       ]
     )
@@ -128,11 +128,11 @@ struct InstrumentConversionServiceCryptoTests {
       providerMappings: [
         CryptoProviderMapping(
           instrumentId: "1:native", coingeckoId: "ethereum",
-          cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+          binanceSymbol: "ETHUSDT"
         ),
         CryptoProviderMapping(
           instrumentId: "0:native", coingeckoId: "bitcoin",
-          cryptocompareSymbol: "BTC", binanceSymbol: "BTCUSDT"
+          binanceSymbol: "BTCUSDT"
         ),
       ]
     )
@@ -165,7 +165,7 @@ struct InstrumentConversionServiceCryptoTests {
       providerMappings: [
         CryptoProviderMapping(
           instrumentId: "1:native", coingeckoId: "ethereum",
-          cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+          binanceSymbol: "ETHUSDT"
         )
       ]
     )
@@ -186,7 +186,7 @@ struct InstrumentConversionServiceCryptoTests {
       providerMappings: [
         CryptoProviderMapping(
           instrumentId: "1:native", coingeckoId: "ethereum",
-          cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+          binanceSymbol: "ETHUSDT"
         )
       ]
     )
@@ -207,7 +207,7 @@ struct InstrumentConversionServiceCryptoTests {
       providerMappings: [
         CryptoProviderMapping(
           instrumentId: "1:native", coingeckoId: "ethereum",
-          cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+          binanceSymbol: "ETHUSDT"
         )
       ]
     )
@@ -225,7 +225,7 @@ struct InstrumentConversionServiceCryptoTests {
       providerMappings: [
         CryptoProviderMapping(
           instrumentId: "1:native", coingeckoId: "ethereum",
-          cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+          binanceSymbol: "ETHUSDT"
         )
       ]
     )
@@ -275,7 +275,7 @@ struct InstrumentConversionServiceCryptoTests {
         instrument: eth,
         mapping: CryptoProviderMapping(
           instrumentId: "1:native", coingeckoId: "ethereum",
-          cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+          binanceSymbol: "ETHUSDT"
         )
       )
     ])

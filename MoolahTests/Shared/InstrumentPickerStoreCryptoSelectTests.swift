@@ -13,7 +13,6 @@ struct InstrumentPickerStoreCryptoSelectTests {
     let resolver = RecordingTokenResolutionClient(
       result: TokenResolutionResult(
         coingeckoId: "uniswap",
-        cryptocompareSymbol: "UNI",
         binanceSymbol: "UNIUSDT",
         resolvedName: "Uniswap",
         resolvedSymbol: "UNI",
@@ -41,7 +40,6 @@ struct InstrumentPickerStoreCryptoSelectTests {
     let snapshot = registry.snapshot()
     #expect(snapshot.registeredCryptos.count == 1)
     #expect(snapshot.registeredCryptos.first?.mapping.coingeckoId == "uniswap")
-    #expect(snapshot.registeredCryptos.first?.mapping.cryptocompareSymbol == "UNI")
     #expect(snapshot.registeredCryptos.first?.mapping.binanceSymbol == "UNIUSDT")
     #expect(store.error == nil)
     #expect(store.isResolving == false)
@@ -58,7 +56,6 @@ struct InstrumentPickerStoreCryptoSelectTests {
     let resolver = RecordingTokenResolutionClient(
       result: TokenResolutionResult(
         coingeckoId: "bitcoin",
-        cryptocompareSymbol: "BTC",
         binanceSymbol: "BTCUSDT",
         resolvedName: "Bitcoin",
         resolvedSymbol: "BTC",
@@ -127,7 +124,6 @@ struct InstrumentPickerStoreCryptoSelectTests {
     let mapping = CryptoProviderMapping(
       instrumentId: registered.id,
       coingeckoId: "uniswap",
-      cryptocompareSymbol: nil,
       binanceSymbol: nil
     )
     let registry = StubInstrumentRegistry(
@@ -190,7 +186,6 @@ struct InstrumentPickerStoreCryptoSelectTests {
     let resolver = RecordingTokenResolutionClient(
       result: TokenResolutionResult(
         coingeckoId: "uniswap",
-        cryptocompareSymbol: "UNI",
         binanceSymbol: nil,
         resolvedName: nil,
         resolvedSymbol: nil,

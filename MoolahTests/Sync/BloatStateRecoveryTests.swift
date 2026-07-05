@@ -148,7 +148,7 @@ struct BloatStateRecoveryTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
     try await registry.remove(id: eth.id)
 
     coordinator.armRecoveryShield()

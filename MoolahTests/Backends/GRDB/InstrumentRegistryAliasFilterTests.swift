@@ -70,12 +70,12 @@ extension InstrumentRegistryAliasFilterTests {
           id: "1:native", recordName: "1:native", kind: "cryptoToken",
           name: "Ethereum", decimals: 18, ticker: "ETH", exchange: nil,
           chainId: 1, contractAddress: nil, coingeckoId: "ethereum",
-          cryptocompareSymbol: nil, binanceSymbol: nil, encodedSystemFields: nil),
+          binanceSymbol: nil, encodedSystemFields: nil),
         InstrumentRow(
           id: "10:native", recordName: "10:native", kind: "cryptoToken",
           name: "Ethereum", decimals: 18, ticker: "ETH", exchange: nil,
           chainId: 10, contractAddress: nil, coingeckoId: "ethereum",
-          cryptocompareSymbol: nil, binanceSymbol: nil, encodedSystemFields: nil),
+          binanceSymbol: nil, encodedSystemFields: nil),
       ], deleted: [])
     return registry
   }

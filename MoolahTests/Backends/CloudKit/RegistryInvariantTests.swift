@@ -84,7 +84,6 @@ struct RegistryInvariantTests {
       mapping: CryptoProviderMapping(
         instrumentId: "1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
         coingeckoId: "usd-coin",
-        cryptocompareSymbol: "USDC",
         binanceSymbol: nil))
 
     let rows = try await queue.read { database in
@@ -110,7 +109,6 @@ struct RegistryInvariantTests {
       chainId: nil,
       contractAddress: nil,
       coingeckoId: nil,
-      cryptocompareSymbol: nil,
       binanceSymbol: nil,
       encodedSystemFields: nil)
   }
@@ -127,7 +125,6 @@ struct RegistryInvariantTests {
       chainId: 1,
       contractAddress: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
       coingeckoId: "usd-coin",
-      cryptocompareSymbol: "USDC",
       binanceSymbol: nil,
       encodedSystemFields: nil)
   }
@@ -144,7 +141,6 @@ struct RegistryInvariantTests {
       chainId: nil,
       contractAddress: nil,
       coingeckoId: nil,
-      cryptocompareSymbol: nil,
       binanceSymbol: nil,
       encodedSystemFields: nil)
   }

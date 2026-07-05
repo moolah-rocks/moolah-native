@@ -12,7 +12,6 @@ struct CryptoInstrumentSpec: Sendable {
   let name: String
   let decimals: Int
   let coingeckoId: String?
-  let cryptocompareSymbol: String?
   let binanceSymbol: String?
 }
 
@@ -35,9 +34,9 @@ extension AutomationService {
   /// unsynced chain (Starknet, Scroll, …) is still valued from its provider
   /// mapping, independent of wallet-sync support.
   ///
-  /// At least one provider identifier (`coingeckoId`, `cryptocompareSymbol`,
-  /// `binanceSymbol`) must be supplied; without one the token can't be priced
-  /// and the call throws rather than register an unpriceable stub.
+  /// At least one provider identifier (`coingeckoId`, `binanceSymbol`) must
+  /// be supplied; without one the token can't be priced and the call throws
+  /// rather than register an unpriceable stub.
   @discardableResult
   func registerCryptoInstrument(
     profileIdentifier: String,
@@ -68,12 +67,11 @@ extension AutomationService {
     let mapping = CryptoProviderMapping(
       instrumentId: instrument.id,
       coingeckoId: nonEmpty(spec.coingeckoId),
-      cryptocompareSymbol: nonEmpty(spec.cryptocompareSymbol),
       binanceSymbol: nonEmpty(spec.binanceSymbol))
     guard mapping.hasProviderMapping else {
       throw AutomationError.invalidParameter(
         "A crypto instrument needs at least one price source: "
-          + "coingecko id, cryptocompare symbol, or binance symbol")
+          + "coingecko id or binance symbol")
     }
 
     do {

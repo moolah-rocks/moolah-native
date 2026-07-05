@@ -35,7 +35,7 @@ struct InstrumentDeletionJournalTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
     #expect(try await entries(database).isEmpty)
 
     try await registry.remove(id: eth.id)
@@ -74,7 +74,7 @@ struct InstrumentDeletionJournalTests {
       chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
     let mapping = CryptoProviderMapping(
       instrumentId: eth.id, coingeckoId: "ethereum",
-      cryptocompareSymbol: nil, binanceSymbol: nil)
+      binanceSymbol: nil)
     try await registry.registerCrypto(eth, mapping: mapping)
     try await registry.remove(id: eth.id)
     #expect(try await entries(database).count == 1)
@@ -106,7 +106,7 @@ struct InstrumentDeletionJournalTests {
       chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
     let mapping = CryptoProviderMapping(
       instrumentId: eth.id, coingeckoId: "ethereum",
-      cryptocompareSymbol: nil, binanceSymbol: nil)
+      binanceSymbol: nil)
     try await registry.registerCrypto(eth, mapping: mapping)
     try await registry.remove(id: eth.id)
     #expect(try await entries(database).count == 1)
@@ -127,7 +127,7 @@ struct InstrumentDeletionJournalTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
     try await registry.remove(id: eth.id)
     #expect(try await entries(database).count == 1)
 
@@ -146,7 +146,7 @@ struct InstrumentDeletionJournalTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
 
     try registry.applyRemoteChangesSync(saved: [], deleted: [eth.id])
     #expect(try await entries(database).isEmpty)

@@ -45,7 +45,6 @@ struct ApplyPathSharedRegistryResolutionTests {
       mapping: CryptoProviderMapping(
         instrumentId: crypto.id,
         coingeckoId: "usd-coin",
-        cryptocompareSymbol: "USDC",
         binanceSymbol: nil))
 
     let bundle = ProfileGRDBRepositories.makeForApply(

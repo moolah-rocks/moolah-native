@@ -59,7 +59,7 @@ struct CryptoRegistration {
         chainId: 0, contractAddress: nil, symbol: "BTC", name: "Bitcoin", decimals: 8),
       mapping: CryptoProviderMapping(
         instrumentId: "0:native", coingeckoId: "bitcoin",
-        cryptocompareSymbol: "BTC", binanceSymbol: "BTCUSDT"
+        binanceSymbol: "BTCUSDT"
       )
     ),
     CryptoRegistration(
@@ -67,7 +67,7 @@ struct CryptoRegistration {
         chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18),
       mapping: CryptoProviderMapping(
         instrumentId: "1:native", coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+        binanceSymbol: "ETHUSDT"
       )
     ),
     CryptoRegistration(
@@ -75,7 +75,7 @@ struct CryptoRegistration {
         chainId: 137, contractAddress: nil, symbol: "MATIC", name: "Polygon", decimals: 18),
       mapping: CryptoProviderMapping(
         instrumentId: "137:native", coingeckoId: "polygon-ecosystem-token",
-        cryptocompareSymbol: "MATIC", binanceSymbol: "POLUSDT"
+        binanceSymbol: "POLUSDT"
       )
     ),
     CryptoRegistration(
@@ -86,7 +86,7 @@ struct CryptoRegistration {
       ),
       mapping: CryptoProviderMapping(
         instrumentId: "10:0x4200000000000000000000000000000000000042",
-        coingeckoId: "optimism", cryptocompareSymbol: "OP", binanceSymbol: "OPUSDT"
+        coingeckoId: "optimism", binanceSymbol: "OPUSDT"
       )
     ),
     CryptoRegistration(
@@ -97,7 +97,7 @@ struct CryptoRegistration {
       ),
       mapping: CryptoProviderMapping(
         instrumentId: "1:0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
-        coingeckoId: "uniswap", cryptocompareSymbol: "UNI", binanceSymbol: "UNIUSDT"
+        coingeckoId: "uniswap", binanceSymbol: "UNIUSDT"
       )
     ),
     CryptoRegistration(
@@ -108,7 +108,7 @@ struct CryptoRegistration {
       ),
       mapping: CryptoProviderMapping(
         instrumentId: "1:0xc18360217d8f7ab5e7c516566761ea12ce7f9d72",
-        coingeckoId: "ethereum-name-service", cryptocompareSymbol: "ENS", binanceSymbol: "ENSUSDT"
+        coingeckoId: "ethereum-name-service", binanceSymbol: "ENSUSDT"
       )
     ),
     // Canonical mainnet stablecoin presets. Every L2 USDC/USDT is collapsed
@@ -125,7 +125,7 @@ struct CryptoRegistration {
       ),
       mapping: CryptoProviderMapping(
         instrumentId: "1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
-        coingeckoId: "usd-coin", cryptocompareSymbol: "USDC", binanceSymbol: "USDCUSDT"
+        coingeckoId: "usd-coin", binanceSymbol: "USDCUSDT"
       )
     ),
     CryptoRegistration(
@@ -136,7 +136,7 @@ struct CryptoRegistration {
       ),
       mapping: CryptoProviderMapping(
         instrumentId: "1:0xdac17f958d2ee523a2206206994597c13d831ec7",
-        coingeckoId: "tether", cryptocompareSymbol: "USDT", binanceSymbol: nil
+        coingeckoId: "tether", binanceSymbol: nil
       )
     ),
   ]

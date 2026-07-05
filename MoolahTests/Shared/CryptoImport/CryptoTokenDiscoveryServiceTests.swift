@@ -18,7 +18,7 @@ struct CryptoTokenDiscoveryServiceTests {
     let subject = makeDiscoverySubject()
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: "usd-coin", cryptocompare: "USDC", binance: "USDCUSDT"))
+      .success(coingecko: "usd-coin", binance: "USDCUSDT"))
 
     let registration = try await subject.service.resolveOrLoad(
       chain: .ethereum,
@@ -90,7 +90,7 @@ struct CryptoTokenDiscoveryServiceTests {
     let subject = makeDiscoverySubject()
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: nil, cryptocompare: nil, binance: nil))
+      .success(coingecko: nil, binance: nil))
 
     let registration = try await subject.service.resolveOrLoad(
       chain: .ethereum,
@@ -101,7 +101,6 @@ struct CryptoTokenDiscoveryServiceTests {
 
     #expect(registration.pricingStatus == .unpriced)
     #expect(registration.mapping.coingeckoId == nil)
-    #expect(registration.mapping.cryptocompareSymbol == nil)
     #expect(registration.mapping.binanceSymbol == nil)
   }
 
@@ -113,7 +112,7 @@ struct CryptoTokenDiscoveryServiceTests {
         name: "USD Coin", decimals: 6),
       mapping: CryptoProviderMapping(
         instrumentId: Self.usdcId,
-        coingeckoId: "usd-coin", cryptocompareSymbol: "USDC", binanceSymbol: "USDCUSDT"),
+        coingeckoId: "usd-coin", binanceSymbol: "USDCUSDT"),
       pricingStatus: .priced)
     let subject = makeDiscoverySubject(seededRegistrations: [preexisting])
 
@@ -166,7 +165,7 @@ struct CryptoTokenDiscoveryServiceTests {
     let subject = makeDiscoverySubject()
     subject.resolver.script(
       .init(chainId: 10, contractAddress: fakeAddress),
-      .success(coingecko: "optimism", cryptocompare: nil, binance: nil))
+      .success(coingecko: "optimism", binance: nil))
 
     let registration = try await subject.service.resolveOrLoad(
       chain: .optimism,
@@ -213,7 +212,7 @@ struct CryptoTokenDiscoveryServiceTests {
     let subject = makeDiscoverySubject()
     subject.resolver.script(
       .init(chainId: 10, contractAddress: canonicalAddress),
-      .success(coingecko: "optimism", cryptocompare: nil, binance: nil))
+      .success(coingecko: "optimism", binance: nil))
 
     let registration = try await subject.service.resolveOrLoad(
       chain: .optimism,
@@ -234,7 +233,7 @@ struct CryptoTokenDiscoveryServiceTests {
     let subject = makeDiscoverySubject()
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: "yearn-finance", cryptocompare: nil, binance: nil))
+      .success(coingecko: "yearn-finance", binance: nil))
 
     let registration = try await subject.service.resolveOrLoad(
       chain: .ethereum,
@@ -252,7 +251,7 @@ struct CryptoTokenDiscoveryServiceTests {
   @Test("resolveOrLoad(chainId:) for a chain without a ChainConfig registers")
   func resolveByChainIdWithoutChainConfigRegisters() async throws {
     let subject = makeDiscoverySubject()
-    subject.resolver.setDefault(.success(coingecko: "usd-coin", cryptocompare: nil, binance: nil))
+    subject.resolver.setDefault(.success(coingecko: "usd-coin", binance: nil))
 
     // Arbitrum (chain 42161) has no ChainConfig.
     let registration = try await subject.service.resolveOrLoad(
@@ -279,12 +278,12 @@ struct CryptoTokenDiscoveryServiceTests {
         name: "Obscure", decimals: 18),
       mapping: CryptoProviderMapping(
         instrumentId: Self.usdcId,
-        coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil),
+        coingeckoId: nil, binanceSymbol: nil),
       pricingStatus: .unpriced)
     let subject = makeDiscoverySubject(seededRegistrations: [unpriced])
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: "newly-listed", cryptocompare: nil, binance: nil))
+      .success(coingecko: "newly-listed", binance: nil))
 
     let updated = try await subject.service.reResolve(unpriced, chain: .ethereum)
 
@@ -308,7 +307,7 @@ struct CryptoTokenDiscoveryServiceTests {
         name: "Obscure", decimals: 18),
       mapping: CryptoProviderMapping(
         instrumentId: Self.usdcId,
-        coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil),
+        coingeckoId: nil, binanceSymbol: nil),
       pricingStatus: .unpriced)
     let liveRow = CryptoRegistration(
       instrument: staleSnapshot.instrument,
@@ -318,7 +317,7 @@ struct CryptoTokenDiscoveryServiceTests {
     // Even if the provider would succeed, reResolve must not call it.
     subject.resolver.script(
       .init(chainId: 1, contractAddress: Self.usdcAddress.lowercased()),
-      .success(coingecko: "should-not-be-used", cryptocompare: nil, binance: nil))
+      .success(coingecko: "should-not-be-used", binance: nil))
 
     let result = try await subject.service.reResolve(staleSnapshot, chain: .ethereum)
 

@@ -67,7 +67,6 @@ extension InstrumentRow {
     self.chainId = domain.chainId
     self.contractAddress = domain.contractAddress
     self.coingeckoId = nil
-    self.cryptocompareSymbol = nil
     self.binanceSymbol = nil
     self.encodedSystemFields = nil
     self.pricingStatus = TokenPricingStatus.priced.rawValue
@@ -91,40 +90,16 @@ extension InstrumentRow {
       contractAddress: contractAddress)
   }
 
-  /// `CryptoProviderMapping` reconstructed from the row's three provider
-  /// columns. Returns `nil` when no mapping is recorded (matches the
-  /// `hasMapping` guard in `GRDBInstrumentRegistryRepository.project(row:)`).
-  ///
-  /// A `.priced` token recognised in the bundled `CanonicalTokenRegistry`
-  /// whose `cryptocompare_symbol` column is nil is given its canonical
-  /// symbol so the otherwise CoinGecko-only token reaches CryptoCompare's
-  /// date-anchored deep-history endpoint — see `bundledPriceSymbol()`.
+  /// `CryptoProviderMapping` reconstructed from the row's provider columns.
+  /// Returns `nil` when no mapping is recorded (matches the `hasMapping`
+  /// guard in `GRDBInstrumentRegistryRepository.project(row:)`).
   func cryptoMapping() -> CryptoProviderMapping? {
-    let cryptocompareSymbol = self.cryptocompareSymbol ?? bundledPriceSymbol()
-    let hasMapping =
-      coingeckoId != nil
-      || cryptocompareSymbol != nil
-      || binanceSymbol != nil
+    let hasMapping = coingeckoId != nil || binanceSymbol != nil
     guard hasMapping else { return nil }
     return CryptoProviderMapping(
       instrumentId: id,
       coingeckoId: coingeckoId,
-      cryptocompareSymbol: cryptocompareSymbol,
       binanceSymbol: binanceSymbol)
-  }
-
-  /// The CryptoCompare `fsym` for a `.priced` token recognised in the
-  /// bundled `CanonicalTokenRegistry`, or `nil`. Lets a CoinGecko-only token
-  /// (e.g. USDC/DAI, which CryptoCompare omits from its contract-address
-  /// index) reach CryptoCompare's date-anchored deep-history endpoint. Gated
-  /// to `.priced` so `.unpriced` / `.spam` rows project unchanged, and keyed
-  /// on the canonical address so an impersonator at a different address
-  /// matches nothing.
-  private func bundledPriceSymbol() -> String? {
-    guard pricingStatus == TokenPricingStatus.priced.rawValue, let chainId else {
-      return nil
-    }
-    return CanonicalTokenRegistry.symbol(chainId: chainId, contractAddress: contractAddress)
   }
 
   /// All-nil `CryptoProviderMapping` for the row's id. Used by the
@@ -136,7 +111,6 @@ extension InstrumentRow {
     CryptoProviderMapping(
       instrumentId: id,
       coingeckoId: nil,
-      cryptocompareSymbol: nil,
       binanceSymbol: nil)
   }
 }

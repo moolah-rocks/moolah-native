@@ -4,7 +4,6 @@ import Foundation
 /// Data needed to resolve a token from provider reference data.
 struct TokenResolutionResult: Sendable {
   var coingeckoId: String?
-  var cryptocompareSymbol: String?
   var binanceSymbol: String?
   var resolvedName: String?
   var resolvedSymbol: String?
@@ -23,6 +22,6 @@ extension TokenResolutionResult {
   /// instrument-picker registers crypto only when this is `true`; otherwise
   /// the user sees "Could not find a price source for this token."
   var hasAnyProviderId: Bool {
-    coingeckoId != nil || cryptocompareSymbol != nil || binanceSymbol != nil
+    coingeckoId != nil || binanceSymbol != nil
   }
 }

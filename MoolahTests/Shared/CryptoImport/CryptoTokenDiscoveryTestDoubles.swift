@@ -19,7 +19,7 @@ enum CryptoTokenDiscoveryTestDoubles {}
 /// the project convention for non-actor concurrent test stubs.
 final class CountingRegistrationResolver: CryptoRegistrationResolver, @unchecked Sendable {
   enum Response: Sendable {
-    case success(coingecko: String?, cryptocompare: String?, binance: String?)
+    case success(coingecko: String?, binance: String?)
     case failure(any Error)
   }
 
@@ -32,7 +32,7 @@ final class CountingRegistrationResolver: CryptoRegistrationResolver, @unchecked
   private var responses: [Key: Response] = [:]
   private var callCounts: [Key: Int] = [:]
   private var defaultResponse: Response = .success(
-    coingecko: "default-id", cryptocompare: nil, binance: nil)
+    coingecko: "default-id", binance: nil)
 
   func setDefault(_ response: Response) {
     lock.withLock { self.defaultResponse = response }
@@ -61,7 +61,7 @@ final class CountingRegistrationResolver: CryptoRegistrationResolver, @unchecked
     switch response {
     case let .failure(error):
       throw error
-    case let .success(coingecko, cryptocompare, binance):
+    case let .success(coingecko, binance):
       let resolvedSymbol = symbol ?? "TKN"
       let instrument = Instrument.crypto(
         chainId: chainId,
@@ -72,7 +72,6 @@ final class CountingRegistrationResolver: CryptoRegistrationResolver, @unchecked
       let mapping = CryptoProviderMapping(
         instrumentId: instrument.id,
         coingeckoId: coingecko,
-        cryptocompareSymbol: cryptocompare,
         binanceSymbol: binance)
       return CryptoRegistration(instrument: instrument, mapping: mapping)
     }

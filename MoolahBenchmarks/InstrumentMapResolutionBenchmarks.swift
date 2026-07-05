@@ -59,7 +59,6 @@ final class InstrumentMapResolutionBenchmarks: XCTestCase {
           mapping: CryptoProviderMapping(
             instrumentId: token.id,
             coingeckoId: "token-\(index)",
-            cryptocompareSymbol: nil,
             binanceSymbol: nil))
       }
     }
@@ -135,7 +134,6 @@ final class InstrumentMapResolutionBenchmarks: XCTestCase {
                 mapping: CryptoProviderMapping(
                   instrumentId: token.id,
                   coingeckoId: "mid-burst",
-                  cryptocompareSymbol: nil,
                   binanceSymbol: nil))
             }
             total += try await registry.instrumentMap().count

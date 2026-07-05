@@ -103,11 +103,11 @@ final class InstrumentPickerStore {
   }
 
   /// Resolves the catalog row's provider IDs and persists the instrument
-  /// alongside its mapping. A row is unwriteable when all three of
-  /// `coingeckoId`, `cryptocompareSymbol`, and `binanceSymbol` are nil — none
-  /// of the price clients can quote it, so we refuse the registration and
-  /// surface a user-facing error instead of poisoning the registry with a
-  /// row that will never price.
+  /// alongside its mapping. A row is unwriteable when all of
+  /// `coingeckoId` and `binanceSymbol` are nil — none of the price
+  /// clients can quote it, so we refuse the registration and surface a
+  /// user-facing error instead of poisoning the registry with a row that
+  /// will never price.
   ///
   /// The incoming instrument is canonicalized before any registry lookup or
   /// write: an L2 stablecoin (e.g. Optimism USDC `10:0x0b2c…`) collapses onto
@@ -158,7 +158,6 @@ final class InstrumentPickerStore {
       let mapping = CryptoProviderMapping(
         instrumentId: canonicalInstrument.id,
         coingeckoId: resolution.coingeckoId,
-        cryptocompareSymbol: resolution.cryptocompareSymbol,
         binanceSymbol: resolution.binanceSymbol
       )
       try await registry.registerCrypto(canonicalInstrument, mapping: mapping)

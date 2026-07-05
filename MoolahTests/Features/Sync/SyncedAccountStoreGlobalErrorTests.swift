@@ -231,7 +231,7 @@ struct SyncedAccountStoreGlobalErrorTests {
     try tokenStore.save(token: token, for: account.id)
     let registry = StubInstrumentRegistry()
     let regResolver = CountingRegistrationResolver()
-    regResolver.setDefault(.success(coingecko: "id", cryptocompare: nil, binance: nil))
+    regResolver.setDefault(.success(coingecko: "id", binance: nil))
     let discovery = CryptoTokenDiscoveryService(
       registry: registry, resolver: regResolver)
     fixture.store.appendSourceForTesting(

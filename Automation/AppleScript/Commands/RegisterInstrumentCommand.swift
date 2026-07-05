@@ -28,7 +28,6 @@
       }
       let contract = args["contract"] as? String
       let coingecko = args["coingecko"] as? String
-      let cryptocompare = args["cryptocompare"] as? String
       let binance = args["binance"] as? String
 
       let result: String? = runBlockingWithError { @MainActor () async throws -> String in
@@ -44,7 +43,6 @@
             name: name,
             decimals: decimals,
             coingeckoId: coingecko,
-            cryptocompareSymbol: cryptocompare,
             binanceSymbol: binance))
         return instrument.id
       }

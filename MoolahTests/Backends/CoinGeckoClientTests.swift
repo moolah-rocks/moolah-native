@@ -6,7 +6,7 @@ import Testing
 @Suite("CoinGeckoClient")
 struct CoinGeckoClientTests {
   private let ethMapping = CryptoProviderMapping(
-    instrumentId: "1:native", coingeckoId: "ethereum", cryptocompareSymbol: nil, binanceSymbol: nil
+    instrumentId: "1:native", coingeckoId: "ethereum", binanceSymbol: nil
   )
 
   private func date(_ string: String) throws -> Date {
@@ -227,7 +227,7 @@ struct CoinGeckoClientTests {
   @Test
   func mappingWithoutCoinGeckoIdThrows() async {
     let mapping = CryptoProviderMapping(
-      instrumentId: "1:0xabc", coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil
+      instrumentId: "1:0xabc", coingeckoId: nil, binanceSymbol: nil
     )
     let services = NetworkingServices(
       session: URLSession(configuration: .ephemeral))

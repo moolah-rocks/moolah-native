@@ -34,7 +34,6 @@ extension GRDBInstrumentRegistryRepository: InstrumentRegistering {
         mapping: CryptoProviderMapping(
           instrumentId: instrument.id,
           coingeckoId: nil,
-          cryptocompareSymbol: nil,
           binanceSymbol: nil))
     }
   }

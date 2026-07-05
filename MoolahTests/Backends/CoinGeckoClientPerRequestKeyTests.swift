@@ -22,7 +22,7 @@ final class CoinGeckoClientPerRequestKeyTests {
 
   private let ethMapping = CryptoProviderMapping(
     instrumentId: "1:native", coingeckoId: "ethereum",
-    cryptocompareSymbol: nil, binanceSymbol: nil)
+    binanceSymbol: nil)
 
   /// One mutable `apiKey` box drives the provider so a single client can be
   /// driven across the empty → Pro transition without reconstructing it.

@@ -18,7 +18,7 @@ struct InstrumentPickerCanonicalizationTests {
     let store = InstrumentPickerStore(
       registry: registry,
       resolutionClient: ConfigurableTokenResolutionClient(
-        coingeckoId: "usd-coin", cryptocompareSymbol: "USDC", binanceSymbol: nil),
+        coingeckoId: "usd-coin", binanceSymbol: nil),
       canonicalResolver: resolver,
       kinds: [.cryptoToken])
 
@@ -46,7 +46,7 @@ struct InstrumentPickerCanonicalizationTests {
     let store = InstrumentPickerStore(
       registry: registry,
       resolutionClient: ConfigurableTokenResolutionClient(
-        coingeckoId: "uniswap", cryptocompareSymbol: "UNI", binanceSymbol: nil),
+        coingeckoId: "uniswap", binanceSymbol: nil),
       canonicalResolver: resolver,
       kinds: [.cryptoToken])
 
@@ -78,7 +78,6 @@ struct InstrumentPickerCanonicalizationTests {
     let mapping = CryptoProviderMapping(
       instrumentId: mainnetUSDC.id,
       coingeckoId: "usd-coin",
-      cryptocompareSymbol: "USDC",
       binanceSymbol: nil)
     try await registry.registerCrypto(mainnetUSDC, mapping: mapping)
 
@@ -111,7 +110,7 @@ struct InstrumentPickerCanonicalizationTests {
     let store = InstrumentPickerStore(
       registry: registry,
       resolutionClient: ConfigurableTokenResolutionClient(
-        coingeckoId: "op-usdc", cryptocompareSymbol: nil, binanceSymbol: nil),
+        coingeckoId: "op-usdc", binanceSymbol: nil),
       canonicalResolver: nil,  // no resolver wired
       kinds: [.cryptoToken])
 
@@ -133,7 +132,6 @@ struct InstrumentPickerCanonicalizationTests {
 /// Returns a fixed set of provider ids on every `resolve` call.
 private struct ConfigurableTokenResolutionClient: TokenResolutionClient {
   let coingeckoId: String?
-  let cryptocompareSymbol: String?
   let binanceSymbol: String?
 
   func resolve(
@@ -141,7 +139,6 @@ private struct ConfigurableTokenResolutionClient: TokenResolutionClient {
   ) async throws -> TokenResolutionResult {
     TokenResolutionResult(
       coingeckoId: coingeckoId,
-      cryptocompareSymbol: cryptocompareSymbol,
       binanceSymbol: binanceSymbol,
       resolvedName: nil,
       resolvedSymbol: nil,
@@ -159,7 +156,6 @@ private final class CountingTokenResolutionClient: TokenResolutionClient, @unche
     callCount += 1
     return TokenResolutionResult(
       coingeckoId: "usd-coin",
-      cryptocompareSymbol: "USDC",
       binanceSymbol: nil,
       resolvedName: nil,
       resolvedSymbol: nil,

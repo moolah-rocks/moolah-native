@@ -8,7 +8,6 @@ struct CryptoProviderMapping: Codable, Sendable, Hashable, Identifiable {
   let instrumentId: String  // Matches Instrument.id, e.g. "1:native", "10:0xabc..."
 
   let coingeckoId: String?
-  let cryptocompareSymbol: String?
   let binanceSymbol: String?
 
   var id: String { instrumentId }
@@ -19,7 +18,7 @@ struct CryptoProviderMapping: Codable, Sendable, Hashable, Identifiable {
   /// this to distinguish a mapped/`.priced` registration from an
   /// `.unpriced` stub.
   var hasProviderMapping: Bool {
-    coingeckoId != nil || cryptocompareSymbol != nil || binanceSymbol != nil
+    coingeckoId != nil || binanceSymbol != nil
   }
 
   /// Canonical cross-chain asset key: the curated price-provider id, which is
@@ -27,7 +26,7 @@ struct CryptoProviderMapping: Codable, Sendable, Hashable, Identifiable {
   /// ETH on mainnet and every L2). Falls back to the instrument's own id when
   /// no provider id is present, so an unmapped token matches no other asset.
   var assetKey: String {
-    coingeckoId ?? cryptocompareSymbol ?? binanceSymbol ?? instrumentId
+    coingeckoId ?? binanceSymbol ?? instrumentId
   }
 
   /// Merge-only fill: each nil provider id is taken from `other`; a populated
@@ -38,7 +37,6 @@ struct CryptoProviderMapping: Codable, Sendable, Hashable, Identifiable {
     CryptoProviderMapping(
       instrumentId: instrumentId,
       coingeckoId: coingeckoId ?? other.coingeckoId,
-      cryptocompareSymbol: cryptocompareSymbol ?? other.cryptocompareSymbol,
       binanceSymbol: binanceSymbol ?? other.binanceSymbol)
   }
 

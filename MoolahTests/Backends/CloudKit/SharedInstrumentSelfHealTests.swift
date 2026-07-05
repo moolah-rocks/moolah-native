@@ -31,7 +31,6 @@ struct SharedInstrumentSelfHealTests {
       mapping: CryptoProviderMapping(
         instrumentId: "1:0xunsynced",
         coingeckoId: "unsynced",
-        cryptocompareSymbol: nil,
         binanceSymbol: nil))
 
     // Another row that has roundtripped (non-NULL):
@@ -42,7 +41,6 @@ struct SharedInstrumentSelfHealTests {
       mapping: CryptoProviderMapping(
         instrumentId: "1:0xsynced",
         coingeckoId: "synced",
-        cryptocompareSymbol: nil,
         binanceSymbol: nil))
     try await queue.write { database in
       try database.execute(

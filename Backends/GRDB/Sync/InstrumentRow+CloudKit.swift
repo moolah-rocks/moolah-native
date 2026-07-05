@@ -18,7 +18,6 @@ extension InstrumentRow: CloudKitRecordConvertible {
       chainId: chainId.map(Int64.init),
       coingeckoId: coingeckoId,
       contractAddress: contractAddress,
-      cryptocompareSymbol: cryptocompareSymbol,
       decimals: Int64(decimals),
       exchange: exchange,
       kind: kind,
@@ -57,7 +56,6 @@ extension InstrumentRow: CloudKitRecordConvertible {
       chainId: fields.chainId.map(Int.init),
       contractAddress: fields.contractAddress,
       coingeckoId: fields.coingeckoId,
-      cryptocompareSymbol: fields.cryptocompareSymbol,
       binanceSymbol: fields.binanceSymbol,
       // Stamped by applyGRDBBatchSave after upsert; never read from the
       // CKRecord itself.

@@ -16,9 +16,9 @@ struct ProfileIndexSchemaV9Tests {
     try ProfileIndexDatabase.openInMemory()
   }
 
-  @Test("schema version reflects the v9 migration")
+  @Test("schema version is at least the v9 migration")
   func versionIsLatest() {
-    #expect(ProfileIndexSchema.version == 9)
+    #expect(ProfileIndexSchema.version >= 9)
   }
 
   @Test("v9 adds the alias_of column to the instrument table")
@@ -89,7 +89,7 @@ struct ProfileIndexSchemaV9Tests {
         id: "10:native", recordName: "10:native", kind: "cryptoToken",
         name: "Ethereum", decimals: 18, ticker: "ETH", exchange: nil,
         chainId: 10, contractAddress: nil, coingeckoId: "ethereum",
-        cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT",
+        binanceSymbol: "ETHUSDT",
         encodedSystemFields: nil, pricingStatus: "priced")
       try row.insert(database)
       try database.execute(

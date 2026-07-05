@@ -4,11 +4,15 @@ import Testing
 
 @testable import Moolah
 
-/// Pins the wire-format contract for the three crypto provider-mapping
-/// columns (`coingeckoId`, `cryptocompareSymbol`, `binanceSymbol`) on
-/// `InstrumentRow`. Asserts that these fields round-trip through CloudKit,
-/// stay absent (not-`nil`-valued) when unset, and survive forward-compat
-/// decoding of older payloads that didn't carry them.
+/// Pins the wire-format contract for the two active crypto provider-mapping
+/// columns (`coingeckoId`, `binanceSymbol`) on `InstrumentRow`. Asserts that
+/// these fields round-trip through CloudKit, stay absent (not-`nil`-valued)
+/// when unset, and survive forward-compat decoding of older payloads that
+/// didn't carry them.
+///
+/// Note: `cryptocompareSymbol` was deprecated in 2026-07 (CryptoCompare
+/// provider removed). The CloudKit field is retained for additive-only
+/// invariant but is no longer written by this app.
 @Suite("InstrumentRow — Crypto Provider Mapping Fields")
 struct InstrumentRecordCryptoFieldsTests {
 
@@ -22,7 +26,6 @@ struct InstrumentRecordCryptoFieldsTests {
     chainId: Int? = nil,
     contractAddress: String? = nil,
     coingeckoId: String? = nil,
-    cryptocompareSymbol: String? = nil,
     binanceSymbol: String? = nil
   ) -> InstrumentRow {
     InstrumentRow(
@@ -36,7 +39,6 @@ struct InstrumentRecordCryptoFieldsTests {
       chainId: chainId,
       contractAddress: contractAddress,
       coingeckoId: coingeckoId,
-      cryptocompareSymbol: cryptocompareSymbol,
       binanceSymbol: binanceSymbol,
       encodedSystemFields: nil)
   }
@@ -51,10 +53,8 @@ struct InstrumentRecordCryptoFieldsTests {
       ticker: "ETH",
       chainId: 1,
       coingeckoId: "ethereum",
-      cryptocompareSymbol: "ETH",
       binanceSymbol: "ETHUSDT")
     #expect(row.coingeckoId == "ethereum")
-    #expect(row.cryptocompareSymbol == "ETH")
     #expect(row.binanceSymbol == "ETHUSDT")
   }
 
@@ -62,7 +62,6 @@ struct InstrumentRecordCryptoFieldsTests {
   func mappingFieldsDefaultToNil() {
     let row = makeInstrumentRow(id: "AUD", kind: "fiatCurrency", name: "AUD", decimals: 2)
     #expect(row.coingeckoId == nil)
-    #expect(row.cryptocompareSymbol == nil)
     #expect(row.binanceSymbol == nil)
   }
 
@@ -77,18 +76,17 @@ struct InstrumentRecordCryptoFieldsTests {
       chainId: 1,
       contractAddress: "0xdac17f958d2ee523a2206206994597c13d831ec7",
       coingeckoId: "tether",
-      cryptocompareSymbol: "USDT",
       binanceSymbol: "USDTUSDT")
     let zoneID = CKRecordZone.ID(zoneName: "test", ownerName: CKCurrentUserDefaultName)
     let ckRecord = original.toCKRecord(in: zoneID)
 
     #expect(ckRecord["coingeckoId"] as? String == "tether")
-    #expect(ckRecord["cryptocompareSymbol"] as? String == "USDT")
     #expect(ckRecord["binanceSymbol"] as? String == "USDTUSDT")
+    // cryptocompareSymbol was deprecated in 2026-07; no longer written to CK records.
+    #expect(ckRecord["cryptocompareSymbol"] == nil)
 
     let decoded = try #require(InstrumentRow.fieldValues(from: ckRecord))
     #expect(decoded.coingeckoId == "tether")
-    #expect(decoded.cryptocompareSymbol == "USDT")
     #expect(decoded.binanceSymbol == "USDTUSDT")
   }
 
@@ -121,7 +119,6 @@ struct InstrumentRecordCryptoFieldsTests {
 
     let decoded = try #require(InstrumentRow.fieldValues(from: ckRecord))
     #expect(decoded.coingeckoId == nil)
-    #expect(decoded.cryptocompareSymbol == nil)
     #expect(decoded.binanceSymbol == nil)
     #expect(decoded.id == "AUD")
     #expect(decoded.kind == "fiatCurrency")

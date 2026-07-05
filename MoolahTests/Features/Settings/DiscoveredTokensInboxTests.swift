@@ -64,7 +64,7 @@ struct DiscoveredTokensInboxTests {
       symbol: symbol, name: symbol, decimals: 18)
     let mapping = CryptoProviderMapping(
       instrumentId: instrument.id, coingeckoId: nil,
-      cryptocompareSymbol: nil, binanceSymbol: nil)
+      binanceSymbol: nil)
     try await registry.registerCrypto(instrument, mapping: mapping)
     let registration = CryptoRegistration(
       instrument: instrument, mapping: mapping, pricingStatus: .unpriced)
@@ -138,7 +138,7 @@ struct DiscoveredTokensInboxTests {
       chainId: 1, contractAddress: seeded.instrument.contractAddress?.lowercased())
     fixture.resolver.script(
       key,
-      .success(coingecko: "resolve-ok", cryptocompare: nil, binance: nil))
+      .success(coingecko: "resolve-ok", binance: nil))
 
     let resolved = try await fixture.discovery.reResolve(seeded, chain: .ethereum)
 

@@ -10,12 +10,10 @@ struct CryptoProviderMappingTests {
     let mapping = CryptoProviderMapping(
       instrumentId: "1:native",
       coingeckoId: "ethereum",
-      cryptocompareSymbol: "ETH",
       binanceSymbol: "ETHUSDT"
     )
     #expect(mapping.instrumentId == "1:native")
     #expect(mapping.coingeckoId == "ethereum")
-    #expect(mapping.cryptocompareSymbol == "ETH")
     #expect(mapping.binanceSymbol == "ETHUSDT")
   }
 
@@ -24,7 +22,6 @@ struct CryptoProviderMappingTests {
     let mapping = CryptoProviderMapping(
       instrumentId: "1:native",
       coingeckoId: nil,
-      cryptocompareSymbol: nil,
       binanceSymbol: nil
     )
     #expect(mapping.coingeckoId == nil)
@@ -35,7 +32,6 @@ struct CryptoProviderMappingTests {
     let original = CryptoProviderMapping(
       instrumentId: "10:0x4200000000000000000000000000000000000042",
       coingeckoId: "optimism",
-      cryptocompareSymbol: "OP",
       binanceSymbol: "OPUSDT"
     )
     let data = try JSONEncoder().encode(original)
@@ -47,11 +43,11 @@ struct CryptoProviderMappingTests {
   func identityBasedOnInstrumentId() {
     let first = CryptoProviderMapping(
       instrumentId: "1:native", coingeckoId: "ethereum",
-      cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+      binanceSymbol: "ETHUSDT"
     )
     let second = CryptoProviderMapping(
       instrumentId: "1:native", coingeckoId: "eth-changed",
-      cryptocompareSymbol: nil, binanceSymbol: nil
+      binanceSymbol: nil
     )
     #expect(first.id == second.id)
   }
@@ -64,7 +60,6 @@ struct CryptoProviderMappingTests {
 
     let btc = try #require(presets.first { $0.instrumentId == "0:native" })
     #expect(btc.coingeckoId == "bitcoin")
-    #expect(btc.cryptocompareSymbol == "BTC")
     #expect(btc.binanceSymbol == "BTCUSDT")
 
     // The canonical mainnet ETH and Polygon native gas instruments carry a
@@ -74,7 +69,6 @@ struct CryptoProviderMappingTests {
     // ChainConfig aliases them to the canonical 1:native.
     for id in ["1:native", "137:native"] {
       let preset = try #require(presets.first { $0.instrumentId == id })
-      #expect(preset.cryptocompareSymbol != nil, "missing CC mapping for \(id)")
       #expect(preset.binanceSymbol != nil, "missing Binance mapping for \(id)")
     }
   }
@@ -86,13 +80,12 @@ struct CryptoProviderMappingMergingTests {
   func mergeFillsNilsOnly() {
     let stored = CryptoProviderMapping(
       instrumentId: "1:0xrpl", coingeckoId: "rocket-pool",
-      cryptocompareSymbol: nil, binanceSymbol: nil)
+      binanceSymbol: nil)
     let extra = CryptoProviderMapping(
       instrumentId: "1:0xrpl", coingeckoId: "WRONG",
-      cryptocompareSymbol: "RPL", binanceSymbol: "RPLUSDT")
+      binanceSymbol: "RPLUSDT")
     let merged = stored.merging(extra)
     #expect(merged.coingeckoId == "rocket-pool")
-    #expect(merged.cryptocompareSymbol == "RPL")
     #expect(merged.binanceSymbol == "RPLUSDT")
     #expect(merged.instrumentId == "1:0xrpl")
   }
@@ -101,22 +94,22 @@ struct CryptoProviderMappingMergingTests {
   func noOp() {
     let full = CryptoProviderMapping(
       instrumentId: "1:0xrpl", coingeckoId: "rocket-pool",
-      cryptocompareSymbol: "RPL", binanceSymbol: "RPLUSDT")
+      binanceSymbol: "RPLUSDT")
     #expect(
       full.merging(
         .init(
           instrumentId: "1:0xrpl", coingeckoId: nil,
-          cryptocompareSymbol: nil, binanceSymbol: nil)) == full)
+          binanceSymbol: nil)) == full)
   }
 
   @Test("does not mutate instrumentId even if other differs")
   func keepsOwnInstrumentId() {
     let stored = CryptoProviderMapping(
       instrumentId: "1:0xrpl", coingeckoId: nil,
-      cryptocompareSymbol: nil, binanceSymbol: "RPLUSDT")
+      binanceSymbol: "RPLUSDT")
     let other = CryptoProviderMapping(
       instrumentId: "999:0xother", coingeckoId: "rocket-pool",
-      cryptocompareSymbol: "RPL", binanceSymbol: "WRONGUSDT")
+      binanceSymbol: "WRONGUSDT")
     let merged = stored.merging(other)
     #expect(merged.instrumentId == "1:0xrpl")
     #expect(merged.binanceSymbol == "RPLUSDT")  // own populated value kept

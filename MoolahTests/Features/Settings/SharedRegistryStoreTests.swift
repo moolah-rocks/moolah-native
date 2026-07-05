@@ -33,7 +33,6 @@ struct SharedRegistryStoreTests {
         instrumentId:
           "1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
         coingeckoId: "usd-coin",
-        cryptocompareSymbol: "USDC",
         binanceSymbol: nil))
 
     await store.loadRegistrations()
@@ -61,7 +60,6 @@ struct SharedRegistryStoreTests {
       mapping: CryptoProviderMapping(
         instrumentId: "1:0xnotregistered",
         coingeckoId: nil,
-        cryptocompareSymbol: nil,
         binanceSymbol: nil))
 
     await #expect(throws: BackendError.self) {
@@ -89,7 +87,6 @@ struct SharedRegistryStoreTests {
         instrumentId:
           "1:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
         coingeckoId: "weth",
-        cryptocompareSymbol: nil,
         binanceSymbol: nil))
     await store.loadRegistrations()
     let initialVersion = store.registrationsVersion
@@ -121,7 +118,6 @@ struct SharedRegistryStoreTests {
       mapping: CryptoProviderMapping(
         instrumentId: id,
         coingeckoId: "weth",
-        cryptocompareSymbol: nil,
         binanceSymbol: nil))
     await store.loadRegistrations()
     let initialVersion = store.registrationsVersion

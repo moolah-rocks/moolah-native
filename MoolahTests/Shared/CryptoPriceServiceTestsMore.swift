@@ -12,7 +12,7 @@ struct CryptoPriceServiceTestsMore {
   )
   private let ethMapping = CryptoProviderMapping(
     instrumentId: "1:native", coingeckoId: "ethereum",
-    cryptocompareSymbol: "ETH", binanceSymbol: "ETHUSDT"
+    binanceSymbol: "ETHUSDT"
   )
 
   private let btcInstrument = Instrument.crypto(
@@ -20,7 +20,7 @@ struct CryptoPriceServiceTestsMore {
   )
   private let btcMapping = CryptoProviderMapping(
     instrumentId: "0:native", coingeckoId: "bitcoin",
-    cryptocompareSymbol: "BTC", binanceSymbol: "BTCUSDT"
+    binanceSymbol: "BTCUSDT"
   )
 
   private var ethRegistration: CryptoRegistration {
@@ -110,7 +110,6 @@ struct CryptoPriceServiceTestsMore {
   func resolveRegistration_populatesProviderFields() async throws {
     let result = TokenResolutionResult(
       coingeckoId: "uniswap",
-      cryptocompareSymbol: "UNI",
       binanceSymbol: "UNIUSDT",
       resolvedName: "Uniswap",
       resolvedSymbol: "UNI",
@@ -125,7 +124,6 @@ struct CryptoPriceServiceTestsMore {
       isNative: false
     )
     #expect(registration.mapping.coingeckoId == "uniswap")
-    #expect(registration.mapping.cryptocompareSymbol == "UNI")
     #expect(registration.mapping.binanceSymbol == "UNIUSDT")
     #expect(registration.instrument.name == "Uniswap")
   }
@@ -142,7 +140,6 @@ struct CryptoPriceServiceTestsMore {
       isNative: false
     )
     #expect(registration.mapping.coingeckoId == nil)
-    #expect(registration.mapping.cryptocompareSymbol == nil)
     #expect(registration.mapping.binanceSymbol == nil)
     #expect(registration.instrument.ticker == "UNKNOWN")
   }

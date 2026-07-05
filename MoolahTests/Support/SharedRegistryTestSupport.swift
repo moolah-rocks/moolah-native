@@ -39,6 +39,6 @@ enum SharedRegistryTestSupport {
       crypto,
       mapping: CryptoProviderMapping(
         instrumentId: crypto.id, coingeckoId: "wrapped-bitcoin",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
   }
 }

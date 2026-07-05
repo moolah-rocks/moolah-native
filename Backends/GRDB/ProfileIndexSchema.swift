@@ -63,7 +63,7 @@ enum ProfileIndexSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 9
+  static let version = 10
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -87,6 +87,8 @@ enum ProfileIndexSchema {
       "v8_crypto_first_traded_on", migrate: addCryptoFirstTradedOn)
     migrator.registerMigration(
       "v9_add_instrument_alias_of", migrate: addInstrumentAliasOf)
+    migrator.registerMigration(
+      "v10_drop_cryptocompare_symbol", migrate: dropCryptocomplareSymbolColumn)
 
     return migrator
   }

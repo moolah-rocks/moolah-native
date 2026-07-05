@@ -51,7 +51,7 @@ struct SpamTokensViewTests {
       symbol: symbol, name: symbol, decimals: 18)
     let mapping = CryptoProviderMapping(
       instrumentId: instrument.id, coingeckoId: nil,
-      cryptocompareSymbol: nil, binanceSymbol: nil)
+      binanceSymbol: nil)
     try await registry.registerCrypto(instrument, mapping: mapping)
     let registration = CryptoRegistration(
       instrument: instrument, mapping: mapping, pricingStatus: status)

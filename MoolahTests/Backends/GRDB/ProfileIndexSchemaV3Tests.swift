@@ -17,8 +17,8 @@ struct ProfileIndexSchemaV3Tests {
 
   @Test("schema version reflects the latest migration")
   func versionIsLatest() {
-    // Bumped to 9 by `v9_add_instrument_alias_of`.
-    #expect(ProfileIndexSchema.version == 9)
+    // Bumped to 10 by `v10_drop_cryptocompare_symbol`.
+    #expect(ProfileIndexSchema.version == 10)
   }
 
   @Test("v3 creates the instrument table plus all six rate-cache tables")

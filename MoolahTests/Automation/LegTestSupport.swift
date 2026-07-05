@@ -54,7 +54,6 @@ enum LegTestSupport {
       mapping: CryptoProviderMapping(
         instrumentId: usdc.id,
         coingeckoId: "usd-coin",
-        cryptocompareSymbol: "USDC",
         binanceSymbol: nil))
     return usdc
   }

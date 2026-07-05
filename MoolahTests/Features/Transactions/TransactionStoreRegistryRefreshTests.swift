@@ -41,7 +41,7 @@ struct TransactionStoreRegistryRefreshTests {
       crypto,
       mapping: CryptoProviderMapping(
         instrumentId: crypto.id, coingeckoId: "wrapped-bitcoin",
-        cryptocompareSymbol: nil, binanceSymbol: nil))
+        binanceSymbol: nil))
   }
 
   /// A two-leg crypto trade (WBTC bought with the test fiat).

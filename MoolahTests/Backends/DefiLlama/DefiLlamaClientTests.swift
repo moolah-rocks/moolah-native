@@ -15,7 +15,7 @@ final class DefiLlamaClientTests {
 
   private let wethMapping = CryptoProviderMapping(
     instrumentId: "1:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2",
-    coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil)
+    coingeckoId: nil, binanceSymbol: nil)
 
   @Test("dailyPrices parses /chart, buckets by UTC day keeping the last point")
   func chartDayBucket() async throws {
@@ -71,7 +71,7 @@ final class DefiLlamaClientTests {
     }
     let btc = CryptoProviderMapping(
       instrumentId: "0:native", coingeckoId: "bitcoin",
-      cryptocompareSymbol: nil, binanceSymbol: nil)
+      binanceSymbol: nil)
     let client = DefiLlamaClient(networking: makeNetworking())
     let result = try await client.currentPrices(for: [wethMapping, btc])
     #expect(result["1:0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2"] == Decimal(string: "2300.0"))
@@ -82,7 +82,7 @@ final class DefiLlamaClientTests {
   func undrivableThrows() async {
     let bad = CryptoProviderMapping(
       instrumentId: "1:native", coingeckoId: nil,
-      cryptocompareSymbol: nil, binanceSymbol: nil)
+      binanceSymbol: nil)
     let client = DefiLlamaClient(networking: makeNetworking())
     await #expect(throws: CryptoPriceError.self) {
       _ = try await client.dailyPrice(for: bad, on: Date(timeIntervalSince1970: 1_704_067_200))

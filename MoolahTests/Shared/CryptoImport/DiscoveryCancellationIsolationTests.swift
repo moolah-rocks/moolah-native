@@ -57,7 +57,6 @@ struct DiscoveryCancellationIsolationTests {
         mapping: CryptoProviderMapping(
           instrumentId: instrument.id,
           coingeckoId: "test-id",
-          cryptocompareSymbol: nil,
           binanceSymbol: nil))
     }
   }

@@ -98,7 +98,6 @@ struct InstrumentSearchServiceTests {
     let mapping = CryptoProviderMapping(
       instrumentId: registeredInstrument.id,
       coingeckoId: "uniswap",
-      cryptocompareSymbol: "UNI",
       binanceSymbol: "UNIUSDT"
     )
     let registration = CryptoRegistration(
@@ -376,7 +375,6 @@ private struct StubTokenResolutionClient: TokenResolutionClient {
     guard let resolved else { return TokenResolutionResult() }
     return TokenResolutionResult(
       coingeckoId: resolved.mapping.coingeckoId,
-      cryptocompareSymbol: resolved.mapping.cryptocompareSymbol,
       binanceSymbol: resolved.mapping.binanceSymbol,
       resolvedName: resolved.instrument.name,
       resolvedSymbol: resolved.instrument.ticker,

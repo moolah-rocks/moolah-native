@@ -143,7 +143,6 @@ enum ProfileDataSyncHandlerTestSupport {
       chainId: nil,
       contractAddress: nil,
       coingeckoId: nil,
-      cryptocompareSymbol: nil,
       binanceSymbol: nil,
       encodedSystemFields: encodedSystemFields)
   }

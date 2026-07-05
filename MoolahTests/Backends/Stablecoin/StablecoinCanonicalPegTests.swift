@@ -18,7 +18,7 @@ struct StablecoinCanonicalPegTests {
 
   private func mapping(_ id: String) -> CryptoProviderMapping {
     CryptoProviderMapping(
-      instrumentId: id, coingeckoId: nil, cryptocompareSymbol: nil, binanceSymbol: nil)
+      instrumentId: id, coingeckoId: nil, binanceSymbol: nil)
   }
 
   @Test("CanonicalTokenRegistry recognises the mainnet USDC/USDT contracts")

@@ -46,7 +46,6 @@ struct CrossProfileSpamPropagationTests {
       mapping: CryptoProviderMapping(
         instrumentId: bitcoin.id,
         coingeckoId: "bitcoin",
-        cryptocompareSymbol: "BTC",
         binanceSymbol: nil))
 
     // **Subscribe-before-mutate.** Install profile B's subscription
@@ -123,7 +122,6 @@ struct CrossProfileSpamPropagationTests {
       mapping: CryptoProviderMapping(
         instrumentId: usdc.id,
         coingeckoId: "usd-coin",
-        cryptocompareSymbol: "USDC",
         binanceSymbol: nil))
     #expect(try await registryB.cryptoRegistration(byId: usdc.id) != nil)
 
