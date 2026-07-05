@@ -113,13 +113,15 @@ struct LiveBlockscoutClientTests {
   }
 }
 
-/// Dedicated URLProtocol stub for the Blockscout live-client tests, with its
-/// own static handler state so it cannot race `AlchemyURLProtocolStub` when
-/// Swift Testing runs suites in parallel. `nonisolated(unsafe)` on the statics
-/// is safe because the enclosing `@Suite` is marked `.serialized` — Swift
-/// Testing runs tests within a suite concurrently by default, but here the
-/// handler is assigned in `makeClient` before any stub invocation, and no two
-/// tests in this suite touch the statics concurrently.
+/// Dedicated URLProtocol stub for `LiveBlockscoutClientTests`, with its own
+/// static handler state so it cannot race `AlchemyURLProtocolStub` — or any
+/// other suite's stub — when Swift Testing runs suites in parallel.
+/// `nonisolated(unsafe)` on the statics is safe because this suite is marked
+/// `.serialized` (no two tests *within this suite* touch the statics
+/// concurrently) AND this stub is exclusively used by this suite: other
+/// suites that stub Blockscout traffic (e.g.
+/// `LiveBlockscoutClientAttributionTests`) declare their own dedicated stub
+/// type rather than sharing this one, so there is no cross-suite race.
 class BlockscoutURLProtocolStub: URLProtocol {
   nonisolated(unsafe) static var requestHandler:
     (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?

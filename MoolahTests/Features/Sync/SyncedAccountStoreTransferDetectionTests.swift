@@ -43,12 +43,13 @@ struct SyncedAccountStoreTransferDetectionTests {
     let discovery = CryptoTokenDiscoveryService(
       registry: registry,
       resolver: CountingRegistrationResolver())
+    let checkpoints = InMemoryWalletSyncCheckpointRepository()
     let walletSyncEngine = WalletSyncEngine(
       alchemy: alchemy,
       blockExplorer: BlockExplorerTestDoubles.empty,
       discovery: discovery,
       walletSyncState: backend.walletSyncState,
-      checkpoints: InMemoryWalletSyncCheckpointRepository(),
+      checkpoints: checkpoints,
       importOriginFactory: { accountId in
         ImportOrigin(
           rawDescription: "wallet:\(accountId.uuidString)",
@@ -57,7 +58,6 @@ struct SyncedAccountStoreTransferDetectionTests {
           importSessionId: UUID(),
           parserIdentifier: "alchemy-wallet-sync")
       })
-    let checkpoints = InMemoryWalletSyncCheckpointRepository()
     let walletApplyEngine = WalletApplyEngine(
       transactions: backend.transactions,
       walletSyncState: backend.walletSyncState,

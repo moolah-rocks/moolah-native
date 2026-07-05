@@ -19,114 +19,6 @@ enum PerAccountBuildResult: Sendable {
 
 extension SyncedAccountStore {
 
-  // MARK: - Public sync triggers
-
-  /// Bootstraps observable state from persisted checkpoints. Call once
-  /// at app launch (e.g. from the root scene `.task`). Failure is
-  /// non-fatal — the next sync cycle still runs against an empty cache.
-  func loadInitialState() async {
-    await reloadStatePerAccount(failureLogPrefix: "Initial WalletSyncState load")
-  }
-
-  /// Sync any syncable account whose `lastSyncedAt` is older than
-  /// `staleThreshold` (24 h by default). Used by app-launch, scene-active,
-  /// and the hourly timer. A no-op when nothing is stale.
-  ///
-  /// Per-account error containment is preserved: failures inside the
-  /// build phase write `WalletSyncState.lastError` and don't abort other
-  /// accounts in the same cycle.
-  func syncStaleAccounts() async {
-    let stale = await accountsToSync(includeNonStale: false)
-    guard !stale.isEmpty else { return }
-    await syncAccounts(stale)
-  }
-
-  /// User-initiated sync of a specific account, regardless of staleness.
-  /// Skips when the account is already mid-sync (the existing in-flight
-  /// task wins; the user-initiated one collapses to a no-op rather than
-  /// queueing a duplicate write).
-  ///
-  /// `fullResync: true` first deletes both the persisted `WalletSyncState`
-  /// AND the synced `WalletSyncCheckpoint`, and drops the account's cached
-  /// entry in `statePerAccount`, so the build phase finds no watermark
-  /// anywhere (local, synced, or cached) and computes `fromBlock == 0`
-  /// (full-history re-fetch), recovering transfers an earlier incremental
-  /// sync skipped. Clearing only the local `WalletSyncState` would NOT be
-  /// enough: `WalletSyncEngine.build` derives `fromBlock` from
-  /// `max(localState, syncedCheckpoint)`, so the resync would still resume
-  /// from the synced checkpoint. Clearing that checkpoint tombstones the
-  /// shared row via CloudKit; a peer that hasn't seen the tombstone yet
-  /// still holds its own last-seen value, but self-heals back to the
-  /// correct shared maximum via `raiseToMax` on its own next cycle. Safe to
-  /// repeat: the apply pass dedups on `(accountId, externalId)`, and a
-  /// failed resync build leaves both watermarks at genesis rather than
-  /// resurrecting the prior block — dropping the in-memory cache entry
-  /// means `persistError` sees a `nil` `priorState` and writes
-  /// `lastSyncedBlockNumber: 0`. Benign TOCTOU: a sync racing the
-  /// in-flight guard below can still see the deleted checkpoints after
-  /// this call collapses to a no-op; either kind simply refetches from
-  /// block 0 — accepted rather than adding locking.
-  func syncAccount(_ account: Account, fullResync: Bool = false) async {
-    guard source(for: account) != nil else { return }
-    guard !inProgressAccountIds.contains(account.id) else { return }
-    if fullResync {
-      // Both deletes are non-fatal: a failure falls back to an incremental
-      // sync (resuming from whatever watermark remains) rather than
-      // aborting the user's request outright.
-      do {
-        try await walletSyncState.delete(accountId: account.id)
-      } catch {
-        Self.internalsLogger.error(
-          "Full-resync checkpoint reset failed for account \(account.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
-        )
-      }
-      do {
-        try await walletSyncCheckpoints.delete(accountId: account.id)
-      } catch {
-        Self.internalsLogger.error(
-          "Full-resync synced-checkpoint reset failed for account \(account.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
-        )
-      }
-      // Drop the cached checkpoint too — otherwise a build failure's
-      // `persistError` would read the stale in-memory `priorState` and
-      // re-save the pre-reset watermark instead of genesis.
-      var trimmedState = statePerAccount
-      trimmedState.removeValue(forKey: account.id)
-      replaceStatePerAccount(trimmedState)
-    }
-    await syncAccounts([account])
-  }
-
-  // MARK: - Stale filter
-
-  /// Filters `accounts.fetchAll()` down to syncable accounts (any
-  /// account some registered `AccountSyncSource` claims) that are
-  /// either stale (older than `staleThreshold`) or — when
-  /// `includeNonStale == true` — every syncable account regardless.
-  /// Reads `clock()` for "now" so tests can pin time.
-  func accountsToSync(includeNonStale: Bool) async -> [Account] {
-    let allAccounts: [Account]
-    do {
-      allAccounts = try await accounts.fetchAll()
-    } catch {
-      Self.internalsLogger.error(
-        "Account fetch failed during stale check: \(error.localizedDescription, privacy: .public)"
-      )
-      return []
-    }
-    let now = clock()
-    return allAccounts.filter { account in
-      // `WalletSyncSource.handles` already enforces walletAddress +
-      // chainId for crypto; exchange accounts have neither but are
-      // claimed by `CoinstashSyncSource`. Asking the sources keeps the
-      // stale-timer / scene-active path provider-neutral.
-      guard source(for: account) != nil else { return false }
-      if includeNonStale { return true }
-      let lastSyncedAt = statePerAccount[account.id]?.lastSyncedAt ?? .distantPast
-      return now.timeIntervalSince(lastSyncedAt) >= staleThreshold
-    }
-  }
-
   // MARK: - Parallel build
 
   /// Runs the parallel build phase for `accountList` via
@@ -392,9 +284,13 @@ extension SyncedAccountStore {
       windowLowerBound: windowLowerBound)
   }
 
-  /// Logger for internals-extension diagnostics. Static and `Sendable`
-  /// so the cross-actor `buildOne` / `persistError` helpers can call
-  /// it without capturing `self`.
-  nonisolated private static let internalsLogger = Logger(
+  /// Logger for the build/apply/detection pipeline (and, via
+  /// `SyncedAccountStore+SyncTriggers.swift`, the public sync-trigger
+  /// entry points too). Static and `Sendable` so the cross-actor
+  /// `buildOne` / `persistError` helpers can call it without capturing
+  /// `self`; module-internal (not `private`) so the sibling
+  /// `+SyncTriggers` extension file can share it rather than declaring
+  /// its own duplicate logger.
+  nonisolated static let internalsLogger = Logger(
     subsystem: "com.moolah.app", category: "SyncedAccountStore")
 }
