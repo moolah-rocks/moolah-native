@@ -2,32 +2,37 @@ import Testing
 
 @testable import Moolah
 
-/// `ContentView.accountDetail(id:)` has no unit-test harness today (the
-/// switch is private and SwiftUI views aren't unit-testable), so this is
-/// a build/compile guard: it pins that `ExchangeAccountView` constructs
-/// from an `.exchange` account with the same stores its siblings take
-/// and composes the shared synced-account header. End-to-end routing is
-/// verified by manual app launch; this unit test is a build/compile
-/// guard only.
-@Suite("ExchangeAccountView — routing")
+/// Build/compile guard for the exchange routing: an `.exchange` account
+/// composes the unified `AccountDetailView` with the shared synced-account
+/// header. `ContentView.accountDetail(id:)`'s switch is private and SwiftUI
+/// views aren't unit-testable, so this pins the construction + the header
+/// routing rule; end-to-end routing is covered by
+/// `AccountDetailUnifiedLayoutTests` (Task 7).
+@Suite("Exchange account routing — AccountDetailView")
 @MainActor
 struct ExchangeAccountViewRoutingTests {
   @Test
-  func exchangeAccountViewBuildsWithSharedHeader() throws {
+  func exchangeAccountRoutesToUnifiedViewWithHeader() throws {
     let account = Account(
       name: "Coinstash", type: .exchange,
       instrument: .AUD, valuationMode: .calculatedFromTrades,
       exchangeProvider: .coinstash)
+    #expect(AccountDetailView.showsSyncedHeader(for: account))
     let session = try ProfileSession.preview()
-    #expect(account.type == .exchange)
-    _ = ExchangeAccountView(
-      account: account,
+    _ = AccountDetailView(
+      title: account.name,
+      transactionFilter: TransactionFilter(accountId: account.id),
+      positions: [],
+      hostCurrency: account.instrument,
+      accountIds: [account.id],
+      conversionService: session.backend.conversionService,
+      registrationsVersion: 0,
+      accountChainId: nil,
+      alwaysShowsFullSurface: false,
+      syncedHeaderAccount: account,
       accounts: Accounts(from: [account]),
       categories: Categories(from: []),
       earmarks: Earmarks(from: []),
-      transactionStore: session.transactionStore,
-      positions: [],
-      conversionService: session.backend.conversionService,
-      session: session)
+      transactionStore: session.transactionStore)
   }
 }

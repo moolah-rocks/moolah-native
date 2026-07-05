@@ -2,10 +2,10 @@ import SwiftUI
 
 // MARK: - Previews
 //
-// The parent `CryptoWalletAccountView` / `ExchangeAccountView` previews
-// render this header as `EmptyView` (their `ProfileSession.preview()`
-// leaves crypto wiring `nil`), so this standalone `#Preview` is the only
-// canvas path that exercises the layout. The header reads only
+// The parent `CryptoWalletAccountView` / `AccountDetailView` (exchange)
+// previews render this header as `EmptyView` (their
+// `ProfileSession.preview()` leaves crypto wiring `nil`), so this
+// standalone `#Preview` is the only canvas path that exercises the layout. The header reads only
 // `SyncedAccountStore`'s observable `statePerAccount` /
 // `inProgressAccountIds`, so a minimal store over the in-memory preview
 // backend (no sync sources) covers the full layout. No checkpoint is
