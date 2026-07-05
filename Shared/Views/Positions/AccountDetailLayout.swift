@@ -32,6 +32,18 @@ enum AccountDetailLayout {
   /// carrying just the toggle.
   static func macShowsPinnedPositions(hasPositions: Bool) -> Bool { hasPositions }
 
+  /// Whether the host renders its full surface (performance tiles + a
+  /// positions pane) regardless of current holdings. Investment
+  /// `.calculatedFromTrades` hosts pass `alwaysShowsFullSurface: true` so a
+  /// fully-sold account still shows its performance / chart / positions;
+  /// every other host falls through to `base` — the per-element gate that
+  /// answers "does the account actually hold something worth surfacing".
+  static func showsFullSurface(
+    alwaysShowsFullSurface: Bool, otherwiseShows base: Bool
+  ) -> Bool {
+    alwaysShowsFullSurface || base
+  }
+
   /// Whether the Chart pane shows the `AccountPerformanceTiles` strip
   /// (value / P&L / return) rather than the plain total-only
   /// `PositionsHeader`. `true` iff the account holds at least one non-zero
