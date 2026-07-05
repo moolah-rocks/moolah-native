@@ -90,8 +90,21 @@ struct TransactionListScreen {
   // MARK: - Row visibility expectations
   //
   // Expectation methods: they carry a bounded post-condition wait (the
-  // preceding action's reload is asynchronous) but never mutate state and
-  // never record a trace breadcrumb — per the driver invariants.
+  // preceding action's reload is asynchronous) and never mutate state
+  // (invariant 3). By convention in this driver they add no leading
+  // `Trace.record` breadcrumb — the preceding action already logged one —
+  // but they still call `Trace.recordFailure` on the failure path.
+
+  /// Asserts the transaction-list container is in the accessibility tree,
+  /// waiting up to 10s for the selected leaf to render it. Used as the
+  /// post-condition for navigation sweeps that land on a transaction list.
+  func expectContainerVisible() {
+    let container = app.element(for: UITestIdentifiers.TransactionList.container)
+    if !container.waitForExistence(timeout: 10) {
+      Trace.recordFailure("transaction list container did not appear")
+      XCTFail("Transaction list container did not appear within 10s")
+    }
+  }
 
   /// Asserts the given transaction's row is present, waiting up to 10s for
   /// the (asynchronous) filtered reload to surface it.

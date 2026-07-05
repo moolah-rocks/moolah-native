@@ -14,16 +14,8 @@ final class SidebarInlineRenameMacTests: MoolahUITestCase {
     app.sidebar.typeRenameAndCommit(renamed)
 
     // The sidebar row's accessibility label includes the account name;
-    // wait for the new label to materialise as the post-condition.
-    let renamedRow = app.element(
-      for: UITestIdentifiers.Sidebar.account(SidebarAccount.checking.id))
-    let predicate = NSPredicate(format: "label CONTAINS %@", renamed)
-    let expectation = XCTNSPredicateExpectation(
-      predicate: predicate, object: renamedRow)
-    XCTAssertEqual(
-      XCTWaiter.wait(for: [expectation], timeout: 3),
-      .completed,
-      "Sidebar row did not reflect the renamed account label within 3s")
+    // the new label materialising is the post-condition.
+    app.sidebar.expectAccountLabel(.checking, contains: renamed)
   }
 
   func testContextMenuRenameEarmark() {
@@ -33,15 +25,7 @@ final class SidebarInlineRenameMacTests: MoolahUITestCase {
     app.sidebar.beginRenameEarmark(.renameTarget)
     app.sidebar.typeRenameAndCommit(renamed)
 
-    let renamedRow = app.element(
-      for: UITestIdentifiers.Sidebar.earmark(SidebarEarmark.renameTarget.id))
-    let predicate = NSPredicate(format: "label CONTAINS %@", renamed)
-    let expectation = XCTNSPredicateExpectation(
-      predicate: predicate, object: renamedRow)
-    XCTAssertEqual(
-      XCTWaiter.wait(for: [expectation], timeout: 3),
-      .completed,
-      "Sidebar row did not reflect the renamed earmark label within 3s")
+    app.sidebar.expectEarmarkLabel(.renameTarget, contains: renamed)
   }
 
   func testContextMenuRenameGroup() {
@@ -51,33 +35,31 @@ final class SidebarInlineRenameMacTests: MoolahUITestCase {
     app.sidebar.beginRenameGroup(.renameTarget)
     app.sidebar.typeRenameAndCommit(renamed)
 
-    let renamedRow = app.element(
-      for: UITestIdentifiers.Sidebar.group(SidebarGroup.renameTarget.id))
-    let predicate = NSPredicate(format: "label CONTAINS %@", renamed)
-    let expectation = XCTNSPredicateExpectation(
-      predicate: predicate, object: renamedRow)
-    XCTAssertEqual(
-      XCTWaiter.wait(for: [expectation], timeout: 3),
-      .completed,
-      "Sidebar row did not reflect the renamed group label within 3s")
+    app.sidebar.expectGroupLabel(.renameTarget, contains: renamed)
   }
 
-  func testReturnKeyEntersRenameAndEscCancels() {
+  func testReturnKeyEntersRename() {
     let app = launch(seed: .tradeBaseline)
-    let original = SidebarAccount.checking
-    let originalName = UITestFixtures.TradeBaseline.checkingAccountName
 
-    app.sidebar.selectAndPressReturn(original)
+    app.sidebar.selectAndPressReturn(.checking)
     app.sidebar.expectRenameFieldVisible()
 
+    // Cancel so nothing is committed.
+    app.sidebar.cancelRename()
+  }
+
+  func testEscapeCancelsRename() {
+    let app = launch(seed: .tradeBaseline)
+    let account = SidebarAccount.checking
+    let originalName = UITestFixtures.TradeBaseline.checkingAccountName
+
+    // Enter rename via the Return trigger (setup), then cancel with Esc.
+    app.sidebar.selectAndPressReturn(account)
     app.sidebar.cancelRename()
     app.sidebar.expectRenameFieldGone()
 
-    // After Esc the row label should be unchanged.
-    let row = app.element(for: UITestIdentifiers.Sidebar.account(original.id))
-    XCTAssertTrue(
-      row.label.contains(originalName),
-      "Esc on rename should leave the account name unchanged; got '\(row.label)'")
+    // Esc leaves the account name unchanged.
+    app.sidebar.expectAccountLabel(account, contains: originalName)
   }
 
   func testDoubleClickAccountNameEntersRename() {

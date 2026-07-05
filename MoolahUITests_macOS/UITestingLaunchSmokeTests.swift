@@ -6,7 +6,7 @@ import XCTest
 /// the launch ever stops working.
 ///
 /// `MoolahApp.launch(seed:)` itself runs `expectMainWindowVisible()` and
-/// fails the test if the window does not appear within 5 s, so the test
+/// fails the test if the window does not appear within 30 s, so the test
 /// body only needs to invoke `launch`. No raw `XCUIApplication` calls
 /// here — the screen-driver rule (`guides/UI_TEST_GUIDE.md` §2) holds.
 @MainActor

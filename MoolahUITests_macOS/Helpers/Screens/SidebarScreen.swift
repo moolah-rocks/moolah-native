@@ -237,14 +237,17 @@ extension SidebarScreen {
     waitForRenameField()
   }
 
-  /// Synchronous assertion that the rename field is currently visible.
-  /// Action methods carry the wait; this is for tests verifying that a
-  /// trigger landed the UI in edit mode.
+  /// Asserts the inline rename field is visible, waiting up to 10s for it
+  /// to materialise. Most triggers (`beginRename*`, `selectAndPressReturn`,
+  /// `doubleClickAccountName`) already carry that wait, so this returns
+  /// immediately for them; the bounded wait is what lets it also serve as
+  /// the post-condition after `dragAccount(_:ontoAccount:)`, whose
+  /// group-create outcome surfaces the field asynchronously.
   func expectRenameFieldVisible() {
     Trace.record()
-    if !renameField().exists {
+    if !renameField().waitForExistence(timeout: 10) {
       Trace.recordFailure("rename field not visible")
-      XCTFail("Inline rename TextField is not present")
+      XCTFail("Inline rename TextField did not appear within 10s")
     }
   }
 

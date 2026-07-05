@@ -26,7 +26,7 @@ import XCTest
 /// in a reasonable time budget.
 @MainActor
 final class DetailColumnNavigationSweepTests: MoolahUITestCase {
-  func test_navigationSweep_acrossDetailLeaves_landsCleanly() {
+  func testNavigationSweepAcrossDetailLeavesLandsCleanly() {
     let app = launch(seed: .tradeBaseline)
     let sidebar = app.sidebar
 
@@ -47,10 +47,6 @@ final class DetailColumnNavigationSweepTests: MoolahUITestCase {
     // Land on a transaction list and confirm the container is in the
     // accessibility tree. Catches a silent "leaf renders empty" regression.
     sidebar.switchToAccount(.checking)
-    let listContainer = app.element(for: UITestIdentifiers.TransactionList.container)
-    XCTAssertTrue(
-      listContainer.waitForExistence(timeout: 3),
-      "Transaction list container missing after the navigation sweep — "
-        + "a leaf view stopped rendering the transaction list.")
+    app.transactionList.expectContainerVisible()
   }
 }
