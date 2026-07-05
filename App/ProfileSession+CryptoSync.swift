@@ -108,17 +108,37 @@ extension ProfileSession {
     canonicalResolver: CanonicalInstrumentResolver = CanonicalInstrumentResolver()
   ) -> CryptoSyncWiring? {
     guard let registry else { return nil }
-    let rateLimiter = RateLimiter(permitsPerSecond: 5, burstCapacity: 1)
-    let alchemy: any ChainDataClient = LiveAlchemyClient(
+    // Shared Alchemy de-burst limiter: `burstCapacity: 1` strictly spaces the
+    // launch-time fan-out across every crypto account ~200ms apart. All chains
+    // that resolve to Alchemy share this one client (and limiter), exactly as
+    // before the routing client was introduced.
+    let alchemyRateLimiter = RateLimiter(permitsPerSecond: 5, burstCapacity: 1)
+    let alchemyClient = LiveAlchemyClient(
       // Closure (not a resolved value): a key entered in Settings after this
       // wiring is built is visible on the next sync cycle without a rebuild,
       // and the key never lives on the client object itself.
       apiKeyProvider: { ProfileSession.resolveAlchemyApiKey() },
-      rateLimiter: rateLimiter)
+      rateLimiter: alchemyRateLimiter)
+    let resolver = RPCEndpointResolver(
+      customEndpoints: CryptoRPCEndpointsStore().load(),
+      alchemyKeyPresent: { ProfileSession.resolveAlchemyApiKey() != nil },
+      makeRPC: { url in
+        LiveJSONRPCClient(endpoint: url, rateLimiter: RateLimiter(permitsPerSecond: 5))
+      })
+    // With no custom endpoint and an Alchemy key present, every chain resolves
+    // to `.alchemy`, so on-chain calls go through `alchemyClient` exactly as
+    // the previous single-client wiring did. A configured custom endpoint (or a
+    // missing Alchemy key) routes the matching chain to a direct JSON-RPC client.
+    let chainClient: any ChainDataClient = RoutingChainDataClient(
+      resolver: resolver,
+      makeAlchemy: { alchemyClient },
+      makeDirect: { rpc in
+        DirectRPCChainClient(rpc: rpc, metadata: TokenMetadataResolver(rpc: rpc))
+      })
     let discovery = CryptoTokenDiscoveryService(
       registry: registry, resolver: cryptoPriceService, canonicalResolver: canonicalResolver)
     let walletSyncEngine = makeWalletSyncEngine(
-      alchemy: alchemy,
+      alchemy: chainClient,
       blockExplorer: makeLiveBlockExplorer(),
       discovery: discovery,
       backend: backend)
