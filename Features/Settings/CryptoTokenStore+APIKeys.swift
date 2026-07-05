@@ -55,7 +55,16 @@ extension CryptoTokenStore {
   /// Keychain. Read on every UI render to drive the status badge —
   /// the keychain read is cheap (~µs) and consulting a cached `Bool`
   /// would require an explicit invalidation hook on save / clear.
+  ///
+  /// Under UI testing, `UITestEnvironment.alchemyKeyPresent` may be set
+  /// in the launch environment as a keychain-free signal that the key is
+  /// present. This avoids `SecItemAdd` / `SecItemCopyMatching` calls that
+  /// can trigger interactive keychain authorization dialogs in headless CI
+  /// environments and cause the app to hang on startup.
   var hasAlchemyApiKey: Bool {
+    if ProcessInfo.processInfo.environment[UITestEnvironment.alchemyKeyPresent] == "1" {
+      return true
+    }
     do {
       return try alchemyKeyStore.restoreString() != nil
     } catch {

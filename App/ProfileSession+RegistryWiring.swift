@@ -80,32 +80,17 @@ extension ProfileSession {
     // through the proxy. Falls back to local storage when no
     // coordinator is wired (preview / legacy tests).
     //
-    // Under UI testing, certain seeds override the Alchemy keychain store
-    // with a test-local (non-iCloud-synced) entry pre-seeded with a dummy
-    // key so `hasCredential` evaluates to `true` without writing to the
-    // user's production keychain. Seeds without an override fall through
-    // to the production `convenience init` (iCloud-synced keychain).
-    let store: CryptoTokenStore
-    if let seed = currentUITestSeed(),
-      let testAlchemyStore = UITestSeedCryptoOverrides.alchemyKeyStore(for: seed)
-    {
-      store = CryptoTokenStore(
-        registry: cloudBackend.instrumentRegistryRepository,
-        cryptoPriceService: cryptoPriceService,
-        conversionService: cloudBackend.conversionService,
-        apiKeyStore: KeychainStore(
-          service: KeychainServices.apiKeys, account: "coingecko", synchronizable: true),
-        alchemyKeyStore: testAlchemyStore,
-        cryptocompareKeyStore: KeychainStore(
-          service: KeychainServices.apiKeys, account: "cryptocompare", synchronizable: true),
-        sharedStore: sharedRegistryStore)
-    } else {
-      store = CryptoTokenStore(
-        registry: cloudBackend.instrumentRegistryRepository,
-        cryptoPriceService: cryptoPriceService,
-        conversionService: cloudBackend.conversionService,
-        sharedStore: sharedRegistryStore)
-    }
+    // `CryptoTokenStore.hasAlchemyApiKey` checks
+    // `UITestEnvironment.alchemyKeyPresent` in the launch environment
+    // before reading the keychain, so seeds that need `hasCredential ==
+    // true` (e.g. `.walletHeaderSyncError`) can signal that via env var
+    // without writing to the system keychain — which can trigger
+    // interactive authorization dialogs in headless CI environments.
+    let store = CryptoTokenStore(
+      registry: cloudBackend.instrumentRegistryRepository,
+      cryptoPriceService: cryptoPriceService,
+      conversionService: cloudBackend.conversionService,
+      sharedStore: sharedRegistryStore)
     let searchService = InstrumentSearchService(
       registry: cloudBackend.instrumentRegistryRepository,
       catalog: wiring.catalog,

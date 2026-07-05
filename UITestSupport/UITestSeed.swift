@@ -158,6 +158,30 @@ public enum UITestSeed: String, CaseIterable, Sendable {
   case walletHeaderSyncError = "wallet-header-sync-error"
 }
 
+extension UITestSeed {
+  /// `true` when the app should treat an Alchemy API key as present
+  /// (`CryptoTokenStore.hasAlchemyApiKey == true`) for this seed.
+  ///
+  /// The harness sets `UITestEnvironment.alchemyKeyPresent` in
+  /// `launchEnvironment` rather than writing to the system keychain.
+  /// Keychain writes use `SecItemAdd`, which can trigger an interactive
+  /// authorization dialog in headless CI environments and cause the
+  /// app to hang — passing the signal via an env var avoids that entirely.
+  public var needsAlchemyKeyPresent: Bool {
+    switch self {
+    case .walletHeaderSyncError:
+      return true
+    case .cryptoCatalogPreloaded, .tradeBaseline, .welcomeEmpty,
+      .welcomeSingleCloudProfile, .welcomeMultipleCloudProfiles,
+      .welcomeDownloading, .sidebarFooterUpToDate, .sidebarFooterReceiving,
+      .sidebarFooterSending, .tradeReady, .incompatibleProfile,
+      .transferDetectionBaseline, .pendingWebImportOneChaseInbox,
+      .insightsForYouBaseline, .groupFilterScope:
+      return false
+    }
+  }
+}
+
 /// Fixtures for the first-run Welcome seeds. Defined here so both the
 /// app (hydration) and UI-test drivers reference the same UUIDs.
 public enum UITestWelcomeFixtures {

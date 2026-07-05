@@ -49,42 +49,4 @@ enum UITestSeedCryptoOverrides {
     }
   }
 
-  /// Returns a test-local (non-synchronizable) `KeychainStore` pre-seeded
-  /// with a dummy Alchemy API key for the given seed, or `nil` to use the
-  /// production iCloud-synced keychain. The local store avoids writing to
-  /// the user's iCloud-synced keychain during test runs while still
-  /// allowing `SyncedAccountHeaderLogic.hasCredential` to evaluate to
-  /// `true` for seeds that need a credentialled crypto account.
-  ///
-  /// Callers:
-  ///   - `UITestSeedHydrator+WalletHeader`: writes the dummy key during
-  ///     seed hydration (runs inside the app process, has keychain access).
-  ///   - `ProfileSession.makeRegistryWiring`: uses the store when building
-  ///     `CryptoTokenStore` so `alchemyKeyStore.restoreString()` finds the
-  ///     seeded key rather than returning `nil`.
-  static func alchemyKeyStore(for seed: UITestSeed) -> KeychainStore? {
-    switch seed {
-    case .walletHeaderSyncError:
-      return KeychainStore(
-        service: "com.moolah.api-keys.ui-test",
-        account: "alchemy",
-        synchronizable: false)
-    case .cryptoCatalogPreloaded,
-      .tradeBaseline,
-      .welcomeEmpty,
-      .welcomeSingleCloudProfile,
-      .welcomeMultipleCloudProfiles,
-      .welcomeDownloading,
-      .sidebarFooterUpToDate,
-      .sidebarFooterReceiving,
-      .sidebarFooterSending,
-      .tradeReady,
-      .incompatibleProfile,
-      .transferDetectionBaseline,
-      .pendingWebImportOneChaseInbox,
-      .insightsForYouBaseline,
-      .groupFilterScope:
-      return nil
-    }
-  }
 }

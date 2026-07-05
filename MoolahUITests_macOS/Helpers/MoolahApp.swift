@@ -51,10 +51,18 @@ final class MoolahApp {
     // processes can read/write it.
     let inboxDirectory = URL(fileURLWithPath: "/private/tmp")
       .appendingPathComponent("moolah-ui-test-inbox-\(UUID().uuidString)")
-    application.launchEnvironment = [
+    var launchEnv: [String: String] = [
       "UI_TESTING_SEED": seed.rawValue,
       UITestEnvironment.inboxDirectory: inboxDirectory.path,
     ]
+    // Avoid writing to the system keychain in CI: seeds that need
+    // `CryptoTokenStore.hasAlchemyApiKey == true` signal that via an env
+    // var instead of a `SecItemAdd` call, which can trigger an interactive
+    // authorization dialog in headless environments and hang the app.
+    if seed.needsAlchemyKeyPresent {
+      launchEnv[UITestEnvironment.alchemyKeyPresent] = "1"
+    }
+    application.launchEnvironment = launchEnv
     application.launch()
     let app = MoolahApp(
       application: application, seed: seed, inboxDirectory: inboxDirectory)
