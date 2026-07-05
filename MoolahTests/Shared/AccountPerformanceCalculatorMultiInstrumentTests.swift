@@ -117,6 +117,34 @@ struct AccountPerformanceCalculatorMultiInstrumentTests {
     #expect(perf.profitLoss == InstrumentAmount(quantity: 100, instrument: aud))
   }
 
+  /// A `ValuedPosition` whose `.value` is in a different instrument than
+  /// `profileCurrency` must not trap (InstrumentAmount.+ has a precondition on
+  /// matching instruments). The aggregate is unavailable → currentValueOnly(nil)
+  /// → both currentValue and profitLoss are nil.
+  @Test("valued position in wrong instrument degrades to nil aggregate, no trap")
+  func valuedPositionWrongInstrumentDegrades() async throws {
+    let wallet = UUID()
+    // No transactions → no flows, so the only path to perf is through
+    // aggregatedValue. The position's value is USD but profileCurrency is AUD:
+    // before the guard fix this would have trapped on InstrumentAmount.+=.
+    let valued = [
+      ValuedPosition(
+        instrument: usd, quantity: 500, unitPrice: nil, costBasis: nil,
+        value: InstrumentAmount(quantity: 750, instrument: usd))  // USD, not AUD
+    ]
+    let perf = try await AccountPerformanceCalculator.computeMultiInstrument(
+      accountIds: [wallet],
+      transactions: [],
+      valuedPositions: valued,
+      profileCurrency: aud,
+      conversionService: FakeConversionService.fixedRates([:]),
+      now: Date(timeIntervalSinceReferenceDate: 30 * 86_400))
+    // Instrument mismatch → aggregate unavailable → currentValueOnly(nil, in: aud)
+    #expect(perf.currentValue == nil)
+    #expect(perf.totalContributions == nil)
+    #expect(perf.profitLoss == nil)
+  }
+
   /// A flow-conversion failure degrades to current value only (which is known
   /// from the already-valued rows) rather than throwing or partial-summing.
   @Test("flow conversion failure degrades to current value only")
