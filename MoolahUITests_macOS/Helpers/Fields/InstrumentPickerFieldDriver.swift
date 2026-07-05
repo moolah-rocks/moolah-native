@@ -24,17 +24,17 @@ struct InstrumentPickerFieldDriver {
   func tap(currentId: String) {
     Trace.record(#function, detail: "currentId=\(currentId)")
     let button = app.element(for: UITestIdentifiers.InstrumentPicker.field(currentId))
-    if !button.waitForExistence(timeout: 3) {
+    if !button.waitForExistence(timeout: 10) {
       Trace.recordFailure("field button 'instrumentPicker.field.\(currentId)' did not appear")
       XCTFail(
-        "InstrumentPickerField button for '\(currentId)' did not appear within 3s")
+        "InstrumentPickerField button for '\(currentId)' did not appear within 10s")
       return
     }
     button.click()
     let sheet = app.element(for: UITestIdentifiers.InstrumentPicker.sheet)
-    if !sheet.waitForExistence(timeout: 3) {
+    if !sheet.waitForExistence(timeout: 10) {
       Trace.recordFailure("instrumentPicker.sheet did not appear after tapping field")
-      XCTFail("InstrumentPickerSheet did not appear within 3s of tapping the field button")
+      XCTFail("InstrumentPickerSheet did not appear within 10s of tapping the field button")
     }
   }
 
@@ -47,9 +47,9 @@ struct InstrumentPickerFieldDriver {
     // NavigationStack; the latter does not expose an accessible search field
     // inside a popover on macOS.
     let searchField = app.element(for: UITestIdentifiers.InstrumentPicker.searchField)
-    if !searchField.waitForExistence(timeout: 3) {
+    if !searchField.waitForExistence(timeout: 10) {
       Trace.recordFailure("instrumentPicker.searchField did not appear")
-      XCTFail("InstrumentPickerSheet search field did not appear within 3s")
+      XCTFail("InstrumentPickerSheet search field did not appear within 10s")
       return
     }
     searchField.click()
@@ -57,11 +57,11 @@ struct InstrumentPickerFieldDriver {
 
     // Post-condition: the row for the searched id must appear in the list.
     let row = app.element(for: UITestIdentifiers.InstrumentPicker.row(query))
-    if !row.waitForExistence(timeout: 5) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "instrumentPicker.row.\(query) did not appear after searching '\(query)'")
       XCTFail(
-        "InstrumentPickerSheet row for '\(query)' did not appear within 5s of searching")
+        "InstrumentPickerSheet row for '\(query)' did not appear within 10s of searching")
     }
   }
 
@@ -72,31 +72,31 @@ struct InstrumentPickerFieldDriver {
   func pickRow(_ instrumentId: String) {
     Trace.record(#function, detail: "instrumentId=\(instrumentId)")
     let row = app.element(for: UITestIdentifiers.InstrumentPicker.row(instrumentId))
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("instrumentPicker.row.\(instrumentId) not found for pick")
-      XCTFail("InstrumentPickerSheet row for '\(instrumentId)' did not appear within 3s")
+      XCTFail("InstrumentPickerSheet row for '\(instrumentId)' did not appear within 10s")
       return
     }
     row.click()
 
     // Post-condition 1: the sheet must dismiss after the pick.
     let sheet = app.element(for: UITestIdentifiers.InstrumentPicker.sheet)
-    let deadline = Date().addingTimeInterval(3)
+    let deadline = Date().addingTimeInterval(10)
     while Date() < deadline {
       if !sheet.exists { break }
       RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     }
     if sheet.exists {
       Trace.recordFailure("instrumentPicker.sheet did not dismiss after picking '\(instrumentId)'")
-      XCTFail("InstrumentPickerSheet did not dismiss within 3s of picking '\(instrumentId)'")
+      XCTFail("InstrumentPickerSheet did not dismiss within 10s of picking '\(instrumentId)'")
       return
     }
 
     // Post-condition 2: field button updates to the new selection.
     let updatedField = app.element(for: UITestIdentifiers.InstrumentPicker.field(instrumentId))
-    if !updatedField.waitForExistence(timeout: 3) {
+    if !updatedField.waitForExistence(timeout: 10) {
       Trace.recordFailure("field did not update to '\(instrumentId)' after sheet dismissed")
-      XCTFail("InstrumentPickerField did not update to '\(instrumentId)' within 3s of picking")
+      XCTFail("InstrumentPickerField did not update to '\(instrumentId)' within 10s of picking")
     }
   }
 

@@ -24,9 +24,9 @@ struct ForYouScreen {
   /// vacuously when the card failed to render.
   func expectCardVisible() {
     let card = app.element(for: UITestIdentifiers.ForYou.card)
-    if !card.waitForExistence(timeout: 5) {
+    if !card.waitForExistence(timeout: 10) {
       Trace.recordFailure("forYou.card did not appear")
-      XCTFail("For You card did not render within 5s")
+      XCTFail("For You card did not render within 10s")
     }
   }
 
@@ -34,9 +34,9 @@ struct ForYouScreen {
   func expectRowVisible(_ id: String) {
     let identifier = UITestIdentifiers.ForYou.row(id)
     let row = app.element(for: identifier)
-    if !row.waitForExistence(timeout: 5) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("forYou row '\(identifier)' did not appear")
-      XCTFail("For You row for '\(id)' did not appear within 5s")
+      XCTFail("For You row for '\(id)' did not appear within 10s")
     }
   }
 
@@ -47,9 +47,9 @@ struct ForYouScreen {
   func expectRowRemoved(_ id: String) {
     let identifier = UITestIdentifiers.ForYou.row(id)
     let row = app.element(for: identifier)
-    if !row.waitForNonExistence(timeout: 5) {
+    if !row.waitForNonExistence(timeout: 10) {
       Trace.recordFailure("forYou row '\(identifier)' still present; row not removed")
-      XCTFail("For You row for '\(id)' was still present after 5s")
+      XCTFail("For You row for '\(id)' was still present after 10s")
     }
   }
 
@@ -59,9 +59,9 @@ struct ForYouScreen {
   func expectChartVisible(_ id: String) {
     let identifier = UITestIdentifiers.ForYou.chart(id)
     let chart = app.element(for: identifier)
-    if !chart.waitForExistence(timeout: 5) {
+    if !chart.waitForExistence(timeout: 10) {
       Trace.recordFailure("forYou chart button '\(identifier)' did not appear")
-      XCTFail("For You chart button for '\(id)' did not appear within 5s")
+      XCTFail("For You chart button for '\(id)' did not appear within 10s")
     }
   }
 
@@ -70,11 +70,11 @@ struct ForYouScreen {
   /// expectation so a test can name the outcome explicitly.
   func expectChartDetailVisible() {
     let detail = app.element(for: UITestIdentifiers.ForYou.chartDetail)
-    if !detail.waitForExistence(timeout: 5) {
+    if !detail.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "forYou chart detail '\(UITestIdentifiers.ForYou.chartDetail)' "
           + "did not appear")
-      XCTFail("Insight chart detail sheet did not appear within 5s")
+      XCTFail("Insight chart detail sheet did not appear within 10s")
     }
   }
 
@@ -87,18 +87,18 @@ struct ForYouScreen {
     Trace.record(#function, detail: "id=\(id)")
     let showLessIdentifier = UITestIdentifiers.ForYou.showLess(id)
     let button = app.element(for: showLessIdentifier)
-    if !button.waitForExistence(timeout: 5) {
+    if !button.waitForExistence(timeout: 10) {
       Trace.recordFailure("forYou show-less control '\(showLessIdentifier)' did not appear")
-      XCTFail("For You 'Show less' control for '\(id)' did not appear within 5s")
+      XCTFail("For You 'Show less' control for '\(id)' did not appear within 10s")
       return
     }
     button.click()
 
     let row = app.element(for: UITestIdentifiers.ForYou.row(id))
-    if !row.waitForNonExistence(timeout: 5) {
+    if !row.waitForNonExistence(timeout: 10) {
       Trace.recordFailure(
-        "forYou row '\(UITestIdentifiers.ForYou.row(id))' still present 5s after show-less")
-      XCTFail("For You row for '\(id)' did not unmount within 5s of 'Show less'")
+        "forYou row '\(UITestIdentifiers.ForYou.row(id))' still present 10s after show-less")
+      XCTFail("For You row for '\(id)' did not unmount within 10s of 'Show less'")
     }
   }
 
@@ -110,9 +110,9 @@ struct ForYouScreen {
     Trace.record(#function, detail: "id=\(id)")
     let viewIdentifier = UITestIdentifiers.ForYou.viewButton(id)
     let viewButton = app.element(for: viewIdentifier)
-    if !viewButton.waitForExistence(timeout: 5) {
+    if !viewButton.waitForExistence(timeout: 10) {
       Trace.recordFailure("forYou view button '\(viewIdentifier)' did not appear")
-      XCTFail("For You 'View' button for '\(id)' did not appear within 5s")
+      XCTFail("For You 'View' button for '\(id)' did not appear within 10s")
       return
     }
     viewButton.click()
@@ -123,11 +123,11 @@ struct ForYouScreen {
     // before a known signal). Scenario-specific landing assertions
     // (e.g. `expectTransactionListVisible()`) remain the caller's job.
     let row = app.element(for: UITestIdentifiers.ForYou.row(id))
-    if !row.waitForNonExistence(timeout: 5) {
+    if !row.waitForNonExistence(timeout: 10) {
       Trace.recordFailure(
-        "forYou row '\(UITestIdentifiers.ForYou.row(id))' still present 5s after tapView "
+        "forYou row '\(UITestIdentifiers.ForYou.row(id))' still present 10s after tapView "
           + "— navigation may not have fired")
-      XCTFail("For You row for '\(id)' did not leave the screen within 5s of tapping View")
+      XCTFail("For You row for '\(id)' did not leave the screen within 10s of tapping View")
     }
   }
 
@@ -140,19 +140,19 @@ struct ForYouScreen {
     Trace.record(#function, detail: "id=\(id)")
     let chartIdentifier = UITestIdentifiers.ForYou.chart(id)
     let chartButton = app.element(for: chartIdentifier)
-    if !chartButton.waitForExistence(timeout: 5) {
+    if !chartButton.waitForExistence(timeout: 10) {
       Trace.recordFailure("forYou chart button '\(chartIdentifier)' did not appear")
-      XCTFail("For You chart button for '\(id)' did not appear within 5s")
+      XCTFail("For You chart button for '\(id)' did not appear within 10s")
       return
     }
     chartButton.click()
 
     let detail = app.element(for: UITestIdentifiers.ForYou.chartDetail)
-    if !detail.waitForExistence(timeout: 5) {
+    if !detail.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "forYou chart detail '\(UITestIdentifiers.ForYou.chartDetail)' did not appear "
-          + "5s after tapping the chart — sheet may not have presented")
-      XCTFail("Insight chart detail sheet did not appear within 5s of tapping the chart")
+          + "10s after tapping the chart — sheet may not have presented")
+      XCTFail("Insight chart detail sheet did not appear within 10s of tapping the chart")
     }
   }
 
@@ -191,7 +191,7 @@ struct ForYouScreen {
   /// away from the For You panel to the referenced account's detail.
   func expectTransactionListVisible() {
     let container = app.element(for: UITestIdentifiers.TransactionList.container)
-    if !container.waitForExistence(timeout: 5) {
+    if !container.waitForExistence(timeout: 10) {
       Trace.recordFailure("transaction list did not appear after navigation")
       XCTFail("Transaction list container did not appear after tapping View")
     }

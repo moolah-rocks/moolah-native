@@ -28,9 +28,9 @@ struct AddTokenScreen {
   func search(_ query: String) {
     Trace.record(#function, detail: "query=\(query)")
     let field = app.element(for: UITestIdentifiers.InstrumentPicker.searchField)
-    if !field.waitForExistence(timeout: 3) {
+    if !field.waitForExistence(timeout: 10) {
       Trace.recordFailure("instrumentPicker.searchField did not appear")
-      XCTFail("AddTokenSheet search field did not appear within 3s")
+      XCTFail("AddTokenSheet search field did not appear within 10s")
       return
     }
     field.click()
@@ -39,7 +39,7 @@ struct AddTokenScreen {
       predicate: NSPredicate(format: "value == %@", query as CVarArg),
       object: field
     )
-    if XCTWaiter().wait(for: [valuePropagated], timeout: 5) != .completed {
+    if XCTWaiter().wait(for: [valuePropagated], timeout: 10) != .completed {
       Trace.recordFailure(
         "instrumentPicker.searchField value did not reach '\(query)' after typeText")
       XCTFail("Search field did not show typed value '\(query)'")
@@ -50,7 +50,7 @@ struct AddTokenScreen {
   /// matches `instrumentId` to appear. The catalog's debounce + async
   /// search lookup means this post-condition is the right gate for "the
   /// user can now click the row I want".
-  func waitForResult(instrumentId: String, timeout: TimeInterval = 5) {
+  func waitForResult(instrumentId: String, timeout: TimeInterval = 10) {
     Trace.record(#function, detail: "instrumentId=\(instrumentId)")
     let row = app.element(for: UITestIdentifiers.InstrumentPicker.row(instrumentId))
     if !row.waitForExistence(timeout: timeout) {
@@ -75,11 +75,11 @@ struct AddTokenScreen {
   func selectResult(instrumentId: String) {
     Trace.record(#function, detail: "instrumentId=\(instrumentId)")
     let row = app.element(for: UITestIdentifiers.InstrumentPicker.row(instrumentId))
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "instrumentPicker.row.\(instrumentId) not found for selection")
       XCTFail(
-        "Picker row for '\(instrumentId)' did not appear within 3s of selectResult")
+        "Picker row for '\(instrumentId)' did not appear within 10s of selectResult")
       return
     }
     row.click()
@@ -87,7 +87,7 @@ struct AddTokenScreen {
       predicate: NSPredicate(format: "exists == false || isHittable == false"),
       object: row
     )
-    _ = XCTWaiter().wait(for: [consumed], timeout: 5)
+    _ = XCTWaiter().wait(for: [consumed], timeout: 10)
     // Note: dismissal (success path) is the responsibility of waitForDismiss().
   }
 
@@ -96,7 +96,7 @@ struct AddTokenScreen {
   /// store's `isResolving` overlay is active (network round-trip in
   /// `TokenResolutionClient.resolve()` and the registry write); a clean
   /// dismissal proves both completed successfully.
-  func waitForDismiss(timeout: TimeInterval = 5) {
+  func waitForDismiss(timeout: TimeInterval = 10) {
     Trace.record(#function)
     let sheet = app.element(for: UITestIdentifiers.InstrumentPicker.sheet)
     let expectation = XCTNSPredicateExpectation(

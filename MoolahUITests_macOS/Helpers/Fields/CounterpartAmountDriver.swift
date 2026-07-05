@@ -10,7 +10,7 @@ struct CounterpartAmountDriver {
 
   /// Waits up to `timeout` seconds for the counterpart amount field to
   /// appear, then asserts the adjacent instrument label matches.
-  func expectVisible(instrumentCode: String, timeout: TimeInterval = 3) {
+  func expectVisible(instrumentCode: String, timeout: TimeInterval = 10) {
     let field = app.element(for: UITestIdentifiers.Detail.counterpartAmount)
     if !field.waitForExistence(timeout: timeout) {
       Trace.recordFailure("counterpart amount field did not appear")

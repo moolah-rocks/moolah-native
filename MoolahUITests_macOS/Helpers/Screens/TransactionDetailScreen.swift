@@ -53,11 +53,11 @@ struct TransactionDetailScreen {
   func selectToAccount(named name: String) {
     Trace.record(detail: "toAccount=\(name)")
     let picker = app.element(for: UITestIdentifiers.Detail.toAccountPicker)
-    if !picker.waitForExistence(timeout: 3) {
+    if !picker.waitForExistence(timeout: 10) {
       Trace.recordFailure("to-account picker did not appear")
       XCTFail(
         "To-account picker '\(UITestIdentifiers.Detail.toAccountPicker)' "
-          + "did not appear within 3s")
+          + "did not appear within 10s")
       return
     }
     picker.click()
@@ -69,9 +69,9 @@ struct TransactionDetailScreen {
     // NSMenuItem, so querying by label via `menuItems[name]` is the only
     // viable resolution path here.
     let menuItem = app.application.menuItems[name]
-    if !menuItem.waitForExistence(timeout: 3) {
+    if !menuItem.waitForExistence(timeout: 10) {
       Trace.recordFailure("menu item '\(name)' did not appear")
-      XCTFail("Picker menu item '\(name)' did not appear within 3s")
+      XCTFail("Picker menu item '\(name)' did not appear within 10s")
       return
     }
     menuItem.click()
@@ -81,7 +81,7 @@ struct TransactionDetailScreen {
     // proves the SwiftUI binding flowed through, not just that the popup
     // closed. macOS pop-up buttons expose the selection via `value`, not
     // `title`; the latter is empty.
-    let deadline = Date().addingTimeInterval(3)
+    let deadline = Date().addingTimeInterval(10)
     var lastValue = ""
     while Date() < deadline {
       lastValue = (picker.value as? String) ?? ""
@@ -91,6 +91,6 @@ struct TransactionDetailScreen {
     Trace.recordFailure(
       "picker value was '\(lastValue)' after selecting '\(name)'")
     XCTFail(
-      "To-account picker did not show '\(name)' within 3s of selection (was '\(lastValue)')")
+      "To-account picker did not show '\(name)' within 10s of selection (was '\(lastValue)')")
   }
 }

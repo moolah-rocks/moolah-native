@@ -62,20 +62,20 @@ struct SidebarScreen {
     Trace.record(detail: "account=\(account)")
     let identifier = UITestIdentifiers.Sidebar.account(account.id)
     let row = app.element(for: identifier)
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("sidebar row '\(identifier)' did not appear")
-      XCTFail("Sidebar row for account \(account) did not appear within 3s")
+      XCTFail("Sidebar row for account \(account) did not appear within 10s")
       return
     }
     row.click()
 
     let listContainer = app.element(for: UITestIdentifiers.TransactionList.container)
-    if !listContainer.waitForExistence(timeout: 3) {
+    if !listContainer.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "transaction list container '\(UITestIdentifiers.TransactionList.container)' "
           + "did not appear after switching to \(account)")
       XCTFail(
-        "Transaction list did not render within 3s of switching to account \(account)")
+        "Transaction list did not render within 10s of switching to account \(account)")
     }
   }
 
@@ -96,9 +96,9 @@ struct SidebarScreen {
     Trace.record(detail: "named=\(item.rawValue)")
     let identifier = UITestIdentifiers.Sidebar.view(item.rawValue)
     let row = app.element(for: identifier)
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("sidebar row '\(identifier)' did not appear")
-      XCTFail("Sidebar row for named item \(item.rawValue) did not appear within 3s")
+      XCTFail("Sidebar row for named item \(item.rawValue) did not appear within 10s")
       return
     }
     row.click()
@@ -110,18 +110,18 @@ struct SidebarScreen {
     switch item {
     case .allTransactions:
       let listContainer = app.element(for: UITestIdentifiers.TransactionList.container)
-      if !listContainer.waitForExistence(timeout: 3) {
+      if !listContainer.waitForExistence(timeout: 10) {
         Trace.recordFailure(
           "transaction list container did not appear after switching to \(item.rawValue)")
-        XCTFail("Transaction list did not render within 3s after \(item.rawValue)")
+        XCTFail("Transaction list did not render within 10s after \(item.rawValue)")
       }
     case .recentlyAdded:
       let recentlyAddedContainer = app.element(
         for: UITestIdentifiers.RecentlyAdded.container)
-      if !recentlyAddedContainer.waitForExistence(timeout: 3) {
+      if !recentlyAddedContainer.waitForExistence(timeout: 10) {
         Trace.recordFailure(
           "recently added container did not appear after switching to \(item.rawValue)")
-        XCTFail("Recently Added did not render within 3s after \(item.rawValue)")
+        XCTFail("Recently Added did not render within 10s after \(item.rawValue)")
       }
     case .upcoming, .analysis, .reports, .categories:
       // No shared identifier — see docstring.
@@ -209,9 +209,9 @@ extension SidebarScreen {
     Trace.record(detail: "account=\(account)")
     let identifier = UITestIdentifiers.Sidebar.account(account.id)
     let row = app.element(for: identifier)
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("sidebar row '\(identifier)' did not appear")
-      XCTFail("Sidebar row for account \(account) did not appear within 3s")
+      XCTFail("Sidebar row for account \(account) did not appear within 10s")
       return
     }
     row.click()
@@ -227,9 +227,9 @@ extension SidebarScreen {
     Trace.record(detail: "account=\(account)")
     let identifier = UITestIdentifiers.Sidebar.account(account.id)
     let row = app.element(for: identifier)
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("sidebar row '\(identifier)' did not appear")
-      XCTFail("Sidebar row for account \(account) did not appear within 3s")
+      XCTFail("Sidebar row for account \(account) did not appear within 10s")
       return
     }
     row.click()
@@ -263,9 +263,9 @@ extension SidebarScreen {
 
   private func rightClick(rowIdentifier: String) {
     let row = app.element(for: rowIdentifier)
-    if !row.waitForExistence(timeout: 3) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("sidebar row '\(rowIdentifier)' did not appear")
-      XCTFail("Sidebar row '\(rowIdentifier)' did not appear within 3s")
+      XCTFail("Sidebar row '\(rowIdentifier)' did not appear within 10s")
       return
     }
     row.rightClick()
@@ -274,10 +274,10 @@ extension SidebarScreen {
   private func clickRenameMenuItem() {
     let renameItem = app.element(
       for: UITestIdentifiers.Sidebar.renameContextMenuItem)
-    if !renameItem.waitForExistence(timeout: 3) {
+    if !renameItem.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "sidebar.contextMenu.rename item did not appear after right-click")
-      XCTFail("'Rename' menu item did not appear within 3s of right-click")
+      XCTFail("'Rename' menu item did not appear within 10s of right-click")
       return
     }
     renameItem.click()
@@ -296,9 +296,9 @@ extension SidebarScreen {
   /// `doubleClickAccountName`.
   private func waitForRenameField() {
     let field = renameField()
-    if !field.waitForExistence(timeout: 3) {
+    if !field.waitForExistence(timeout: 10) {
       Trace.recordFailure("rename field did not appear")
-      XCTFail("Inline rename TextField did not appear within 3s of trigger")
+      XCTFail("Inline rename TextField did not appear within 10s of trigger")
     }
   }
 
@@ -308,10 +308,10 @@ extension SidebarScreen {
     let field = renameField()
     let predicate = NSPredicate(format: "exists == false")
     let expectation = XCTNSPredicateExpectation(predicate: predicate, object: field)
-    let result = XCTWaiter.wait(for: [expectation], timeout: 3)
+    let result = XCTWaiter.wait(for: [expectation], timeout: 10)
     if result != .completed {
       Trace.recordFailure("rename field still present")
-      XCTFail("Inline rename TextField did not disappear within 3s")
+      XCTFail("Inline rename TextField did not disappear within 10s")
     }
   }
 }
@@ -336,14 +336,14 @@ extension SidebarScreen {
     let targetIdentifier = UITestIdentifiers.Sidebar.account(target.id)
     let sourceRow = app.element(for: sourceIdentifier)
     let targetRow = app.element(for: targetIdentifier)
-    if !sourceRow.waitForExistence(timeout: 3) {
+    if !sourceRow.waitForExistence(timeout: 10) {
       Trace.recordFailure("sidebar row '\(sourceIdentifier)' did not appear")
-      XCTFail("Sidebar row for source account \(source) did not appear within 3s")
+      XCTFail("Sidebar row for source account \(source) did not appear within 10s")
       return
     }
-    if !targetRow.waitForExistence(timeout: 3) {
+    if !targetRow.waitForExistence(timeout: 10) {
       Trace.recordFailure("sidebar row '\(targetIdentifier)' did not appear")
-      XCTFail("Sidebar row for target account \(target) did not appear within 3s")
+      XCTFail("Sidebar row for target account \(target) did not appear within 10s")
       return
     }
     sourceRow.press(forDuration: 0.4, thenDragTo: targetRow)
@@ -358,14 +358,14 @@ extension SidebarScreen {
     let targetIdentifier = UITestIdentifiers.Sidebar.group(target.id)
     let sourceRow = app.element(for: sourceIdentifier)
     let targetRow = app.element(for: targetIdentifier)
-    if !sourceRow.waitForExistence(timeout: 3) {
+    if !sourceRow.waitForExistence(timeout: 10) {
       Trace.recordFailure("sidebar row '\(sourceIdentifier)' did not appear")
-      XCTFail("Sidebar row for source account \(source) did not appear within 3s")
+      XCTFail("Sidebar row for source account \(source) did not appear within 10s")
       return
     }
-    if !targetRow.waitForExistence(timeout: 3) {
+    if !targetRow.waitForExistence(timeout: 10) {
       Trace.recordFailure("sidebar row '\(targetIdentifier)' did not appear")
-      XCTFail("Sidebar row for target group \(target) did not appear within 3s")
+      XCTFail("Sidebar row for target group \(target) did not appear within 10s")
       return
     }
     sourceRow.press(forDuration: 0.4, thenDragTo: targetRow)

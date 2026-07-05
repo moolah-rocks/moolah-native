@@ -59,7 +59,7 @@ func testBad() {
     app.launchArguments = ["--ui-testing"]
     app.launch()
     app.textFields["detail.payee"].typeText("Woo")
-    XCTAssertTrue(app.tables["autocomplete.payee"].waitForExistence(timeout: 3))
+    XCTAssertTrue(app.tables["autocomplete.payee"].waitForExistence(timeout: 10))
 }
 ```
 
@@ -95,7 +95,7 @@ No driver method returns a raw value to the test. If a test needs to know "payee
 
 ### The six invariants
 
-1. **Actions wait for post-conditions.** `switchToAccount(_:)` does not return until the transaction list has re-rendered for that account. `type(_:)` does not return until the text binding has propagated. The wait is bounded (default 3 s).
+1. **Actions wait for post-conditions.** `switchToAccount(_:)` does not return until the transaction list has re-rendered for that account. `type(_:)` does not return until the text binding has propagated. The wait is bounded — positive waits (appear / hittable / value-propagate / a sheet/popover/dropdown dismissing as an action's post-condition) default to **10 s**, because merge-queue runners are slower than local hardware and a 3 s positive wait flakes there; use a shorter timeout only for absence assertions (proving something does *not* appear).
    *Why:* every test failure that "feels timing-related" is a missing post-condition wait somewhere. By codifying the wait inside the action, the next caller does not have to re-discover the right `waitForExistence` or guess at a `sleep`. When this invariant is upheld, retries are unnecessary by construction (Section 5, "Flaky = broken").
 2. **Actions fail loudly.** Precondition violations (e.g. sidebar not visible when `switchToAccount` is called) call `XCTFail(...)` with the failure artefacts already attached. No silent no-ops, no thrown errors the caller can swallow.
    *Why:* a driver that returns silently when its precondition is wrong defers the failure to a downstream assertion that will report a confusing symptom (`expected payee to be "Foo", was ""`). Failing at the action surface keeps the trace pointing at the real cause.

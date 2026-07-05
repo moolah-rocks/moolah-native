@@ -16,9 +16,9 @@ struct WelcomeHeroScreen {
   func expectCreateNewButtonVisible() {
     Trace.record(#function)
     let element = app.element(for: UITestIdentifiers.Welcome.heroCreateNewButton)
-    if !element.waitForExistence(timeout: 5) {
+    if !element.waitForExistence(timeout: 10) {
       Trace.recordFailure("'Create a new profile' button did not appear")
-      XCTFail("'Create a new profile' button did not appear within 5s")
+      XCTFail("'Create a new profile' button did not appear within 10s")
     }
   }
 
@@ -27,9 +27,9 @@ struct WelcomeHeroScreen {
   func expectDownloadingStatus(containing receivedText: String) {
     Trace.record(#function, detail: "receivedText=\(receivedText)")
     let element = app.element(for: UITestIdentifiers.Welcome.heroDownloadingStatus)
-    if !element.waitForExistence(timeout: 5) {
+    if !element.waitForExistence(timeout: 10) {
       Trace.recordFailure("downloading status line did not appear")
-      XCTFail("Downloading-status line did not appear within 5s")
+      XCTFail("Downloading-status line did not appear within 10s")
       return
     }
     let label = element.label
@@ -47,9 +47,9 @@ struct WelcomeHeroScreen {
   func expectDownloadFootnoteVisible() {
     Trace.record(#function)
     let element = app.element(for: UITestIdentifiers.Welcome.heroDownloadFootnote)
-    if !element.waitForExistence(timeout: 5) {
+    if !element.waitForExistence(timeout: 10) {
       Trace.recordFailure("download footnote did not appear")
-      XCTFail("Download footnote did not appear within 5s")
+      XCTFail("Download footnote did not appear within 10s")
     }
   }
 }

@@ -18,9 +18,9 @@ struct TradeFormDriver {
   func switchToTradeMode() {
     Trace.record(#function)
     let picker = app.element(for: UITestIdentifiers.Detail.modeTypePicker)
-    if !picker.waitForExistence(timeout: 3) {
+    if !picker.waitForExistence(timeout: 10) {
       Trace.recordFailure("modeTypePicker did not appear")
-      XCTFail("Type picker '\(UITestIdentifiers.Detail.modeTypePicker)' did not appear within 3s")
+      XCTFail("Type picker '\(UITestIdentifiers.Detail.modeTypePicker)' did not appear within 10s")
       return
     }
     picker.click()
@@ -37,9 +37,9 @@ struct TradeFormDriver {
     // `Transaction > Type ▸ Trade` menu-bar entry, which descends from the
     // app's menu bar, not the popUpButton.
     let tradeItem = picker.menuItems.element(boundBy: 3)
-    if !tradeItem.waitForExistence(timeout: 3) {
+    if !tradeItem.waitForExistence(timeout: 10) {
       Trace.recordFailure("popup menu item at index 3 did not appear after opening type picker")
-      XCTFail("Picker popup item at index 3 (Trade) did not appear within 3s of opening")
+      XCTFail("Picker popup item at index 3 (Trade) did not appear within 10s of opening")
       return
     }
     tradeItem.click()
@@ -47,11 +47,11 @@ struct TradeFormDriver {
     // Post-condition: the Paid amount field must exist, proving the view
     // switched to trade mode.
     let paidField = app.element(for: UITestIdentifiers.Detail.tradePaidAmount)
-    if !paidField.waitForExistence(timeout: 3) {
+    if !paidField.waitForExistence(timeout: 10) {
       Trace.recordFailure("tradePaidAmount did not appear after switching to Trade mode")
       XCTFail(
         "Trade mode did not render: '\(UITestIdentifiers.Detail.tradePaidAmount)' "
-          + "did not appear within 3s")
+          + "did not appear within 10s")
     }
   }
 
@@ -107,10 +107,10 @@ struct TradeFormDriver {
 
     // Tap "+ Add Fee".
     let addFeeButton = app.element(for: UITestIdentifiers.Detail.tradeAddFeeButton)
-    if !addFeeButton.waitForExistence(timeout: 3) {
+    if !addFeeButton.waitForExistence(timeout: 10) {
       Trace.recordFailure("tradeAddFeeButton did not appear")
       XCTFail(
-        "Add Fee button '\(UITestIdentifiers.Detail.tradeAddFeeButton)' did not appear within 3s")
+        "Add Fee button '\(UITestIdentifiers.Detail.tradeAddFeeButton)' did not appear within 10s")
       return
     }
     addFeeButton.click()
@@ -118,9 +118,9 @@ struct TradeFormDriver {
     // Wait for the fee amount field (proves the fee row inserted).
     let feeAmountId = UITestIdentifiers.Detail.tradeFeeAmount(feeDisplayIndex)
     let feeAmountField = app.element(for: feeAmountId)
-    if !feeAmountField.waitForExistence(timeout: 3) {
+    if !feeAmountField.waitForExistence(timeout: 10) {
       Trace.recordFailure("fee amount field '\(feeAmountId)' did not appear after tapping Add Fee")
-      XCTFail("Fee amount field '\(feeAmountId)' did not appear within 3s of tapping Add Fee")
+      XCTFail("Fee amount field '\(feeAmountId)' did not appear within 10s of tapping Add Fee")
       return
     }
 
@@ -195,9 +195,9 @@ struct TradeFormDriver {
   /// the field's `value` contains `text`.
   private func setAmountField(_ identifier: String, to text: String) {
     let field = app.element(for: identifier)
-    if !field.waitForExistence(timeout: 3) {
+    if !field.waitForExistence(timeout: 10) {
       Trace.recordFailure("amount field '\(identifier)' did not appear")
-      XCTFail("Amount field '\(identifier)' did not appear within 3s")
+      XCTFail("Amount field '\(identifier)' did not appear within 10s")
       return
     }
     // `waitForExistence` only checks AX-tree presence — a field can exist
@@ -205,13 +205,13 @@ struct TradeFormDriver {
     // (sheet-dismissal animation overlap) is now handled at the source by
     // `awaitPickerDismissal` waiting for the popover's host NSWindow to
     // finish tearing down, so by the time control reaches `setAmountField`
-    // the form is guaranteed interactive. This 3s wait remains as a
+    // the form is guaranteed interactive. This 10s wait remains as a
     // narrow safety margin against transient SwiftUI re-layout after
     // `switchToTradeMode` and the typing-in-Paid path before any picker
     // has opened.
-    if !waitForHittable(field, timeout: 3) {
-      Trace.recordFailure("amount field '\(identifier)' was not hittable within 3s")
-      XCTFail("Amount field '\(identifier)' was not hittable within 3s")
+    if !waitForHittable(field, timeout: 10) {
+      Trace.recordFailure("amount field '\(identifier)' was not hittable within 10s")
+      XCTFail("Amount field '\(identifier)' was not hittable within 10s")
       return
     }
     field.click()
@@ -219,16 +219,16 @@ struct TradeFormDriver {
     field.typeText(text)
 
     // Post-condition: field reports the typed value. Failure to converge
-    // within 3 s is a real driver/product bug — fail loudly so the trace
+    // within 10 s is a real driver/product bug — fail loudly so the trace
     // points at the right action, mirroring `AutocompleteFieldDriver.type(_:)`.
-    let deadline = Date().addingTimeInterval(3)
+    let deadline = Date().addingTimeInterval(10)
     while Date() < deadline {
       if let value = field.value as? String, value.contains(text) { return }
       RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     }
     Trace.recordFailure(
-      "amount field '\(identifier)' did not contain '\(text)' within 3s")
-    XCTFail("Amount field '\(identifier)' did not contain '\(text)' within 3s")
+      "amount field '\(identifier)' did not contain '\(text)' within 10s")
+    XCTFail("Amount field '\(identifier)' did not contain '\(text)' within 10s")
   }
 
   /// Opens the `InstrumentPickerSheet` by clicking either `containerIdentifier`
@@ -247,36 +247,36 @@ struct TradeFormDriver {
     } else {
       button = app.element(for: UITestIdentifiers.InstrumentPicker.field(fieldId))
     }
-    if !button.waitForExistence(timeout: 3) {
+    if !button.waitForExistence(timeout: 10) {
       Trace.recordFailure("instrument picker button did not appear")
-      XCTFail("Instrument picker button did not appear within 3s")
+      XCTFail("Instrument picker button did not appear within 10s")
       return
     }
     button.click()
 
     // Wait for the sheet to appear.
     let sheet = app.element(for: UITestIdentifiers.InstrumentPicker.sheet)
-    if !sheet.waitForExistence(timeout: 3) {
+    if !sheet.waitForExistence(timeout: 10) {
       Trace.recordFailure("instrumentPicker.sheet did not appear after tap")
-      XCTFail("InstrumentPickerSheet did not appear within 3s of tapping the picker button")
+      XCTFail("InstrumentPickerSheet did not appear within 10s of tapping the picker button")
       return
     }
 
     // Search and pick.
     let searchField = app.element(for: UITestIdentifiers.InstrumentPicker.searchField)
-    if !searchField.waitForExistence(timeout: 3) {
+    if !searchField.waitForExistence(timeout: 10) {
       Trace.recordFailure("instrumentPicker.searchField did not appear")
-      XCTFail("InstrumentPickerSheet search field did not appear within 3s")
+      XCTFail("InstrumentPickerSheet search field did not appear within 10s")
       return
     }
     searchField.click()
     searchField.typeText(instrumentId)
 
     let row = app.element(for: UITestIdentifiers.InstrumentPicker.row(instrumentId))
-    if !row.waitForExistence(timeout: 5) {
+    if !row.waitForExistence(timeout: 10) {
       Trace.recordFailure("instrumentPicker.row.\(instrumentId) did not appear after search")
       XCTFail(
-        "InstrumentPickerSheet row for '\(instrumentId)' did not appear within 5s of searching")
+        "InstrumentPickerSheet row for '\(instrumentId)' did not appear within 10s of searching")
       return
     }
     // The search input is debounced (250 ms in `InstrumentPickerStore`), so
@@ -340,9 +340,9 @@ struct TradeFormDriver {
       predicate: NSPredicate(format: "exists == false"),
       object: sheet
     )
-    if XCTWaiter().wait(for: [sheetGone], timeout: 3) != .completed {
+    if XCTWaiter().wait(for: [sheetGone], timeout: 10) != .completed {
       Trace.recordFailure("instrumentPicker.sheet did not dismiss after picking '\(instrumentId)'")
-      XCTFail("InstrumentPickerSheet did not dismiss within 3s of picking '\(instrumentId)'")
+      XCTFail("InstrumentPickerSheet did not dismiss within 10s of picking '\(instrumentId)'")
       return
     }
 
@@ -363,11 +363,11 @@ struct TradeFormDriver {
     let anchorIdentifier =
       containerIdentifier ?? UITestIdentifiers.InstrumentPicker.field(instrumentId)
     let anchor = app.element(for: anchorIdentifier)
-    if !waitForHittable(anchor, timeout: 3) {
+    if !waitForHittable(anchor, timeout: 10) {
       Trace.recordFailure(
-        "picker anchor '\(anchorIdentifier)' was not hittable within 3s of pick")
+        "picker anchor '\(anchorIdentifier)' was not hittable within 10s of pick")
       XCTFail(
-        "Picker anchor '\(anchorIdentifier)' was not hittable within 3s "
+        "Picker anchor '\(anchorIdentifier)' was not hittable within 10s "
           + "of dismissing the sheet")
     }
   }

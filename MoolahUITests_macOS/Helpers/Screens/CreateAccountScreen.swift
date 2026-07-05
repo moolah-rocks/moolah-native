@@ -23,20 +23,20 @@ struct CreateAccountScreen {
   func open(initialCurrencyId: String) {
     Trace.record(#function, detail: "initialCurrencyId=\(initialCurrencyId)")
     let button = app.element(for: UITestIdentifiers.Sidebar.newAccountButton)
-    if !button.waitForExistence(timeout: 3) {
+    if !button.waitForExistence(timeout: 10) {
       Trace.recordFailure("sidebar.toolbar.newAccount button did not appear")
-      XCTFail("New Account toolbar button did not appear within 3s")
+      XCTFail("New Account toolbar button did not appear within 10s")
       return
     }
     button.click()
 
     // Post-condition: the currency picker field must be visible in the sheet.
     let field = app.element(for: UITestIdentifiers.InstrumentPicker.field(initialCurrencyId))
-    if !field.waitForExistence(timeout: 3) {
+    if !field.waitForExistence(timeout: 10) {
       Trace.recordFailure(
         "instrumentPicker.field.\(initialCurrencyId) did not appear in CreateAccountView")
       XCTFail(
-        "CreateAccountView currency field did not appear within 3s "
+        "CreateAccountView currency field did not appear within 10s "
           + "(expected instrumentPicker.field.\(initialCurrencyId))")
     }
   }

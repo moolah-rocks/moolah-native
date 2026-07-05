@@ -74,14 +74,14 @@ Test reliability comes from waiting for the *right* condition, not from waiting 
 ### Required
 
 - Every wait targets a specific post-condition (a value, a UI element appearing, a binding propagating).
-- Every wait has a bounded timeout (default 3 s for UI tests, lower for unit tests).
+- Every wait has a bounded timeout. Positive UI-test waits (an element appearing, becoming hittable, or a sheet/popover/dropdown dismissing as an action's post-condition) default to **10 s** — merge-queue runners are slower than local hardware, and a 3 s positive wait flakes there. Use a shorter timeout only for absence assertions (proving something does *not* appear) and for unit tests.
 - A failed wait fails the test with an actionable message, not a silent retry.
 
 ```swift
 // GOOD: bounded wait on a post-condition
 let dropdown = app.textFields["autocomplete.payee"]
-XCTAssertTrue(dropdown.waitForExistence(timeout: 3),
-              "payee dropdown did not appear after 3 s")
+XCTAssertTrue(dropdown.waitForExistence(timeout: 10),
+              "payee dropdown did not appear after 10 s")
 
 // BAD: hope-based wait
 Thread.sleep(forTimeInterval: 1.0)

@@ -24,13 +24,13 @@ struct AutocompleteFieldDriver {
   func tap() {
     Trace.record(#function, detail: "field=\(fieldIdentifier)")
     let field = app.element(for: fieldIdentifier)
-    if !field.waitForExistence(timeout: 3) {
+    if !field.waitForExistence(timeout: 10) {
       Trace.recordFailure("field '\(fieldIdentifier)' did not appear for tap")
-      XCTFail("Autocomplete field '\(fieldIdentifier)' did not appear within 3s")
+      XCTFail("Autocomplete field '\(fieldIdentifier)' did not appear within 10s")
       return
     }
     field.click()
-    let deadline = Date().addingTimeInterval(3)
+    let deadline = Date().addingTimeInterval(10)
     while Date() < deadline {
       if (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false { return }
       RunLoop.current.run(until: Date().addingTimeInterval(0.05))
@@ -45,9 +45,9 @@ struct AutocompleteFieldDriver {
   func type(_ text: String) {
     Trace.record(detail: "field=\(fieldIdentifier) text=\"\(text)\"")
     let field = app.element(for: fieldIdentifier)
-    if !field.waitForExistence(timeout: 3) {
+    if !field.waitForExistence(timeout: 10) {
       Trace.recordFailure("field '\(fieldIdentifier)' did not appear")
-      XCTFail("Autocomplete field '\(fieldIdentifier)' did not appear within 3s")
+      XCTFail("Autocomplete field '\(fieldIdentifier)' did not appear within 10s")
       return
     }
     field.click()
@@ -56,14 +56,14 @@ struct AutocompleteFieldDriver {
     // Post-condition: the field reports back a value containing the typed
     // text. (`SwiftUI` text field values are exposed via the `value`
     // accessor.)
-    let deadline = Date().addingTimeInterval(3)
+    let deadline = Date().addingTimeInterval(10)
     while Date() < deadline {
       if let value = field.value as? String, value.contains(text) { return }
       RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     }
     app.testCase?.captureFailureSnapshot(reason: "type-no-value-\(fieldIdentifier)")
     Trace.recordFailure("field value did not propagate after typing")
-    XCTFail("Autocomplete field value did not contain '\(text)' within 3s")
+    XCTFail("Autocomplete field value did not contain '\(text)' within 10s")
   }
 
   /// Clears any existing text in the field via Cmd+A then backspace.
@@ -73,23 +73,23 @@ struct AutocompleteFieldDriver {
   func clear() {
     Trace.record(detail: "field=\(fieldIdentifier)")
     let field = app.element(for: fieldIdentifier)
-    if !field.waitForExistence(timeout: 3) {
+    if !field.waitForExistence(timeout: 10) {
       Trace.recordFailure("field '\(fieldIdentifier)' did not appear for clear")
-      XCTFail("Autocomplete field '\(fieldIdentifier)' did not appear within 3s")
+      XCTFail("Autocomplete field '\(fieldIdentifier)' did not appear within 10s")
       return
     }
     field.click()
     app.pressKeyboardShortcut("a", modifiers: .command)
     app.pressKeyboardShortcut(XCUIKeyboardKey.delete.rawValue)
 
-    let deadline = Date().addingTimeInterval(3)
+    let deadline = Date().addingTimeInterval(10)
     while Date() < deadline {
       if let value = field.value as? String, value.isEmpty { return }
       RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     }
     app.testCase?.captureFailureSnapshot(reason: "clear-not-empty-\(fieldIdentifier)")
     Trace.recordFailure("field did not empty after clear")
-    XCTFail("Autocomplete field '\(fieldIdentifier)' did not clear within 3s")
+    XCTFail("Autocomplete field '\(fieldIdentifier)' did not clear within 10s")
   }
 
   /// Sends a single arrow-down key press to the field. Returns once the
@@ -100,11 +100,11 @@ struct AutocompleteFieldDriver {
   func pressArrowDown() {
     Trace.record(detail: "field=\(fieldIdentifier)")
     app.application.typeKey(.downArrow, modifierFlags: [])
-    if !waitUntilAnySuggestionSelected(timeout: 3) {
+    if !waitUntilAnySuggestionSelected(timeout: 10) {
       Trace.recordFailure("arrow-down did not produce any highlighted suggestion")
       XCTFail(
         "Autocomplete dropdown '\(dropdownIdentifier)' had no highlighted suggestion "
-          + "within 3s of arrow-down")
+          + "within 10s of arrow-down")
     }
   }
 
@@ -114,10 +114,10 @@ struct AutocompleteFieldDriver {
   func pressEnter() {
     Trace.record(detail: "field=\(fieldIdentifier)")
     app.application.typeKey(.return, modifierFlags: [])
-    if !waitUntilDropdownHidden(timeout: 3) {
+    if !waitUntilDropdownHidden(timeout: 10) {
       Trace.recordFailure("dropdown '\(dropdownIdentifier)' did not hide after Return")
       XCTFail(
-        "Autocomplete dropdown '\(dropdownIdentifier)' did not hide within 3s of Return")
+        "Autocomplete dropdown '\(dropdownIdentifier)' did not hide within 10s of Return")
     }
   }
 
@@ -130,10 +130,10 @@ struct AutocompleteFieldDriver {
   func pressTab() {
     Trace.record(detail: "field=\(fieldIdentifier)")
     app.application.typeKey("\t", modifierFlags: [])
-    if !waitUntilDropdownHidden(timeout: 3) {
+    if !waitUntilDropdownHidden(timeout: 10) {
       Trace.recordFailure("dropdown '\(dropdownIdentifier)' did not hide after Tab")
       XCTFail(
-        "Autocomplete dropdown '\(dropdownIdentifier)' did not hide within 3s of Tab")
+        "Autocomplete dropdown '\(dropdownIdentifier)' did not hide within 10s of Tab")
     }
   }
 
@@ -144,10 +144,10 @@ struct AutocompleteFieldDriver {
   func pressEscape() {
     Trace.record(detail: "field=\(fieldIdentifier)")
     app.application.typeKey(.escape, modifierFlags: [])
-    if !waitUntilDropdownHidden(timeout: 3) {
+    if !waitUntilDropdownHidden(timeout: 10) {
       Trace.recordFailure("dropdown '\(dropdownIdentifier)' did not hide after Escape")
       XCTFail(
-        "Autocomplete dropdown '\(dropdownIdentifier)' did not hide within 3s of Escape")
+        "Autocomplete dropdown '\(dropdownIdentifier)' did not hide within 10s of Escape")
     }
   }
 
@@ -181,19 +181,19 @@ struct AutocompleteFieldDriver {
   // MARK: - Expectations (read-only)
 
   /// Asserts the field currently holds keyboard focus. Polls for up to
-  /// 3 s — SwiftUI propagates `@FocusState` on a later runloop pass than
+  /// 10 s — SwiftUI propagates `@FocusState` on a later runloop pass than
   /// the field's value binding, so a field can exist (and even hold its
   /// new value) a tick before focus lands. A single point-in-time read
   /// would flake on a CI runner that processes that pass slower than
   /// local hardware.
   func expectFocused() {
     let field = app.element(for: fieldIdentifier)
-    if !field.waitForExistence(timeout: 3) {
+    if !field.waitForExistence(timeout: 10) {
       Trace.recordFailure("field '\(fieldIdentifier)' not present for focus check")
-      XCTFail("Autocomplete field '\(fieldIdentifier)' did not appear within 3s")
+      XCTFail("Autocomplete field '\(fieldIdentifier)' did not appear within 10s")
       return
     }
-    let deadline = Date().addingTimeInterval(3)
+    let deadline = Date().addingTimeInterval(10)
     while Date() < deadline {
       if (field.value(forKey: "hasKeyboardFocus") as? Bool) ?? false { return }
       RunLoop.current.run(until: Date().addingTimeInterval(0.05))
@@ -203,16 +203,16 @@ struct AutocompleteFieldDriver {
   }
 
   /// Asserts the field's current value equals `expected`. Polls for up
-  /// to 3 s — bindings from `onChange(of: text)` can lag a frame behind
+  /// to 10 s — bindings from `onChange(of: text)` can lag a frame behind
   /// the key event that triggered them.
   func expectValue(_ expected: String) {
     let field = app.element(for: fieldIdentifier)
-    if !field.waitForExistence(timeout: 3) {
+    if !field.waitForExistence(timeout: 10) {
       Trace.recordFailure("field '\(fieldIdentifier)' not present for value check")
-      XCTFail("Autocomplete field '\(fieldIdentifier)' did not appear within 3s")
+      XCTFail("Autocomplete field '\(fieldIdentifier)' did not appear within 10s")
       return
     }
-    let deadline = Date().addingTimeInterval(3)
+    let deadline = Date().addingTimeInterval(10)
     var lastActual = ""
     while Date() < deadline {
       lastActual = (field.value as? String) ?? ""
@@ -229,12 +229,12 @@ struct AutocompleteFieldDriver {
   /// dropdown appears.
   func expectSuggestionsVisible(count: Int) {
     let dropdown = app.element(for: dropdownIdentifier)
-    if !dropdown.waitForExistence(timeout: 3) {
+    if !dropdown.waitForExistence(timeout: 10) {
       Trace.recordFailure("dropdown '\(dropdownIdentifier)' did not appear")
-      XCTFail("Autocomplete dropdown '\(dropdownIdentifier)' did not appear within 3s")
+      XCTFail("Autocomplete dropdown '\(dropdownIdentifier)' did not appear within 10s")
       return
     }
-    let deadline = Date().addingTimeInterval(3)
+    let deadline = Date().addingTimeInterval(10)
     var lastFound = -1
     while Date() < deadline {
       var found = 0
@@ -254,32 +254,32 @@ struct AutocompleteFieldDriver {
   func expectSuggestionsHidden() {
     // Wait briefly for hide to settle, then assert.
     let dropdown = app.element(for: dropdownIdentifier)
-    let deadline = Date().addingTimeInterval(3)
+    let deadline = Date().addingTimeInterval(10)
     while Date() < deadline {
       if !dropdown.exists { return }
       RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     }
-    Trace.recordFailure("dropdown '\(dropdownIdentifier)' still visible after 3s")
-    XCTFail("Autocomplete dropdown '\(dropdownIdentifier)' did not hide within 3s")
+    Trace.recordFailure("dropdown '\(dropdownIdentifier)' still visible after 10s")
+    XCTFail("Autocomplete dropdown '\(dropdownIdentifier)' did not hide within 10s")
   }
 
   /// Asserts the suggestion at `index` is currently highlighted. Polls
-  /// for up to 3 s so the assertion tolerates a frame of lag between the
+  /// for up to 10 s so the assertion tolerates a frame of lag between the
   /// key event and SwiftUI's `highlightedIndex` update.
   func expectHighlightedSuggestion(at index: Int) {
     let identifier = suggestionIdentifier(index)
     let suggestion = app.element(for: identifier)
-    if !suggestion.waitForExistence(timeout: 3) {
+    if !suggestion.waitForExistence(timeout: 10) {
       Trace.recordFailure("suggestion '\(identifier)' not present")
-      XCTFail("Autocomplete suggestion at index \(index) did not appear within 3s")
+      XCTFail("Autocomplete suggestion at index \(index) did not appear within 10s")
       return
     }
-    let deadline = Date().addingTimeInterval(3)
+    let deadline = Date().addingTimeInterval(10)
     while Date() < deadline {
       if (suggestion.value(forKey: "isSelected") as? Bool) ?? false { return }
       RunLoop.current.run(until: Date().addingTimeInterval(0.05))
     }
     Trace.recordFailure("suggestion '\(identifier)' is not highlighted")
-    XCTFail("Autocomplete suggestion at index \(index) is not highlighted within 3s")
+    XCTFail("Autocomplete suggestion at index \(index) is not highlighted within 10s")
   }
 }
