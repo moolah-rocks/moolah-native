@@ -68,11 +68,9 @@ extension ProfileSession {
   }
 
   /// Builds the crypto-price service with its configured clients
-  /// (CoinGecko first — Pro tier when a key is set, otherwise the free
-  /// public endpoint — plus CryptoCompare and Binance as fallbacks) and
-  /// the token resolver. The price-service falls through to the next
-  /// client on any error, so an anonymous CoinGecko 429 still resolves
-  /// via CryptoCompare/Binance.
+  /// (DefiLlama first, then CoinGecko, Binance, and the stablecoin peg as a
+  /// last resort) and the token resolver. The price-service falls through to
+  /// the next client on any error.
   static func makeCryptoPriceService(
     coinGeckoApiKeyProvider: @Sendable @escaping () -> String?,
     database: any DatabaseWriter,
@@ -83,22 +81,16 @@ extension ProfileSession {
   ) -> CryptoPriceService {
     // `CoinGeckoClient` resolves the key per request: an empty key targets
     // the free public host; a configured key targets the Pro host with
-    // `x_cg_pro_api_key`. Always included so users without a Pro key still
-    // get coverage for tokens like USDC that CryptoCompare omits from its
-    // contract index.
-    let cryptoCompareClient = CryptoCompareClient(
-      http: networking.client(forHost: "min-api.cryptocompare.com"),
-      apiKeyProvider: { ProfileSession.resolveCryptoCompareApiKey() })
+    // `x_cg_pro_api_key`.
     let coinGeckoClient = CoinGeckoClient(
       apiKeyProvider: coinGeckoApiKeyProvider, networking: networking)
     let stablecoinClient = StablecoinPriceClient()
     // Binance prices are quoted in USDT; converting them to USD needs a
     // USDT/USD rate. Resolve it through the same provider precedence the main
-    // chain uses, ending in the stablecoin peg — so a CryptoCompare outage
-    // falls to CoinGecko's real USDT price before assuming parity, and the $1
-    // last resort comes from the canonical peg rather than a literal here.
+    // chain uses, ending in the stablecoin peg — the $1 last resort comes
+    // from the canonical peg rather than a literal here.
     let usdtRateClients: [CryptoPriceClient] = [
-      cryptoCompareClient, coinGeckoClient, stablecoinClient,
+      coinGeckoClient, stablecoinClient,
     ]
     let binanceClient = BinanceClient(
       http: networking.client(forHost: "api.binance.com"),
@@ -115,7 +107,6 @@ extension ProfileSession {
     let priceClients: [CryptoPriceClient] = [
       defiLlamaClient,
       coinGeckoClient,
-      cryptoCompareClient,
       binanceClient,
       // Last-resort $1 fallback for canonical USDC/USDT only (peg).
       stablecoinClient,

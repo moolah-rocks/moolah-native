@@ -58,11 +58,10 @@ final class ProfileSession: Identifiable {
   private(set) var cryptoTokenStore: CryptoTokenStore?
   private(set) var instrumentSearchService: InstrumentSearchService?
   private(set) var coinGeckoCatalog: (any CoinGeckoCatalog)?
-  /// Self-refreshing CryptoCompare / Binance token caches the resolution
-  /// client reads from. Exposed so PR2's preset reconciliation can reach the
-  /// same warm cache instances. `nil` when cache construction failed (or under
-  /// UI testing, where overrides supply the resolver directly).
-  private(set) var cryptoCompareCache: CryptoCompareTokenCache?
+  /// Self-refreshing Binance token cache the resolution client reads from.
+  /// Exposed so the preset reconciliation can reach the same warm cache
+  /// instance. `nil` when cache construction failed (or under UI testing,
+  /// where overrides supply the resolver directly).
   private(set) var binanceCache: BinanceTokenCache?
   private(set) var defiLlamaSupportCache: DefiLlamaSupportCache?
   private(set) var tokenResolutionClient: (any TokenResolutionClient)?
@@ -107,9 +106,9 @@ final class ProfileSession: Identifiable {
   /// `cleanupSync(coordinator:)` if the session is torn down before the
   /// refresh completes. Module-internal for the sync-cleanup extension.
   var catalogRefreshTask: Task<Void, Never>?
-  /// Background task handles for the once-per-session CryptoCompare / Binance
-  /// `refreshIfStale()` kick-offs. Tracked as siblings to `catalogRefreshTask`
-  /// so they can be cancelled in `cleanupSync(coordinator:)` if the session is
+  /// Background task handle for the once-per-session Binance cache
+  /// `refreshIfStale()` kick-off. Tracked as a sibling to `catalogRefreshTask`
+  /// so it can be cancelled in `cleanupSync(coordinator:)` if the session is
   /// torn down before the refresh completes. Empty when cache construction
   /// failed (or under UI testing). Module-internal for the sync-cleanup
   /// extension.
@@ -253,7 +252,6 @@ final class ProfileSession: Identifiable {
     self.cryptoTokenStore = registryWiring.cryptoTokenStore
     self.instrumentSearchService = registryWiring.searchService
     self.coinGeckoCatalog = registryWiring.coinGeckoCatalog
-    self.cryptoCompareCache = registryWiring.cryptoCompareCache
     self.binanceCache = registryWiring.binanceCache
     self.tokenResolutionClient = registryWiring.tokenResolutionClient
     self.catalogRefreshTask = registryWiring.catalogRefreshTask

@@ -9,18 +9,6 @@ import Testing
 struct InstrumentRegistryReconcileTests {
   // MARK: - In-memory cache stubs
 
-  struct StubCC: CryptoCompareSymbolLookup {
-    var byContract: [String: String] = [:]
-    var natives: Set<String> = []
-    var all: Set<String> = []
-
-    func symbol(forContract address: String) async -> String? {
-      byContract[address.lowercased()]
-    }
-    func nativeSymbols() async -> Set<String> { natives }
-    func allSymbols() async -> Set<String> { all }
-  }
-
   struct StubBinance: BinancePairLookup {
     var pairs: Set<String> = []
 
@@ -81,7 +69,7 @@ struct InstrumentRegistryReconcileTests {
 
   // MARK: - Tests
 
-  @Test("fills nil provider columns from the caches")
+  @Test("fills nil provider columns from the caches (binance + coingecko)")
   func upgradesPartialMapping() async throws {
     let subject = try makeSubject()
     let repo = subject.repo
@@ -93,14 +81,14 @@ struct InstrumentRegistryReconcileTests {
         cryptocompareSymbol: nil, binanceSymbol: nil))
 
     let catalogs = ProviderCatalogLookups(
-      cryptoCompare: StubCC(byContract: [rplAddress: "RPL"]),
       binance: StubBinance(pairs: ["RPLUSDT"]),
       coinGecko: StubCG())
     await repo.reconcileProviderMappings(using: catalogs)
 
     let reg = try await reg(byId: rpl.id, in: repo)
     #expect(reg.mapping.coingeckoId == "rocket-pool")
-    #expect(reg.mapping.cryptocompareSymbol == "RPL")
+    // cryptocompareSymbol is never filled by reconcile (CC removed)
+    #expect(reg.mapping.cryptocompareSymbol == nil)
     #expect(reg.mapping.binanceSymbol == "RPLUSDT")
   }
 
@@ -120,7 +108,6 @@ struct InstrumentRegistryReconcileTests {
 
     // Caches offer DIFFERENT values; merge-only fill must ignore them.
     let catalogs = ProviderCatalogLookups(
-      cryptoCompare: StubCC(byContract: [rplAddress: "XXX"]),
       binance: StubBinance(pairs: ["RPLUSDT"]),
       coinGecko: StubCG(
         byContract: [
@@ -153,7 +140,6 @@ struct InstrumentRegistryReconcileTests {
     hooks.changedIds.removeAll()
 
     let catalogs = ProviderCatalogLookups(
-      cryptoCompare: StubCC(byContract: [rplAddress: "RPL"]),
       binance: StubBinance(pairs: ["RPLUSDT"]),
       coinGecko: StubCG(
         byContract: [
@@ -177,8 +163,7 @@ struct InstrumentRegistryReconcileTests {
         instrumentId: rpl.id, coingeckoId: "rocket-pool",
         cryptocompareSymbol: nil, binanceSymbol: nil))
 
-    let catalogs = ProviderCatalogLookups(
-      cryptoCompare: StubCC(), binance: StubBinance(), coinGecko: StubCG())
+    let catalogs = ProviderCatalogLookups(binance: StubBinance(), coinGecko: StubCG())
     await repo.reconcileProviderMappings(using: catalogs)
 
     let reg = try await reg(byId: rpl.id, in: repo)
@@ -187,7 +172,7 @@ struct InstrumentRegistryReconcileTests {
     #expect(reg.mapping.binanceSymbol == nil)
   }
 
-  @Test("fills native token from native symbols + binance pair")
+  @Test("fills native token binance pair")
   func nativeToken() async throws {
     let subject = try makeSubject()
     let repo = subject.repo
@@ -200,14 +185,14 @@ struct InstrumentRegistryReconcileTests {
         cryptocompareSymbol: nil, binanceSymbol: nil))
 
     let catalogs = ProviderCatalogLookups(
-      cryptoCompare: StubCC(natives: ["ETH"]),
       binance: StubBinance(pairs: ["ETHUSDT"]),
       coinGecko: StubCG())
     await repo.reconcileProviderMappings(using: catalogs)
 
     let reg = try await reg(byId: eth.id, in: repo)
     #expect(reg.mapping.coingeckoId == "ethereum")
-    #expect(reg.mapping.cryptocompareSymbol == "ETH")
+    // cryptocompareSymbol is never filled by reconcile (CC removed)
+    #expect(reg.mapping.cryptocompareSymbol == nil)
     #expect(reg.mapping.binanceSymbol == "ETHUSDT")
   }
 
@@ -224,7 +209,6 @@ struct InstrumentRegistryReconcileTests {
         cryptocompareSymbol: nil, binanceSymbol: nil))
 
     let catalogs = ProviderCatalogLookups(
-      cryptoCompare: StubCC(byContract: [rplAddress: "RPL"]),
       binance: StubBinance(pairs: ["RPLUSDT"]),
       coinGecko: StubCG())
     await repo.reconcileProviderMappings(using: catalogs)
@@ -243,7 +227,7 @@ struct InstrumentRegistryReconcileTests {
     let hooks = subject.hooks
     // A spam ERC-20 impersonating Optimism: a different contract, but a
     // copied "OP" ticker and an all-nil mapping persisted at .spam by the
-    // discovery actor. Reconcile must not attribute OPUSDT / OP from the
+    // discovery actor. Reconcile must not attribute OPUSDT from the
     // unverified ticker — that's the #790 poisoning the contract-confirmed
     // resolver path is built to prevent.
     let fakeOp = Instrument.crypto(
@@ -259,13 +243,12 @@ struct InstrumentRegistryReconcileTests {
     hooks.changedIds.removeAll()
 
     let catalogs = ProviderCatalogLookups(
-      cryptoCompare: StubCC(byContract: ["0x000000000000000000000000000000000000dead": "OP"]),
       binance: StubBinance(pairs: ["OPUSDT"]),
       coinGecko: StubCG())
     await repo.reconcileProviderMappings(using: catalogs)
 
     // The row is returned by allCryptoRegistrations() (it's .spam, so the
-    // Lookup guard does not drop it), so it must be explicitly skipped.
+    // guard at the top of the loop skips it).
     let reg = try await reg(byId: fakeOp.id, in: repo)
     #expect(reg.mapping.coingeckoId == nil)
     #expect(reg.mapping.cryptocompareSymbol == nil)

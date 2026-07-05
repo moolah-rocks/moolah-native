@@ -58,8 +58,7 @@ extension BinanceTokenCache {
   }
 
   /// Atomically replaces the whole `binance_pair` table inside a single
-  /// `BEGIN IMMEDIATE` transaction, rolling back on any error (mirrors
-  /// `CryptoCompareTokenCache.replaceAll`).
+  /// `BEGIN IMMEDIATE` transaction, rolling back on any error.
   func replaceAll(pairs: Set<String>) throws {
     try database.exec("BEGIN IMMEDIATE;")
     do {
