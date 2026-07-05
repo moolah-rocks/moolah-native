@@ -221,7 +221,7 @@ extension UITestSeed {
       .sidebarFooterReceiving, .sidebarFooterSending, .tradeReady, .incompatibleProfile,
       .transferDetectionBaseline, .pendingWebImportOneChaseInbox,
       .insightsForYouBaseline, .groupFilterScope, .walletHeaderSyncError,
-      .accountDetailLayout:
+      .accountDetailLayout, .investmentTradeReady:
       return false
     }
   }
