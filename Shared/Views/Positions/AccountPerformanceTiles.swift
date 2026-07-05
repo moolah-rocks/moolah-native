@@ -19,7 +19,6 @@ struct AccountPerformanceTiles: View {
       Text(title)
         .font(.headline)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityIdentifier(UITestIdentifiers.AccountDetail.performanceTiles)
       HStack(spacing: 0) {
         currentValueTile
         Divider().frame(height: tileDividerHeight)
@@ -115,6 +114,12 @@ struct AccountPerformanceTiles: View {
       }
     }
     .accessibilityLabel(annualisedReturnAccessibilityLabel)
+    // Placed on this combined leaf (not a transparent container) so the
+    // identifier survives the outer `chartPane` parent's propagation.
+    // The `Tile` uses `.accessibilityElement(children: .combine)` which
+    // creates an opaque node with its own XCUI identity — unlike a plain
+    // `Text`, which inherits the nearest ancestor identifier instead.
+    .accessibilityIdentifier(UITestIdentifiers.AccountDetail.performanceTiles)
 
     if performance.annualisedReturn == nil {
       tile.accessibilityHint(annualisedReturnUnavailableTooltip)

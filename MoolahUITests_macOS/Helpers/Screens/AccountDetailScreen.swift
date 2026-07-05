@@ -63,6 +63,12 @@ struct AccountDetailScreen {
 
   /// Clicks the "Chart" segment of the bottom toggle and waits for the chart
   /// pane to appear.
+  ///
+  /// Uses a verified retry: clicks the segment, waits a bounded per-attempt
+  /// window for the chart pane, and re-clicks if it does not appear. This
+  /// guards against the NSSegmentedControl click-drop that occurs on CI under
+  /// load (the `BottomTabToggle.Equatable` guard stabilises the control across
+  /// content re-renders, but the click can still be lost on a busy runner).
   func toggleToChart(timeout: TimeInterval = 10) {
     Trace.record(#function)
     let segment = app.pickerSegment(label: UITestIdentifiers.AccountDetail.chartSegmentLabel)
@@ -73,12 +79,24 @@ struct AccountDetailScreen {
           + "Check the bottom-pane Picker has rendered.")
       return
     }
-    segment.click()
     let chart = app.element(for: UITestIdentifiers.AccountDetail.chartPane)
-    if !chart.waitForExistence(timeout: timeout) {
-      Trace.recordFailure("chart pane did not appear after toggling")
-      XCTFail("Chart pane did not appear within \(timeout)s of clicking the Chart segment")
+    let maxAttempts = 3
+    let perAttemptWait = timeout / TimeInterval(maxAttempts)
+    for attempt in 1...maxAttempts {
+      segment.click()
+      if chart.waitForExistence(timeout: perAttemptWait) {
+        return
+      }
+      if attempt < maxAttempts {
+        Trace.record(
+          "toggleToChart: chart pane did not appear, retrying click "
+            + "(attempt \(attempt)/\(maxAttempts))")
+      }
     }
+    Trace.recordFailure("chart pane did not appear after toggling")
+    XCTFail(
+      "Chart pane did not appear within \(Int(timeout))s after \(maxAttempts) attempts "
+        + "clicking the Chart segment")
   }
 
   /// Asserts the performance-tiles strip is present within `timeout` seconds.
@@ -114,6 +132,11 @@ struct AccountDetailScreen {
 
   /// Clicks the "Transactions" segment of the bottom toggle and waits for
   /// the transaction list to reappear.
+  ///
+  /// Uses a verified retry: clicks the segment, waits a bounded per-attempt
+  /// window for the transaction list, and re-clicks if it does not appear.
+  /// Mirrors `toggleToChart`'s retry strategy for the same NSSegmentedControl
+  /// click-drop on CI.
   func toggleToTransactions(timeout: TimeInterval = 10) {
     Trace.record(#function)
     let segment = app.pickerSegment(label: UITestIdentifiers.AccountDetail.transactionsSegmentLabel)
@@ -124,11 +147,23 @@ struct AccountDetailScreen {
           + "Check the bottom-pane Picker has rendered.")
       return
     }
-    segment.click()
     let list = app.element(for: UITestIdentifiers.TransactionList.container)
-    if !list.waitForExistence(timeout: timeout) {
-      Trace.recordFailure("transaction list did not reappear after toggling")
-      XCTFail("Transaction list did not reappear within \(timeout)s")
+    let maxAttempts = 3
+    let perAttemptWait = timeout / TimeInterval(maxAttempts)
+    for attempt in 1...maxAttempts {
+      segment.click()
+      if list.waitForExistence(timeout: perAttemptWait) {
+        return
+      }
+      if attempt < maxAttempts {
+        Trace.record(
+          "toggleToTransactions: transaction list did not reappear, retrying click "
+            + "(attempt \(attempt)/\(maxAttempts))")
+      }
     }
+    Trace.recordFailure("transaction list did not reappear after toggling")
+    XCTFail(
+      "Transaction list did not reappear within \(Int(timeout))s after \(maxAttempts) attempts "
+        + "clicking the Transactions segment")
   }
 }
