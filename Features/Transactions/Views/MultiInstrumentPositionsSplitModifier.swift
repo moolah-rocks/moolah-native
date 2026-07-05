@@ -1,25 +1,25 @@
 import SwiftUI
 import os
 
-/// Conditionally wraps a `TransactionListView` (or any other content)
-/// in a `PositionsTransactionsSplit` when the account has positions in
-/// instruments other than its host currency. Owns the positions
-/// valuator `.task(id:)` so the wrapping leaf doesn't need to manage
-/// the valuation lifecycle.
+/// Wraps any content (typically a `TransactionListView`) in the
+/// `PositionsChartTransactionsSplit` unified account-detail container.
+/// Chart and Transactions are **always** present; the Positions pane
+/// is gated on `hasPositions` (non-host-currency holdings). Owns the
+/// positions valuator `.task(id:)` lifecycle so callers don't manage it.
 ///
-/// **Decision predicate** — see `shouldShow(rawPositions:hostCurrency:positionsInput:)`.
-/// Once the valuator has produced a `positionsInput`, that becomes
-/// authoritative because it has already dropped `.knownZero` (`.spam`
-/// / `.unpriced`) rows; relying on the raw-positions heuristic alone
-/// can otherwise leave the split rendered with an inner
-/// `PositionsView` that returns `EmptyView`, manifesting as a large
-/// blank pane above the transactions list.
+/// **Positions gate** — `hasPositions` delegates to
+/// `AccountDetailLayout.hasNonHostHoldings`. Once the valuator
+/// produces a `positionsInput` it is authoritative — its `shouldHide`
+/// has already dropped `.knownZero` (`.spam` / `.unpriced`) rows, so
+/// it agrees with what the table will render. Pre-valuation, the raw
+/// heuristic acts as a stand-in so the tab / pane can render with a
+/// `ProgressView` while the valuator works.
 ///
 /// **Re-fire trigger** — the `.task(id:)` re-fires whenever the
 /// positions list changes OR the crypto-registry version bumps (e.g.
 /// the user marks a token as `.spam`). Without the version dimension
-/// a spam flip in preferences would leave a stale `valuedPositions`
-/// on screen — see issue #790 for the original rationale.
+/// a spam flip in preferences would leave stale content on screen —
+/// see issue #790 for the original rationale.
 struct MultiInstrumentPositionsSplitModifier: ViewModifier {
   let positions: [Position]
   let hostCurrency: Instrument
@@ -38,67 +38,62 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
 
   @State private var positionsInput: PositionsViewInput?
   @State private var positionsRange: PositionsTimeRange = .threeMonths
+  @State private var selection: PositionSelection?
 
   private static let logger = Logger(
     subsystem: "com.moolah.app", category: "MultiInstrumentPositionsSplitModifier")
 
-  /// Pure decision helper. Once the valuator produces a
-  /// `positionsInput`, that becomes authoritative — its `shouldHide`
-  /// has already filtered out `.knownZero` (spam / unpriced) positions
-  /// and so agrees with what the inner `PositionsView` will actually
-  /// render. Pre-valuation, fall back to a heuristic on raw positions
-  /// so the split can render with a `ProgressView` while the valuator
-  /// works.
-  ///
-  /// `nonisolated` so unit tests can call this without spinning up a
-  /// `@MainActor` context — the body touches only value-type inputs
-  /// (no view state, no actor-isolated dependencies).
-  nonisolated static func shouldShow(
-    rawPositions: [Position],
-    hostCurrency: Instrument,
-    positionsInput: PositionsViewInput?
-  ) -> Bool {
+  private var hasPositions: Bool {
     AccountDetailLayout.hasNonHostHoldings(
-      rawPositions: rawPositions,
-      hostCurrency: hostCurrency,
-      positionsInput: positionsInput)
-  }
-
-  private var shouldShow: Bool {
-    Self.shouldShow(
       rawPositions: positions,
       hostCurrency: hostCurrency,
       positionsInput: positionsInput)
   }
 
   func body(content: Content) -> some View {
-    if shouldShow {
-      PositionsTransactionsSplit(defaultTab: .transactions) {
-        if let positionsInput {
-          PositionsView(input: positionsInput, range: $positionsRange)
-        } else {
-          ProgressView()
-            .frame(maxWidth: .infinity)
-            .padding()
-            .accessibilityLabel("Loading positions")
-        }
-      } transactions: {
-        content
-      }
-      .task(
-        id: PositionsTaskKey(
-          positions: positions, registrationsVersion: registrationsVersion, range: positionsRange)
-      ) {
-        await valuatePositions()
-      }
-    } else {
+    PositionsChartTransactionsSplit(hasPositions: hasPositions) {
       content
+    } positions: {
+      if let positionsInput {
+        PositionsPane(input: positionsInput, selection: $selection)
+      } else {
+        ProgressView()
+          .frame(maxWidth: .infinity)
+          .padding()
+          .accessibilityLabel("Loading positions")
+      }
+    } chart: {
+      if let positionsInput {
+        PositionsChartPane(
+          input: positionsInput, range: $positionsRange, selection: $selection)
+      } else {
+        ProgressView()
+          .frame(maxWidth: .infinity)
+          .padding()
+          .accessibilityLabel("Loading chart")
+      }
     }
+    .task(
+      id: PositionsTaskKey(
+        positions: positions,
+        registrationsVersion: registrationsVersion,
+        range: positionsRange)
+    ) {
+      await valuatePositions()
+    }
+    #if os(macOS)
+      .onExitCommand { selection = nil }
+    #endif
+    .onChange(of: positionsInput) { _, _ in selection = nil }
   }
 
   private func valuatePositions() async {
     guard let conversionService, !positions.isEmpty else {
-      positionsInput = nil
+      // Nothing to value (no conversion service, or an account with no
+      // positions). Settle to an empty input so the always-present Chart
+      // tab renders a header rather than a perpetual loading spinner.
+      positionsInput = PositionsViewInput(
+        title: title, hostCurrency: hostCurrency, positions: [], historicalValue: nil)
       return
     }
     let valuator = PositionsValuator(conversionService: conversionService)
@@ -226,9 +221,10 @@ private struct PositionsTaskKey: Hashable {
 }
 
 extension View {
-  /// Wraps the view in a `PositionsTransactionsSplit` when the account
-  /// has positions in non-host-currency instruments. No-op otherwise.
-  /// Owns the positions valuator lifecycle.
+  /// Wraps the view in `PositionsChartTransactionsSplit` — chart and
+  /// transactions are always present; the Positions pane appears only
+  /// when the account has non-host-currency holdings. Owns the
+  /// positions valuator lifecycle.
   func multiInstrumentPositionsSplit(
     positions: [Position],
     hostCurrency: Instrument,
@@ -267,9 +263,8 @@ private func multiInstrumentSplitPreviewContent(
       conversionService: backend.conversionService)
 }
 
-/// Multi-instrument positions exercise the split-shown branch. The
-/// host currency is AUD; the positions include a USD holding so
-/// `shouldShow` returns true and the wrapper renders the split.
+/// Multi-instrument positions: `hasPositions` is true so the pinned
+/// Positions pane appears alongside `[Transactions | Chart]`.
 #Preview("Split shown — multi-instrument") {
   multiInstrumentSplitPreviewContent(
     positions: [
@@ -279,10 +274,10 @@ private func multiInstrumentSplitPreviewContent(
     title: "Multi-currency Account")
 }
 
-/// Single-instrument positions in the host currency exercise the
-/// no-op branch — `shouldShow` returns false and the wrapper passes
-/// the content through unchanged.
-#Preview("Split hidden — host-currency only") {
+/// Fiat-only account: `hasPositions` is false so no Positions pane,
+/// but the wrapper still renders `[Transactions | Chart]` — the chart
+/// tab shows the balance line rather than the old bare transaction list.
+#Preview("Chart + transactions — fiat only (no positions pane)") {
   multiInstrumentSplitPreviewContent(
     positions: [Position(instrument: .AUD, quantity: 1_000)],
     title: "Plain Account")
