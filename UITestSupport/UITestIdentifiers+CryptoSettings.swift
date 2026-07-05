@@ -74,5 +74,31 @@ extension UITestIdentifiers {
     public static func restoreButton(_ id: String) -> String {
       "crypto.settings.spam.restore.\(id)"
     }
+
+    // MARK: - Custom RPC Endpoints
+
+    /// Text field for entering a new custom JSON-RPC endpoint URL.
+    public static let rpcEndpointField = "crypto.settings.rpc.field"
+
+    /// "Add" button next to the RPC endpoint entry field.
+    public static let rpcEndpointAddButton = "crypto.settings.rpc.add"
+
+    /// A row in the Custom RPC Endpoints list. Qualifier is the endpoint
+    /// URL string itself — the same value `addRPCEndpoint`/
+    /// `removeRPCEndpoint` operate on and the view's `ForEach` keys by.
+    public static func rpcEndpointRow(_ url: String) -> String {
+      "crypto.settings.rpc.row.\(url)"
+    }
+
+    /// Status label inside an RPC endpoint row (reachable/unreachable/
+    /// unknown-chain/not-yet-probed). Qualifier is the endpoint URL.
+    public static func rpcEndpointStatusLabel(_ url: String) -> String {
+      "crypto.settings.rpc.status.\(url)"
+    }
+
+    /// "Remove" button on an RPC endpoint row. Qualifier is the endpoint URL.
+    public static func rpcEndpointRemoveButton(_ url: String) -> String {
+      "crypto.settings.rpc.remove.\(url)"
+    }
   }
 }

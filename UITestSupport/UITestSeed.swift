@@ -190,6 +190,26 @@ extension UITestSeed {
       return false
     }
   }
+
+  /// `true` when `CryptoTokenStore.probeEndpoints()` should treat every
+  /// configured custom RPC endpoint as reachable on chain 1 (Ethereum)
+  /// rather than issuing a live `eth_chainId` call — see
+  /// `UITestEnvironment.rpcProbeStubbedReachable`. Reuses
+  /// `.cryptoCatalogPreloaded` (already a network-free Settings → Crypto
+  /// tab seed) for the Custom RPC Endpoints section test rather than
+  /// adding a dedicated seed.
+  public var needsStubbedRPCProbe: Bool {
+    switch self {
+    case .cryptoCatalogPreloaded:
+      return true
+    case .tradeBaseline, .welcomeEmpty, .welcomeSingleCloudProfile,
+      .welcomeMultipleCloudProfiles, .welcomeDownloading, .sidebarFooterUpToDate,
+      .sidebarFooterReceiving, .sidebarFooterSending, .tradeReady, .incompatibleProfile,
+      .transferDetectionBaseline, .pendingWebImportOneChaseInbox,
+      .insightsForYouBaseline, .groupFilterScope, .walletHeaderSyncError:
+      return false
+    }
+  }
 }
 
 /// Fixtures for the first-run Welcome seeds. Defined here so both the

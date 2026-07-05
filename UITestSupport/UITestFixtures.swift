@@ -374,27 +374,3 @@ public enum UITestFixtures {
     public static let walletChainId = 1
   }
 }
-
-/// Environment-variable names the app and UI-test target both read.
-///
-/// Compiled into both targets so the launch wiring (`MoolahApp.launch`)
-/// and the consumers (e.g. the fallback inbox in `MoolahApp+Setup`) cannot
-/// disagree on the key.
-public enum UITestEnvironment {
-  /// Directory the app's `PendingImportsBannerFallback` inbox is rooted
-  /// at when `InboxWriter.shared()` is unavailable (the `--ui-testing`
-  /// case). Both the seed hydrator (which writes the fixture payload)
-  /// and the app's launch wiring (which constructs the `InboxWriter`)
-  /// read this value, so the seed's writes and the banner's reads land
-  /// on the same on-disk directory.
-  public static let inboxDirectory = "MOOLAH_UI_TEST_INBOX_DIR"
-
-  /// Set to `"1"` when the app under test should treat an Alchemy API key
-  /// as present (`CryptoTokenStore.hasAlchemyApiKey == true`), without
-  /// writing to the system keychain. Used by seeds that need
-  /// `SyncedAccountHeaderLogic.hasCredential` to evaluate to `true` for
-  /// a crypto account while avoiding `SecItemAdd` calls that can hang or
-  /// fail in headless CI environments (interactive keychain authorization
-  /// not available).
-  public static let alchemyKeyPresent = "MOOLAH_UI_TEST_ALCHEMY_KEY_PRESENT"
-}

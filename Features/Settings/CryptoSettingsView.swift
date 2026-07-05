@@ -26,6 +26,7 @@ struct CryptoSettingsView: View {
   @State var coinGeckoApiKeyInput = ""
   @State var alchemyApiKeyInput = ""
   @State var showAddToken = false
+  @State var rpcEndpointInput = ""
 
   init(
     store: CryptoTokenStore,
@@ -43,6 +44,7 @@ struct CryptoSettingsView: View {
       tokenInboxNavigationSection
       tokenListSection
       coinGeckoApiKeySection
+      rpcEndpointsSection
     }
     .formStyle(.grouped)
     .navigationTitle("Crypto Tokens")
@@ -216,7 +218,8 @@ struct CryptoSettingsView: View {
   }
 
   // The "Registered Tokens" + "CoinGecko API Key" sections live in
-  // `CryptoSettingsView+TokenList.swift`.
+  // `CryptoSettingsView+TokenList.swift`. The "Custom RPC Endpoints"
+  // section lives in `CryptoSettingsView+RPCEndpoints.swift`.
 }
 
 #Preview("No keys") {

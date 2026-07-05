@@ -62,6 +62,13 @@ final class MoolahApp {
     if seed.needsAlchemyKeyPresent {
       launchEnv[UITestEnvironment.alchemyKeyPresent] = "1"
     }
+    // Avoid a live `eth_chainId` JSON-RPC call from the Custom RPC
+    // Endpoints Settings section: seeds that drive that flow signal a
+    // deterministic "everything probes as reachable Ethereum" stub
+    // instead, mirroring the Alchemy key signal above.
+    if seed.needsStubbedRPCProbe {
+      launchEnv[UITestEnvironment.rpcProbeStubbedReachable] = "1"
+    }
     application.launchEnvironment = launchEnv
     application.launch()
     let app = MoolahApp(
