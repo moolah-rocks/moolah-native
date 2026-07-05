@@ -95,6 +95,40 @@ struct DirectRPCChainClientTests {
     #expect(receipt.from == "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
     #expect(receipt.l1FeeWei == nil)
   }
+
+  @Test
+  func populatesReceiptLogs() async throws {
+    let client = makeClient { request in
+      (
+        AlchemyTestSupport.okResponse(for: request),
+        Data(
+          """
+          {"jsonrpc":"2.0","id":1,"result":{
+            "transactionHash":"0xabc",
+            "from":"0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "gasUsed":"0x5208","effectiveGasPrice":"0x3b9aca00",
+            "logs":[
+              {"address":"0xC02AAA39B223FE8D0A0E5C4F27EAD9083C756CC2",
+               "topics":["0xe1fffcc4923d04b559f4d29a8bfc6cda04eb5b0d3c460751c2402c5c5cc9109c"],
+               "data":"0xde0b6b3a7640000","logIndex":"0x4"},
+              {"address":"0xdddddddddddddddddddddddddddddddddddddddd",
+               "topics":["0xdeadbeef"],"data":"0x0","logIndex":"0xnothex"}
+            ]
+          }}
+          """.utf8)
+      )
+    }
+    let receipt = try await client.getTransactionReceipt(chain: .ethereum, hash: "0xabc")
+    // The malformed-logIndex entry is dropped; the valid Deposit log survives
+    // with its address lowercased and logIndex parsed.
+    #expect(receipt.logs.count == 1)
+    let log = try #require(receipt.logs.first)
+    #expect(log.address == "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2")
+    #expect(log.logIndex == 4)
+    #expect(
+      log.topics.first == "0xe1fffcc4923d04b559f4d29a8bfc6cda04eb5b0d3c460751c2402c5c5cc9109c")
+    #expect(log.data == "0xde0b6b3a7640000")
+  }
 }
 
 /// Fixtures and the shared response dispatcher for the direct-RPC discovery

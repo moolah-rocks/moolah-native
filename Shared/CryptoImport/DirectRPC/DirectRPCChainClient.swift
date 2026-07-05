@@ -113,7 +113,24 @@ extension DirectRPCChainClient: ChainDataClient {
       gasUsed: gasUsed,
       effectiveGasPrice: effectiveGasPrice,
       from: receipt.from.lowercased(),
-      l1FeeWei: l1FeeWei)
+      l1FeeWei: l1FeeWei,
+      logs: mapLogs(receipt.logs))
+  }
+
+  /// Maps raw `eth_getTransactionReceipt` log entries into the domain
+  /// `ReceiptLog` the wrap/unwrap detector reads. `logIndex` is parsed from
+  /// hex; an entry whose `logIndex` won't parse is dropped rather than
+  /// failing the whole receipt (mirrors the Alchemy path's log leniency).
+  /// `address` is lowercased so contract comparisons are case-insensitive.
+  private func mapLogs(_ logs: [RPCReceiptLog]) -> [ReceiptLog] {
+    logs.compactMap { log in
+      guard let index = HexDecimal.parseInt(log.logIndex) else { return nil }
+      return ReceiptLog(
+        address: log.address.lowercased(),
+        topics: log.topics,
+        data: log.data,
+        logIndex: index)
+    }
   }
 }
 
