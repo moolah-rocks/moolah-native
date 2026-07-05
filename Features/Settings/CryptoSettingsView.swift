@@ -3,8 +3,8 @@ import SwiftUI
 
 /// Crypto preferences tab. Surfaces every user-facing control for the
 /// wallet auto-import: Alchemy API key, CoinGecko API key, the list of
-/// registered tokens, the Discovered Tokens inbox and the Spam tokens
-/// management view.
+/// registered tokens, and the Discovered Tokens inbox and Spam tokens
+/// management views.
 ///
 /// The per-account sync control (last-synced timestamp + "Sync now")
 /// lives in the account-detail header (`SyncedAccountHeaderView`), not
@@ -24,7 +24,6 @@ struct CryptoSettingsView: View {
   // `CryptoSettingsView+TokenList.swift` can read / mutate the same
   // local UI state. Not part of the public surface.
   @State var coinGeckoApiKeyInput = ""
-  @State var cryptoCompareApiKeyInput = ""
   @State var alchemyApiKeyInput = ""
   @State var showAddToken = false
 
@@ -44,7 +43,6 @@ struct CryptoSettingsView: View {
       tokenInboxNavigationSection
       tokenListSection
       coinGeckoApiKeySection
-      cryptoCompareApiKeySection
     }
     .formStyle(.grouped)
     .navigationTitle("Crypto Tokens")

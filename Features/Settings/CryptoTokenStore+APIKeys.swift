@@ -1,10 +1,10 @@
 import Foundation
 
-/// Provider API-key surface for `CryptoTokenStore` — the CoinGecko,
-/// Alchemy, and CryptoCompare keychain reads / writes that back the
-/// Crypto preferences tab. Split into its own file so the core store
-/// stays under the file-length limit. Every member proxies the
-/// store's `let` keychain handles; none owns new state.
+/// Provider API-key surface for `CryptoTokenStore` — the CoinGecko and
+/// Alchemy keychain reads / writes that back the Crypto preferences tab.
+/// Split into its own file so the core store stays under the file-length
+/// limit. Every member proxies the store's `let` keychain handles; none
+/// owns new state.
 ///
 /// Each provider follows the same shape: a `has…ApiKey` read that
 /// drives a status badge, a `save…ApiKey(_:)` that trims surrounding
@@ -86,45 +86,4 @@ extension CryptoTokenStore {
     alchemyKeyStore.clear()
   }
 
-  // MARK: - CryptoCompare API Key
-  //
-  // The CryptoCompare key unlocks deep historical price coverage for
-  // tokens like DAI. The price client reads from the same
-  // `(service, account)` keychain entry, so a write here is picked up
-  // by the next price request without further plumbing.
-
-  /// `true` when a CryptoCompare API key is configured in the synced
-  /// Keychain. Read on every UI render to drive the status badge — the
-  /// keychain read is cheap (~µs) and consulting a cached `Bool` would
-  /// require an explicit invalidation hook on save / clear.
-  var hasCryptoCompareApiKey: Bool {
-    do {
-      return try cryptocompareKeyStore.restoreString() != nil
-    } catch {
-      logger.error("keychain read failed: \(error.localizedDescription)")
-      return false
-    }
-  }
-
-  /// Persists the CryptoCompare API key to the synced Keychain. Sets
-  /// `error` (without logging the key) on failure.
-  func saveCryptoCompareApiKey(_ key: String) {
-    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return }
-    do {
-      try cryptocompareKeyStore.saveString(trimmed)
-      setError(nil)
-    } catch {
-      logger.error(
-        "CryptoCompare API key save failed: \(error.localizedDescription, privacy: .public)")
-      setError("Failed to save CryptoCompare API key: \(error.localizedDescription)")
-    }
-  }
-
-  /// Removes the CryptoCompare API key from the synced Keychain.
-  /// Subsequent price requests fall back to the unauthenticated
-  /// CryptoCompare tier until a new key is saved.
-  func clearCryptoCompareApiKey() {
-    cryptocompareKeyStore.clear()
-  }
 }

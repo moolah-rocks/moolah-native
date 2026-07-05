@@ -1,11 +1,10 @@
 // Features/Settings/CryptoSettingsView+TokenList.swift
 import SwiftUI
 
-/// "Registered Tokens" + "CoinGecko" / "CryptoCompare" API-key sections
-/// of the Crypto preferences tab. Every member here closes over the
-/// parent view's `store` / `showAddToken` / `coinGeckoApiKeyInput` /
-/// `cryptoCompareApiKeyInput` bindings — no new state owned at this
-/// layer.
+/// "Registered Tokens" + "CoinGecko" API-key sections of the Crypto
+/// preferences tab. Every member here closes over the parent view's
+/// `store` / `showAddToken` / `coinGeckoApiKeyInput` bindings — no new
+/// state owned at this layer.
 extension CryptoSettingsView {
 
   // MARK: - Registered Tokens
@@ -25,7 +24,7 @@ extension CryptoSettingsView {
         ProgressView()
         Spacer()
       }
-    } else if pricedRegistrations.isEmpty {
+    } else if store.pricedRegistrations.isEmpty {
       ContentUnavailableView(
         "No Tokens",
         systemImage: "bitcoinsign.circle",
@@ -44,7 +43,7 @@ extension CryptoSettingsView {
         ScrollView {
           LazyVStack(spacing: 0) {
             ForEach(
-              Array(pricedRegistrations.enumerated()), id: \.element.id
+              Array(store.pricedRegistrations.enumerated()), id: \.element.id
             ) { index, registration in
               if index > 0 {
                 Divider()
@@ -56,7 +55,7 @@ extension CryptoSettingsView {
         }
         .frame(maxHeight: 280)
       #else
-        ForEach(pricedRegistrations) { registration in
+        ForEach(store.pricedRegistrations) { registration in
           registrationRow(for: registration)
         }
       #endif
@@ -76,14 +75,6 @@ extension CryptoSettingsView {
       .accessibilityLabel("Add token")
       .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.addTokenButton)
     }
-  }
-
-  /// Tokens that are neither `.unpriced` nor `.spam` — i.e. the set the
-  /// "Registered Tokens" list shows. Filtering at the view layer keeps
-  /// the store's `registrations` a single source of truth that the
-  /// inbox + spam views can also read.
-  var pricedRegistrations: [CryptoRegistration] {
-    store.registrations.filter { $0.pricingStatus == .priced }
   }
 
   /// One row in the Registered Tokens list, with an inline ellipsis
@@ -172,69 +163,6 @@ extension CryptoSettingsView {
         .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.coinGeckoApiKeySaveButton)
       }
     }
-  }
-
-  // MARK: - CryptoCompare API Key
-
-  var cryptoCompareApiKeySection: some View {
-    Section {
-      cryptoCompareApiKeyControl
-      Link(
-        "How to get a CryptoCompare API key",
-        destination: cryptoCompareSignupURL
-      )
-      .font(.caption)
-    } header: {
-      Text("CryptoCompare")
-    } footer: {
-      Text(
-        "Optional. Restores deep price history for tokens like DAI. "
-          + "Requires a free API key from CoinDesk Data, formerly CryptoCompare."
-      )
-    }
-  }
-
-  @ViewBuilder var cryptoCompareApiKeyControl: some View {
-    if store.hasCryptoCompareApiKey {
-      HStack {
-        Label("CryptoCompare API Key", systemImage: "key")
-        Spacer()
-        Text("Configured")
-          .foregroundStyle(.secondary)
-        Button("Remove", role: .destructive) {
-          store.clearCryptoCompareApiKey()
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.cryptoCompareApiKeyRemoveButton)
-      }
-    } else {
-      HStack {
-        SecureField("CryptoCompare API Key", text: $cryptoCompareApiKeyInput)
-          .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.cryptoCompareApiKeyField)
-        Button("Save") {
-          store.saveCryptoCompareApiKey(cryptoCompareApiKeyInput)
-          cryptoCompareApiKeyInput = ""
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.small)
-        .disabled(cryptoCompareApiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        .accessibilityIdentifier(UITestIdentifiers.CryptoSettings.cryptoCompareApiKeySaveButton)
-      }
-    }
-  }
-
-  /// CoinDesk Data (formerly CryptoCompare) API landing page. Hard-coded
-  /// constant rather than environment / config because the URL is a
-  /// public resource and keeping it inline keeps the link a one-line
-  /// `Link(...)` call. `URL(string:)`'s force-unwrap is gated by a
-  /// known-good literal so a `nil` here is a programmer error, not a
-  /// runtime failure mode.
-  private var cryptoCompareSignupURL: URL {
-    guard let url = URL(string: "https://developers.coindesk.com") else {
-      preconditionFailure("CryptoSettingsView: malformed CryptoCompare signup URL literal")
-    }
-    return url
   }
 
   /// CoinGecko API landing page. Hard-coded constant rather than

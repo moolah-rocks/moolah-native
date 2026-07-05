@@ -76,7 +76,7 @@ final class CryptoTokenStore {
   let logger = Logger(
     subsystem: "com.moolah.app", category: "CryptoTokenStore")
 
-  // The three API-key keychain stores are internal (not `private`) so
+  // The two API-key keychain stores are internal (not `private`) so
   // the `CryptoTokenStore+APIKeys` extension — which lives in a sibling
   // file to keep this type under the file-length limit — can read and
   // write them. The save / has / clear surface lives in that extension.
@@ -91,16 +91,6 @@ final class CryptoTokenStore {
   /// non-synced `KeychainStore` since the test runner cannot write to
   /// the synced keychain in CI.
   let alchemyKeyStore: KeychainStore
-
-  /// Keychain entry for the CryptoCompare API key, used by the price
-  /// client to unlock deep historical price coverage for tokens like
-  /// DAI. Service / account strings are pinned to the values
-  /// `ProfileSession+CryptoSync` reads on the fetch side so reads pick
-  /// up whatever the settings UI writes here. Production wires this to
-  /// the iCloud-synced keychain (`synchronizable: true`); tests inject a
-  /// non-synced `KeychainStore` since the test runner cannot write to
-  /// the synced keychain in CI.
-  let cryptocompareKeyStore: KeychainStore
 
   /// Subscription to the registry's change stream so per-session side
   /// effects fire when ANY session (including this one) mutates the
@@ -123,7 +113,6 @@ final class CryptoTokenStore {
     conversionService: any InstrumentConversionService,
     apiKeyStore: KeychainStore,
     alchemyKeyStore: KeychainStore,
-    cryptocompareKeyStore: KeychainStore,
     sharedStore: SharedRegistryStore? = nil
   ) {
     self.registry = registry
@@ -131,8 +120,14 @@ final class CryptoTokenStore {
     self.conversionService = conversionService
     self.apiKeyStore = apiKeyStore
     self.alchemyKeyStore = alchemyKeyStore
-    self.cryptocompareKeyStore = cryptocompareKeyStore
     self.sharedStore = sharedStore
+    // Migration cleanup: CryptoCompare is not a supported provider and
+    // its keychain entry may linger in iCloud keychains. `clear()` is
+    // idempotent — a missing entry is a no-op; the call is cheap on
+    // every init.
+    KeychainStore(
+      service: KeychainServices.apiKeys, account: "cryptocompare", synchronizable: true
+    ).clear()
 
     let stream = registry.observeChanges()
     self.observationTask = Task { @MainActor [weak self] in
@@ -157,9 +152,9 @@ final class CryptoTokenStore {
     }
   }
 
-  /// Production convenience initialiser — wires both keychain stores
-  /// to the iCloud-synced keychain at the canonical service / account
-  /// ids. The shape mirrors `ProfileSession.resolveAlchemyApiKey()`'s
+  /// Production convenience initialiser — wires the keychain stores to
+  /// the iCloud-synced keychain at the canonical service / account ids.
+  /// The shape mirrors `ProfileSession.resolveAlchemyApiKey()`'s
   /// keychain coordinates so a write from settings is picked up by
   /// the next sync cycle without further plumbing.
   convenience init(
@@ -176,12 +171,19 @@ final class CryptoTokenStore {
         service: KeychainServices.apiKeys, account: "coingecko", synchronizable: true),
       alchemyKeyStore: KeychainStore(
         service: KeychainServices.apiKeys, account: "alchemy", synchronizable: true),
-      cryptocompareKeyStore: KeychainStore(
-        service: KeychainServices.apiKeys, account: "cryptocompare", synchronizable: true),
       sharedStore: sharedStore)
   }
 
   // MARK: - Filtered registrations
+
+  /// Subset of `registrations` with `pricingStatus == .priced` — the set
+  /// the "Registered Tokens" list shows. Excludes `.unpriced` (the
+  /// Discovered Tokens inbox) and `.spam` (the Spam tokens list) so the
+  /// three partition predicates all read from `registrations` as the
+  /// single source of truth.
+  var pricedRegistrations: [CryptoRegistration] {
+    registrations.filter { $0.pricingStatus == .priced }
+  }
 
   /// Subset of `registrations` with `pricingStatus == .unpriced`. Drives
   /// the Discovered Tokens inbox row count + the sidebar badge.
