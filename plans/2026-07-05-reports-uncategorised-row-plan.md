@@ -1,124 +1,169 @@
-# Reports "Uncategorised" income/expense row — implementation plan
+# Reports & earmark-budget "Uncategorised" support — implementation plan
 
 ## Goal
 
-Add an **Uncategorised** row to the Income and Expense columns of the Reports
-screen, showing the total of income/expense legs that have **no category**.
-Omit the row when there are none. The row is **tappable**, drilling into the
-matching transactions, and is **pinned at the bottom** of each column, below all
-real categories.
+Surface the total of income/expense legs that have **no category** everywhere
+category balances are shown:
 
-Including uncategorised legs also fixes a latent under-count: the report
-currently filters `category_id IS NOT NULL`, so uncategorised income/expense is
-missing from the column **Total** today. The new total includes it.
+- **Reports screen** — an "Uncategorised" row in the Income and Expense columns,
+  pinned at the bottom, tappable (drills into those transactions, type-scoped),
+  omitted when there are none. Also fixes a latent under-count: the column
+  **Total** currently excludes uncategorised legs.
+- **Earmark budget breakdown** — uncategorised spend against the earmark is
+  **folded into the existing "Unallocated" amount** (today it is silently
+  excluded, so the budget under-counts actual spend).
 
-## Design decisions (locked)
+## Design (revised — single combined query)
 
-- **Do NOT change `fetchCategoryBalances(dateRange:transactionType:filters:targetInstrument:)`.**
-  Its `[UUID: InstrumentAmount]` contract *excludes* uncategorised legs and is
-  relied on by earmark budgets (`EarmarkBudgetSectionView`) and a contract test
-  (`AnalysisCategoryBalancesTests` "excludes transactions without category").
-  Uncategorised is computed by a **separate** query, invoked only from the
-  Reports-specific `fetchCategoryBalancesByType`.
-- **Drill-down is type-scoped by construction.** `TransactionFilter` gains one
-  optional field `uncategorizedLegType: TransactionType?`; when set, the fetch
-  restricts to transactions having a leg with `category_id IS NULL AND type = X`.
-  Income "Uncategorised" → uncategorised income only; expense → expense only.
-- **Per-day conversion contract preserved.** The uncategorised aggregation sums
-  `(day, instrument)` and converts each on its own day, exactly like the
-  category aggregation (`INSTRUMENT_CONVERSION_GUIDE.md` Rule 5).
-- `uncategorised == nil` (not `.zero`) means "no uncategorised legs" → row omitted.
+One query, one method, shared by both surfaces:
+
+- **`fetchCategoryBalances(dateRange:transactionType:filters:targetInstrument:)`
+  returns `CategoryBalances { byCategory: [UUID: InstrumentAmount]; uncategorised: InstrumentAmount? }`.**
+  A single SQL query (NO `category_id IS NOT NULL` filter) selects a **nullable**
+  `category_id` and groups by `(day, category_id, instrument)`. Swift assembly
+  routes null-category rows into `uncategorised` and non-null rows into
+  `byCategory`. `uncategorised == nil` (not `.zero`) means "no uncategorised
+  legs" → the Reports row is omitted / nothing added to Unallocated.
+  - `byCategory` **still excludes** uncategorised (its contract is unchanged —
+    the "excludes transactions without category" guarantee now applies to the
+    `byCategory` field specifically).
+  - Per-day conversion contract preserved (each `(day, instrument)` converts on
+    its own day; `INSTRUMENT_CONVERSION_GUIDE.md` Rule 5). Uncategorised and
+    categorised share one batch conversion, so a conversion failure fails the
+    whole call exactly as today — no new partial-failure surface, no best-effort
+    special-casing needed.
+- **`fetchCategoryBalancesByType`** (Reports) is just the protocol-extension
+  default composing two `fetchCategoryBalances` calls into
+  `CategoryBalancesByType { income, expense, incomeUncategorised, expenseUncategorised }`.
+  **No GRDB-specific override** — the uncategorised values come from
+  `fetchCategoryBalances` for any backend.
+- **Index:** the combined query (no null filter) cannot use the existing
+  *partial* covering index `leg_analysis_by_type_category`
+  (`WHERE category_id IS NOT NULL`). Make that index **non-partial** via a
+  migration (drop + recreate, same name, same columns, no `WHERE`). One full
+  index then covers both the combined query and any residual `IS NOT NULL`
+  usage. Re-pin the plan.
+- **Drill-down** is type-scoped: `TransactionFilter.uncategorizedLegType: TransactionType?`;
+  when set, the fetch restricts to transactions having a leg with
+  `category_id IS NULL AND type = X`.
+
+## Current branch state (to rework)
+
+Task 1 landed and is kept: `CategoryBalancesByType` struct + the protocol
+return-type change (commit `7e3f5593`).
+
+Task 2's first attempt (commits `98d23910`, `ebb110c9`) took a *separate*
+uncategorised query + a second partial index. **That approach is being
+replaced** by the combined-query design above. The rework must DELETE:
+`GRDBAnalysisRepository+UncategorisedBalances.swift`,
+`ProfileSchema+UncategorisedLegAnalysisIndex.swift` (and its `v21` registration),
+the GRDB `fetchCategoryBalancesByType`/`fetchUncategorisedBalances` override,
+`GRDBUncategorisedBalancesTests.swift`,
+`GRDBUncategorisedBalancesAssembleTests.swift`,
+`UncategorisedBalancesPlanPinningTests.swift`, and revert the
+`ProfileSchemaV20DropCryptoCompareTests` version bump made for the old v21.
 
 ## Steps
 
-### Step 1 — Domain: `CategoryBalancesByType` result type + protocol
+### Step 2 (rework) — combined query + `CategoryBalances` result
 
-- Add `struct CategoryBalancesByType: Sendable` with `income`, `expense`
-  (`[UUID: InstrumentAmount]`) and `incomeUncategorised`, `expenseUncategorised`
-  (`InstrumentAmount?`).
-- Change `AnalysisRepository.fetchCategoryBalancesByType(...)` return type from
-  the tuple to `CategoryBalancesByType`.
-- The protocol-extension **default** impl composes `income`/`expense` via
-  `fetchCategoryBalances` and sets both uncategorised fields to `nil` (safe
-  fallback for any non-GRDB backend — row simply never shows).
-- Update the two callers to the struct:
-  - `Features/Reports/ReportingStore.swift:62` (`result.income` / `result.expense`
-    already field-style — keep).
-  - `MoolahBenchmarks/AnalysisBenchmarks.swift:107`.
-- **Verify:** `just build-mac`; existing `AnalysisCategoryBalancesTests` still green.
+- In `GRDBAnalysisRepository+CategoryBalances.swift`: drop
+  `AND leg.category_id IS NOT NULL` from the SQL; make the row's `categoryId`
+  a `UUID?`; generalise `assembleCategoryBalances` to return
+  `CategoryBalances` (null → `uncategorised` accumulator in the target
+  instrument; non-null → `byCategory`; `uncategorised = nil` when no null rows).
+- Change `fetchCategoryBalances` (in `GRDBAnalysisRepository.swift`) to return
+  `CategoryBalances`. Define `struct CategoryBalances: Sendable` in Domain
+  (near `AnalysisRepository`).
+- Update the protocol default `fetchCategoryBalancesByType` to build
+  `CategoryBalancesByType` from the two calls' `byCategory` + `uncategorised`.
+- **Index migration** `v21_leg_analysis_category_include_null` (or similarly
+  named): `DROP INDEX leg_analysis_by_type_category;` then recreate it WITHOUT
+  the partial `WHERE`. Do not edit the base CREATE block or existing migrations.
+  Update `ProfileSchema` version test(s) to the new count.
+- Update ALL `fetchCategoryBalances` callers to `.byCategory`
+  (`AnalysisBenchmarks`, the `AnalysisCategoryBalancesTests` suite,
+  `GRDBCategoryBalancesConversionTests`, `AnalysisMultiCurrencyConversionTests`,
+  `AnlRepoSharedInstrumentResolutionTests`, and any others `grep` finds).
+- **Tests:** repurpose the deleted uncategorised tests into
+  `AnalysisCategoryBalancesTests` (or a sibling): uncategorised legs land in
+  `.uncategorised` and NOT in `.byCategory`; `.uncategorised == nil` when none;
+  category totals unaffected; per-day conversion for a multi-currency
+  uncategorised leg. Update/extend the plan-pinning test for the combined query
+  (`USING COVERING INDEX leg_analysis_by_type_category`).
+- **Verify:** `just build-mac`; controller runs the analysis + pinning suites.
 
-### Step 2 — GRDB: uncategorised aggregation + `fetchCategoryBalancesByType` override
+### Step 3 — `TransactionFilter.uncategorizedLegType` + fetch (unchanged)
 
-- In `GRDBAnalysisRepository+CategoryBalances.swift` (or a new sibling
-  `+UncategorisedBalances.swift`), add:
-  - `makeUncategorisedBalancesRequest(args)` — mirrors
-    `makeCategoryBalancesRequest` but `WHERE ... AND leg.category_id IS NULL`,
-    `GROUP BY DATE(t.date), leg.instrument_id` (no category grouping). Reuses the
-    same optional filter clauses (account/earmark/payee) minus `categoryIds`.
-  - A lightweight row `{ day, instrumentId, qty }` + an assemble helper that
-    batch-converts each `(qty, instrument, day)` and sums to a single
-    `InstrumentAmount`, returning `nil` when there are no rows.
-- Add a concrete `fetchCategoryBalancesByType(...)` on `GRDBAnalysisRepository`
-  that runs the two category fetches **and** the two uncategorised fetches
-  (income + expense) and returns a fully-populated `CategoryBalancesByType`.
-  (Concrete member overrides the protocol-extension default.)
-- **Tests:** extend `GRDBCategoryBalancesConversionTests` / add a suite —
-  uncategorised legs sum correctly, per-day conversion holds, `nil` when none,
-  and category totals are unaffected by presence of uncategorised legs.
-- If the new SQL needs an index-plan assertion, add/adjust in
-  `AnalysisAggregationPlanPinningTests` (only if the planner shape warrants it;
-  do not disturb the existing `fetchCategoryBalancesUsesCategoryIndex` pin).
-- **Verify:** `just build-mac` + the GRDB analysis test suites.
-
-### Step 3 — `TransactionFilter.uncategorizedLegType` + fetch
-
-- `Domain/Models/TransactionFilter.swift`: add `var uncategorizedLegType: TransactionType?`
-  (default `nil` in the memberwise init — backward compatible). Include it in
+- Add `var uncategorizedLegType: TransactionType?` (default `nil`); include in
   `hasActiveFilters`.
-- `GRDBTransactionRepository+Fetch.swift` `filteredTransactionRequest`: when set,
-  add a `legTransactionIds(where: categoryId == nil && type == rawValue)`
-  subquery filter, matching the existing `categoryIds` block's shape.
-- **Tests:** `TransactionFilterTests` (hasActiveFilters) + a GRDB fetch test that
-  only uncategorised legs of the given type match.
-- **Verify:** `just build-mac` + transaction fetch/filter tests.
+- `GRDBTransactionRepository+Fetch.swift`: when set, filter to
+  `legTransactionIds(where: categoryId == nil && type == rawValue)`.
+- Tests: `TransactionFilterTests` + a GRDB fetch test.
 
-### Step 4 — `ReportingStore` published uncategorised state
+### Step 2b — Rule 11 partial availability (fold into the assembly)
 
-- Add `private(set) var incomeUncategorised: InstrumentAmount?` and
-  `expenseUncategorised: InstrumentAmount?`.
-- `loadCategoryBalances` populates all four from the `CategoryBalancesByType`
-  result (and clears them on the cancellation/error paths consistently with the
-  existing dict handling).
-- **Tests:** `ReportingStoreTests` — populated when uncategorised legs exist,
-  `nil` when not.
-- **Verify:** `just build-mac` + reporting store tests.
+`assembleCategoryBalances` must match the `#1077` sibling pattern
+(`+ExpenseBreakdown.swift` / `+IncomeAndExpense.swift`): on a **transient**
+conversion failure (`ConversionFailureClassifier.isTransient`) skip that row's
+contribution and set a `hasUnavailableData` flag; keep the loud rethrow only for
+**structural** failures. Add `hasUnavailableData: Bool` (default false) to
+`CategoryBalances`, and propagate per-column onto `CategoryBalancesByType`
+(`incomeHasUnavailableData` / `expenseHasUnavailableData`). Tests mirror the
+expense-breakdown transient-skip coverage.
 
-### Step 5 — Views: pinned Uncategorised row + drill-down
+### Step 4 — `ReportingStore` published uncategorised + unavailable state
 
-- `CategoryBalanceTable`:
-  - Add `let uncategorised: InstrumentAmount?` and `let transactionType: TransactionType`.
-  - Render an "Uncategorised" row **after** all category sections (pinned bottom)
-    when `uncategorised != nil`, as a `NavigationLink(value: UncategorisedDrillDown(...))`.
-  - `grandTotal` includes `uncategorised` when present.
-  - Accessibility label mirrors category rows.
-- Add `struct UncategorisedDrillDown: Hashable { transactionType; dateRange }`.
-- `ReportsView`:
-  - Pass `reportingStore.incomeUncategorised` / `expenseUncategorised` and the
-    correct `transactionType` into each `CategoryBalanceTable`.
-  - Add `.navigationDestination(for: UncategorisedDrillDown.self)` →
-    `TransactionListView` with title "Uncategorised" and
-    `TransactionFilter(dateRange:, uncategorizedLegType: type)`.
-- Update `CategoryBalanceTable` `#Preview` to show the row.
-- **Verify:** `@ui-review`; render preview if practical.
+- Add `incomeUncategorised` / `expenseUncategorised: InstrumentAmount?` and
+  `incomeHasUnavailableData` / `expenseHasUnavailableData: Bool`, populated from
+  `CategoryBalancesByType` in `loadCategoryBalances`.
+- Store tests.
 
-### Step 6 — Full verification gate
+### Step 5 — Reports views: pinned row + drill-down
 
-- `just format-check`, `just test-mac` (full), and all relevant reviewers:
-  `@code-review`, `@database-code-review`, `@concurrency-review`,
-  `@instrument-conversion-review`, `@ui-review`, `@ui-test-review` (as touched).
-  Fix every finding, re-review until clean.
+- `CategoryBalanceTable` gains `uncategorised: InstrumentAmount?` and
+  `transactionType: TransactionType`; renders an "Uncategorised" row pinned
+  after all category sections when non-nil; `grandTotal` includes it; row is a
+  `NavigationLink(value: UncategorisedDrillDown(transactionType:dateRange:))`.
+- `ReportsView` passes the fields + type and adds
+  `.navigationDestination(for: UncategorisedDrillDown.self)` →
+  `TransactionListView` (title "Uncategorised",
+  `TransactionFilter(dateRange:, uncategorizedLegType: type)`).
+- `CategoryBalanceTable` shows a "some amounts unavailable" indicator when its
+  column's `hasUnavailableData` is set (mirror `ExpenseBreakdownCard`'s
+  treatment).
+- Update `CategoryBalanceTable` `#Preview`. UI review.
+- Also fix the Rule 11 gap in `EarmarkBudgetSectionView.loadCategoryBalances`
+  (Step 6): its `catch` currently swallows errors to an empty dict silently —
+  log via `os.Logger` and surface an error/retry state instead.
+
+### Step 6 — Earmark budget shows uncategorised spend as a line item
+
+NOTE: "Unallocated" is `savingsGoal − sum(budget allocations)` — a budget-side
+figure, unrelated to spend. Uncategorised spend must NOT go there. Instead it is
+an actual-spend row, exactly like the existing "categories with spending but no
+budget" rows `buildLineItems` already appends (budgeted = 0, actual = spend).
+
+- `EarmarkBudgetSectionView.loadCategoryBalances` keeps the whole
+  `CategoryBalances` (both `.byCategory` and `.uncategorised`).
+- `BudgetLineItem.buildLineItems(...)` gains an `uncategorised: InstrumentAmount?`
+  parameter; when non-nil it appends one row labelled "Uncategorised"
+  (`budgeted = 0`, `actual = uncategorised`), coerced to the earmark instrument,
+  sorted alongside the others (or pinned last — match the Reports pinned-bottom
+  treatment). Omit when nil. `unallocatedAmount` is UNCHANGED.
+- Tests: `buildLineItems` includes an "Uncategorised" row when a total is passed
+  and omits it when nil; totals (`totalActual`) include it; earmark-budget load
+  test.
+- UI review for the new row.
+
+### Step 7 — Full verification gate
+
+- `just format-check`, `just test-mac` (full), and reviewers:
+  `@code-review`, `@database-code-review`, `@database-schema-review`
+  (index migration), `@concurrency-review`, `@instrument-conversion-review`,
+  `@ui-review`. Fix every finding, re-review until clean.
 
 ## Out of scope
 
-- Recategorising transactions from the report (this is read-only reporting).
-- Uncategorised handling anywhere other than the Reports income/expense columns.
+- Recategorising transactions from either screen (read-only).
+- Uncategorised anywhere other than Reports income/expense + earmark budgets.
