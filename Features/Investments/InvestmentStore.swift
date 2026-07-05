@@ -56,8 +56,9 @@ final class InvestmentStore {
   // and `+PositionsInput` extension files can reach the repository for
   // fetches and pass-through writes.
   let repository: InvestmentRepository
-  // internal (was private) so the `+PositionsInput` extension file can fetch
-  // transactions and classify trades using the same injected dependencies.
+  // internal (was private) so the `+Positions` and `+PositionsInput`
+  // extension files can fetch transactions and classify trades using
+  // the same injected dependencies.
   let transactionRepository: TransactionRepository?
   let conversionService: any InstrumentConversionService
   let logger = Logger(subsystem: "com.moolah.app", category: "InvestmentStore")
@@ -264,8 +265,8 @@ final class InvestmentStore {
 // `InvestmentStore+Observation.swift`.
 //
 // `loadValues`, `loadDailyBalances`, `loadAllData`, `setValue`,
-// `removeValue`, `refreshLegacyPerformance`, `reloadPositionsIfNeeded`
-// live in `InvestmentStore+Loading.swift`.
+// `removeValue`, `refreshLegacyPerformance` live in
+// `InvestmentStore+Loading.swift`.
 //
 // `loadPositions`, `valuatePositions`, `refreshPositionTrackedPerformance`,
 // and `valuate` live in `InvestmentStore+Positions.swift`.
