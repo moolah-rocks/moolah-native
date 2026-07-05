@@ -381,4 +381,13 @@ public enum UITestEnvironment {
   /// read this value, so the seed's writes and the banner's reads land
   /// on the same on-disk directory.
   public static let inboxDirectory = "MOOLAH_UI_TEST_INBOX_DIR"
+
+  /// Set to `"1"` when the app under test should treat an Alchemy API key
+  /// as present (`CryptoTokenStore.hasAlchemyApiKey == true`), without
+  /// writing to the system keychain. Used by seeds that need
+  /// `SyncedAccountHeaderLogic.hasCredential` to evaluate to `true` for
+  /// a crypto account while avoiding `SecItemAdd` calls that can hang or
+  /// fail in headless CI environments (interactive keychain authorization
+  /// not available).
+  public static let alchemyKeyPresent = "MOOLAH_UI_TEST_ALCHEMY_KEY_PRESENT"
 }
