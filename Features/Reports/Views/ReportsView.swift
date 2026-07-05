@@ -31,6 +31,9 @@ struct ReportsView: View {
       .navigationDestination(for: CategoryDrillDown.self) { drillDown in
         drillDownDestination(drillDown)
       }
+      .navigationDestination(for: UncategorisedDrillDown.self) { drillDown in
+        uncategorisedDrillDownDestination(drillDown)
+      }
     }
     .task(id: DateRangeKey(from: resolvedFrom, to: resolvedTo)) {
       await reportingStore.loadCategoryBalances(dateRange: resolvedFrom...resolvedTo)
@@ -79,26 +82,55 @@ struct ReportsView: View {
     // Income and Expense columns: side by side on macOS, stacked on iOS.
     #if os(macOS)
       HStack(spacing: 0) {
-        categoryTable(title: "Income", balances: reportingStore.incomeBalances)
+        categoryTable(
+          title: "Income",
+          balances: reportingStore.incomeBalances,
+          transactionType: .income,
+          uncategorised: reportingStore.incomeUncategorised,
+          hasUnavailableData: reportingStore.incomeHasUnavailableData)
         Divider()
-        categoryTable(title: "Expenses", balances: reportingStore.expenseBalances)
+        categoryTable(
+          title: "Expenses",
+          balances: reportingStore.expenseBalances,
+          transactionType: .expense,
+          uncategorised: reportingStore.expenseUncategorised,
+          hasUnavailableData: reportingStore.expenseHasUnavailableData)
       }
     #else
       VStack(spacing: 0) {
-        categoryTable(title: "Income", balances: reportingStore.incomeBalances)
+        categoryTable(
+          title: "Income",
+          balances: reportingStore.incomeBalances,
+          transactionType: .income,
+          uncategorised: reportingStore.incomeUncategorised,
+          hasUnavailableData: reportingStore.incomeHasUnavailableData)
         Divider()
-        categoryTable(title: "Expenses", balances: reportingStore.expenseBalances)
+        categoryTable(
+          title: "Expenses",
+          balances: reportingStore.expenseBalances,
+          transactionType: .expense,
+          uncategorised: reportingStore.expenseUncategorised,
+          hasUnavailableData: reportingStore.expenseHasUnavailableData)
       }
     #endif
   }
 
-  private func categoryTable(title: String, balances: [UUID: InstrumentAmount]) -> some View {
+  private func categoryTable(
+    title: String,
+    balances: [UUID: InstrumentAmount],
+    transactionType: TransactionType,
+    uncategorised: InstrumentAmount?,
+    hasUnavailableData: Bool
+  ) -> some View {
     CategoryBalanceTable(
       title: title,
       balances: balances,
       categories: categories,
       dateRange: resolvedFrom...resolvedTo,
-      profileInstrument: reportingStore.profileCurrency)
+      profileInstrument: reportingStore.profileCurrency,
+      uncategorised: uncategorised,
+      transactionType: transactionType,
+      hasUnavailableData: hasUnavailableData)
   }
 
   @ViewBuilder
@@ -110,6 +142,21 @@ struct ReportsView: View {
       filter: TransactionFilter(
         dateRange: drillDown.dateRange,
         categoryIds: [drillDown.categoryId]),
+      accounts: accounts,
+      categories: categories,
+      earmarks: earmarks,
+      transactionStore: transactionStore)
+  }
+
+  @ViewBuilder
+  private func uncategorisedDrillDownDestination(_ drillDown: UncategorisedDrillDown)
+    -> some View
+  {
+    TransactionListView(
+      title: "Uncategorised",
+      filter: TransactionFilter(
+        dateRange: drillDown.dateRange,
+        uncategorizedLegType: drillDown.transactionType),
       accounts: accounts,
       categories: categories,
       earmarks: earmarks,

@@ -8,6 +8,16 @@ struct CategoryBalanceTable: View {
   let categories: Categories
   let dateRange: ClosedRange<Date>
   let profileInstrument: Instrument
+  /// Total of legs with no category, `nil` when there are none in range —
+  /// the row is omitted entirely rather than shown as zero.
+  let uncategorised: InstrumentAmount?
+  /// Type this table represents (income or expense), used to scope the
+  /// "Uncategorised" row's drill-down.
+  let transactionType: TransactionType
+  /// Mirrors `ReportingStore`'s `income`/`expenseHasUnavailableData` — true
+  /// when a transient conversion failure means some rows were skipped, so
+  /// the total may be understated.
+  let hasUnavailableData: Bool
 
   private var reportData: [CategoryGroup] {
     // Group subcategories under roots
@@ -59,16 +69,20 @@ struct CategoryBalanceTable: View {
   /// Seed the reduce with a zero in the profile instrument so empty balances
   /// render as the right currency. All `balances` entries come from the
   /// repository's `fetchCategoryBalancesByType` which returns values in the
-  /// profile instrument, so instrument parity with the seed holds.
+  /// profile instrument, so instrument parity with the seed holds. Includes
+  /// `uncategorised` when present so the Total reconciles with the sum of
+  /// visible rows.
   private var grandTotal: InstrumentAmount {
-    balances.values.reduce(.zero(instrument: profileInstrument), +)
+    let categorisedTotal = balances.values.reduce(.zero(instrument: profileInstrument), +)
+    guard let uncategorised else { return categorisedTotal }
+    return categorisedTotal + uncategorised
   }
 
   var body: some View {
     VStack(spacing: 0) {
       header
       Divider()
-      if reportData.isEmpty {
+      if reportData.isEmpty && uncategorised == nil {
         ContentUnavailableView(
           "No Transactions",
           systemImage: "tray",
@@ -82,11 +96,22 @@ struct CategoryBalanceTable: View {
   }
 
   private var header: some View {
-    HStack {
-      Text(title).font(.title2).fontWeight(.semibold)
-      Spacer()
+    VStack(alignment: .leading, spacing: 4) {
+      HStack {
+        Text(title).font(.title2).fontWeight(.semibold)
+        Spacer()
+      }
+      if hasUnavailableData {
+        incompleteDataCaption
+      }
     }
     .padding()
+  }
+
+  private var incompleteDataCaption: some View {
+    Text("Some prices are still loading; totals may be incomplete")
+      .font(.caption)
+      .foregroundStyle(.secondary)
   }
 
   private var footer: some View {
@@ -103,12 +128,32 @@ struct CategoryBalanceTable: View {
       ForEach(reportData) { group in
         categorySection(group)
       }
+      if let uncategorised {
+        uncategorisedSection(uncategorised)
+      }
     }
     #if os(macOS)
       .listStyle(.inset)
     #else
       .listStyle(.plain)
     #endif
+  }
+
+  /// Pinned after all category sections (bottom of the list) so it reads as
+  /// a peer of the category rows without competing with them for sort order.
+  private func uncategorisedSection(_ amount: InstrumentAmount) -> some View {
+    Section {
+      NavigationLink(
+        value: UncategorisedDrillDown(transactionType: transactionType, dateRange: dateRange)
+      ) {
+        HStack {
+          Text("Uncategorised").font(.headline)
+          Spacer()
+          InstrumentAmountView(amount: amount, font: .headline)
+        }
+      }
+      .accessibilityLabel("Uncategorised, \(amount.formatted)")
+    }
   }
 
   private func categorySection(_ group: CategoryGroup) -> some View {
@@ -172,6 +217,13 @@ struct CategoryDrillDown: Hashable {
   let dateRange: ClosedRange<Date>
 }
 
+/// Drill-down target for the Reports "Uncategorised" row — type-scoped
+/// (income or expense) rather than category-scoped.
+struct UncategorisedDrillDown: Hashable {
+  let transactionType: TransactionType
+  let dateRange: ClosedRange<Date>
+}
+
 #Preview {
   let salaryId = UUID()
   let bonusId = UUID()
@@ -197,7 +249,34 @@ struct CategoryDrillDown: Hashable {
     balances: balances,
     categories: categories,
     dateRange: start...Date(),
-    profileInstrument: .AUD
+    profileInstrument: .AUD,
+    uncategorised: InstrumentAmount(quantity: 250, instrument: .AUD),
+    transactionType: .income,
+    hasUnavailableData: false
+  )
+  .frame(width: 500, height: 400)
+}
+
+#Preview("Unavailable data") {
+  let salaryId = UUID()
+  let incomeId = UUID()
+  let categories = Categories(from: [
+    Category(id: incomeId, name: "Income"),
+    Category(id: salaryId, name: "Salary", parentId: incomeId),
+  ])
+  let balances: [UUID: InstrumentAmount] = [
+    salaryId: InstrumentAmount(quantity: 4200, instrument: .AUD)
+  ]
+  let start = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
+  CategoryBalanceTable(
+    title: "Income",
+    balances: balances,
+    categories: categories,
+    dateRange: start...Date(),
+    profileInstrument: .AUD,
+    uncategorised: InstrumentAmount(quantity: 250, instrument: .AUD),
+    transactionType: .income,
+    hasUnavailableData: true
   )
   .frame(width: 500, height: 400)
 }
