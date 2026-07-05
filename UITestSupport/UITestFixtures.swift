@@ -355,8 +355,8 @@ public enum UITestFixtures {
   /// Entities (all fixed, deterministic):
   ///   - Profile `personal` — label "Personal", currency AUD,
   ///     CloudKit-backed (a `cryptoSyncStore` is only built for CloudKit
-  ///     profiles; `CryptoWalletAccountView.walletHeader` returns
-  ///     `EmptyView` otherwise).
+  ///     profiles; `AccountDetailView` / `SyncedAccountHeaderView` renders
+  ///     `EmptyView` for the header slot otherwise).
   ///   - Account `wallet` — "Ethereum Wallet", crypto, AUD denomination,
   ///     `chainId = 1` (Ethereum mainnet), `walletAddress` set to a
   ///     deterministic 42-char hex address.

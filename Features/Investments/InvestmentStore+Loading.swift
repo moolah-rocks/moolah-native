@@ -157,20 +157,6 @@ extension InvestmentStore {
         instrument: loadedHostCurrency ?? .AUD))
   }
 
-  /// Refreshes position data after a trade is recorded. Used from
-  /// `.onChange` where we only care about position-tracked accounts.
-  func reloadPositionsIfNeeded(account: Account, profileCurrency: Instrument) async {
-    guard account.valuationMode == .calculatedFromTrades else { return }
-    // Authoritative reload (post-trade): supersede any in-flight rate-tick pass.
-    bumpSnapshotGeneration()
-    await loadPositions(accountId: account.id, accountChainId: account.chainId)
-    guard !Task.isCancelled else { return }
-    await valuatePositions(profileCurrency: profileCurrency, on: Date())
-    guard !Task.isCancelled else { return }
-    await refreshPositionTrackedPerformance(
-      accountId: account.id, profileCurrency: profileCurrency)
-  }
-
   func setValue(accountId: UUID, date: Date, value: InstrumentAmount) async {
     setError(nil)
     let generation = snapshotGeneration

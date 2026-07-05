@@ -91,7 +91,7 @@ extension InvestmentStore {
     // position's row and fold its outcome into the total / first failure.
     //
     // Snapshot both actor-isolated properties into locals before the first
-    // suspension point. A concurrent `reloadPositionsIfNeeded` can grow
+    // suspension point. A concurrent authoritative load can grow
     // `self.positions` during the await, causing `outcomes[cursor]` to go
     // out-of-bounds on the second iteration. The snapshot also freezes
     // `loadedAccountChainId` so every `ValuedPosition` in this run carries
@@ -200,10 +200,9 @@ extension InvestmentStore {
   }
 
   /// Recompute the position-tracked `accountPerformance` from the loaded
-  /// transactions and `valuedPositions`. Called from `loadAllData` and
-  /// `reloadPositionsIfNeeded` after a trade is recorded. Sets
-  /// `accountPerformance` to `nil` and surfaces the error on conversion
-  /// failure; partial sums are not shown.
+  /// transactions and `valuedPositions`. Called from `loadAllData` after
+  /// positions are loaded. Sets `accountPerformance` to `nil` and surfaces
+  /// the error on conversion failure; partial sums are not shown.
   func refreshPositionTrackedPerformance(
     accountId: UUID, profileCurrency: Instrument
   ) async {
