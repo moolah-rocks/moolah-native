@@ -287,12 +287,15 @@ enum UITestSeedHydrator {
     let historicalAmount = InstrumentAmount(
       quantity: Decimal(fixtures.historicalExpenseAmountCents) / 100,
       instrument: instrument)
+    // Sample "now" once so every historical expense shares one launch
+    // reference instant when resolving its `daysAgo` offset.
+    let now = Date()
     for historical in fixtures.historicalPayees {
       try upsertHistoricalExpense(
         HistoricalExpenseSpec(
           id: historical.id,
           payee: historical.payee,
-          date: historical.date,
+          date: historical.date(now: now),
           amount: historicalAmount,
           accountId: fixtures.checkingAccountId,
           categoryId: historical.categoryId),

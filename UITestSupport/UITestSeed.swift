@@ -233,14 +233,27 @@ public enum UITestIncompatibleProfileFixtures {
 public struct UITestHistoricalExpense: Sendable {
   public let id: UUID
   public let payee: String
-  public let date: Date
+  /// How many days before launch the expense is dated. Stored as an offset
+  /// (rather than an absolute date) so the transaction always lands inside
+  /// rolling report / filter windows — e.g. the Reports view's default
+  /// `.last12Months` — no matter what calendar date the suite runs on. The
+  /// offset is a deterministic integer, identical in the app and UI-test
+  /// processes; only the app resolves it to a wall-clock date, at hydration.
+  public let daysAgo: Int
   public let categoryId: UUID?
 
-  public init(id: UUID, payee: String, date: Date, categoryId: UUID? = nil) {
+  public init(id: UUID, payee: String, daysAgo: Int, categoryId: UUID? = nil) {
     self.id = id
     self.payee = payee
-    self.date = date
+    self.daysAgo = daysAgo
     self.categoryId = categoryId
+  }
+
+  /// The seeded transaction date, anchored `daysAgo` days before `now`
+  /// (launch time). Pass the single `Date()` sampled once per hydration so
+  /// every expense in a seed shares one reference instant.
+  public func date(now: Date) -> Date {
+    now.addingTimeInterval(-Double(daysAgo) * 86_400)
   }
 }
 
