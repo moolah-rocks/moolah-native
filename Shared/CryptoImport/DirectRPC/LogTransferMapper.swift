@@ -4,13 +4,13 @@ import Foundation
 /// Maps one ERC-20 `Transfer` event log (`RPCLog`, from `eth_getLogs`) into
 /// the canonical `AlchemyTransfer` shape the rest of the sync pipeline
 /// already consumes (`TransferEventBuilder` and downstream). This lets the
-/// direct-RPC discovery path (Tasks 3+) feed the same pipeline Alchemy's
-/// higher-level `alchemy_getAssetTransfers` API feeds, without duplicating
-/// the transfer-to-transaction transformation.
+/// direct-RPC discovery path feed the same pipeline Alchemy's higher-level
+/// `alchemy_getAssetTransfers` API feeds, without duplicating the
+/// transfer-to-transaction transformation.
 ///
 /// `decimals`/`symbol` (per-contract metadata) and `timestamp` (per-block
-/// data) are resolved by the caller — batched lookups are Task 9/10's job —
-/// and passed in here purely as data.
+/// data) are resolved by the caller — a token-metadata resolver and a
+/// batched block-timestamp lookup — and passed in here purely as data.
 enum LogTransferMapper {
   /// Number of topics a standard ERC-20 `Transfer(address indexed from,
   /// address indexed to, uint256 value)` log carries: the event signature
