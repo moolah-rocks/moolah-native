@@ -26,7 +26,7 @@ enum DirectRPCConstants {
 ///
 /// `Sendable` struct with no mutable state; the `TokenMetadataResolver`
 /// collaborator is an `actor` that owns its own per-contract cache.
-struct DirectRPCChainClient: ChainDataClient {
+struct DirectRPCChainClient {
   private let rpc: LiveJSONRPCClient
   private let batcher: AdaptiveLogRangeBatcher
   private let metadata: TokenMetadataResolver
@@ -48,7 +48,11 @@ struct DirectRPCChainClient: ChainDataClient {
     self.batcher = batcher
     self.metadata = metadata
   }
+}
 
+// MARK: - ChainDataClient
+
+extension DirectRPCChainClient: ChainDataClient {
   func getAssetTransfers(
     chain: ChainConfig,
     walletAddress: String,
@@ -68,7 +72,7 @@ struct DirectRPCChainClient: ChainDataClient {
       topics: [DirectRPCConstants.transferTopic, nil, walletTopic])
     let combined = try await outbound + inbound
 
-    let logs = deduplicated(combined).filter { keep($0, chain: chain) }
+    let logs = deduplicated(combined).filter { isRelevant($0, chain: chain) }
     guard !logs.isEmpty else { return [] }
 
     let uniqueBlocks = Set(logs.compactMap { RPCHex.parseUInt64($0.blockNumber) })
@@ -111,9 +115,11 @@ struct DirectRPCChainClient: ChainDataClient {
       from: receipt.from.lowercased(),
       l1FeeWei: l1FeeWei)
   }
+}
 
-  // MARK: - Internals
+// MARK: - Internals
 
+extension DirectRPCChainClient {
   /// One indexed-topic pass over `[from, to]`, walked in adaptive chunks.
   /// `address: nil` means "every contract" — the topic0 filter alone
   /// restricts the result to ERC-20 `Transfer` logs.
@@ -151,7 +157,7 @@ struct DirectRPCChainClient: ChainDataClient {
   }
 
   /// Identity of a log for de-duplication: a transaction hash plus the log's
-  /// position within that transaction is unique on chain.
+  /// position within its block is unique on chain.
   private struct LogIdentity: Hashable {
     let transactionHash: String
     let logIndex: String
@@ -162,7 +168,7 @@ struct DirectRPCChainClient: ChainDataClient {
   /// leg (a `Transfer` to/from the zero address on the chain's canonical
   /// wrapped-native contract), which a receipt-based wrap/unwrap detector
   /// accounts for separately.
-  private func keep(_ log: RPCLog, chain: ChainConfig) -> Bool {
+  private func isRelevant(_ log: RPCLog, chain: ChainConfig) -> Bool {
     guard log.topics.count >= 3 else { return false }
     let from = RPCHex.addressFromTopic(log.topics[1])
     let to = RPCHex.addressFromTopic(log.topics[2])
