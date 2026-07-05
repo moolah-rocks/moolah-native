@@ -14,7 +14,22 @@ extension ProfileSession {
   /// itself is just a synchronous Keychain read, so it doesn't need
   /// `@MainActor` isolation that the surrounding `ProfileSession`
   /// extension inherits.
+  ///
+  /// Under UI testing, `UITestEnvironment.alchemyKeyPresent == "1"` in
+  /// the launch environment causes this function to return a synthetic
+  /// placeholder rather than reading the system keychain. A real
+  /// `SecItemCopyMatching(synchronizable: true)` call from a background
+  /// task can trigger an iCloud authorization dialog on the main thread,
+  /// which blocks the app's run loop indefinitely in a headless CI
+  /// environment. The placeholder value is non-nil (so the `LiveAlchemyClient`
+  /// takes the authenticated path) but will produce an HTTP 401 error on
+  /// the first Alchemy request; the resulting `invalidApiKey` error is
+  /// recorded to `WalletSyncState` and surfaces as an inline caption —
+  /// the same UI path that UI tests for this seed exercise.
   nonisolated static func resolveAlchemyApiKey() -> String? {
+    if ProcessInfo.processInfo.environment[UITestEnvironment.alchemyKeyPresent] == "1" {
+      return "ui-test-placeholder"
+    }
     let store = KeychainStore(
       service: KeychainServices.apiKeys, account: "alchemy", synchronizable: true)
     do {
