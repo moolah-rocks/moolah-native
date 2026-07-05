@@ -9,7 +9,7 @@ import Testing
 /// (mirroring `LiveBlockscoutClient`'s public-endpoint policy), and the
 /// JSON-RPC-level `{"error": ...}` envelope (a 200 with an error body, not
 /// a retryable HTTP status).
-@Suite("LiveJSONRPCClient")
+@Suite("LiveJSONRPCClient", .serialized)
 struct LiveJSONRPCClientTests {
   private static let endpoint = URL(string: "https://rpc.example.test")!
 
@@ -109,6 +109,19 @@ struct LiveJSONRPCClientTests {
       #expect(stage == "chainId")
     }
   }
+
+  @Test
+  func chainIdRejectsHexQuantityAboveIntMaxInsteadOfTrapping() async throws {
+    let client = makeClient { request in
+      (
+        AlchemyTestSupport.okResponse(for: request),
+        Data(#"{"jsonrpc":"2.0","id":1,"result":"0xffffffffffffffff"}"#.utf8)
+      )
+    }
+    await #expect(throws: WalletSyncError.providerMalformedResponse(stage: "chainId")) {
+      _ = try await client.chainId()
+    }
+  }
 }
 
 /// Thread-safe call counter for the URLProtocol handler closure, which must
@@ -135,9 +148,10 @@ private final class CallCounter: @unchecked Sendable {
 /// Dedicated `URLProtocol` stub for the `LiveJSONRPCClient` suite, with its
 /// own static handler state so it cannot race `AlchemyURLProtocolStub` /
 /// `BlockscoutURLProtocolStub` when Swift Testing runs suites in parallel.
-/// `nonisolated(unsafe)` on the statics is safe because all tests within a
-/// `@Suite` run sequentially: the handler is assigned in `makeClient` before
-/// any stub invocation, and no two tests in this suite touch the statics
+/// `nonisolated(unsafe)` on the statics is safe because the enclosing
+/// `@Suite` is marked `.serialized`, so tests within it never run
+/// concurrently: the handler is assigned in `makeClient` before any stub
+/// invocation, and no two tests in this suite touch the statics
 /// concurrently.
 class JSONRPCURLProtocolStub: URLProtocol {
   nonisolated(unsafe) static var requestHandler:
