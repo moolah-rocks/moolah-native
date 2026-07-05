@@ -13,6 +13,17 @@ import Foundation
 ///
 /// `Sendable` struct with no mutable state; the injected `ChainDataClient` is
 /// itself `Sendable`.
+struct WrapUnwrapResult: Sendable {
+  /// Synthesized WETH `.erc20` legs recovered from candidate receipts.
+  let rows: [AlchemyTransfer]
+  /// Every receipt `detect` fetched, keyed by transaction hash. A wrap's
+  /// candidate hash is also the outbound `external` gas-leg hash the
+  /// coalescer would otherwise re-fetch — sharing this dictionary with
+  /// `TransferEventBuilder` avoids fetching the same receipt twice in one
+  /// build pass.
+  let receipts: [String: AlchemyTransactionReceipt]
+}
+
 struct WrapUnwrapDetector: Sendable {
   private let chainClient: any ChainDataClient
 
@@ -36,16 +47,20 @@ struct WrapUnwrapDetector: Sendable {
 
   /// Scans `nativeTransfers` for wrap / unwrap candidates, fetches each
   /// distinct candidate hash's receipt once, and returns the synthesized
-  /// WETH `.erc20` legs. A candidate whose receipt carries no matching
-  /// `Deposit` / `Withdrawal` log yields no row.
+  /// WETH `.erc20` legs together with every receipt fetched. A candidate
+  /// whose receipt carries no matching `Deposit` / `Withdrawal` log yields
+  /// no row, but its receipt is still returned — the caller (`WalletSyncEngine`)
+  /// forwards it to `TransferEventBuilder` so a wrap/unwrap candidate's
+  /// receipt (which is also its outbound `external` gas-leg receipt) is
+  /// never fetched a second time.
   func detect(
     nativeTransfers: [AlchemyTransfer],
     chain: ChainConfig,
     walletAddress: String
-  ) async throws -> [AlchemyTransfer] {
+  ) async throws -> WrapUnwrapResult {
     let wallet = walletAddress.lowercased()
     let candidates = nativeTransfers.compactMap { candidate($0, chain: chain, wallet: wallet) }
-    guard !candidates.isEmpty else { return [] }
+    guard !candidates.isEmpty else { return WrapUnwrapResult(rows: [], receipts: [:]) }
 
     // De-dup: one receipt fetch per hash even when several candidate legs
     // share a transaction.
@@ -54,9 +69,10 @@ struct WrapUnwrapDetector: Sendable {
       receipts[hash] = try await chainClient.getTransactionReceipt(chain: chain, hash: hash)
     }
 
-    return candidates.compactMap { candidate in
+    let rows = candidates.compactMap { candidate in
       synthesize(candidate, receipt: receipts[candidate.transfer.hash], wallet: wallet)
     }
+    return WrapUnwrapResult(rows: rows, receipts: receipts)
   }
 
   // MARK: - Internals

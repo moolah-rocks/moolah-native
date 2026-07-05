@@ -10,7 +10,8 @@ extension TransferEventBuilder {
     transfers: [AlchemyTransfer],
     signedGasTxs: [SignedGasTx],
     context: BuildContext,
-    alchemy: any ChainDataClient
+    alchemy: any ChainDataClient,
+    prefetchedReceipts: [String: AlchemyTransactionReceipt] = [:]
   ) async throws -> [BuiltTransaction] {
     // Stable order: group preserves first-seen order so test fixtures
     // and signposts are deterministic.
@@ -20,7 +21,8 @@ extension TransferEventBuilder {
       extraSignedHashes: signedGasTxs.map(\.hash),
       walletAddress: context.walletAddress,
       chain: context.chain,
-      alchemy: alchemy)
+      alchemy: alchemy,
+      prefetched: prefetchedReceipts)
 
     var results: [BuiltTransaction] = []
     results.reserveCapacity(groups.count)
