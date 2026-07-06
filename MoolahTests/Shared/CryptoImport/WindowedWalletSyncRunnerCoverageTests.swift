@@ -24,7 +24,8 @@ struct WindowedWalletSyncRunnerCoverageTests {
   func nativeRowPartitionsIntoItsOwnWindowAndPersists() async throws {
     let blockscout = RecordingBlockExplorerClientStub()
     // One native ETH transfer at block 300_000 — inside window 2's range
-    // [250_000, 499_999], not window 1's [0, 249_999].
+    // [250_001, 500_000], not window 1's [1, 250_000] (never-synced start
+    // clamps to `.ethereum`'s `earliestScannableBlock` of 1, not genesis).
     blockscout.setNative(
       .txs([
         BlockscoutTransaction(
@@ -54,7 +55,7 @@ struct WindowedWalletSyncRunnerCoverageTests {
     // The native context is fetched once up front for the whole range, not
     // once per window.
     #expect(blockscout.recordedNativeCalls.count == 1)
-    #expect(blockscout.recordedNativeCalls.first?.fromBlock == 0)
+    #expect(blockscout.recordedNativeCalls.first?.fromBlock == 1)
     let persisted = try await setup.backend.transactions.fetchAll(filter: .init())
     #expect(persisted.count == 1)
     let externalIds = persisted.flatMap { $0.legs.compactMap(\.externalId) }
@@ -119,7 +120,7 @@ struct WindowedWalletSyncRunnerCoverageTests {
   func outboundGasLegLandsInItsOwnWindowNotAsAnEarlierPhantom() async throws {
     let blockscout = RecordingBlockExplorerClientStub()
     // One OUTBOUND native ETH send at block 300_000 — inside window 2's range
-    // [250_000, 499_999], not window 1's [0, 249_999]. Because the wallet is
+    // [250_001, 500_000], not window 1's [1, 250_000]. Because the wallet is
     // the sender, this yields BOTH an external transfer AND a signed-gas tx,
     // each stamped at block 300_000.
     let hash = "0xoutbound"
@@ -166,5 +167,34 @@ struct WindowedWalletSyncRunnerCoverageTests {
     // window (the unpartitioned code fetched it in window 1's gas-only path
     // AND window 2's transfer path).
     #expect(setup.chain.recordedReceiptCalls.filter { $0 == hash }.count == 1)
+  }
+
+  // MARK: - Chain floor clamp on the windowed path (rebase reconciliation)
+
+  @Test(
+    """
+    A never-synced account on Optimism starts its scan at the chain's \
+    earliest scannable block, not genesis — the windowed path must apply \
+    the same chain clamp `WalletSyncEngine.build` does, or a never-synced \
+    OP wallet would scan from block 0 and a pruned node would reject the \
+    pre-Bedrock range with 4444 pruned history unavailable
+    """)
+  func neverSyncedOptimismAccountClampsToEarliestScannableBlock() async throws {
+    let earliestScannableBlock = ChainConfig.optimism.earliestScannableBlock
+    let setup = try WindowedRunnerFixture.make(head: earliestScannableBlock + 50_000)
+    // Seeded directly (rather than via `Setup.seedAccount`, which hardcodes
+    // `.ethereum`) so this account carries the Optimism chain id.
+    let account = makeCryptoAccount(
+      walletAddress: WindowedRunnerFixture.wallet, chain: .optimism)
+    _ = TestBackend.seed(accounts: [account], in: setup.database)
+
+    let result = try await setup.runner.run(
+      account: account, chain: .optimism, progress: { _ in })
+
+    #expect(result.didWindowedScan)
+    #expect(result.windowError == nil)
+    // Never-synced (no checkpoint) still starts at Optimism's Bedrock floor
+    // (105_235_063), NOT block 0.
+    #expect(setup.chain.recordedFromBlocks.first == earliestScannableBlock)
   }
 }

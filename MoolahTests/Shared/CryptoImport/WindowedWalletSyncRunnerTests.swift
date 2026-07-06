@@ -32,8 +32,10 @@ struct WindowedWalletSyncRunnerTests {
 
     #expect(result.didWindowedScan)
     #expect(result.genuinelyNew.isEmpty)
-    // Three windows: [0, 249_999], [250_000, 499_999], [500_000, 600_000].
-    #expect(setup.chain.recordedFromBlocks == [0, 250_000, 500_000])
+    // Never-synced start clamps to `.ethereum`'s `earliestScannableBlock`
+    // (1), not genesis (0). Three windows: [1, 250_000], [250_001,
+    // 500_000], [500_001, 600_000].
+    #expect(setup.chain.recordedFromBlocks == [1, 250_001, 500_001])
     let checkpoint = try await setup.backend.walletSyncCheckpoints.load(accountId: account.id)
     #expect(checkpoint?.lastSyncedBlockNumber == 600_000)
     let state = try await setup.backend.walletSyncState.load(accountId: account.id)
@@ -46,8 +48,10 @@ struct WindowedWalletSyncRunnerTests {
   func midScanFailureReturnsErrorAndCheckpointsPerWindow() async throws {
     let setup = try makeSetup(head: 600_000)
     let account = setup.seedAccount()
-    // Fail the third window's ERC-20 fetch (its fromBlock is 500_000).
-    setup.chain.failTransfers(forFromBlock: 500_000)
+    // Fail the third window's ERC-20 fetch (its fromBlock is 500_001 — the
+    // never-synced start clamps to block 1, not 0, so every window boundary
+    // shifts up by one).
+    setup.chain.failTransfers(forFromBlock: 500_001)
 
     let result = try await setup.runner.run(
       account: account, chain: .ethereum, progress: { _ in })
@@ -57,26 +61,26 @@ struct WindowedWalletSyncRunnerTests {
     // surfaces the error so the caller can still consume the survivors.
     #expect(result.didWindowedScan)
     #expect(result.windowError != nil)
-    // The durable checkpoint is the 2nd window's end, not 0.
+    // The durable checkpoint is the 2nd window's end, not the start.
     let checkpoint = try await setup.backend.walletSyncCheckpoints.load(accountId: account.id)
-    #expect(checkpoint?.lastSyncedBlockNumber == 499_999)
+    #expect(checkpoint?.lastSyncedBlockNumber == 500_000)
     let state = try await setup.backend.walletSyncState.load(accountId: account.id)
-    #expect(state?.lastSyncedBlockNumber == 499_999)
+    #expect(state?.lastSyncedBlockNumber == 500_000)
   }
 
   @Test("A per-window failure still returns the survivors from earlier windows")
   func midScanFailureReturnsPreFailureSurvivors() async throws {
     let setup = try makeSetup(head: 600_000)
     let account = setup.seedAccount()
-    // One inbound ERC-20 in the first window [0, 249_999]; fail the third.
+    // One inbound ERC-20 in the first window [1, 250_000]; fail the third.
     setup.chain.setRows(
       [
         makeAlchemyTransfer(
           hash: "0xearly", from: Self.counterparty, to: Self.wallet, category: .erc20,
           contractAddress: "0xtoken", blockNum: RPCHex.hexQuantity(100_000))
       ],
-      forFromBlock: 0)
-    setup.chain.failTransfers(forFromBlock: 500_000)
+      forFromBlock: 1)
+    setup.chain.failTransfers(forFromBlock: 500_001)
 
     let result = try await setup.runner.run(
       account: account, chain: .ethereum, progress: { _ in })
@@ -96,14 +100,14 @@ struct WindowedWalletSyncRunnerTests {
   func midScanCancellationReturnsSurvivorsWithoutError() async throws {
     let setup = try makeSetup(head: 600_000)
     let account = setup.seedAccount()
-    // Inbound ERC-20 in the first window [0, 249_999].
+    // Inbound ERC-20 in the first window [1, 250_000].
     setup.chain.setRows(
       [
         makeAlchemyTransfer(
           hash: "0xearly", from: Self.counterparty, to: Self.wallet, category: .erc20,
           contractAddress: "0xtoken", blockNum: RPCHex.hexQuantity(100_000))
       ],
-      forFromBlock: 0)
+      forFromBlock: 1)
     // Cancel the run once the SECOND window's fetch begins — window 1 has by
     // then fully applied-and-checkpointed its transfer. `withUnsafeCurrentTask`
     // cancels the child task the run executes in (below), not the test task.
@@ -128,7 +132,7 @@ struct WindowedWalletSyncRunnerTests {
     #expect(persisted.count == 1)
     // The checkpoint sits at a completed window (at least the first's end).
     let checkpoint = try await setup.backend.walletSyncCheckpoints.load(accountId: account.id)
-    #expect((checkpoint?.lastSyncedBlockNumber ?? 0) >= 249_999)
+    #expect((checkpoint?.lastSyncedBlockNumber ?? 0) >= 250_000)
     let state = try await setup.backend.walletSyncState.load(accountId: account.id)
     #expect(state?.lastError == nil)
   }
@@ -139,18 +143,20 @@ struct WindowedWalletSyncRunnerTests {
   func resumeStartsAtCheckpointMinusReorgWindow() async throws {
     let setup = try makeSetup(head: 600_000)
     let account = setup.seedAccount()
-    setup.chain.failTransfers(forFromBlock: 500_000)
+    // The never-synced start clamps to block 1, not 0, so the third
+    // window's fromBlock is 500_001 (see `emptyWindowsAdvanceCheckpoint`).
+    setup.chain.failTransfers(forFromBlock: 500_001)
     let firstResult = try await setup.runner.run(
       account: account, chain: .ethereum, progress: { _ in })
     #expect(firstResult.windowError != nil)
     let secondCheckpoint = try #require(
       try await setup.backend.walletSyncCheckpoints.load(accountId: account.id)
     ).lastSyncedBlockNumber
-    #expect(secondCheckpoint == 499_999)
+    #expect(secondCheckpoint == 500_000)
 
     // Clear the failure and resume; the first fetch of the second run must
     // start from the checkpoint minus the reorg window — it does NOT
-    // re-scan window 1 from 0.
+    // re-scan window 1 from block 1.
     let callsBeforeResume = setup.chain.recordedFromBlocks.count
     setup.chain.clearFailures()
 
@@ -159,9 +165,9 @@ struct WindowedWalletSyncRunnerTests {
 
     #expect(result.didWindowedScan)
     let resumeFromBlocks = Array(setup.chain.recordedFromBlocks.dropFirst(callsBeforeResume))
-    #expect(resumeFromBlocks.first == secondCheckpoint - Self.reorgWindow)  // 499_967
-    // 499_967…600_000 fits one window, so exactly one resume fetch.
-    #expect(resumeFromBlocks == [499_967])
+    #expect(resumeFromBlocks.first == secondCheckpoint - Self.reorgWindow)  // 499_968
+    // 499_968…600_000 fits one window, so exactly one resume fetch.
+    #expect(resumeFromBlocks == [499_968])
     let checkpoint = try await setup.backend.walletSyncCheckpoints.load(accountId: account.id)
     #expect(checkpoint?.lastSyncedBlockNumber == 600_000)
   }
