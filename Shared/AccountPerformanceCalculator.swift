@@ -8,9 +8,8 @@ import Foundation
 ///
 ///   - **Amount invested** = `ledger.remainingInvested(accountIds:onOrBefore:)`
 ///     — the remaining cost basis of currently-held lots (≥ 0 by construction;
-///     `nil` if any in-scope instrument failed conversion, Rule 11). This is
-///     the field `AccountPerformance.totalContributions` now carries: the
-///     remaining cost basis, *not* the historical sum of inflows.
+///     `nil` if any in-scope instrument failed conversion, Rule 11). Carried by
+///     `AccountPerformance.amountInvested`.
 ///   - **Gain** = `currentValue − amountInvested` (unrealised).
 ///   - **Return** = money-weighted IRR over `ledger.cashFlows(accountIds:)`.
 ///     Received tokens are positive inflows at market value, so a self-custody
@@ -125,7 +124,7 @@ enum AccountPerformanceCalculator {
     AccountPerformance(
       instrument: profileCurrency,
       currentValue: currentValue,
-      totalContributions: InstrumentAmount(quantity: amountInvested, instrument: profileCurrency),
+      amountInvested: InstrumentAmount(quantity: amountInvested, instrument: profileCurrency),
       profitLoss: gain(
         currentValue: currentValue, amountInvested: amountInvested, in: profileCurrency),
       profitLossPercent: gainPercent(currentValue: currentValue, amountInvested: amountInvested),
@@ -225,7 +224,7 @@ enum AccountPerformanceCalculator {
   }
 
   /// Assembles the legacy (manual-valuation) `AccountPerformance` from
-  /// net-deposit flows and the terminal value. Here `totalContributions` is
+  /// net-deposit flows and the terminal value. Here `amountInvested` carries
   /// the net-deposit sum and the percentage is Modified Dietz — the correct
   /// derivation for accounts with no cost-basis lots. The ledger path uses
   /// `assembleFromLedger` (remaining cost basis + IRR) instead.
@@ -237,17 +236,17 @@ enum AccountPerformanceCalculator {
   ) -> AccountPerformance {
     guard let currentValue else {
       // Row 6: V failed but flows were extracted successfully. Surface
-      // totalContributions and firstFlowDate so the caller can show
+      // the invested amount and firstFlowDate so the caller can show
       // partial information (e.g. the "since Mar 2023" subtitle on the
-      // p.a. tile remains useful even when the rate itself is
+      // Return tile remains useful even when the rate itself is
       // unavailable). profitLoss / profitLossPercent / annualisedReturn
       // all require V and stay nil.
-      let totalContributions = flows.reduce(Decimal(0)) { $0 + $1.amount }
+      let netDeposits = flows.reduce(Decimal(0)) { $0 + $1.amount }
       return AccountPerformance(
         instrument: profileCurrency,
         currentValue: nil,
-        totalContributions: InstrumentAmount(
-          quantity: totalContributions, instrument: profileCurrency),
+        amountInvested: InstrumentAmount(
+          quantity: netDeposits, instrument: profileCurrency),
         profitLoss: nil,
         profitLossPercent: nil,
         annualisedReturn: nil,
@@ -261,20 +260,20 @@ enum AccountPerformanceCalculator {
       return AccountPerformance(
         instrument: profileCurrency,
         currentValue: currentValue,
-        totalContributions: .zero(instrument: profileCurrency),
+        amountInvested: .zero(instrument: profileCurrency),
         profitLoss: currentValue,
         profitLossPercent: nil,
         annualisedReturn: nil,
         firstFlowDate: nil)
     }
 
-    let totalContributions = flows.reduce(Decimal(0)) { $0 + $1.amount }
+    let netDeposits = flows.reduce(Decimal(0)) { $0 + $1.amount }
     // Decimal has no fractional `pow`; convert to Double at the IRR/Modified
     // Dietz boundary.
     let terminal = Double(truncating: currentValue.quantity as NSDecimalNumber)
     let totalDays = max(now.timeIntervalSince(firstFlow.date) / 86_400, 0)
 
-    let plQuantity = currentValue.quantity - totalContributions
+    let plQuantity = currentValue.quantity - netDeposits
     let plPercent = modifiedDietzPercent(
       flows: flows, terminal: terminal, totalDays: totalDays)
     let annualised = IRRSolver.annualisedReturn(
@@ -283,8 +282,8 @@ enum AccountPerformanceCalculator {
     return AccountPerformance(
       instrument: profileCurrency,
       currentValue: currentValue,
-      totalContributions: InstrumentAmount(
-        quantity: totalContributions, instrument: profileCurrency),
+      amountInvested: InstrumentAmount(
+        quantity: netDeposits, instrument: profileCurrency),
       profitLoss: InstrumentAmount(quantity: plQuantity, instrument: profileCurrency),
       profitLossPercent: plPercent,
       annualisedReturn: annualised,

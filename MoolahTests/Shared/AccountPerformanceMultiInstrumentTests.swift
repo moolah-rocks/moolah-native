@@ -46,7 +46,7 @@ struct AccountPerformanceMultiInstrumentTests {
       ],
       profileCurrency: aud, ledger: ledger, now: day(365))
     #expect(perf.currentValue == InstrumentAmount(quantity: 1_100, instrument: aud))
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 1_000, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 1_000, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 100, instrument: aud))
   }
 
@@ -65,7 +65,7 @@ struct AccountPerformanceMultiInstrumentTests {
     )
     #expect(perf.currentValue == InstrumentAmount(quantity: 6_000, instrument: aud))
     // Amount invested = market value on receipt (4,000), not a zero/negative flow.
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 4_000, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 4_000, instrument: aud))
     #expect(perf.annualisedReturn != nil)  // was nil under the old contributions path
   }
 
@@ -87,7 +87,7 @@ struct AccountPerformanceMultiInstrumentTests {
       accountIds: [memberA, memberB], valuedPositions: rows,
       profileCurrency: aud, ledger: ledger, now: day(365))
     // Cost carries A→B; aggregate remaining invested stays 4,000 (2 ETH @ 2,000).
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 4_000, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 4_000, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 1_000, instrument: aud))  // 5000 − 4000
     // Only the buy is an external flow; the internal move adds none.
     #expect(perf.firstFlowDate == day(0))
@@ -109,7 +109,7 @@ struct AccountPerformanceMultiInstrumentTests {
     #expect(perf.currentValue == nil)
     #expect(perf.profitLoss == nil)
     // No lots in the ledger → invested is a genuine 0, not a phantom.
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 0, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 0, instrument: aud))
   }
 
   /// A genuine flow conversion failure marks the instrument unavailable in the
@@ -127,7 +127,7 @@ struct AccountPerformanceMultiInstrumentTests {
       accountIds: [wallet], valuedPositions: rows, profileCurrency: aud, ledger: ledger,
       now: day(365))
     #expect(perf.currentValue == InstrumentAmount(quantity: 1_100, instrument: aud))
-    #expect(perf.totalContributions == nil)
+    #expect(perf.amountInvested == nil)
     #expect(perf.profitLoss == nil)
   }
 
@@ -160,7 +160,7 @@ struct AccountPerformanceMultiInstrumentTests {
       ],
       profileCurrency: aud, ledger: ledger, now: day(365))
     #expect(perfA.currentValue == InstrumentAmount(quantity: 9_000, instrument: aud))
-    #expect(perfA.totalContributions == nil)
+    #expect(perfA.amountInvested == nil)
     #expect(perfA.annualisedReturn == nil)
     #expect(perfA.firstFlowDate == nil)
 
@@ -171,7 +171,7 @@ struct AccountPerformanceMultiInstrumentTests {
         valued(btc, quantity: 1, worth: InstrumentAmount(quantity: 60_000, instrument: aud))
       ],
       profileCurrency: aud, ledger: ledger, now: day(365))
-    #expect(perfB.totalContributions == InstrumentAmount(quantity: 50_000, instrument: aud))
+    #expect(perfB.amountInvested == InstrumentAmount(quantity: 50_000, instrument: aud))
     #expect(perfB.annualisedReturn != nil)
     #expect(perfB.firstFlowDate == day(5))
   }

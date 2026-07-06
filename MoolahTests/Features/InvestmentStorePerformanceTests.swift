@@ -36,7 +36,7 @@ struct InvestmentStorePerformanceTests {
     // amount invested (remaining cost basis) is 0: a fiat account shows no
     // baseline (Symptom 1). Performance is still populated from the shared
     // ledger provider.
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 0, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 0, instrument: aud))
   }
 
   @Test("loadAllData populates accountPerformance for a legacy-valuation account")

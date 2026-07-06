@@ -2,8 +2,11 @@
 import SwiftUI
 
 /// Three-tile horizontal strip rendering account-level lifetime numbers
-/// from an `AccountPerformance`: Current Value, Profit / Loss (with %),
-/// and Annualised Return (with "since [first-flow-date]" subtitle).
+/// from an `AccountPerformance`: Current Value (with the amount invested
+/// beneath), Gain (dollar figure plus its total-return %), and Return (the
+/// annualised rate, with a "since [first-flow-date]" subtitle). The Gain %
+/// is a plain gain/invested ratio; the Return % is annualised — the two are
+/// deliberately different measures, shown on separate tiles.
 ///
 /// Used for both position-tracked accounts (performance supplied via
 /// `PositionsViewInput.performance`) and manual-valuation accounts. Each
@@ -55,14 +58,14 @@ struct AccountPerformanceTiles: View {
 
   @ViewBuilder private var investedSubtitleView: some View {
     if let text = AccountPerformanceTileLabels.investedSubtitleText(performance) {
-      if performance.totalContributions != nil {
+      if performance.amountInvested != nil {
         Text(text)
           .font(.caption)
           .monospacedDigit()
           .foregroundStyle(.secondary)
       } else {
-        // "Invested —" form: no number to monospace; tertiary
-        // colour matches the P/L tile's `—` styling.
+        // "Amount invested —" form: no number to monospace; tertiary
+        // colour matches the Gain tile's `—` styling.
         Text(text)
           .font(.caption)
           .foregroundStyle(.tertiary)
@@ -71,7 +74,7 @@ struct AccountPerformanceTiles: View {
   }
 
   @ViewBuilder private var profitLossTile: some View {
-    Tile(label: "Profit / Loss") {
+    Tile(label: "Gain") {
       if let profitLoss = performance.profitLoss {
         Text(profitLoss.signedFormatted)
           .font(.title3)
@@ -94,7 +97,7 @@ struct AccountPerformanceTiles: View {
   }
 
   @ViewBuilder private var annualisedReturnTile: some View {
-    let tile = Tile(label: "Annualised Return") {
+    let tile = Tile(label: "Return") {
       if let rate = performance.annualisedReturn {
         Text(formattedPaPercent(rate))
           .font(.title3)
@@ -177,7 +180,7 @@ struct AccountPerformanceTiles: View {
     if performance.firstFlowDate == nil {
       return "Not enough activity yet"
     }
-    return "Annualised return unavailable — conversion may have failed"
+    return "Return unavailable — a price conversion may have failed"
   }
 
   // MARK: - Accessibility labels
@@ -188,9 +191,9 @@ struct AccountPerformanceTiles: View {
 
   private var profitLossAccessibilityLabel: String {
     guard let profitLoss = performance.profitLoss else {
-      return "Profit and Loss: Not available"
+      return "Gain: Not available"
     }
-    var label = "Profit and Loss: \(profitLoss.signedFormatted)"
+    var label = "Gain: \(profitLoss.signedFormatted)"
     if let pct = profitLossPercentText {
       label += ", \(pct)"
     }
@@ -199,9 +202,9 @@ struct AccountPerformanceTiles: View {
 
   private var annualisedReturnAccessibilityLabel: String {
     guard let rate = performance.annualisedReturn else {
-      return "Annualised Return: \(annualisedReturnUnavailableTooltip)"
+      return "Return: \(annualisedReturnUnavailableTooltip)"
     }
-    var label = "Annualised Return: \(formattedPaPercent(rate))"
+    var label = "Return: \(formattedPaPercent(rate))"
     if let since = sinceText {
       label += " \(since)"
     }
@@ -258,7 +261,7 @@ private struct Tile<Content: View, Subtitle: View>: View {
     performance: AccountPerformance(
       instrument: .AUD,
       currentValue: InstrumentAmount(quantity: 23_405, instrument: .AUD),
-      totalContributions: InstrumentAmount(quantity: 21_605, instrument: .AUD),
+      amountInvested: InstrumentAmount(quantity: 21_605, instrument: .AUD),
       profitLoss: InstrumentAmount(quantity: 1_800, instrument: .AUD),
       profitLossPercent: Decimal(string: "0.083"),
       annualisedReturn: Decimal(string: "0.083"),
@@ -274,7 +277,7 @@ private struct Tile<Content: View, Subtitle: View>: View {
     performance: AccountPerformance(
       instrument: .AUD,
       currentValue: InstrumentAmount(quantity: 9_500, instrument: .AUD),
-      totalContributions: InstrumentAmount(quantity: 10_000, instrument: .AUD),
+      amountInvested: InstrumentAmount(quantity: 10_000, instrument: .AUD),
       profitLoss: InstrumentAmount(quantity: -500, instrument: .AUD),
       profitLossPercent: Decimal(string: "-0.05"),
       annualisedReturn: Decimal(string: "-0.05"),
@@ -299,7 +302,7 @@ private struct Tile<Content: View, Subtitle: View>: View {
     performance: AccountPerformance(
       instrument: .AUD,
       currentValue: InstrumentAmount(quantity: 0, instrument: .AUD),
-      totalContributions: InstrumentAmount(quantity: 0, instrument: .AUD),
+      amountInvested: InstrumentAmount(quantity: 0, instrument: .AUD),
       profitLoss: InstrumentAmount(quantity: 0, instrument: .AUD),
       profitLossPercent: nil,
       annualisedReturn: nil,

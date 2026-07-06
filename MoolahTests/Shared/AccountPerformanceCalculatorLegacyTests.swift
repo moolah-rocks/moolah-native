@@ -53,7 +53,7 @@ struct AccountPerformanceCalculatorLegacyTests {
     #expect(perf.currentValue == InstrumentAmount(quantity: 11_000, instrument: aud))
   }
 
-  /// `totalContributions` and `profitLoss` derive from the same flow
+  /// `amountInvested` and `profitLoss` derive from the same flow
   /// arithmetic and break together; tested in one body.
   @Test("legacy single contribution records contributions and P/L")
   func legacySingleContributionContributionsAndProfitLoss() {
@@ -72,7 +72,7 @@ struct AccountPerformanceCalculatorLegacyTests {
     let perf = AccountPerformanceCalculator.computeLegacy(
       dailyBalances: dailyBalances, values: values, instrument: aud, now: now)
 
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 10_000, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 10_000, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 1_000, instrument: aud))
   }
 

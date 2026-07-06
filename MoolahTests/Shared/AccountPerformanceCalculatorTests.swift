@@ -4,7 +4,7 @@ import Testing
 @testable import Moolah
 
 /// `compute` reads the shared `HoldingsCostLedger`: the "Amount invested" tile
-/// (`totalContributions`) is the remaining cost basis (a stock), gain is
+/// (`amountInvested`) is the remaining cost basis (a stock), gain is
 /// `value − invested`, and the annualised return is the IRR over the ledger's
 /// market-valued flows. Fiat legs create no lots, so these fixtures use a stock
 /// / crypto to exercise a real invested figure.
@@ -49,7 +49,7 @@ struct AccountPerformanceCalculatorTests {
       valuedPositions: [valued(bhp, quantity: 100, worth: 5_000)],
       profileCurrency: aud, ledger: ledger, now: oneYearLater)
     #expect(perf.currentValue == InstrumentAmount(quantity: 5_000, instrument: aud))
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 4_000, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 4_000, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 1_000, instrument: aud))
     #expect(perf.firstFlowDate == openingDate)
   }
@@ -97,7 +97,7 @@ struct AccountPerformanceCalculatorTests {
       accountId: account,
       valuedPositions: [valued(eth, quantity: 1, worth: 6_000)],
       profileCurrency: aud, ledger: ledger, now: oneYearLater)
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 4_000, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 4_000, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 2_000, instrument: aud))
     let annualised = try #require(perf.annualisedReturn)
     #expect(Double(truncating: annualised as NSDecimalNumber) > 0)
@@ -116,7 +116,7 @@ struct AccountPerformanceCalculatorTests {
       valuedPositions: [valued(eth, quantity: 1, worth: 3_500)],
       profileCurrency: aud, ledger: ledger, now: oneYearLater)
     // Bought 2 ETH @ 2,000; sold 1 (FIFO) → 1 ETH @ 2,000 remains invested.
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 2_000, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 2_000, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 1_500, instrument: aud))  // 3500 − 2000
   }
 
@@ -134,7 +134,7 @@ struct AccountPerformanceCalculatorTests {
       valuedPositions: [valued(eth, quantity: 1, worth: 6_000)],
       profileCurrency: aud, ledger: ledger, now: oneYearLater)
     #expect(perf.currentValue == InstrumentAmount(quantity: 6_000, instrument: aud))
-    #expect(perf.totalContributions == nil)
+    #expect(perf.amountInvested == nil)
     #expect(perf.profitLoss == nil)
     #expect(perf.profitLossPercent == nil)
     #expect(perf.annualisedReturn == nil)
@@ -156,7 +156,7 @@ struct AccountPerformanceCalculatorTests {
       valuedPositions: valuedNil,
       profileCurrency: aud, ledger: ledger, now: oneYearLater)
     #expect(perf.currentValue == nil)
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 1_000, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 1_000, instrument: aud))
     #expect(perf.profitLoss == nil)
     #expect(perf.profitLossPercent == nil)
     #expect(perf.annualisedReturn == nil)

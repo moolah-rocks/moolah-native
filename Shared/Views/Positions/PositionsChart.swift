@@ -125,7 +125,6 @@ struct PositionsChart: View {
 
       PositionsChartLegendRow(
         rows: rows,
-        mode: mode,
         gainLossOpacity: Self.gainLossOpacity,
         showBaseline: showBaseline)
     }
@@ -279,7 +278,7 @@ extension PositionsChart: AXChartDescriptorRepresentable {
     if showBaseline {
       series.append(
         AXDataSeriesDescriptor(
-          name: selection == nil ? "Invested amount" : "Cost basis",
+          name: "Amount invested",
           isContinuous: true,
           dataPoints: baselinePairs.map { AXDataPoint(x: $0.label, y: $0.value) }
         ))
