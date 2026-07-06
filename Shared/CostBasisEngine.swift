@@ -100,9 +100,11 @@ struct CostBasisEngine: Sendable {
     instrument: Instrument,
     quantity: Decimal,
     from source: UUID?,
-    to destination: UUID?,
-    date: Date
+    to destination: UUID?
   ) {
+    // A same-bucket move has no economic effect, and the shared-mutation loop below
+    // would otherwise clobber the appended lots when re-writing the source bucket.
+    guard source != destination else { return }
     let sourceKey = BucketKey(instrumentId: instrument.id, account: source)
     let destKey = BucketKey(instrumentId: instrument.id, account: destination)
     var remaining = quantity
@@ -141,8 +143,8 @@ struct CostBasisEngine: Sendable {
     buckets[BucketKey(instrumentId: instrument.id, account: account)] ?? []
   }
 
-  /// Return open (unsold) lots for an instrument across all accounts.
-  func openLots(for instrument: Instrument) -> [CostBasisLot] {
+  /// Return open (unsold) lots for an instrument aggregated across all accounts.
+  func allOpenLots(for instrument: Instrument) -> [CostBasisLot] {
     buckets.filter { $0.key.instrumentId == instrument.id }.flatMap(\.value)
   }
 

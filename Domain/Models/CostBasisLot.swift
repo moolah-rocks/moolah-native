@@ -9,14 +9,18 @@ struct CostBasisLot: Sendable, Hashable, Identifiable {
   let costPerUnit: Decimal
   let originalQuantity: Decimal
   var remainingQuantity: Decimal
-  /// Holding-account tag. `nil` for the legacy single-bucket callers
-  /// (`CapitalGainsCalculator`, `MultiInstrumentPositionsAssembler`)
-  /// that do not yet segregate lots by account.
+  /// Holding-account tag. `nil` for legacy single-bucket callers that do not
+  /// segregate lots by account.
   let account: UUID?
 
   init(
-    id: UUID, instrument: Instrument, acquiredDate: Date, costPerUnit: Decimal,
-    originalQuantity: Decimal, remainingQuantity: Decimal, account: UUID? = nil
+    id: UUID,
+    instrument: Instrument,
+    acquiredDate: Date,
+    costPerUnit: Decimal,
+    originalQuantity: Decimal,
+    remainingQuantity: Decimal,
+    account: UUID? = nil
   ) {
     self.id = id
     self.instrument = instrument
