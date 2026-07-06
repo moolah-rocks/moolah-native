@@ -4,91 +4,69 @@ import Foundation
 ///
 /// Combines FIFO cost basis tracking with current market valuation.
 enum ProfitLossCalculator {
+  /// Retained convenience for unit-test call sites: builds a profile-wide
+  /// `HoldingsCostLedger` from `LegTransaction`s then projects. Production
+  /// (`ReportingStore`) uses `compute(ledger:…)` with the shared
+  /// `HoldingsCostLedgerStore` ledger so the build is not repeated.
   static func compute(
     transactions: [LegTransaction],
     profileCurrency: Instrument,
     conversionService: InstrumentConversionService,
     asOfDate: Date
   ) async throws -> [InstrumentProfitLoss] {
-    let gainsResult = try await CapitalGainsCalculator.computeWithConversion(
-      transactions: transactions,
-      profileCurrency: profileCurrency,
-      conversionService: conversionService
-    )
-
-    var instrumentData: [String: InstrumentData] = [:]
-    try await accumulateInvested(
-      into: &instrumentData,
-      transactions: transactions,
-      profileCurrency: profileCurrency,
+    let txns = transactions.map { Transaction(date: $0.date, legs: $0.legs) }
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns,
+      referenceCurrency: profileCurrency,
       conversionService: conversionService)
-    accumulateGainsAndLots(into: &instrumentData, result: gainsResult)
-
-    return try await buildResults(
-      from: instrumentData,
+    return try await compute(
+      ledger: ledger,
       profileCurrency: profileCurrency,
       conversionService: conversionService,
       asOfDate: asOfDate)
   }
 
-  /// Process all transactions to compute total invested.
+  /// Pure per-instrument P&L projection from a pre-built profile-wide ledger.
   ///
-  /// `totalInvested` is the lifetime fiat input attributed to each
-  /// non-fiat acquisition: every fiat `.trade` outflow plus every
-  /// `.expense` fee leg attached to the same transaction, all converted
-  /// to `profileCurrency` on the transaction's date. Mirrors the
-  /// classifier's fee fold-in via `TradeEventClassifier.feeContribution`
-  /// so `totalInvested` stays consistent with `remainingCostBasis` from
-  /// the FIFO engine — otherwise `returnPercentage` (computed against
-  /// `totalInvested`) would over-state returns by ignoring transaction
-  /// costs. See guides/INSTRUMENT_CONVERSION_GUIDE.md Rules 1, 5, and 8.
-  private static func accumulateInvested(
-    into instrumentData: inout [String: InstrumentData],
-    transactions: [LegTransaction],
+  /// `totalInvested` is reconciled with the shared ledger's acquisition
+  /// flows — the external capital that entered each instrument's holdings
+  /// (`counterpartyAccount == nil && amount > 0`, i.e. fiat-paired buys AND
+  /// income/opening-balance receipts valued at market, but NOT the receiving
+  /// side of an internal transfer). This folds transaction fees in (they are
+  /// already in each acquisition's per-unit cost via `TradeEventClassifier`)
+  /// so `totalInvested` stays consistent with the FIFO `remainingCostBasis`,
+  /// keeping `returnPercentage` honest. Realised gains and open lots come
+  /// from the same ledger; `currentValue` market-values the open quantity at
+  /// `asOfDate` (Rule 6). See guides/INSTRUMENT_CONVERSION_GUIDE.md Rules 1,
+  /// 5, 6, and 8.
+  static func compute(
+    ledger: HoldingsCostLedger,
     profileCurrency: Instrument,
-    conversionService: InstrumentConversionService
-  ) async throws {
-    let sorted = transactions.sorted { $0.date < $1.date }
-    for transaction in sorted {
-      let tradeLegs = transaction.legs.filter { $0.type == .trade }
-      let fiatLegs = tradeLegs.filter { $0.instrument.kind == .fiatCurrency }
-      let nonFiatLegs = tradeLegs.filter { $0.instrument.kind != .fiatCurrency }
-
-      var fiatOutflow: Decimal = 0
-      for leg in fiatLegs where leg.quantity < 0 {
-        let converted = try await conversionService.convert(
-          -leg.quantity, from: leg.instrument, to: profileCurrency, on: transaction.date
-        )
-        fiatOutflow += converted
-      }
-      fiatOutflow += try await TradeEventClassifier.feeContribution(
-        from: transaction.legs,
-        hostCurrency: profileCurrency,
-        on: transaction.date,
-        using: conversionService)
-
-      for leg in nonFiatLegs where leg.quantity > 0 {
-        instrumentData[leg.instrument.id, default: InstrumentData(instrument: leg.instrument)]
-          .totalInvested += fiatOutflow
-      }
+    conversionService: InstrumentConversionService,
+    asOfDate: Date
+  ) async throws -> [InstrumentProfitLoss] {
+    var instrumentData: [String: InstrumentData] = [:]
+    for entry in ledger.flows where entry.counterpartyAccount == nil && entry.amount > 0 {
+      instrumentData[entry.instrument.id, default: InstrumentData(instrument: entry.instrument)]
+        .totalInvested += entry.amount
     }
-  }
-
-  private static func accumulateGainsAndLots(
-    into instrumentData: inout [String: InstrumentData],
-    result: CapitalGainsResult
-  ) {
-    for event in result.events {
+    for event in ledger.realisedEvents {
       instrumentData[event.instrument.id, default: InstrumentData(instrument: event.instrument)]
         .realizedGain += event.gain
     }
-    for lot in result.openLots {
+    for lot in ledger.openLots {
       let id = lot.instrument.id
       instrumentData[id, default: InstrumentData(instrument: lot.instrument)]
         .currentQuantity += lot.remainingQuantity
       instrumentData[id, default: InstrumentData(instrument: lot.instrument)]
         .remainingCostBasis += lot.remainingCost
     }
+
+    return try await buildResults(
+      from: instrumentData,
+      profileCurrency: profileCurrency,
+      conversionService: conversionService,
+      asOfDate: asOfDate)
   }
 
   private static func buildResults(

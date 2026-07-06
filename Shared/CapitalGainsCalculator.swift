@@ -39,41 +39,39 @@ struct CapitalGainsResult: Sendable {
 /// source of truth for buy/sell classification across the entire codebase.
 enum CapitalGainsCalculator {
 
-  /// Compute capital gains including non-fiat swaps, using conversion service for AUD-equivalent.
+  /// Pure realised-CGT projection from a pre-built profile-wide ledger.
+  /// `ReportingStore` passes the shared `HoldingsCostLedgerStore` ledger so
+  /// the tax path does not rebuild it. The ledger already realises the full
+  /// disposal set — sells, crypto spends / gas (non-fiat `.expense`), and
+  /// income/opening-funded lots — against market-value cost bases; a
+  /// tracked→tracked transfer is a non-event (the lot's cost carries), so it
+  /// never appears here.
+  static func compute(
+    ledger: HoldingsCostLedger, sellDateRange: ClosedRange<Date>? = nil
+  ) -> CapitalGainsResult {
+    let events = ledger.realisedEvents.filter { event in
+      sellDateRange.map { $0.contains(event.sellDate) } ?? true
+    }
+    return CapitalGainsResult(events: events, openLots: ledger.openLots)
+  }
+
+  /// Retained convenience for unit-test call sites: builds a profile-wide
+  /// ledger from `LegTransaction`s then projects. Production (`ReportingStore`)
+  /// uses `compute(ledger:)` with the shared `HoldingsCostLedgerStore` ledger
+  /// so the build is not repeated. Now that the ledger drives realisation,
+  /// income/opening-funded lots and crypto spends realise here too — not only
+  /// fiat-paired `.trade`s — matching the profile-wide model.
   static func computeWithConversion(
     transactions: [LegTransaction],
     profileCurrency: Instrument,
     conversionService: any InstrumentConversionService,
     sellDateRange: ClosedRange<Date>? = nil
   ) async throws -> CapitalGainsResult {
-    var engine = CostBasisEngine()
-    var allEvents: [CapitalGainEvent] = []
-    let sorted = transactions.sorted { $0.date < $1.date }
-
-    for transaction in sorted {
-      let classification = try await TradeEventClassifier.classify(
-        legs: transaction.legs,
-        on: transaction.date,
-        hostCurrency: profileCurrency,
-        conversionService: conversionService
-      )
-      for buy in classification.buys {
-        engine.processBuy(
-          instrument: buy.instrument,
-          quantity: buy.quantity,
-          costPerUnit: buy.costPerUnit,
-          date: transaction.date)
-      }
-      for sell in classification.sells {
-        let inRange = sellDateRange.map { $0.contains(transaction.date) } ?? true
-        let events = engine.processSell(
-          instrument: sell.instrument,
-          quantity: sell.quantity,
-          proceedsPerUnit: sell.proceedsPerUnit,
-          date: transaction.date)
-        if inRange { allEvents.append(contentsOf: events) }
-      }
-    }
-    return CapitalGainsResult(events: allEvents, openLots: engine.allOpenLots())
+    let txns = transactions.map { Transaction(date: $0.date, legs: $0.legs) }
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns,
+      referenceCurrency: profileCurrency,
+      conversionService: conversionService)
+    return compute(ledger: ledger, sellDateRange: sellDateRange)
   }
 }
