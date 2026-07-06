@@ -12,8 +12,6 @@ import XCTest
 struct CryptoSettingsScreen {
   let app: MoolahApp
 
-  // MARK: - Actions
-
   /// Taps the "+" button in the Registered Tokens header to present the
   /// `AddTokenSheet`. Returns once the picker sheet's sentinel
   /// (`instrumentPicker.sheet`) appears in the accessibility tree.
@@ -55,8 +53,6 @@ struct CryptoSettingsScreen {
     }
   }
 
-  // MARK: - Custom RPC Endpoints
-
   /// Types `url` into the Custom RPC Endpoints entry field and taps "Add".
   /// Waits for the field's typed value to propagate (mirroring
   /// `AddTokenScreen.search(_:)`) before tapping Add, then waits for the
@@ -82,6 +78,21 @@ struct CryptoSettingsScreen {
       return
     }
     let addButton = app.element(for: UITestIdentifiers.CryptoSettings.rpcEndpointAddButton)
+    if !addButton.waitForExistence(timeout: 10) {
+      Trace.recordFailure("crypto.settings.rpc.add button did not appear")
+      XCTFail("RPC endpoint Add button did not appear within 10s")
+      return
+    }
+    // The Add button shares the "Custom RPC Endpoints" section — the last
+    // section of a Form that overflows the small CI Settings window — so it
+    // can render below the viewport. Scroll it into view before clicking so
+    // a silent off-screen miss surfaces here, not as a misleading
+    // "row did not appear" downstream. See scrollFormUntilHittable.
+    if !scrollFormUntilHittable(addButton, timeout: 10) {
+      Trace.recordFailure("crypto.settings.rpc.add button was not hittable within 10s")
+      XCTFail("RPC endpoint Add button was not hittable within 10s")
+      return
+    }
     addButton.click()
     let row = app.element(for: UITestIdentifiers.CryptoSettings.rpcEndpointRow(url))
     if !row.waitForExistence(timeout: 10) {
@@ -127,12 +138,16 @@ struct CryptoSettingsScreen {
       XCTFail("RPC endpoint remove button for '\(url)' did not appear within \(timeout)s")
       return
     }
-    // The row re-probes/re-lays-out after an add, so the button can exist in
-    // the AX tree but be transiently not hittable — observed as a "Not hittable"
-    // XCUIElement error on GitHub macos-26 runners (intermittent merge-queue
-    // ejection). Wait for hittability before clicking, matching the pattern
-    // established in TradeFormDriver / XCUIElement+WaitUntilHittable.
-    if !button.waitUntilHittable(timeout: timeout) {
+    // "Custom RPC Endpoints" is the last section of a `Form` that overflows
+    // the small Settings window on CI (observed ~900x488), and the Remove
+    // button sits on the second line of the two-line row — so it can render
+    // just below the visible viewport. There it exists in the AX tree with
+    // readable attributes (waitForExistence and the status-label predicate
+    // both pass) yet is never hittable, because nothing scrolls it into
+    // view. That is a *static* off-screen state a pure hittability poll can
+    // never resolve, so the button has to be scrolled into the viewport
+    // first.
+    if !scrollFormUntilHittable(button, timeout: timeout) {
       Trace.recordFailure(
         "crypto.settings.rpc.remove.\(url) was not hittable within \(timeout)s")
       XCTFail(
@@ -149,5 +164,32 @@ struct CryptoSettingsScreen {
       Trace.recordFailure("crypto.settings.rpc.row.\(url) still present after Remove")
       XCTFail("RPC endpoint row for '\(url)' was still present \(timeout)s after tapping Remove")
     }
+  }
+}
+
+extension CryptoSettingsScreen {
+
+  /// Scrolls the Crypto settings `Form` upward until `element` becomes
+  /// hittable, or `timeout` elapses; returns the final hittability. Used
+  /// to reveal a control near the bottom of the last (overflowing) section
+  /// that renders just below the viewport — see `removeRPCEndpoint`.
+  ///
+  /// Swiping up on the form reveals content below the fold; the "Custom RPC
+  /// Endpoints" section is the last one, so swiping to the bottom brings the
+  /// whole section into view. Swipes past the bottom are no-ops, so the loop
+  /// can only ever help — a wrong guess never scrolls the target further
+  /// away. Returns immediately if `element` is already hittable, so the
+  /// common (already-visible) case pays no gesture cost.
+  private func scrollFormUntilHittable(
+    _ element: XCUIElement, timeout: TimeInterval
+  ) -> Bool {
+    if element.isHittable { return true }
+    let form = app.element(for: UITestIdentifiers.CryptoSettings.container)
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      form.swipeUp()
+      if element.isHittable { return true }
+    }
+    return element.isHittable
   }
 }
