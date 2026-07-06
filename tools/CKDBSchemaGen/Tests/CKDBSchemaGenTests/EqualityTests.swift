@@ -98,15 +98,59 @@ struct EqualityTests {
       })
   }
 
-  @Test("deprecation difference on a field is reported")
-  func fieldDeprecationDifferenceReported() {
+  @Test("field deprecation difference is ignored")
+  func fieldDeprecationDifferenceIgnored() {
+    // `// DEPRECATED` is a repo-local annotation with no CloudKit-side
+    // equivalent, so a live export never reports it. Deprecating a field must
+    // not make an otherwise-matching schema compare unequal.
     var changed = baseline
     changed.recordTypes[0].fields[1].isDeprecated = true
     let result = Equality.check(baseline, changed)
+    #expect(result.isEqual)
+    #expect(result.differences.isEmpty)
+  }
+
+  @Test("record-type deprecation difference is ignored")
+  func recordTypeDeprecationDifferenceIgnored() {
+    var changed = baseline
+    changed.recordTypes[0].isDeprecated = true
+    let result = Equality.check(baseline, changed)
+    #expect(result.isEqual)
+    #expect(result.differences.isEmpty)
+  }
+
+  @Test("deprecated field absent from live export is still reported as missing")
+  func deprecatedFieldAbsenceIsStillReported() {
+    // Deprecation is ignored as a flag, but presence is not: a field deprecated
+    // in schema.ckdb is still deployed on CloudKit, so if the live export lacks
+    // it entirely that is a genuine mismatch and must be reported.
+    var schemaWithDeprecated = baseline
+    schemaWithDeprecated.recordTypes[0].fields[1].isDeprecated = true  // position, deprecated
+
+    var liveExport = baseline
+    liveExport.recordTypes[0].fields.removeLast()  // position absent from live export
+
+    let result = Equality.check(schemaWithDeprecated, liveExport, aLabel: "schema", bLabel: "live")
     #expect(!result.isEqual)
     #expect(
       result.differences.contains {
-        $0.contains("AccountRecord.position") && $0.contains("deprecation")
+        $0.contains("AccountRecord.position") && $0.contains("schema")
+      })
+  }
+
+  @Test("deprecated record type absent from live export is still reported as missing")
+  func deprecatedRecordTypeAbsenceIsStillReported() {
+    var schemaWithDeprecated = baseline
+    schemaWithDeprecated.recordTypes[0].isDeprecated = true  // AccountRecord, deprecated
+
+    var liveExport = baseline
+    liveExport.recordTypes.removeFirst()  // AccountRecord absent from live export
+
+    let result = Equality.check(schemaWithDeprecated, liveExport, aLabel: "schema", bLabel: "live")
+    #expect(!result.isEqual)
+    #expect(
+      result.differences.contains {
+        $0.contains("AccountRecord") && $0.contains("schema")
       })
   }
 

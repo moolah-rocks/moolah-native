@@ -1,7 +1,13 @@
 import Foundation
 
 /// Checks whether two `Schema`s are semantically equal: same set of record
-/// types, each with the same fields, types, indexes, and deprecation flags.
+/// types, each with the same fields, types, and indexes.
+///
+/// Deprecation flags are **not** part of the comparison. A `// DEPRECATED`
+/// marker is a repo-local annotation on `schema.ckdb` that drives wire-struct
+/// codegen; CloudKit has no server-side equivalent, so a live
+/// `cktool export-schema` never reports it. Including it would make the
+/// `verify-prod-deployed` gate permanently fail after any deprecation.
 ///
 /// Order of record types and order of fields within a record type are
 /// **not** significant — cktool's `export-schema` returns record types in a
@@ -56,11 +62,12 @@ enum Equality {
     var differences: [String] = []
     let typeName = a.name
 
-    if a.isDeprecated != b.isDeprecated {
-      differences.append(
-        "record type '\(typeName)': deprecation differs "
-          + "(\(aLabel)=\(a.isDeprecated), \(bLabel)=\(b.isDeprecated))")
-    }
+    // Deprecation is intentionally NOT compared. A `// DEPRECATED` marker is a
+    // repo-local annotation on `schema.ckdb` (it drives wire-struct codegen);
+    // CloudKit has no server-side notion of it, so a live `cktool export-schema`
+    // never carries it. Comparing the flag would make `verify-prod-deployed`
+    // permanently fail after any field/record deprecation, even though the
+    // deployed shape is correct (the field stays in Production either way).
 
     let aFields = Dictionary(uniqueKeysWithValues: a.fields.map { ($0.name, $0) })
     let bFields = Dictionary(uniqueKeysWithValues: b.fields.map { ($0.name, $0) })
@@ -104,11 +111,7 @@ enum Equality {
           "field '\(typeName).\(fieldName)': indexes differ (\(parts.joined(separator: "; ")))")
       }
 
-      if aField.isDeprecated != bField.isDeprecated {
-        differences.append(
-          "field '\(typeName).\(fieldName)': deprecation differs "
-            + "(\(aLabel)=\(aField.isDeprecated), \(bLabel)=\(bField.isDeprecated))")
-      }
+      // Field deprecation is deliberately not compared — see the note above.
     }
 
     return differences
