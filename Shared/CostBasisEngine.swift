@@ -90,6 +90,52 @@ struct CostBasisEngine: Sendable {
     return events
   }
 
+  /// Move lots of an instrument between holding accounts, consuming the source bucket
+  /// FIFO and re-appending to the destination bucket with fresh ids but the original
+  /// `costPerUnit` and `acquiredDate` preserved (the holding-period clock is not reset).
+  /// Emits no gain — a move is not a disposal.
+  ///
+  /// If move quantity exceeds available lots, only the available quantity is moved.
+  mutating func moveLots(
+    instrument: Instrument,
+    quantity: Decimal,
+    from source: UUID?,
+    to destination: UUID?,
+    date: Date
+  ) {
+    let sourceKey = BucketKey(instrumentId: instrument.id, account: source)
+    let destKey = BucketKey(instrumentId: instrument.id, account: destination)
+    var remaining = quantity
+
+    while remaining > 0 {
+      guard var lots = buckets[sourceKey], !lots.isEmpty else { break }
+
+      var lot = lots[0]
+      let moved = min(remaining, lot.remainingQuantity)
+
+      buckets[destKey, default: []].append(
+        CostBasisLot(
+          id: UUID(),
+          instrument: instrument,
+          acquiredDate: lot.acquiredDate,
+          costPerUnit: lot.costPerUnit,
+          originalQuantity: moved,
+          remainingQuantity: moved,
+          account: destination
+        ))
+
+      lot.remainingQuantity -= moved
+      remaining -= moved
+
+      if lot.remainingQuantity <= 0 {
+        lots.removeFirst()
+      } else {
+        lots[0] = lot
+      }
+      buckets[sourceKey] = lots
+    }
+  }
+
   /// Return open (unsold) lots for an instrument in a specific account's bucket, FIFO order.
   func openLots(for instrument: Instrument, account: UUID?) -> [CostBasisLot] {
     buckets[BucketKey(instrumentId: instrument.id, account: account)] ?? []
