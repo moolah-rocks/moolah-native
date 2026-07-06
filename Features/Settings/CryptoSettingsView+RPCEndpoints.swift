@@ -24,10 +24,8 @@ extension CryptoSettingsView {
             .textSelection(.enabled)
         }
         Text(
-          "Advanced. Route on-chain calls for wallets on a matching chain through your own "
-            + "JSON-RPC node instead of Alchemy or a public node. The connection status above "
-            + "updates immediately; wallet sync picks up an edited endpoint list on its next "
-            + "sync — no relaunch needed."
+          "Advanced. Routes on-chain calls for wallets on a matching chain through your own "
+            + "JSON-RPC node instead of Alchemy or a public node."
         )
       }
     }
