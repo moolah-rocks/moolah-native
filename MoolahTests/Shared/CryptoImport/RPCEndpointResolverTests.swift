@@ -8,7 +8,7 @@ import Testing
 /// custom endpoint's `eth_chainId` (cached, for the Settings screen), and
 /// routing a given `ChainConfig` to whichever client should serve it —
 /// a matching custom endpoint first, then Alchemy, then the chain's default
-/// publicnode endpoint.
+/// public node endpoint.
 @Suite("RPCEndpointResolver", .serialized)
 struct RPCEndpointResolverTests {
   private static let customEndpoint = "https://op.custom.test"
@@ -45,7 +45,7 @@ struct RPCEndpointResolverTests {
   }
 
   /// Scripts `eth_chainId` responses per endpoint URL: `op.custom.test` →
-  /// chain 10 (OP Mainnet), Ethereum's default publicnode URL → chain 1.
+  /// chain 10 (OP Mainnet), Ethereum's default public node URL → chain 1.
   /// Any other URL is a test-authoring mistake — HTTP 404 makes that loud.
   private func chainIdHandler(_ request: URLRequest) -> (HTTPURLResponse, Data) {
     switch request.url?.absoluteString {
@@ -93,7 +93,7 @@ struct RPCEndpointResolverTests {
   }
 
   @Test
-  func nonMatchingChainWithoutAlchemyKeyRoutesDefaultPublicnode() async throws {
+  func nonMatchingChainWithoutAlchemyKeyRoutesDefaultPublicEndpoint() async throws {
     let (resolver, _) = makeResolver(
       customEndpoints: [Self.customEndpoint],
       alchemyKeyPresent: { false },
@@ -103,7 +103,7 @@ struct RPCEndpointResolverTests {
       Issue.record("Expected .direct, got \(resolved)")
       return
     }
-    // Confirm it's Ethereum's default publicnode client (scripted chain 1),
+    // Confirm it's Ethereum's default public node client (scripted chain 1),
     // not the custom OP endpoint.
     let chainId = try await client.chainId()
     #expect(chainId == 1)
@@ -122,12 +122,12 @@ struct RPCEndpointResolverTests {
       probes == [Probe(url: Self.unreachableEndpoint, reachable: false, chainId: nil)])
 
     // `client(for:)` can't match the unreachable endpoint to any chain, so
-    // it falls through to the default publicnode endpoint. Route Optimism
+    // it falls through to the default public node endpoint. Route Optimism
     // (chain 10) — the unreachable endpoint's probe never yields a chainId,
     // so it can't spuriously match.
     let resolved = await resolver.client(for: .optimism)
     guard case .direct = resolved else {
-      Issue.record("Expected .direct (default publicnode fallback), got \(resolved)")
+      Issue.record("Expected .direct (default public node fallback), got \(resolved)")
       return
     }
   }
@@ -256,7 +256,7 @@ struct RPCEndpointResolverTests {
     keyPresent.value = false
     let secondResolved = await resolver.client(for: .ethereum)
     guard case .direct = secondResolved else {
-      Issue.record("Expected .direct (default publicnode), got \(secondResolved)")
+      Issue.record("Expected .direct (default public node), got \(secondResolved)")
       return
     }
   }

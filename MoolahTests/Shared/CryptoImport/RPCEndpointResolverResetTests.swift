@@ -91,11 +91,11 @@ struct RPCEndpointResolverResetTests {
     #expect(baseChainId == 8453)
 
     // … and the removed OP endpoint no longer matches: with no Alchemy key,
-    // Optimism falls through to its default publicnode client (which the stub
+    // Optimism falls through to its default public node client (which the stub
     // 404s), so probing it throws rather than returning chain 10.
     let opAfter = await resolver.client(for: .optimism)
     guard case .direct(let opClient) = opAfter else {
-      Issue.record("Expected .direct (default publicnode) for OP after reset, got \(opAfter)")
+      Issue.record("Expected .direct (default public node) for OP after reset, got \(opAfter)")
       return
     }
     await #expect(throws: (any Error).self) { try await opClient.chainId() }
@@ -172,7 +172,7 @@ struct RPCEndpointResolverResetTests {
     }
 
     // And the resolved client is genuinely the custom endpoint (not the
-    // default publicnode, which the stub 404s) — the chain ID round-trips.
+    // default public node, which the stub 404s) — the chain ID round-trips.
     let chainId = try await client.chainId()
     #expect(chainId == 10)
   }

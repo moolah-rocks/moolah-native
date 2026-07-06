@@ -104,9 +104,9 @@ extension ProfileSession {
   /// a user-configured custom endpoint (matched by probing `eth_chainId`)
   /// wins if one is set; otherwise a present Alchemy key routes the chain to
   /// `alchemyClient`; otherwise the chain falls back to its default
-  /// publicnode.com endpoint over direct JSON-RPC. So a missing Alchemy key
-  /// no longer fails sync — ERC-20 discovery still succeeds via the public
-  /// endpoint, just with extra one-time latency on the first sync since a
+  /// public `<chain>.drpc.org` endpoint over direct JSON-RPC. A missing Alchemy key
+  /// does not block sync — ERC-20 discovery still succeeds via the public
+  /// endpoint, with extra one-time latency on the first sync since a
   /// public node is slower to scan than Alchemy's indexed API.
   @MainActor
   static func makeCryptoSyncWiring(

@@ -49,8 +49,14 @@ struct ChainConfig: Sendable, Hashable {
   /// why it is not a supported chain.
   let blockscoutAPIBaseURL: URL
 
-  /// Default public JSON-RPC endpoint (publicnode.com), used for direct
-  /// on-chain calls that don't go through Alchemy.
+  /// Default public JSON-RPC endpoint (dRPC's keyless `<chain>.drpc.org`
+  /// public nodes), used for direct on-chain calls that don't go through
+  /// Alchemy. dRPC is used in preference to publicnode because publicnode's
+  /// gateway rejects `eth_getLogs` without a contract `address`
+  /// (`-32701 "Please specify an address"`) and gates archive ranges behind
+  /// a paid token — both of which break the topics-only, cross-contract,
+  /// full-history Transfer scan in `DirectRPCChainClient`. dRPC's keyless
+  /// public nodes serve that exact query (topics-only + archive) for free.
   let defaultRPCURL: URL
 
   /// Human-readable name for the chain picker / settings UI.
@@ -81,7 +87,7 @@ extension ChainConfig {
     chargesL1DataFee: false,
     blockExplorerBaseURL: requireURL("https://etherscan.io"),
     blockscoutAPIBaseURL: requireURL("https://eth.blockscout.com"),
-    defaultRPCURL: requireURL("https://ethereum-rpc.publicnode.com"),
+    defaultRPCURL: requireURL("https://eth.drpc.org"),
     displayName: "Ethereum"
   )
 
@@ -104,7 +110,7 @@ extension ChainConfig {
     // now 301-redirects every path to explorer.optimism.io. Point directly
     // at the canonical host (Ethereum/Base still use *.blockscout.com).
     blockscoutAPIBaseURL: requireURL("https://explorer.optimism.io"),
-    defaultRPCURL: requireURL("https://optimism-rpc.publicnode.com"),
+    defaultRPCURL: requireURL("https://optimism.drpc.org"),
     displayName: "OP Mainnet"
   )
 
@@ -124,7 +130,7 @@ extension ChainConfig {
     chargesL1DataFee: true,
     blockExplorerBaseURL: requireURL("https://basescan.org"),
     blockscoutAPIBaseURL: requireURL("https://base.blockscout.com"),
-    defaultRPCURL: requireURL("https://base-rpc.publicnode.com"),
+    defaultRPCURL: requireURL("https://base.drpc.org"),
     displayName: "Base"
   )
 
