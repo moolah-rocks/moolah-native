@@ -178,12 +178,16 @@ struct MultiInstrumentPositionsCoverageTests {
     return try #require(Calendar.utc.date(from: comps))
   }
 
-  // A crypto account holding a token acquired ONLY via a transfer-in (cost
-  // basis is nil — no trade leg) with daily prices should yield:
-  //   showsChart == true  (historical value series has points)
-  //   showsPLPill == false (no cost-bearing position → no gain/loss pill)
-  @Test("transfer-only token: showsChart true, showsPLPill false")
-  func transferOnlyTokenValueOnlyChart() async throws {
+  // A crypto account holding a token acquired via a transfer-in (income leg).
+  // Under the cost-basis model a non-fiat receive is an acquisition at market
+  // value, so the token now carries an invested baseline = its AUD value when
+  // it entered holdings. Both the table cost row and the chart baseline are
+  // sourced from the shared ledger, so:
+  //   showsChart == true   (historical value series has points)
+  //   showsPLPill == true  (the received holding has an invested baseline)
+  //   the row cost + last chart baseline both equal 2 × 30_000 = 60_000
+  @Test("received token: invested at market value drives table cost + P&L pill")
+  func receivedTokenInvestedAtMarketValue() async throws {
     let (backend, _) = try TestBackend.create(instrument: aud)
     try await TestBackend.register(btc, in: backend)
 
@@ -192,8 +196,8 @@ struct MultiInstrumentPositionsCoverageTests {
     _ = try await backend.accounts.create(
       account, openingBalance: InstrumentAmount(quantity: 0, instrument: aud))
 
-    // Acquire BTC via a transfer-in (income leg) — no fiat trade leg, so the
-    // cost basis classifier sees no buy event and leaves costBasis nil.
+    // Acquire BTC via a transfer-in (income leg) — a non-fiat receive is an
+    // acquisition at market value in the ledger (invested = value at receipt).
     let transferIn = Transaction(
       date: try noonUTC(year: 2026, month: 5, day: 10),
       legs: [
@@ -220,17 +224,21 @@ struct MultiInstrumentPositionsCoverageTests {
     ]
     let context = PositionsAssemblyContext(
       title: "BTC Wallet", hostCurrency: aud, accountIds: [accountId])
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: transactions, referenceCurrency: aud, conversionService: conversionService)
     let input = await assembler.assemble(
       context: context, valuedRows: valuedRows, transactions: transactions,
-      range: .threeMonths, ledger: .empty,
+      range: .threeMonths, ledger: ledger,
       now: try noonUTC(year: 2026, month: 5, day: 15))
 
-    // The value series must have points — chart renders value even without cost basis.
     let series = try #require(input.historicalValue, "historicalValue must be non-nil")
     #expect(!series.total.isEmpty, "total series must not be empty")
     #expect(input.showsChart, "showsChart must be true: historical value exists")
-    // No position has a cost basis, so the P&L pill must not appear.
-    #expect(!input.showsPLPill, "showsPLPill must be false: no cost-bearing position")
+    // Received holding carries an invested baseline (market value at receipt):
+    // table cost and the chart baseline both equal 2 × 30_000 = 60_000.
+    #expect(input.showsPLPill, "showsPLPill must be true: the received holding has invested")
+    #expect(input.positions.first?.costBasis?.quantity == 60_000)
+    #expect(series.total.last?.invested == 60_000)
   }
 
   // MARK: - (d) Mixed-instrument group: aggregate converts to group host

@@ -72,12 +72,16 @@ struct MultiInstrumentPositionsAssemblerTests {
       title: "BTC Account",
       hostCurrency: aud,
       accountIds: [accountA])
+    // Real ledger: the table cost is now sourced from the shared ledger, so it
+    // must be built from the same buy (invested 50_000).
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
     let input = await assembler.assemble(
       context: context,
       valuedRows: valuedRows,
       transactions: txns,
       range: .all,
-      ledger: .empty
+      ledger: ledger
     )
 
     #expect(input.historicalValue != nil)
@@ -173,16 +177,15 @@ struct MultiInstrumentPositionsAssemblerTests {
       "accountChainId \(chainId) must survive the cost-basis overlay rebuild")
   }
 
-  // costBasisSnapshot omits an instrument whose classification fails while
-  // keeping cleanly-classifiable instruments (Rule 11 — unavailable, not zero).
+  // costBasisSnapshot (now a pure query over the shared HoldingsCostLedger)
+  // omits an instrument whose ledger key is unavailable while keeping cleanly
+  // priced instruments (Rule 11 — unavailable, not zero).
   //
-  // Setup: LTC buy is fiat-paired (classifiable, no failing legs). ETH buy has
-  // a BTC-denominated fee whose conversion fails — the classifier throws, so
-  // ETH is added to the failed-classification set and dropped from the snapshot.
-  // The test asserts BOTH properties: bad instrument absent AND good instrument
-  // present with the correct exact host-currency cost.
+  // Setup: LTC buy is fiat-paired (cleanly priced). ETH buy carries a
+  // BTC-denominated fee whose conversion fails — the ledger build marks the
+  // ETH key unavailable, so `remainingInvested` returns nil and ETH is omitted.
   @Test
-  func costBasisOmitsUnclassifiableInstrument() async throws {
+  func costBasisOmitsUnavailableInstrument() async throws {
     // BTC→AUD conversion fails; LTC→AUD and AUD→AUD always succeed.
     let service = FakeConversionService.failingInstruments(
       [btc.id],
@@ -190,8 +193,8 @@ struct MultiInstrumentPositionsAssemblerTests {
     let assembler = MultiInstrumentPositionsAssembler(conversionService: service)
 
     let txns = [
-      // LTC fiat buy — cleanly classifiable (no BTC legs).
-      // 5 LTC × 100 AUD/LTC = 500 AUD cost basis.
+      // LTC fiat buy — cleanly priced (no BTC legs).
+      // 5 LTC × 100 AUD/LTC = 500 AUD invested.
       Transaction(
         date: date(daysAfterEpoch: 1),
         legs: [
@@ -200,7 +203,7 @@ struct MultiInstrumentPositionsAssemblerTests {
         ]
       ),
       // ETH fiat buy with a BTC fee. The fee conversion (BTC→AUD) fails,
-      // so `classify` throws and ETH is marked as unclassifiable.
+      // so the ledger marks the ETH key unavailable.
       Transaction(
         date: date(daysAfterEpoch: 2),
         legs: [
@@ -212,14 +215,53 @@ struct MultiInstrumentPositionsAssemblerTests {
       ),
     ]
 
-    let snapshot = try await assembler.costBasisSnapshot(
-      transactions: txns, accountIds: [accountA], hostCurrency: aud)
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
+    let snapshot = assembler.costBasisSnapshot(
+      ledger: ledger, accountIds: [accountA], instruments: [ltc, eth],
+      asOfDate: date(daysAfterEpoch: 5))
 
-    // ETH classification failed (because the BTC fee conversion throws) →
-    // omitted per Rule 11.
-    #expect(snapshot[eth.id] == nil, "ETH should be omitted when its classification fails")
-    // LTC classification succeeded → present with the exact cost.
-    #expect(snapshot[ltc.id] != nil, "LTC should be present: its classification succeeded")
-    #expect(snapshot[ltc.id] == 500, "LTC cost basis should equal 500 AUD (5 × 100)")
+    // ETH key unavailable (BTC fee conversion failed) → omitted per Rule 11.
+    #expect(snapshot[eth.id] == nil, "ETH should be omitted when its ledger key is unavailable")
+    // LTC cleanly priced → present with the exact invested.
+    #expect(snapshot[ltc.id] != nil, "LTC should be present: it is cleanly priced")
+    #expect(snapshot[ltc.id] == 500, "LTC invested should equal 500 AUD (5 × 100)")
+  }
+
+  // A tracked→tracked transfer-in holding's table cost equals its carried-over
+  // invested (from the source account's lots via moveLots) — the SAME figure
+  // the chart baseline now shows. A per-view engine scoped to the destination's
+  // own legs saw no trade leg and produced 0/absent; the shared ledger carries
+  // the original cost across the transfer.
+  @Test
+  func transferInHoldingCostIsCarriedInvestedFromLedger() async throws {
+    let service = FakeConversionService.fixedRates([btc.id: Decimal(20_000)])
+    let assembler = MultiInstrumentPositionsAssembler(conversionService: service)
+
+    let txns = [
+      // Account A buys 1 BTC for 20_000 AUD.
+      buyTransaction(
+        instrument: btc, qty: 1, fiat: 20_000, accountId: accountA, daysAfterEpoch: 1),
+      // A transfers the BTC to B via tracked .transfer legs → moveLots carries
+      // the lot's cost (acquired date + costPerUnit) to B.
+      Transaction(
+        date: date(daysAfterEpoch: 2),
+        legs: [
+          TransactionLeg(accountId: accountA, instrument: btc, quantity: -1, type: .transfer),
+          TransactionLeg(accountId: accountB, instrument: btc, quantity: 1, type: .transfer),
+        ]
+      ),
+    ]
+
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
+    // View only account B: its transfer-in BTC row must show the carried cost.
+    let snapshot = assembler.costBasisSnapshot(
+      ledger: ledger, accountIds: [accountB], instruments: [btc],
+      asOfDate: date(daysAfterEpoch: 5))
+
+    #expect(
+      snapshot[btc.id] == 20_000,
+      "B's transfer-in BTC holding must show the carried-over invested (20_000), not 0")
   }
 }

@@ -9,7 +9,7 @@ import Testing
 /// `PositionsHistoryBuilderTests` because that file is already
 /// near the SwiftLint type-body-length limit.
 @Suite("PositionsHistoryBuilder invested")
-struct PositionsContributionsTests {
+struct PositionsHistoryBuilderInvestedTests {
   let aud = Instrument.AUD
   let bhp = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
   let accountId = UUID()

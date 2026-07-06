@@ -23,7 +23,7 @@ struct PositionsChartDataTests {
   }
 
   @Test("aggregate mode picks point.invested as baseline")
-  func aggregateBaselineIsContributions() throws {
+  func aggregateBaselineIsInvested() throws {
     let points = try [
       point(day: 0, value: 1_100, cost: 800, invested: 1_000),
       point(day: 1, value: 1_150, cost: 800, invested: 1_000),
@@ -123,7 +123,7 @@ struct PositionsChartDataTests {
   // MARK: - showsBaseline(points:mode:)
 
   @Test("showsBaseline aggregate: true when invested has a non-zero value")
-  func showsBaselineAggregateTrueWhenContributionsNonZero() throws {
+  func showsBaselineAggregateTrueWhenInvestedNonZero() throws {
     let points = try [
       point(day: 0, value: 1_100, cost: 800, invested: nil),
       point(day: 1, value: 1_200, cost: 900, invested: 1_000),
@@ -135,7 +135,7 @@ struct PositionsChartDataTests {
   }
 
   @Test("showsBaseline aggregate: false when all invested are nil or zero")
-  func showsBaselineAggregateFalseWhenContributionsAllNilOrZero() throws {
+  func showsBaselineAggregateFalseWhenInvestedAllNilOrZero() throws {
     let points = try [
       point(day: 0, value: 500, cost: 0, invested: nil),
       point(day: 1, value: 600, cost: 0, invested: 0),

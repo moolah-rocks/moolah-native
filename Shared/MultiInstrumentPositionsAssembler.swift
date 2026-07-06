@@ -1,5 +1,4 @@
 import Foundation
-import OSLog
 
 /// Store-independent helper that owns the cost-basis-snapshot and history-
 /// assembly logic for multi-instrument positions views.
@@ -19,8 +18,6 @@ import OSLog
 /// implementations shipped with the app are all `Sendable`.
 struct MultiInstrumentPositionsAssembler: Sendable {
   let conversionService: any InstrumentConversionService
-  private let logger = Logger(
-    subsystem: "com.moolah.app", category: "MultiInstrumentPositionsAssembler")
 
   // MARK: - Transaction fetch
 
@@ -47,68 +44,35 @@ struct MultiInstrumentPositionsAssembler: Sendable {
 
   // MARK: - Cost-basis snapshot
 
-  /// Open-lot remaining cost per instrument id, in `hostCurrency` `Decimal`s.
+  /// Remaining amount invested per instrument id (in the profile / reference
+  /// currency `Decimal`s), read from the shared profile-wide
+  /// `HoldingsCostLedger` — the SAME source the chart baseline now uses, so
+  /// the positions table and the chart cannot disagree. A tracked→tracked
+  /// transfer-in holding therefore shows its carried-over invested (from the
+  /// source account's lots via `moveLots`), not a per-view-reacquired value.
   ///
-  /// Classifies only the legs that belong to `accountIds` so internal
-  /// transfers between group members net out — consistent with how
-  /// `PositionsHistoryBuilder` handles the same set. Instruments whose
-  /// classification fails are **omitted** (cost unavailable, not zero) per
-  /// `guides/INSTRUMENT_CONVERSION_GUIDE.md` Rule 11.
-  ///
-  /// Throws `CancellationError` via `Task.checkCancellation()` so a cancelled
-  /// task never produces a partial cost-basis snapshot.
+  /// For each `instrument`, the cost is
+  /// `ledger.remainingInvested(accountIds:instrument:onOrBefore: asOfDate)`.
+  /// An instrument whose `(account, instrument)` key is unavailable (Rule 11 —
+  /// a genuine conversion failure in the ledger build), or the whole ledger
+  /// being unavailable (`nil` — a genuine provider failure), yields **no
+  /// entry** for that instrument → the caller renders its cost as unavailable
+  /// (`nil` `costBasis`), never `0`. Pure and non-throwing: it only queries the
+  /// already-built ledger's change-points, running no conversions.
   func costBasisSnapshot(
-    transactions: [Transaction],
+    ledger: HoldingsCostLedger?,
     accountIds: Set<UUID>,
-    hostCurrency: Instrument
-  ) async throws -> [String: Decimal] {
-    var engine = CostBasisEngine()
-    var instrumentsWithFailedClassification: Set<String> = []
-    let sorted = transactions.sorted { $0.date < $1.date }
-    for txn in sorted {
-      try Task.checkCancellation()
-      let scopedLegs = txn.legs.filter {
-        $0.accountId.map { accountIds.contains($0) } ?? false
-      }
-      guard !scopedLegs.isEmpty else { continue }
-      do {
-        let classification = try await TradeEventClassifier.classify(
-          legs: scopedLegs,
-          on: txn.date,
-          hostCurrency: hostCurrency,
-          conversionService: conversionService
-        )
-        for buy in classification.buys {
-          engine.processBuy(
-            instrument: buy.instrument,
-            quantity: buy.quantity,
-            costPerUnit: buy.costPerUnit,
-            date: txn.date)
-        }
-        for sell in classification.sells {
-          _ = engine.processSell(
-            instrument: sell.instrument,
-            quantity: sell.quantity,
-            proceedsPerUnit: sell.proceedsPerUnit,
-            date: txn.date)
-        }
-      } catch is CancellationError {
-        throw CancellationError()
-      } catch {
-        logger.warning(
-          "Failed to classify txn \(txn.id, privacy: .public) for cost basis: \(error.localizedDescription, privacy: .public)"
-        )
-        for leg in scopedLegs where leg.instrument.kind != .fiatCurrency {
-          instrumentsWithFailedClassification.insert(leg.instrument.id)
-        }
-      }
-    }
+    instruments: [Instrument],
+    asOfDate: Date
+  ) -> [String: Decimal] {
+    guard let ledger else { return [:] }
     var result: [String: Decimal] = [:]
-    for lot in engine.allOpenLots() {
-      result[lot.instrument.id, default: 0] += lot.remainingCost
-    }
-    for id in instrumentsWithFailedClassification {
-      result.removeValue(forKey: id)
+    for instrument in instruments {
+      guard
+        let cost = ledger.remainingInvested(
+          accountIds: accountIds, instrument: instrument, onOrBefore: asOfDate)
+      else { continue }  // unavailable → omit (Rule 11), never 0
+      result[instrument.id] = cost
     }
     return result
   }
@@ -124,10 +88,11 @@ struct MultiInstrumentPositionsAssembler: Sendable {
   /// runtime assertion is added here to avoid trapping in production on
   /// unexpected data.
   ///
-  /// The cost-basis snapshot and the history series are computed concurrently
-  /// (they are independent of each other). If the snapshot is cancelled, the
-  /// method returns a minimal input with `historicalValue: nil` rather than
-  /// propagating the cancellation — the history series result is still valid.
+  /// The cost-basis snapshot is a pure ledger query (no conversions) and the
+  /// history series is built by `PositionsHistoryBuilder`; both read the same
+  /// shared `ledger`, so the table cost and the chart baseline cannot disagree.
+  /// The builder handles its own cancellation internally (returning a partial
+  /// series); the caller drops the whole result if its task was cancelled.
   func assemble(
     context: PositionsAssemblyContext,
     valuedRows: [ValuedPosition],
@@ -136,10 +101,6 @@ struct MultiInstrumentPositionsAssembler: Sendable {
     ledger: HoldingsCostLedger?,
     now: Date = Date()
   ) async -> PositionsViewInput {
-    async let snapshotTask = costBasisSnapshot(
-      transactions: transactions,
-      accountIds: context.accountIds,
-      hostCurrency: context.hostCurrency)
     let series = await PositionsHistoryBuilder(conversionService: conversionService).build(
       transactions: transactions,
       accountIds: context.accountIds,
@@ -147,19 +108,11 @@ struct MultiInstrumentPositionsAssembler: Sendable {
       range: range,
       ledger: ledger,
       now: now)
-    let costSnapshot: [String: Decimal]
-    do {
-      costSnapshot = try await snapshotTask
-    } catch {
-      return PositionsViewInput(
-        title: context.title,
-        hostCurrency: context.hostCurrency,
-        positions: valuedRows,
-        historicalValue: nil,
-        assetKeysByInstrumentId: context.assetKeysByInstrumentId,
-        performance: context.performance,
-        alwaysShowsFullSurface: context.alwaysShowsFullSurface)
-    }
+    let costSnapshot = costBasisSnapshot(
+      ledger: ledger,
+      accountIds: context.accountIds,
+      instruments: valuedRows.map(\.instrument),
+      asOfDate: now)
     let rowsWithCost = valuedRows.map { row in
       ValuedPosition(
         instrument: row.instrument,
