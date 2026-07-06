@@ -160,7 +160,12 @@ struct CapitalGainsCalculatorTestsMoreExtra {
     )
 
     let usdCalls = await service.recordedCalls().filter { $0.from == "USD" }
-    #expect(usdCalls.count == 2)
+    // 4 USD conversions now (was 2): the profile-wide ledger pre-warms each
+    // distinct (USD, day) rate with a unit-quantity batch probe — 2 days
+    // (buy day(0), sell day(400)) → 2 probes — BEFORE the classifier converts
+    // the two signed leg amounts. The sign contract (below) is unchanged: the
+    // classifier still passes each leg's natural signed quantity.
+    #expect(usdCalls.count == 4)
     // Outflow leg (-2000 USD) must reach the conversion service with its
     // natural negative sign; inflow leg (+3000 USD) with its natural
     // positive sign. Any implementation that strips the sign before

@@ -167,5 +167,24 @@ struct ProfitLossCalculatorTests {
     #expect(results.isEmpty)
   }
 
+  // MARK: - Ledger-sourced invested (income-funded lots)
+
+  @Test
+  func totalInvested_includesReceivedCryptoAtMarketValue() async throws {
+    let eth = Instrument.crypto(
+      chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+    let account = UUID()
+    let txns = [
+      LegTransaction(
+        date: date(0),
+        legs: [TransactionLeg(accountId: account, instrument: eth, quantity: 1, type: .income)])
+    ]
+    let results = try await ProfitLossCalculator.compute(
+      transactions: txns, profileCurrency: aud,
+      conversionService: FakeConversionService.fixedRates([eth.id: 4_000]), asOfDate: date(10))
+    let row = try #require(results.first { $0.instrument == eth })
+    #expect(row.totalInvested == 4_000)  // was 0 under the fiat-only accumulate
+  }
+
   // MARK: - Multi-instrument portfolios
 }
