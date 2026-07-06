@@ -10,12 +10,18 @@ import Foundation
 /// has never fetched can bootstrap from a peer's checkpoint instead of a
 /// genesis-style scan.
 ///
-/// The read side (`WalletSyncEngine.build`) takes the higher of the local
-/// `WalletSyncState` and this synced checkpoint when deriving `fromBlock`; the
-/// write side (`WalletApplyEngine.updateSyncState`) atomically raises the
-/// checkpoint to `max(existing, head)` via `raiseToMax` so a device can never
-/// lower the shared value, even when a peer's higher checkpoint lands via the
-/// CloudKit apply path concurrently with this device's own write.
+/// The read side (`WalletSyncEngine.resolveFromBlock`, shared by the
+/// single-shot `build` and the windowed `WindowedWalletSyncRunner`) takes the
+/// higher of the local `WalletSyncState` and this synced checkpoint when
+/// deriving `fromBlock`; the write side (`WalletApplyEngine.updateSyncState`)
+/// atomically raises the checkpoint to `max(existing, headBlockNumber)` via
+/// `raiseToMax` so a device can never lower the shared value, even when a
+/// peer's higher checkpoint lands via the CloudKit apply path concurrently
+/// with this device's own write. `headBlockNumber` is either `build`'s
+/// max-observed-transfer watermark or one window's end from the windowed
+/// runner — the latter advances every window, including empty ones, because
+/// the apply pass echoes the caller-supplied window end regardless of what
+/// was found (see `WalletSyncBuildResult`'s doc comment).
 protocol WalletSyncCheckpointRepository: Sendable {
   /// Returns one account's synced checkpoint, or `nil` when no device has
   /// ever recorded one for the account.
@@ -34,10 +40,11 @@ protocol WalletSyncCheckpointRepository: Sendable {
 
   /// Removes an account's synced checkpoint and tombstones the shared row via
   /// CloudKit. Called alongside `WalletSyncStateRepository.delete` when a
-  /// user triggers a full resync: `WalletSyncEngine.build` derives
-  /// `fromBlock` from `max(localState, syncedCheckpoint)`, so clearing only
-  /// the local state would leave the synced checkpoint in place and the
-  /// resync would still start from that watermark instead of genesis.
+  /// user triggers a full resync: `WalletSyncEngine.resolveFromBlock` (read by
+  /// both `build` and the windowed runner) derives `fromBlock` from
+  /// `max(localState, syncedCheckpoint)`, so clearing only the local state
+  /// would leave the synced checkpoint in place and the resync would still
+  /// start from that watermark instead of genesis.
   /// Clearing this checkpoint too makes THIS device re-fetch from genesis;
   /// any peer device still holds its own last-seen value, but the tombstone
   /// propagates via CloudKit and peers self-heal back to the correct shared

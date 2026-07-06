@@ -44,8 +44,9 @@ extension SyncedAccountStore {
   /// anywhere (local, synced, or cached) and computes `fromBlock == 0`
   /// (full-history re-fetch), recovering transfers an earlier incremental
   /// sync skipped. Clearing only the local `WalletSyncState` would NOT be
-  /// enough: `WalletSyncEngine.build` derives `fromBlock` from
-  /// `max(localState, syncedCheckpoint)`, so the resync would still resume
+  /// enough: `WalletSyncEngine.resolveFromBlock` (shared by `build` and the
+  /// windowed runner) derives `fromBlock` from `max(localState,
+  /// syncedCheckpoint)`, so the resync would still resume
   /// from the synced checkpoint. Clearing that checkpoint tombstones the
   /// shared row via CloudKit; a peer that hasn't seen the tombstone yet
   /// still holds its own last-seen value, but self-heals back to the

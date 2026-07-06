@@ -1,6 +1,5 @@
 // MoolahTests/Shared/CryptoImport/WindowedWalletSyncRunnerTests.swift
 import Foundation
-import GRDB
 import Testing
 
 @testable import Moolah
@@ -15,13 +14,11 @@ import Testing
 @Suite("WindowedWalletSyncRunner — windowed scan / apply / checkpoint")
 @MainActor
 struct WindowedWalletSyncRunnerTests {
-  nonisolated static let pinnedNow = Date(timeIntervalSince1970: 1_700_000_000)
-  // `nonisolated` so the nested (nonisolated) `Setup` can reference `wallet`
-  // as a default argument without hopping to the main actor.
-  nonisolated static let wallet = "0x1111111111111111111111111111111111111111"
-  nonisolated static let counterparty = "0x2222222222222222222222222222222222222222"
-  /// The reorg window `WalletSyncEngine.resolveFromBlock` subtracts.
-  nonisolated static let reorgWindow: UInt64 = 32
+  // Re-exported from the shared `WindowedRunnerFixture` so the test bodies
+  // below read `Self.wallet` etc. without re-declaring the values.
+  nonisolated static let wallet = WindowedRunnerFixture.wallet
+  nonisolated static let counterparty = WindowedRunnerFixture.counterparty
+  nonisolated static let reorgWindow = WindowedRunnerFixture.reorgWindow
 
   // MARK: - Empty windows advance the checkpoint
 
@@ -271,50 +268,14 @@ struct WindowedWalletSyncRunnerTests {
 
   // MARK: - Helpers
 
-  private struct Setup {
-    let backend: CloudKitBackend
-    let database: DatabaseQueue
-    let chain: ScriptedWindowChainClient
-    let runner: WindowedWalletSyncRunner
-
-    func seedAccount(
-      walletAddress: String = WindowedWalletSyncRunnerTests.wallet
-    ) -> Account {
-      let account = makeCryptoAccount(walletAddress: walletAddress, chain: .ethereum)
-      _ = TestBackend.seed(accounts: [account], in: database)
-      return account
-    }
-  }
-
+  /// Thin alias onto the shared `WindowedRunnerFixture.make` so this suite's
+  /// call sites read `makeSetup(head:)` while the runner wiring lives in one
+  /// place (also consumed by `WindowedWalletSyncResumeTests` and
+  /// `WindowedWalletSyncRunnerCoverageTests`).
   private func makeSetup(
     head: UInt64?,
     segmentBlockWindow: UInt64 = 250_000
-  ) throws -> Setup {
-    let (backend, database) = try TestBackend.create()
-    let chain = ScriptedWindowChainClient(head: head)
-    // Wire discovery to the backend's shared registry (matches production)
-    // so an ERC-20 instrument the engine resolves is registered where the
-    // apply pass's persistence reads it back.
-    let discovery = CryptoTokenDiscoveryService(
-      registry: backend.grdbInstruments, resolver: CountingRegistrationResolver())
-    let engine = WalletSyncEngine(
-      alchemy: chain,
-      blockExplorer: BlockExplorerTestDoubles.empty,
-      discovery: discovery,
-      walletSyncState: backend.walletSyncState,
-      checkpoints: backend.walletSyncCheckpoints,
-      importOriginFactory: { makeWalletImportOrigin(for: $0) })
-    let applyEngine = WalletApplyEngine(
-      transactions: backend.transactions,
-      walletSyncState: backend.walletSyncState,
-      checkpoints: backend.walletSyncCheckpoints,
-      importRules: NoOpWalletImportRulesEngine(),
-      clock: { Self.pinnedNow })
-    let runner = WindowedWalletSyncRunner(
-      engine: engine,
-      chainClient: chain,
-      applyEngine: applyEngine,
-      segmentBlockWindow: segmentBlockWindow)
-    return Setup(backend: backend, database: database, chain: chain, runner: runner)
+  ) throws -> WindowedRunnerFixture.Setup {
+    try WindowedRunnerFixture.make(head: head, segmentBlockWindow: segmentBlockWindow)
   }
 }

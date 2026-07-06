@@ -247,10 +247,18 @@ final class WalletApplyEngine {
   }
 
   /// Writes both the per-device `WalletSyncState` and the cross-device synced
-  /// `WalletSyncCheckpoint` for every account that participated in the cycle.
+  /// `WalletSyncCheckpoint` for every account that participated in the cycle,
+  /// to `input.headBlockNumber` — the single-shot `build` path's
+  /// max-observed-transfer watermark, or one window's end on the windowed
+  /// path. Both watermarks advance identically here regardless of which
+  /// produced them: the windowed runner calls `apply(perAccount:)` once per
+  /// window with `headBlockNumber = window.to`, so an empty window still
+  /// advances the checkpoint to the block it scanned through (see
+  /// `WalletSyncBuildResult`'s doc comment) — this method has no branch for
+  /// "nothing was found."
   ///
-  /// The synced checkpoint is raised atomically to `max(existing, head)` via
-  /// `WalletSyncCheckpointRepository.raiseToMax` — a single GRDB write
+  /// The synced checkpoint is raised atomically to `max(existing, headBlockNumber)`
+  /// via `WalletSyncCheckpointRepository.raiseToMax` — a single GRDB write
   /// transaction — so a device whose fetch trailed a peer never lowers the
   /// shared value. A separate `load` then `save` pair would leave a TOCTOU
   /// window: the `wallet_sync_checkpoint` table has a second independent
@@ -258,8 +266,9 @@ final class WalletApplyEngine {
   /// higher checkpoint could land between this device's read and its write
   /// and get clobbered back down. `raiseToMax`'s single write transaction is
   /// serialized against that apply writer by GRDB's writer queue, closing the
-  /// window. The read side (`WalletSyncEngine.build`) trusts the checkpoint
-  /// to skip re-scanning blocks a peer already covered.
+  /// window. The read side (`WalletSyncEngine.resolveFromBlock`, shared by
+  /// `build` and the windowed runner) trusts the checkpoint to skip
+  /// re-scanning blocks a peer already covered.
   ///
   /// Eventual-consistency caveat: a synced checkpoint can arrive on a peer
   /// device *before* the transactions it summarises (CloudKit delivers the
