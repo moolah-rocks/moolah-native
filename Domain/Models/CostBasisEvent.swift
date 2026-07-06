@@ -5,6 +5,11 @@ import Foundation
 /// `CostBasisEngine`: acquisitions buy lots, disposals sell them, and moves
 /// carry a lot between tracked accounts (cost preserved) while recording the
 /// market value for return calculations.
+///
+/// Ordering invariant for the downstream FIFO engine (Task 3): within one
+/// transaction, disposals are expected to be applied *before* acquisitions, so
+/// a fee/gas leg draws from pre-existing lots rather than the lot acquired in
+/// the same transaction. The crypto-fee dual-role test encodes this.
 enum CostBasisEvent {
   /// A lot enters holdings: a fiat-paired buy, a non-fiat income/opening
   /// balance (valued at market), or the acquiring side of a swap.
@@ -14,6 +19,10 @@ enum CostBasisEvent {
   case disposal(
     instrument: Instrument, quantity: Decimal, proceedsPerUnit: Decimal, account: UUID?)
   // swiftlint:disable enum_case_associated_values_count
+  // Flat 5-value shape matches the .move destructuring used identically across
+  // HoldingsCostLedger/CapitalGainsCalculator (Tasks 3–4); a payload struct
+  // would churn every call site for one case. (disable/enable pair, not :next,
+  // keeps the doc comment attached to avoid orphaned_doc_comment.)
   /// A tracked→tracked transfer: the lot's cost carries in the engine while
   /// `marketValue` records what the moved quantity was worth on the date.
   case move(instrument: Instrument, quantity: Decimal, from: UUID?, to: UUID?, marketValue: Decimal)
