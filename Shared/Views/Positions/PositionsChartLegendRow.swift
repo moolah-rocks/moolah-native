@@ -75,7 +75,7 @@ private struct DashedLineSwatch: View {
 }
 
 /// Two-tone gain/loss swatch + label. UI_GUIDE.md §5 — colour is
-/// never the sole differentiator: the label "Gain/Loss" is the
+/// never the sole differentiator: the label "Gain/loss" is the
 /// non-color pairing. Inner colour blocks are
 /// `.accessibilityHidden(true)` and the combined element carries a
 /// single descriptive `.accessibilityLabel`.
@@ -102,7 +102,7 @@ private struct GainLossLegendSwatch: View {
           .frame(width: 14, height: 4)
       }
       .accessibilityHidden(true)
-      Text(unavailable ? "Gain/Loss unavailable" : "Gain/Loss")
+      Text(unavailable ? "Gain/loss unavailable" : "Gain/loss")
     }
     .accessibilityElement(children: .combine)
     .accessibilityLabel(

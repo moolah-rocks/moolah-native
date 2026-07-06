@@ -9,14 +9,14 @@ struct AccountPerformanceTileLabelsTests {
 
   private func performance(
     currentValue: Decimal? = nil,
-    contributions: Decimal? = nil,
+    amountInvested: Decimal? = nil,
     profitLoss: Decimal? = nil,
     firstFlowDate: Date? = nil
   ) -> AccountPerformance {
     AccountPerformance(
       instrument: aud,
       currentValue: currentValue.map { InstrumentAmount(quantity: $0, instrument: aud) },
-      amountInvested: contributions.map {
+      amountInvested: amountInvested.map {
         InstrumentAmount(quantity: $0, instrument: aud)
       },
       profitLoss: profitLoss.map { InstrumentAmount(quantity: $0, instrument: aud) },
@@ -26,10 +26,10 @@ struct AccountPerformanceTileLabelsTests {
     )
   }
 
-  @Test("subtitle shows Amount invested $X when both flowDate and contributions populated")
+  @Test("subtitle shows Amount invested $X when both flowDate and amountInvested populated")
   func subtitleShowsInvested() {
     let perf = performance(
-      currentValue: 12_000, contributions: 10_000,
+      currentValue: 12_000, amountInvested: 10_000,
       firstFlowDate: Date(timeIntervalSince1970: 1_700_000_000)
     )
     let expected =
@@ -37,10 +37,10 @@ struct AccountPerformanceTileLabelsTests {
     #expect(AccountPerformanceTileLabels.investedSubtitleText(perf) == expected)
   }
 
-  @Test("subtitle shows Amount invested em-dash when flowDate set but contributions nil")
+  @Test("subtitle shows Amount invested em-dash when flowDate set but amountInvested nil")
   func subtitleShowsUnavailable() {
     let perf = performance(
-      currentValue: 12_000, contributions: nil,
+      currentValue: 12_000, amountInvested: nil,
       firstFlowDate: Date(timeIntervalSince1970: 1_700_000_000)
     )
     #expect(AccountPerformanceTileLabels.investedSubtitleText(perf) == "Amount invested —")
@@ -48,14 +48,14 @@ struct AccountPerformanceTileLabelsTests {
 
   @Test("subtitle hidden when no flows yet")
   func subtitleHiddenNoFlows() {
-    let perf = performance(currentValue: 12_000, contributions: nil, firstFlowDate: nil)
+    let perf = performance(currentValue: 12_000, amountInvested: nil, firstFlowDate: nil)
     #expect(AccountPerformanceTileLabels.investedSubtitleText(perf) == nil)
   }
 
   @Test("accessibility label combines both fields when both populated")
   func accessibilityBothPopulated() {
     let perf = performance(
-      currentValue: 12_000, contributions: 10_000,
+      currentValue: 12_000, amountInvested: 10_000,
       firstFlowDate: Date(timeIntervalSince1970: 1_700_000_000)
     )
     let valueText = InstrumentAmount(quantity: 12_000, instrument: aud).formatted
@@ -66,10 +66,10 @@ struct AccountPerformanceTileLabelsTests {
     )
   }
 
-  @Test("accessibility label when currentValue nil but contributions populated")
+  @Test("accessibility label when currentValue nil but amountInvested populated")
   func accessibilityCurrentValueNil() {
     let perf = performance(
-      contributions: 10_000,
+      amountInvested: 10_000,
       firstFlowDate: Date(timeIntervalSince1970: 1_700_000_000)
     )
     let inv = InstrumentAmount(quantity: 10_000, instrument: aud).formatted
@@ -79,7 +79,7 @@ struct AccountPerformanceTileLabelsTests {
     )
   }
 
-  @Test("accessibility label when currentValue populated but contributions nil")
+  @Test("accessibility label when currentValue populated but amountInvested nil")
   func accessibilityContributionsNil() {
     let perf = performance(
       currentValue: 12_000,
