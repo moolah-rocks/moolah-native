@@ -308,6 +308,7 @@ actor FirstFetchGatedTransactionRepository: TransactionRepository {
   func legExists(accountId: UUID, externalId: String) async throws -> Bool { false }
   func distinctLegInstrumentIds() async throws -> Set<String> { [] }
   func countNeedsReview() async throws -> Int { 0 }
+  func fetchCostBasisEventLegs() async throws -> [CostBasisEventLegRow] { [] }
 }
 
 /// A `TransactionRepository` that returns a fixed page from every `fetch`, and
@@ -353,4 +354,5 @@ private final class FixedPageTransactionRepository: TransactionRepository, Senda
   func legExists(accountId: UUID, externalId: String) async throws -> Bool { false }
   func distinctLegInstrumentIds() async throws -> Set<String> { [] }
   func countNeedsReview() async throws -> Int { 0 }
+  func fetchCostBasisEventLegs() async throws -> [CostBasisEventLegRow] { [] }
 }

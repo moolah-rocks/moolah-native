@@ -103,6 +103,12 @@ protocol TransactionRepository: Sendable {
   /// uncategorised (`Transaction.needsReview`). A SQL `COUNT` — never
   /// materialises history. Drives the categorise-backlog insight nudge.
   func countNeedsReview() async throws -> Int
+  /// Returns the legs of every transaction that touches at least one
+  /// non-fiat instrument, ordered by `(date, transaction_id, sort_order)`,
+  /// for the profile-wide cost-basis pass. Pure-fiat transactions (the
+  /// bulk of the table) never leave SQLite; each returned leg's instrument
+  /// is resolved via the same map `fetch`/`fetchAll` use.
+  func fetchCostBasisEventLegs() async throws -> [CostBasisEventLegRow]
 }
 
 extension TransactionRepository {
