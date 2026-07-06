@@ -3,10 +3,8 @@ import Testing
 
 @testable import Moolah
 
-// swiftlint:disable type_name
 @Suite("AccountPerformance — investment path equivalence")
-struct AccountPerformanceInvestmentEquivalenceTests {
-  // swiftlint:enable type_name
+struct AccountPerformanceEquivalenceTests {
   private let aud = Instrument.AUD
   private let eth = Instrument.crypto(
     chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)

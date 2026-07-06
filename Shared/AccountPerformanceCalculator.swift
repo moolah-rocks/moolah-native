@@ -89,8 +89,18 @@ enum AccountPerformanceCalculator {
   ) async throws -> AccountPerformance {
     try Task.checkCancellation()
     let currentValue = aggregatedValue(of: valuedPositions, in: profileCurrency)
-    let flows = ledger.cashFlows(accountIds: accountIds)
     let amountInvested = ledger.remainingInvested(accountIds: accountIds, onOrBefore: now)
+    // Rule 11: `remainingInvested` returns nil under the SAME scope condition
+    // that drops in-scope entries from `cashFlows` — a genuine conversion
+    // failure on a held instrument. So a nil here means BOTH the invested
+    // figure (partial lots) AND the flow series (dropped entries) are
+    // incomplete; an IRR / first-flow date over the truncated `cashFlows` would
+    // look complete while being understated. Degrade every derived figure to
+    // current-value-only — the already-valued current value still shows.
+    guard let amountInvested else {
+      return .currentValueOnly(currentValue, in: profileCurrency)
+    }
+    let flows = ledger.cashFlows(accountIds: accountIds)
     return assembleFromLedger(
       flows: flows,
       amountInvested: amountInvested,
@@ -99,26 +109,23 @@ enum AccountPerformanceCalculator {
       now: now)
   }
 
-  /// Assembles the ledger-sourced `AccountPerformance`. `amountInvested` is the
-  /// remaining cost basis (the "Amount invested" tile); gain is
-  /// `currentValue − amountInvested`; the annualised return is the IRR over the
-  /// market-valued `flows`. Any of these degrades to `nil` independently when
-  /// its input is unavailable (Rule 11) — the current value tile can still show
-  /// while the gain / return tiles hide.
+  /// Assembles the ledger-sourced `AccountPerformance` from an available
+  /// `amountInvested` (the remaining cost basis — the "Amount invested" tile).
+  /// Gain is `currentValue − amountInvested`; the annualised return is the IRR
+  /// over the market-valued `flows`. When the current value is unavailable the
+  /// gain / percentage / annualised figures degrade to `nil` while the amount
+  /// invested and first-flow date survive (Rule 11 — the partial shape).
   private static func assembleFromLedger(
     flows: [CashFlow],
-    amountInvested: Decimal?,
+    amountInvested: Decimal,
     currentValue: InstrumentAmount?,
     profileCurrency: Instrument,
     now: Date
   ) -> AccountPerformance {
-    let invested = amountInvested.map {
-      InstrumentAmount(quantity: $0, instrument: profileCurrency)
-    }
-    return AccountPerformance(
+    AccountPerformance(
       instrument: profileCurrency,
       currentValue: currentValue,
-      totalContributions: invested,
+      totalContributions: InstrumentAmount(quantity: amountInvested, instrument: profileCurrency),
       profitLoss: gain(
         currentValue: currentValue, amountInvested: amountInvested, in: profileCurrency),
       profitLossPercent: gainPercent(currentValue: currentValue, amountInvested: amountInvested),
@@ -126,24 +133,24 @@ enum AccountPerformanceCalculator {
       firstFlowDate: flows.first?.date)
   }
 
-  /// Unrealised gain `currentValue − amountInvested`, or `nil` if either input
-  /// is unavailable (Rule 11 — no partial figure).
+  /// Unrealised gain `currentValue − amountInvested`, or `nil` when the current
+  /// value is unavailable (Rule 11 — no partial figure).
   private static func gain(
-    currentValue: InstrumentAmount?, amountInvested: Decimal?, in profileCurrency: Instrument
+    currentValue: InstrumentAmount?, amountInvested: Decimal, in profileCurrency: Instrument
   ) -> InstrumentAmount? {
-    guard let currentValue, let amountInvested else { return nil }
+    guard let currentValue else { return nil }
     return InstrumentAmount(
       quantity: currentValue.quantity - amountInvested, instrument: profileCurrency)
   }
 
   /// Total return on the remaining invested capital: `gain / amountInvested`.
-  /// `nil` when amount invested is zero (no baseline to measure against) or
-  /// either input is unavailable. Distinct from the annualised return: this is
+  /// `nil` when amount invested is zero (no baseline to measure against) or the
+  /// current value is unavailable. Distinct from the annualised return: this is
   /// a simple (not time-weighted) ratio shown beside the gain figure.
   private static func gainPercent(
-    currentValue: InstrumentAmount?, amountInvested: Decimal?
+    currentValue: InstrumentAmount?, amountInvested: Decimal
   ) -> Decimal? {
-    guard let currentValue, let amountInvested, amountInvested != 0 else { return nil }
+    guard let currentValue, amountInvested != 0 else { return nil }
     return (currentValue.quantity - amountInvested) / amountInvested
   }
 

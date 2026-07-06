@@ -288,9 +288,12 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
         valuedPositions: rows,
         profileCurrency: hostCurrency,
         ledger: ledger)
+    } catch is CancellationError {
+      // A superseding pass owns the write now, so drop this one.
+      return nil
     } catch {
-      // `computeMultiInstrument` throws only `CancellationError`: a
-      // superseding pass owns the write now, so drop this one.
+      Self.logger.warning(
+        "account performance unavailable: \(error.localizedDescription, privacy: .public)")
       return nil
     }
   }
