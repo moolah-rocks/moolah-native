@@ -8,19 +8,37 @@ import OSLog
 /// (rather than threading the head block through `BuiltTransaction`) so
 /// the build phase has a single, type-safe handoff to the apply phase.
 ///
-/// `headBlockNumber` is the largest block number observed across the
-/// fetched transfers. When the fetch returns no transfers (e.g. account
-/// has no recent activity), the value falls back to the prior
-/// `lastSyncedBlockNumber` so the next cycle's reorg-window math still
-/// holds, or `0` on a genesis-style fetch. The watermark is intentionally
-/// advanced even when the builder dropped every transfer — holding it
-/// would make inactive accounts re-query an ever-growing range. The
-/// "raw transfers returned but zero candidates produced" pattern is
-/// instead surfaced as a `warning` log so a wire-format regression is
-/// visible without stranding inactive wallets.
+/// `headBlockNumber`'s derivation depends on which primitive produced
+/// it:
+/// - `build()` uses the largest block number observed across the
+///   fetched transfers, falling back to the prior `lastSyncedBlockNumber`
+///   so the next cycle's reorg-window math still holds, or `0` on a
+///   genesis-style fetch.
+/// - `buildWindow()` echoes the caller-supplied window end verbatim,
+///   regardless of what was observed, so a window with no activity still
+///   advances the checkpoint deterministically to the block the window
+///   actually scanned through.
+///
+/// Either way, the watermark is intentionally advanced even when the
+/// builder dropped every transfer — holding it would make inactive
+/// accounts re-query an ever-growing range. The "raw transfers returned
+/// but zero candidates produced" pattern is instead surfaced as a
+/// `warning` log so a wire-format regression is visible without
+/// stranding inactive wallets.
 struct WalletSyncBuildResult: Sendable, Hashable {
   let candidates: [BuiltTransaction]
   let headBlockNumber: UInt64
+}
+
+/// The Blockscout native + internal + wrap/unwrap set for an account,
+/// fetched once from `fetchNativeContext(fromBlock:)`. A windowed sync
+/// runner partitions `nativeRows` by block per window and passes the
+/// matching slice to `buildWindow` alongside `signedGasTxs` and
+/// `prefetchedReceipts`, which apply uniformly across every window.
+struct WalletSyncNativeContext: Sendable {
+  let nativeRows: [AlchemyTransfer]
+  let signedGasTxs: [SignedGasTx]
+  let prefetchedReceipts: [String: AlchemyTransactionReceipt]
 }
 
 /// Per-account orchestrator of the build phase. **No repository writes.**
@@ -46,6 +64,8 @@ struct WalletSyncEngine: Sendable {
   /// safe across actor boundaries without per-instance allocation.
   private static let logger = Logger(
     subsystem: "com.moolah.app", category: "WalletSyncEngine")
+
+  // MARK: - Init
 
   /// - Parameters:
   ///   - alchemy: Stage 4's `ChainDataClient`. The engine itself doesn't
@@ -80,6 +100,8 @@ struct WalletSyncEngine: Sendable {
     self.importOriginFactory = importOriginFactory
     self.wrapUnwrapDetector = WrapUnwrapDetector(chainClient: alchemy)
   }
+
+  // MARK: - Build phase
 
   /// Runs the build phase for a single crypto account. Returns the
   /// candidate `BuiltTransaction`s and the head block number the apply
@@ -116,35 +138,136 @@ struct WalletSyncEngine: Sendable {
     let priorBlock = try await resolvePriorBlock(for: account)
     let fromBlock = Self.startBlock(priorBlock: priorBlock, chain: chain)
 
-    // 3. Native + internal ETH from Blockscout (authoritative tx index;
-    //    sees approve()/failed/zero-movement #919 and OP-stack internal
-    //    transfers #918). A failure here is a sync error for this
-    //    account — it propagates to CryptoSyncStore's persistError.
+    // 3. Native + internal ETH from Blockscout, plus wrap/unwrap
+    //    synthesis — see `fetchNativeContext`.
     try Task.checkCancellation()
+    let context = try await fetchNativeContext(
+      account: account, chain: chain, walletAddress: walletAddress, fromBlock: fromBlock)
+
+    // 4. ERC-20 from Alchemy, merged with the native context, and built
+    //    into candidates — see `fetchAndBuildCandidates`. `toBlock: nil`
+    //    scans to the current head, unlike `buildWindow`, which bounds
+    //    the fetch to a caller-chosen window end for resumable scanning.
+    try Task.checkCancellation()
+    let (transfers, built) = try await fetchAndBuildCandidates(
+      account: account,
+      chain: chain,
+      walletAddress: walletAddress,
+      fromBlock: fromBlock,
+      toBlock: nil,
+      nativeRows: context.nativeRows,
+      signedGasTxs: context.signedGasTxs,
+      prefetchedReceipts: context.prefetchedReceipts)
+
+    // 5. Head block over the merged set (Blockscout blockNum included).
+    //    Unlike `buildWindow`'s deterministic window-end checkpoint, the
+    //    single-shot `build` has no caller-supplied window end, so it
+    //    falls back to the highest observed block, or the prior
+    //    checkpoint when nothing was found.
+    let headBlock = Self.maxBlockNumber(in: transfers) ?? priorBlock
+    return WalletSyncBuildResult(candidates: built, headBlockNumber: headBlock)
+  }
+
+  // MARK: - Windowed build primitives
+
+  /// Fetches the Blockscout native + internal transfer set for
+  /// `[fromBlock, head]` and runs wrap/unwrap synthesis over it, without
+  /// touching Alchemy's ERC-20 endpoint or the candidate builder. A
+  /// windowed sync runner fetches this once per account and reuses it
+  /// across every block window (`nativeRows` is partitioned per window
+  /// by the caller; `signedGasTxs` and `prefetchedReceipts` apply
+  /// uniformly).
+  func fetchNativeContext(
+    account: Account, chain: ChainConfig, walletAddress: String, fromBlock: UInt64
+  ) async throws -> WalletSyncNativeContext {
+    // Native + internal ETH from Blockscout (authoritative tx index;
+    // sees approve()/failed/zero-movement #919 and OP-stack internal
+    // transfers #918). A failure here is a sync error for this
+    // account — it propagates to CryptoSyncStore's persistError.
     let adapted = try await fetchBlockscout(
       chain: chain, walletAddress: walletAddress, fromBlock: fromBlock)
 
-    // 3b. Wrap/unwrap synthesis: recovers the WETH leg a native-only view
-    //     of an ETH↔WETH movement omits (invisible to both Alchemy's
-    //     transfer API and the mint/burn guard). Runs off the Blockscout
-    //     native set fetched above.
+    // Wrap/unwrap synthesis: recovers the WETH leg a native-only view of
+    // an ETH↔WETH movement omits (invisible to both Alchemy's transfer
+    // API and the mint/burn guard). Runs off the Blockscout native set
+    // fetched above.
     try Task.checkCancellation()
     let wrapUnwrap = try await wrapUnwrapDetector.detect(
       nativeTransfers: adapted.transfers, chain: chain, walletAddress: walletAddress)
 
-    // 3c. ERC-20 only from Alchemy — Blockscout owns native/internal.
-    try Task.checkCancellation()
+    return WalletSyncNativeContext(
+      nativeRows: adapted.transfers + wrapUnwrap.rows,
+      signedGasTxs: adapted.signedGasTxs,
+      prefetchedReceipts: wrapUnwrap.receipts)
+  }
+
+  /// Builds candidates for ONE window: ERC-20 logs for `window` merged
+  /// with the caller-supplied native rows whose block falls in that same
+  /// window, then run through `TransferEventBuilder` exactly as `build`
+  /// does today.
+  ///
+  /// `headForRecord` is the block the apply pass will checkpoint to —
+  /// the window's end, chosen by the runner up front. Unlike `build`'s
+  /// single-shot watermark, it is returned verbatim rather than derived
+  /// from the observed transfers, so a window with no activity still
+  /// advances the checkpoint deterministically to the block the window
+  /// actually scanned through.
+  ///
+  /// `from`/`to` are collapsed into a single `window` parameter (rather
+  /// than two `UInt64`s) so this stays at 5 non-defaulted parameters —
+  /// `function_parameter_count`'s ceiling — without inventing a grouping
+  /// type for `account`/`chain`/`walletAddress`, which every primitive
+  /// on this engine takes individually.
+  func buildWindow(
+    account: Account,
+    chain: ChainConfig,
+    walletAddress: String,
+    window: ClosedRange<UInt64>,
+    headForRecord: UInt64,
+    nativeRowsInWindow: [AlchemyTransfer] = [],
+    signedGasTxs: [SignedGasTx] = [],
+    prefetchedReceipts: [String: AlchemyTransactionReceipt] = [:]
+  ) async throws -> WalletSyncBuildResult {
+    let (_, built) = try await fetchAndBuildCandidates(
+      account: account,
+      chain: chain,
+      walletAddress: walletAddress,
+      fromBlock: window.lowerBound,
+      toBlock: window.upperBound,
+      nativeRows: nativeRowsInWindow,
+      signedGasTxs: signedGasTxs,
+      prefetchedReceipts: prefetchedReceipts)
+    return WalletSyncBuildResult(candidates: built, headBlockNumber: headForRecord)
+  }
+
+  // MARK: - Private helpers
+
+  /// Shared core of both `build` and `buildWindow`: fetches ERC-20
+  /// transfers in `[fromBlock, toBlock ?? currentHead]` from Alchemy,
+  /// merges them with the caller-supplied native rows, and runs
+  /// `TransferEventBuilder`. Returns the merged raw transfers alongside
+  /// the built candidates so `build` can derive its own watermark from
+  /// them without a second Alchemy fetch — `buildWindow` doesn't need
+  /// the raw transfers, since its checkpoint is the caller-supplied
+  /// window end regardless of what was found.
+  private func fetchAndBuildCandidates(
+    account: Account,
+    chain: ChainConfig,
+    walletAddress: String,
+    fromBlock: UInt64,
+    toBlock: UInt64? = nil,
+    nativeRows: [AlchemyTransfer] = [],
+    signedGasTxs: [SignedGasTx] = [],
+    prefetchedReceipts: [String: AlchemyTransactionReceipt] = [:]
+  ) async throws -> (transfers: [AlchemyTransfer], candidates: [BuiltTransaction]) {
+    // ERC-20 only from Alchemy — Blockscout owns native/internal.
     let alchemyAll = try await alchemy.getAssetTransfers(
-      chain: chain, walletAddress: walletAddress, fromBlock: fromBlock, toBlock: nil)
-    let transfers =
-      adapted.transfers + wrapUnwrap.rows + alchemyAll.filter { $0.category == .erc20 }
+      chain: chain, walletAddress: walletAddress, fromBlock: fromBlock, toBlock: toBlock)
+    let transfers = nativeRows + alchemyAll.filter { $0.category == .erc20 }
     try Task.checkCancellation()
 
-    // 4. Head block over the merged set (Blockscout blockNum included).
-    let headBlock = Self.maxBlockNumber(in: transfers) ?? priorBlock
-
-    // 5. Build candidates. Discovery actor handles its own coalescing;
-    //    no repository writes happen here.
+    // Build candidates. Discovery actor handles its own coalescing; no
+    // repository writes happen here.
     let builder = TransferEventBuilder()
     let importOrigin = importOriginFactory(account.id)
     let built = try await builder.build(
@@ -153,15 +276,15 @@ struct WalletSyncEngine: Sendable {
       services: BuilderServices(
         chain: chain, discovery: discovery, alchemy: alchemy),
       importOrigin: importOrigin,
-      signedGasTxs: adapted.signedGasTxs,
-      prefetchedReceipts: wrapUnwrap.receipts)
+      signedGasTxs: signedGasTxs,
+      prefetchedReceipts: prefetchedReceipts)
 
-    // 6. Observability for wire-format regressions: if Alchemy returned
-    //    rows but every one dropped at the builder, that's the symptom
-    //    of a decoder bug (malformed amount, unknown category…). Log
-    //    loudly so the next regression doesn't recreate the silent
-    //    "synced ok, zero transactions" failure mode that hid the
-    //    `rawContract.value` JSON-key mismatch in production.
+    // Observability for wire-format regressions: if Alchemy returned
+    // rows but every one dropped at the builder, that's the symptom of
+    // a decoder bug (malformed amount, unknown category…). Log loudly
+    // so the next regression doesn't recreate the silent "synced ok,
+    // zero transactions" failure mode that hid the `rawContract.value`
+    // JSON-key mismatch in production.
     if !transfers.isEmpty, built.isEmpty {
       Self.logger.warning(
         """
@@ -174,7 +297,7 @@ struct WalletSyncEngine: Sendable {
         """
       )
     }
-    return WalletSyncBuildResult(candidates: built, headBlockNumber: headBlock)
+    return (transfers, built)
   }
 
   /// The higher of this device's local `WalletSyncState` and the

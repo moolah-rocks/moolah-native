@@ -19,6 +19,7 @@ final class RecordingAlchemyClientStub: ChainDataClient, @unchecked Sendable {
     let chainId: Int
     let walletAddress: String
     let fromBlock: UInt64
+    let toBlock: UInt64?
   }
 
   enum Response: Sendable {
@@ -90,7 +91,8 @@ final class RecordingAlchemyClientStub: ChainDataClient, @unchecked Sendable {
         AssetTransfersCall(
           chainId: chain.chainId,
           walletAddress: walletAddress,
-          fromBlock: fromBlock))
+          fromBlock: fromBlock,
+          toBlock: toBlock))
       let perAddress = perAddressResponses[walletAddress.lowercased()]
       return (perAddress ?? transfersResponse, beforeAssetTransfers)
     }
