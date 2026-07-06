@@ -12,6 +12,10 @@ struct TradeEventClassifierTests {
     chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
   let btc = Instrument.crypto(
     chainId: 0, contractAddress: nil, symbol: "BTC", name: "Bitcoin", decimals: 8)
+  let spam = Instrument.crypto(
+    chainId: 1, contractAddress: "0xSpam", symbol: "SPAM", name: "Spam", decimals: 18)
+  let spam2 = Instrument.crypto(
+    chainId: 1, contractAddress: "0xSpam2", symbol: "SPAM2", name: "Spam Two", decimals: 18)
   // November 2023. Past-date precondition for `buyFoldsFXFee` — that test
   // straddles `date` and `date + 1 day` with two FX rates and relies on
   // wall-clock `Date()` being later than `date + 1 day` so a buggy
@@ -207,23 +211,89 @@ struct TradeEventClassifierTests {
 
   @Test("buy: host-currency fee skips the conversion service")
   func hostCurrencyFeeNeedsNoConversionLookup() async throws {
-    // FakeConversionService records every convert() call that reaches its
-    // outcome closure. The pair-leg conversion (AUD→AUD, for the BHP
-    // capital leg) goes through the service — the classifier does not
-    // fast-path the *pair* leg today — so the recorder sees that one
-    // call. The fee leg (also AUD on AUD-host) MUST be fast-pathed inside
-    // the classifier so the recorder sees exactly one call total. If the
-    // fast path is missing, the recorder sees two calls and `count == 1`
-    // catches it.
+    // `callCount` counts only conversions that reach the rate outcome
+    // closure (same-instrument requests fast-path before it). Both the AUD
+    // pair leg and the AUD fee leg are host currency, so `hostValue`
+    // fast-paths both and neither touches rate logic — `callCount` stays 0.
+    // (Migrated from the old `recordedCalls`-based proxy: the pair leg now
+    // resolves via `convertResult`, whose same-instrument fast path returns
+    // before recording, so a host-currency trade records nothing.)
     let service = FakeConversionService.passthrough
     let legs = [tradeLeg(aud, -4_000), tradeLeg(bhp, 100), feeLeg(aud, -10)]
     let result = try await TradeEventClassifier.classify(
       legs: legs, on: date, hostCurrency: aud, conversionService: service)
     try #require(result.buys.count == 1)
     #expect(result.buys[0].costPerUnit == Decimal(40) + Decimal(10) / Decimal(100))
-    // passthrough returns input unchanged (1:1), so the
-    // pair-leg conversion still produces -4 000.
-    #expect(service.recordedCalls.count == 1)
-    #expect(service.recordedCalls.first?.quantity == -4_000)
+    #expect(service.callCount == 0)
+  }
+
+  // MARK: - ATO fallback valuation for unpriced / spam trade legs (#1255)
+
+  @Test("swap: dispose spam / acquire ETH values both legs from the ETH side")
+  func spamForEth_valuesFromEthSide() async throws {
+    // Dispose 100 SPAM (unpriceable) for 1 ETH @ 3000 AUD. The ETH buy's
+    // paired price-carrier (SPAM) is `.knownZero`, so it falls back to ETH's
+    // own value; the SPAM sell's paired carrier (ETH) prices directly. Both
+    // ride the ETH value — no throw.
+    let service = FakeConversionService.fixedRates(
+      [eth.id: 3_000], knownZero: [spam.id])
+    let legs = [tradeLeg(spam, -100), tradeLeg(eth, 1)]
+    let result = try await TradeEventClassifier.classify(
+      legs: legs, on: date, hostCurrency: aud, conversionService: service)
+    try #require(result.buys.count == 1)
+    #expect(result.buys[0].instrument == eth)
+    #expect(result.buys[0].costPerUnit == Decimal(3_000))  // ETH's own value
+    try #require(result.sells.count == 1)
+    #expect(result.sells[0].instrument == spam)
+    #expect(result.sells[0].quantity == 100)
+    // 3000 AUD of ETH received / 100 SPAM given up = 30 AUD per SPAM.
+    #expect(result.sells[0].proceedsPerUnit == Decimal(30))
+  }
+
+  @Test("swap: dispose ETH / acquire spam falls back to ETH's own value")
+  func ethForSpam_fallsBackToEthOwnValue() async throws {
+    // Dispose 1 ETH @ 3000 for 100 SPAM (unpriceable). The ETH sell's paired
+    // price-carrier is SPAM → `.knownZero`, so its proceeds fall back to
+    // ETH's OWN market value (3000), NOT a 0-valued ETH and NOT a throw. The
+    // SPAM buy's cost = the ETH value given up.
+    let service = FakeConversionService.fixedRates(
+      [eth.id: 3_000], knownZero: [spam.id])
+    let legs = [tradeLeg(eth, -1), tradeLeg(spam, 100)]
+    let result = try await TradeEventClassifier.classify(
+      legs: legs, on: date, hostCurrency: aud, conversionService: service)
+    try #require(result.sells.count == 1)
+    #expect(result.sells[0].instrument == eth)
+    #expect(result.sells[0].proceedsPerUnit == Decimal(3_000))  // ETH's own value
+    try #require(result.buys.count == 1)
+    #expect(result.buys[0].instrument == spam)
+    // 3000 AUD of ETH given up / 100 SPAM received = 30 AUD per SPAM.
+    #expect(result.buys[0].costPerUnit == Decimal(30))
+  }
+
+  @Test("spam fee on a real ETH/AUD trade contributes 0 and the trade still values")
+  func spamFeeContributesZero_tradeStillValued() async throws {
+    // Buy 1 ETH for 4000 AUD with a spam-token gas fee attached. A worthless
+    // `.knownZero` fee token is a 0 incidental cost, so the ETH cost stays at
+    // its raw 4000 with no fee fold-in.
+    let service = FakeConversionService.fixedRates(
+      [eth.id: 4_000], knownZero: [spam.id])
+    let legs = [tradeLeg(aud, -4_000), tradeLeg(eth, 1), feeLeg(spam, dec("-0.5"))]
+    let result = try await TradeEventClassifier.classify(
+      legs: legs, on: date, hostCurrency: aud, conversionService: service)
+    try #require(result.buys.count == 1)
+    #expect(result.buys[0].instrument == eth)
+    #expect(result.buys[0].costPerUnit == Decimal(4_000))
+    #expect(result.sells.isEmpty)
+  }
+
+  @Test("swap: both legs unpriced is genuinely unavailable and throws")
+  func bothLegsUnpriced_throws() async throws {
+    let service = FakeConversionService.fixedRates(
+      [:], knownZero: [spam.id, spam2.id])
+    let legs = [tradeLeg(spam, -100), tradeLeg(spam2, 50)]
+    await #expect(throws: (any Error).self) {
+      try await TradeEventClassifier.classify(
+        legs: legs, on: date, hostCurrency: aud, conversionService: service)
+    }
   }
 }
