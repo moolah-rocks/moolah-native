@@ -287,7 +287,6 @@ private func seedReportsPreview(
     conversionService: backend.conversionService,
     targetInstrument: .AUD)
   let reportingStore = ReportingStore(
-    transactionRepository: backend.transactions,
     analysisRepository: backend.analysis,
     conversionService: backend.conversionService,
     profileCurrency: .AUD)

@@ -37,11 +37,13 @@ import Foundation
 ///
 /// **Supersession, not stacking.** A monotonic `generation` (mirroring
 /// `AccountStore.snapshotGeneration` / `ReportingStore.reportGeneration`) is
-/// bumped on every `invalidate()`. A build captures the generation it started
-/// under and refuses to publish its result if a later invalidate superseded
-/// it, so a burst of sync ticks coalesces to a single rebuild rather than
-/// stacking N — the single-flight discipline the analysis reload-storm fix
-/// (#1164) established.
+/// bumped on every `invalidate()`. EVERY `ledger()` caller — the build
+/// originator and any joiner that awaits the same in-flight `buildTask` —
+/// captures the generation before its await and rechecks it after, dropping
+/// the result and retrying if a later invalidate superseded it. So a burst of
+/// sync ticks coalesces to a single rebuild rather than stacking N, and a
+/// joiner never publishes a pre-invalidate snapshot — the single-flight
+/// discipline the analysis reload-storm fix (#1164) established.
 @MainActor
 final class HoldingsCostLedgerStore {
   nonisolated private let transactionRepository: any TransactionRepository
@@ -95,36 +97,50 @@ final class HoldingsCostLedgerStore {
 
   /// The profile-wide ledger: `.empty` while migrating, the cached instance
   /// if valid, otherwise built once. Concurrent callers during a build await
-  /// the same `buildTask`. If an `invalidate()` supersedes the build
-  /// mid-flight, the stale result is dropped and a fresh build is issued —
-  /// the cache is never written behind a newer generation. A genuine build
-  /// failure propagates (it is NOT degraded to `.empty` and NOT cached).
+  /// the same `buildTask` (single-flight). If an `invalidate()` supersedes the
+  /// build mid-flight, the stale result is dropped and a fresh build is issued
+  /// — for the originator AND every joiner, since both capture and recheck the
+  /// generation around the await. The cache is never written behind a newer
+  /// generation. A genuine build failure propagates (it is NOT degraded to
+  /// `.empty` and NOT cached).
   func ledger() async throws -> HoldingsCostLedger {
     if isMigrating() { return .empty }
     if let cached { return cached }
-    if let inFlight = buildTask { return try await inFlight.value }
+    // Capture the generation and resolve the in-flight (or freshly created)
+    // build in ONE synchronous, non-suspending region so single-flight holds
+    // and EVERY caller — the originator AND a joiner — rechecks the captured
+    // generation after the await. Otherwise a joiner awaiting a build that an
+    // `invalidate()` supersedes mid-flight would return that build's stale
+    // (pre-edit) ledger or its `CancellationError` (the #1209 clobber class).
     let requested = generation
-    let task = Task { try await self.build() }
-    buildTask = task
+    let task: Task<HoldingsCostLedger, any Error>
+    if let inFlight = buildTask {
+      task = inFlight
+    } else {
+      task = Task { try await self.build() }
+      buildTask = task
+    }
 
     let built: HoldingsCostLedger
     do {
       built = try await task.value
     } catch {
-      // An `invalidate()` may have cancelled this build (generation bumped) —
-      // it already cleared `buildTask`. That is supersession, not a genuine
-      // failure: rebuild under the new generation rather than surfacing the
-      // cancellation.
-      if requested != generation { return try await ledger() }
-      // Genuine failure (query / conversion threw): clear our settled handle
+      // Superseded by an `invalidate()` (which bumped the generation and may
+      // have cancelled the build): rebuild under the new generation rather
+      // than surfacing a stale result or the cancellation. Applies to
+      // originator and joiner alike.
+      guard requested == generation else { return try await ledger() }
+      // Genuine failure (query / conversion threw): clear the settled handle
       // so a later call retries, then propagate — never degrade to `.empty`,
-      // never cache.
+      // never cache. Only the originator holds `buildTask`; a joiner's clear
+      // is a harmless no-op (the originator already cleared it).
       buildTask = nil
       throw error
     }
     guard requested == generation else {
-      // Superseded after a successful build (`invalidate()` already cleared
-      // `buildTask`) — drop the stale result, rebuild.
+      // Superseded after a successful build — drop the stale result, rebuild.
+      // Both originator and joiner take this path when their captured
+      // generation is stale, so neither publishes a pre-invalidate snapshot.
       return try await ledger()
     }
     cached = built

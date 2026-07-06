@@ -59,7 +59,6 @@ struct ReportingStoreTests {
 
     let service = FakeConversionService.fixedRates(["ASX:BHP.AX": 50])
     let store = ReportingStore(
-      transactionRepository: backend.transactions,
       conversionService: service,
       profileCurrency: aud,
       holdingsCostLedger: makeLedger(backend.transactions, service)
@@ -118,7 +117,6 @@ struct ReportingStoreTests {
 
     let service = FakeConversionService.fixedRates([:])
     let store = ReportingStore(
-      transactionRepository: backend.transactions,
       conversionService: service,
       profileCurrency: aud,
       holdingsCostLedger: makeLedger(backend.transactions, service),
@@ -151,7 +149,6 @@ struct ReportingStoreTests {
 
     let service = FakeConversionService.fixedRates([:])
     let store = ReportingStore(
-      transactionRepository: backend.transactions,
       conversionService: service,
       profileCurrency: aud,
       holdingsCostLedger: makeLedger(backend.transactions, service),

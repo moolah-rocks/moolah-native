@@ -92,7 +92,6 @@ struct ReportingStoreTestsMore {
     // BHP worth $50/share → 5000, CBA worth $120/share → 6000
     let service = FakeConversionService.fixedRates(["ASX:BHP.AX": 50, "ASX:CBA.AX": 120])
     let store = ReportingStore(
-      transactionRepository: backend.transactions,
       conversionService: service,
       profileCurrency: aud,
       holdingsCostLedger: makeLedger(backend.transactions, service)
@@ -150,7 +149,6 @@ struct ReportingStoreTestsMore {
 
     let service = FakeConversionService.fixedRates(["ASX:BHP.AX": 50, eth.id: 2500])
     let store = ReportingStore(
-      transactionRepository: backend.transactions,
       conversionService: service,
       profileCurrency: aud,
       holdingsCostLedger: makeLedger(backend.transactions, service)
@@ -199,7 +197,6 @@ struct ReportingStoreTestsMore {
     )
 
     let store = ReportingStore(
-      transactionRepository: backend.transactions,
       analysisRepository: backend.analysis,
       conversionService: FakeConversionService.fixedRates([:]),
       profileCurrency: .defaultTestInstrument
@@ -229,9 +226,7 @@ struct ReportingStoreTestsMore {
       hasUnavailableData: false
     )
     let repository = StubCategoryBalancesAnalysisRepository(income: income, expense: expense)
-    let (backend, _) = try TestBackend.create()
     let store = ReportingStore(
-      transactionRepository: backend.transactions,
       analysisRepository: repository,
       conversionService: FakeConversionService.fixedRates([:]),
       profileCurrency: aud
@@ -255,9 +250,7 @@ struct ReportingStoreTestsMore {
   {
     let empty = CategoryBalances(byCategory: [:], uncategorised: nil)
     let repository = StubCategoryBalancesAnalysisRepository(income: empty, expense: empty)
-    let (backend, _) = try TestBackend.create()
     let store = ReportingStore(
-      transactionRepository: backend.transactions,
       analysisRepository: repository,
       conversionService: FakeConversionService.fixedRates([:]),
       profileCurrency: aud

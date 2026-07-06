@@ -41,7 +41,6 @@ struct CapitalGainsIdentityMigrationGateTests {
     let (backend, _) = try TestBackend.create()
     let service = FakeConversionService.fixedRates([:])
     let store = ReportingStore(
-      transactionRepository: backend.transactions,
       conversionService: service,
       profileCurrency: .AUD,
       holdingsCostLedger: HoldingsCostLedgerStore(

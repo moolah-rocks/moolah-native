@@ -10,6 +10,21 @@ struct LegTransaction: Sendable {
 struct CapitalGainsResult: Sendable {
   let events: [CapitalGainEvent]
   let openLots: [CostBasisLot]
+  /// `true` when at least one instrument's cost-basis history hit an
+  /// unresolvable conversion during the ledger build (Rule 11), so a disposal
+  /// may have been dropped and the realised-gain total may be understated. A
+  /// coarse profile-wide flag: the caller must render the figure as
+  /// unavailable rather than as a complete tax number. Defaults to `false` for
+  /// the direct-construction / fixture call sites that never fail conversion.
+  let hasUnavailableData: Bool
+
+  init(
+    events: [CapitalGainEvent], openLots: [CostBasisLot], hasUnavailableData: Bool = false
+  ) {
+    self.events = events
+    self.openLots = openLots
+    self.hasUnavailableData = hasUnavailableData
+  }
 
   var totalRealizedGain: Decimal {
     events.reduce(Decimal(0)) { $0 + $1.gain }
@@ -52,7 +67,10 @@ enum CapitalGainsCalculator {
     let events = ledger.realisedEvents.filter { event in
       sellDateRange.map { $0.contains(event.sellDate) } ?? true
     }
-    return CapitalGainsResult(events: events, openLots: ledger.openLots)
+    return CapitalGainsResult(
+      events: events,
+      openLots: ledger.openLots,
+      hasUnavailableData: !ledger.unavailableInstrumentIds.isEmpty)
   }
 
   /// Retained convenience for unit-test call sites: builds a profile-wide

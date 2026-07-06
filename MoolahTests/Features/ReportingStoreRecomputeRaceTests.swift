@@ -19,7 +19,6 @@ struct ReportingStoreRecomputeRaceTests {
     let aud = Instrument.defaultTestInstrument
     let repository = GatingAnalysisRepository()
     let store = ReportingStore(
-      transactionRepository: FailingTransactionRepository(),
       analysisRepository: repository,
       conversionService: FakeConversionService.fixedRates([:]),
       profileCurrency: aud
