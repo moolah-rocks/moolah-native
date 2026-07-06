@@ -103,15 +103,22 @@ Realised `CapitalGainEvent`s are unchanged in shape; the account tag is irreleva
 
 Extend the current `.trade`-only classification into a single component (working name `CostBasisEventBuilder`, likely absorbing/wrapping `TradeEventClassifier`) that, given a transaction + the set of tracked account IDs, emits acquisition / disposal / move events per the Event-model table, each valued in AUD on the transaction date. `TradeEventClassifier`'s existing buy/sell/fee logic is reused verbatim for `.trade` legs.
 
-### Profile-global cost pass → `HoldingsCostLedger`
+### Profile-global cost pass → `HoldingsCostLedger` (SQL-sourced, cached)
 
-A new pass (working name `HoldingsCostLedger`) runs the enriched classifier over **all** of the profile's transactions in date order through one account-aware `CostBasisEngine`, producing:
+Cross-account carryover means the ledger must see **every account's** acquisition history — a per-view build over one account's transactions would show a transferred-in holding as zero-invested. But it must **not** materialise the whole ~20k-row transaction table into Swift (that is exactly the hotspot `ReportingStore.loadAllLegTransactions()` + `CapitalGainsCalculator.computeWithConversion(transactions:)` is today, and reintroducing it would regress the transaction-list/analysis perf work). FIFO is inherently sequential, but it only needs the **cost-basis-relevant** legs, which are a small fraction of the table.
 
-1. **Per-(account, instrument, day) remaining amount invested** — the daily snapshot `PositionsHistoryBuilder` needs for the baseline.
-2. **Realised `CapitalGainEvent`s** — consumed by `CapitalGainsCalculator` → `ReportingStore` (tax).
-3. **Per-account acquisition/disposal flow list** (valued at *market* on the date; see Return) — consumed by the return calculation.
+**SQL does the heavy lifting; Swift does only the FIFO over the reduced set:**
 
-`PositionsHistoryBuilder` stops building its own `.trade`-only engine and stops folding `contributions`; it reads the per-account remaining-invested series from the ledger and keeps its existing value-line batch-conversion pass unchanged. `AccountCashFlows` and `BuildState.contributions` are **retired**.
+1. **SQL key-event query.** A new GRDB repository method returns, ordered by `(date, sort_order)`, only the legs of transactions that touch **at least one non-fiat instrument** — i.e. `transaction_leg JOIN "transaction" ... WHERE transaction_id IN (SELECT transaction_id FROM transaction_leg JOIN instrument ON kind != 'fiatCurrency')`, with `instrument.kind` joined in (NULL → fiat). Pure-fiat income/expense transactions (the bulk of the table) never leave SQLite. This follows the existing `fetchIncomeAndExpenseAggregation` / `subtotalsAfterPage` aggregate patterns and must ship a paired EXPLAIN-QUERY-PLAN-pinning test (`guides/DATABASE_CODE_GUIDE.md`); the covering index `leg_analysis_by_type_account (type, account_id, instrument_id, …)` and `transaction_by_date` already back it.
+2. **Conversions deduped to (instrument, day).** The reduced event set is collapsed to its distinct `(non-fiat instrument, day)` pairs (the daily price is the same for every event that day) and resolved in **one** `convertResultBatch` call — the same batching `PositionsHistoryBuilder+Batch` and the analysis repos already use. This is the "reduce the amount of currency conversion required" win.
+3. **Swift FIFO pass.** The enriched classifier + account-aware `CostBasisEngine` walk the reduced, pre-converted event stream once, producing three outputs. Remaining amount invested is a **step function that only changes on cost-basis events**, so the ledger emits change-points (per account, per instrument), not a row per calendar day — consumers carry forward between events (matching the existing "cost only changes on events" chart semantics):
+   - **Remaining amount invested change-points** per (account, instrument) — the baseline source.
+   - **Realised `CapitalGainEvent`s** — consumed by `CapitalGainsCalculator` → `ReportingStore` (tax).
+   - **Per-account market-valued flow list** — consumed by the Return (IRR) calculation.
+
+**Built once per load, cached, invalidated on change.** The profile-wide ledger is built once and cached behind the existing `ReportingStore` generation-bump seam (`reportGeneration`, the same guard `loadCapitalGains`/`loadProfitLoss` use), then shared by the account-detail views (`PositionsHistoryBuilder`, `AccountPerformanceCalculator`), `CapitalGainsCalculator`, and `ProfitLossCalculator`. It is rebuilt only when transactions change. This is what replaces `loadAllLegTransactions()`.
+
+`PositionsHistoryBuilder` stops building its own `.trade`-only engine and stops folding `contributions`; it reads the per-account remaining-invested change-points from the cached ledger and keeps its existing per-account value-line batch-conversion pass unchanged. `AccountCashFlows` and `BuildState.contributions` are **retired**.
 
 ---
 
@@ -204,18 +211,20 @@ Zone-invariance: any date keying/formatting introduced follows `guides/DATE_TIME
 
 - `Shared/CostBasisEngine.swift` — add account-tagged lots + `moveLots`.
 - `Shared/TradeEventClassifier.swift` — reused for `.trade`; wrapped by the new event builder.
-- `Shared/CapitalGainsCalculator.swift` — feed from the enriched event stream; realised events now include income/transfer/expense sources.
-- `Shared/PositionsHistoryBuilder.swift` / `+Batch.swift` — consume per-account remaining-invested series; drop `foldContributions` / `BuildState.contributions`.
+- `Shared/CapitalGainsCalculator.swift` — feed from the enriched event stream / cached ledger; realised events now include income/transfer/expense sources.
+- `Shared/PositionsHistoryBuilder.swift` / `+Batch.swift` — consume per-account remaining-invested change-points from the cached ledger; drop `foldContributions` / `BuildState.contributions`. Per-account value-line quantity fold + batch conversion unchanged.
 - `Shared/AccountCashFlows.swift` — **retire** (replaced by the event model).
-- `Shared/AccountPerformanceCalculator.swift` — return/IRR flows come from the event ledger, not `AccountCashFlows`.
+- `Shared/AccountPerformanceCalculator.swift` — return/IRR flows come from the ledger, not `AccountCashFlows`.
 - `Shared/ProfitLossCalculator.swift` — reconcile `accumulateInvested` with the shared ledger.
 - `Shared/Views/Positions/PositionsChartBaselineResolver.swift` — aggregate + per-instrument baselines both read remaining amount invested; single suppression rule.
 - `Shared/Views/Positions/PositionsChartLegendRow.swift`, `PositionsChart.swift`, `AccountPerformanceTiles.swift`, `AccountPerformanceTileLabels.swift` — relabel to "Amount invested" / "Gain" / "Return".
-- `Features/Reports/ReportingStore.swift` — consumes the richer `CapitalGainsResult` (tax-report-ready).
-- New: `CostBasisEventBuilder`, `HoldingsCostLedger` (working names).
+- `Backends/GRDB/` — **new** repository method returning the SQL-filtered key-event legs (only transactions touching a non-fiat instrument), `instrument.kind` joined; paired EXPLAIN-plan-pinning test. Follows `fetchIncomeAndExpenseAggregation` / `subtotalsAfterPage` patterns.
+- `Features/Reports/ReportingStore.swift` — build + cache the profile-wide ledger behind the existing `reportGeneration` seam; **replaces `loadAllLegTransactions()`**; consumes the richer `CapitalGainsResult` (tax-report-ready) and exposes the ledger to the account-detail stores.
+- New: `CostBasisEventBuilder`, `HoldingsCostLedger`, the GRDB key-event query, a cached ledger provider (working names).
 
 ## Migration & risks
 
 - **Blast radius includes the tax calculators.** Realised-CGT numbers will *change* (become more accurate) because disposals now include income-funded lots and spends. Existing `CapitalGainsCalculator` tests must be updated deliberately, not force-passed.
-- **Profile-global pass cost.** Building one ledger over all transactions is heavier than the current per-account `.trade` walk. The value-line batch-conversion path is unchanged; the added cost is the enriched fold + conversions for income/opening/expense events. Watch first-open performance (cf. the analysis reload-storm work); the ledger should be built once per load and shared, not per account view.
-- **Implementation is multi-PR.** Suggested ordering for the plan: (1) account-aware engine + `moveLots` + tests; (2) enriched event builder + `HoldingsCostLedger` + tests; (3) `CapitalGainsCalculator`/`ReportingStore` cutover; (4) `PositionsHistoryBuilder` baseline cutover + retire `AccountCashFlows`; (5) return/IRR cutover in `AccountPerformanceCalculator`; (6) relabelling + baseline-suppression UI. Each gated through the AI review agents.
+- **Performance — SQL-sourced, built once, cached.** The ledger is built from a SQL key-event query (only non-fiat-touching transactions leave SQLite; the pure-fiat bulk never materialises), with conversions deduped to `(instrument, day)` and batched. It is built **once per load** and cached behind the `ReportingStore` generation seam, shared across all account views and the tax path — never rebuilt per account open. Ship the query with an EXPLAIN-plan-pinning test and re-check first-open timing against the analysis reload-storm / transaction-list-perf baselines. Retiring `loadAllLegTransactions()` should *improve* the tax path.
+- **Cross-account carryover requires the profile-wide (not per-view) ledger** — viewing a transfer's destination account must see the source's acquisition history, which is why the ledger is profile-global and queries filter by account rather than being built per account.
+- **Implementation is multi-PR.** Suggested ordering for the plan: (1) account-aware engine + `moveLots`; (2) enriched event builder + `CostBasisEvent`; (3) SQL key-event query in GRDB (+ EXPLAIN test) and the `HoldingsCostLedger` FIFO pass over it; (4) cached profile-wide ledger provider at the `ReportingStore` seam + `CapitalGainsCalculator`/`ProfitLoss` cutover (replace `loadAllLegTransactions`); (5) `PositionsHistoryBuilder` baseline cutover; (6) return/IRR cutover + retire `AccountCashFlows`; (7) relabelling + baseline-suppression UI. Each gated through the AI review agents (incl. `@database-code-review` / `@database-schema-review` for the query).
