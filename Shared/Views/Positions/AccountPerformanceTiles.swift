@@ -99,10 +99,11 @@ struct AccountPerformanceTiles: View {
   @ViewBuilder private var annualisedReturnTile: some View {
     let tile = Tile(label: "Return") {
       if let rate = performance.annualisedReturn {
-        Text(formattedPaPercent(rate))
+        Text(formattedAnnualReturn(rate))
           .font(.title3)
           .monospacedDigit()
           .foregroundStyle(paColor(rate))
+          .help(annualisedReturnAvailableTooltip)
       } else {
         Text("—")
           .font(.title3)
@@ -113,6 +114,7 @@ struct AccountPerformanceTiles: View {
       if let text = sinceText {
         Text(text)
           .font(.caption)
+          .monospacedDigit()
           .foregroundStyle(.secondary)
       }
     }
@@ -153,11 +155,12 @@ struct AccountPerformanceTiles: View {
     return "since \(Self.flowDateFormatter.string(from: date))"
   }
 
-  /// `+8.3% p.a.` / `−4.0% p.a.` / `0.0% p.a.`. Uses the shared
-  /// `GainLossPercentDisplay.formatted` so the percentage portion
-  /// matches `PositionsTable.gainCell` and `PositionRow.trailingColumn`.
-  private func formattedPaPercent(_ rate: Decimal) -> String {
-    "\(GainLossPercentDisplay.formatted(rate * 100)) p.a."
+  /// `+8.3% a year` / `−4.0% a year` / `0.0% a year`. Plain, global phrasing
+  /// (BRAND_GUIDE — no jargon) in place of "p.a.". Uses the shared
+  /// `GainLossPercentDisplay.formatted` so the percentage portion matches
+  /// `PositionsTable.gainCell` and `PositionRow.trailingColumn`.
+  private func formattedAnnualReturn(_ rate: Decimal) -> String {
+    "\(GainLossPercentDisplay.formatted(rate * 100)) a year"
   }
 
   private var plColor: Color {
@@ -173,14 +176,36 @@ struct AccountPerformanceTiles: View {
     return .green
   }
 
-  /// Surfaced via `.help(...)` on the unavailable p.a. tile.
-  /// Distinguishes "not enough data" from "conversion broke" so the
-  /// user knows whether to wait or retry.
+  /// `.help(...)`/hint tooltip on the available Return tile. Distinguishes
+  /// the annualised rate from the Gain tile's simple ratio.
+  private let annualisedReturnAvailableTooltip =
+    "Average return each year since your first investment."
+
+  /// Full-sentence reason the Return is unavailable, surfaced via `.help(...)`
+  /// and the accessibility hint. Branches on the data actually present so the
+  /// message is honest: the return is `nil` for three distinct reasons and
+  /// only one of them is a conversion failure.
   private var annualisedReturnUnavailableTooltip: String {
     if performance.firstFlowDate == nil {
       return "Not enough activity yet"
     }
-    return "Return unavailable — a price conversion may have failed"
+    if performance.currentValue == nil {
+      return "Return unavailable — a price conversion may have failed"
+    }
+    return "Return unavailable — not enough time has passed yet"
+  }
+
+  /// The bare reason clause (no leading "Return") for the accessibility label,
+  /// which already prefixes "Return: " — avoids a "Return: Return unavailable…"
+  /// stutter under VoiceOver. Mirrors the three branches of the full tooltip.
+  private var annualisedReturnUnavailableReason: String {
+    if performance.firstFlowDate == nil {
+      return "Not enough activity yet"
+    }
+    if performance.currentValue == nil {
+      return "a price conversion may have failed"
+    }
+    return "not enough time has passed yet"
   }
 
   // MARK: - Accessibility labels
@@ -191,7 +216,7 @@ struct AccountPerformanceTiles: View {
 
   private var profitLossAccessibilityLabel: String {
     guard let profitLoss = performance.profitLoss else {
-      return "Gain: Not available"
+      return "Gain: Unavailable"
     }
     var label = "Gain: \(profitLoss.signedFormatted)"
     if let pct = profitLossPercentText {
@@ -202,9 +227,9 @@ struct AccountPerformanceTiles: View {
 
   private var annualisedReturnAccessibilityLabel: String {
     guard let rate = performance.annualisedReturn else {
-      return "Return: \(annualisedReturnUnavailableTooltip)"
+      return "Return: \(annualisedReturnUnavailableReason)"
     }
-    var label = "Return: \(formattedPaPercent(rate))"
+    var label = "Return: \(formattedAnnualReturn(rate))"
     if let since = sinceText {
       label += " \(since)"
     }

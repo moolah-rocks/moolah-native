@@ -24,7 +24,7 @@ struct PositionsChartRenderRow: Sendable, Hashable {
   let lossSegment: Decimal
   /// True for every row whose `baseline == nil` AND the row is the
   /// last in the resolved sequence — drives the legend's
-  /// "Profit/Loss unavailable" state. Always false on non-last rows
+  /// "Gain/loss unavailable" state. Always false on non-last rows
   /// (the chart's legend reads only the most recent point's value).
   let legendUnavailable: Bool
 }

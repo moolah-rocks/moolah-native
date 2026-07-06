@@ -14,11 +14,12 @@ import Foundation
 struct AccountPerformance {
   let instrument: Instrument
   let currentValue: InstrumentAmount?
-  /// Remaining amount invested — the AUD cost basis of the currently-held
-  /// lots (a stock, ≥ 0 by construction). For ledger-sourced accounts this
-  /// is `HoldingsCostLedger.remainingInvested`; for legacy manual-valuation
-  /// accounts it is the net-deposit sum. `nil` when any in-scope figure is
-  /// unavailable (Rule 11 — never a partial sum).
+  /// Remaining amount invested. For ledger-sourced accounts this is the
+  /// remaining cost basis of the currently-held lots
+  /// (`HoldingsCostLedger.remainingInvested`, ≥ 0 by construction); for legacy
+  /// manual-valuation accounts it is the net-deposit sum (may be negative).
+  /// `nil` when any in-scope figure is unavailable (Rule 11 — never a partial
+  /// sum).
   let amountInvested: InstrumentAmount?
   let profitLoss: InstrumentAmount?
   /// Period return on invested capital (not annualised). The ledger path
