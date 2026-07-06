@@ -96,8 +96,10 @@ struct SyncedAccountStoreFullResyncTests {
     return account
   }
 
-  @Test("syncAccount(fullResync: true) forces fromBlock 0 and re-establishes the checkpoint")
-  func fullResyncForcesFromBlockZero() async throws {
+  @Test(
+    "syncAccount(fullResync: true) restarts from the chain floor and re-establishes the checkpoint"
+  )
+  func fullResyncRestartsFromChainFloor() async throws {
     let fixture = try makeStore()
     let account = seedCryptoAccount(in: fixture.database)
     // Recent lastSyncedAt — a normal sync wouldn't be stale — proves the
@@ -111,7 +113,10 @@ struct SyncedAccountStoreFullResyncTests {
     await fixture.store.syncAccount(account, fullResync: true)
 
     #expect(fixture.alchemy.recordedCalls.count == 1)
-    #expect(fixture.alchemy.recordedCalls.first?.fromBlock == 0)
+    // The resync clears the watermark to 0, then the scan start is clamped up
+    // to the chain's earliest scannable block — 1 for Ethereum (genesis has no
+    // logs), not 0. See `ChainConfig.earliestScannableBlock`.
+    #expect(fixture.alchemy.recordedCalls.first?.fromBlock == 1)
     // The apply pass re-saves a checkpoint row after the reset — the
     // reset is not left as a dangling "never synced" state.
     let saved = try await fixture.backend.walletSyncState.load(accountId: account.id)
@@ -222,11 +227,12 @@ struct SyncedAccountStoreFullResyncTests {
 
     await fixture.store.syncAccount(account, fullResync: true)
 
-    #expect(fixture.alchemy.recordedCalls.first?.fromBlock == 0)
+    // fromBlock is the cleared watermark (0) clamped up to Ethereum's floor (1).
+    #expect(fixture.alchemy.recordedCalls.first?.fromBlock == 1)
     // A successful build's apply pass re-establishes a fresh checkpoint
     // post-reset (at the new cycle's head, block 0 here since the stub
     // returns no transfers) — this asserts the pre-reset 5_000 value was
-    // torn down and rebuilt from genesis, not silently kept.
+    // torn down and rebuilt from the reset baseline, not silently kept.
     let checkpoint = try #require(
       try await fixture.checkpoints.load(accountId: account.id))
     #expect(checkpoint.lastSyncedBlockNumber == 0)
@@ -254,10 +260,10 @@ struct SyncedAccountStoreFullResyncTests {
 
     await fixture.store.syncAccount(account, fullResync: true)
 
-    // The local watermark delete ran and the build still succeeded from
-    // genesis — proving the failure surfaced below isn't just a build
-    // failure bleeding through.
-    #expect(fixture.alchemy.recordedCalls.first?.fromBlock == 0)
+    // The local watermark delete ran and the build still succeeded from the
+    // reset baseline (Ethereum floor 1) — proving the failure surfaced below
+    // isn't just a build failure bleeding through.
+    #expect(fixture.alchemy.recordedCalls.first?.fromBlock == 1)
     let saved = try #require(
       try await fixture.backend.walletSyncState.load(accountId: account.id))
     let kind = try #require(saved.lastError?.kind)
