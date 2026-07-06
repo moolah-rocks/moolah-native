@@ -23,6 +23,16 @@ struct ReportingStoreTests {
     return defaults
   }
 
+  /// Builds a shared cost-basis provider over the same repository + conversion
+  /// service the `ReportingStore` uses, so its ledger reflects the seeded data.
+  @MainActor
+  private func makeLedger(
+    _ repository: any TransactionRepository, _ service: any InstrumentConversionService
+  ) -> HoldingsCostLedgerStore {
+    HoldingsCostLedgerStore(
+      transactionRepository: repository, conversionService: service, referenceCurrency: aud)
+  }
+
   @Test @MainActor func loadProfitLoss_populatesState() async throws {
     let (backend, database) = try TestBackend.create()
     let account = Account(
@@ -51,7 +61,8 @@ struct ReportingStoreTests {
     let store = ReportingStore(
       transactionRepository: backend.transactions,
       conversionService: service,
-      profileCurrency: aud
+      profileCurrency: aud,
+      holdingsCostLedger: makeLedger(backend.transactions, service)
     )
 
     await store.loadProfitLoss()
@@ -105,10 +116,12 @@ struct ReportingStoreTests {
     )
     TestBackend.seed(transactions: [buyTx, sellTx], in: database)
 
+    let service = FakeConversionService.fixedRates([:])
     let store = ReportingStore(
       transactionRepository: backend.transactions,
-      conversionService: FakeConversionService.fixedRates([:]),
+      conversionService: service,
       profileCurrency: aud,
+      holdingsCostLedger: makeLedger(backend.transactions, service),
       userDefaults: try makeDefaultsWithMigrationComplete()
     )
 
@@ -136,10 +149,12 @@ struct ReportingStoreTests {
     }
     TestBackend.seed(transactions: fixture, in: database)
 
+    let service = FakeConversionService.fixedRates([:])
     let store = ReportingStore(
       transactionRepository: backend.transactions,
-      conversionService: FakeConversionService.fixedRates([:]),
+      conversionService: service,
       profileCurrency: aud,
+      holdingsCostLedger: makeLedger(backend.transactions, service),
       userDefaults: try makeDefaultsWithMigrationComplete()
     )
 

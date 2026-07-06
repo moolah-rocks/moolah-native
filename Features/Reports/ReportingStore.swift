@@ -137,10 +137,20 @@ final class ReportingStore {
     let generation = reportGeneration
     isLoading = true
     error = nil
+    guard let holdingsCostLedger else {
+      logger.error("loadProfitLoss called without holdingsCostLedger")
+      isLoading = false
+      return
+    }
     do {
-      let transactions = try await loadAllLegTransactions()
+      // Source the profile-wide ledger from the shared provider (built once
+      // per load, shared with the positions / performance passes) instead of
+      // rebuilding from a full transaction fetch. A genuine build failure
+      // throws here and is surfaced as `error` (Rule 11 unavailable), never a
+      // partial/zero P&L.
+      let ledger = try await holdingsCostLedger.ledger()
       let result = try await ProfitLossCalculator.compute(
-        transactions: transactions,
+        ledger: ledger,
         profileCurrency: profileCurrency,
         conversionService: conversionService,
         asOfDate: Date()
@@ -179,9 +189,12 @@ final class ReportingStore {
     let generation = reportGeneration
     isLoading = true
     error = nil
+    guard let holdingsCostLedger else {
+      logger.error("loadCapitalGains called without holdingsCostLedger")
+      isLoading = false
+      return
+    }
     do {
-      let transactions = try await loadAllLegTransactions()
-
       // Australian FY: 1 July (year-1) to 30 June (year)
       let calendar = Calendar(identifier: .gregorian)
       guard
@@ -196,12 +209,12 @@ final class ReportingStore {
         return
       }
 
-      let result = try await CapitalGainsCalculator.computeWithConversion(
-        transactions: transactions,
-        profileCurrency: profileCurrency,
-        conversionService: conversionService,
-        sellDateRange: fyStart...fyEnd
-      )
+      // Shared profile-wide ledger from the provider (built once per load).
+      // A genuine build failure throws → surfaced as `error`, never a partial
+      // realised set.
+      let ledger = try await holdingsCostLedger.ledger()
+      let result = CapitalGainsCalculator.compute(
+        ledger: ledger, sellDateRange: fyStart...fyEnd)
       guard generation == reportGeneration else { return }
       capitalGainsResult = result
       capitalGainsSummary = CapitalGainsSummary(
@@ -225,14 +238,4 @@ final class ReportingStore {
     isLoading = false
   }
 
-  // MARK: - Private
-
-  private func loadAllLegTransactions() async throws -> [LegTransaction] {
-    let page = try await transactionRepository.fetch(
-      filter: TransactionFilter(), page: 0, pageSize: Int.max
-    )
-    return page.transactions.map { transaction in
-      LegTransaction(date: transaction.date, legs: transaction.legs)
-    }
-  }
 }
