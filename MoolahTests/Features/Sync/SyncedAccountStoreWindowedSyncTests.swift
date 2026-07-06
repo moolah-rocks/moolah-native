@@ -164,18 +164,20 @@ struct SyncedAccountStoreWindowedSyncTests {
     #expect(state.lastSyncedBlockNumber == 499_999)
   }
 
-  // MARK: - Cross-account pairing survives the per-account windowed apply
+  // MARK: - Same-cycle cross-account transfer is auto-merged, not suggested
 
-  @Test("A transfer between two direct-path accounts is paired via one detection pass")
-  func crossAccountTransferPairedAcrossWindowedAccounts() async throws {
+  @Test("A transfer between two direct-path accounts is auto-merged into one transfer")
+  func crossAccountTransferMergedAcrossWindowedAccounts() async throws {
     let fixture = try Store.makeFixture(head: 100_000)
     let accountA = fixture.seedCryptoAccount(walletAddress: Store.walletA)
     let accountB = fixture.seedCryptoAccount(walletAddress: Store.walletB)
     try await fixture.seedFreshState(for: [accountA, accountB])
     // One on-chain ERC-20 transfer A → B. Both wallets' scans see the same
     // log (same hash → same externalId): A as outbound (.expense), B as
-    // inbound (.income). The runners apply sequentially, so B's apply pairs
-    // against A's already-persisted leg via the existing-leg lookup.
+    // inbound (.income). The two sides land in separate per-account windowed
+    // applies, so the same-cycle reconciliation (restored on the windowed
+    // path) collapses the certain pair into one two-`.transfer`-leg transfer
+    // BEFORE the fuzzy detection pass runs.
     fixture.chain.setRowsForAnyCall([
       makeAlchemyTransfer(
         hash: "0xtransfer", from: Store.walletA, to: Store.walletB, category: .erc20,
@@ -187,25 +189,26 @@ struct SyncedAccountStoreWindowedSyncTests {
     await fixture.store.syncAccounts([accountA, accountB])
     let detectionPasses = await fixture.recorder.fetchAllCallCount - fetchAllBefore
 
-    // Detection ran exactly once over the union of both accounts' new rows.
-    #expect(detectionPasses == 1)
+    // The certain pair was collapsed BEFORE detection, so the merged transfer
+    // carries a nil `transferDetectionValueLeg` and nothing eligible remains —
+    // the fuzzy pass short-circuits before any counterpart `fetchAll`.
+    #expect(detectionPasses == 0)
 
-    // Two single-leg transactions survive (the existing-leg dedup kept A's
-    // leg from being duplicated onto B's transaction).
+    // Exactly one merged transfer survives, carrying both accounts' legs as
+    // two `.transfer` legs.
     let txns = try await fixture.backend.transactions.fetchAll(filter: TransactionFilter())
-    #expect(txns.count == 2)
-    let totalValueLegs = txns.flatMap(\.legs).filter { $0.externalId == "0xtransfer:0" }
-    #expect(totalValueLegs.count == 2)
-    let legAccounts = Set(totalValueLegs.compactMap(\.accountId))
+    #expect(txns.count == 1)
+    let merged = try #require(txns.first)
+    let transferLegs = merged.legs.filter { $0.type == .transfer }
+    #expect(transferLegs.count == 2)
+    let legAccounts = Set(transferLegs.compactMap(\.accountId))
     #expect(legAccounts == Set([accountA.id, accountB.id]))
+    let valueLegs = merged.legs.filter { $0.externalId == "0xtransfer:0" }
+    #expect(valueLegs.count == 2)
 
-    // The opposing pair is recognised as a transfer — one suggestion links
-    // the two accounts' transactions.
+    // The pair was collapsed at merge time, so the fuzzy pass wrote NO
+    // suggestion.
     let suggestions = try await fixture.backend.transferSuggestions.fetchAll()
-    #expect(suggestions.count == 1)
-    let suggestion = try #require(suggestions.first)
-    let txA = try #require(txns.first { $0.accountIds.contains(accountA.id) })
-    let txB = try #require(txns.first { $0.accountIds.contains(accountB.id) })
-    #expect(Set(suggestion.transactionIds) == Set([txA.id, txB.id]))
+    #expect(suggestions.isEmpty)
   }
 }
