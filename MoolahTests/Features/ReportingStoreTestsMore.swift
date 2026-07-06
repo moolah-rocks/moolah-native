@@ -13,6 +13,16 @@ import Testing
 struct ReportingStoreTestsMore {
   let aud = Instrument.fiat(code: "AUD")
 
+  /// Builds a shared cost-basis provider over the same repository + conversion
+  /// service the `ReportingStore` uses, so its ledger reflects the seeded data.
+  @MainActor
+  private func makeLedger(
+    _ repository: any TransactionRepository, _ service: any InstrumentConversionService
+  ) -> HoldingsCostLedgerStore {
+    HoldingsCostLedgerStore(
+      transactionRepository: repository, conversionService: service, referenceCurrency: aud)
+  }
+
   @Test func capitalGainsSummary_taxAdjustmentValues_withLosses() {
     let summary = CapitalGainsSummary(
       shortTermGain: -200,
@@ -84,7 +94,8 @@ struct ReportingStoreTestsMore {
     let store = ReportingStore(
       transactionRepository: backend.transactions,
       conversionService: service,
-      profileCurrency: aud
+      profileCurrency: aud,
+      holdingsCostLedger: makeLedger(backend.transactions, service)
     )
 
     await store.loadProfitLoss()
@@ -141,7 +152,8 @@ struct ReportingStoreTestsMore {
     let store = ReportingStore(
       transactionRepository: backend.transactions,
       conversionService: service,
-      profileCurrency: aud
+      profileCurrency: aud,
+      holdingsCostLedger: makeLedger(backend.transactions, service)
     )
 
     await store.loadProfitLoss()

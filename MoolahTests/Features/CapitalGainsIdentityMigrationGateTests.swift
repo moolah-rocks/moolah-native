@@ -39,10 +39,15 @@ struct CapitalGainsIdentityMigrationGateTests {
     let defaults = try makeIsolatedDefaults(tag: "migrating")
     // Flag NOT set → migration in flight.
     let (backend, _) = try TestBackend.create()
+    let service = FakeConversionService.fixedRates([:])
     let store = ReportingStore(
       transactionRepository: backend.transactions,
-      conversionService: FakeConversionService.fixedRates([:]),
+      conversionService: service,
       profileCurrency: .AUD,
+      holdingsCostLedger: HoldingsCostLedgerStore(
+        transactionRepository: backend.transactions,
+        conversionService: service,
+        referenceCurrency: .AUD),
       userDefaults: defaults
     )
     #expect(store.isMigratingCrossChainIdentity)
