@@ -37,7 +37,7 @@ extension PositionsHistoryBuilder {
     let pointDate = Calendar.utc.date(byAdding: .hour, value: 12, to: day) ?? day
     var entries: [PendingEntry] = []
     for (instrument, qty) in state.quantities where qty != 0 {
-      let cost = state.engine.openLots(for: instrument)
+      let cost = state.engine.allOpenLots(for: instrument)
         .reduce(Decimal(0)) { $0 + $1.remainingCost }
       entries.append(PendingEntry(instrument: instrument, quantity: qty, cost: cost))
     }

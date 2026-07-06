@@ -14,7 +14,7 @@ struct CostBasisEngineTests {
     var engine = CostBasisEngine()
     engine.processBuy(instrument: bhp, quantity: 100, costPerUnit: Decimal(42), date: date(0))
 
-    let lots = engine.openLots(for: bhp)
+    let lots = engine.allOpenLots(for: bhp)
     #expect(lots.count == 1)
     #expect(lots[0].remainingQuantity == 100)
     #expect(lots[0].costPerUnit == 42)
@@ -27,7 +27,7 @@ struct CostBasisEngineTests {
     engine.processBuy(instrument: bhp, quantity: 100, costPerUnit: 40, date: date(0))
     engine.processBuy(instrument: bhp, quantity: 50, costPerUnit: 45, date: date(30))
 
-    let lots = engine.openLots(for: bhp)
+    let lots = engine.allOpenLots(for: bhp)
     #expect(lots.count == 2)
     #expect(lots[0].costPerUnit == 40)
     #expect(lots[1].costPerUnit == 45)
@@ -51,7 +51,7 @@ struct CostBasisEngineTests {
     #expect(events[0].proceeds == 5000)
     #expect(events[0].gain == 1000)
     #expect(events[0].holdingDays >= 365)
-    #expect(engine.openLots(for: bhp).isEmpty)
+    #expect(engine.allOpenLots(for: bhp).isEmpty)
   }
 
   @Test
@@ -73,7 +73,7 @@ struct CostBasisEngineTests {
     #expect(events[1].costBasis == 900)
 
     // Remaining: 30 units in lot 2
-    let remaining = engine.openLots(for: bhp)
+    let remaining = engine.allOpenLots(for: bhp)
     #expect(remaining.count == 1)
     #expect(remaining[0].remainingQuantity == 30)
     #expect(remaining[0].costPerUnit == 45)
@@ -135,7 +135,7 @@ struct CostBasisEngineTests {
     #expect(bhpEvents[0].quantity == 50)
 
     // CBA lots unaffected
-    let cbaLots = engine.openLots(for: cba)
+    let cbaLots = engine.allOpenLots(for: cba)
     #expect(cbaLots.count == 1)
     #expect(cbaLots[0].remainingQuantity == 50)
   }
@@ -152,7 +152,7 @@ struct CostBasisEngineTests {
 
     #expect(events.count == 1)
     #expect(events[0].quantity == 50)
-    #expect(engine.openLots(for: bhp).isEmpty)
+    #expect(engine.allOpenLots(for: bhp).isEmpty)
   }
 
   // MARK: - Mixed kinds (stock + crypto)
@@ -168,8 +168,8 @@ struct CostBasisEngineTests {
 
     // Sell only stock — crypto untouched
     _ = engine.processSell(instrument: bhp, quantity: 100, proceedsPerUnit: 50, date: date(365))
-    #expect(engine.openLots(for: bhp).isEmpty)
-    let ethLots = engine.openLots(for: eth)
+    #expect(engine.allOpenLots(for: bhp).isEmpty)
+    let ethLots = engine.allOpenLots(for: eth)
     #expect(ethLots.count == 1)
     #expect(ethLots[0].remainingQuantity == dec("1.0"))
   }
@@ -186,7 +186,7 @@ struct CostBasisEngineTests {
 
     #expect(events.count == 1)
     #expect(events[0].quantity == dec("0.5"))
-    let remaining = engine.openLots(for: eth)
+    let remaining = engine.allOpenLots(for: eth)
     #expect(remaining.count == 1)
     #expect(remaining[0].remainingQuantity == dec("1.5"))
   }
@@ -211,9 +211,9 @@ struct CostBasisEngineTests {
     // Selling from one chain should not touch the other.
     _ = engine.processSell(
       instrument: ethUsdc, quantity: 100, proceedsPerUnit: 1, date: date(100))
-    #expect(engine.openLots(for: ethUsdc).isEmpty)
-    #expect(engine.openLots(for: polyUsdc).count == 1)
-    #expect(engine.openLots(for: polyUsdc)[0].remainingQuantity == 200)
+    #expect(engine.allOpenLots(for: ethUsdc).isEmpty)
+    #expect(engine.allOpenLots(for: polyUsdc).count == 1)
+    #expect(engine.allOpenLots(for: polyUsdc)[0].remainingQuantity == 200)
   }
 
   // MARK: - Helpers
