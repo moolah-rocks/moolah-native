@@ -4,7 +4,6 @@ import SwiftUI
 /// legend's rendering; not reused elsewhere.
 struct PositionsChartLegendRow: View {
   let rows: [PositionsChartRenderRow]
-  let mode: PositionsChartMode
   /// Source of truth for the gain/loss area opacity. Both the
   /// `AreaMark` fills inside the chart AND the legend swatch
   /// reference this constant so a tuning pass adjusts the legend
@@ -13,18 +12,20 @@ struct PositionsChartLegendRow: View {
   let gainLossOpacity: Double
   /// When `false`, the chart is rendering a value-only series (e.g. a wallet
   /// of transfer-in or airdrop tokens). The dashed baseline item and the
-  /// Profit/Loss swatch are omitted so the legend accurately reflects what
+  /// gain/loss swatch are omitted so the legend accurately reflects what
   /// the chart shows. When `true`, the full three-item legend renders.
   let showBaseline: Bool
 
   var body: some View {
-    let baselineLabel = (mode == .aggregate) ? "Invested amount" : "Cost basis"
     let unavailable = rows.last?.legendUnavailable == true
     HStack(spacing: 16) {
       PositionsChartLegendItem(color: .accentColor, label: "Value", dashed: false)
       if showBaseline {
-        PositionsChartLegendItem(color: .secondary, label: baselineLabel, dashed: true)
-        ProfitLossLegendSwatch(unavailable: unavailable, opacity: gainLossOpacity)
+        // Aggregate and per-instrument baselines are the same quantity now —
+        // the AUD amount invested in the currently-held lots — so both read
+        // "Amount invested".
+        PositionsChartLegendItem(color: .secondary, label: "Amount invested", dashed: true)
+        GainLossLegendSwatch(unavailable: unavailable, opacity: gainLossOpacity)
       }
       Spacer()
     }
@@ -74,11 +75,11 @@ private struct DashedLineSwatch: View {
 }
 
 /// Two-tone gain/loss swatch + label. UI_GUIDE.md §5 — colour is
-/// never the sole differentiator: the label "Profit/Loss" is the
+/// never the sole differentiator: the label "Gain/Loss" is the
 /// non-color pairing. Inner colour blocks are
 /// `.accessibilityHidden(true)` and the combined element carries a
 /// single descriptive `.accessibilityLabel`.
-private struct ProfitLossLegendSwatch: View {
+private struct GainLossLegendSwatch: View {
   let unavailable: Bool
   let opacity: Double
 
@@ -101,11 +102,11 @@ private struct ProfitLossLegendSwatch: View {
           .frame(width: 14, height: 4)
       }
       .accessibilityHidden(true)
-      Text(unavailable ? "Profit/Loss unavailable" : "Profit/Loss")
+      Text(unavailable ? "Gain/Loss unavailable" : "Gain/Loss")
     }
     .accessibilityElement(children: .combine)
     .accessibilityLabel(
-      unavailable ? "Profit and Loss area, unavailable" : "Profit and Loss area"
+      unavailable ? "Gain and loss area, unavailable" : "Gain and loss area"
     )
   }
 }

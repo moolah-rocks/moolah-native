@@ -33,7 +33,7 @@ struct AccountPerformanceEquivalenceTests {
 
   private func expectAgreement(_ single: AccountPerformance, _ multi: AccountPerformance) {
     #expect(single.currentValue == multi.currentValue)
-    #expect(single.totalContributions == multi.totalContributions)
+    #expect(single.amountInvested == multi.amountInvested)
     #expect(single.profitLoss == multi.profitLoss)
     #expect(single.profitLossPercent == multi.profitLossPercent)
     #expect(single.annualisedReturn == multi.annualisedReturn)
@@ -57,7 +57,7 @@ struct AccountPerformanceEquivalenceTests {
       accountIds: [account], valuedPositions: rows, profileCurrency: aud, ledger: ledger,
       now: day(365))
     expectAgreement(single, multi)
-    #expect(single.totalContributions == InstrumentAmount(quantity: 1_000, instrument: aud))
+    #expect(single.amountInvested == InstrumentAmount(quantity: 1_000, instrument: aud))
   }
 
   /// A receive-only wallet: the two entry points still agree. The old model's
@@ -76,7 +76,7 @@ struct AccountPerformanceEquivalenceTests {
       accountIds: [account], valuedPositions: rows, profileCurrency: aud, ledger: ledger,
       now: day(0))
     expectAgreement(single, multi)
-    #expect(multi.totalContributions == InstrumentAmount(quantity: 500, instrument: aud))
+    #expect(multi.amountInvested == InstrumentAmount(quantity: 500, instrument: aud))
     #expect(multi.profitLoss == InstrumentAmount(quantity: 0, instrument: aud))
   }
 }

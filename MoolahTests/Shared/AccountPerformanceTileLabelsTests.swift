@@ -16,7 +16,7 @@ struct AccountPerformanceTileLabelsTests {
     AccountPerformance(
       instrument: aud,
       currentValue: currentValue.map { InstrumentAmount(quantity: $0, instrument: aud) },
-      totalContributions: contributions.map {
+      amountInvested: contributions.map {
         InstrumentAmount(quantity: $0, instrument: aud)
       },
       profitLoss: profitLoss.map { InstrumentAmount(quantity: $0, instrument: aud) },
@@ -26,23 +26,24 @@ struct AccountPerformanceTileLabelsTests {
     )
   }
 
-  @Test("subtitle shows Invested $X when both flowDate and contributions populated")
+  @Test("subtitle shows Amount invested $X when both flowDate and contributions populated")
   func subtitleShowsInvested() {
     let perf = performance(
       currentValue: 12_000, contributions: 10_000,
       firstFlowDate: Date(timeIntervalSince1970: 1_700_000_000)
     )
-    let expected = "Invested \(InstrumentAmount(quantity: 10_000, instrument: aud).formatted)"
+    let expected =
+      "Amount invested \(InstrumentAmount(quantity: 10_000, instrument: aud).formatted)"
     #expect(AccountPerformanceTileLabels.investedSubtitleText(perf) == expected)
   }
 
-  @Test("subtitle shows Invested em-dash when flowDate set but contributions nil")
+  @Test("subtitle shows Amount invested em-dash when flowDate set but contributions nil")
   func subtitleShowsUnavailable() {
     let perf = performance(
       currentValue: 12_000, contributions: nil,
       firstFlowDate: Date(timeIntervalSince1970: 1_700_000_000)
     )
-    #expect(AccountPerformanceTileLabels.investedSubtitleText(perf) == "Invested —")
+    #expect(AccountPerformanceTileLabels.investedSubtitleText(perf) == "Amount invested —")
   }
 
   @Test("subtitle hidden when no flows yet")
@@ -61,7 +62,7 @@ struct AccountPerformanceTileLabelsTests {
     let inv = InstrumentAmount(quantity: 10_000, instrument: aud).formatted
     #expect(
       AccountPerformanceTileLabels.currentValueAccessibilityLabel(perf)
-        == "Current Value: \(valueText), Invested: \(inv)"
+        == "Current Value: \(valueText), Amount invested: \(inv)"
     )
   }
 
@@ -74,7 +75,7 @@ struct AccountPerformanceTileLabelsTests {
     let inv = InstrumentAmount(quantity: 10_000, instrument: aud).formatted
     #expect(
       AccountPerformanceTileLabels.currentValueAccessibilityLabel(perf)
-        == "Current Value: Unavailable, Invested: \(inv)"
+        == "Current Value: Unavailable, Amount invested: \(inv)"
     )
   }
 
@@ -87,11 +88,11 @@ struct AccountPerformanceTileLabelsTests {
     let valueText = InstrumentAmount(quantity: 12_000, instrument: aud).formatted
     #expect(
       AccountPerformanceTileLabels.currentValueAccessibilityLabel(perf)
-        == "Current Value: \(valueText), Invested: Unavailable"
+        == "Current Value: \(valueText), Amount invested: Unavailable"
     )
   }
 
-  @Test("accessibility label drops Invested clause when no flows yet")
+  @Test("accessibility label drops Amount invested clause when no flows yet")
   func accessibilityNoFlowsClause() {
     let perf = performance(currentValue: 12_000, firstFlowDate: nil)
     let valueText = InstrumentAmount(quantity: 12_000, instrument: aud).formatted

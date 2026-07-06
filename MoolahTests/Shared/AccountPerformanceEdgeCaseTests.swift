@@ -37,7 +37,7 @@ struct AccountPerformanceEdgeCaseTests {
     let perf = try await AccountPerformanceCalculator.compute(
       accountId: account, valuedPositions: [], profileCurrency: aud, ledger: ledger)
     #expect(perf.currentValue == InstrumentAmount(quantity: 0, instrument: aud))
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 0, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 0, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 0, instrument: aud))
     #expect(perf.profitLossPercent == nil)
     #expect(perf.annualisedReturn == nil)
@@ -55,7 +55,7 @@ struct AccountPerformanceEdgeCaseTests {
       valuedPositions: [valued(bhp, quantity: 100, worth: 10_000)],
       profileCurrency: aud, ledger: ledger, now: oneYearLater)
     #expect(perf.currentValue == InstrumentAmount(quantity: 10_000, instrument: aud))
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 10_000, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 10_000, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 0, instrument: aud))
     #expect(perf.profitLossPercent == 0)
     let annualised = try #require(perf.annualisedReturn)
@@ -77,7 +77,7 @@ struct AccountPerformanceEdgeCaseTests {
       valuedPositions: [valued(bhp, quantity: 0, worth: 0)],
       profileCurrency: aud, ledger: ledger, now: sellDate)
     #expect(perf.currentValue == InstrumentAmount(quantity: 0, instrument: aud))
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 0, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 0, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 0, instrument: aud))
     #expect(perf.firstFlowDate == openingDate)
   }
@@ -96,7 +96,7 @@ struct AccountPerformanceEdgeCaseTests {
       valuedPositions: [valued(bhp, quantity: 10, worth: 1_010)],
       profileCurrency: aud, ledger: ledger, now: now)
     #expect(perf.currentValue == InstrumentAmount(quantity: 1_010, instrument: aud))
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 1_000, instrument: aud))
+    #expect(perf.amountInvested == InstrumentAmount(quantity: 1_000, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 10, instrument: aud))
     // Gain% is gain/invested (10/1000) — defined regardless of span; only the
     // annualised rate needs a >= 1-day span.

@@ -11,24 +11,24 @@ import Foundation
 enum AccountPerformanceTileLabels {
   /// Subtitle text for the Current Value tile, or `nil` to hide
   /// the subtitle row. Hidden when no flows exist; renders the
-  /// formatted contributions when populated; renders an em-dash
-  /// label when contributions are unavailable but flows exist
+  /// formatted amount invested when populated; renders an em-dash
+  /// label when the amount invested is unavailable but flows exist
   /// (Rule 11 — never silently drop a partial sum).
   ///
-  /// The "Invested —" form (label kept, value as em-dash) is
-  /// intentional and **does not** match the P/L tile's bare `—`:
+  /// The "Amount invested —" form (label kept, value as em-dash) is
+  /// intentional and **does not** match the Gain tile's bare `—`:
   /// the subtitle has no adjacent label to supply context, so the
   /// prefix is needed for the row to be intelligible in isolation.
   static func investedSubtitleText(_ performance: AccountPerformance) -> String? {
     guard performance.firstFlowDate != nil else { return nil }
-    if let contributions = performance.totalContributions {
-      return "Invested \(contributions.formatted)"
+    if let amountInvested = performance.amountInvested {
+      return "Amount invested \(amountInvested.formatted)"
     }
-    return "Invested —"
+    return "Amount invested —"
   }
 
   /// Accessibility label for the Current Value tile. Speaks the
-  /// main value and (when flows exist) the contributions number.
+  /// main value and (when flows exist) the amount invested.
   /// `InstrumentAmount.formatted` uses `.currency(code:)` which
   /// Foundation localises into spoken-currency phrasing under
   /// VoiceOver, so no extra formatter is needed.
@@ -42,9 +42,9 @@ enum AccountPerformanceTileLabels {
       main = "Current Value: Unavailable"
     }
     guard performance.firstFlowDate != nil else { return main }
-    if let contributions = performance.totalContributions {
-      return "\(main), Invested: \(contributions.formatted)"
+    if let amountInvested = performance.amountInvested {
+      return "\(main), Amount invested: \(amountInvested.formatted)"
     }
-    return "\(main), Invested: Unavailable"
+    return "\(main), Amount invested: Unavailable"
   }
 }

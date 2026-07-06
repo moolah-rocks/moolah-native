@@ -14,7 +14,12 @@ import Foundation
 struct AccountPerformance {
   let instrument: Instrument
   let currentValue: InstrumentAmount?
-  let totalContributions: InstrumentAmount?
+  /// Remaining amount invested — the AUD cost basis of the currently-held
+  /// lots (a stock, ≥ 0 by construction). For ledger-sourced accounts this
+  /// is `HoldingsCostLedger.remainingInvested`; for legacy manual-valuation
+  /// accounts it is the net-deposit sum. `nil` when any in-scope figure is
+  /// unavailable (Rule 11 — never a partial sum).
+  let amountInvested: InstrumentAmount?
   let profitLoss: InstrumentAmount?
   /// Period return on invested capital (not annualised). The ledger path
   /// computes it as the simple `gain / amountInvested` ratio; the legacy
@@ -39,7 +44,7 @@ extension AccountPerformance {
     AccountPerformance(
       instrument: instrument,
       currentValue: nil,
-      totalContributions: nil,
+      amountInvested: nil,
       profitLoss: nil,
       profitLossPercent: nil,
       annualisedReturn: nil,
@@ -60,7 +65,7 @@ extension AccountPerformance {
     AccountPerformance(
       instrument: instrument,
       currentValue: currentValue,
-      totalContributions: nil,
+      amountInvested: nil,
       profitLoss: nil,
       profitLossPercent: nil,
       annualisedReturn: nil,
