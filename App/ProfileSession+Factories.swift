@@ -203,18 +203,34 @@ extension ProfileSession {
     )
     let analysis = AnalysisStore(
       repository: backend.analysis, conversionService: backend.conversionService)
+    // Single profile-wide cost-basis provider, shared by the investment
+    // (positions/performance) and reporting (CGT/P&L) stores so the ledger is
+    // built once per data load, not per view. Wiring BOTH change seams is
+    // deliberate and load-bearing: `transactionChanges` catches manual edits on
+    // the app's own connection; `instrumentChanges` is the import/sync backstop
+    // for separate-connection writes `observeAll()` cannot see — the exact
+    // pairing #1149 gave `AccountGroupStore`. Not invalidated on rate ticks.
+    let holdingsCostLedger = HoldingsCostLedgerStore(
+      transactionRepository: backend.transactions,
+      conversionService: backend.conversionService,
+      referenceCurrency: profile.instrument,
+      isMigrating: { !UnifiedInstrumentIdentityMigration.isComplete() },
+      transactionChanges: backend.transactions.observeAll(filter: TransactionFilter()),
+      instrumentChanges: instrumentChanges?.observeChanges())
     let investment = InvestmentStore(
       repository: backend.investments,
       transactionRepository: backend.transactions,
       conversionService: backend.conversionService,
       instrumentChanges: instrumentChanges,
-      instrumentRegistry: backend.instrumentRegistry
+      instrumentRegistry: backend.instrumentRegistry,
+      holdingsCostLedger: holdingsCostLedger
     )
     let reporting = ReportingStore(
       transactionRepository: backend.transactions,
       analysisRepository: backend.analysis,
       conversionService: backend.conversionService,
-      profileCurrency: profile.instrument
+      profileCurrency: profile.instrument,
+      holdingsCostLedger: holdingsCostLedger
     )
     return DomainStores(
       auth: auth, account: account, category: category, earmark: earmark,

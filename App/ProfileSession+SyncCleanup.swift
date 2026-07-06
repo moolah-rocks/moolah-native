@@ -52,6 +52,7 @@ extension ProfileSession {
     transactionStore.stopObserving()
     investmentStore.stopObserving()
     analysisStore.stopObserving()
+    holdingsCostLedgerStore?.stopObserving()
   }
 
   // MARK: - Profile Update
