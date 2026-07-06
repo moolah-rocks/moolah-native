@@ -15,10 +15,22 @@ private actor CountingTransactionRepository: TransactionRepository {
   private var legRows: [CostBasisEventLegRow]
   private var shouldThrow: Bool
   private(set) var fetchCount = 0
+  /// Optional gates that block ONLY the first `fetchCostBasisEventLegs` call
+  /// so a test can hold a build in flight, join a second caller, and fire
+  /// `invalidate()` before the build completes.
+  private let firstFetchStarted: AsyncGate?
+  private let releaseFirstFetch: AsyncGate?
 
-  init(legRows: [CostBasisEventLegRow], shouldThrow: Bool = false) {
+  init(
+    legRows: [CostBasisEventLegRow],
+    shouldThrow: Bool = false,
+    firstFetchStarted: AsyncGate? = nil,
+    releaseFirstFetch: AsyncGate? = nil
+  ) {
     self.legRows = legRows
     self.shouldThrow = shouldThrow
+    self.firstFetchStarted = firstFetchStarted
+    self.releaseFirstFetch = releaseFirstFetch
   }
 
   func setLegRows(_ rows: [CostBasisEventLegRow]) { legRows = rows }
@@ -26,8 +38,15 @@ private actor CountingTransactionRepository: TransactionRepository {
 
   func fetchCostBasisEventLegs() async throws -> [CostBasisEventLegRow] {
     fetchCount += 1
+    // Snapshot the rows at call time so the (superseded) first build sees the
+    // pre-edit data even if the test mutates `legRows` while it is gated.
+    let rows = legRows
+    if fetchCount == 1, let firstFetchStarted, let releaseFirstFetch {
+      await firstFetchStarted.open()
+      await releaseFirstFetch.wait()
+    }
     if shouldThrow { throw CostBasisQueryFailure() }
-    return legRows
+    return rows
   }
 
   nonisolated func observe(
@@ -178,5 +197,48 @@ struct HoldingsCostLedgerStoreTests {
 
     _ = try await store.ledger()
     #expect(await repo.fetchCount == 2)  // rebuilt — import reflected, not stale
+  }
+
+  /// A SECOND caller that joins an in-flight build (via the shared
+  /// `buildTask`) must ALSO honour a mid-flight `invalidate()`: it captures
+  /// and rechecks the generation around its await, so it retries rather than
+  /// publishing the superseded (pre-edit) snapshot — the #1209 clobber class.
+  @Test
+  func ledger_joinerHonoursMidFlightSupersession() async throws {
+    let started = AsyncGate()
+    let release = AsyncGate()
+    // Pre-edit data: 1 ETH income → invested 4000.
+    let repo = CountingTransactionRepository(
+      legRows: [row()], firstFetchStarted: started, releaseFirstFetch: release)
+    let store = HoldingsCostLedgerStore(
+      transactionRepository: repo,
+      conversionService: FakeConversionService.fixedRates([eth.id: 4_000]),
+      referenceCurrency: aud)
+
+    // Originator A starts the build; it blocks inside the gated first fetch
+    // (with `buildTask` already set).
+    let taskA = Task { try await store.ledger() }
+    await started.wait()
+
+    // Joiner B attaches to the SAME in-flight `buildTask`.
+    let taskB = Task { try await store.ledger() }
+    for _ in 0..<10 { await Task.yield() }  // let B reach `await buildTask.value`
+
+    // A transaction/import change supersedes the in-flight build and swaps in
+    // post-edit data: 2 ETH income → invested 8000.
+    await repo.setLegRows([row(), row()])
+    store.invalidate()
+
+    // Release the now-superseded first build.
+    await release.open()
+
+    let ledgerA = try await taskA.value
+    let ledgerB = try await taskB.value
+
+    // Both the originator AND the joiner see the POST-invalidate ledger —
+    // never the pre-edit 4000 snapshot.
+    #expect(ledgerA.remainingInvested(accountIds: [account], onOrBefore: day) == 8_000)
+    #expect(ledgerB.remainingInvested(accountIds: [account], onOrBefore: day) == 8_000)
+    #expect(await repo.fetchCount == 2)  // one superseded build + one fresh rebuild
   }
 }

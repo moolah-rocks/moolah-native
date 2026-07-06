@@ -11,6 +11,15 @@ final class ReportingStore {
   private(set) var capitalGainsSummary: CapitalGainsSummary?
   private(set) var isLoading = false
   private(set) var error: Error?
+  /// Rule 11 flags: `true` when a genuine conversion failure during the shared
+  /// ledger build marked at least one instrument unavailable, so the
+  /// corresponding figure may be understated. The Reports view renders
+  /// "unavailable" for the affected surface rather than a complete-looking but
+  /// wrong number — the same treatment as
+  /// `incomeHasUnavailableData`/`expenseHasUnavailableData`. `profitLoss` still
+  /// lists the sibling instruments that resolved.
+  private(set) var capitalGainsHasUnavailableData = false
+  private(set) var profitLossHasUnavailableData = false
 
   /// Category balances for the Reports view, bucketed by transaction type.
   private(set) var incomeBalances: [UUID: InstrumentAmount] = [:]
@@ -28,7 +37,6 @@ final class ReportingStore {
   private(set) var isLoadingCategoryBalances = false
   private(set) var categoryBalancesError: Error?
 
-  private let transactionRepository: TransactionRepository
   private let analysisRepository: AnalysisRepository?
   private let conversionService: InstrumentConversionService
   private(set) var profileCurrency: Instrument
@@ -70,14 +78,12 @@ final class ReportingStore {
   }
 
   init(
-    transactionRepository: TransactionRepository,
     analysisRepository: AnalysisRepository? = nil,
     conversionService: InstrumentConversionService,
     profileCurrency: Instrument,
     holdingsCostLedger: HoldingsCostLedgerStore? = nil,
     userDefaults: UserDefaults = .moolahShared
   ) {
-    self.transactionRepository = transactionRepository
     self.analysisRepository = analysisRepository
     self.conversionService = conversionService
     self.profileCurrency = profileCurrency
@@ -156,7 +162,10 @@ final class ReportingStore {
         asOfDate: Date()
       )
       guard generation == reportGeneration else { return }
-      profitLoss = result
+      profitLoss = result.rows
+      // Rule 11: an unavailable instrument's row is omitted; flag it so the
+      // view marks the P&L surface unavailable rather than "no position."
+      profitLossHasUnavailableData = !result.unavailableInstrumentIds.isEmpty
     } catch is CancellationError {
       // View teardown / supersession — never surface; the next mount
       // issues its own load.
@@ -217,6 +226,10 @@ final class ReportingStore {
         ledger: ledger, sellDateRange: fyStart...fyEnd)
       guard generation == reportGeneration else { return }
       capitalGainsResult = result
+      // Rule 11: a conversion failure may have dropped a disposal, so the
+      // realised total may be understated — flag it (a tax figure must never
+      // render complete-but-wrong).
+      capitalGainsHasUnavailableData = result.hasUnavailableData
       capitalGainsSummary = CapitalGainsSummary(
         shortTermGain: result.shortTermGain,
         longTermGain: result.longTermGain,

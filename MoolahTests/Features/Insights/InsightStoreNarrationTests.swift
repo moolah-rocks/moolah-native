@@ -45,7 +45,7 @@ struct InsightStoreNarrationTests {
         repository: backend.earmarks, conversionService: backend.conversionService,
         targetInstrument: aud, instrumentChanges: nil),
       reporting: ReportingStore(
-        transactionRepository: backend.transactions, analysisRepository: backend.analysis,
+        analysisRepository: backend.analysis,
         conversionService: backend.conversionService, profileCurrency: aud),
       account: AccountStore(
         repository: backend.accounts, conversionService: backend.conversionService,

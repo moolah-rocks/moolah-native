@@ -1,13 +1,24 @@
 import Foundation
 
+/// Per-instrument P&L rows plus the Rule 11 unavailability set.
+struct ProfitLossResult: Sendable {
+  let rows: [InstrumentProfitLoss]
+  /// Instrument ids whose cost-basis history hit an unresolvable conversion
+  /// during the ledger build (Rule 11). Their rows are OMITTED from `rows`
+  /// (a partial row would look complete); the caller surfaces them as
+  /// "unavailable" rather than "no position."
+  let unavailableInstrumentIds: Set<String>
+}
+
 /// Computes per-instrument profit/loss from transaction history.
 ///
 /// Combines FIFO cost basis tracking with current market valuation.
 enum ProfitLossCalculator {
   /// Retained convenience for unit-test call sites: builds a profile-wide
-  /// `HoldingsCostLedger` from `LegTransaction`s then projects. Production
-  /// (`ReportingStore`) uses `compute(ledger:…)` with the shared
-  /// `HoldingsCostLedgerStore` ledger so the build is not repeated.
+  /// `HoldingsCostLedger` from `LegTransaction`s then projects, returning just
+  /// the rows. Production (`ReportingStore`) uses `compute(ledger:…)` with the
+  /// shared `HoldingsCostLedgerStore` ledger (and reads its
+  /// `unavailableInstrumentIds`) so the build is not repeated.
   static func compute(
     transactions: [LegTransaction],
     profileCurrency: Instrument,
@@ -23,7 +34,8 @@ enum ProfitLossCalculator {
       ledger: ledger,
       profileCurrency: profileCurrency,
       conversionService: conversionService,
-      asOfDate: asOfDate)
+      asOfDate: asOfDate
+    ).rows
   }
 
   /// Pure per-instrument P&L projection from a pre-built profile-wide ledger.
@@ -39,22 +51,32 @@ enum ProfitLossCalculator {
   /// from the same ledger; `currentValue` market-values the open quantity at
   /// `asOfDate` (Rule 6). See guides/INSTRUMENT_CONVERSION_GUIDE.md Rules 1,
   /// 5, 6, and 8.
+  ///
+  /// Rule 11: instruments in `ledger.unavailableInstrumentIds` (a genuine
+  /// conversion failure touched their history) are OMITTED from `rows` — a
+  /// row assembled from their surviving flows/lots would look complete but be
+  /// understated — and returned in `unavailableInstrumentIds` so the caller
+  /// marks them unavailable. Sibling instruments still render.
   static func compute(
     ledger: HoldingsCostLedger,
     profileCurrency: Instrument,
     conversionService: InstrumentConversionService,
     asOfDate: Date
-  ) async throws -> [InstrumentProfitLoss] {
+  ) async throws -> ProfitLossResult {
+    let unavailable = ledger.unavailableInstrumentIds
     var instrumentData: [String: InstrumentData] = [:]
-    for entry in ledger.flows where entry.counterpartyAccount == nil && entry.amount > 0 {
+    for entry in ledger.flows
+    where entry.counterpartyAccount == nil && entry.amount > 0
+      && !unavailable.contains(entry.instrument.id)
+    {
       instrumentData[entry.instrument.id, default: InstrumentData(instrument: entry.instrument)]
         .totalInvested += entry.amount
     }
-    for event in ledger.realisedEvents {
+    for event in ledger.realisedEvents where !unavailable.contains(event.instrument.id) {
       instrumentData[event.instrument.id, default: InstrumentData(instrument: event.instrument)]
         .realizedGain += event.gain
     }
-    for lot in ledger.openLots {
+    for lot in ledger.openLots where !unavailable.contains(lot.instrument.id) {
       let id = lot.instrument.id
       instrumentData[id, default: InstrumentData(instrument: lot.instrument)]
         .currentQuantity += lot.remainingQuantity
@@ -62,11 +84,12 @@ enum ProfitLossCalculator {
         .remainingCostBasis += lot.remainingCost
     }
 
-    return try await buildResults(
+    let rows = try await buildResults(
       from: instrumentData,
       profileCurrency: profileCurrency,
       conversionService: conversionService,
       asOfDate: asOfDate)
+    return ProfitLossResult(rows: rows, unavailableInstrumentIds: unavailable)
   }
 
   private static func buildResults(

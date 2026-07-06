@@ -16,7 +16,6 @@ struct ReportingStoreLoadCancellationTests {
   func cancelledLoadCategoryBalancesDoesNotSurfaceCancellationError() async throws {
     let analysisRepository = GatedAnalysisRepository()
     let store = ReportingStore(
-      transactionRepository: FailingTransactionRepository(),
       analysisRepository: analysisRepository,
       conversionService: FakeConversionService.fixedRates([:]),
       profileCurrency: .defaultTestInstrument

@@ -226,7 +226,6 @@ extension ProfileSession {
       holdingsCostLedger: holdingsCostLedger
     )
     let reporting = ReportingStore(
-      transactionRepository: backend.transactions,
       analysisRepository: backend.analysis,
       conversionService: backend.conversionService,
       profileCurrency: profile.instrument,

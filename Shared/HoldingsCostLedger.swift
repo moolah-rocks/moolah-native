@@ -303,10 +303,14 @@ struct HoldingsCostLedger: Sendable {
 extension HoldingsCostLedger: Equatable {}
 
 extension HoldingsCostLedger {
-  /// The degraded/no-data ledger: every query returns 0 / empty. Used by
-  /// consumers when a build is unavailable (Rule 11) or while the
-  /// cross-chain identity migration is running, so a failed/gated ledger
-  /// never partially sums.
+  /// The no-data ledger: every query returns 0 / empty. This is ONLY the
+  /// migration-gate sentinel — returned by `HoldingsCostLedgerStore.ledger()`
+  /// while the cross-chain identity migration is running, when no cost-basis
+  /// data exists yet so 0/empty is honest. It is NOT a substitute for a failed
+  /// build: a genuine build failure must propagate/throw and be surfaced as
+  /// unavailable (Rule 11), never coalesced with `(try? await ledger()) ??
+  /// .empty` — because `.empty`'s `unavailableKeys` is empty, `remainingInvested`
+  /// returns 0 (not nil), which would render a real failure as "0 invested".
   static var empty: HoldingsCostLedger {
     HoldingsCostLedger(
       investedSnapshots: [], realisedEvents: [], flows: [], openLots: [], unavailableKeys: [])
@@ -314,6 +318,16 @@ extension HoldingsCostLedger {
 }
 
 extension HoldingsCostLedger {
+  /// Instrument ids whose build hit a genuine (non-cancel) conversion failure
+  /// (Rule 11). Consumers that read `realisedEvents` / `openLots` / `flows`
+  /// directly (`CapitalGainsCalculator`, `ProfitLossCalculator`) must consult
+  /// this: a disposal or lot for such an instrument may have been dropped, so
+  /// a figure that includes it would be understated and must be marked
+  /// unavailable rather than rendered as complete.
+  var unavailableInstrumentIds: Set<String> {
+    Set(unavailableKeys.map(\.instrument.id))
+  }
+
   /// Remaining amount invested across `accountIds` at-or-before `day`,
   /// carrying forward the latest change-point per (account, instrument).
   /// Returns `nil` (never a partial sum, Rule 11) if any in-scope
