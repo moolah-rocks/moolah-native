@@ -117,16 +117,7 @@ struct WalletSyncEngine: Sendable {
     account: Account, chain: ChainConfig
   ) async throws -> WalletSyncBuildResult {
     // 1. Validate account is a crypto account with required fields.
-    guard
-      account.type == .crypto,
-      let walletAddress = account.walletAddress,
-      !walletAddress.isEmpty
-    else {
-      Self.logger.error(
-        "WalletSyncEngine: invalid account \(account.id, privacy: .public)"
-      )
-      throw WalletSyncError.providerMalformedResponse(stage: "account-validation")
-    }
+    let walletAddress = try validatedWalletAddress(for: account)
     try Task.checkCancellation()
 
     // 2. Determine fromBlock (reorg window — re-fetch covers the last
@@ -134,7 +125,9 @@ struct WalletSyncEngine: Sendable {
     //    earliest scannable block. This clamp is applied uniformly to every
     //    downstream source (Blockscout native/internal + Alchemy/direct-RPC
     //    ERC-20): pre-Bedrock OP Mainnet history is intentionally discarded
-    //    across the board, not just where a pruned node forces it.
+    //    across the board, not just where a pruned node forces it. `priorBlock`
+    //    is read once here and reused as the step-5 watermark fallback; the
+    //    windowed runner reaches the same start via `resolveFromBlock(for:chain:)`.
     let priorBlock = try await resolvePriorBlock(for: account)
     let fromBlock = Self.startBlock(priorBlock: priorBlock, chain: chain)
 
@@ -166,6 +159,26 @@ struct WalletSyncEngine: Sendable {
     //    checkpoint when nothing was found.
     let headBlock = Self.maxBlockNumber(in: transfers) ?? priorBlock
     return WalletSyncBuildResult(candidates: built, headBlockNumber: headBlock)
+  }
+
+  /// Validates `account` is a crypto account carrying a non-empty wallet
+  /// address, returning the address. Throws
+  /// `providerMalformedResponse(stage: "account-validation")` otherwise.
+  /// Shared by `build` and the windowed sync runner so a malformed account
+  /// is rejected identically on both paths (a runner that skipped this
+  /// would force-unwrap a `nil` `walletAddress` into `fetchNativeContext`).
+  func validatedWalletAddress(for account: Account) throws -> String {
+    guard
+      account.type == .crypto,
+      let walletAddress = account.walletAddress,
+      !walletAddress.isEmpty
+    else {
+      Self.logger.error(
+        "WalletSyncEngine: invalid account \(account.id, privacy: .public)"
+      )
+      throw WalletSyncError.providerMalformedResponse(stage: "account-validation")
+    }
+    return walletAddress
   }
 
   // MARK: - Windowed build primitives
@@ -311,6 +324,26 @@ struct WalletSyncEngine: Sendable {
     let syncedBlock =
       (try? await checkpoints.load(accountId: account.id))?.lastSyncedBlockNumber ?? 0
     return max(localState?.lastSyncedBlockNumber ?? 0, syncedBlock)
+  }
+
+  /// The block a scan should start from for `account`: the reorg-window-
+  /// adjusted prior checkpoint (`max(localState, syncedCheckpoint) - 32`,
+  /// clamped at 0). `build` derives this inline from a `priorBlock` it
+  /// already read for its watermark fallback; the windowed sync runner
+  /// (which has no such fallback) calls this so both primitives compute an
+  /// identical resumable start from the same two repositories, keeping the
+  /// reorg-window rule single-sourced.
+  func resolveFromBlock(for account: Account) async throws -> UInt64 {
+    Self.reorgAdjustedFromBlock(priorBlock: try await resolvePriorBlock(for: account))
+  }
+
+  /// Pure reorg-window adjustment shared by `build` and `resolveFromBlock`:
+  /// a prior checkpoint of 0 (genesis / never synced) starts at 0; any
+  /// higher checkpoint drops the last 32 blocks so a reorg below the
+  /// watermark is re-scanned. Factored out so the two entry points can't
+  /// drift.
+  static func reorgAdjustedFromBlock(priorBlock: UInt64) -> UInt64 {
+    priorBlock == 0 ? 0 : subtractingReorgWindow(priorBlock)
   }
 
   /// Fetches native and internal transfers from Blockscout and returns the
