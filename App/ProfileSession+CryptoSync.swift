@@ -147,6 +147,17 @@ extension ProfileSession {
       walletSyncState: backend.walletSyncState,
       checkpoints: backend.walletSyncCheckpoints,
       importRules: NoOpWalletImportRulesEngine())
+    // Resumable, determinate direct-RPC runner. Shares the sync engine,
+    // routing chain client, and apply engine that the single-shot path
+    // uses, so a windowed account and an Alchemy-path fallback resolve the
+    // same instruments and write through the same repositories. The store
+    // routes crypto accounts with a resolvable `ChainConfig` here; the
+    // Alchemy path (`didWindowedScan == false`) and exchanges fall back to
+    // the single-shot batch.
+    let windowedRunner = WindowedWalletSyncRunner(
+      engine: walletSyncEngine,
+      chainClient: chainClient,
+      applyEngine: walletApplyEngine)
     let coinstashSource = makeCoinstashSource(
       registry: registry,
       fiatInstrument: profileInstrument,
@@ -165,7 +176,8 @@ extension ProfileSession {
       walletSyncCheckpoints: backend.walletSyncCheckpoints,
       accounts: backend.accounts,
       transferDetection: transferDetection,
-      priceWarmer: priceWarmer)
+      priceWarmer: priceWarmer,
+      windowedRunner: windowedRunner)
     return CryptoSyncWiring(
       store: store, discovery: discovery, reloadRPCEndpoints: reloadRPCEndpoints)
   }

@@ -67,28 +67,43 @@ extension SyncedAccountStore {
 
     for account in inputs { setInProgress(true, for: account.id) }
     defer {
-      for account in inputs { setInProgress(false, for: account.id) }
+      for account in inputs {
+        setInProgress(false, for: account.id)
+        // Clear any determinate progress the windowed runner published so
+        // a completed / failed sync leaves no stale bar behind.
+        setSyncProgress(nil, for: account.id)
+      }
     }
 
-    let perAccountResults = await runParallelBuilds(for: inputs)
+    // Route each account: a crypto account with a resolvable `ChainConfig`
+    // is tried through the windowed runner; the Alchemy path and every
+    // non-crypto source fall back to the single-shot batch (see
+    // `routeThroughWindowedRunner`).
+    let (windowedNew, singleShotInputs) = await routeThroughWindowedRunner(inputs)
+
+    let perAccountResults = await runParallelBuilds(for: singleShotInputs)
     updateGlobalError(from: perAccountResults)
-    let genuinelyNew = await runApplyPass(perAccountResults: perAccountResults)
+    let singleShotNew = await runApplyPass(perAccountResults: perAccountResults)
     await refreshStateFromRepository()
-    // Detection runs over the apply pass's genuinely-new survivors only
-    // — the transactions this pass actually merged-and-deduped-and-
-    // persisted. There is no date-window scan, so a previously-existing
+    // Detection runs once over the union of every path's genuinely-new
+    // survivors — the transactions this pass actually merged-and-deduped-
+    // and-persisted. There is no date-window scan, so a previously-existing
     // row (e.g. a dismissed/merged pair) is never re-evaluated. Transfers
     // already collapsed by `CrossAccountTransferMerger` (same-`externalId`
     // opposing legs) carry a nil `transferDetectionValueLeg` and are
-    // structurally skipped by the detector.
+    // structurally skipped by the detector; opposing legs that survived as
+    // two single-leg transactions across windowed + single-shot accounts
+    // are still paired here because both sides sit in this one union pass.
+    let genuinelyNew = windowedNew + singleShotNew
+    let participatingAccountIds = Set(inputs.map(\.id))
     await runTransferDetection(
       genuinelyNew: genuinelyNew,
-      participatingAccountIds: Set(inputs.map(\.id)))
+      participatingAccountIds: participatingAccountIds)
     // Kick off a background warm of the just-synced crypto tokens'
     // historical prices so the Analysis dashboard fills in without
     // blocking the sync pass (issue #1075). No-op when no warmer is
     // wired or nothing genuinely-new landed.
-    startPriceWarming(genuinelyNew: genuinelyNew, accountIds: Set(inputs.map(\.id)))
+    startPriceWarming(genuinelyNew: genuinelyNew, accountIds: participatingAccountIds)
   }
 
   // MARK: - Parallel build

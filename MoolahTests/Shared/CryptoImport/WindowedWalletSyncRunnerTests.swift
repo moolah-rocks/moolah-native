@@ -45,24 +45,95 @@ struct WindowedWalletSyncRunnerTests {
 
   // MARK: - Per-window checkpoint on a mid-scan throw
 
-  @Test("A throw on the 3rd window leaves the checkpoint at the 2nd window's end")
-  func midScanThrowCheckpointsPerWindow() async throws {
+  @Test("A per-window failure surfaces windowError and checkpoints at the 2nd window's end")
+  func midScanFailureReturnsErrorAndCheckpointsPerWindow() async throws {
     let setup = try makeSetup(head: 600_000)
     let account = setup.seedAccount()
     // Fail the third window's ERC-20 fetch (its fromBlock is 500_000).
     setup.chain.failTransfers(forFromBlock: 500_000)
 
-    await #expect(throws: (any Error).self) {
-      _ = try await setup.runner.run(
-        account: account, chain: .ethereum, progress: { _ in })
-    }
+    let result = try await setup.runner.run(
+      account: account, chain: .ethereum, progress: { _ in })
 
-    // Windows 1 and 2 applied-then-checkpointed; window 3 threw before its
-    // apply. The durable checkpoint is the 2nd window's end, not 0.
+    // Windows 1 and 2 applied-then-checkpointed; window 3 failed before its
+    // apply. The run does NOT throw on a per-window error — it stops and
+    // surfaces the error so the caller can still consume the survivors.
+    #expect(result.didWindowedScan)
+    #expect(result.windowError != nil)
+    // The durable checkpoint is the 2nd window's end, not 0.
     let checkpoint = try await setup.backend.walletSyncCheckpoints.load(accountId: account.id)
     #expect(checkpoint?.lastSyncedBlockNumber == 499_999)
     let state = try await setup.backend.walletSyncState.load(accountId: account.id)
     #expect(state?.lastSyncedBlockNumber == 499_999)
+  }
+
+  @Test("A per-window failure still returns the survivors from earlier windows")
+  func midScanFailureReturnsPreFailureSurvivors() async throws {
+    let setup = try makeSetup(head: 600_000)
+    let account = setup.seedAccount()
+    // One inbound ERC-20 in the first window [0, 249_999]; fail the third.
+    setup.chain.setRows(
+      [
+        makeAlchemyTransfer(
+          hash: "0xearly", from: Self.counterparty, to: Self.wallet, category: .erc20,
+          contractAddress: "0xtoken", blockNum: RPCHex.hexQuantity(100_000))
+      ],
+      forFromBlock: 0)
+    setup.chain.failTransfers(forFromBlock: 500_000)
+
+    let result = try await setup.runner.run(
+      account: account, chain: .ethereum, progress: { _ in })
+
+    #expect(result.windowError != nil)
+    // The first window's persisted transfer is returned despite the later
+    // failure, so transfer detection still sees it (the whole point of the
+    // return-on-error contract).
+    #expect(result.genuinelyNew.count == 1)
+    let persisted = try await setup.backend.transactions.fetchAll(filter: .init())
+    #expect(persisted.count == 1)
+  }
+
+  // MARK: - Mid-scan cancellation returns survivors, not an error
+
+  @Test("Mid-scan cancellation returns the pre-cancel survivors without an error")
+  func midScanCancellationReturnsSurvivorsWithoutError() async throws {
+    let setup = try makeSetup(head: 600_000)
+    let account = setup.seedAccount()
+    // Inbound ERC-20 in the first window [0, 249_999].
+    setup.chain.setRows(
+      [
+        makeAlchemyTransfer(
+          hash: "0xearly", from: Self.counterparty, to: Self.wallet, category: .erc20,
+          contractAddress: "0xtoken", blockNum: RPCHex.hexQuantity(100_000))
+      ],
+      forFromBlock: 0)
+    // Cancel the run once the SECOND window's fetch begins — window 1 has by
+    // then fully applied-and-checkpointed its transfer. `withUnsafeCurrentTask`
+    // cancels the child task the run executes in (below), not the test task.
+    setup.chain.setOnGetAssetTransfers {
+      if setup.chain.recordedFromBlocks.count == 2 {
+        withUnsafeCurrentTask { $0?.cancel() }
+      }
+    }
+
+    let result = try await Task { @MainActor in
+      try await setup.runner.run(account: account, chain: .ethereum, progress: { _ in })
+    }.value
+
+    // Cancellation is not an error: no `windowError`, so the caller writes no
+    // `lastError` — but the first window's persisted survivor is still returned
+    // so this cycle's detection pass (which runs regardless of cancellation)
+    // sees it.
+    #expect(result.didWindowedScan)
+    #expect(result.windowError == nil)
+    #expect(result.genuinelyNew.count == 1)
+    let persisted = try await setup.backend.transactions.fetchAll(filter: .init())
+    #expect(persisted.count == 1)
+    // The checkpoint sits at a completed window (at least the first's end).
+    let checkpoint = try await setup.backend.walletSyncCheckpoints.load(accountId: account.id)
+    #expect((checkpoint?.lastSyncedBlockNumber ?? 0) >= 249_999)
+    let state = try await setup.backend.walletSyncState.load(accountId: account.id)
+    #expect(state?.lastError == nil)
   }
 
   // MARK: - Resume
@@ -72,10 +143,9 @@ struct WindowedWalletSyncRunnerTests {
     let setup = try makeSetup(head: 600_000)
     let account = setup.seedAccount()
     setup.chain.failTransfers(forFromBlock: 500_000)
-    await #expect(throws: (any Error).self) {
-      _ = try await setup.runner.run(
-        account: account, chain: .ethereum, progress: { _ in })
-    }
+    let firstResult = try await setup.runner.run(
+      account: account, chain: .ethereum, progress: { _ in })
+    #expect(firstResult.windowError != nil)
     let secondCheckpoint = try #require(
       try await setup.backend.walletSyncCheckpoints.load(accountId: account.id)
     ).lastSyncedBlockNumber
@@ -246,86 +316,5 @@ struct WindowedWalletSyncRunnerTests {
       applyEngine: applyEngine,
       segmentBlockWindow: segmentBlockWindow)
     return Setup(backend: backend, database: database, chain: chain, runner: runner)
-  }
-}
-
-/// Scriptable, recording `ChainDataClient` for the windowed-runner tests.
-/// Returns a fixed `currentHead`, per-`fromBlock` ERC-20 rows (or a single
-/// set for every call), records every `getAssetTransfers` `fromBlock`, and
-/// can inject a failure on a chosen window's fetch. Receipts return a
-/// zero-fee sentinel (`from: ""`) so an outbound transfer's gas-leg lookup
-/// resolves to no leg rather than trapping.
-///
-/// `@unchecked Sendable`: all mutable state lives behind an `NSLock`,
-/// matching the project convention for non-actor concurrent test stubs.
-final class ScriptedWindowChainClient: ChainDataClient, @unchecked Sendable {
-  /// Thrown by a window scripted to fail via `failTransfers(forFromBlock:)`.
-  struct ScriptedWindowFailure: Error { let fromBlock: UInt64 }
-
-  private let lock = NSLock()
-  private let head: UInt64?
-  private var rowsByFromBlock: [UInt64: [AlchemyTransfer]] = [:]
-  private var anyCallRows: [AlchemyTransfer] = []
-  private var failingFromBlocks: Set<UInt64> = []
-  private var fromBlocks: [UInt64] = []
-
-  init(head: UInt64?) {
-    self.head = head
-  }
-
-  /// Rows returned for the window whose fetch starts at `fromBlock`.
-  func setRows(_ rows: [AlchemyTransfer], forFromBlock fromBlock: UInt64) {
-    lock.withLock { rowsByFromBlock[fromBlock] = rows }
-  }
-
-  /// Rows returned for every fetch that has no per-`fromBlock` override —
-  /// used to model a transfer that reappears in the reorg-window re-scan.
-  func setRowsForAnyCall(_ rows: [AlchemyTransfer]) {
-    lock.withLock { anyCallRows = rows }
-  }
-
-  /// Scripts the fetch for the window starting at `fromBlock` to throw.
-  func failTransfers(forFromBlock fromBlock: UInt64) {
-    lock.withLock { _ = failingFromBlocks.insert(fromBlock) }
-  }
-
-  /// Clears all scripted failures (used to model a cleared transient error
-  /// on resume).
-  func clearFailures() {
-    lock.withLock { failingFromBlocks.removeAll() }
-  }
-
-  /// Every `getAssetTransfers` `fromBlock`, in call order.
-  var recordedFromBlocks: [UInt64] {
-    lock.withLock { fromBlocks }
-  }
-
-  func currentHead(chain: ChainConfig) async throws -> UInt64? {
-    head
-  }
-
-  func getAssetTransfers(
-    chain: ChainConfig,
-    walletAddress: String,
-    fromBlock: UInt64,
-    toBlock: UInt64?
-  ) async throws -> [AlchemyTransfer] {
-    let (rows, shouldFail) = lock.withLock { () -> ([AlchemyTransfer], Bool) in
-      fromBlocks.append(fromBlock)
-      let resolved = rowsByFromBlock[fromBlock] ?? anyCallRows
-      return (resolved, failingFromBlocks.contains(fromBlock))
-    }
-    if shouldFail { throw ScriptedWindowFailure(fromBlock: fromBlock) }
-    return rows
-  }
-
-  func getTransactionReceipt(
-    chain: ChainConfig,
-    hash: String
-  ) async throws -> AlchemyTransactionReceipt {
-    // Sentinel `from: ""` never matches a wallet, so `makeGasLeg` returns
-    // nil and no gas leg is synthesised — keeps the transfer legs the
-    // tests inspect deterministic.
-    AlchemyTransactionReceipt(hash: hash, gasUsed: 0, effectiveGasPrice: 0, from: "")
   }
 }
