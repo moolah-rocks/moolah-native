@@ -62,6 +62,26 @@ enum AccountDetailLayout {
     valuedRows.contains { $0.quantity != 0 && $0.instrument != hostCurrency }
   }
 
+  /// Whether `account` warrants a synced-account header above the detail
+  /// split. Crypto shows a header only when its chain resolves to a
+  /// `ChainConfig`; exchange always shows one; every other type (including
+  /// investment and bank) shows none. Pure so the rule is unit-testable
+  /// without instantiating the view.
+  ///
+  /// Note: account *groups* never reach this helper — the group dispatch
+  /// passes `syncedHeaderAccount: nil`, gating the header at the call site.
+  nonisolated static func showsSyncedHeader(for account: Account) -> Bool {
+    switch account.type {
+    case .crypto:
+      guard let chainId = account.chainId else { return false }
+      return ChainConfig.config(for: chainId) != nil
+    case .exchange:
+      return true
+    default:
+      return false
+    }
+  }
+
   /// Whether the account has holdings worth surfacing in a positions
   /// table — at least one non-zero position in an instrument other than
   /// the host currency. Drives Positions-tab / pinned-pane presence only;
