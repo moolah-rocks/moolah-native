@@ -24,18 +24,36 @@ The **Alchemy path** (Alchemy key present, no matching custom RPC) uses cursor-b
 
 ## Design
 
+### 0. The multi-source reality (why windowing is per-account, not per-scan)
+
+`WalletSyncEngine.build` merges **three** sources before it derives a head or applies anything:
+
+- **Blockscout** native + internal ETH (`BlockExplorerClient.nativeTransactions`/`internalTransactions`) — takes `fromBlock` only, paginates newest-first to latest; **no upper block bound**.
+- **Wrap/unwrap synthesis** — derived off the Blockscout native set.
+- **Direct-RPC ERC-20** `eth_getLogs` scan (`DirectRPCChainClient.getAssetTransfers`) — the long pole, and the only source with a determinate `[from, head]` block range.
+
+For a resumable checkpoint to be *safe*, every transfer with block ≤ the checkpoint must be durably applied — native included, not just ERC-20 logs. Since Blockscout can't be windowed by an upper bound, the design **fetches Blockscout (native + internal + wrap/unwrap) once up front for `[from, head]`** (same cost as today) and **partitions those transfers by block number into the windows**, applying each window's native partition alongside that window's ERC-20 scan. Only the ERC-20 scan is windowed.
+
+Two more consequences the pipeline forces:
+
+- **Apply becomes per-account-per-window.** Today `WalletApplyEngine.apply(perAccount:)` runs **once per cycle across all accounts**. Mid-scan resumability requires applying (and checkpointing) *within* a scan, so the direct-path account applies its own windows incrementally — `apply(perAccount: [singleAccountInput])` per window. Cross-account transfer pairing is **preserved**: `CrossAccountTransferMerger` already pairs candidates against **already-persisted** legs via `existingLegLookup` (the "prior-cycle pair" path), so a pairing that used to happen in-batch now happens via the persisted-leg lookup on a later window/cycle — same result, idempotent. Transfer-detection and price-warming run **once at cycle end** over the union of each window's `genuinelyNew` survivors (unchanged semantics).
+- **The generic `AccountSyncSource` path stays single-shot.** Windowing is specific to the direct-RPC crypto path. Exchanges (Coinstash) and the Alchemy-cursor crypto path keep today's `build(account:) -> WalletSyncBuildResult` → single cross-account apply.
+
 ### 1. Block-windowed segment coordinator (direct path)
 
-Replace the single scan-everything-then-apply-once pass (for the direct path) with a loop over fixed **block windows**:
+Replace the single scan-everything-then-apply-once pass (for the direct path only) with a loop over fixed **block windows**:
 
-1. Fetch `head = eth_blockNumber` up front. It is the progress target and, with the existing reorg window, defines `from = max(localState, syncedCheckpoint) − 32` (0 for a fresh account).
-2. Walk `[from, head]` in windows of a constant `segmentBlockWindow` (sized to roughly ~30 s of scanning; a tunable constant — exact block count is approximate because scan rate varies by RPC and log density).
-3. For each window `[s, e]` where `e = min(s + segmentBlockWindow − 1, head)`:
-   a. Run **both** topic passes (wallet-as-sender, wallet-as-recipient) concurrently over *exactly* `[s, e]`, using the existing `AdaptiveLogRangeBatcher` for chunking within the window. **Await both.**
-   b. Apply the window's accumulated transfers (existing `WalletApplyEngine` apply path).
-   c. Advance the checkpoint to `e` — **both** the local `wallet_sync_state` and the synced `wallet_sync_checkpoint` (`raiseToMax`, which marks `needs_push`).
-   d. Publish progress.
-   e. Advance `s = e + 1`.
+1. Fetch `head` up front via the new seam capability (direct → `eth_blockNumber`). It is the progress target and, with the existing reorg window, defines `from = max(localState, syncedCheckpoint) − 32` (0 for a fresh account).
+2. Fetch Blockscout native + internal + wrap/unwrap **once** for `[from, head]`; partition the resulting transfers by block number into the windows below.
+3. Walk `[from, head]` in windows of a constant `segmentBlockWindow` (sized to roughly ~30 s of scanning; a tunable constant — exact block count is approximate because scan rate varies by RPC and log density).
+4. For each window `[s, e]` where `e = min(s + segmentBlockWindow − 1, head)`:
+   a. Run **both** ERC-20 topic passes (wallet-as-sender, wallet-as-recipient) concurrently over *exactly* `[s, e]`, using the existing `AdaptiveLogRangeBatcher` for chunking within the window. **Await both.**
+   b. Build over the window's combined set: the ERC-20 logs from (a) **plus** the pre-fetched native/wrap-unwrap partition whose block ∈ `[s, e]`.
+   c. Apply this account's window result via `WalletApplyEngine.apply(perAccount: [input])` and accumulate the returned `genuinelyNew` survivors.
+   d. Advance the checkpoint to `e` — **both** the local `wallet_sync_state` and the synced `wallet_sync_checkpoint` (`raiseToMax`, which marks `needs_push`).
+   e. Publish progress.
+   f. Advance `s = e + 1`.
+5. After the last window, run transfer-detection + price-warming once over the accumulated `genuinelyNew`.
 
 **Why the window barrier matters (the "lower of the two topics" guarantee).** Because we await *both* topic passes for a window before applying or checkpointing, the checkpoint can only ever advance to a block that **both** passes have fully covered. It is structurally impossible to checkpoint past the slower topic. This is why block-windowing was chosen over a time-based flush of two independently-racing full-range passes — no cross-pass frontier-min tracking is needed for correctness.
 
@@ -44,7 +62,7 @@ Replace the single scan-everything-then-apply-once pass (for the direct path) wi
 ### 2. Correctness invariants
 
 - **Apply-before-advance.** A window's transfers are durably applied *before* its checkpoint moves. An interruption never advances the checkpoint past unsaved transactions, so no transaction is ever permanently skipped.
-- **Idempotent replay.** An interruption *between* apply and the checkpoint write causes that one window to be re-scanned and re-applied next run. Apply is upsert-keyed (transaction identity), so re-applying a window is a no-op. The plan must verify/assert this idempotency for the apply path used here.
+- **Idempotent replay.** An interruption *between* apply and the checkpoint write causes that one window to be re-scanned and re-applied next run. `WalletApplyEngine` dedups every leg against persisted legs by `(accountId, externalId)` (`survivingLegs`/`legExists`), so re-applying a window drops to a no-op. The plan asserts this for the windowed path.
 - **Reorg window preserved.** Resume still starts at `checkpoint − 32` (`WalletSyncEngine.subtractingReorgWindow`). The checkpoint stores the fully-scanned window end; the reorg margin is re-applied on the next scan's `from`.
 - **Empty windows advance the checkpoint.** Unlike today, a window with zero transfers still advances the checkpoint to `e`, so empty ranges are scanned once, not every cycle.
 
@@ -59,11 +77,11 @@ Replace the single scan-everything-then-apply-once pass (for the direct path) wi
 
 ### 4. Seam changes (`ChainDataClient`)
 
-The segmentation and progress logic lives in a **coordinator above the client**, preserving the existing build-pure / apply-is-sole-writer separation. The client keeps only the windowed scan and head lookup. Required seam additions (exact signatures deferred to the plan):
+The segmentation and progress logic lives in a **coordinator above the client**, preserving the existing build-pure / apply-is-sole-writer separation. The client keeps only the windowed scan and head lookup. Required seam additions:
 
-- **Head / capability probe.** A way to obtain the current head block and whether block-range scanning is supported: direct → `head` available (from `eth_blockNumber`); Alchemy → not supported (→ coordinator uses the existing single-shot path).
-- **Windowed fetch.** `getAssetTransfers` gains an explicit upper bound (`toBlock`) so the coordinator can drive one window at a time. Alchemy ignores it (treats as `"latest"`).
-- The routing (`RoutingChainDataClient` / `RPCEndpointResolver`) is untouched; the coordinator branches on the capability probe, not on routing internals.
+- **Head / capability probe** on `ChainDataClient`: `func currentHead(chain: ChainConfig) async throws -> UInt64?` — direct returns `eth_blockNumber`; Alchemy returns `nil` (→ coordinator falls back to the existing single-shot path). Non-nil is the signal to use the windowed path.
+- **Windowed fetch:** `getAssetTransfers` gains an optional upper bound — `getAssetTransfers(chain:walletAddress:fromBlock:toBlock:)` where `toBlock: UInt64?` (nil = latest/head, back-compat). Direct honours `toBlock`; Alchemy ignores it (always `"latest"`).
+- `RoutingChainDataClient` forwards both new methods to the per-chain resolved client. `RPCEndpointResolver` is untouched; the coordinator branches on `currentHead != nil`, not on routing internals.
 
 ### 5. Testing
 
