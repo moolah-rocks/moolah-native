@@ -102,6 +102,10 @@ struct ReplaceFailingTransactionRepository: TransactionRepository {
   func countNeedsReview() async throws -> Int {
     try await wrapped.countNeedsReview()
   }
+
+  func fetchCostBasisEventLegs() async throws -> [CostBasisEventLegRow] {
+    try await wrapped.fetchCostBasisEventLegs()
+  }
 }
 
 /// Forwards every call to a wrapped repository, but suspends inside
@@ -177,6 +181,10 @@ actor GatedReplaceTransactionRepository: TransactionRepository {
 
   nonisolated func countNeedsReview() async throws -> Int {
     try await wrapped.countNeedsReview()
+  }
+
+  nonisolated func fetchCostBasisEventLegs() async throws -> [CostBasisEventLegRow] {
+    try await wrapped.fetchCostBasisEventLegs()
   }
 }
 
@@ -255,5 +263,9 @@ actor GatedFetchAllTransactionRepository: TransactionRepository {
 
   nonisolated func countNeedsReview() async throws -> Int {
     try await wrapped.countNeedsReview()
+  }
+
+  nonisolated func fetchCostBasisEventLegs() async throws -> [CostBasisEventLegRow] {
+    try await wrapped.fetchCostBasisEventLegs()
   }
 }

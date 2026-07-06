@@ -90,4 +90,8 @@ actor RecordingTransactionRepository: TransactionRepository {
   func countNeedsReview() async throws -> Int {
     try await wrapped.countNeedsReview()
   }
+
+  func fetchCostBasisEventLegs() async throws -> [CostBasisEventLegRow] {
+    try await wrapped.fetchCostBasisEventLegs()
+  }
 }

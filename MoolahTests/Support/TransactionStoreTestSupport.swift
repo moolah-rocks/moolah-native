@@ -218,4 +218,8 @@ struct FailingTransactionRepository: TransactionRepository {
   func countNeedsReview() async throws -> Int {
     throw BackendError.networkUnavailable
   }
+
+  func fetchCostBasisEventLegs() async throws -> [CostBasisEventLegRow] {
+    throw BackendError.networkUnavailable
+  }
 }
