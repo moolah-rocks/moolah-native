@@ -1,6 +1,16 @@
 import Foundation
 import OSLog
 
+/// The "Sync Now" button's in-progress indicator, as decided by
+/// `SyncedAccountHeaderLogic.syncButtonProgress(isSyncing:progress:)`.
+/// `.none` renders the normal label; `.indeterminate` the existing
+/// spinner; `.determinate(fraction)` a `ProgressView(value:)` bar.
+enum SyncButtonProgress: Equatable {
+  case none
+  case indeterminate
+  case determinate(Double)
+}
+
 /// Pure-logic helper for `SyncedAccountHeaderView`. Owns the relative-
 /// time formatting for the last-synced label, the "is sync allowed"
 /// predicate, and the user-facing error caption so they are all
@@ -67,6 +77,78 @@ enum SyncedAccountHeaderLogic {
   /// incremental one would mislead the user.
   static func syncButtonIsFullResync(optionHeld: Bool) -> Bool {
     optionHeld
+  }
+
+  /// What the "Sync Now" button should render for its in-progress
+  /// indicator, given whether the account is currently syncing and its
+  /// latest `WalletSyncProgress` (`SyncedAccountStore.progressPerAccount`).
+  ///
+  /// Not syncing always collapses to `.none` regardless of a stale
+  /// leftover progress value — the button shows its normal label. While
+  /// syncing, a `.scanning(fraction:)` value renders as a determinate bar;
+  /// `.indeterminate` (or no progress value published yet, e.g. before the
+  /// windowed runner has computed its first fraction) renders as the
+  /// existing indeterminate spinner.
+  static func syncButtonProgress(
+    isSyncing: Bool, progress: WalletSyncProgress?
+  ) -> SyncButtonProgress {
+    guard isSyncing else { return .none }
+    switch progress {
+    case .scanning(let fraction):
+      return .determinate(fraction)
+    case .indeterminate, nil:
+      return .indeterminate
+    }
+  }
+
+  /// Tooltip (`.help`) text for the sync button. While a sync is in
+  /// flight the button is disabled, so the tooltip says so rather than
+  /// promising an action the tap won't perform; otherwise it mirrors the
+  /// button's action — the missing-credential hint when the account can't
+  /// sync, or the Option-key-aware sync/resync wording when it can.
+  static func syncButtonHelp(
+    isSyncing: Bool, hasCredential: Bool, optionHeld: Bool, missingCredentialHint: String?
+  ) -> String {
+    if isSyncing { return "Sync in progress…" }
+    guard hasCredential else {
+      return missingCredentialHint ?? "Configure this account to enable sync"
+    }
+    return optionHeld ? "Resync full history now" : "Sync account now"
+  }
+
+  /// VoiceOver *label* (the control's stable identity) for the sync
+  /// button given its current `SyncButtonProgress` and whether Option (⌥)
+  /// is held. Both in-progress states share the pre-existing "Syncing in
+  /// progress" wording so the label doesn't churn as an indeterminate scan
+  /// resolves to a determinate one — the changing percentage rides on the
+  /// separate `syncButtonAccessibilityValue(for:)` instead (matching the
+  /// `.accessibilityLabel` + `.accessibilityValue` + `.updatesFrequently`
+  /// idiom used by the other in-progress indicators in this app). `.none`
+  /// mirrors the button's action label, which tracks the Option-key resync
+  /// toggle.
+  static func syncButtonAccessibilityLabel(
+    _ progress: SyncButtonProgress, optionHeld: Bool
+  ) -> String {
+    switch progress {
+    case .determinate, .indeterminate:
+      return "Syncing in progress"
+    case .none:
+      return optionHeld ? "Resync full history now" : "Sync account now"
+    }
+  }
+
+  /// VoiceOver *value* for the sync button — the changing part that
+  /// updates frequently while a determinate scan progresses. Only a
+  /// `.determinate` scan has a value to report (its whole-percent
+  /// completion, e.g. "42%", locale-formatted via `FloatingPointFormatStyle`
+  /// so the percent symbol placement follows the user's locale); every
+  /// other state returns `nil`, which the view maps to an empty
+  /// accessibility value (VoiceOver announces that as no value).
+  static func syncButtonAccessibilityValue(
+    for progress: SyncButtonProgress
+  ) -> String? {
+    guard case .determinate(let fraction) = progress else { return nil }
+    return fraction.formatted(.percent.precision(.fractionLength(0)))
   }
 
   /// Synchronous credential presence check, invoked once from the

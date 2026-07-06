@@ -325,28 +325,21 @@ extension SyncedAccountHeaderView {
   /// The "Sync now" button. On macOS, holding Option (⌥) relabels it to
   /// "Resync Now" and switches its tap to a full resync
   /// (`syncAccount(_:fullResync: true)`) — an escape hatch for accounts
-  /// whose incrementally-synced history has drifted, without cluttering
-  /// the default path with a second always-visible button. The
-  /// label/action mapping itself lives in `SyncedAccountHeaderLogic` so
-  /// it's unit-testable without the AppKit event plumbing; this method
-  /// only wires up live Option-key tracking. iOS has no modifier keys,
-  /// so `isOptionHeld` reads permanently `false` there and the button
-  /// keeps its original plain behaviour.
+  /// whose incrementally-synced history has drifted. All label/action/help
+  /// mapping lives in `SyncedAccountHeaderLogic` (unit-tested without the
+  /// AppKit event plumbing); this method only wires up live Option-key
+  /// tracking, which iOS lacks (so `isOptionHeld` is permanently `false`).
   private func syncButton(_ presentation: SyncableAccountPresentation) -> some View {
-    Button {
+    let buttonProgress = SyncedAccountHeaderLogic.syncButtonProgress(
+      isSyncing: isSyncing, progress: syncStore.progressPerAccount[account.id])
+    return Button {
       Task {
         await syncStore.syncAccount(
           account,
           fullResync: SyncedAccountHeaderLogic.syncButtonIsFullResync(optionHeld: isOptionHeld))
       }
     } label: {
-      if isSyncing {
-        ProgressView().controlSize(.small)
-      } else {
-        Label(
-          SyncedAccountHeaderLogic.syncButtonTitle(optionHeld: isOptionHeld),
-          systemImage: "arrow.clockwise")
-      }
+      syncButtonLabel(buttonProgress)
     }
     .disabled(
       !SyncedAccountHeaderLogic.isSyncEnabled(
@@ -356,20 +349,52 @@ extension SyncedAccountHeaderView {
     )
     .buttonStyle(.borderless)
     .help(
-      presentation.hasCredential
-        ? (isOptionHeld ? "Resync full history now" : "Sync account now")
-        : (presentation.missingCredentialHint ?? "Configure this account to enable sync")
+      SyncedAccountHeaderLogic.syncButtonHelp(
+        isSyncing: isSyncing,
+        hasCredential: presentation.hasCredential,
+        optionHeld: isOptionHeld,
+        missingCredentialHint: presentation.missingCredentialHint)
     )
     .accessibilityLabel(
-      isSyncing
-        ? "Syncing in progress"
-        : (isOptionHeld ? "Resync full history now" : "Sync account now")
+      SyncedAccountHeaderLogic.syncButtonAccessibilityLabel(
+        buttonProgress, optionHeld: isOptionHeld)
     )
+    // The percentage rides on the value, not the label, so VoiceOver
+    // treats it as a stable control's frequently-updating value (the
+    // price-warming idiom). Non-determinate → empty value, i.e. no value.
+    .accessibilityValue(
+      SyncedAccountHeaderLogic.syncButtonAccessibilityValue(for: buttonProgress) ?? ""
+    )
+    .accessibilityAddTraits(isSyncing ? .updatesFrequently : [])
     .accessibilityIdentifier(UITestIdentifiers.WalletAccountHeader.syncButton)
     #if os(macOS)
       .onModifierKeysChanged(mask: .option) { _, modifiers in
         optionHeld = modifiers.contains(.option)
       }
     #endif
+  }
+
+  /// Shared width for both in-progress sync indicators, so the footprint stays steady.
+  private var syncIndicatorWidth: CGFloat { 44 }
+
+  /// The sync button's label for its progress state: a determinate bar,
+  /// the indeterminate spinner, or the idle "Sync Now" label. Both
+  /// in-progress indicators share `syncIndicatorWidth` so the button
+  /// footprint stays steady across a sync.
+  @ViewBuilder
+  private func syncButtonLabel(_ progress: SyncButtonProgress) -> some View {
+    switch progress {
+    case .determinate(let fraction):
+      ProgressView(value: fraction)
+        .controlSize(.small)
+        .progressViewStyle(.linear)
+        .frame(width: syncIndicatorWidth)
+    case .indeterminate:
+      ProgressView().controlSize(.small).frame(width: syncIndicatorWidth)
+    case .none:
+      Label(
+        SyncedAccountHeaderLogic.syncButtonTitle(optionHeld: isOptionHeld),
+        systemImage: "arrow.clockwise")
+    }
   }
 }
