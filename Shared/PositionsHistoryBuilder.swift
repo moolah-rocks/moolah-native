@@ -183,9 +183,9 @@ struct PositionsHistoryBuilder: Sendable {
 
   /// Mutable running state threaded through `build`'s per-day loop.
   /// Exclusively owned by the single `@concurrent` build task; no
-  /// other task ever holds a reference. The `inout`-across-`await`
-  /// usage in `apply` is therefore safe — there is no concurrent
-  /// reader or writer.
+  /// other task ever holds a reference, so the `inout` threading through
+  /// the (now synchronous) fold and the batch-assembly pass has no
+  /// concurrent reader or writer.
   ///
   /// Not `private`: shared with the batch-conversion assembly pass in
   /// `PositionsHistoryBuilder+Batch.swift`.

@@ -61,7 +61,7 @@ struct HistoricalValueSeriesTests {
   }
 
   @Test("Point.invested round-trips and participates in Hashable")
-  func pointContributionsRoundTrip() {
+  func pointInvestedRoundTrip() {
     let day = date(1)
     let populated = HistoricalValueSeries.Point(
       date: day, value: 100, cost: 80, invested: 50
