@@ -108,9 +108,13 @@ struct WalletSyncEngine: Sendable {
     try Task.checkCancellation()
 
     // 2. Determine fromBlock (reorg window — re-fetch covers the last
-    //    32 blocks below the prior checkpoint).
+    //    32 blocks below the prior checkpoint), clamped up to the chain's
+    //    earliest scannable block. This clamp is applied uniformly to every
+    //    downstream source (Blockscout native/internal + Alchemy/direct-RPC
+    //    ERC-20): pre-Bedrock OP Mainnet history is intentionally discarded
+    //    across the board, not just where a pruned node forces it.
     let priorBlock = try await resolvePriorBlock(for: account)
-    let fromBlock = priorBlock == 0 ? 0 : Self.subtractingReorgWindow(priorBlock)
+    let fromBlock = Self.startBlock(priorBlock: priorBlock, chain: chain)
 
     // 3. Native + internal ETH from Blockscout (authoritative tx index;
     //    sees approve()/failed/zero-movement #919 and OP-stack internal
@@ -208,6 +212,21 @@ struct WalletSyncEngine: Sendable {
   /// (genesis-fetch on a new device).
   static func subtractingReorgWindow(_ block: UInt64) -> UInt64 {
     block > 32 ? block - 32 : 0
+  }
+
+  /// The block a scan starts from: the reorg-re-fetch window below the
+  /// prior checkpoint (or genesis on a never-synced wallet), clamped up to
+  /// the chain's earliest scannable block. The immediate driver is that a
+  /// never-synced OP Mainnet wallet would otherwise scan from genesis and a
+  /// pruned OP node rejects the pre-Bedrock range with `4444 pruned history
+  /// unavailable`, failing the whole sync — but the clamp is applied
+  /// uniformly to all sources because pre-Bedrock OP history is discarded by
+  /// design, not merely where a pruned node forces it. See
+  /// `ChainConfig.earliestScannableBlock`.
+  static func startBlock(priorBlock: UInt64, chain: ChainConfig) -> UInt64 {
+    // `subtractingReorgWindow(0) == 0`, so no `priorBlock == 0` special case
+    // is needed — genesis falls through to the chain-floor clamp below.
+    max(chain.earliestScannableBlock, subtractingReorgWindow(priorBlock))
   }
 
   /// Maximum `blockNum` parsed from a list of `AlchemyTransfer`s as

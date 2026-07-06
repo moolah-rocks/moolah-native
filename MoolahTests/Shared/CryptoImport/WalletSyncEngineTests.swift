@@ -88,8 +88,8 @@ struct WalletSyncEngineTests {
     #expect(calls.first?.fromBlock == 68)  // 100 - 32
   }
 
-  @Test("Pre-existing state inside reorg window → fromBlock = 0")
-  func fromBlockClampsAtZeroInsideWindow() async throws {
+  @Test("Pre-existing state inside reorg window → fromBlock = chain floor")
+  func fromBlockClampsToChainFloorInsideWindow() async throws {
     let alchemy = RecordingAlchemyClientStub()
     alchemy.setTransfersResponse(.transfers([]))
     let syncState = RecordingWalletSyncStateRepository()
@@ -103,11 +103,12 @@ struct WalletSyncEngineTests {
     let (engine, _) = makeEngine(alchemy: alchemy, syncState: syncState)
 
     _ = try await engine.build(account: account, chain: .ethereum)
-    #expect(alchemy.recordedCalls.first?.fromBlock == 0)
+    // 10 - 32 clamps to 0, then up to Ethereum's earliest scannable block (1).
+    #expect(alchemy.recordedCalls.first?.fromBlock == 1)
   }
 
-  @Test("No prior state → fromBlock = 0")
-  func fromBlockZeroWhenNoState() async throws {
+  @Test("No prior state → fromBlock = chain floor (Ethereum block 1)")
+  func fromBlockUsesChainFloorWhenNoState() async throws {
     let alchemy = RecordingAlchemyClientStub()
     alchemy.setTransfersResponse(.transfers([]))
     let syncState = RecordingWalletSyncStateRepository()
@@ -115,7 +116,30 @@ struct WalletSyncEngineTests {
     let account = makeCryptoAccount(walletAddress: Self.wallet, chain: .ethereum)
 
     _ = try await engine.build(account: account, chain: .ethereum)
-    #expect(alchemy.recordedCalls.first?.fromBlock == 0)
+    #expect(alchemy.recordedCalls.first?.fromBlock == 1)
+  }
+
+  @Test("No prior state on OP Mainnet → every source starts at Bedrock, not genesis")
+  func fromBlockUsesBedrockFloorOnOptimismWhenNoState() async throws {
+    // Regression for the "Direct RPC returned a malformed response (getLogs)"
+    // failure: a never-synced OP wallet scanned from genesis, and a pruned
+    // OP node rejects pre-Bedrock `eth_getLogs` with `4444 pruned history
+    // unavailable`, failing the whole sync. The scan must start at Bedrock —
+    // and pre-Bedrock OP history is discarded by design, so the clamp applies
+    // uniformly to the Blockscout native/internal fetches too, not just the
+    // log-based ERC-20 fetch that a pruned node forces it on.
+    let alchemy = RecordingAlchemyClientStub()
+    alchemy.setTransfersResponse(.transfers([]))
+    let blockscout = RecordingBlockExplorerClientStub()
+    let syncState = RecordingWalletSyncStateRepository()
+    let (engine, _) = makeEngine(alchemy: alchemy, blockExplorer: blockscout, syncState: syncState)
+    let account = makeCryptoAccount(walletAddress: Self.wallet, chain: .optimism)
+
+    _ = try await engine.build(account: account, chain: .optimism)
+
+    #expect(alchemy.recordedCalls.first?.fromBlock == 105_235_063)
+    #expect(blockscout.recordedNativeCalls.first?.fromBlock == 105_235_063)
+    #expect(blockscout.recordedInternalCalls.first?.fromBlock == 105_235_063)
   }
 
   // MARK: - Cancellation

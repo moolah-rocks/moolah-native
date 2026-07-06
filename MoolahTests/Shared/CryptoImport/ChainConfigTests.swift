@@ -71,6 +71,20 @@ struct ChainConfigTests {
   }
 
   @Test
+  func earliestScannableBlockPerChain() {
+    // OP Mainnet's Bedrock fork (block 105_235_063) is where the current
+    // state/log format begins; pre-Bedrock (OVM) history has no scannable
+    // ERC-20 Transfer logs and is unavailable on pruned OP nodes (they
+    // answer pre-Bedrock `eth_getLogs` with `4444 pruned history
+    // unavailable`). A never-synced OP wallet must therefore start its scan
+    // at Bedrock, not genesis. Every other chain starts at block 1 — the
+    // genesis block never carries logs.
+    #expect(ChainConfig.ethereum.earliestScannableBlock == 1)
+    #expect(ChainConfig.optimism.earliestScannableBlock == 105_235_063)
+    #expect(ChainConfig.base.earliestScannableBlock == 1)
+  }
+
+  @Test
   func lookupByIdReturnsNilForUnsupportedChain() {
     #expect(ChainConfig.config(for: 0) == nil)
     #expect(ChainConfig.config(for: 137) == nil)  // Polygon (no public Blockscout — unsupported)
