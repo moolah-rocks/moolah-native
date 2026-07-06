@@ -15,6 +15,13 @@ import Foundation
 actor RecordingTransactionRepository: TransactionRepository {
   private let wrapped: any TransactionRepository
   private(set) var deletedIds: [UUID] = []
+  /// Count of `fetchAll(filter:)` calls the unit-under-test made. The
+  /// windowed-sync routing tests use this to prove transfer detection runs
+  /// exactly once per sync cycle — `TransferDetectionCoordinator.runDetection`
+  /// is the sole `fetchAll(filter:)` caller inside a sync pass (the apply
+  /// engine dedups via `legExists` / `legs(matchingExternalId:)`), so a
+  /// per-cycle delta of one means detection ran once over the union.
+  private(set) var fetchAllCallCount = 0
 
   init(wrapping wrapped: any TransactionRepository) {
     self.wrapped = wrapped
@@ -25,7 +32,8 @@ actor RecordingTransactionRepository: TransactionRepository {
   }
 
   func fetchAll(filter: TransactionFilter) async throws -> [Transaction] {
-    try await wrapped.fetchAll(filter: filter)
+    fetchAllCallCount += 1
+    return try await wrapped.fetchAll(filter: filter)
   }
 
   nonisolated func observe(

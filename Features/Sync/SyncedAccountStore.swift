@@ -131,6 +131,17 @@ final class SyncedAccountStore {
   /// the kick-off lives in `SyncedAccountStore+PriceWarming.swift`.
   let priceWarmer: (any PriceWarming)?
 
+  /// The resumable, determinate windowed wallet-sync runner, injected by
+  /// `makeCryptoSyncWiring`. When present, `syncAccounts` routes each
+  /// crypto account with a resolvable `ChainConfig` through this runner
+  /// (window-by-window scan → apply → checkpoint with determinate
+  /// progress). A crypto account whose provider can't report a head
+  /// (`didWindowedScan == false`, the Alchemy path) and every non-crypto
+  /// source fall back to the single-shot build → apply batch. `nil` in
+  /// degraded / preview wiring and in tests that don't exercise windowed
+  /// sync, in which case every account takes the single-shot path.
+  let windowedRunner: WindowedWalletSyncRunner?
+
   /// The in-flight warm task spawned after the latest apply pass. Tracked
   /// per `guides/CONCURRENCY_GUIDE.md` §8 so `cancelTimer()` can tear it
   /// down on profile teardown, and so a fresh sync supersedes a prior
@@ -168,6 +179,13 @@ final class SyncedAccountStore {
   ///     kicked off after each apply pass over the genuinely-new
   ///     transactions. `nil` (the default) disables warming — used by
   ///     degraded / preview wiring and tests that don't exercise it.
+  ///   - windowedRunner: Resumable, determinate windowed wallet-sync
+  ///     runner. When present, crypto accounts with a resolvable
+  ///     `ChainConfig` sync window-by-window through it; the Alchemy path
+  ///     and every non-crypto source fall back to the single-shot batch.
+  ///     `nil` (the default) routes every account through the single-shot
+  ///     path — used by degraded / preview wiring and tests that don't
+  ///     exercise windowed sync.
   init(
     sources: [any AccountSyncSource],
     walletApplyEngine: WalletApplyEngine,
@@ -179,7 +197,8 @@ final class SyncedAccountStore {
     staleThreshold: TimeInterval = 86_400,
     timerInterval: Duration = .seconds(3_600),
     maxConcurrentBuilds: Int = 4,
-    priceWarmer: (any PriceWarming)? = nil
+    priceWarmer: (any PriceWarming)? = nil,
+    windowedRunner: WindowedWalletSyncRunner? = nil
   ) {
     self.sources = sources
     self.walletApplyEngine = walletApplyEngine
@@ -192,6 +211,7 @@ final class SyncedAccountStore {
     self.timerInterval = timerInterval
     self.maxConcurrentBuilds = max(1, maxConcurrentBuilds)
     self.priceWarmer = priceWarmer
+    self.windowedRunner = windowedRunner
   }
 
   // MARK: - Public sync triggers
