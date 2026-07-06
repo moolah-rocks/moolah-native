@@ -7,9 +7,13 @@ import Foundation
 /// market value for return calculations.
 ///
 /// Ordering invariant for the downstream FIFO engine (Task 3): within one
-/// transaction, disposals are expected to be applied *before* acquisitions, so
-/// a fee/gas leg draws from pre-existing lots rather than the lot acquired in
-/// the same transaction. The crypto-fee dual-role test encodes this.
+/// transaction, acquisitions are applied *before* disposals. FIFO appends new
+/// lots to the tail and consumes from the head, so a fee/gas disposal still
+/// drains older pre-existing lots first when they exist — but when none do
+/// (e.g. gas paid in a token bought in the *same* transaction, with no prior
+/// holding), the disposal can draw the just-acquired lot instead of being
+/// silently dropped against an empty bucket. The crypto-fee dual-role test
+/// encodes this.
 enum CostBasisEvent {
   /// A lot enters holdings: a fiat-paired buy, a non-fiat income/opening
   /// balance (valued at market), or the acquiring side of a swap.
