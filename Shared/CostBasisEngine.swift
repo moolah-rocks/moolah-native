@@ -2,20 +2,29 @@ import Foundation
 
 /// Pure synchronous engine for FIFO cost basis tracking.
 ///
-/// Feed buy and sell events in chronological order. The engine maintains open lots
-/// per instrument and produces CapitalGainEvent values on sells.
+/// Feed buy, sell, and move events in chronological order. The engine maintains open
+/// lots per `(instrument, holding account)` and produces CapitalGainEvent values on sells.
 ///
 /// Not async, no repository dependencies — all data passed in. Highly testable.
 struct CostBasisEngine: Sendable {
-  /// Open lots grouped by instrument ID, in acquisition order (FIFO).
-  private var lots: [String: [CostBasisLot]] = [:]
+  /// Identifies a bucket of open lots: one instrument held in one account.
+  /// `account == nil` is the legacy single-bucket used by callers that do not
+  /// yet segregate lots by account.
+  private struct BucketKey: Hashable {
+    let instrumentId: String
+    let account: UUID?
+  }
 
-  /// Record a buy: adds a new lot for the instrument.
+  /// Open lots grouped by `(instrument, account)`, in acquisition order (FIFO).
+  private var buckets: [BucketKey: [CostBasisLot]] = [:]
+
+  /// Record a buy: adds a new lot for the instrument in the given account's bucket.
   mutating func processBuy(
     instrument: Instrument,
     quantity: Decimal,
     costPerUnit: Decimal,
-    date: Date
+    date: Date,
+    account: UUID? = nil
   ) {
     let lot = CostBasisLot(
       id: UUID(),
@@ -23,28 +32,32 @@ struct CostBasisEngine: Sendable {
       acquiredDate: date,
       costPerUnit: costPerUnit,
       originalQuantity: quantity,
-      remainingQuantity: quantity
+      remainingQuantity: quantity,
+      account: account
     )
-    lots[instrument.id, default: []].append(lot)
+    buckets[BucketKey(instrumentId: instrument.id, account: account), default: []].append(lot)
   }
 
-  /// Record a sell: consume lots in FIFO order, return gain/loss events.
+  /// Record a sell: consume lots in FIFO order within the account's bucket, return
+  /// gain/loss events.
   ///
   /// If sell quantity exceeds available lots, only the available quantity is processed.
   mutating func processSell(
     instrument: Instrument,
     quantity: Decimal,
     proceedsPerUnit: Decimal,
-    date: Date
+    date: Date,
+    account: UUID? = nil
   ) -> [CapitalGainEvent] {
+    let key = BucketKey(instrumentId: instrument.id, account: account)
     var remaining = quantity
     var events: [CapitalGainEvent] = []
     let calendar = Calendar(identifier: .gregorian)
 
     while remaining > 0 {
-      guard var openLots = lots[instrument.id], !openLots.isEmpty else { break }
+      guard var lots = buckets[key], !lots.isEmpty else { break }
 
-      var lot = openLots[0]
+      var lot = lots[0]
       let consumed = min(remaining, lot.remainingQuantity)
 
       let holdingDays =
@@ -67,23 +80,28 @@ struct CostBasisEngine: Sendable {
       remaining -= consumed
 
       if lot.remainingQuantity <= 0 {
-        openLots.removeFirst()
+        lots.removeFirst()
       } else {
-        openLots[0] = lot
+        lots[0] = lot
       }
-      lots[instrument.id] = openLots
+      buckets[key] = lots
     }
 
     return events
   }
 
-  /// Return open (unsold) lots for an instrument, in FIFO order.
-  func openLots(for instrument: Instrument) -> [CostBasisLot] {
-    lots[instrument.id] ?? []
+  /// Return open (unsold) lots for an instrument in a specific account's bucket, FIFO order.
+  func openLots(for instrument: Instrument, account: UUID?) -> [CostBasisLot] {
+    buckets[BucketKey(instrumentId: instrument.id, account: account)] ?? []
   }
 
-  /// All open lots across all instruments.
+  /// Return open (unsold) lots for an instrument across all accounts.
+  func openLots(for instrument: Instrument) -> [CostBasisLot] {
+    buckets.filter { $0.key.instrumentId == instrument.id }.flatMap(\.value)
+  }
+
+  /// All open lots across all instruments and accounts.
   func allOpenLots() -> [CostBasisLot] {
-    lots.values.flatMap { $0 }
+    buckets.values.flatMap { $0 }
   }
 }
