@@ -17,7 +17,7 @@ struct ExchangeAccountViewRoutingTests {
       name: "Coinstash", type: .exchange,
       instrument: .AUD, valuationMode: .calculatedFromTrades,
       exchangeProvider: .coinstash)
-    #expect(AccountDetailView.showsSyncedHeader(for: account))
+    #expect(AccountDetailLayout.showsSyncedHeader(for: account))
     let session = try ProfileSession.preview()
     _ = AccountDetailView(
       title: account.name,

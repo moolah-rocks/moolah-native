@@ -69,7 +69,7 @@ struct AccountDetailView: View {
   /// chain is not passed in.
   @ViewBuilder private var header: some View {
     if let account = syncedHeaderAccount,
-      Self.showsSyncedHeader(for: account),
+      AccountDetailLayout.showsSyncedHeader(for: account),
       let session,
       let syncStore = session.cryptoSyncStore
     {
@@ -81,23 +81,6 @@ struct AccountDetailView: View {
     }
   }
 
-  /// Whether `account` warrants a synced-account header. Pure so the routing
-  /// rule is unit-testable without instantiating the view. Crypto shows a
-  /// header only when its chain resolves to a `ChainConfig`; exchange always
-  /// shows one; every other type shows none. `nonisolated` because the method
-  /// is pure (no `@MainActor` state) and tests call it from a non-`@MainActor`
-  /// context.
-  nonisolated static func showsSyncedHeader(for account: Account) -> Bool {
-    switch account.type {
-    case .crypto:
-      guard let chainId = account.chainId else { return false }
-      return ChainConfig.config(for: chainId) != nil
-    case .exchange:
-      return true
-    default:
-      return false
-    }
-  }
 }
 
 // MARK: - Preview
