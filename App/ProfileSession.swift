@@ -46,6 +46,16 @@ final class ProfileSession: Identifiable {
   let analysisStore: AnalysisStore
   let investmentStore: InvestmentStore
   let reportingStore: ReportingStore
+  /// The single profile-wide cost-basis provider — the same instance
+  /// `makeDomainStores` builds once and injects into BOTH `investmentStore`
+  /// (positions / performance) and `reportingStore` (CGT / P&L). Exposed so
+  /// the positions split modifier can reach it via the environment session.
+  /// Surfaced through `investmentStore` (which holds the shared reference)
+  /// rather than a separate stored property so `init` stays within its
+  /// `function_body_length` budget. Its observation is torn down in
+  /// `cleanupSync`. `nil` only in preview / legacy sessions that don't wire a
+  /// provider.
+  var holdingsCostLedgerStore: HoldingsCostLedgerStore? { investmentStore.holdingsCostLedger }
   let exchangeRateService: ExchangeRateService
   let stockPriceService: StockPriceService
   let cryptoPriceService: CryptoPriceService

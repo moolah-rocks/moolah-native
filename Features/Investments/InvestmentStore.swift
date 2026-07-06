@@ -98,6 +98,12 @@ final class InvestmentStore {
   /// case the holdings surface degrades to per-chain rows.
   private let instrumentRegistry: (any InstrumentRegistryRepository)?
 
+  /// The shared profile-wide cost-basis provider. Injected by
+  /// `ProfileSession` so the positions/performance passes (Task 6) read the
+  /// same ledger the reports path reads — built once per load, not per view.
+  /// `nil` in previews / legacy tests that don't exercise the ledger path.
+  let holdingsCostLedger: HoldingsCostLedgerStore?
+
   /// `[instrumentId: assetKey]` for the holdings cross-chain rollup, refreshed
   /// by `loadAllData`. Empty until first load, or if the registry is absent or
   /// errors — the surface then shows per-chain rows (a safe degradation).
@@ -123,13 +129,15 @@ final class InvestmentStore {
     transactionRepository: TransactionRepository? = nil,
     conversionService: any InstrumentConversionService,
     instrumentChanges: (any InstrumentChangeObserving)? = nil,
-    instrumentRegistry: (any InstrumentRegistryRepository)? = nil
+    instrumentRegistry: (any InstrumentRegistryRepository)? = nil,
+    holdingsCostLedger: HoldingsCostLedgerStore? = nil
   ) {
     self.repository = repository
     self.transactionRepository = transactionRepository
     self.conversionService = conversionService
     self.instrumentChanges = instrumentChanges
     self.instrumentRegistry = instrumentRegistry
+    self.holdingsCostLedger = holdingsCostLedger
     let pair = AsyncStream<Void>.makeStream()
     self.testObservationTickStream = pair.stream
     self.testObservationTickContinuation = pair.continuation

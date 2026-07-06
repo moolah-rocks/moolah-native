@@ -32,6 +32,13 @@ final class ReportingStore {
   private let analysisRepository: AnalysisRepository?
   private let conversionService: InstrumentConversionService
   private(set) var profileCurrency: Instrument
+  /// The shared profile-wide cost-basis provider. Source of the realised-CGT
+  /// events and P&L rows: `loadCapitalGains` / `loadProfitLoss` read the
+  /// ledger from here (built once per load, shared with the positions /
+  /// performance passes) instead of rebuilding from a full transaction fetch.
+  /// `nil` in previews / incidental test construction sites that never call
+  /// the reports loads.
+  private let holdingsCostLedger: HoldingsCostLedgerStore?
   private let userDefaults: UserDefaults
   private let logger = Logger(subsystem: "com.moolah.app", category: "ReportingStore")
 
@@ -67,12 +74,14 @@ final class ReportingStore {
     analysisRepository: AnalysisRepository? = nil,
     conversionService: InstrumentConversionService,
     profileCurrency: Instrument,
+    holdingsCostLedger: HoldingsCostLedgerStore? = nil,
     userDefaults: UserDefaults = .moolahShared
   ) {
     self.transactionRepository = transactionRepository
     self.analysisRepository = analysisRepository
     self.conversionService = conversionService
     self.profileCurrency = profileCurrency
+    self.holdingsCostLedger = holdingsCostLedger
     self.userDefaults = userDefaults
   }
 

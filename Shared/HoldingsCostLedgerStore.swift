@@ -47,7 +47,10 @@ final class HoldingsCostLedgerStore {
   nonisolated private let transactionRepository: any TransactionRepository
   nonisolated private let conversionService: any InstrumentConversionService
   nonisolated private let referenceCurrency: Instrument
-  nonisolated private let isMigrating: @Sendable () -> Bool
+  /// Migration gate. `@MainActor`-isolated (not `@Sendable`): only `ledger()`
+  /// reads it, on the main actor, so it may call the `@MainActor`
+  /// `UnifiedInstrumentIdentityMigration.isComplete(in:)` directly.
+  private let isMigrating: () -> Bool
 
   private var cached: HoldingsCostLedger?
   private var buildTask: Task<HoldingsCostLedger, any Error>?
@@ -65,7 +68,7 @@ final class HoldingsCostLedgerStore {
     transactionRepository: any TransactionRepository,
     conversionService: any InstrumentConversionService,
     referenceCurrency: Instrument,
-    isMigrating: @escaping @Sendable () -> Bool = { false },
+    isMigrating: @escaping () -> Bool = { false },
     transactionChanges: AsyncStream<[Transaction]>? = nil,
     instrumentChanges: AsyncStream<Void>? = nil
   ) {
