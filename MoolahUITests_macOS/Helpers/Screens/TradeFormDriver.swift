@@ -178,19 +178,6 @@ struct TradeFormDriver {
 
   // MARK: - Private helpers
 
-  /// Polls `element.isHittable` until it returns `true` or `timeout` elapses.
-  /// Returns `true` on hittable, `false` on timeout. Use after
-  /// `waitForExistence` when the element may briefly exist in the AX tree
-  /// before becoming hittable (e.g. while an overlapping sheet animates out).
-  private func waitForHittable(_ element: XCUIElement, timeout: TimeInterval) -> Bool {
-    let deadline = Date().addingTimeInterval(timeout)
-    while Date() < deadline {
-      if element.isHittable { return true }
-      RunLoop.current.run(until: Date().addingTimeInterval(0.05))
-    }
-    return element.isHittable
-  }
-
   /// Clears any existing text in `identifier` and types `text`. Returns once
   /// the field's `value` contains `text`.
   private func setAmountField(_ identifier: String, to text: String) {
@@ -209,7 +196,7 @@ struct TradeFormDriver {
     // narrow safety margin against transient SwiftUI re-layout after
     // `switchToTradeMode` and the typing-in-Paid path before any picker
     // has opened.
-    if !waitForHittable(field, timeout: 10) {
+    if !field.waitUntilHittable(timeout: 10) {
       Trace.recordFailure("amount field '\(identifier)' was not hittable within 10s")
       XCTFail("Amount field '\(identifier)' was not hittable within 10s")
       return
@@ -284,7 +271,7 @@ struct TradeFormDriver {
     // existing rows may shift while filtered results animate in. Wait for
     // the target row to become hittable before clicking, otherwise a click
     // can land on a stale frame and the sheet never receives the tap.
-    if !waitForHittable(row, timeout: 10) {
+    if !row.waitUntilHittable(timeout: 10) {
       Trace.recordFailure("instrumentPicker.row.\(instrumentId) was not hittable within 10s")
       XCTFail(
         "InstrumentPickerSheet row for '\(instrumentId)' was not hittable within 10s of appearing")
@@ -363,7 +350,7 @@ struct TradeFormDriver {
     let anchorIdentifier =
       containerIdentifier ?? UITestIdentifiers.InstrumentPicker.field(instrumentId)
     let anchor = app.element(for: anchorIdentifier)
-    if !waitForHittable(anchor, timeout: 10) {
+    if !anchor.waitUntilHittable(timeout: 10) {
       Trace.recordFailure(
         "picker anchor '\(anchorIdentifier)' was not hittable within 10s of pick")
       XCTFail(

@@ -25,6 +25,11 @@ struct CryptoSettingsScreen {
       XCTFail("Add Token button did not appear within 10s")
       return
     }
+    if !button.waitUntilHittable(timeout: 10) {
+      Trace.recordFailure("crypto.settings.addToken button was not hittable within 10s")
+      XCTFail("Add Token button was not hittable within 10s")
+      return
+    }
     button.click()
     let sheet = app.element(for: UITestIdentifiers.InstrumentPicker.sheet)
     if !sheet.waitForExistence(timeout: 10) {
@@ -120,6 +125,18 @@ struct CryptoSettingsScreen {
     if !button.waitForExistence(timeout: timeout) {
       Trace.recordFailure("crypto.settings.rpc.remove.\(url) did not appear")
       XCTFail("RPC endpoint remove button for '\(url)' did not appear within \(timeout)s")
+      return
+    }
+    // The row re-probes/re-lays-out after an add, so the button can exist in
+    // the AX tree but be transiently not hittable — observed as a "Not hittable"
+    // XCUIElement error on GitHub macos-26 runners (intermittent merge-queue
+    // ejection). Wait for hittability before clicking, matching the pattern
+    // established in TradeFormDriver / XCUIElement+WaitUntilHittable.
+    if !button.waitUntilHittable(timeout: timeout) {
+      Trace.recordFailure(
+        "crypto.settings.rpc.remove.\(url) was not hittable within \(timeout)s")
+      XCTFail(
+        "RPC endpoint remove button for '\(url)' was not hittable within \(timeout)s")
       return
     }
     button.click()
