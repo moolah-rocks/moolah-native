@@ -199,10 +199,17 @@ extension InvestmentStore {
     await valuatePositions(profileCurrency: profileCurrency, on: Date())
   }
 
-  /// Recompute the position-tracked `accountPerformance` from the loaded
-  /// transactions and `valuedPositions`. Called from `loadAllData` after
-  /// positions are loaded. Sets `accountPerformance` to `nil` and surfaces
-  /// the error on conversion failure; partial sums are not shown.
+  /// Recompute the position-tracked `accountPerformance` from the shared
+  /// ledger and the loaded `valuedPositions`. Called from `loadAllData`'s
+  /// `.calculatedFromTrades` branch. Marks `accountPerformance` unavailable on a
+  /// genuine ledger failure; partial sums are not shown.
+  ///
+  /// **Reachability.** In production, `.calculatedFromTrades` accounts render
+  /// through `AccountDetailView` (the multi-instrument path — see
+  /// `App/ContentView+AccountDetail.swift`), which computes performance via
+  /// `MultiInstrumentPositionsSplitModifier`. This single-account path is
+  /// currently exercised by tests; it is kept in parity with that path so a
+  /// future caller (or the `InvestmentAccountView` surface) can rely on it.
   func refreshPositionTrackedPerformance(
     accountId: UUID, profileCurrency: Instrument
   ) async {
@@ -213,6 +220,10 @@ extension InvestmentStore {
       return
     }
     let generation = snapshotGeneration
+    // Snapshot the actor-isolated positions before the `ledger()` suspension so
+    // a concurrent authoritative load can't swap `self.valuedPositions` out from
+    // under this pass (mirrors `valuatePositions`' pre-await snapshot).
+    let positions = valuedPositions
     do {
       // The shared, profile-wide ledger (built once per load, cached). A
       // genuine provider failure throws here and is caught below → performance
@@ -221,7 +232,7 @@ extension InvestmentStore {
       let ledger = try await holdingsCostLedger.ledger()
       let performance = try await AccountPerformanceCalculator.compute(
         accountId: accountId,
-        valuedPositions: valuedPositions,
+        valuedPositions: positions,
         profileCurrency: profileCurrency,
         ledger: ledger)
       // `ledger()` is another suspension point: re-check the captured
@@ -237,9 +248,10 @@ extension InvestmentStore {
       )
       // Don't blank a superseded pass's account over the fresher one (#1209).
       guard generation == snapshotGeneration else { return }
-      setAccountPerformance(nil)
-      // self.error intentionally not set — performance tile degrades to
-      // "Unavailable" while the rest of the account view stays functional.
+      // Genuine ledger failure → the tiles read "Unavailable" (Rule 11), parity
+      // with the multi-instrument path. self.error intentionally not set — the
+      // rest of the account view stays functional.
+      setAccountPerformance(.unavailable(in: profileCurrency))
     }
   }
 

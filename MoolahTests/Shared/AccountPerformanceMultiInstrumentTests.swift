@@ -3,10 +3,8 @@ import Testing
 
 @testable import Moolah
 
-// swiftlint:disable type_name
 @Suite("AccountPerformanceCalculator.computeMultiInstrument")
-struct AccountPerformanceCalculatorMultiInstrumentTests {
-  // swiftlint:enable type_name
+struct AccountPerformanceMultiInstrumentTests {
   private let aud = Instrument.AUD
   private let usd = Instrument.USD
   private let eth = Instrument.crypto(
@@ -131,5 +129,50 @@ struct AccountPerformanceCalculatorMultiInstrumentTests {
     #expect(perf.currentValue == InstrumentAmount(quantity: 1_100, instrument: aud))
     #expect(perf.totalContributions == nil)
     #expect(perf.profitLoss == nil)
+  }
+
+  /// Mixed success/failure across an in-scope instrument (Rule 11). Wallet A
+  /// receives ETH twice: the earlier receipt's conversion fails and the later
+  /// one succeeds, so A's `cashFlows` series is *truncated*. The return + first-
+  /// flow date must NOT be computed from that partial series — the whole set
+  /// degrades to current-value-only — while sibling wallet B, holding only a
+  /// priced instrument, still gets a finite return.
+  @Test("dropped in-scope flow hides return for the affected set; priced sibling unaffected")
+  func mixedFailureHidesReturnForAffectedSet() async throws {
+    let btc = Instrument.crypto(
+      chainId: 2, contractAddress: nil, symbol: "BTC", name: "Bitcoin", decimals: 8)
+    let walletA = UUID()
+    let walletB = UUID()
+    let ethFail = Transaction(date: day(0), legs: [leg(walletA, eth, 1, .income)])
+    let ethOk = Transaction(date: day(10), legs: [leg(walletA, eth, 1, .income)])
+    let btcOk = Transaction(date: day(5), legs: [leg(walletB, btc, 1, .income)])
+    let service = FakeConversionService.dateRates(
+      [day(-100): [eth.id: 4_000, btc.id: 50_000]], failingDates: [day(0)])
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: [ethFail, ethOk, btcOk], referenceCurrency: aud, conversionService: service)
+
+    // Wallet A: the day(0) conversion failure poisons the whole set — the
+    // partial flow series must not yield a return or first-flow date.
+    let perfA = try await AccountPerformanceCalculator.computeMultiInstrument(
+      accountIds: [walletA],
+      valuedPositions: [
+        valued(eth, quantity: 2, worth: InstrumentAmount(quantity: 9_000, instrument: aud))
+      ],
+      profileCurrency: aud, ledger: ledger, now: day(365))
+    #expect(perfA.currentValue == InstrumentAmount(quantity: 9_000, instrument: aud))
+    #expect(perfA.totalContributions == nil)
+    #expect(perfA.annualisedReturn == nil)
+    #expect(perfA.firstFlowDate == nil)
+
+    // Wallet B: only a priced instrument → a finite return survives.
+    let perfB = try await AccountPerformanceCalculator.computeMultiInstrument(
+      accountIds: [walletB],
+      valuedPositions: [
+        valued(btc, quantity: 1, worth: InstrumentAmount(quantity: 60_000, instrument: aud))
+      ],
+      profileCurrency: aud, ledger: ledger, now: day(365))
+    #expect(perfB.totalContributions == InstrumentAmount(quantity: 50_000, instrument: aud))
+    #expect(perfB.annualisedReturn != nil)
+    #expect(perfB.firstFlowDate == day(5))
   }
 }

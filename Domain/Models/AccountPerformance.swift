@@ -16,8 +16,10 @@ struct AccountPerformance {
   let currentValue: InstrumentAmount?
   let totalContributions: InstrumentAmount?
   let profitLoss: InstrumentAmount?
-  /// Modified Dietz period return (not annualised). `nil` when the
-  /// weighted-capital denominator is zero or any input is unavailable.
+  /// Period return on invested capital (not annualised). The ledger path
+  /// computes it as the simple `gain / amountInvested` ratio; the legacy
+  /// manual-valuation path uses Modified Dietz. `nil` when the invested base is
+  /// zero or any input is unavailable.
   let profitLossPercent: Decimal?
   /// Effective annual rate from `IRRSolver`. `nil` for spans < 1 day,
   /// pathological multi-root cases, or when inputs are unavailable.
