@@ -28,9 +28,13 @@ enum ConversionFailureClassifier {
 
   private static func isTransient(_ error: WalletSyncError) -> Bool {
     switch error.kind {
-    case .network, .rateLimited, .providerMalformedResponse:
-      // .providerMalformedResponse is transient: the provider could have had
-      // the data but glitched (e.g. a bad JSON payload). Retrying may succeed.
+    case .network, .rateLimited, .providerMalformedResponse, .providerError:
+      // .providerMalformedResponse / .providerError are transient here: the
+      // provider responded but not usefully (a bad payload, or a refusal such
+      // as a momentary node issue). This classifier gates the conversion
+      // (price) path, which self-heals per row on a retry; the loud
+      // structural-failure bucket is reserved for permanently unresolvable
+      // conversions (unmapped token, unsupported pair).
       return true
     case .missingApiKey, .invalidApiKey:
       return false

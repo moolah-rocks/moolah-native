@@ -193,6 +193,21 @@ struct SyncedAccountHeaderLogicTests {
         == "Provider returned a malformed response (decode).")
   }
 
+  @Test("providerError caption surfaces the provider's own reason")
+  func providerErrorCaptionSurfacesReason() {
+    let unattributed = SyncedAccountHeaderLogic.errorCaption(
+      for: .providerError(stage: "getLogs", code: 4_444, message: "pruned history unavailable"),
+      account: cryptoAccount)
+    #expect(unattributed == "Sync failed (getLogs): pruned history unavailable")
+
+    let attributed = SyncedAccountHeaderLogic.errorCaption(
+      for: WalletSyncError(
+        provider: .directRPC,
+        kind: .providerError(stage: "getLogs", code: 4_444, message: "pruned history unavailable")),
+      account: cryptoAccount)
+    #expect(attributed == "Direct RPC couldn't complete sync (getLogs): pruned history unavailable")
+  }
+
   // MARK: - Provider-attributed captions
 
   @Test("Attributed invalidApiKey names the provider")

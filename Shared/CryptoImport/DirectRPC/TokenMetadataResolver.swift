@@ -171,7 +171,10 @@ actor TokenMetadataResolver {
     switch walletError.kind {
     case .rateLimited, .network:
       return true
-    case .missingApiKey, .invalidApiKey, .providerMalformedResponse:
+    case .missingApiKey, .invalidApiKey, .providerMalformedResponse, .providerError:
+      // .providerError covers an `eth_call` revert ("execution reverted"),
+      // which means the contract truly doesn't support `decimals()`/`symbol()`
+      // — permanent, worth negative-caching, same as a malformed response.
       return false
     }
   }

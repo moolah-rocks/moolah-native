@@ -24,6 +24,14 @@ struct ConversionFailureClassifierTests {
     #expect(ConversionFailureClassifier.isTransient(error))
   }
 
+  @Test("WalletSyncError .providerError is transient")
+  func providerErrorIsTransient() {
+    let error = WalletSyncError(
+      provider: .directRPC,
+      kind: .providerError(stage: "getLogs", code: 4_444, message: "pruned history unavailable"))
+    #expect(ConversionFailureClassifier.isTransient(error))
+  }
+
   @Test("CryptoPriceError .noPriceAvailable is transient")
   func noPriceAvailableIsTransient() {
     let error = CryptoPriceError.noPriceAvailable(tokenId: "1:native", date: "2026-01-01")

@@ -118,7 +118,8 @@ struct LiveJSONRPCClient: Sendable {
         logger.error(
           "JSON-RPC blockTimestamps provider error \(error.code, privacy: .public) for block \(block, privacy: .public): \(error.message, privacy: .public)"
         )
-        throw WalletSyncError.providerMalformedResponse(stage: "blockTimestamps")
+        throw WalletSyncError.providerError(
+          stage: "blockTimestamps", code: error.code, message: error.message)
       }
       guard let result = response.result, let seconds = RPCHex.parseUInt64(result.timestamp)
       else {
@@ -157,7 +158,9 @@ struct LiveJSONRPCClient: Sendable {
 
   /// `eth_getLogs` for a single filter, wrapped in the one-element
   /// positional params array (`[filter]`) the spec requires. Decodes the
-  /// result as `[RPCLog]`; malformed → `.providerMalformedResponse("getLogs")`.
+  /// result as `[RPCLog]`. An undecodable/absent result →
+  /// `.providerMalformedResponse("getLogs")`; a JSON-RPC `error` envelope
+  /// (e.g. a range/pruning refusal) → `.providerError("getLogs", …)`.
   func getLogs(_ filter: RPCLogFilter) async throws -> [RPCLog] {
     try await call(method: "eth_getLogs", params: [filter], stage: "getLogs")
   }
@@ -166,9 +169,10 @@ struct LiveJSONRPCClient: Sendable {
 
   /// One JSON-RPC round-trip: encodes `{method, params}` as a single (non-batch)
   /// request with a fixed `id: 1` — every call is its own HTTP request, so there
-  /// is no batch to correlate by id. Decodes the response envelope, throwing
-  /// `.providerMalformedResponse(stage:)` when the body carries a JSON-RPC
-  /// `error` object, when `result` is `null`, or when decoding itself fails.
+  /// is no batch to correlate by id. Decodes the response envelope. A JSON-RPC
+  /// `error` object throws `.providerError(stage:code:message:)` (carrying the
+  /// provider's own reason); a `null` result or an undecodable body throws
+  /// `.providerMalformedResponse(stage:)`.
   private func call<Params: Encodable & Sendable, ResultValue: Decodable & Sendable>(
     method: String,
     params: Params,
@@ -215,7 +219,8 @@ struct LiveJSONRPCClient: Sendable {
       logger.error(
         "JSON-RPC \(stage, privacy: .public) provider error \(error.code, privacy: .public): \(error.message, privacy: .public)"
       )
-      throw WalletSyncError.providerMalformedResponse(stage: stage)
+      throw WalletSyncError.providerError(
+        stage: stage, code: error.code, message: error.message)
     }
     guard let result = envelope.result else {
       logger.error("JSON-RPC \(stage, privacy: .public): result is null with no error")

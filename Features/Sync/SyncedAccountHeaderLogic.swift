@@ -135,6 +135,8 @@ enum SyncedAccountHeaderLogic {
       return networkCaption(provider: error.provider, underlying: underlying)
     case .providerMalformedResponse(let stage):
       return malformedCaption(provider: error.provider, stage: stage)
+    case let .providerError(stage, _, message):
+      return providerErrorCaption(provider: error.provider, stage: stage, message: message)
     }
   }
 }
@@ -197,5 +199,17 @@ extension SyncedAccountHeaderLogic {
       return "\(provider.displayName) returned a malformed response (\(stage))."
     }
     return "Provider returned a malformed response (\(stage))."
+  }
+
+  /// Surfaces the provider's own refusal reason (e.g. "pruned history
+  /// unavailable") rather than a generic "malformed response", so the user
+  /// can act on it — switch endpoints, add a key, or use an archive node.
+  private static func providerErrorCaption(
+    provider: SyncProvider?, stage: String, message: String
+  ) -> String {
+    if let provider {
+      return "\(provider.displayName) couldn't complete sync (\(stage)): \(message)"
+    }
+    return "Sync failed (\(stage)): \(message)"
   }
 }
