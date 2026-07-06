@@ -74,6 +74,21 @@ enum WalletSyncWindowMath {
     }
   }
 
+  /// The subset of `signedGasTxs` whose `blockNumber` falls in
+  /// `[window.from, window.to]`. Mirrors the `[AlchemyTransfer]` overload
+  /// so the signed-gas set is sliced per window exactly like the native
+  /// rows: a signed tx and the transfer event it pays gas for share the
+  /// same block, so partitioning both keeps gas-only synthesis and gas-leg
+  /// attribution inside a single window. Passing the whole set to every
+  /// window instead synthesised a phantom gas-only transaction in an
+  /// earlier window whose `"<hash>:gas"` leg then deduped the real
+  /// transfer's gas leg out of its own later window.
+  static func partition(
+    _ signedGasTxs: [SignedGasTx], into window: WalletSyncWindow
+  ) -> [SignedGasTx] {
+    signedGasTxs.filter { $0.blockNumber >= window.from && $0.blockNumber <= window.to }
+  }
+
   /// The fraction of the `[from, head]` range that `pos` has reached,
   /// clamped to `0...1`. Returns `1.0` when `head == from` (a zero-width
   /// range is, by definition, already complete). Used to publish

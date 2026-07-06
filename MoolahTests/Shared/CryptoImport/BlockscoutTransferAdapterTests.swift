@@ -51,6 +51,18 @@ struct BlockscoutTransferAdapterTests {
     #expect(transfer.blockNum == "0x64")  // 100
     #expect(transfer.metadata.blockTimestamp == "2024-09-12T12:34:56.000000Z")
     #expect(result.signedGasTxs.map(\.hash) == ["0xH1"])
+    // The signed-gas set carries the block number so the windowed runner can
+    // partition it per window exactly like the transfer's `blockNum`.
+    #expect(result.signedGasTxs.first?.blockNumber == 100)
+  }
+
+  @Test
+  func signedGasTxCarriesTheNativeTxBlockNumber() throws {
+    let result = BlockscoutTransferAdapter.adapt(
+      nativeTxs: [tx(hash: "0xB", from: wallet, to: "0xDEF", value: "0", block: 300_000)],
+      internalTxs: [],
+      walletAddress: wallet)
+    #expect(result.signedGasTxs.first?.blockNumber == 300_000)
   }
 
   @Test

@@ -121,9 +121,14 @@ final class WindowedWalletSyncRunner {
   /// each earlier window already applied-then-checkpointed, the durable
   /// checkpoint sits at window `k-1`'s end at the stop — exactly the resume
   /// point — and the survivors still reach the caller's transfer-detection
-  /// pass. Only the PRE-loop steps (`currentHead`, `validatedWalletAddress`,
-  /// `resolveFromBlock`, and their cancellation checks) throw, because nothing
-  /// has been persisted yet there. See `RunResult` for the caller contract.
+  /// pass. Only the PRE-loop steps throw: `currentHead`,
+  /// `validatedWalletAddress`, `resolveFromBlock`, their cancellation checks,
+  /// and — on the already-caught-up branch (`from > head`) —
+  /// `resolvePriorBlock` plus the empty-`candidates` `apply` that refreshes
+  /// `lastSyncedAt`. All of these throw before any window is scanned, and the
+  /// caught-up `apply` writes only the watermark (its persist/dedup/rules
+  /// stages are no-ops on an empty candidate set), so a throw there leaves
+  /// nothing half-persisted. See `RunResult` for the caller contract.
   func run(
     account: Account,
     chain: ChainConfig,
@@ -145,12 +150,29 @@ final class WindowedWalletSyncRunner {
     let from = try await engine.resolveFromBlock(for: account)
     try Task.checkCancellation()
 
-    // Already caught up (or a reorg-window that sits above head): report
-    // complete and return without a fetch. `resolveFromBlock` can exceed a
-    // freshly-observed `head` when a peer's synced checkpoint is ahead of
-    // this provider's reported head; scanning `[from, head]` would be empty
-    // anyway, so skip straight to done.
+    // Already caught up (or a reorg-window that sits above head): the scan
+    // range `[from, head]` is empty, so skip straight to done — but still
+    // refresh `lastSyncedAt` so the account doesn't stay perpetually stale
+    // and re-trigger every cycle. `from` can exceed a freshly-observed
+    // `head` when a peer's synced checkpoint is ahead of this provider's
+    // reported head. Mirror the single-shot path, which stamps
+    // `lastSyncedAt = now` while keeping `lastSyncedBlockNumber` at the prior
+    // checkpoint: apply an EMPTY input whose `headBlockNumber` is the RAW
+    // prior checkpoint (`resolvePriorBlock`, NOT the reorg-subtracted `from`,
+    // which is below head here). `WalletApplyEngine.updateSyncState` writes
+    // `lastSyncedBlockNumber = headBlockNumber` directly, so passing the prior
+    // checkpoint keeps the block from being lowered while still stamping a
+    // fresh `lastSyncedAt`; `priorBlock >= the stored watermark` (it is a
+    // `max`), so it can only hold or raise, never regress. `candidates: []`
+    // means `apply`'s persist/dedup/rules stages are all no-ops — the only
+    // durable effect is the watermark refresh — so a throw here (or the
+    // cancellation check just before it) leaves nothing half-written.
     guard from <= head else {
+      try Task.checkCancellation()
+      let priorBlock = try await engine.resolvePriorBlock(for: account)
+      let input = WalletApplyEngine.AccountInput(
+        account: account, headBlockNumber: priorBlock, candidates: [])
+      _ = try await applyEngine.apply(perAccount: [input])
       progress(.scanning(fraction: 1.0))
       return RunResult(genuinelyNew: [], didWindowedScan: true)
     }
@@ -174,25 +196,12 @@ final class WindowedWalletSyncRunner {
         // below returns those survivors, so a stop here resumes cleanly.
         try Task.checkCancellation()
 
-        let nativeInWindow = WalletSyncWindowMath.partition(
-          context.nativeRows, into: window)
-        let build = try await engine.buildWindow(
+        let persisted = try await buildAndApplyWindow(
           account: account,
           chain: chain,
           walletAddress: walletAddress,
-          window: window.from...window.to,
-          headForRecord: window.to,
-          nativeRowsInWindow: nativeInWindow,
-          signedGasTxs: context.signedGasTxs,
-          prefetchedReceipts: context.prefetchedReceipts)
-
-        // The apply pass persists this window's transactions AND advances
-        // both the local `WalletSyncState` and the synced checkpoint to
-        // `window.to` — even for an empty window, because `headBlockNumber`
-        // is the window end regardless of `candidates`.
-        let input = WalletApplyEngine.AccountInput(
-          account: account, headBlockNumber: window.to, candidates: build.candidates)
-        let persisted = try await applyEngine.apply(perAccount: [input])
+          window: window,
+          context: context)
         genuinelyNew.append(contentsOf: persisted)
 
         progress(
@@ -223,5 +232,43 @@ final class WindowedWalletSyncRunner {
     }
 
     return RunResult(genuinelyNew: genuinelyNew, didWindowedScan: true)
+  }
+
+  /// Builds and applies ONE window, returning the transactions the apply
+  /// pass persisted for it.
+  ///
+  /// Partitions BOTH the native rows AND the signed-gas set by block: a
+  /// signed tx belongs to the window whose real transfer it pays gas for
+  /// (they are the same on-chain transaction, so they share a block).
+  /// Passing the whole signed set to every window instead would synthesise
+  /// a phantom gas-only transaction in an earlier window — whose
+  /// `"<hash>:gas"` leg then deduped the real transfer's gas leg out of its
+  /// own later window — and re-fetch that hash's receipt once per window.
+  /// `prefetchedReceipts` stays whole: it's a hash→receipt lookup cache
+  /// consumed only for this window's own transfers/signed txs, so an
+  /// out-of-window entry simply goes unused rather than producing a leg.
+  ///
+  /// The apply pass advances both the local `WalletSyncState` and the synced
+  /// checkpoint to `window.to` even for an empty window, because
+  /// `headBlockNumber` is the window end regardless of `candidates`.
+  private func buildAndApplyWindow(
+    account: Account,
+    chain: ChainConfig,
+    walletAddress: String,
+    window: WalletSyncWindow,
+    context: WalletSyncNativeContext
+  ) async throws -> [Transaction] {
+    let build = try await engine.buildWindow(
+      account: account,
+      chain: chain,
+      walletAddress: walletAddress,
+      window: window.from...window.to,
+      headForRecord: window.to,
+      nativeRowsInWindow: WalletSyncWindowMath.partition(context.nativeRows, into: window),
+      signedGasTxs: WalletSyncWindowMath.partition(context.signedGasTxs, into: window),
+      prefetchedReceipts: context.prefetchedReceipts)
+    let input = WalletApplyEngine.AccountInput(
+      account: account, headBlockNumber: window.to, candidates: build.candidates)
+    return try await applyEngine.apply(perAccount: [input])
   }
 }
