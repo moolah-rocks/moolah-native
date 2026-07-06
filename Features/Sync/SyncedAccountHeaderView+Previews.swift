@@ -43,11 +43,26 @@ import SwiftUI
     .dynamicTypeSize(.accessibility5)
 }
 
+// In-progress variants seed the store's `inProgressAccountIds` /
+// `progressPerAccount` so the sync button's determinate bar and
+// indeterminate spinner (the states this feature adds) get canvas
+// coverage — the standalone preview above only exercises the idle label.
+
+#Preview("Synced account header (syncing)") {
+  syncedAccountHeaderPreview(syncing: true)
+}
+
+#Preview("Synced account header (scanning 42%)") {
+  syncedAccountHeaderPreview(syncing: true, fraction: 0.42)
+}
+
 // Builds the standalone-preview content. Extracted from the `#Preview`
 // closure so the (unavoidably verbose) store wiring is governed by
 // `function_body_length` rather than the stricter `closure_body_length`.
 @MainActor
-private func syncedAccountHeaderPreview(width: CGFloat = 720) -> some View {
+private func syncedAccountHeaderPreview(
+  width: CGFloat = 720, syncing: Bool = false, fraction: Double? = nil
+) -> some View {
   // `ProfileSession.preview()` throws only if the in-memory SwiftData
   // container can't be created — a programmer error; crashing is correct.
   // swiftlint:disable:next force_try
@@ -79,6 +94,15 @@ private func syncedAccountHeaderPreview(width: CGFloat = 720) -> some View {
     instrument: .AUD,
     valuationMode: .calculatedFromTrades,
     exchangeProvider: .coinstash)
+  if syncing {
+    // Drive the crypto header's sync button into its in-progress state:
+    // a seeded fraction renders the determinate bar, its absence the
+    // indeterminate spinner.
+    store.setInProgress(true, for: cryptoAccount.id)
+    if let fraction {
+      store.setSyncProgress(.scanning(fraction: fraction), for: cryptoAccount.id)
+    }
+  }
   return VStack(spacing: 24) {
     SyncedAccountHeaderView(
       account: cryptoAccount,
