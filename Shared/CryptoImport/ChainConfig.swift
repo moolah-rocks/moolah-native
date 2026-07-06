@@ -59,6 +59,21 @@ struct ChainConfig: Sendable, Hashable {
   /// public nodes serve that exact query (topics-only + archive) for free.
   let defaultRPCURL: URL
 
+  /// The earliest block a never-synced wallet's log scan should start from.
+  /// Genesis (block 0) never carries logs, so most chains start at block 1.
+  /// OP Mainnet is the exception: its Bedrock fork (block 105_235_063)
+  /// migrated the chain to the current state/log format, and pre-Bedrock
+  /// (OVM) history has no scannable ERC-20 `Transfer` logs — a pruned OP
+  /// node answers a pre-Bedrock `eth_getLogs` with `4444 pruned history
+  /// unavailable`, which would otherwise fail the whole sync. Clamping the
+  /// start block up to this value keeps the scan inside the range every
+  /// node can serve. The clamp is applied uniformly to every source
+  /// (Blockscout native/internal transactions and Alchemy/direct-RPC ERC-20
+  /// logs) — pre-Bedrock OP Mainnet history is intentionally discarded
+  /// everywhere, not only where a pruned node forces it. See
+  /// `WalletSyncEngine.build`.
+  let earliestScannableBlock: UInt64
+
   /// Human-readable name for the chain picker / settings UI.
   let displayName: String
 
@@ -88,6 +103,7 @@ extension ChainConfig {
     blockExplorerBaseURL: requireURL("https://etherscan.io"),
     blockscoutAPIBaseURL: requireURL("https://eth.blockscout.com"),
     defaultRPCURL: requireURL("https://eth.drpc.org"),
+    earliestScannableBlock: 1,
     displayName: "Ethereum"
   )
 
@@ -111,6 +127,9 @@ extension ChainConfig {
     // at the canonical host (Ethereum/Base still use *.blockscout.com).
     blockscoutAPIBaseURL: requireURL("https://explorer.optimism.io"),
     defaultRPCURL: requireURL("https://optimism.drpc.org"),
+    // Bedrock fork activation (2023-06-06). Pre-Bedrock OVM history has no
+    // scannable ERC-20 Transfer logs and is unavailable on pruned nodes.
+    earliestScannableBlock: 105_235_063,
     displayName: "OP Mainnet"
   )
 
@@ -131,6 +150,9 @@ extension ChainConfig {
     blockExplorerBaseURL: requireURL("https://basescan.org"),
     blockscoutAPIBaseURL: requireURL("https://base.blockscout.com"),
     defaultRPCURL: requireURL("https://base.drpc.org"),
+    // Base launched post-Bedrock, so its full history is scannable; genesis
+    // (block 0) carries no logs, so the scan starts at block 1.
+    earliestScannableBlock: 1,
     displayName: "Base"
   )
 
