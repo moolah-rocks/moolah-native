@@ -1,153 +1,162 @@
 import Foundation
-import OSLog
 
-/// Pure orchestrator that turns transactions and valued positions into an
-/// `AccountPerformance` for a position-tracked investment account.
+/// Pure orchestrator that turns the shared `HoldingsCostLedger` and valued
+/// positions into an `AccountPerformance` for an account (or account set).
 ///
-/// Cash flows are extracted from the transaction history using the
-/// boundary-crossing rule: a leg in the account contributes a flow only
-/// if it is an opening balance or the transaction also touches a
-/// different account. Intra-account activity (trades, dividends, fees)
-/// is reflected via the terminal value, not as flows.
+/// The three account-detail tiles are three distinct reads of the shared
+/// ledger — a *stock* and a *rate*, deliberately decoupled:
 ///
-/// Throws when any cash-flow conversion fails so the caller can mark the
-/// performance unavailable; a partial result is never returned.
+///   - **Amount invested** = `ledger.remainingInvested(accountIds:onOrBefore:)`
+///     — the remaining cost basis of currently-held lots (≥ 0 by construction;
+///     `nil` if any in-scope instrument failed conversion, Rule 11). This is
+///     the field `AccountPerformance.totalContributions` now carries: the
+///     remaining cost basis, *not* the historical sum of inflows.
+///   - **Gain** = `currentValue − amountInvested` (unrealised).
+///   - **Return** = money-weighted IRR over `ledger.cashFlows(accountIds:)`.
+///     Received tokens are positive inflows at market value, so a self-custody
+///     wallet funded purely by on-chain receives gets a finite return (the
+///     regression the old negative-`contributions` path could not produce).
+///
+/// The single-account (`compute`) and multi-instrument (`computeMultiInstrument`)
+/// entry points now run the same ledger read; they differ only in whether the
+/// caller supplies one account id or a set. `computeLegacy` (manual-valuation
+/// accounts, which have no ledger) keeps its own net-deposit / Modified-Dietz
+/// derivation and is unchanged.
 enum AccountPerformanceCalculator {
-  private static let logger = Logger(
-    subsystem: "com.moolah.app", category: "AccountPerformanceCalculator")
 
-  // MARK: - Position-tracked
+  // MARK: - Position-tracked (single account, ledger-sourced)
 
   /// Computes account-level performance for a position-tracked investment
-  /// account. Throws when any cash-flow currency conversion fails — per
-  /// Rule 11 the caller should treat the entire performance as
-  /// unavailable, not partially populated.
+  /// account from the shared profile-wide `ledger`. Throws only
+  /// `CancellationError` (a superseded pass abandons cleanly); the ledger is
+  /// pre-built, so no conversion happens here.
   static func compute(
     accountId: UUID,
-    transactions: [Transaction],
     valuedPositions: [ValuedPosition],
     profileCurrency: Instrument,
-    conversionService: any InstrumentConversionService,
+    ledger: HoldingsCostLedger,
     now: Date = Date()
   ) async throws -> AccountPerformance {
-    let flows: [CashFlow]
-    do {
-      flows = try await extractFlows(
-        from: transactions,
-        accountId: accountId,
-        profileCurrency: profileCurrency,
-        conversionService: conversionService)
-    } catch {
-      logger.warning(
-        "Cash-flow conversion failed for account \(accountId, privacy: .public): \(error.localizedDescription, privacy: .public)"
-      )
-      throw error
-    }
-
-    let currentValue = aggregatedValue(of: valuedPositions, in: profileCurrency)
-
-    return assemble(
-      flows: flows,
-      currentValue: currentValue,
+    try await performance(
+      accountIds: [accountId],
+      valuedPositions: valuedPositions,
       profileCurrency: profileCurrency,
+      ledger: ledger,
       now: now)
   }
 
-  // MARK: - Multi-instrument (unified account-detail path)
+  // MARK: - Multi-instrument (unified account-detail path, ledger-sourced)
 
   /// Computes account-level performance for the unified multi-instrument
   /// account-detail path (crypto / exchange / standard / group hosts), which
   /// carries a *set* of account ids rather than a single account.
   ///
-  /// **Group boundary rule.** A transaction contributes external cash flows
-  /// only when it touches exactly one member of `accountIds` (one member ⇒
-  /// external counterparty; ≥2 members ⇒ an internal transfer between group
-  /// members, excluded). This mirrors
-  /// `PositionsHistoryBuilder.foldContributions`, so the tile's
-  /// `totalContributions` and the chart's contribution baseline never
-  /// disagree. For a single-account host (`accountIds.count == 1`) the rule
-  /// reduces to the single-account boundary-crossing predicate.
+  /// **Group boundary rule.** `ledger.cashFlows(accountIds:)` keeps only flows
+  /// whose account is in the set and whose counterparty is outside it, so a
+  /// transfer between two members of the set nets to zero (internal) while a
+  /// transfer to a sibling outside the set is an external flow — matching the
+  /// chart baseline, which reads the same ledger.
   ///
-  /// **Graceful degradation (Rule 11).** `currentValue` is aggregated from the
-  /// already-valued `valuedPositions` (no further conversion), so it survives
-  /// even when the flow history cannot be converted. Two degraded shapes both
-  /// return `currentValue` with every other field `nil` — so the P&L and
-  /// annualised-return tiles hide rather than mislead:
-  ///   1. **No external flows** — a wallet funded solely by on-chain receives
-  ///      / airdrops has no known cost basis. Unlike the single-account
-  ///      `compute`, this path does NOT treat the whole balance as profit
-  ///      (that would paint an airdrop wallet's entire value as gain).
-  ///   2. **Flow conversion failed** — a rate lookup for a historical flow
-  ///      threw; contributions are unavailable, but the current value is not.
-  ///   3. **Row value in wrong instrument** — a `ValuedPosition` whose `value`
-  ///      is not in `profileCurrency` (aggregate would trap on `+=`); routes
-  ///      through `assemble` with `currentValue: nil`, yielding
-  ///      `totalContributions` with `profitLoss`/`annualisedReturn` nil.
-  ///
-  /// Throws only `CancellationError` (propagated so a superseded valuator pass
-  /// abandons cleanly); every other failure degrades in place.
+  /// Throws only `CancellationError`; every field degrades in place otherwise
+  /// (unavailable amount-invested → invested/gain nil while current value
+  /// survives, per Rule 11 — no phantom zeros).
   static func computeMultiInstrument(
     accountIds: Set<UUID>,
-    transactions: [Transaction],
     valuedPositions: [ValuedPosition],
     profileCurrency: Instrument,
-    conversionService: any InstrumentConversionService,
+    ledger: HoldingsCostLedger,
     now: Date = Date()
   ) async throws -> AccountPerformance {
+    try await performance(
+      accountIds: accountIds,
+      valuedPositions: valuedPositions,
+      profileCurrency: profileCurrency,
+      ledger: ledger,
+      now: now)
+  }
+
+  /// Shared ledger-sourced core for both entry points. Reads the three
+  /// surfaces off the shared ledger — amount invested (a stock) and cash
+  /// flows (a rate's inputs) come from *different* queries — then assembles.
+  /// `try Task.checkCancellation()` lets a superseded valuator/refresh pass
+  /// abandon before publishing.
+  private static func performance(
+    accountIds: Set<UUID>,
+    valuedPositions: [ValuedPosition],
+    profileCurrency: Instrument,
+    ledger: HoldingsCostLedger,
+    now: Date
+  ) async throws -> AccountPerformance {
+    try Task.checkCancellation()
     let currentValue = aggregatedValue(of: valuedPositions, in: profileCurrency)
-    let flows: [CashFlow]
-    do {
-      flows = try await extractGroupFlows(
-        from: transactions,
-        accountIds: accountIds,
-        profileCurrency: profileCurrency,
-        conversionService: conversionService)
-    } catch is CancellationError {
-      throw CancellationError()
-    } catch {
-      logger.warning(
-        "Multi-instrument cash-flow conversion failed; showing current value only: \(error.localizedDescription, privacy: .public)"
-      )
-      return .currentValueOnly(currentValue, in: profileCurrency)
-    }
-    guard !flows.isEmpty else {
-      return .currentValueOnly(currentValue, in: profileCurrency)
-    }
-    return assemble(
+    let flows = ledger.cashFlows(accountIds: accountIds)
+    let amountInvested = ledger.remainingInvested(accountIds: accountIds, onOrBefore: now)
+    return assembleFromLedger(
       flows: flows,
+      amountInvested: amountInvested,
       currentValue: currentValue,
       profileCurrency: profileCurrency,
       now: now)
   }
 
-  /// Group-aware cash-flow extraction: applies the single-member-touch rule
-  /// (see `computeMultiInstrument`) then delegates the per-leg amount to the
-  /// shared `AccountCashFlows.flowAmounts(for:)` so the boundary-crossing +
-  /// on-date conversion logic lives in exactly one place. Per-leg `CashFlow`
-  /// granularity is preserved; all legs of a transaction date at
-  /// `transaction.date`.
-  private static func extractGroupFlows(
-    from transactions: [Transaction],
-    accountIds: Set<UUID>,
+  /// Assembles the ledger-sourced `AccountPerformance`. `amountInvested` is the
+  /// remaining cost basis (the "Amount invested" tile); gain is
+  /// `currentValue − amountInvested`; the annualised return is the IRR over the
+  /// market-valued `flows`. Any of these degrades to `nil` independently when
+  /// its input is unavailable (Rule 11) — the current value tile can still show
+  /// while the gain / return tiles hide.
+  private static func assembleFromLedger(
+    flows: [CashFlow],
+    amountInvested: Decimal?,
+    currentValue: InstrumentAmount?,
     profileCurrency: Instrument,
-    conversionService: any InstrumentConversionService
-  ) async throws -> [CashFlow] {
-    var flows: [CashFlow] = []
-    let sorted = transactions.sorted { $0.date < $1.date }
-    for transaction in sorted {
-      let membersTouched = Set(transaction.legs.compactMap(\.accountId))
-        .intersection(accountIds)
-      guard membersTouched.count == 1, let member = membersTouched.first else { continue }
-      let amounts = try await AccountCashFlows.flowAmounts(
-        for: transaction,
-        accountId: member,
-        hostCurrency: profileCurrency,
-        service: conversionService)
-      for amount in amounts {
-        flows.append(CashFlow(date: transaction.date, amount: amount))
-      }
+    now: Date
+  ) -> AccountPerformance {
+    let invested = amountInvested.map {
+      InstrumentAmount(quantity: $0, instrument: profileCurrency)
     }
-    return flows
+    return AccountPerformance(
+      instrument: profileCurrency,
+      currentValue: currentValue,
+      totalContributions: invested,
+      profitLoss: gain(
+        currentValue: currentValue, amountInvested: amountInvested, in: profileCurrency),
+      profitLossPercent: gainPercent(currentValue: currentValue, amountInvested: amountInvested),
+      annualisedReturn: annualisedReturn(flows: flows, currentValue: currentValue, now: now),
+      firstFlowDate: flows.first?.date)
+  }
+
+  /// Unrealised gain `currentValue − amountInvested`, or `nil` if either input
+  /// is unavailable (Rule 11 — no partial figure).
+  private static func gain(
+    currentValue: InstrumentAmount?, amountInvested: Decimal?, in profileCurrency: Instrument
+  ) -> InstrumentAmount? {
+    guard let currentValue, let amountInvested else { return nil }
+    return InstrumentAmount(
+      quantity: currentValue.quantity - amountInvested, instrument: profileCurrency)
+  }
+
+  /// Total return on the remaining invested capital: `gain / amountInvested`.
+  /// `nil` when amount invested is zero (no baseline to measure against) or
+  /// either input is unavailable. Distinct from the annualised return: this is
+  /// a simple (not time-weighted) ratio shown beside the gain figure.
+  private static func gainPercent(
+    currentValue: InstrumentAmount?, amountInvested: Decimal?
+  ) -> Decimal? {
+    guard let currentValue, let amountInvested, amountInvested != 0 else { return nil }
+    return (currentValue.quantity - amountInvested) / amountInvested
+  }
+
+  /// Money-weighted annualised return (IRR) over the ledger's market-valued
+  /// flows, terminal = `currentValue`. `nil` when the current value is
+  /// unavailable or `IRRSolver` cannot annualise (empty flows, span < 1 day,
+  /// pathological multi-root).
+  private static func annualisedReturn(
+    flows: [CashFlow], currentValue: InstrumentAmount?, now: Date
+  ) -> Decimal? {
+    guard let currentValue else { return nil }
+    return IRRSolver.annualisedReturn(
+      flows: flows, terminalValue: currentValue.quantity, terminalDate: now)
   }
 
   // MARK: - Manual valuation
@@ -191,37 +200,6 @@ enum AccountPerformanceCalculator {
       now: now)
   }
 
-  /// Cash-flow extraction. Delegates the per-leg "is this a flow"
-  /// classification (opening balance OR boundary-crossing) and the
-  /// on-date conversion to `AccountCashFlows.flowAmounts(for:)` so
-  /// the boundary-crossing rule lives in exactly one place — see
-  /// `Shared/AccountCashFlows.swift`. Per-leg `CashFlow` granularity
-  /// is preserved by flat-mapping each transaction's returned
-  /// amounts into one `CashFlow` per qualifying leg, all dated at
-  /// `transaction.date` (the IRR / Modified-Dietz weighting code
-  /// keys on date, not leg index).
-  private static func extractFlows(
-    from transactions: [Transaction],
-    accountId: UUID,
-    profileCurrency: Instrument,
-    conversionService: any InstrumentConversionService
-  ) async throws -> [CashFlow] {
-    var flows: [CashFlow] = []
-    let sorted = transactions.sorted { $0.date < $1.date }
-    for transaction in sorted {
-      let amounts = try await AccountCashFlows.flowAmounts(
-        for: transaction,
-        accountId: accountId,
-        hostCurrency: profileCurrency,
-        service: conversionService
-      )
-      for amount in amounts {
-        flows.append(CashFlow(date: transaction.date, amount: amount))
-      }
-    }
-    return flows
-  }
-
   /// Sum of valued positions in `profileCurrency`, or `nil` if any row's
   /// `value` is missing — Rule 11 forbids partial sums.
   private static func aggregatedValue(
@@ -239,8 +217,11 @@ enum AccountPerformanceCalculator {
     return total
   }
 
-  /// Assembles the final `AccountPerformance` from extracted flows and
-  /// the aggregated terminal value.
+  /// Assembles the legacy (manual-valuation) `AccountPerformance` from
+  /// net-deposit flows and the terminal value. Here `totalContributions` is
+  /// the net-deposit sum and the percentage is Modified Dietz — the correct
+  /// derivation for accounts with no cost-basis lots. The ledger path uses
+  /// `assembleFromLedger` (remaining cost basis + IRR) instead.
   private static func assemble(
     flows: [CashFlow],
     currentValue: InstrumentAmount?,
@@ -266,11 +247,10 @@ enum AccountPerformanceCalculator {
         firstFlowDate: flows.first?.date)
     }
     guard let firstFlow = flows.first else {
-      // No external flows: the entire current value is treated as gain.
-      // Accounts funded only via intra-account trades or standalone income
-      // have no external contribution baseline.
-      // Same formula gives P/L = 0 when currentValue is also zero (empty
-      // account).
+      // No flows: the entire current value is treated as gain. A manual
+      // account with a value but no recorded deposits has no baseline against
+      // which to subtract. Same formula gives P/L = 0 when currentValue is
+      // also zero (empty account).
       return AccountPerformance(
         instrument: profileCurrency,
         currentValue: currentValue,
@@ -307,7 +287,8 @@ enum AccountPerformanceCalculator {
   /// `(V − ΣCᵢ) / Σ(wᵢ · Cᵢ)` with `wᵢ = (T − tᵢ) / T`. Same formula
   /// `IRRSolver` uses internally as its Newton-Raphson seed; we expose it
   /// here so the result is shown directly as the period return without
-  /// re-deriving it from `IRRSolver`'s annualised output.
+  /// re-deriving it from `IRRSolver`'s annualised output. Used by the legacy
+  /// manual-valuation path only.
   ///
   /// Returns `nil` for spans < 1 day or zero weighted-capital.
   private static func modifiedDietzPercent(

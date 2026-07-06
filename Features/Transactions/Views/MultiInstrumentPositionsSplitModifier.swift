@@ -206,19 +206,20 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       txns = []
     }
     guard !Task.isCancelled else { return }
-    let performance = await computePerformance(
-      accountIds: accountIdSet,
-      transactions: txns,
-      rows: rows,
-      conversionService: service)
-    guard !Task.isCancelled else { return }
     // The shared, profile-wide ledger — built once per data load and cached by
     // the provider (never re-derived per view: a per-view build over the
-    // viewed subset cannot see a transfer's source-account lots). A genuine
-    // provider failure degrades to `nil` (baseline unavailable → suppressed,
-    // Rule 11) — NEVER to `.empty`, which would render a computed-looking `0`
-    // invested. The value line still renders regardless.
+    // viewed subset cannot see a transfer's source-account lots). Fetched once
+    // and threaded to BOTH the performance tiles and the chart baseline so they
+    // read the same instance. A genuine provider failure degrades to `nil`
+    // (baseline unavailable → suppressed, performance unavailable, Rule 11) —
+    // NEVER to `.empty`, which would render a computed-looking `0` invested.
+    // The value line still renders regardless.
     let ledger = await sharedLedger()
+    guard !Task.isCancelled else { return }
+    let performance = await computePerformance(
+      accountIds: accountIdSet,
+      rows: rows,
+      ledger: ledger)
     guard !Task.isCancelled else { return }
     let context = PositionsAssemblyContext(
       title: title,
@@ -258,17 +259,16 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
   }
 
   /// Computes the account-level `AccountPerformance` that feeds the Chart
-  /// pane's tiles. Gated so fiat-only accounts skip it (→ `nil` → the pane
-  /// falls back to the plain `PositionsHeader`) and never pay for the flow
-  /// conversions. Returns `nil` on cancellation so a superseding valuator
-  /// pass owns the write. Reuses
-  /// `AccountPerformanceCalculator.computeMultiInstrument` — no
-  /// Modified-Dietz reimplementation here.
+  /// pane's tiles from the shared `ledger`. Gated so fiat-only accounts skip it
+  /// (→ `nil` → the pane falls back to the plain `PositionsHeader`). A genuine
+  /// provider failure (`ledger == nil`) marks performance unavailable rather
+  /// than fabricating a `0`-invested shape (Rule 11). Returns `nil` on
+  /// cancellation so a superseding valuator pass owns the write. Reuses
+  /// `AccountPerformanceCalculator.computeMultiInstrument`.
   private func computePerformance(
     accountIds: Set<UUID>,
-    transactions: [Transaction],
     rows: [ValuedPosition],
-    conversionService: any InstrumentConversionService
+    ledger: HoldingsCostLedger?
   ) async -> AccountPerformance? {
     guard
       AccountDetailLayout.showsFullSurface(
@@ -276,13 +276,18 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
         otherwiseShows: AccountDetailLayout.showsPerformanceTiles(
           valuedRows: rows, hostCurrency: hostCurrency))
     else { return nil }
+    guard let ledger else {
+      // The shared ledger genuinely failed to build: the tiles are
+      // unavailable (Rule 11 — never a fabricated `0` invested). The value
+      // line still renders from the history series.
+      return .unavailable(in: hostCurrency)
+    }
     do {
       return try await AccountPerformanceCalculator.computeMultiInstrument(
         accountIds: accountIds,
-        transactions: transactions,
         valuedPositions: rows,
         profileCurrency: hostCurrency,
-        conversionService: conversionService)
+        ledger: ledger)
     } catch {
       // `computeMultiInstrument` throws only `CancellationError`: a
       // superseding pass owns the write now, so drop this one.

@@ -32,8 +32,8 @@ struct PositionsHistoryBuilderCashTests {
   @Test
   func pureFiatAccountProducesRunningBalanceLine() async throws {
     // Arrange: two AUD income deposits on consecutive days.
-    // A second participant UUID acts as the external counterpart so
-    // AccountCashFlows.flowAmounts sees a boundary-crossing transaction.
+    // A second participant UUID acts as the external counterpart, giving each
+    // deposit a boundary-crossing shape (fiat still holds no cost-basis lots).
     let externalId = UUID()
     let deposit1 = Transaction(
       date: date(daysAfterEpoch: 0),
