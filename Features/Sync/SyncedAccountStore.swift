@@ -116,6 +116,14 @@ final class SyncedAccountStore {
   /// owns the writes.
   private(set) var priceWarmingInProgress = false
 
+  /// Per-account in-flight sync progress, keyed by account id. Written
+  /// exclusively by `setSyncProgress` — the windowed wallet-sync runner
+  /// is the sole writer, and the sync-button view is the sole reader. An
+  /// account absent from this dictionary has no progress to show (either
+  /// not syncing, or syncing without a determinate fraction yet — see
+  /// `WalletSyncProgress.indeterminate`).
+  private(set) var progressPerAccount: [UUID: WalletSyncProgress] = [:]
+
   /// The throttle-aware background price warmer, injected by
   /// `makeCryptoSyncWiring`. `nil` in degraded / preview wiring (and in
   /// tests that don't exercise warming), in which case
@@ -257,79 +265,25 @@ final class SyncedAccountStore {
     priceWarmingTask = nil
   }
 
-  // MARK: - Sync algorithm (parallel build → sequential apply)
-
-  /// Sync the given accounts via the parallel-build → sequential-apply
-  /// algorithm. Internal seam — used by `syncStaleAccounts`,
-  /// `syncAccount`, and the timer loop. Marked `internal` so tests can
-  /// drive a deterministic account list directly.
-  ///
-  /// Algorithm:
-  /// 1. Mark every account as in-flight on `@MainActor`.
-  /// 2. Run up to `maxConcurrentBuilds` parallel build tasks via
-  ///    `withTaskGroup`. Each task either produces a
-  ///    `WalletSyncBuildResult` or records a `lastError` on the account's
-  ///    `WalletSyncState` and surfaces a `.failed` outcome.
-  /// 3. Scan the per-account outcomes for process-wide errors
-  ///    (`.missingApiKey` / `.invalidApiKey`) and update `globalError`.
-  /// 4. Apply successful results sequentially through `WalletApplyEngine`.
-  /// 5. Refresh `statePerAccount` from the repository so observable view
-  ///    state matches the persisted truth.
-  /// 6. Clear in-flight markers.
-  func syncAccounts(_ accountList: [Account]) async {
-    let inputs = accountList.filter { account in
-      guard source(for: account) != nil else { return false }
-      // Re-skip anything already in flight from a prior trigger; this
-      // is the load-bearing collapse-duplicates check exercised by the
-      // concurrent-trigger test.
-      guard !inProgressAccountIds.contains(account.id) else { return false }
-      return true
-    }
-    guard !inputs.isEmpty else { return }
-
-    let signpostID = OSSignpostID(log: Signposts.cryptoSync)
-    os_signpost(
-      .begin,
-      log: Signposts.cryptoSync,
-      name: "syncedAccountStore.syncAccounts",
-      signpostID: signpostID,
-      "%{public}d accounts",
-      inputs.count)
-    defer {
-      os_signpost(
-        .end,
-        log: Signposts.cryptoSync,
-        name: "syncedAccountStore.syncAccounts",
-        signpostID: signpostID)
-    }
-
-    for account in inputs { inProgressAccountIds.insert(account.id) }
-    defer {
-      for account in inputs { inProgressAccountIds.remove(account.id) }
-    }
-
-    let perAccountResults = await runParallelBuilds(for: inputs)
-    updateGlobalError(from: perAccountResults)
-    let genuinelyNew = await runApplyPass(perAccountResults: perAccountResults)
-    await refreshStateFromRepository()
-    // Detection runs over the apply pass's genuinely-new survivors only
-    // — the transactions this pass actually merged-and-deduped-and-
-    // persisted. There is no date-window scan, so a previously-existing
-    // row (e.g. a dismissed/merged pair) is never re-evaluated. Transfers
-    // already collapsed by `CrossAccountTransferMerger` (same-`externalId`
-    // opposing legs) carry a nil `transferDetectionValueLeg` and are
-    // structurally skipped by the detector.
-    await runTransferDetection(
-      genuinelyNew: genuinelyNew,
-      participatingAccountIds: Set(inputs.map(\.id)))
-    // Kick off a background warm of the just-synced crypto tokens'
-    // historical prices so the Analysis dashboard fills in without
-    // blocking the sync pass (issue #1075). No-op when no warmer is
-    // wired or nothing genuinely-new landed.
-    startPriceWarming(genuinelyNew: genuinelyNew, accountIds: Set(inputs.map(\.id)))
-  }
-
   // MARK: - Internal mutators
+  //
+  // `syncAccounts(_:)` — the parallel-build → sequential-apply algorithm
+  // — lives in `SyncedAccountStore+Internals.swift` alongside the
+  // per-phase helpers it orchestrates. It reaches `inProgressAccountIds`
+  // only through `setInProgress(_:for:)` below, since that field's
+  // setter is private to this file.
+
+  /// Setter shim so `SyncedAccountStore+Internals.swift` (a different
+  /// file) can flip a per-account in-flight marker whose setter is
+  /// `private` to this file. `syncAccounts` sets `true` before dispatching
+  /// an account's build/apply cycle and `false` once it completes.
+  func setInProgress(_ inProgress: Bool, for accountId: UUID) {
+    if inProgress {
+      inProgressAccountIds.insert(accountId)
+    } else {
+      inProgressAccountIds.remove(accountId)
+    }
+  }
 
   /// Setter shim so `SyncedAccountStore+Internals.swift` extension
   /// methods can update observable state. The store's public surface
@@ -345,6 +299,25 @@ final class SyncedAccountStore {
   /// file. See issue #1075.
   func setPriceWarmingInProgress(_ inProgress: Bool) {
     priceWarmingInProgress = inProgress
+  }
+
+  /// Setter shim so the windowed wallet-sync runner (a different file)
+  /// can publish per-account progress whose setter is `private` to this
+  /// file. `progress: nil` removes the entry — the sync-button view
+  /// treats a missing entry as "nothing to show", so clearing progress at
+  /// the end of a sync just deletes the key rather than setting some
+  /// "done" sentinel. `.scanning(fraction:)` is clamped to `0...1` here,
+  /// once, at the single write path, so `WalletSyncProgress` itself can
+  /// stay a plain value type.
+  func setSyncProgress(_ progress: WalletSyncProgress?, for accountId: UUID) {
+    switch progress {
+    case nil:
+      progressPerAccount[accountId] = nil
+    case .indeterminate:
+      progressPerAccount[accountId] = .indeterminate
+    case .scanning(let fraction):
+      progressPerAccount[accountId] = .scanning(fraction: min(1, max(0, fraction)))
+    }
   }
 
   #if DEBUG
