@@ -30,7 +30,7 @@ enum TransferReceiptCoalescer {
   /// receipt for an outbound wrap candidate, which is also that hash's
   /// gas-leg receipt) — any hash present in `prefetched` is excluded from
   /// the fetch set entirely, so each unique hash's receipt is fetched at
-  /// most once per `WalletSyncEngine.build` pass.
+  /// most once per `WalletSyncEngine.build`/`buildWindow` pass.
   ///
   /// Per-receipt fetch failures (network blip, rate limit on a single
   /// hash, malformed response) log and are dropped from the returned
