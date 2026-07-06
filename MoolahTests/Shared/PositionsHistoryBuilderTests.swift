@@ -46,11 +46,14 @@ struct PositionsHistoryBuilderTests {
     ])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 5)
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
     let series = await builder.build(
       transactions: txns,
       accountId: accountId,
       hostCurrency: aud,
       range: .oneMonth,
+      ledger: ledger,
       now: now
     )
 
@@ -78,9 +81,11 @@ struct PositionsHistoryBuilderTests {
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 30)
 
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
     let series = await builder.build(
       transactions: txns, accountId: accountId,
-      hostCurrency: aud, range: .threeMonths, now: now
+      hostCurrency: aud, range: .threeMonths, ledger: ledger, now: now
     )
 
     // The per-instrument series is one point per day. Cost on each daily
@@ -100,7 +105,7 @@ struct PositionsHistoryBuilderTests {
   }
 
   @Test("aggregate point is omitted on days where any instrument's conversion fails")
-  func aggregateSkipsOnPartialFailure() async {
+  func aggregateSkipsOnPartialFailure() async throws {
     let txns = [
       buy(instrument: bhp, qty: 100, fiat: 4_000, daysAfterEpoch: 1),
       buy(instrument: cba, qty: 50, fiat: 5_000, daysAfterEpoch: 2),
@@ -110,9 +115,12 @@ struct PositionsHistoryBuilderTests {
       rates: [bhp.id: Decimal(50)]
     )
     let builder = PositionsHistoryBuilder(conversionService: service)
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
     let series = await builder.build(
       transactions: txns, accountId: accountId,
       hostCurrency: aud, range: .threeMonths,
+      ledger: ledger,
       now: date(daysAfterEpoch: 5)
     )
     // From day 2 onwards CBA is held; every aggregate point that includes
@@ -131,9 +139,11 @@ struct PositionsHistoryBuilderTests {
     let service = FakeConversionService.fixedRates([bhp.id: Decimal(60)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 200)
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
     let series = await builder.build(
       transactions: txns, accountId: accountId,
-      hostCurrency: aud, range: .oneMonth, now: now
+      hostCurrency: aud, range: .oneMonth, ledger: ledger, now: now
     )
 
     // First visible point's cost should reflect the prior buy ($500), and
@@ -154,9 +164,11 @@ struct PositionsHistoryBuilderTests {
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 5)
 
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
     let series = await builder.build(
       transactions: txns, accountId: accountId,
-      hostCurrency: aud, range: .threeMonths, now: now
+      hostCurrency: aud, range: .threeMonths, ledger: ledger, now: now
     )
 
     let bhpSeries = series.series(forInstrumentIds: [bhp.id])
@@ -172,7 +184,7 @@ struct PositionsHistoryBuilderTests {
     let builder = PositionsHistoryBuilder(conversionService: service)
     let series = await builder.build(
       transactions: [], accountId: accountId,
-      hostCurrency: aud, range: .oneMonth, now: Date()
+      hostCurrency: aud, range: .oneMonth, ledger: .empty, now: Date()
     )
     #expect(series.totalSeries.isEmpty)
     #expect(series.instruments.isEmpty)
@@ -186,9 +198,11 @@ struct PositionsHistoryBuilderTests {
     let service = FakeConversionService.fixedRates([bhp.id: Decimal(60)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 200)
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
     let oneMonth = await builder.build(
       transactions: txns, accountId: accountId,
-      hostCurrency: aud, range: .oneMonth, now: now
+      hostCurrency: aud, range: .oneMonth, ledger: ledger, now: now
     )
     let cutoff = try #require(PositionsTimeRange.oneMonth.cutoff(from: now))
     let cutoffDay = Calendar.utc.startOfDay(for: cutoff)
@@ -207,7 +221,7 @@ struct PositionsHistoryBuilderTests {
   /// pass a regression that swapped `on: day` for `on: Date()`. This
   /// test pins the per-day rate by using `DateBasedFixedConversionService`.
   @Test("each day's value uses that day's rate, not today's rate")
-  func valueSeriesUsesPerDayRate() async {
+  func valueSeriesUsesPerDayRate() async throws {
     // Single buy on day 1; rate steps day-by-day so each daily point
     // exercises a different conversion rate.
     let txns = [buy(instrument: bhp, qty: 100, fiat: 4_000, daysAfterEpoch: 1)]
@@ -218,11 +232,14 @@ struct PositionsHistoryBuilderTests {
     ])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 3)
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
     let series = await builder.build(
       transactions: txns,
       accountId: accountId,
       hostCurrency: aud,
       range: .threeMonths,
+      ledger: ledger,
       now: now
     )
 

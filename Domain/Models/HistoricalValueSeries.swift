@@ -22,14 +22,16 @@ struct HistoricalValueSeries: Sendable, Hashable {
     /// Remaining cost basis of currently-held lots in `hostCurrency`.
     /// Meaningful for both aggregate and per-instrument series.
     let cost: Decimal
-    /// Cumulative net external contributions to the account in
-    /// `hostCurrency`, evaluated at this date. Populated only for
-    /// the aggregate (account-level) series; per-instrument series
-    /// leave this `nil`. `nil` does not mean zero — it means
+    /// Aggregate remaining amount invested for the account set in
+    /// `hostCurrency`, evaluated at this date — the sum of remaining
+    /// lot costs from the profile-wide `HoldingsCostLedger`. Populated
+    /// only for the aggregate (account-level) series; per-instrument
+    /// series leave this `nil`. `nil` does not mean zero — it means
     /// "not applicable at this granularity" (per-instrument) or
-    /// "conversion failure for some flow on or before this date"
-    /// (Rule 11 — see `PositionsHistoryBuilder`).
-    let contributions: Decimal?
+    /// "unavailable" (Rule 11 — an in-scope `(account, instrument)`
+    /// key failed conversion in the ledger build). Invested is `≥ 0`
+    /// by construction, so a fiat-only account carries `0` → no baseline.
+    let invested: Decimal?
   }
 
   let hostCurrency: Instrument
@@ -56,8 +58,8 @@ struct HistoricalValueSeries: Sendable, Hashable {
   /// satisfies this rule, so a date absent from the first is absent from at
   /// least one series regardless, and anchor choice doesn't change the result.
   ///
-  /// `contributions` is always `nil` on the result; per-instrument series
-  /// carry no flow data.
+  /// `invested` is always `nil` on the result; per-instrument series
+  /// carry no aggregate baseline.
   func series(forInstrumentIds ids: [String]) -> [Point] {
     let seriesList = ids.compactMap { perInstrument[$0] }
     guard let firstSeries = seriesList.first else { return [] }
@@ -75,7 +77,7 @@ struct HistoricalValueSeries: Sendable, Hashable {
         value += matched.value
         cost += matched.cost
       }
-      return Point(date: anchor.date, value: value, cost: cost, contributions: nil)
+      return Point(date: anchor.date, value: value, cost: cost, invested: nil)
     }
   }
 }

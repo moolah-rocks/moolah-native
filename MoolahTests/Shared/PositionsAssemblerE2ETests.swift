@@ -131,6 +131,7 @@ struct PositionsAssemblerE2ETests {
       valuedRows: singlePosition(instrument: btc, qty: qty, rate: rate),
       transactions: transactions,
       range: .threeMonths,
+      ledger: .empty,
       now: fixedNow
     )
 
@@ -176,6 +177,7 @@ struct PositionsAssemblerE2ETests {
       valuedRows: singlePosition(instrument: btc, qty: totalQty, rate: rate),
       transactions: transactions,
       range: .threeMonths,
+      ledger: .empty,
       now: fixedNow
     )
 
@@ -229,6 +231,7 @@ struct PositionsAssemblerE2ETests {
       valuedRows: singlePosition(instrument: btc, qty: totalQty, rate: rate),
       transactions: transactions,
       range: .threeMonths,
+      ledger: .empty,
       now: fixedNow
     )
 

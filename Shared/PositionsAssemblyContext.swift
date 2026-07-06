@@ -1,7 +1,7 @@
 import Foundation
 
 /// The fixed "who / where / how" inputs to `MultiInstrumentPositionsAssembler
-/// .assemble(context:valuedRows:transactions:range:now:)`. Grouping them lets the
+/// .assemble(context:valuedRows:transactions:range:ledger:now:)`. Grouping them lets the
 /// call site stay below SwiftLint's five-parameter limit while keeping
 /// every field named and documented.
 struct PositionsAssemblyContext: Sendable {

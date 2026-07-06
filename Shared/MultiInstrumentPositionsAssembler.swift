@@ -5,10 +5,15 @@ import OSLog
 /// assembly logic for multi-instrument positions views.
 ///
 /// Call `fetchTransactions(repository:accountIds:)` to load all relevant
-/// transactions, then `assemble(context:valuedRows:transactions:range:now:)` to
-/// produce the `PositionsViewInput` the view layer needs. Separating fetch
-/// from assembly lets callers supply a pre-fetched slice (e.g. a group-level
-/// merge) without duplicating the cost-basis engine or history builder.
+/// transactions, then
+/// `assemble(context:valuedRows:transactions:range:ledger:now:)` to produce
+/// the `PositionsViewInput` the view layer needs. The `ledger` is the shared
+/// profile-wide `HoldingsCostLedger` (built once per data load by
+/// `HoldingsCostLedgerStore` and passed in) — the assembler never builds its
+/// own, because a per-view build over the viewed subset cannot see a
+/// transfer's source-account lots. Separating fetch from assembly lets callers
+/// supply a pre-fetched slice (e.g. a group-level merge) without duplicating
+/// the history builder.
 ///
 /// Sendable: `conversionService` is an existential protocol; the concrete
 /// implementations shipped with the app are all `Sendable`.
@@ -128,6 +133,7 @@ struct MultiInstrumentPositionsAssembler: Sendable {
     valuedRows: [ValuedPosition],
     transactions: [Transaction],
     range: PositionsTimeRange,
+    ledger: HoldingsCostLedger?,
     now: Date = Date()
   ) async -> PositionsViewInput {
     async let snapshotTask = costBasisSnapshot(
@@ -139,6 +145,7 @@ struct MultiInstrumentPositionsAssembler: Sendable {
       accountIds: context.accountIds,
       hostCurrency: context.hostCurrency,
       range: range,
+      ledger: ledger,
       now: now)
     let costSnapshot: [String: Decimal]
     do {

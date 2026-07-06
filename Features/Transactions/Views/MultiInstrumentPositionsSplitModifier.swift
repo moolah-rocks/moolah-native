@@ -212,6 +212,14 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       rows: rows,
       conversionService: service)
     guard !Task.isCancelled else { return }
+    // The shared, profile-wide ledger — built once per data load and cached by
+    // the provider (never re-derived per view: a per-view build over the
+    // viewed subset cannot see a transfer's source-account lots). A genuine
+    // provider failure degrades to `nil` (baseline unavailable → suppressed,
+    // Rule 11) — NEVER to `.empty`, which would render a computed-looking `0`
+    // invested. The value line still renders regardless.
+    let ledger = await sharedLedger()
+    guard !Task.isCancelled else { return }
     let context = PositionsAssemblyContext(
       title: title,
       hostCurrency: hostCurrency,
@@ -223,9 +231,30 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       context: context,
       valuedRows: rows,
       transactions: txns,
-      range: positionsRange)
+      range: positionsRange,
+      ledger: ledger)
     guard !Task.isCancelled else { return }
     positionsInput = input
+  }
+
+  /// The shared profile-wide `HoldingsCostLedger` from the environment
+  /// session's provider (built once per data load, cached). Returns `nil` when
+  /// the provider is absent (no session) or its build genuinely fails — the
+  /// caller then renders the value line with every baseline suppressed rather
+  /// than substituting a computed-looking `.empty` (Rule 11). The migration
+  /// gate returns `.empty` from `ledger()` itself, which is honest (no cost
+  /// data yet → invested `0` → suppressed).
+  private func sharedLedger() async -> HoldingsCostLedger? {
+    do {
+      return try await session?.holdingsCostLedgerStore?.ledger()
+    } catch is CancellationError {
+      return nil
+    } catch {
+      Self.logger.warning(
+        "holdings cost ledger unavailable; chart baseline suppressed: \(error.localizedDescription, privacy: .public)"
+      )
+      return nil
+    }
   }
 
   /// Computes the account-level `AccountPerformance` that feeds the Chart

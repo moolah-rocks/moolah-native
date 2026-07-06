@@ -51,11 +51,14 @@ struct PositionsHistoryBuilderMultiAccountTests {
     let service = FakeConversionService.fixedRates([btc.id: Decimal(15_000)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 3)
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
     let series = await builder.build(
       transactions: txns,
       accountIds: Set([accountA, accountB]),
       hostCurrency: aud,
       range: .threeMonths,
+      ledger: ledger,
       now: now
     )
 
@@ -93,11 +96,14 @@ struct PositionsHistoryBuilderMultiAccountTests {
     let service = FakeConversionService.fixedRates([btc.id: Decimal(12_000)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 2)
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: [buyTxn, transferTxn], referenceCurrency: aud, conversionService: service)
     let series = await builder.build(
       transactions: [buyTxn, transferTxn],
       accountIds: Set([accountA, accountB]),
       hostCurrency: aud,
       range: .threeMonths,
+      ledger: ledger,
       now: now
     )
 
@@ -124,7 +130,7 @@ struct PositionsHistoryBuilderMultiAccountTests {
   /// `DateBasedFixedConversionService` always aligns regardless of the CI
   /// runner's local timezone.
   @Test("each day's value uses that day's rate across multiple accounts")
-  func dateDependentConversionProducesCorrectValues() async {
+  func dateDependentConversionProducesCorrectValues() async throws {
     // Account A buys 1 BTC on day 1; account B buys 1 BTC on day 1.
     // Group total = 2 BTC; each day has its own rate.
     let txns = [
@@ -150,11 +156,14 @@ struct PositionsHistoryBuilderMultiAccountTests {
     ])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 3)
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
     let series = await builder.build(
       transactions: txns,
       accountIds: Set([accountA, accountB]),
       hostCurrency: aud,
       range: .threeMonths,
+      ledger: ledger,
       now: now
     )
 
@@ -180,13 +189,15 @@ struct PositionsHistoryBuilderMultiAccountTests {
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 3)
 
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
     let viaSingleId = await builder.build(
       transactions: txns, accountId: accountA,
-      hostCurrency: aud, range: .threeMonths, now: now
+      hostCurrency: aud, range: .threeMonths, ledger: ledger, now: now
     )
     let viaSet = await builder.build(
       transactions: txns, accountIds: Set([accountA]),
-      hostCurrency: aud, range: .threeMonths, now: now
+      hostCurrency: aud, range: .threeMonths, ledger: ledger, now: now
     )
 
     // Both should produce identical total-series counts and values.

@@ -7,15 +7,17 @@ import Foundation
 /// without spinning up a view harness.
 enum PositionsChartBaselineResolver {
   /// `true` iff the series carries a non-zero baseline to plot for `mode`
-  /// (aggregate → `point.contributions`; per-instrument → `point.cost`).
+  /// (aggregate → `point.invested`; per-instrument → `point.cost`).
   ///
-  /// `false` for a wallet of transfer-in/airdrop tokens whose baseline is
-  /// uniformly zero/absent — plotting a zero baseline would misleadingly
-  /// render the whole holding as gain.
+  /// `false` for a fiat-only account (invested `0`) or a wallet of
+  /// transfer-in/airdrop tokens whose baseline is uniformly zero/absent —
+  /// plotting a zero baseline would misleadingly render the whole holding as
+  /// gain. Amount invested is `≥ 0` by construction, so the baseline is never
+  /// negative.
   static func showsBaseline(points: [HistoricalValueSeries.Point], mode: PositionsChartMode) -> Bool
   {
     points.contains { point in
-      let baseline: Decimal? = (mode == .aggregate) ? point.contributions : point.cost
+      let baseline: Decimal? = (mode == .aggregate) ? point.invested : point.cost
       return (baseline ?? 0) != 0
     }
   }
@@ -25,7 +27,7 @@ enum PositionsChartBaselineResolver {
   ///
   /// - Parameters:
   ///   - points: Raw data points from `HistoricalValueSeries`.
-  ///   - mode: Aggregate (uses `point.contributions`) or per-instrument (uses
+  ///   - mode: Aggregate (uses `point.invested`) or per-instrument (uses
   ///     `point.cost`).
   ///   - showBaseline: When `false`, `baseline` is forced to `nil` for every
   ///     row, suppressing gain/loss shading and the dashed baseline line. Pass
@@ -43,7 +45,7 @@ enum PositionsChartBaselineResolver {
       let baseline: Decimal?
       if showBaseline {
         switch mode {
-        case .aggregate: baseline = point.contributions
+        case .aggregate: baseline = point.invested
         case .perInstrument: baseline = point.cost
         }
       } else {
