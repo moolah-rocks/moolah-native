@@ -19,7 +19,7 @@ struct LiveAlchemyClientRequestTests {
     _ = try await client.getAssetTransfers(
       chain: .ethereum,
       walletAddress: "0xabc",
-      fromBlock: 0
+      fromBlock: 0, toBlock: nil
     )
 
     let url = try #require(AlchemyURLProtocolStub.lastRequest?.url)
@@ -45,7 +45,7 @@ struct LiveAlchemyClientRequestTests {
       return (AlchemyTestSupport.okResponse(for: request), fixture)
     }
     _ = try await client.getAssetTransfers(
-      chain: .optimism, walletAddress: "0xabc", fromBlock: 0
+      chain: .optimism, walletAddress: "0xabc", fromBlock: 0, toBlock: nil
     )
 
     let url = try #require(AlchemyURLProtocolStub.lastRequest?.url)
@@ -66,7 +66,7 @@ struct LiveAlchemyClientRequestTests {
       return (AlchemyTestSupport.okResponse(for: request), fixture)
     }
     _ = try await client.getAssetTransfers(
-      chain: .base, walletAddress: "0xabc", fromBlock: 0
+      chain: .base, walletAddress: "0xabc", fromBlock: 0, toBlock: nil
     )
     let url = try #require(AlchemyURLProtocolStub.lastRequest?.url)
     #expect(url.host == "base-mainnet.g.alchemy.com")
@@ -85,7 +85,7 @@ struct LiveAlchemyClientRequestTests {
       return (AlchemyTestSupport.okResponse(for: request), fixture)
     }
     _ = try await client.getAssetTransfers(
-      chain: .ethereum, walletAddress: "0xWALLET", fromBlock: 0x100
+      chain: .ethereum, walletAddress: "0xWALLET", fromBlock: 0x100, toBlock: nil
     )
 
     let recorded = calls.captured
@@ -108,7 +108,7 @@ struct LiveAlchemyClientRequestTests {
       (AlchemyTestSupport.okResponse(for: request), fixture)
     }
     let transfers = try await client.getAssetTransfers(
-      chain: .ethereum, walletAddress: "0xabc", fromBlock: 0
+      chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil
     )
     // Two-pass query → both passes return the same fixture.
     #expect(transfers.count == 2)

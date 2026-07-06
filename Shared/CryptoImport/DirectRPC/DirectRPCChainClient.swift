@@ -38,13 +38,20 @@ struct DirectRPCChainClient {
 // MARK: - ChainDataClient
 
 extension DirectRPCChainClient: ChainDataClient {
+  func currentHead(chain: ChainConfig) async throws -> UInt64? {
+    try await attributingErrors(to: .directRPC) {
+      try await rpc.blockNumber()
+    }
+  }
+
   func getAssetTransfers(
     chain: ChainConfig,
     walletAddress: String,
-    fromBlock: UInt64
+    fromBlock: UInt64,
+    toBlock: UInt64?
   ) async throws -> [AlchemyTransfer] {
     try await attributingErrors(to: .directRPC) {
-      let head = try await rpc.blockNumber()
+      let head = try await resolveUpperBound(toBlock)
       guard fromBlock <= head else { return [] }
 
       let walletTopic = RPCHex.addressTopic(walletAddress)
@@ -126,6 +133,14 @@ extension DirectRPCChainClient: ChainDataClient {
 // MARK: - Internals
 
 extension DirectRPCChainClient {
+  /// The upper bound of the scan window: `toBlock` when the caller supplied
+  /// one (a windowed scan — no extra round-trip), else the live
+  /// `eth_blockNumber` head (today's "scan to head" behaviour).
+  private func resolveUpperBound(_ toBlock: UInt64?) async throws -> UInt64 {
+    if let toBlock { return toBlock }
+    return try await rpc.blockNumber()
+  }
+
   /// One indexed-topic pass over `[from, to]`, walked in adaptive chunks.
   /// `address: nil` means "every contract" — the topic0 filter alone
   /// restricts the result to ERC-20 `Transfer` logs.

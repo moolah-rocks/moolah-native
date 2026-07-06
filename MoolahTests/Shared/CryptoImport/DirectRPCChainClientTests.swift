@@ -38,7 +38,7 @@ struct DirectRPCChainClientTests {
     let transfers = try await client.getAssetTransfers(
       chain: .ethereum,
       walletAddress: DirectRPCFixtures.wallet,
-      fromBlock: 0)
+      fromBlock: 0, toBlock: nil)
 
     // Two distinct transfers plus one self-send counted once.
     #expect(transfers.count == 3)
@@ -69,7 +69,7 @@ struct DirectRPCChainClientTests {
     let transfers = try await client.getAssetTransfers(
       chain: .ethereum,
       walletAddress: DirectRPCFixtures.wallet,
-      fromBlock: 0)
+      fromBlock: 0, toBlock: nil)
     #expect(transfers.isEmpty)
   }
 
@@ -227,7 +227,7 @@ enum DirectRPCFixtures {
     inboundLogs: String
   ) -> (HTTPURLResponse, Data) {
     let ok = AlchemyTestSupport.okResponse(for: request)
-    let body = DirectRPCURLProtocolStub.bodyObject(request)
+    let body = AlchemyTestSupport.jsonRPCBodyObject(request)
     if let batch = body as? [[String: Any]] {
       let items = batch.map { item -> String in
         let id = item["id"] as? Int ?? 1
@@ -266,25 +266,11 @@ enum DirectRPCFixtures {
 /// `URLProtocol` stub for the direct-RPC discovery tests, with its own static
 /// state so it cannot race another suite's stub under parallel execution.
 /// `nonisolated(unsafe)` is safe because the enclosing `@Suite` is
-/// `.serialized`.
+/// `.serialized`. Body decoding is delegated to the shared
+/// `AlchemyTestSupport.jsonRPCBodyObject`.
 final class DirectRPCURLProtocolStub: URLProtocol {
   nonisolated(unsafe) static var requestHandler:
     (@Sendable (URLRequest) throws -> (HTTPURLResponse, Data))?
-
-  /// Decodes the request's JSON body — streamed (URLSession converts
-  /// `httpBody` to a stream for a custom `URLProtocol`) or in-memory — into a
-  /// Foundation object the dispatcher can branch on.
-  static func bodyObject(_ request: URLRequest) -> Any? {
-    let data: Data
-    if let stream = request.httpBodyStream {
-      data = readStream(stream)
-    } else if let body = request.httpBody {
-      data = body
-    } else {
-      return nil
-    }
-    return try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
-  }
 
   override static func canInit(with request: URLRequest) -> Bool { true }
   override static func canonicalRequest(for request: URLRequest) -> URLRequest { request }
@@ -305,19 +291,4 @@ final class DirectRPCURLProtocolStub: URLProtocol {
   }
 
   override func stopLoading() {}
-
-  private static func readStream(_ stream: InputStream) -> Data {
-    stream.open()
-    defer { stream.close() }
-    var data = Data()
-    let bufferSize = 1024
-    let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-    defer { buffer.deallocate() }
-    while stream.hasBytesAvailable {
-      let read = stream.read(buffer, maxLength: bufferSize)
-      if read <= 0 { break }
-      data.append(buffer, count: read)
-    }
-    return data
-  }
 }

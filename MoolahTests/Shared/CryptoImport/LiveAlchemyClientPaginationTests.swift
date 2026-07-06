@@ -70,7 +70,7 @@ struct LiveAlchemyClientPaginationTests {
     }
 
     let transfers = try await client.getAssetTransfers(
-      chain: .optimism, walletAddress: "0xWALLET", fromBlock: 0
+      chain: .optimism, walletAddress: "0xWALLET", fromBlock: 0, toBlock: nil
     )
 
     // 2 pages × 2 directions = 4 concatenated transfers.
@@ -107,7 +107,7 @@ struct LiveAlchemyClientPaginationTests {
     }
 
     let transfers = try await client.getAssetTransfers(
-      chain: .optimism, walletAddress: "0xWALLET", fromBlock: 0
+      chain: .optimism, walletAddress: "0xWALLET", fromBlock: 0, toBlock: nil
     )
 
     // The client must stop the first time it is handed a pageKey it has

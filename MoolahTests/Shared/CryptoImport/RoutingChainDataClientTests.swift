@@ -89,7 +89,7 @@ struct RoutingChainDataClientTests {
     let harness = makeHarness(alchemyKeyPresent: { true })
 
     _ = try await harness.routing.getAssetTransfers(
-      chain: .ethereum, walletAddress: Self.wallet, fromBlock: 0)
+      chain: .ethereum, walletAddress: Self.wallet, fromBlock: 0, toBlock: nil)
 
     #expect(harness.alchemyStub.transferChains == [1])
     #expect(harness.directStub.transferChains.isEmpty)
@@ -100,7 +100,7 @@ struct RoutingChainDataClientTests {
     let harness = makeHarness(alchemyKeyPresent: { true })
 
     _ = try await harness.routing.getAssetTransfers(
-      chain: .optimism, walletAddress: Self.wallet, fromBlock: 0)
+      chain: .optimism, walletAddress: Self.wallet, fromBlock: 0, toBlock: nil)
 
     #expect(harness.directStub.transferChains == [10])
     #expect(harness.alchemyStub.transferChains.isEmpty)
@@ -122,7 +122,7 @@ struct RoutingChainDataClientTests {
     let harness = makeHarness(alchemyKeyPresent: { true })
 
     _ = try await harness.routing.getAssetTransfers(
-      chain: .optimism, walletAddress: Self.wallet, fromBlock: 0)
+      chain: .optimism, walletAddress: Self.wallet, fromBlock: 0, toBlock: nil)
     _ = try await harness.routing.getTransactionReceipt(chain: .optimism, hash: "0xdef")
 
     // One `makeDirect` call for both the transfer and the receipt pass on the
@@ -138,7 +138,7 @@ struct RoutingChainDataClientTests {
     let harness = makeHarness(alchemyKeyPresent: { true })
 
     _ = try await harness.routing.getAssetTransfers(
-      chain: .optimism, walletAddress: Self.wallet, fromBlock: 0)
+      chain: .optimism, walletAddress: Self.wallet, fromBlock: 0, toBlock: nil)
     _ = try await harness.routing.getTransactionReceipt(chain: .optimism, hash: "0xabc")
     #expect(harness.directStub.transferChains == [10])
     #expect(harness.directStub.receiptChains == [10])
@@ -150,7 +150,7 @@ struct RoutingChainDataClientTests {
     await harness.routing.invalidate(customEndpoints: [])
 
     _ = try await harness.routing.getAssetTransfers(
-      chain: .optimism, walletAddress: Self.wallet, fromBlock: 0)
+      chain: .optimism, walletAddress: Self.wallet, fromBlock: 0, toBlock: nil)
     _ = try await harness.routing.getTransactionReceipt(chain: .optimism, hash: "0xdef")
 
     // Post-invalidate calls dispatched to Alchemy; the direct stub saw no new
@@ -204,10 +204,15 @@ private final class RecordingChainDataClient: @unchecked Sendable {
 // MARK: - ChainDataClient
 
 extension RecordingChainDataClient: ChainDataClient {
+  func currentHead(chain: ChainConfig) async throws -> UInt64? {
+    nil
+  }
+
   func getAssetTransfers(
     chain: ChainConfig,
     walletAddress: String,
-    fromBlock: UInt64
+    fromBlock: UInt64,
+    toBlock: UInt64?
   ) async throws -> [AlchemyTransfer] {
     recordTransfer(chain.chainId)
     return []
