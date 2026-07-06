@@ -19,6 +19,78 @@ enum PerAccountBuildResult: Sendable {
 
 extension SyncedAccountStore {
 
+  // MARK: - Sync algorithm (parallel build → sequential apply)
+
+  /// Sync the given accounts via the parallel-build → sequential-apply
+  /// algorithm. Internal seam — used by `syncStaleAccounts`,
+  /// `syncAccount`, and the timer loop. Marked `internal` so tests can
+  /// drive a deterministic account list directly.
+  ///
+  /// Algorithm:
+  /// 1. Mark every account as in-flight on `@MainActor`.
+  /// 2. Run up to `maxConcurrentBuilds` parallel build tasks via
+  ///    `withTaskGroup`. Each task either produces a
+  ///    `WalletSyncBuildResult` or records a `lastError` on the account's
+  ///    `WalletSyncState` and surfaces a `.failed` outcome.
+  /// 3. Scan the per-account outcomes for process-wide errors
+  ///    (`.missingApiKey` / `.invalidApiKey`) and update `globalError`.
+  /// 4. Apply successful results sequentially through `WalletApplyEngine`.
+  /// 5. Refresh `statePerAccount` from the repository so observable view
+  ///    state matches the persisted truth.
+  /// 6. Clear in-flight markers.
+  func syncAccounts(_ accountList: [Account]) async {
+    let inputs = accountList.filter { account in
+      guard source(for: account) != nil else { return false }
+      // Re-skip anything already in flight from a prior trigger; this
+      // is the load-bearing collapse-duplicates check exercised by the
+      // concurrent-trigger test.
+      guard !inProgressAccountIds.contains(account.id) else { return false }
+      return true
+    }
+    guard !inputs.isEmpty else { return }
+
+    let signpostID = OSSignpostID(log: Signposts.cryptoSync)
+    os_signpost(
+      .begin,
+      log: Signposts.cryptoSync,
+      name: "syncedAccountStore.syncAccounts",
+      signpostID: signpostID,
+      "%{public}d accounts",
+      inputs.count)
+    defer {
+      os_signpost(
+        .end,
+        log: Signposts.cryptoSync,
+        name: "syncedAccountStore.syncAccounts",
+        signpostID: signpostID)
+    }
+
+    for account in inputs { setInProgress(true, for: account.id) }
+    defer {
+      for account in inputs { setInProgress(false, for: account.id) }
+    }
+
+    let perAccountResults = await runParallelBuilds(for: inputs)
+    updateGlobalError(from: perAccountResults)
+    let genuinelyNew = await runApplyPass(perAccountResults: perAccountResults)
+    await refreshStateFromRepository()
+    // Detection runs over the apply pass's genuinely-new survivors only
+    // — the transactions this pass actually merged-and-deduped-and-
+    // persisted. There is no date-window scan, so a previously-existing
+    // row (e.g. a dismissed/merged pair) is never re-evaluated. Transfers
+    // already collapsed by `CrossAccountTransferMerger` (same-`externalId`
+    // opposing legs) carry a nil `transferDetectionValueLeg` and are
+    // structurally skipped by the detector.
+    await runTransferDetection(
+      genuinelyNew: genuinelyNew,
+      participatingAccountIds: Set(inputs.map(\.id)))
+    // Kick off a background warm of the just-synced crypto tokens'
+    // historical prices so the Analysis dashboard fills in without
+    // blocking the sync pass (issue #1075). No-op when no warmer is
+    // wired or nothing genuinely-new landed.
+    startPriceWarming(genuinelyNew: genuinelyNew, accountIds: Set(inputs.map(\.id)))
+  }
+
   // MARK: - Parallel build
 
   /// Runs the parallel build phase for `accountList` via
