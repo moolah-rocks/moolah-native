@@ -20,8 +20,12 @@ struct GRDBCostBasisEventLegsTests {
   }
 
   /// Builds an in-memory repository with ETH registered in the shared
-  /// registry (so it resolves to `.cryptoToken`) and AUD ambient.
-  private func makeRepository() async throws -> GRDBTransactionRepository {
+  /// registry (so it resolves to `.cryptoToken`) and AUD ambient. Returns
+  /// the per-profile database too so tests can raw-insert rows that bypass
+  /// `create`'s instrument registration (the deregistered-instrument case).
+  private func makeSetup() async throws -> (
+    repo: GRDBTransactionRepository, database: DatabaseQueue
+  ) {
     let perProfile = try ProfileDatabase.openInMemory()
     let sharedQueue = try ProfileIndexDatabase.openInMemory()
     let registry = GRDBInstrumentRegistryRepository(database: sharedQueue)
@@ -29,17 +33,18 @@ struct GRDBCostBasisEventLegsTests {
       eth,
       mapping: CryptoProviderMapping(
         instrumentId: eth.id, coingeckoId: "ethereum", binanceSymbol: "ETHUSDT"))
-    return GRDBTransactionRepository(
+    let repo = GRDBTransactionRepository(
       database: perProfile,
       defaultInstrument: aud,
       conversionService: FakeConversionService.fixedRates([:]),
       instrumentResolver: registry,
       instrumentRegistrar: registry)
+    return (repo, perProfile)
   }
 
   @Test
   func returnsOnlyNonFiatTouchingLegs_scaledAndOrdered() async throws {
-    let repo = try await makeRepository()
+    let (repo, _) = try await makeSetup()
     let account = UUID()
 
     let fiatOnlyIncome = Transaction(
@@ -84,7 +89,7 @@ struct GRDBCostBasisEventLegsTests {
 
   @Test
   func fiatOnlyProfile_returnsNoLegs() async throws {
-    let repo = try await makeRepository()
+    let (repo, _) = try await makeSetup()
     let account = UUID()
     _ = try await repo.create(
       Transaction(
@@ -94,5 +99,46 @@ struct GRDBCostBasisEventLegsTests {
 
     let rows = try await repo.fetchCostBasisEventLegs()
     #expect(rows.isEmpty)
+  }
+
+  @Test
+  func scheduledTransactionLegs_areExcluded() async throws {
+    let (repo, _) = try await makeSetup()
+    let account = UUID()
+    let scheduled = Transaction(
+      date: day(0), payee: "recurring buy", recurPeriod: .month, recurEvery: 1,
+      legs: [TransactionLeg(accountId: account, instrument: eth, quantity: 1, type: .income)])
+    let posted = Transaction(
+      date: day(1), payee: "posted buy",
+      legs: [TransactionLeg(accountId: account, instrument: eth, quantity: 1, type: .income)])
+    _ = try await repo.create(scheduled)
+    _ = try await repo.create(posted)
+
+    let rows = try await repo.fetchCostBasisEventLegs()
+    // `recur_period IS NULL` excludes the scheduled template's legs.
+    #expect(!rows.contains { $0.transactionId == scheduled.id })
+    #expect(rows.contains { $0.transactionId == posted.id })
+  }
+
+  @Test
+  func deregisteredInstrumentLegs_areStillReturned() async throws {
+    // A crypto instrument that was deregistered from the registry (so it is
+    // absent from `instrumentMap()`) must NOT vanish: the fiat-exclusion
+    // membership keeps it because its id contains `:` and so is not a fiat
+    // code. Raw-inserted to bypass `create`'s auto-registration.
+    let (repo, database) = try await makeSetup()
+    let account = UUID()
+    let deregistered = Instrument.crypto(
+      chainId: 137, contractAddress: "0xdeadbeef", symbol: "GONE", name: "Gone", decimals: 18)
+    let leg = TransactionLeg(
+      accountId: account, instrument: deregistered, quantity: 1, type: .income)
+    let txn = Transaction(date: day(0), payee: "old token", legs: [leg])
+    try await database.write { database in
+      try TransactionRow(domain: txn).insert(database)
+      try TransactionLegRow(domain: leg, transactionId: txn.id, sortOrder: 0).insert(database)
+    }
+
+    let rows = try await repo.fetchCostBasisEventLegs()
+    #expect(rows.contains { $0.transactionId == txn.id })
   }
 }

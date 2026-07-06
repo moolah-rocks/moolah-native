@@ -164,6 +164,13 @@ enum CostBasisEventBuilder {
     ]
   }
 
+  /// Market value of `quantity` of `instrument` in `referenceCurrency` on
+  /// `date`. Uses the discriminated `convertResult` so an intentional zero
+  /// (an `.unpriced` / `.spam` token — a common airdrop `.income` leg)
+  /// values at `0` rather than throwing: a valid amount-invested of 0. A
+  /// genuine provider failure still throws, so the caller's per-transaction
+  /// isolation (`HoldingsCostLedger.runPass`) can degrade only the affected
+  /// `(account, instrument)` keys per Rule 11.
   private static func marketValue(
     _ quantity: Decimal,
     of instrument: Instrument,
@@ -172,7 +179,14 @@ enum CostBasisEventBuilder {
     using service: any InstrumentConversionService
   ) async throws -> Decimal {
     if instrument == referenceCurrency { return quantity }
-    return try await service.convert(quantity, from: instrument, to: referenceCurrency, on: date)
+    let result = try await service.convertResult(
+      InstrumentAmount(quantity: quantity, instrument: instrument),
+      to: referenceCurrency,
+      on: date)
+    switch result {
+    case .value(let converted): return converted.quantity
+    case .knownZero: return 0
+    }
   }
 
   private static func accountFor(_ instrument: Instrument, in legs: [TransactionLeg]) -> UUID? {

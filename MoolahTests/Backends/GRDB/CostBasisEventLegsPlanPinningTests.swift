@@ -52,7 +52,7 @@ struct CostBasisEventLegsPlanPinningTests {
       AND leg.transaction_id IN (
           SELECT nf.transaction_id
           FROM transaction_leg nf
-          WHERE nf.instrument_id IN (?)
+          WHERE nf.instrument_id NOT IN (?)
       )
     ORDER BY t.date ASC, leg.transaction_id ASC, leg.sort_order ASC
     """
@@ -61,7 +61,7 @@ struct CostBasisEventLegsPlanPinningTests {
   func legAliasesNotFullyScanned() throws {
     let database = try PlanPinningTestHelpers.makeDatabase()
     let detail = try PlanPinningTestHelpers.planDetail(
-      database, query: query, arguments: ["1:native"])
+      database, query: query, arguments: ["AUD"])
     // The outer `leg` (materialised rows) and the membership `nf`
     // subquery must both avoid a bare full-table scan of transaction_leg.
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
@@ -70,5 +70,8 @@ struct CostBasisEventLegsPlanPinningTests {
     // membership subquery rides a covering index (never a base-row scan).
     #expect(detail.contains("leg_by_transaction"))
     #expect(detail.contains("USING COVERING INDEX"))
+    // Guard a future join-order regression onto the `t` alias (matches
+    // every sibling analysis plan-pinning suite).
+    #expect(!detail.contains("SCAN \"transaction\""))
   }
 }
