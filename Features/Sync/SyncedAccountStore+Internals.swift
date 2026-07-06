@@ -85,16 +85,27 @@ extension SyncedAccountStore {
     updateGlobalError(from: perAccountResults)
     let singleShotNew = await runApplyPass(perAccountResults: perAccountResults)
     await refreshStateFromRepository()
+    // Restore the single-shot path's build-time cross-account auto-merge for
+    // the windowed path: its two sides land in separate per-account-per-window
+    // applies, so no `CrossAccountTransferMerger` batch ever collapses a
+    // same-cycle transfer between two of the user's own windowed accounts. This
+    // folds each CERTAIN same-`externalId` opposing pair within the windowed
+    // survivors into one two-`.transfer`-leg transaction BEFORE detection,
+    // returning the reduced set so the fuzzy pass never re-suggests them. Cross-
+    // cycle pairs (mate persisted a prior cycle) are out of scope and untouched.
+    let mergedWindowedNew = await transferDetection.mergeCertainSameCycleTransfers(
+      among: windowedNew)
     // Detection runs once over the union of every path's genuinely-new
     // survivors — the transactions this pass actually merged-and-deduped-
     // and-persisted. There is no date-window scan, so a previously-existing
     // row (e.g. a dismissed/merged pair) is never re-evaluated. Transfers
-    // already collapsed by `CrossAccountTransferMerger` (same-`externalId`
-    // opposing legs) carry a nil `transferDetectionValueLeg` and are
-    // structurally skipped by the detector; opposing legs that survived as
-    // two single-leg transactions across windowed + single-shot accounts
-    // are still paired here because both sides sit in this one union pass.
-    let genuinelyNew = windowedNew + singleShotNew
+    // already collapsed by `CrossAccountTransferMerger` (single-shot) or by
+    // the same-cycle reconciliation above (windowed) carry a nil
+    // `transferDetectionValueLeg` and are structurally skipped by the detector;
+    // opposing legs that survived as two single-leg transactions across
+    // windowed + single-shot accounts are still paired here because both sides
+    // sit in this one union pass.
+    let genuinelyNew = mergedWindowedNew + singleShotNew
     let participatingAccountIds = Set(inputs.map(\.id))
     await runTransferDetection(
       genuinelyNew: genuinelyNew,

@@ -9,12 +9,14 @@ enum TransferDetectionFixture {
   static let accountB = UUID()
 
   /// A single-leg cash transaction on `account` for `amount`
-  /// (negative = outgoing).
+  /// (negative = outgoing). Pass `externalId` to give the value leg the
+  /// on-chain dedup key that certainty-based cross-account pairing keys on.
   static func cashTx(
     id: UUID = UUID(),
     account: UUID,
     amount: Decimal,
     type: TransactionType,
+    externalId: String? = nil,
     on date: Date
   ) -> Transaction {
     Transaction(
@@ -25,6 +27,7 @@ enum TransferDetectionFixture {
           accountId: account,
           instrument: .defaultTestInstrument,
           quantity: amount,
+          externalId: externalId,
           type: type)
       ])
   }
