@@ -14,8 +14,11 @@
 # record types in chronological-creation order and uses different
 # column-alignment whitespace than human-edited `.ckdb` files. We delegate
 # to `tools/CKDBSchemaGen check-equal`, which parses both files and compares
-# their parsed AST (record types, fields, types, indexes, deprecation flags)
-# regardless of source-file order or whitespace.
+# their parsed AST (record types, fields, types, indexes) regardless of
+# source-file order or whitespace. Deprecation is deliberately excluded: a
+# `// DEPRECATED` marker is a repo-local annotation with no CloudKit-side
+# equivalent, so a live export never carries it — comparing it would make this
+# gate permanently fail after any field/record deprecation.
 #
 # Targets the release container (CLOUDKIT_CONTAINER_ID_RELEASE) — see issue
 # #495.
