@@ -333,23 +333,12 @@ struct WalletSyncEngine: Sendable {
   }
 
   /// The block a scan should start from for `account`: the reorg-window-
-  /// adjusted prior checkpoint (`max(localState, syncedCheckpoint) - 32`,
-  /// clamped at 0). `build` derives this inline from a `priorBlock` it
-  /// already read for its watermark fallback; the windowed sync runner
-  /// (which has no such fallback) calls this so both primitives compute an
-  /// identical resumable start from the same two repositories, keeping the
-  /// reorg-window rule single-sourced.
-  func resolveFromBlock(for account: Account) async throws -> UInt64 {
-    Self.reorgAdjustedFromBlock(priorBlock: try await resolvePriorBlock(for: account))
-  }
-
-  /// Pure reorg-window adjustment shared by `build` and `resolveFromBlock`:
-  /// a prior checkpoint of 0 (genesis / never synced) starts at 0; any
-  /// higher checkpoint drops the last 32 blocks so a reorg below the
-  /// watermark is re-scanned. Factored out so the two entry points can't
-  /// drift.
-  static func reorgAdjustedFromBlock(priorBlock: UInt64) -> UInt64 {
-    priorBlock == 0 ? 0 : subtractingReorgWindow(priorBlock)
+  /// adjusted prior checkpoint, clamped up to `chain.earliestScannableBlock`
+  /// — routed through `startBlock`, exactly like `build`'s inline
+  /// derivation, so the windowed sync runner (which has no watermark
+  /// fallback of its own) shares one single-sourced rule with `build`.
+  func resolveFromBlock(for account: Account, chain: ChainConfig) async throws -> UInt64 {
+    Self.startBlock(priorBlock: try await resolvePriorBlock(for: account), chain: chain)
   }
 
   /// Fetches native and internal transfers from Blockscout and returns the
@@ -378,13 +367,11 @@ struct WalletSyncEngine: Sendable {
 
   /// The block a scan starts from: the reorg-re-fetch window below the
   /// prior checkpoint (or genesis on a never-synced wallet), clamped up to
-  /// the chain's earliest scannable block. The immediate driver is that a
-  /// never-synced OP Mainnet wallet would otherwise scan from genesis and a
-  /// pruned OP node rejects the pre-Bedrock range with `4444 pruned history
-  /// unavailable`, failing the whole sync — but the clamp is applied
-  /// uniformly to all sources because pre-Bedrock OP history is discarded by
-  /// design, not merely where a pruned node forces it. See
-  /// `ChainConfig.earliestScannableBlock`.
+  /// the chain's earliest scannable block. A never-synced OP Mainnet wallet
+  /// would otherwise scan from genesis and a pruned OP node rejects the
+  /// pre-Bedrock range with `4444 pruned history unavailable` — the clamp
+  /// applies uniformly to every source, since pre-Bedrock OP history is
+  /// discarded by design. See `ChainConfig.earliestScannableBlock`.
   static func startBlock(priorBlock: UInt64, chain: ChainConfig) -> UInt64 {
     // `subtractingReorgWindow(0) == 0`, so no `priorBlock == 0` special case
     // is needed — genesis falls through to the chain-floor clamp below.

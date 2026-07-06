@@ -27,27 +27,30 @@ struct WindowedWalletSyncResumeTests {
     let wallet = WindowedRunnerFixture.wallet
     let counterparty = WindowedRunnerFixture.counterparty
 
-    // Window 1 [0, 249_999]: one inbound ERC-20, only returned on window 1's
+    // Never-synced start clamps to `.ethereum`'s `earliestScannableBlock`
+    // (1), not genesis, so every window boundary below shifts up by one.
+    //
+    // Window 1 [1, 250_000]: one inbound ERC-20, only returned on window 1's
     // own fetch.
     let windowOneTransfer = makeAlchemyTransfer(
       hash: "0xw1", from: counterparty, to: wallet, category: .erc20,
       contractAddress: "0xtoken", blockNum: RPCHex.hexQuantity(100_000))
-    setup.chain.setRows([windowOneTransfer], forFromBlock: 0)
+    setup.chain.setRows([windowOneTransfer], forFromBlock: 1)
 
-    // Window 2 [250_000, 499_999]: one inbound ERC-20 near the window's end —
-    // inside the reorg zone (499_967...499_999) the resumed run re-scans. The
+    // Window 2 [250_001, 500_000]: one inbound ERC-20 near the window's end —
+    // inside the reorg zone (499_968...500_000) the resumed run re-scans. The
     // chain still reports the same on-chain transfer there on resume
     // (nothing changed on-chain), so the apply pass must dedup it rather
     // than double-persist.
     let windowTwoTransfer = makeAlchemyTransfer(
       hash: "0xw2", from: counterparty, to: wallet, category: .erc20,
       contractAddress: "0xtoken", blockNum: RPCHex.hexQuantity(499_990))
-    setup.chain.setRows([windowTwoTransfer], forFromBlock: 250_000)
-    setup.chain.setRows([windowTwoTransfer], forFromBlock: 499_967)
+    setup.chain.setRows([windowTwoTransfer], forFromBlock: 250_001)
+    setup.chain.setRows([windowTwoTransfer], forFromBlock: 499_968)
 
-    // Window 3 [500_000, 600_000] fails — models a mid-scan interruption
+    // Window 3 [500_001, 600_000] fails — models a mid-scan interruption
     // (network drop, cancellation, app quit) after two windows completed.
-    setup.chain.failTransfers(forFromBlock: 500_000)
+    setup.chain.failTransfers(forFromBlock: 500_001)
 
     // --- First run: interrupted mid-scan ---
     let firstResult = try await setup.runner.run(
@@ -59,10 +62,10 @@ struct WindowedWalletSyncResumeTests {
       try await setup.backend.walletSyncCheckpoints.load(accountId: account.id)
     ).lastSyncedBlockNumber
     // The checkpoint sits at the second (last completed) window's end — NOT
-    // the original `from` (0) the scan started at.
-    #expect(checkpointAfterFirstRun == 499_999)
+    // the original `from` (1) the scan started at.
+    #expect(checkpointAfterFirstRun == 500_000)
     let stateAfterFirstRun = try await setup.backend.walletSyncState.load(accountId: account.id)
-    #expect(stateAfterFirstRun?.lastSyncedBlockNumber == 499_999)
+    #expect(stateAfterFirstRun?.lastSyncedBlockNumber == 500_000)
     let persistedAfterFirstRun = try await setup.backend.transactions.fetchAll(filter: .init())
     #expect(persistedAfterFirstRun.count == 2)
 
@@ -78,7 +81,7 @@ struct WindowedWalletSyncResumeTests {
     // Resumes from checkpoint − 32 — not the top of the range, and not a
     // re-scan of window 1.
     #expect(resumeFromBlocks.first == checkpointAfterFirstRun - WindowedRunnerFixture.reorgWindow)
-    #expect(resumeFromBlocks == [499_967])
+    #expect(resumeFromBlocks == [499_968])
 
     let checkpointAfterSecondRun = try #require(
       try await setup.backend.walletSyncCheckpoints.load(accountId: account.id)

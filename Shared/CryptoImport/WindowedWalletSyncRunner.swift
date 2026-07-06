@@ -147,7 +147,7 @@ final class WindowedWalletSyncRunner {
     // Validate up front (mirrors `build`) so a malformed account throws
     // before any window work rather than force-unwrapping a nil address.
     let walletAddress = try engine.validatedWalletAddress(for: account)
-    let from = try await engine.resolveFromBlock(for: account)
+    let from = try await engine.resolveFromBlock(for: account, chain: chain)
     try Task.checkCancellation()
 
     // Already caught up (or a reorg-window that sits above head): the scan

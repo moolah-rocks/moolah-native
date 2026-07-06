@@ -27,9 +27,11 @@ struct SyncedAccountStoreWindowedSyncTests {
 
     await fixture.store.syncAccounts([account])
 
-    // Windows [0, 249_999], [250_000, 499_999], [500_000, 600_000] each
-    // scanned via the runner, not the single-shot Alchemy path.
-    #expect(fixture.chain.recordedFromBlocks == [0, 250_000, 500_000])
+    // Never-synced start clamps to `.ethereum`'s `earliestScannableBlock`
+    // (1), not genesis. Windows [1, 250_000], [250_001, 500_000],
+    // [500_001, 600_000] each scanned via the runner, not the single-shot
+    // Alchemy path.
+    #expect(fixture.chain.recordedFromBlocks == [1, 250_001, 500_001])
     let checkpoint = try await fixture.backend.walletSyncCheckpoints.load(
       accountId: account.id)
     #expect(checkpoint?.lastSyncedBlockNumber == 600_000)
@@ -113,9 +115,9 @@ struct SyncedAccountStoreWindowedSyncTests {
     let account = fixture.seedCryptoAccount(walletAddress: Store.walletA)
     try await fixture.seedFreshState(for: [account])
     await fixture.store.loadInitialState()
-    // Windows [0, 249_999] and [250_000, 499_999] apply-and-checkpoint; the
-    // third window's fetch (fromBlock 500_000) fails.
-    fixture.chain.failTransfers(forFromBlock: 500_000)
+    // Windows [1, 250_000] and [250_001, 500_000] apply-and-checkpoint; the
+    // third window's fetch (fromBlock 500_001) fails.
+    fixture.chain.failTransfers(forFromBlock: 500_001)
 
     await fixture.store.syncAccounts([account])
 
@@ -123,7 +125,7 @@ struct SyncedAccountStoreWindowedSyncTests {
       try await fixture.backend.walletSyncState.load(accountId: account.id))
     // Error surfaced, resume point preserved at the 2nd window's end…
     #expect(state.lastError != nil)
-    #expect(state.lastSyncedBlockNumber == 499_999)
+    #expect(state.lastSyncedBlockNumber == 500_000)
     // …but `lastSyncedAt` stays the pre-cycle value, so the stale-check still
     // treats the account as overdue and retries it on the next tick (rather
     // than the per-window `now` the completed windows wrote).
@@ -137,14 +139,14 @@ struct SyncedAccountStoreWindowedSyncTests {
     let account = fixture.seedCryptoAccount(walletAddress: Store.walletA)
     try await fixture.seedFreshState(for: [account])
     await fixture.store.loadInitialState()
-    // Inbound ERC-20 in the first window [0, 249_999]; fail the third window.
+    // Inbound ERC-20 in the first window [1, 250_000]; fail the third window.
     fixture.chain.setRows(
       [
         Store.inboundERC20(
           hash: "0xearly", to: Store.walletA, contractAddress: "0xtoken", blockNum: 100_000)
       ],
-      forFromBlock: 0)
-    fixture.chain.failTransfers(forFromBlock: 500_000)
+      forFromBlock: 1)
+    fixture.chain.failTransfers(forFromBlock: 500_001)
 
     let fetchAllBefore = await fixture.recorder.fetchAllCallCount
     await fixture.store.syncAccounts([account])
@@ -161,7 +163,7 @@ struct SyncedAccountStoreWindowedSyncTests {
     let state = try #require(
       try await fixture.backend.walletSyncState.load(accountId: account.id))
     #expect(state.lastError != nil)
-    #expect(state.lastSyncedBlockNumber == 499_999)
+    #expect(state.lastSyncedBlockNumber == 500_000)
   }
 
   // MARK: - Same-cycle cross-account transfer is auto-merged, not suggested
