@@ -57,6 +57,19 @@ struct WalletSyncErrorTests {
     #expect(decoded.kind == .missingApiKey)
   }
 
+  @Test("providerError round-trips through JSON carrying code + message")
+  func providerErrorRoundTrips() throws {
+    let original = WalletSyncError(
+      provider: .directRPC,
+      kind: .providerError(stage: "getLogs", code: 4_444, message: "pruned history unavailable"))
+    let data = try JSONEncoder().encode(original)
+    let decoded = try JSONDecoder().decode(WalletSyncError.self, from: data)
+    #expect(decoded == original)
+    #expect(
+      decoded.kind
+        == .providerError(stage: "getLogs", code: 4_444, message: "pruned history unavailable"))
+  }
+
   @Test("rateLimited with a non-nil retryAfter survives JSON round-trip")
   func rateLimitedDateRoundTrips() throws {
     let date = Date(timeIntervalSince1970: 1_700_000_000)
@@ -83,6 +96,9 @@ struct WalletSyncErrorTests {
       WalletSyncError(provider: nil, kind: .network(underlyingDescription: "HTTP 500")),
       WalletSyncError(
         provider: .coinGecko, kind: .providerMalformedResponse(stage: "dailyPrices")),
+      WalletSyncError(
+        provider: .directRPC,
+        kind: .providerError(stage: "getLogs", code: 4_444, message: "pruned history unavailable")),
     ]
     for error in cases {
       let message = error.localizedDescription
@@ -91,6 +107,17 @@ struct WalletSyncErrorTests {
       #expect(!message.contains("error 1"))
       #expect(!message.contains("couldn’t be completed"))
     }
+  }
+
+  @Test("providerError surfaces the provider's own reason in the description")
+  func providerErrorDescriptionSurfacesNodeMessage() throws {
+    let error = WalletSyncError(
+      provider: .directRPC,
+      kind: .providerError(stage: "getLogs", code: 4_444, message: "pruned history unavailable"))
+    let message = try #require(error.errorDescription)
+    #expect(message.contains("Direct RPC"))
+    #expect(message.contains("pruned history unavailable"))
+    #expect(message.contains("getLogs"))
   }
 
   @Test("errorDescription names the attributed provider and the failure kind")

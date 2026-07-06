@@ -91,7 +91,7 @@ struct LiveJSONRPCClientTests {
   }
 
   @Test
-  func providerErrorBodyThrowsProviderMalformedResponse() async throws {
+  func providerErrorBodyThrowsProviderErrorCarryingCodeAndMessage() async throws {
     let client = makeClient { request in
       (
         AlchemyTestSupport.okResponse(for: request),
@@ -100,13 +100,76 @@ struct LiveJSONRPCClientTests {
     }
     do {
       _ = try await client.chainId()
-      Issue.record("Expected WalletSyncError.providerMalformedResponse")
+      Issue.record("Expected WalletSyncError.providerError")
     } catch let error as WalletSyncError {
-      guard case .providerMalformedResponse(let stage) = error.kind else {
-        Issue.record("Expected .providerMalformedResponse, got \(error.kind)")
+      guard case let .providerError(stage, code, message) = error.kind else {
+        Issue.record("Expected .providerError, got \(error.kind)")
         return
       }
       #expect(stage == "chainId")
+      #expect(code == -32_000)
+      #expect(message == "boom")
+    }
+  }
+
+  @Test
+  func getLogsProviderErrorEnvelopeSurfacesTheNodeReason() async throws {
+    // The reported scenario at the transport layer: a pruned node refuses
+    // `eth_getLogs`. The `{"error": ...}` envelope becomes `.providerError`
+    // carrying the node's own code + message (stage "getLogs"), not a
+    // generic "malformed response".
+    let client = makeClient { request in
+      (
+        AlchemyTestSupport.okResponse(for: request),
+        Data(
+          #"{"jsonrpc":"2.0","id":1,"error":{"code":4444,"message":"pruned history unavailable"}}"#
+            .utf8)
+      )
+    }
+    let filter = RPCLogFilter(
+      fromBlock: "0x0", toBlock: "0x10", address: nil, topics: [nil])
+    do {
+      _ = try await client.getLogs(filter)
+      Issue.record("Expected WalletSyncError.providerError")
+    } catch let error as WalletSyncError {
+      guard case let .providerError(stage, code, message) = error.kind else {
+        Issue.record("Expected .providerError, got \(error.kind)")
+        return
+      }
+      #expect(stage == "getLogs")
+      #expect(code == 4_444)
+      #expect(message == "pruned history unavailable")
+    }
+  }
+
+  @Test
+  func blockTimestampsPerItemErrorEnvelopeSurfacesProviderError() async throws {
+    // The batched timestamp lookup's per-item error branch: one batch item
+    // carrying a JSON-RPC error surfaces as `.providerError` with the node's
+    // own code + message (stage "blockTimestamps"), not a malformed response.
+    let client = makeClient { request in
+      (
+        AlchemyTestSupport.okResponse(for: request),
+        Data(
+          """
+          [
+            {"jsonrpc":"2.0","id":1,"result":{"timestamp":"0x60"}},
+            {"jsonrpc":"2.0","id":2,"error":{"code":-32000,"message":"missing trie node"}}
+          ]
+          """.utf8)
+      )
+    }
+    do {
+      _ = try await client.blockTimestamps([16, 17])
+      Issue.record("Expected WalletSyncError.providerError")
+    } catch let error as WalletSyncError {
+      guard case let .providerError(stage, code, message) = error.kind else {
+        Issue.record("Expected .providerError, got \(error.kind)")
+        return
+      }
+      #expect(stage == "blockTimestamps")
+      #expect(code == -32_000)
+      #expect(message == "missing trie node")
     }
   }
 

@@ -18,6 +18,14 @@ struct WalletSyncError {
     case rateLimited(retryAfter: Date?)
     case network(underlyingDescription: String)
     case providerMalformedResponse(stage: String)
+    /// A well-formed JSON-RPC `{"error": {...}}` envelope — the provider
+    /// understood the request and deliberately refused it (e.g. `4444
+    /// pruned history unavailable`, `-32701 please specify an address`).
+    /// Distinct from `.providerMalformedResponse`, which is an
+    /// undecodable/absent result. Carries the provider's own `code` and
+    /// `message` so the caption can surface an actionable reason instead of
+    /// a generic "malformed response".
+    case providerError(stage: String, code: Int, message: String)
   }
 
   let provider: SyncProvider?
@@ -68,6 +76,11 @@ extension WalletSyncError {
   static func providerMalformedResponse(stage: String) -> WalletSyncError {
     WalletSyncError(provider: nil, kind: .providerMalformedResponse(stage: stage))
   }
+
+  static func providerError(stage: String, code: Int, message: String) -> WalletSyncError {
+    WalletSyncError(
+      provider: nil, kind: .providerError(stage: stage, code: code, message: message))
+  }
 }
 
 // MARK: - LocalizedError
@@ -114,6 +127,9 @@ extension WalletSyncError: LocalizedError {
     case .providerMalformedResponse(let stage):
       let who = provider ?? "The data provider"
       return "\(who) returned a malformed response (\(stage))."
+    case let .providerError(stage, _, message):
+      let who = provider ?? "The data provider"
+      return "\(who) couldn't complete the request (\(stage)): \(message)"
     }
   }
 }
