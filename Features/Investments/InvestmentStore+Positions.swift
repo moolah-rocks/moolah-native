@@ -206,23 +206,27 @@ extension InvestmentStore {
   func refreshPositionTrackedPerformance(
     accountId: UUID, profileCurrency: Instrument
   ) async {
-    guard let transactionRepository else {
+    guard let holdingsCostLedger else {
+      // No shared-ledger provider (e.g. an un-wired test store): performance is
+      // ledger-derived, so without one it is unavailable rather than fabricated.
       setAccountPerformance(nil)
       return
     }
     let generation = snapshotGeneration
     do {
-      let txns = try await fetchAllTransactions(
-        repository: transactionRepository,
-        accountId: accountId)
+      // The shared, profile-wide ledger (built once per load, cached). A
+      // genuine provider failure throws here and is caught below → performance
+      // unavailable; it is NEVER coalesced to `.empty` (which would render a
+      // computed-looking `0` invested, Rule 11).
+      let ledger = try await holdingsCostLedger.ledger()
       let performance = try await AccountPerformanceCalculator.compute(
         accountId: accountId,
-        transactions: txns,
         valuedPositions: valuedPositions,
         profileCurrency: profileCurrency,
-        conversionService: conversionService)
-      // Drop a superseded pass so a stale account's performance can't overwrite
-      // the switched-to account's (#1209).
+        ledger: ledger)
+      // `ledger()` is another suspension point: re-check the captured
+      // generation and drop a superseded pass so a stale account's performance
+      // can't overwrite the switched-to account's (#1209).
       guard generation == snapshotGeneration else { return }
       setAccountPerformance(performance)
     } catch is CancellationError {

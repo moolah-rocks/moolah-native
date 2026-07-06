@@ -3,24 +3,39 @@ import Testing
 
 @testable import Moolah
 
-/// Edge-case rows from the §3 design table — each pinned in its own
-/// test so a regression on Row N reads as a single named failure.
+/// Ledger-sourced edge cases for `compute` — each pinned in its own test so a
+/// regression reads as a single named failure. Amount invested is the remaining
+/// cost basis; fiat holds no lots, so these use a stock to have a real baseline.
 @Suite("AccountPerformanceCalculator.compute edge cases")
 struct AccountPerformanceEdgeCaseTests {
-  let aud = Instrument.AUD
+  private let aud = Instrument.AUD
+  private let bhp = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
+  private let account = UUID()
+  private let openingDate = Date(timeIntervalSinceReferenceDate: 0)
+  private var oneYearLater: Date { openingDate.addingTimeInterval(365 * 86_400) }
 
-  /// Row 1 of the §3 edge-case table: empty account (no transactions,
-  /// no positions). Matches the V=0, no-flows row.
+  private func leg(_ i: Instrument, _ qty: Decimal, _ type: TransactionType) -> TransactionLeg {
+    TransactionLeg(accountId: account, instrument: i, quantity: qty, type: type)
+  }
+
+  private func valued(_ i: Instrument, quantity: Decimal, worth: Decimal) -> ValuedPosition {
+    ValuedPosition(
+      instrument: i, quantity: quantity, unitPrice: nil, costBasis: nil,
+      value: InstrumentAmount(quantity: worth, instrument: aud))
+  }
+
+  private func buildLedger(_ txns: [Transaction]) async throws -> HoldingsCostLedger {
+    try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud,
+      conversionService: FakeConversionService.fixedRates([:]))
+  }
+
+  /// Empty account: no lots, no flows, no value → all zeros, nil percentages.
   @Test("empty account with no flows reports all zeros and nil percentages")
   func emptyAccountNoFlows() async throws {
-    let accountId = UUID()
+    let ledger = try await buildLedger([])
     let perf = try await AccountPerformanceCalculator.compute(
-      accountId: accountId,
-      transactions: [],
-      valuedPositions: [],
-      profileCurrency: aud,
-      conversionService: FakeConversionService.fixedRates([:])
-    )
+      accountId: account, valuedPositions: [], profileCurrency: aud, ledger: ledger)
     #expect(perf.currentValue == InstrumentAmount(quantity: 0, instrument: aud))
     #expect(perf.totalContributions == InstrumentAmount(quantity: 0, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 0, instrument: aud))
@@ -29,127 +44,63 @@ struct AccountPerformanceEdgeCaseTests {
     #expect(perf.firstFlowDate == nil)
   }
 
-  /// Row 2 of the §3 edge-case table: single deposit, no trades, no
-  /// growth. P/L = 0; Modified Dietz % = 0; annualised = 0.
-  @Test("single deposit with no growth reports zero P/L, zero percent, zero annualised")
-  func singleDepositNoGrowth() async throws {
-    let accountId = UUID()
-    let openingDate = Date(timeIntervalSinceReferenceDate: 0)
-    let now = openingDate.addingTimeInterval(365 * 86_400)
-    let opening = Transaction(
-      date: openingDate,
-      legs: [
-        TransactionLeg(
-          accountId: accountId, instrument: aud, quantity: 10_000, type: .openingBalance)
-      ]
-    )
-    let valued = [
-      ValuedPosition(
-        instrument: aud, quantity: 10_000,
-        unitPrice: nil, costBasis: nil,
-        value: InstrumentAmount(quantity: 10_000, instrument: aud))
-    ]
+  /// A buy with no growth: gain = 0, gain% = 0, annualised = 0.
+  @Test("buy with no growth reports zero gain, zero percent, zero annualised")
+  func buyNoGrowth() async throws {
+    let buy = Transaction(
+      date: openingDate, legs: [leg(aud, -10_000, .trade), leg(bhp, 100, .trade)])
+    let ledger = try await buildLedger([buy])
     let perf = try await AccountPerformanceCalculator.compute(
-      accountId: accountId,
-      transactions: [opening],
-      valuedPositions: valued,
-      profileCurrency: aud,
-      conversionService: FakeConversionService.fixedRates([:]),
-      now: now
-    )
+      accountId: account,
+      valuedPositions: [valued(bhp, quantity: 100, worth: 10_000)],
+      profileCurrency: aud, ledger: ledger, now: oneYearLater)
     #expect(perf.currentValue == InstrumentAmount(quantity: 10_000, instrument: aud))
     #expect(perf.totalContributions == InstrumentAmount(quantity: 10_000, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 0, instrument: aud))
-    let pct = try #require(perf.profitLossPercent)
-    #expect(pct == 0)
+    #expect(perf.profitLossPercent == 0)
     let annualised = try #require(perf.annualisedReturn)
-    let asDouble = Double(truncating: annualised as NSDecimalNumber)
-    #expect(abs(asDouble) < 0.001, "expected ~0 p.a., got \(asDouble)")
+    #expect(abs(Double(truncating: annualised as NSDecimalNumber)) < 0.001)
   }
 
-  /// Row 3 of the §3 edge-case table: deposit then full withdrawal one
-  /// year later, V=0. ΣC = 0; weighted-capital is positive (deposit was
-  /// in for the full year, withdrawal cancels late) so Modified Dietz %
-  /// converges on 0. Annualised return — IRR of {+1000 at t=0,
-  /// -1000 at t=365, V=0 at t=365} converges on 0.
-  @Test("deposit then full withdrawal yields zero contributions and zero P/L")
-  func depositThenFullWithdrawal() async throws {
-    let accountId = UUID()
-    let cashAccount = UUID()
-    let depositDate = Date(timeIntervalSinceReferenceDate: 0)
-    let withdrawalDate = depositDate.addingTimeInterval(365 * 86_400)
-    let deposit = Transaction(
-      date: depositDate,
-      legs: [
-        TransactionLeg(
-          accountId: cashAccount, instrument: aud, quantity: -1_000, type: .transfer),
-        TransactionLeg(
-          accountId: accountId, instrument: aud, quantity: 1_000, type: .transfer),
-      ]
-    )
-    let withdrawal = Transaction(
-      date: withdrawalDate,
-      legs: [
-        TransactionLeg(
-          accountId: accountId, instrument: aud, quantity: -1_000, type: .transfer),
-        TransactionLeg(
-          accountId: cashAccount, instrument: aud, quantity: 1_000, type: .transfer),
-      ]
-    )
-    let valued = [
-      ValuedPosition(
-        instrument: aud, quantity: 0,
-        unitPrice: nil, costBasis: nil,
-        value: InstrumentAmount(quantity: 0, instrument: aud))
-    ]
+  /// Buy then a full disposal a year later, V=0: every lot consumed → remaining
+  /// invested 0 and gain 0.
+  @Test("buy then full disposal yields zero invested and zero gain")
+  func buyThenFullDisposal() async throws {
+    let sellDate = openingDate.addingTimeInterval(365 * 86_400)
+    let buy = Transaction(
+      date: openingDate, legs: [leg(aud, -1_000, .trade), leg(bhp, 100, .trade)])
+    let sell = Transaction(
+      date: sellDate, legs: [leg(bhp, -100, .trade), leg(aud, 1_000, .trade)])
+    let ledger = try await buildLedger([buy, sell])
     let perf = try await AccountPerformanceCalculator.compute(
-      accountId: accountId,
-      transactions: [deposit, withdrawal],
-      valuedPositions: valued,
-      profileCurrency: aud,
-      conversionService: FakeConversionService.fixedRates([:]),
-      now: withdrawalDate
-    )
+      accountId: account,
+      valuedPositions: [valued(bhp, quantity: 0, worth: 0)],
+      profileCurrency: aud, ledger: ledger, now: sellDate)
     #expect(perf.currentValue == InstrumentAmount(quantity: 0, instrument: aud))
     #expect(perf.totalContributions == InstrumentAmount(quantity: 0, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 0, instrument: aud))
-    #expect(perf.firstFlowDate == depositDate)
+    #expect(perf.firstFlowDate == openingDate)
   }
 
-  /// Row 4 of the §3 edge-case table: first flow less than one day
-  /// before now. currentValue / totalContributions / profitLoss are all
-  /// populated, but profitLossPercent and annualisedReturn are nil
-  /// because the time span is too short to report a meaningful rate.
-  @Test("first flow under one day old marks percentages unavailable")
+  /// First flow under one day before `now`: invested / gain / gain% are all
+  /// defined (gain% is a simple ratio, not time-weighted), but the annualised
+  /// return is nil — `IRRSolver` cannot annualise a sub-day span.
+  @Test("first flow under one day old: gain percent defined, annualised nil")
   func firstFlowSubDaySpan() async throws {
-    let accountId = UUID()
-    let firstFlowDate = Date(timeIntervalSinceReferenceDate: 0)
-    let now = firstFlowDate.addingTimeInterval(60 * 60)  // one hour later
-    let opening = Transaction(
-      date: firstFlowDate,
-      legs: [
-        TransactionLeg(
-          accountId: accountId, instrument: aud, quantity: 1_000, type: .openingBalance)
-      ]
-    )
-    let valued = [
-      ValuedPosition(
-        instrument: aud, quantity: 1_000,
-        unitPrice: nil, costBasis: nil,
-        value: InstrumentAmount(quantity: 1_010, instrument: aud))
-    ]
+    let now = openingDate.addingTimeInterval(60 * 60)  // one hour later
+    let buy = Transaction(
+      date: openingDate, legs: [leg(aud, -1_000, .trade), leg(bhp, 10, .trade)])
+    let ledger = try await buildLedger([buy])
     let perf = try await AccountPerformanceCalculator.compute(
-      accountId: accountId,
-      transactions: [opening],
-      valuedPositions: valued,
-      profileCurrency: aud,
-      conversionService: FakeConversionService.fixedRates([:]),
-      now: now
-    )
+      accountId: account,
+      valuedPositions: [valued(bhp, quantity: 10, worth: 1_010)],
+      profileCurrency: aud, ledger: ledger, now: now)
     #expect(perf.currentValue == InstrumentAmount(quantity: 1_010, instrument: aud))
     #expect(perf.totalContributions == InstrumentAmount(quantity: 1_000, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 10, instrument: aud))
-    #expect(perf.profitLossPercent == nil)
+    // Gain% is gain/invested (10/1000) — defined regardless of span; only the
+    // annualised rate needs a >= 1-day span.
+    #expect(perf.profitLossPercent == Decimal(10) / Decimal(1_000))
     #expect(perf.annualisedReturn == nil)
   }
 }

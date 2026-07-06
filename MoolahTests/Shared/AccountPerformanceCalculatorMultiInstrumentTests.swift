@@ -7,171 +7,127 @@ import Testing
 @Suite("AccountPerformanceCalculator.computeMultiInstrument")
 struct AccountPerformanceCalculatorMultiInstrumentTests {
   // swiftlint:enable type_name
-  let aud = Instrument.AUD
-  let usd = Instrument.USD
+  private let aud = Instrument.AUD
+  private let usd = Instrument.USD
+  private let eth = Instrument.crypto(
+    chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
 
-  /// A cross-account deposit (external → wallet) establishes a contribution
-  /// baseline, so contributions and P&L populate.
-  @Test("cross-account funding populates contributions and signed P/L")
-  func crossAccountFundingPopulatesPL() async throws {
+  private func day(_ n: Int) -> Date { Date(timeIntervalSinceReferenceDate: Double(n) * 86_400) }
+
+  private func leg(
+    _ account: UUID, _ i: Instrument, _ qty: Decimal, _ type: TransactionType
+  ) -> TransactionLeg {
+    TransactionLeg(accountId: account, instrument: i, quantity: qty, type: type)
+  }
+
+  private func valued(_ i: Instrument, quantity: Decimal, worth: InstrumentAmount) -> ValuedPosition
+  {
+    ValuedPosition(instrument: i, quantity: quantity, unitPrice: nil, costBasis: nil, value: worth)
+  }
+
+  private func buildLedger(
+    _ txns: [Transaction], rates: [String: Decimal] = [:]
+  ) async throws -> HoldingsCostLedger {
+    try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud,
+      conversionService: FakeConversionService.fixedRates(rates))
+  }
+
+  /// A wallet that bought crypto has a real cost basis: invested + signed gain
+  /// populate from the ledger.
+  @Test("crypto buy populates amount invested and signed gain")
+  func cryptoBuyPopulatesInvestedAndGain() async throws {
     let wallet = UUID()
-    let external = UUID()
-    let openingDate = Date(timeIntervalSinceReferenceDate: 0)
-    let now = openingDate.addingTimeInterval(365 * 86_400)
-    // A transfer from `external` (an AUD source) into `wallet` as USD:
-    // touches exactly one member of {wallet} → external flow of 1,000 AUD
-    // (USD→AUD at 1.0 for the fake service).
-    let funding = Transaction(
-      date: openingDate,
-      legs: [
-        TransactionLeg(accountId: wallet, instrument: usd, quantity: 1_000, type: .transfer),
-        TransactionLeg(accountId: external, instrument: aud, quantity: -1_000, type: .transfer),
-      ])
-    let valued = [
-      ValuedPosition(
-        instrument: usd, quantity: 1_000, unitPrice: nil, costBasis: nil,
-        value: InstrumentAmount(quantity: 1_100, instrument: aud))
-    ]
+    let buy = Transaction(
+      date: day(0), legs: [leg(wallet, aud, -1_000, .trade), leg(wallet, eth, 1, .trade)])
+    let ledger = try await buildLedger([buy])
     let perf = try await AccountPerformanceCalculator.computeMultiInstrument(
       accountIds: [wallet],
-      transactions: [funding],
-      valuedPositions: valued,
-      profileCurrency: aud,
-      conversionService: FakeConversionService.fixedRates([:]),
-      now: now)
+      valuedPositions: [
+        valued(eth, quantity: 1, worth: InstrumentAmount(quantity: 1_100, instrument: aud))
+      ],
+      profileCurrency: aud, ledger: ledger, now: day(365))
     #expect(perf.currentValue == InstrumentAmount(quantity: 1_100, instrument: aud))
     #expect(perf.totalContributions == InstrumentAmount(quantity: 1_000, instrument: aud))
     #expect(perf.profitLoss == InstrumentAmount(quantity: 100, instrument: aud))
   }
 
-  /// A wallet funded only by single-account on-chain receives (no boundary
-  /// crossing, no opening balance) has no known cost basis: current value
-  /// shows, but contributions / P&L / return are nil — NOT "entire value is
-  /// gain". Rule 11: no phantom gain.
-  @Test("no-cost-basis wallet shows current value only, P/L nil")
-  func noCostBasisWalletCurrentValueOnly() async throws {
+  /// The self-custody regression (spec's Return test): a wallet funded only by
+  /// on-chain receives now yields a finite annualised return, because the
+  /// received token is a positive inflow at market value. Under the old
+  /// contributions path this had no external flow → nil return.
+  @Test("self-custody wallet funded by receives has a finite return")
+  func selfCustodyWalletReceivesOnlyHasFiniteReturn() async throws {
     let wallet = UUID()
-    let receiveDate = Date(timeIntervalSinceReferenceDate: 0)
-    let receive = Transaction(
-      date: receiveDate,
-      legs: [
-        // Single-account receive (airdrop): no other accountId, not an
-        // opening balance → not a flow.
-        TransactionLeg(accountId: wallet, instrument: usd, quantity: 500, type: .income)
-      ])
-    let valued = [
-      ValuedPosition(
-        instrument: usd, quantity: 500, unitPrice: nil, costBasis: nil,
-        value: InstrumentAmount(quantity: 750, instrument: aud))
-    ]
+    let receive = Transaction(date: day(-400), legs: [leg(wallet, eth, 1, .income)])
+    let ledger = try await buildLedger([receive], rates: [eth.id: 4_000])
+    let rows = [valued(eth, quantity: 1, worth: InstrumentAmount(quantity: 6_000, instrument: aud))]
     let perf = try await AccountPerformanceCalculator.computeMultiInstrument(
-      accountIds: [wallet],
-      transactions: [receive],
-      valuedPositions: valued,
-      profileCurrency: aud,
-      conversionService: FakeConversionService.fixedRates([:]),
-      now: receiveDate.addingTimeInterval(30 * 86_400))
-    #expect(perf.currentValue == InstrumentAmount(quantity: 750, instrument: aud))
-    #expect(perf.totalContributions == nil)
-    #expect(perf.profitLoss == nil)
-    #expect(perf.profitLossPercent == nil)
-    #expect(perf.annualisedReturn == nil)
-    #expect(perf.firstFlowDate == nil)
+      accountIds: [wallet], valuedPositions: rows, profileCurrency: aud, ledger: ledger, now: day(0)
+    )
+    #expect(perf.currentValue == InstrumentAmount(quantity: 6_000, instrument: aud))
+    // Amount invested = market value on receipt (4,000), not a zero/negative flow.
+    #expect(perf.totalContributions == InstrumentAmount(quantity: 4_000, instrument: aud))
+    #expect(perf.annualisedReturn != nil)  // was nil under the old contributions path
   }
 
-  /// A transfer BETWEEN two group members touches ≥2 members → internal
-  /// transfer → excluded from contributions (mirrors the chart baseline).
-  @Test("internal transfer between group members is not a contribution")
-  func internalGroupTransferExcluded() async throws {
+  /// A transfer between two members of the viewed set is internal: it nets to
+  /// zero in the flows and carries cost between the members' lots, so the
+  /// aggregate amount invested is unchanged and no phantom flow appears.
+  @Test("internal transfer between members nets to zero and preserves invested")
+  func internalTransferBetweenMembersNetsToZero() async throws {
     let memberA = UUID()
     let memberB = UUID()
-    let openingDate = Date(timeIntervalSinceReferenceDate: 0)
-    let now = openingDate.addingTimeInterval(365 * 86_400)
-    let opening = Transaction(
-      date: openingDate,
-      legs: [
-        TransactionLeg(accountId: memberA, instrument: aud, quantity: 1_000, type: .openingBalance)
-      ])
-    // A→B internal move: touches both members → excluded.
-    let internalMove = Transaction(
-      date: openingDate.addingTimeInterval(86_400),
-      legs: [
-        TransactionLeg(accountId: memberA, instrument: aud, quantity: -400, type: .transfer),
-        TransactionLeg(accountId: memberB, instrument: aud, quantity: 400, type: .transfer),
-      ])
-    let valued = [
-      ValuedPosition(
-        instrument: aud, quantity: 1_100, unitPrice: nil, costBasis: nil,
-        value: InstrumentAmount(quantity: 1_100, instrument: aud))
-    ]
+    let buy = Transaction(
+      date: day(0), legs: [leg(memberA, aud, -4_000, .trade), leg(memberA, eth, 2, .trade)])
+    let move = Transaction(
+      date: day(1),
+      legs: [leg(memberA, eth, -1, .transfer), leg(memberB, eth, 1, .transfer)])
+    let ledger = try await buildLedger([buy, move], rates: [eth.id: 2_500])
+    let rows = [valued(eth, quantity: 2, worth: InstrumentAmount(quantity: 5_000, instrument: aud))]
     let perf = try await AccountPerformanceCalculator.computeMultiInstrument(
-      accountIds: [memberA, memberB],
-      transactions: [opening, internalMove],
-      valuedPositions: valued,
-      profileCurrency: aud,
-      conversionService: FakeConversionService.fixedRates([:]),
-      now: now)
-    // Only the opening balance counts as a contribution; the internal move
-    // does not. So contributions = 1,000 and P/L = 1,100 − 1,000 = 100.
-    #expect(perf.totalContributions == InstrumentAmount(quantity: 1_000, instrument: aud))
-    #expect(perf.profitLoss == InstrumentAmount(quantity: 100, instrument: aud))
+      accountIds: [memberA, memberB], valuedPositions: rows,
+      profileCurrency: aud, ledger: ledger, now: day(365))
+    // Cost carries A→B; aggregate remaining invested stays 4,000 (2 ETH @ 2,000).
+    #expect(perf.totalContributions == InstrumentAmount(quantity: 4_000, instrument: aud))
+    #expect(perf.profitLoss == InstrumentAmount(quantity: 1_000, instrument: aud))  // 5000 − 4000
+    // Only the buy is an external flow; the internal move adds none.
+    #expect(perf.firstFlowDate == day(0))
   }
 
   /// A `ValuedPosition` whose `.value` is in a different instrument than
-  /// `profileCurrency` must not trap (InstrumentAmount.+ has a precondition on
-  /// matching instruments). The aggregate is unavailable → currentValueOnly(nil)
-  /// → both currentValue and profitLoss are nil.
+  /// `profileCurrency` must not trap. The aggregate is unavailable → currentValue
+  /// and profitLoss are nil; amount invested (an empty ledger read) is 0.
   @Test("valued position in wrong instrument degrades to nil aggregate, no trap")
   func valuedPositionWrongInstrumentDegrades() async throws {
     let wallet = UUID()
-    // No transactions → no flows, so the only path to perf is through
-    // aggregatedValue. The position's value is USD but profileCurrency is AUD:
-    // before the guard fix this would have trapped on InstrumentAmount.+=.
-    let valued = [
-      ValuedPosition(
-        instrument: usd, quantity: 500, unitPrice: nil, costBasis: nil,
-        value: InstrumentAmount(quantity: 750, instrument: usd))  // USD, not AUD
+    let ledger = try await buildLedger([])
+    let rows = [
+      valued(usd, quantity: 500, worth: InstrumentAmount(quantity: 750, instrument: usd))  // USD, not AUD
     ]
     let perf = try await AccountPerformanceCalculator.computeMultiInstrument(
-      accountIds: [wallet],
-      transactions: [],
-      valuedPositions: valued,
-      profileCurrency: aud,
-      conversionService: FakeConversionService.fixedRates([:]),
-      now: Date(timeIntervalSinceReferenceDate: 30 * 86_400))
-    // Instrument mismatch → aggregate unavailable → currentValueOnly(nil, in: aud)
+      accountIds: [wallet], valuedPositions: rows, profileCurrency: aud, ledger: ledger,
+      now: day(30))
     #expect(perf.currentValue == nil)
-    #expect(perf.totalContributions == nil)
     #expect(perf.profitLoss == nil)
+    // No lots in the ledger → invested is a genuine 0, not a phantom.
+    #expect(perf.totalContributions == InstrumentAmount(quantity: 0, instrument: aud))
   }
 
-  /// A flow-conversion failure degrades to current value only (which is known
-  /// from the already-valued rows) rather than throwing or partial-summing.
-  @Test("flow conversion failure degrades to current value only")
-  func flowConversionFailureCurrentValueOnly() async throws {
+  /// A genuine flow conversion failure marks the instrument unavailable in the
+  /// ledger (Rule 11): amount invested / gain are nil while the current value
+  /// (already valued) survives.
+  @Test("ledger conversion failure marks invested unavailable, value survives")
+  func ledgerConversionFailureCurrentValueOnly() async throws {
     let wallet = UUID()
-    let external = UUID()
-    let openingDate = Date(timeIntervalSinceReferenceDate: 0)
-    let funding = Transaction(
-      date: openingDate,
-      legs: [
-        TransactionLeg(accountId: wallet, instrument: usd, quantity: 1_000, type: .transfer),
-        TransactionLeg(accountId: external, instrument: aud, quantity: -1_000, type: .transfer),
-      ])
-    let valued = [
-      ValuedPosition(
-        instrument: usd, quantity: 1_000, unitPrice: nil, costBasis: nil,
-        value: InstrumentAmount(quantity: 1_100, instrument: aud))
-    ]
-    // USD flow conversion fails → contributions unavailable.
-    let failing = FakeConversionService.failingInstruments([usd.id])
+    let receive = Transaction(date: day(0), legs: [leg(wallet, eth, 1, .income)])
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: [receive], referenceCurrency: aud,
+      conversionService: FakeConversionService.failingInstruments([eth.id]))
+    let rows = [valued(eth, quantity: 1, worth: InstrumentAmount(quantity: 1_100, instrument: aud))]
     let perf = try await AccountPerformanceCalculator.computeMultiInstrument(
-      accountIds: [wallet],
-      transactions: [funding],
-      valuedPositions: valued,
-      profileCurrency: aud,
-      conversionService: failing,
-      now: openingDate.addingTimeInterval(365 * 86_400))
+      accountIds: [wallet], valuedPositions: rows, profileCurrency: aud, ledger: ledger,
+      now: day(365))
     #expect(perf.currentValue == InstrumentAmount(quantity: 1_100, instrument: aud))
     #expect(perf.totalContributions == nil)
     #expect(perf.profitLoss == nil)
