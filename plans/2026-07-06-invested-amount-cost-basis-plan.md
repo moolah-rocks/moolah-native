@@ -1565,6 +1565,25 @@ Rename user-facing copy to "Amount invested" / "Gain" / "Return"; the legend's t
 
 ---
 
+## Task 8 — ATO-fallback valuation for spam/unpriced trade legs (fixes #1255)
+
+Make the capital-gains calculation correct for `.trade` legs touching a `.spam`/`.unpriced` token. Today `TradeEventClassifier` uses plain `convert()` for the pair-value lookup (`classify`) and the fee-leg lookup (`feeContribution`), so an unpriceable token in a trade throws `noProviderMapping`; the ledger's per-transaction Rule-11 catch then marks the whole transaction's instruments unavailable — including the genuinely-priced counterparty — instead of ATO-fallback valuing it.
+
+**ATO rule:** for a crypto-to-crypto disposal, capital proceeds = market value of the asset *received*; if the received asset can't be valued, fall back to the market value of the asset *disposed of* (its own price). Only when **both** legs are unpriceable is the trade genuinely unavailable.
+
+**Files:** `Shared/TradeEventClassifier.swift`; `MoolahTests/Shared/TradeEventClassifierTests.swift`; assert improved behaviour in `HoldingsCostLedgerTests` / `CapitalGainsCalculator*Tests`.
+
+**Interfaces:** unchanged public shape of `TradeEventClassifier.classify(...)` / `feeContribution(...)`; internal conversions move from `convert` → `convertResult`.
+
+**Steps (TDD):**
+- [ ] **Step 1: Failing test** — a `.trade` swapping ETH (priced) for a spam token (`.knownZero`): assert the ETH disposal's `proceedsPerUnit` uses ETH's **own** market value (ATO fallback), the spam acquisition's `costPerUnit` uses ETH's value (value given up), and the classify call does NOT throw. Use `FakeConversionService.fixedRates([ethId: X], knownZero: [spamId])`.
+- [ ] **Step 2: Add a discriminated `hostValue` helper** on `TradeEventClassifier` using `convertResult`: `.value → quantity`, `.knownZero →` signal-unavailable-for-this-leg (do NOT collapse a price-carrier to 0). In `classify`, when the paired price-carrier leg resolves `.knownZero`, fall back to converting the leg being valued from its **own** instrument (`convertResult`); if that is also `.knownZero`, throw (both unpriceable → genuinely unavailable, `runPass` isolates the transaction). `feeContribution`: a `.knownZero` fee leg contributes 0 (a worthless fee token is a 0 incidental cost) — that IS correct there, unlike the price-carrier.
+- [ ] **Step 3: Wire** the pair-value lookup and `feeContribution` to the helper; keep the host-currency fast path.
+- [ ] **Step 4: Tests** — spam-for-ETH swap (fallback), ETH-for-spam swap, spam-fee-on-a-real-trade (fee→0, trade still valued), both-legs-unpriced (throws → ledger isolates). Confirm existing `TradeEventClassifier`/`CapitalGains`/`ProfitLoss`/positions suites still pass; update any number deliberately with a one-line reason.
+- [ ] **Step 5:** run `@instrument-conversion-review` + `@code-review`; `just format`; commit `fix(cost-basis): ATO-fallback valuation for unpriced trade legs (#1255)`; the PR closes #1255.
+
+---
+
 ## Self-review — spec coverage, placeholders, name consistency
 
 - **Spec coverage.** Single definition + event model → Task 2 (`CostBasisEventBuilder`) & Task 1 (`moveLots`). Account-aware engine → Task 1. **SQL-sourced key-event query (only non-fiat-touching transactions leave SQLite) + `HoldingsCostLedger` FIFO pass with one batched `(instrument, day)` conversion + three change-point outputs → Task 3.** Crypto-to-crypto (unchanged) → reused `TradeEventClassifier` in Task 2 Step 3. Fees/incidental + crypto-fee disposal → Task 2 Steps 3–4. Cached profile-wide provider (built once per load from the SQL query, invalidated on transaction/instrument change, `.empty` while migrating) → Task 4 (`HoldingsCostLedgerStore`). Derived surfaces: value line unchanged (Task 5 keeps the per-viewed-account quantity fold + batch conversion); baseline → Task 5; gain/return tiles → Tasks 6–7; realised CGT / P&L → Task 4 (consuming the shared ledger, replacing `loadAllLegTransactions`). Baseline suppression single rule → Task 5 Step 6. Return works for self-custody → Task 6 Step 1. Transfer nuance (cost carries, market for IRR; needs the source account's lots present, hence the profile-wide ledger) → Task 3 (`move` records both) + `cashFlows` netting + Task 4 profile-wide provider. Terminology → Task 7. Policy decisions (opening = market on opening date; external moves ATO-strict; AUD reference) → Task 2 event mapping.
