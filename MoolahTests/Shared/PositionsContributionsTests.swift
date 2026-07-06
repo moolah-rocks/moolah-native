@@ -3,11 +3,12 @@ import Testing
 
 @testable import Moolah
 
-/// Cumulative-contributions coverage for `PositionsHistoryBuilder`.
+/// Remaining-amount-invested (chart baseline) coverage for
+/// `PositionsHistoryBuilder` — the ledger-sourced `Point.invested`.
 /// Lives in its own file rather than appending to the existing
 /// `PositionsHistoryBuilderTests` because that file is already
 /// near the SwiftLint type-body-length limit.
-@Suite("PositionsHistoryBuilder contributions")
+@Suite("PositionsHistoryBuilder invested")
 struct PositionsContributionsTests {
   let aud = Instrument.AUD
   let bhp = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
@@ -72,226 +73,162 @@ struct PositionsContributionsTests {
     )
   }
 
-  private func transferOut(
-    qty: Decimal, daysAfterEpoch days: Int, toOther: UUID = UUID()
+  private func sell(
+    instrument: Instrument, qty: Decimal, proceeds: Decimal, daysAfterEpoch days: Int
   ) throws -> Transaction {
     Transaction(
       date: try date(daysAfterEpoch: days),
       legs: [
-        TransactionLeg(accountId: accountId, instrument: aud, quantity: -qty, type: .expense),
-        TransactionLeg(accountId: toOther, instrument: aud, quantity: qty, type: .income),
+        TransactionLeg(
+          accountId: accountId, instrument: instrument, quantity: -qty, type: .trade),
+        TransactionLeg(
+          accountId: accountId, instrument: aud, quantity: proceeds, type: .trade),
       ]
     )
   }
 
-  // MARK: - Cumulative contributions
-
-  @Test("opening balance establishes contributions baseline")
-  func contributionsOpeningBalance() async throws {
-    let txns = try [
-      openingBalance(in: aud, qty: 1_000, daysAfterEpoch: 0),
-      // The buy seeds a BHP holding so we can verify the opening-balance
-      // contribution is carried on subsequent non-cash days too.
-      buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
-    ]
-    let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
-    let builder = PositionsHistoryBuilder(conversionService: service)
-    let series = await builder.build(
-      transactions: txns, accountId: accountId,
-      hostCurrency: aud, range: .threeMonths,
-      now: try date(daysAfterEpoch: 5)
-    )
-    let firstAggregate = try #require(series.totalSeries.first)
-    #expect(firstAggregate.contributions == 1_000)
+  private func ledger(
+    for txns: [Transaction], service: any InstrumentConversionService
+  ) async throws -> HoldingsCostLedger {
+    try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
   }
 
-  @Test("external transfer in steps contributions up")
-  func contributionsTransferInStep() async throws {
+  // MARK: - Remaining amount invested (baseline)
+
+  /// Symptom 1: a fiat-only account holds no lots, so remaining amount
+  /// invested is `0` on every point and the aggregate baseline is suppressed
+  /// (fiat income / opening balances are non-events — cash is not "invested").
+  @Test("fiat-only account: invested is 0 and the baseline is suppressed")
+  func fiatOnlyAccountHasZeroInvestedNoBaseline() async throws {
     let txns = try [
       openingBalance(in: aud, qty: 1_000, daysAfterEpoch: 0),
-      buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
       transferIn(qty: 500, daysAfterEpoch: 3),
     ]
-    let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
+    let service = FakeConversionService.fixedRates([:])
     let builder = PositionsHistoryBuilder(conversionService: service)
-    let day1Date = try date(daysAfterEpoch: 1)
-    let day3Date = try date(daysAfterEpoch: 3)
     let series = await builder.build(
       transactions: txns, accountId: accountId,
       hostCurrency: aud, range: .threeMonths,
+      ledger: try await ledger(for: txns, service: service),
       now: try date(daysAfterEpoch: 5)
     )
-    let day1 = try #require(
-      series.totalSeries.first { Calendar.utc.startOfDay(for: $0.date) == day1Date })
-    let day3 = try #require(
-      series.totalSeries.first { Calendar.utc.startOfDay(for: $0.date) == day3Date })
-    #expect(day1.contributions == 1_000)
-    #expect(day3.contributions == 1_500)
+    #expect(!series.totalSeries.isEmpty)
+    #expect(series.totalSeries.allSatisfy { $0.invested == 0 })
+    #expect(
+      !PositionsChartBaselineResolver.showsBaseline(
+        points: series.totalSeries, mode: .aggregate))
   }
 
-  @Test("external transfer out steps contributions down")
-  func contributionsTransferOutStep() async throws {
-    let txns = try [
-      openingBalance(in: aud, qty: 2_000, daysAfterEpoch: 0),
-      buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
-      transferOut(qty: 800, daysAfterEpoch: 3),
-    ]
+  /// A fiat-paired buy establishes remaining amount invested at its cost basis
+  /// and carries it forward on subsequent (no-event) days.
+  @Test("fiat-paired buy: invested equals cost basis, carried forward")
+  func fiatPairedBuyInvestedEqualsCostBasis() async throws {
+    let txns = try [buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1)]
     let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
     let builder = PositionsHistoryBuilder(conversionService: service)
-    let day3Date = try date(daysAfterEpoch: 3)
     let series = await builder.build(
       transactions: txns, accountId: accountId,
       hostCurrency: aud, range: .threeMonths,
+      ledger: try await ledger(for: txns, service: service),
       now: try date(daysAfterEpoch: 5)
     )
-    let day3 = try #require(
-      series.totalSeries.first { Calendar.utc.startOfDay(for: $0.date) == day3Date })
-    #expect(day3.contributions == 1_200)
+    #expect(series.totalSeries.last?.invested == 500)
+    #expect(
+      PositionsChartBaselineResolver.showsBaseline(
+        points: series.totalSeries, mode: .aggregate))
   }
 
-  @Test("intra-account trade leaves contributions unchanged")
-  func contributionsIntraAccountTrade() async throws {
+  /// A second buy steps remaining amount invested up on its event day.
+  @Test("second buy: invested steps up on the acquisition day")
+  func secondBuyStepsInvestedUp() async throws {
     let txns = try [
-      openingBalance(in: aud, qty: 1_000, daysAfterEpoch: 0),
       buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
       buy(instrument: bhp, qty: 5, fiat: 250, daysAfterEpoch: 3),
     ]
     let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
     let builder = PositionsHistoryBuilder(conversionService: service)
-    let series = await builder.build(
-      transactions: txns, accountId: accountId,
-      hostCurrency: aud, range: .threeMonths,
-      now: try date(daysAfterEpoch: 5)
-    )
-    for point in series.totalSeries {
-      #expect(point.contributions == 1_000)
-    }
-  }
-
-  @Test("cross-currency contribution converts on transaction.date")
-  func contributionsCrossCurrencyOnTxnDate() async throws {
-    let usd = Instrument.USD
-    let day0 = try date(daysAfterEpoch: 0)
-    let day10 = try date(daysAfterEpoch: 10)
-    // Two distinct rates: passing the wrong date would yield 1_400.
-    let day0Rate = try #require(Decimal(string: "1.50"))
-    let day10Rate = try #require(Decimal(string: "1.40"))
-    let service = FakeConversionService.dateRates([
-      day0: [usd.id: day0Rate, bhp.id: Decimal(50)],
-      day10: [usd.id: day10Rate, bhp.id: Decimal(50)],
-    ])
     let day1Date = try date(daysAfterEpoch: 1)
-    let txns = try [
-      openingBalance(in: usd, qty: 1_000, daysAfterEpoch: 0, hour: 14),
-      buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
-    ]
-    let builder = PositionsHistoryBuilder(conversionService: service)
+    let day3Date = try date(daysAfterEpoch: 3)
     let series = await builder.build(
       transactions: txns, accountId: accountId,
       hostCurrency: aud, range: .threeMonths,
-      now: try date(daysAfterEpoch: 12)
+      ledger: try await ledger(for: txns, service: service),
+      now: try date(daysAfterEpoch: 5)
     )
     let day1 = try #require(
       series.totalSeries.first { Calendar.utc.startOfDay(for: $0.date) == day1Date })
-    #expect(day1.contributions == Decimal(1_500))
+    let day3 = try #require(
+      series.totalSeries.first { Calendar.utc.startOfDay(for: $0.date) == day3Date })
+    #expect(day1.invested == 500)
+    #expect(day3.invested == 750)
   }
 
-  @Test("pre-fold contributes prior-window flows to day-1 of visible window")
-  func contributionsPreFold() async throws {
+  /// A partial sell reduces remaining amount invested FIFO (5 of 10 shares
+  /// @ 50 cost → invested drops from 500 to 250).
+  @Test("partial sell: invested drops FIFO by the consumed lots' cost")
+  func partialSellReducesInvestedFIFO() async throws {
     let txns = try [
-      openingBalance(in: aud, qty: 5_000, daysAfterEpoch: 0),
       buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
-      transferIn(qty: 1_000, daysAfterEpoch: 5),
+      sell(instrument: bhp, qty: 5, proceeds: 300, daysAfterEpoch: 3),
     ]
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(60)])
+    let builder = PositionsHistoryBuilder(conversionService: service)
+    let day1Date = try date(daysAfterEpoch: 1)
+    let day4Date = try date(daysAfterEpoch: 4)
+    let series = await builder.build(
+      transactions: txns, accountId: accountId,
+      hostCurrency: aud, range: .threeMonths,
+      ledger: try await ledger(for: txns, service: service),
+      now: try date(daysAfterEpoch: 5)
+    )
+    let day1 = try #require(
+      series.totalSeries.first { Calendar.utc.startOfDay(for: $0.date) == day1Date })
+    let day4 = try #require(
+      series.totalSeries.first { Calendar.utc.startOfDay(for: $0.date) == day4Date })
+    #expect(day1.invested == 500)
+    #expect(day4.invested == 250)
+  }
+
+  /// A non-fiat opening balance is an acquisition at market value, so
+  /// remaining amount invested reflects that market value.
+  @Test("non-fiat opening balance: invested at market value")
+  func nonFiatOpeningBalanceInvestedAtMarketValue() async throws {
+    let txns = try [openingBalance(in: bhp, qty: 10, daysAfterEpoch: 0)]
     let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
     let builder = PositionsHistoryBuilder(conversionService: service)
-    // now=day 50 with .oneMonth pushes the window cutoff to ~day 20,
-    // so days 0/1/5 are all pre-window and the pre-fold path drives
-    // the cumulative contributions seed for the first visible point.
     let series = await builder.build(
       transactions: txns, accountId: accountId,
-      hostCurrency: aud, range: .oneMonth,
-      now: try date(daysAfterEpoch: 50)
+      hostCurrency: aud, range: .threeMonths,
+      ledger: try await ledger(for: txns, service: service),
+      now: try date(daysAfterEpoch: 5)
     )
-    let firstVisible = try #require(series.totalSeries.first)
-    #expect(firstVisible.contributions == 6_000)
+    // 10 shares × 50 market = 500 invested.
+    #expect(series.totalSeries.last?.invested == 500)
   }
 
-  @Test("conversion failure makes contributions sticky-nil for all subsequent emitted points")
-  func contributionsStickyLatchOnFailure() async throws {
-    let usd = Instrument.USD
-    // failingInstruments throws .instrumentUnavailable for any conversion
-    // involving an id in `failingInstrumentIds`; same-instrument
-    // conversions short-circuit (Rule 8 fast path) and never throw.
-    // BHP rate is configured so the per-day BHP value-conversion
-    // path succeeds.
-    //
-    // Important: a USD income leg adds USD to `state.quantities`,
-    // which means the per-day value-conversion path will also try
-    // (and fail) to convert that USD position from day 3 onwards —
-    // so the aggregate point is suppressed entirely. The
-    // assertion is therefore: every emitted aggregate point on or
-    // after the failure date carries `contributions == nil`,
-    // regardless of how many actually emit.
-    let service = FakeConversionService.failingInstruments(
-      [usd.id],
-      rates: [bhp.id: Decimal(50)]
-    )
-    let day3 = try date(daysAfterEpoch: 3)
-    let txns = try [
-      openingBalance(in: aud, qty: 1_000, daysAfterEpoch: 0),
-      buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
-      Transaction(
-        date: day3,
-        legs: [
-          TransactionLeg(accountId: accountId, instrument: usd, quantity: 100, type: .income),
-          TransactionLeg(accountId: UUID(), instrument: usd, quantity: -100, type: .expense),
-        ]
-      ),
-    ]
+  /// Rule 11 / genuine provider failure: a `nil` ledger (the shared provider's
+  /// build failed) suppresses the baseline — every `Point.invested` is `nil` —
+  /// while the value line still renders. A failure must never surface as a
+  /// computed-looking `0` invested.
+  @Test("nil ledger (provider failure): baseline suppressed, value line renders")
+  func nilLedgerSuppressesBaselineButValueRenders() async throws {
+    let txns = try [buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1)]
+    let service = FakeConversionService.fixedRates([bhp.id: Decimal(50)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let series = await builder.build(
       transactions: txns, accountId: accountId,
       hostCurrency: aud, range: .threeMonths,
+      ledger: nil,
       now: try date(daysAfterEpoch: 5)
     )
-    let day1Date = try date(daysAfterEpoch: 1)
-    let day1 = try #require(
-      series.totalSeries.first { Calendar.utc.startOfDay(for: $0.date) == day1Date })
-    #expect(day1.contributions == 1_000)
-    // Sticky-latch invariant: no aggregate point on or after day 3
-    // carries a populated `contributions`, regardless of whether the
-    // point actually emits (USD position blocks emission via the
-    // value-conversion path).
-    for point in series.totalSeries where Calendar.utc.startOfDay(for: point.date) >= day3 {
-      #expect(point.contributions == nil)
-    }
-  }
-
-  @Test("cancellation produces no aggregate point with stale contributions")
-  func contributionsCancellation() async throws {
-    // Service throws CancellationError on every call. The contribution
-    // fold catches it, latches state.contributions = nil, and rethrows;
-    // the build's per-day loop converts the throw into a partial-series
-    // return. The primary assertions are:
-    //   1. The function returns at all (no deadlock — the test would
-    //      hang otherwise).
-    //   2. No emitted aggregate point carries a populated `contributions`
-    //      value. `allSatisfy` on an empty collection returns `true` —
-    //      that is the correct outcome here, because cancellation
-    //      mid-pre-fold legitimately produces zero emitted points and
-    //      the latch invariant is then trivially satisfied.
-    let service = FakeConversionService.perCall { _ in .failure(CancellationError()) }
-    let txns = try [
-      openingBalance(in: Instrument.USD, qty: 1_000, daysAfterEpoch: 0),
-      buy(instrument: bhp, qty: 10, fiat: 500, daysAfterEpoch: 1),
-    ]
-    let builder = PositionsHistoryBuilder(conversionService: service)
-    let series = await builder.build(
-      transactions: txns, accountId: accountId,
-      hostCurrency: aud, range: .threeMonths,
-      now: try date(daysAfterEpoch: 5)
-    )
-    #expect(series.totalSeries.allSatisfy { $0.contributions == nil })
+    // Value line still renders (quantities fold is independent of the ledger).
+    #expect(!series.totalSeries.isEmpty)
+    #expect(series.totalSeries.last?.value == 10 * Decimal(50) - 500)
+    // Baseline unavailable → every invested is nil (never a coalesced 0).
+    #expect(series.totalSeries.allSatisfy { $0.invested == nil })
+    #expect(
+      !PositionsChartBaselineResolver.showsBaseline(
+        points: series.totalSeries, mode: .aggregate))
   }
 }

@@ -57,16 +57,26 @@ struct PositionsHistoryBuilderCashTests {
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 5)
 
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: [deposit1, deposit2], referenceCurrency: aud, conversionService: service)
     let series = await builder.build(
       transactions: [deposit1, deposit2],
       accountId: accountId,
       hostCurrency: aud,
       range: .oneMonth,
+      ledger: ledger,
       now: now)
 
     // Six points span days 0..5: start = firstTxnDate = day 0, endDay = day 5.
     // Before the fix, all AUD legs were excluded → totalSeries was empty.
     #expect(series.totalSeries.count == 6)
+
+    // A fiat-only account holds no lots → remaining amount invested is 0 on
+    // every point → the aggregate baseline is suppressed (Symptom 1 fixed:
+    // fiat no longer shows a computed baseline).
+    #expect(series.totalSeries.allSatisfy { $0.invested == 0 })
+    #expect(
+      !PositionsChartBaselineResolver.showsBaseline(points: series.totalSeries, mode: .aggregate))
 
     // Day 0: balance = 1_000 (first deposit only).
     let day0 = try #require(
@@ -116,11 +126,14 @@ struct PositionsHistoryBuilderCashTests {
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 3)
 
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: [receiveEth, depositAud], referenceCurrency: aud, conversionService: service)
     let series = await builder.build(
       transactions: [receiveEth, depositAud],
       accountId: accountId,
       hostCurrency: aud,
       range: .oneMonth,
+      ledger: ledger,
       now: now)
 
     // Total = 8 × 3_000 (ETH) + 2_000 (AUD cash) = 26_000.

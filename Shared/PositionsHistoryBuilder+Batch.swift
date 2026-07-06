@@ -9,8 +9,9 @@ import Foundation
 /// `convertResultBatch` call and folds the outcomes back into
 /// `BuildState.perInstrument` / `.total`.
 extension PositionsHistoryBuilder {
-  /// One held instrument on one day: the quantity to value and the
-  /// cost-basis snapshot for that instrument on that day.
+  /// One held instrument on one day: the quantity to value and its remaining
+  /// amount invested (per-instrument, from the profile-wide ledger) on that
+  /// day.
   struct PendingEntry {
     let instrument: Instrument
     let quantity: Decimal
@@ -18,31 +19,48 @@ extension PositionsHistoryBuilder {
   }
 
   /// One day's recorded points, captured during the fold pass before any
-  /// conversion runs. `contributions` is the running cumulative
-  /// contributions snapshot at that day (Rule 11 sticky latch).
+  /// conversion runs. `invested` is the aggregate remaining amount invested
+  /// at that day from the profile-wide ledger — `nil` when unavailable
+  /// (Rule 11: an in-scope key failed conversion, or the ledger itself was
+  /// unavailable). `nil` suppresses the aggregate baseline.
   struct PendingDay {
     let day: Date
     let pointDate: Date
-    let contributions: Decimal?
+    let invested: Decimal?
     var entries: [PendingEntry]
   }
 
   /// Record — without converting — one `PendingEntry` per held instrument
-  /// on `day`, plus the day's contributions snapshot. Conversion happens
-  /// later in one batch. `day` is UTC midnight (conversion key); `pointDate`
-  /// is noon UTC (zone-invariant chart positioning token).
+  /// on `day`, plus the day's aggregate remaining-invested snapshot, both
+  /// read from the profile-wide `HoldingsCostLedger` (carrying forward the
+  /// latest change-point at-or-before `day`). Conversion of the value line
+  /// happens later in one batch. `day` is UTC midnight (conversion + ledger
+  /// query key); `pointDate` is noon UTC (zone-invariant chart positioning
+  /// token).
+  ///
+  /// A `nil` ledger (a genuine build failure at the call site) yields `nil`
+  /// aggregate `invested` (baseline suppressed) and `0` per-instrument cost
+  /// (that baseline suppressed too) — never a computed-looking figure from a
+  /// failure. `Point.cost` is non-optional, so a per-instrument key that is
+  /// unavailable in an otherwise-good ledger also coalesces to `0`
+  /// (suppressed for that instrument); the aggregate `invested` faithfully
+  /// preserves the ledger's `nil`.
   func recordDailyPoints(
-    for day: Date, state: BuildState
+    for day: Date, state: BuildState, accountIds: Set<UUID>, ledger: HoldingsCostLedger?
   ) -> PendingDay {
     let pointDate = Calendar.utc.date(byAdding: .hour, value: 12, to: day) ?? day
     var entries: [PendingEntry] = []
     for (instrument, qty) in state.quantities where qty != 0 {
-      let cost = state.engine.allOpenLots(for: instrument)
-        .reduce(Decimal(0)) { $0 + $1.remainingCost }
+      let cost =
+        ledger.flatMap {
+          $0.remainingInvested(accountIds: accountIds, instrument: instrument, onOrBefore: day)
+        } ?? 0
       entries.append(PendingEntry(instrument: instrument, quantity: qty, cost: cost))
     }
-    return PendingDay(
-      day: day, pointDate: pointDate, contributions: state.contributions, entries: entries)
+    let invested = ledger.flatMap {
+      $0.remainingInvested(accountIds: accountIds, onOrBefore: day)
+    }
+    return PendingDay(day: day, pointDate: pointDate, invested: invested, entries: entries)
   }
 
   /// Flatten every recorded `(instrument, day)` pair across `pending` into
@@ -95,7 +113,7 @@ extension PositionsHistoryBuilder {
               date: pendingDay.pointDate,
               value: amount.quantity,
               cost: entry.cost,
-              contributions: nil))
+              invested: nil))
           aggValue += amount.quantity
           aggCost += entry.cost
         case .knownZero:
@@ -104,7 +122,7 @@ extension PositionsHistoryBuilder {
               date: pendingDay.pointDate,
               value: 0,
               cost: entry.cost,
-              contributions: nil))
+              invested: nil))
           aggCost += entry.cost
         case .failure:
           aggOK = false
@@ -116,7 +134,7 @@ extension PositionsHistoryBuilder {
             date: pendingDay.pointDate,
             value: aggValue,
             cost: aggCost,
-            contributions: pendingDay.contributions))
+            invested: pendingDay.invested))
       }
     }
   }

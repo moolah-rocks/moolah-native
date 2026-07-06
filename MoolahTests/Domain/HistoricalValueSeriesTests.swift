@@ -18,12 +18,12 @@ struct HistoricalValueSeriesTests {
     let series = HistoricalValueSeries(
       hostCurrency: aud,
       total: [
-        HistoricalValueSeries.Point(date: date(1), value: 100, cost: 80, contributions: nil),
-        HistoricalValueSeries.Point(date: date(2), value: 110, cost: 80, contributions: nil),
+        HistoricalValueSeries.Point(date: date(1), value: 100, cost: 80, invested: nil),
+        HistoricalValueSeries.Point(date: date(2), value: 110, cost: 80, invested: nil),
       ],
       perInstrument: [
         bhp.id: [
-          HistoricalValueSeries.Point(date: date(1), value: 60, cost: 50, contributions: nil)
+          HistoricalValueSeries.Point(date: date(1), value: 60, cost: 50, invested: nil)
         ]
       ]
     )
@@ -52,7 +52,7 @@ struct HistoricalValueSeriesTests {
       total: [],
       perInstrument: [
         bhp.id: [
-          HistoricalValueSeries.Point(date: date(1), value: 60, cost: 50, contributions: nil)
+          HistoricalValueSeries.Point(date: date(1), value: 60, cost: 50, invested: nil)
         ]
       ]
     )
@@ -60,17 +60,17 @@ struct HistoricalValueSeriesTests {
     #expect(series.series(forInstrumentIds: [bhp.id]).count == 1)
   }
 
-  @Test("Point.contributions round-trips and participates in Hashable")
+  @Test("Point.invested round-trips and participates in Hashable")
   func pointContributionsRoundTrip() {
     let day = date(1)
     let populated = HistoricalValueSeries.Point(
-      date: day, value: 100, cost: 80, contributions: 50
+      date: day, value: 100, cost: 80, invested: 50
     )
     let unavailable = HistoricalValueSeries.Point(
-      date: day, value: 100, cost: 80, contributions: nil
+      date: day, value: 100, cost: 80, invested: nil
     )
-    #expect(populated.contributions == 50)
-    #expect(unavailable.contributions == nil)
+    #expect(populated.invested == 50)
+    #expect(unavailable.invested == nil)
     #expect(populated != unavailable)
     #expect(Set([populated, unavailable]).count == 2)
   }

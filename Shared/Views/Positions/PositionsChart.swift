@@ -310,7 +310,7 @@ extension PositionsChart: AXChartDescriptorRepresentable {
     guard showBaseline else { return [] }
     return points.compactMap { point in
       let baseline: Decimal? =
-        selection == nil ? point.contributions : point.cost
+        selection == nil ? point.invested : point.cost
       guard let baseline else { return nil }
       return (
         point.date.formatted(.dateTime.month(.abbreviated).day().year()),
@@ -345,7 +345,7 @@ private func previewChartInput(days: Int, base: Decimal, step: Decimal, cost: De
       date: date,
       value: base + Decimal(offset) * step,
       cost: cost,
-      contributions: nil)
+      invested: nil)
   }
   let series = HistoricalValueSeries(
     hostCurrency: aud,

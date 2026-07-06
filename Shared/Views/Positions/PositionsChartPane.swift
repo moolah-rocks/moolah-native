@@ -57,7 +57,7 @@ struct PositionsChartPane: View {
         .date(byAdding: .day, value: -29 + offset, to: Date()) ?? Date(),
       value: 9_800 + Decimal(offset) * 15,
       cost: 9_500,
-      contributions: nil)
+      invested: nil)
   }
   let positions: [ValuedPosition] = [
     ValuedPosition(

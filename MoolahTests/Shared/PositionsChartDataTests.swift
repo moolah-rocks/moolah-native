@@ -8,7 +8,7 @@ struct PositionsChartDataTests {
   let aud = Instrument.AUD
 
   private func point(
-    day: Int, value: Decimal, cost: Decimal, contributions: Decimal?
+    day: Int, value: Decimal, cost: Decimal, invested: Decimal?
   ) throws -> HistoricalValueSeries.Point {
     let calendar = Calendar(identifier: .gregorian)
     var epoch = DateComponents()
@@ -18,15 +18,15 @@ struct PositionsChartDataTests {
     let base = try #require(calendar.date(from: epoch))
     let date = try #require(calendar.date(byAdding: .day, value: day, to: base))
     return HistoricalValueSeries.Point(
-      date: date, value: value, cost: cost, contributions: contributions
+      date: date, value: value, cost: cost, invested: invested
     )
   }
 
-  @Test("aggregate mode picks point.contributions as baseline")
+  @Test("aggregate mode picks point.invested as baseline")
   func aggregateBaselineIsContributions() throws {
     let points = try [
-      point(day: 0, value: 1_100, cost: 800, contributions: 1_000),
-      point(day: 1, value: 1_150, cost: 800, contributions: 1_000),
+      point(day: 0, value: 1_100, cost: 800, invested: 1_000),
+      point(day: 1, value: 1_150, cost: 800, invested: 1_000),
     ]
     let resolved = PositionsChartBaselineResolver.resolve(
       points: points, mode: .aggregate, showBaseline: true
@@ -40,8 +40,8 @@ struct PositionsChartDataTests {
   @Test("per-instrument mode picks point.cost as baseline")
   func perInstrumentBaselineIsCost() throws {
     let points = try [
-      point(day: 0, value: 850, cost: 800, contributions: nil),
-      point(day: 1, value: 900, cost: 800, contributions: nil),
+      point(day: 0, value: 850, cost: 800, invested: nil),
+      point(day: 1, value: 900, cost: 800, invested: nil),
     ]
     let resolved = PositionsChartBaselineResolver.resolve(
       points: points, mode: .perInstrument, showBaseline: true
@@ -52,7 +52,7 @@ struct PositionsChartDataTests {
 
   @Test("loss segments are emitted when value < baseline")
   func lossSegments() throws {
-    let points = try [point(day: 0, value: 950, cost: 1_000, contributions: nil)]
+    let points = try [point(day: 0, value: 950, cost: 1_000, invested: nil)]
     let resolved = PositionsChartBaselineResolver.resolve(
       points: points, mode: .perInstrument, showBaseline: true
     )
@@ -63,8 +63,8 @@ struct PositionsChartDataTests {
   @Test("nil baseline produces a no-area entry; value-line still renderable")
   func nilBaselineSuppressesArea() throws {
     let points = try [
-      point(day: 0, value: 1_100, cost: 800, contributions: 1_000),
-      point(day: 1, value: 1_150, cost: 800, contributions: nil),
+      point(day: 0, value: 1_100, cost: 800, invested: 1_000),
+      point(day: 1, value: 1_150, cost: 800, invested: nil),
     ]
     let resolved = PositionsChartBaselineResolver.resolve(
       points: points, mode: .aggregate, showBaseline: true
@@ -78,8 +78,8 @@ struct PositionsChartDataTests {
   @Test("most-recent point with nil baseline triggers legend-unavailable signal")
   func legendUnavailableWhenLatestNil() throws {
     let points = try [
-      point(day: 0, value: 1_100, cost: 800, contributions: 1_000),
-      point(day: 1, value: 1_150, cost: 800, contributions: nil),
+      point(day: 0, value: 1_100, cost: 800, invested: 1_000),
+      point(day: 1, value: 1_150, cost: 800, invested: nil),
     ]
     let resolved = PositionsChartBaselineResolver.resolve(
       points: points, mode: .aggregate, showBaseline: true
@@ -90,8 +90,8 @@ struct PositionsChartDataTests {
   @Test("showBaseline:false suppresses baseline for all rows regardless of mode")
   func showBaselineFalseSuppressesAllBaselines() throws {
     let points = try [
-      point(day: 0, value: 1_100, cost: 800, contributions: 1_000),
-      point(day: 1, value: 1_200, cost: 850, contributions: 1_050),
+      point(day: 0, value: 1_100, cost: 800, invested: 1_000),
+      point(day: 1, value: 1_200, cost: 850, invested: 1_050),
     ]
     // Both aggregate and perInstrument modes should yield nil baseline when showBaseline is false.
     for mode in [PositionsChartMode.aggregate, PositionsChartMode.perInstrument] {
@@ -110,8 +110,8 @@ struct PositionsChartDataTests {
   @Test("showBaseline:false renders value line even when cost data is present")
   func showBaselineFalsePreservesValueLine() throws {
     let points = try [
-      point(day: 0, value: 500, cost: 400, contributions: 450),
-      point(day: 1, value: 600, cost: 400, contributions: 450),
+      point(day: 0, value: 500, cost: 400, invested: 450),
+      point(day: 1, value: 600, cost: 400, invested: 450),
     ]
     let resolved = PositionsChartBaselineResolver.resolve(
       points: points, mode: .aggregate, showBaseline: false
@@ -122,35 +122,35 @@ struct PositionsChartDataTests {
 
   // MARK: - showsBaseline(points:mode:)
 
-  @Test("showsBaseline aggregate: true when contributions has a non-zero value")
+  @Test("showsBaseline aggregate: true when invested has a non-zero value")
   func showsBaselineAggregateTrueWhenContributionsNonZero() throws {
     let points = try [
-      point(day: 0, value: 1_100, cost: 800, contributions: nil),
-      point(day: 1, value: 1_200, cost: 900, contributions: 1_000),
+      point(day: 0, value: 1_100, cost: 800, invested: nil),
+      point(day: 1, value: 1_200, cost: 900, invested: 1_000),
     ]
     #expect(
       PositionsChartBaselineResolver.showsBaseline(points: points, mode: .aggregate),
-      "aggregate mode returns true when at least one point has non-zero contributions"
+      "aggregate mode returns true when at least one point has non-zero invested"
     )
   }
 
-  @Test("showsBaseline aggregate: false when all contributions are nil or zero")
+  @Test("showsBaseline aggregate: false when all invested are nil or zero")
   func showsBaselineAggregateFalseWhenContributionsAllNilOrZero() throws {
     let points = try [
-      point(day: 0, value: 500, cost: 0, contributions: nil),
-      point(day: 1, value: 600, cost: 0, contributions: 0),
+      point(day: 0, value: 500, cost: 0, invested: nil),
+      point(day: 1, value: 600, cost: 0, invested: 0),
     ]
     #expect(
       !PositionsChartBaselineResolver.showsBaseline(points: points, mode: .aggregate),
-      "aggregate mode returns false when all contributions are nil or zero"
+      "aggregate mode returns false when all invested are nil or zero"
     )
   }
 
   @Test("showsBaseline perInstrument: true when cost has a non-zero value")
   func showsBaselinePerInstrumentTrueWhenCostNonZero() throws {
     let points = try [
-      point(day: 0, value: 850, cost: 800, contributions: nil),
-      point(day: 1, value: 900, cost: 800, contributions: nil),
+      point(day: 0, value: 850, cost: 800, invested: nil),
+      point(day: 1, value: 900, cost: 800, invested: nil),
     ]
     #expect(
       PositionsChartBaselineResolver.showsBaseline(points: points, mode: .perInstrument),
@@ -161,8 +161,8 @@ struct PositionsChartDataTests {
   @Test("showsBaseline perInstrument: false when all cost values are zero")
   func showsBaselinePerInstrumentFalseWhenCostAllZero() throws {
     let points = try [
-      point(day: 0, value: 500, cost: 0, contributions: nil),
-      point(day: 1, value: 600, cost: 0, contributions: nil),
+      point(day: 0, value: 500, cost: 0, invested: nil),
+      point(day: 1, value: 600, cost: 0, invested: nil),
     ]
     #expect(
       !PositionsChartBaselineResolver.showsBaseline(points: points, mode: .perInstrument),

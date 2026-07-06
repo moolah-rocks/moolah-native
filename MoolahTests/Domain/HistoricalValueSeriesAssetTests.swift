@@ -69,6 +69,6 @@ extension HistoricalValueSeriesAssetTests {
   private func point(_ offset: Int, _ value: Decimal, _ cost: Decimal)
     -> HistoricalValueSeries.Point
   {
-    .init(date: day(offset), value: value, cost: cost, contributions: nil)
+    .init(date: day(offset), value: value, cost: cost, invested: nil)
   }
 }

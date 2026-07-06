@@ -76,7 +76,8 @@ struct MultiInstrumentPositionsAssemblerTests {
       context: context,
       valuedRows: valuedRows,
       transactions: txns,
-      range: .all
+      range: .all,
+      ledger: .empty
     )
 
     #expect(input.historicalValue != nil)
@@ -162,7 +163,8 @@ struct MultiInstrumentPositionsAssemblerTests {
       context: context,
       valuedRows: [valuedRow],
       transactions: txns,
-      range: .all
+      range: .all,
+      ledger: .empty
     )
 
     let row = try #require(input.positions.first, "assembler must produce at least one row")

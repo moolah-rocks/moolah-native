@@ -41,9 +41,12 @@ struct PositionsHistoryBuilderBatchTests {
     ]
     let service = FakeConversionService.fixedRates([bhp.id: Decimal(50), cba.id: Decimal(110)])
     let builder = PositionsHistoryBuilder(conversionService: service)
+    // `.empty` ledger: this test asserts only the builder's own value-batch
+    // shape (baseline is not exercised), so it must not build a ledger on
+    // `service` — that would add the ledger's warm batch to `recordedBatches`.
     _ = await builder.build(
       transactions: txns, accountId: accountId, hostCurrency: aud,
-      range: .oneMonth, now: date(daysAfterEpoch: 5))
+      range: .oneMonth, ledger: .empty, now: date(daysAfterEpoch: 5))
     // Exactly one flat batch, not N serial convertResult hops.
     // Requests: BHP days 1..5 (5) + CBA days 2..5 (4) + AUD days 1..5 (5, identity) = 14.
     #expect(service.recordedBatches.count == 1)
@@ -62,7 +65,7 @@ struct PositionsHistoryBuilderBatchTests {
     let builder = PositionsHistoryBuilder(conversionService: service)
     let series = await builder.build(
       transactions: txns, accountId: accountId, hostCurrency: aud,
-      range: .threeMonths, now: date(daysAfterEpoch: 5))
+      range: .threeMonths, ledger: .empty, now: date(daysAfterEpoch: 5))
     // Aggregate kept on every day (unlike a .failure which would drop days ≥ 2):
     // days 1..5 all have a total point.
     #expect(series.totalSeries.count == 5)

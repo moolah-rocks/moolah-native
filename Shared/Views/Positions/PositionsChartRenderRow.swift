@@ -13,9 +13,10 @@ struct PositionsChartRenderRow: Sendable, Hashable {
   let value: Decimal
   /// `nil` when the per-mode baseline is unavailable for this point
   /// (per-instrument: cost — but cost is non-optional, so this only
-  /// happens in aggregate mode where contributions can be `nil`
-  /// after a Rule 11 latch). When `nil`, the chart emits the value
-  /// line only — no area, no baseline line for this row.
+  /// happens in aggregate mode where `invested` can be `nil` when the
+  /// ledger marks an in-scope key unavailable, Rule 11). When `nil`,
+  /// the chart emits the value line only — no area, no baseline line
+  /// for this row.
   let baseline: Decimal?
   /// `max(value - baseline, 0)` when baseline is non-nil, else 0.
   let gainSegment: Decimal

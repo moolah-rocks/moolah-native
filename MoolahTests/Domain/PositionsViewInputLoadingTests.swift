@@ -38,7 +38,7 @@ struct PositionsViewInputLoadingTests {
   @Test("once the series arrives the chart shows and the placeholder does not")
   func placeholderClearsWhenLoaded() {
     let point = HistoricalValueSeries.Point(
-      date: Date(), value: 5_000, cost: 4_000, contributions: nil)
+      date: Date(), value: 5_000, cost: 4_000, invested: nil)
     let input = PositionsViewInput(
       title: "x", hostCurrency: aud, positions: oneRow,
       historicalValue: HistoricalValueSeries(

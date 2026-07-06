@@ -66,11 +66,14 @@ struct PositionsHistoryBuilderZoneTests {
 
     let service = FakeConversionService.fixedRates([btc.id: Decimal(50_000)])
     let builder = PositionsHistoryBuilder(conversionService: service)
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: [txn], referenceCurrency: aud, conversionService: service)
     let series = await builder.build(
       transactions: [txn],
       accountId: accountId,
       hostCurrency: aud,
       range: .all,
+      ledger: ledger,
       now: now
     )
 

@@ -1,13 +1,17 @@
 import Foundation
-import OSLog
 
 /// Builds the `(value, cost)` time series the chart in `PositionsChartPane` plots.
 ///
-/// **Cost basis line is exact.** Cost only changes on transaction events, so
-/// we walk transactions chronologically through `CostBasisEngine` once and
-/// emit the resulting `(quantity, remainingCost)` snapshot for *every* day
-/// in the visible range. Days between events carry forward the prior
-/// snapshot — no interpolation, no approximation.
+/// **Amount-invested / cost line is exact.** Remaining amount invested only
+/// changes on cost-basis events, so we read each day's remaining invested
+/// (aggregate) and per-instrument remaining cost from the profile-wide
+/// `HoldingsCostLedger` change-points — carrying forward the latest
+/// change-point at-or-before the day. No interpolation, no approximation.
+/// The quantity fold (driving the value line) still runs over the **viewed**
+/// account's transactions; the `ledger` is **profile-wide** (so a
+/// tracked→tracked transfer's source lots are visible), queried per viewed
+/// account. A `nil` ledger (a genuine build failure at the call site)
+/// suppresses every baseline — the value line still renders (Rule 11).
 ///
 /// **Value line is queried daily.** For each day `d` in
 /// `[startOfRange ... today]` and each instrument with a non-zero holding
@@ -30,8 +34,6 @@ import OSLog
 /// day to bail out quickly on dismissal.
 struct PositionsHistoryBuilder: Sendable {
   let conversionService: any InstrumentConversionService
-  private let logger = Logger(
-    subsystem: "com.moolah.app", category: "PositionsHistoryBuilder")
 
   @concurrent
   func build(
@@ -39,6 +41,7 @@ struct PositionsHistoryBuilder: Sendable {
     accountIds: Set<UUID>,
     hostCurrency: Instrument,
     range: PositionsTimeRange,
+    ledger: HoldingsCostLedger?,
     now: Date = Date()
   ) async -> HistoricalValueSeries {
     let sortedTxns =
@@ -62,20 +65,14 @@ struct PositionsHistoryBuilder: Sendable {
     let context = BuildContext(
       sortedTxns: sortedTxns,
       accountIds: accountIds,
-      hostCurrency: hostCurrency)
+      hostCurrency: hostCurrency,
+      ledger: ledger)
     var state = BuildState()
-    do {
-      try await preFoldHistory(before: start, context: context, state: &state)
-    } catch is CancellationError {
-      return state.series(hostCurrency: hostCurrency)
-    } catch {
-      // apply() only re-throws CancellationError; any other error is
-      // already swallowed and latched.
-    }
+    preFoldHistory(before: start, context: context, state: &state)
 
     let pending: [PendingDay]
     do {
-      pending = try await foldPendingDays(
+      pending = try foldPendingDays(
         start: start, endDay: endDay, context: context, state: &state)
     } catch {
       // Cancellation during the fold: view is being torn down; return what we have.
@@ -104,19 +101,15 @@ struct PositionsHistoryBuilder: Sendable {
   /// bail without batching.
   private func foldPendingDays(
     start: Date, endDay: Date, context: BuildContext, state: inout BuildState
-  ) async throws -> [PendingDay] {
+  ) throws -> [PendingDay] {
     var pending: [PendingDay] = []
     var day = start
     while day <= endDay {
       if Task.isCancelled { throw CancellationError() }
-      do {
-        try await applyTransactions(on: day, context: context, state: &state)
-      } catch is CancellationError {
-        throw CancellationError()
-      } catch {
-        // see preFoldHistory comment
-      }
-      pending.append(recordDailyPoints(for: day, state: state))
+      applyTransactions(on: day, context: context, state: &state)
+      pending.append(
+        recordDailyPoints(
+          for: day, state: state, accountIds: context.accountIds, ledger: context.ledger))
       guard let next = Calendar.utc.date(byAdding: .day, value: 1, to: day) else { break }
       day = next
     }
@@ -129,6 +122,7 @@ struct PositionsHistoryBuilder: Sendable {
     accountId: UUID,
     hostCurrency: Instrument,
     range: PositionsTimeRange,
+    ledger: HoldingsCostLedger?,
     now: Date = Date()
   ) async -> HistoricalValueSeries {
     await build(
@@ -136,25 +130,24 @@ struct PositionsHistoryBuilder: Sendable {
       accountIds: [accountId],
       hostCurrency: hostCurrency,
       range: range,
+      ledger: ledger,
       now: now)
   }
 
   /// Pre-fold any transactions strictly before `start` so the snapshot at
-  /// `start` already reflects historical buys.
+  /// `start` already reflects historical holdings quantities.
   private func preFoldHistory(
     before start: Date,
     context: BuildContext,
     state: inout BuildState
-  ) async throws {
+  ) {
     while state.txnIndex < context.sortedTxns.count
       && Calendar.utc.startOfDay(for: context.sortedTxns[state.txnIndex].date) < start
     {
-      try await apply(
+      apply(
         transaction: context.sortedTxns[state.txnIndex],
         accountIds: context.accountIds,
-        hostCurrency: context.hostCurrency,
-        state: &state
-      )
+        state: &state)
       state.txnIndex += 1
     }
   }
@@ -164,16 +157,14 @@ struct PositionsHistoryBuilder: Sendable {
     on day: Date,
     context: BuildContext,
     state: inout BuildState
-  ) async throws {
+  ) {
     while state.txnIndex < context.sortedTxns.count
       && Calendar.utc.startOfDay(for: context.sortedTxns[state.txnIndex].date) == day
     {
-      try await apply(
+      apply(
         transaction: context.sortedTxns[state.txnIndex],
         accountIds: context.accountIds,
-        hostCurrency: context.hostCurrency,
-        state: &state
-      )
+        state: &state)
       state.txnIndex += 1
     }
   }
@@ -183,6 +174,11 @@ struct PositionsHistoryBuilder: Sendable {
     let sortedTxns: [Transaction]
     let accountIds: Set<UUID>
     let hostCurrency: Instrument
+    /// Profile-wide cost ledger driving `invested`/`cost`; `nil` when the
+    /// ledger is unavailable (a genuine build failure at the call site) —
+    /// every baseline is then suppressed (Rule 11), the value line still
+    /// renders.
+    let ledger: HoldingsCostLedger?
   }
 
   /// Mutable running state threaded through `build`'s per-day loop.
@@ -195,17 +191,9 @@ struct PositionsHistoryBuilder: Sendable {
   /// `PositionsHistoryBuilder+Batch.swift`.
   struct BuildState {
     var quantities: [Instrument: Decimal] = [:]
-    var engine = CostBasisEngine()
     var txnIndex = 0
     var perInstrument: [String: [HistoricalValueSeries.Point]] = [:]
     var total: [HistoricalValueSeries.Point] = []
-    /// Running cumulative contributions in `hostCurrency`. `nil`
-    /// once any contribution conversion has thrown — sticky latch
-    /// never reset within a build (Rule 11 cumulative-sum
-    /// semantics). The single-`Decimal?` design (rather than
-    /// `Decimal` + `Bool`) lets the type system enforce the
-    /// invariant "unavailable contributions have no running value".
-    var contributions: Decimal? = 0
 
     func series(hostCurrency: Instrument) -> HistoricalValueSeries {
       HistoricalValueSeries(
@@ -213,126 +201,28 @@ struct PositionsHistoryBuilder: Sendable {
     }
   }
 
-  /// Fold one transaction into the running quantity dict, FIFO engine,
-  /// and contributions accumulator.
+  /// Fold one transaction's held quantities into the running quantity dict.
   ///
   /// Quantities update directly from the account's signed leg quantities
   /// (so an ETH→BTC swap subtracts ETH and adds BTC, and a cash deposit
-  /// increments the host-currency balance). Cost basis updates via the
-  /// shared `TradeEventClassifier`, which handles fiat-paired trades AND
-  /// crypto-to-crypto swaps — for a swap, ETH gets a sell event (proceeds =
-  /// host-currency value of ETH on this date) and BTC gets a buy event (cost
-  /// = host-currency value of BTC on this date).
+  /// increments the host-currency balance). Host-currency (cash) legs are
+  /// included so the value line reflects the true total account balance —
+  /// cash holdings plus non-cash position value.
   ///
-  /// Host-currency (cash) legs are included in `quantities` so the value
-  /// line reflects the true total account balance — cash holdings plus
-  /// non-cash position value. Cost basis is still derived exclusively via
-  /// `TradeEventClassifier` (unchanged).
-  ///
-  /// Contributions are folded via `foldContributions(transaction:accountIds:hostCurrency:state:)`.
-  /// Throws `CancellationError` (and only `CancellationError`); general
-  /// conversion errors set the sticky latch and stay swallowed.
+  /// Cost basis / amount invested are no longer folded here — they are read
+  /// per day from the profile-wide `HoldingsCostLedger` in the batch pass
+  /// (`recordDailyPoints`), so this fold is pure and non-throwing.
   private func apply(
     transaction: Transaction,
     accountIds: Set<UUID>,
-    hostCurrency: Instrument,
     state: inout BuildState
-  ) async throws {
+  ) {
     let accountLegs = transaction.legs.filter {
       $0.accountId.map { accountIds.contains($0) } ?? false
     }
     for leg in accountLegs {
       state.quantities[leg.instrument, default: 0] += leg.quantity
     }
-
-    do {
-      let classification = try await TradeEventClassifier.classify(
-        legs: accountLegs,
-        on: transaction.date,
-        hostCurrency: hostCurrency,
-        conversionService: conversionService
-      )
-      for buy in classification.buys {
-        state.engine.processBuy(
-          instrument: buy.instrument,
-          quantity: buy.quantity,
-          costPerUnit: buy.costPerUnit,
-          date: transaction.date)
-      }
-      for sell in classification.sells {
-        _ = state.engine.processSell(
-          instrument: sell.instrument,
-          quantity: sell.quantity,
-          proceedsPerUnit: sell.proceedsPerUnit,
-          date: transaction.date)
-      }
-    } catch is CancellationError {
-      throw CancellationError()
-    } catch {
-      // A failed conversion when classifying a swap means we cannot derive
-      // a cost basis for this leg. Quantities still update so the value
-      // line is correct; cost basis on the affected instrument simply
-      // stops advancing (the chart will draw a flat dashed line through
-      // the gap, which is the honest representation of "we don't know").
-      logger.warning(
-        "TradeEventClassifier failed for txn \(transaction.id, privacy: .public) on \(transaction.date, privacy: .public): \(error.localizedDescription, privacy: .public)"
-      )
-    }
-
-    try await foldContributions(
-      transaction: transaction,
-      accountIds: accountIds,
-      hostCurrency: hostCurrency,
-      state: &state)
   }
 
-}
-
-// MARK: - Contributions folding
-
-extension PositionsHistoryBuilder {
-  /// Fold cash-flow contributions for one transaction into the running total
-  /// (sticky latch — see `BuildState` docs).
-  ///
-  /// A flow counts for the group only if the transaction touches exactly one
-  /// member of `accountIds` (single member → external counterpart). Touching
-  /// ≥2 members means an internal transfer → excluded. Uses
-  /// `AccountCashFlows.flowAmounts(for:)` — the same boundary-crossing
-  /// predicate `AccountPerformanceCalculator` uses, so the chart and the tile
-  /// cannot disagree on a per-flow basis. Throws `CancellationError` (and
-  /// only `CancellationError`); general conversion errors latch
-  /// `state.contributions` to `nil` and stay swallowed.
-  private func foldContributions(
-    transaction: Transaction,
-    accountIds: Set<UUID>,
-    hostCurrency: Instrument,
-    state: inout BuildState
-  ) async throws {
-    guard let running = state.contributions else { return }
-    let membersTouched = Set(transaction.legs.compactMap(\.accountId)).intersection(accountIds)
-    guard membersTouched.count == 1, let member = membersTouched.first else {
-      return
-    }
-    do {
-      let amounts = try await AccountCashFlows.flowAmounts(
-        for: transaction,
-        accountId: member,
-        hostCurrency: hostCurrency,
-        service: conversionService
-      )
-      if !amounts.isEmpty {
-        state.contributions = running + amounts.reduce(0, +)
-      }
-    } catch is CancellationError {
-      // Rule 11: don't let a stale partial total reach an emitted
-      // point. Latch first, then propagate.
-      state.contributions = nil
-      throw CancellationError()
-    } catch {
-      state.contributions = nil
-      logger.warning(
-        "AccountCashFlows.flowAmounts failed for txn \(transaction.id, privacy: .public) on \(transaction.date, privacy: .public): \(error.localizedDescription, privacy: .public)"
-      )
-    }
-  }
 }

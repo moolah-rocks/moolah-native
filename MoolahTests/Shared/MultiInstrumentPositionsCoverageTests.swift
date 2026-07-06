@@ -33,17 +33,19 @@ struct MultiInstrumentPositionsCoverageTests {
     return result
   }
 
-  // MARK: - (a) Multi-account group contributions
+  // MARK: - (a) Multi-account group remaining amount invested
 
-  // An INTERNAL transfer (touching ≥2 members of accountIds) is EXCLUDED from
-  // group contributions; an EXTERNAL inflow into exactly one member IS counted.
-  // Asserts the aggregate `contributions` at the last emitted point reflects
-  // only the external inflow, not the internal transfer.
-  @Test("internal transfer excluded from contributions; external inflow counted")
-  func groupContributionsExcludesInternalTransfer() async throws {
+  // The aggregate baseline is now remaining amount invested (cost basis of
+  // currently-held lots), NOT cash contributions. A fiat inflow is not an
+  // acquisition (fiat legs are non-events), so it does not raise invested; the
+  // BTC bought establishes the invested; relocating BTC within the group (via
+  // expense/disposal + income/acquisition at the same market rate) preserves
+  // the group-wide total invested.
+  @Test("group remaining invested reflects held BTC cost, not fiat inflow")
+  func groupInvestedReflectsHeldCostNotFiatInflow() async throws {
     let externalSource = UUID()  // outside the group
 
-    // Day 1: Account A buys BTC (external — only accountA touched).
+    // Day 1: Account A buys 2 BTC for 40_000 AUD → invested 40_000.
     let buyTxn = Transaction(
       date: date(daysAfterEpoch: 1),
       legs: [
@@ -51,7 +53,7 @@ struct MultiInstrumentPositionsCoverageTests {
         TransactionLeg(accountId: accountA, instrument: aud, quantity: -40_000, type: .trade),
       ]
     )
-    // Day 2: External AUD inflow to accountA (external counterpart = externalSource).
+    // Day 2: External AUD inflow to accountA (fiat income) — NOT invested.
     let externalInflow = Transaction(
       date: date(daysAfterEpoch: 2),
       legs: [
@@ -60,8 +62,10 @@ struct MultiInstrumentPositionsCoverageTests {
           accountId: externalSource, instrument: aud, quantity: -5_000, type: .expense),
       ]
     )
-    // Day 3: Internal BTC transfer from accountA to accountB (both in group).
-    // Must be excluded from contributions.
+    // Day 3: Relocate 1 BTC from accountA to accountB (both in group). Modelled
+    // as A-disposal + B-acquisition at the same 20_000 market rate, so the
+    // group-wide remaining invested is preserved (A: 1 BTC @ 20_000, B: 1 BTC
+    // @ 20_000).
     let internalTransfer = Transaction(
       date: date(daysAfterEpoch: 3),
       legs: [
@@ -70,28 +74,27 @@ struct MultiInstrumentPositionsCoverageTests {
       ]
     )
 
+    let txns = [buyTxn, externalInflow, internalTransfer]
     let service = FakeConversionService.fixedRates([btc.id: Decimal(20_000)])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 5)
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
     let series = await builder.build(
-      transactions: [buyTxn, externalInflow, internalTransfer],
+      transactions: txns,
       accountIds: Set([accountA, accountB]),
       hostCurrency: aud,
       range: .threeMonths,
+      ledger: ledger,
       now: now
     )
 
     // At least one aggregate point must emit (the group holds BTC from day 1).
     let lastPoint = try #require(series.totalSeries.last)
-    // `AccountCashFlows.flowAmounts` counts a leg only when the transaction
-    // crosses a boundary (touches a second distinct accountId) OR the leg is
-    // an openingBalance. The buy has both legs on accountA only (crossesBoundary
-    // = false, no openingBalance) → contributes 0. The external inflow crosses
-    // the boundary (externalSource leg) → accountA's +5_000 AUD income leg
-    // qualifies. The internal transfer is excluded before reaching flowAmounts
-    // (≥2 group members touched → the group-level guard skips it entirely).
-    // Total expected contributions = 0 + 5_000 + 0 = 5_000.
-    #expect(lastPoint.contributions == 5_000)
+    // Group remaining invested = A's 1 BTC (20_000) + B's 1 BTC (20_000) =
+    // 40_000. The 5_000 fiat inflow is cash, not invested; the relocation
+    // preserves the group total.
+    #expect(lastPoint.invested == 40_000)
   }
 
   // MARK: - (b) Partial price history — aggregate omits failed days; per-instrument keeps them
@@ -133,11 +136,15 @@ struct MultiInstrumentPositionsCoverageTests {
     )
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 4)
+    // `.empty` ledger: this test exercises value-line aggregate suppression on
+    // the failing-instrument path (driven by the value batch, not the
+    // baseline), so no ledger is needed.
     let series = await builder.build(
       transactions: txns,
       accountId: accountA,
       hostCurrency: aud,
       range: .threeMonths,
+      ledger: .empty,
       now: now
     )
 
@@ -215,7 +222,8 @@ struct MultiInstrumentPositionsCoverageTests {
       title: "BTC Wallet", hostCurrency: aud, accountIds: [accountId])
     let input = await assembler.assemble(
       context: context, valuedRows: valuedRows, transactions: transactions,
-      range: .threeMonths, now: try noonUTC(year: 2026, month: 5, day: 15))
+      range: .threeMonths, ledger: .empty,
+      now: try noonUTC(year: 2026, month: 5, day: 15))
 
     // The value series must have points — chart renders value even without cost basis.
     let series = try #require(input.historicalValue, "historicalValue must be non-nil")
@@ -263,11 +271,13 @@ struct MultiInstrumentPositionsCoverageTests {
     ])
     let builder = PositionsHistoryBuilder(conversionService: service)
     let now = date(daysAfterEpoch: 3)
+    // Value-only assertion (pure position value); baseline not exercised.
     let series = await builder.build(
       transactions: txns,
       accountIds: Set([accountA, accountB]),
       hostCurrency: aud,
       range: .threeMonths,
+      ledger: .empty,
       now: now
     )
 
