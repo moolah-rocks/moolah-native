@@ -78,8 +78,11 @@ enum CostBasisEventBuilder {
     return events
   }
 
-  /// Non-fiat `.income` / `.openingBalance` legs enter holdings at their
-  /// market value on `date` (cost basis = value received).
+  /// Non-fiat legs that *enter* holdings at their market value on `date` (cost
+  /// basis = value received): `.income` / `.openingBalance`, plus a positive
+  /// non-fiat `.expense` — a refund (sign convention lets any type carry the
+  /// opposite sign; CODE_GUIDE §16), the mirror of the negative-expense
+  /// disposal in `nonFiatDisposals`.
   private static func nonFiatAcquisitions(
     legs: [TransactionLeg],
     on date: Date,
@@ -89,7 +92,8 @@ enum CostBasisEventBuilder {
     var events: [CostBasisEvent] = []
     for leg in legs
     where leg.instrument.kind != .fiatCurrency
-      && (leg.type == .income || leg.type == .openingBalance) && leg.quantity > 0
+      && (leg.type == .income || leg.type == .openingBalance || leg.type == .expense)
+      && leg.quantity > 0
     {
       let value = try await marketValue(
         leg.quantity,

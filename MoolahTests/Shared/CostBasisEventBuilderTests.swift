@@ -50,6 +50,39 @@ struct CostBasisEventBuilderTests {
   }
 
   @Test
+  func nonFiatExpenseRefund_mapsToAcquisitionAtMarketValue() async throws {
+    // A positive-quantity non-fiat `.expense` is a refund (sign convention lets
+    // any type carry the opposite sign) — the mirror of the gas/spend disposal,
+    // so it re-enters holdings as an acquisition at market value.
+    let legs = [leg(eth, dec("0.02"), .expense)]
+    let events = try await CostBasisEventBuilder.events(
+      legs: legs, on: day, trackedAccountIds: [account], referenceCurrency: aud,
+      conversionService: FakeConversionService.fixedRates([eth.id: 2_000]))
+    #expect(
+      events == [
+        .acquisition(instrument: eth, quantity: dec("0.02"), costPerUnit: 2_000, account: account)
+      ])
+  }
+
+  @Test
+  func nonFiatIncome_usesTransactionDateNotToday() async throws {
+    // dateRates ignores nothing: the builder must convert on the transaction
+    // `day` (rate 4000), never on "today" (rate 9999). A regression that
+    // substituted `Date()` for the transaction date would fail here.
+    let service = FakeConversionService.dateRates([
+      day: [eth.id: 4_000],
+      Date(): [eth.id: 9_999],
+    ])
+    let events = try await CostBasisEventBuilder.events(
+      legs: [leg(eth, dec("0.5"), .income)], on: day, trackedAccountIds: [account],
+      referenceCurrency: aud, conversionService: service)
+    #expect(
+      events == [
+        .acquisition(instrument: eth, quantity: dec("0.5"), costPerUnit: 4_000, account: account)
+      ])
+  }
+
+  @Test
   func fiatLegs_areNonEvents() async throws {
     let legs = [leg(aud, 1_000, .income), leg(aud, -50, .expense)]
     let events = try await CostBasisEventBuilder.events(
