@@ -75,10 +75,15 @@ final class RecordingAlchemyClientStub: ChainDataClient, @unchecked Sendable {
     lock.withLock { assetTransfersCalls }
   }
 
+  func currentHead(chain: ChainConfig) async throws -> UInt64? {
+    nil
+  }
+
   func getAssetTransfers(
     chain: ChainConfig,
     walletAddress: String,
-    fromBlock: UInt64
+    fromBlock: UInt64,
+    toBlock: UInt64?
   ) async throws -> [AlchemyTransfer] {
     let (response, hook) = lock.withLock {
       assetTransfersCalls.append(
@@ -246,10 +251,15 @@ final class ZeroReceiptAlchemyStub: ChainDataClient, @unchecked Sendable {
     lock.withLock { receiptHashes }
   }
 
+  func currentHead(chain: ChainConfig) async throws -> UInt64? {
+    nil
+  }
+
   func getAssetTransfers(
     chain: ChainConfig,
     walletAddress: String,
-    fromBlock: UInt64
+    fromBlock: UInt64,
+    toBlock: UInt64?
   ) async throws -> [AlchemyTransfer] {
     throw UnexpectedAssetTransfersCall()
   }

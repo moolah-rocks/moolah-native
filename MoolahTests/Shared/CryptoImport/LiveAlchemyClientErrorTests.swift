@@ -14,7 +14,7 @@ struct LiveAlchemyClientErrorTests {
     }
     do {
       _ = try await client.getAssetTransfers(
-        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0
+        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil
       )
       Issue.record("Expected WalletSyncError.invalidApiKey")
     } catch let error as WalletSyncError {
@@ -31,7 +31,7 @@ struct LiveAlchemyClientErrorTests {
     }
     do {
       _ = try await client.getAssetTransfers(
-        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0
+        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil
       )
       Issue.record("Expected WalletSyncError.invalidApiKey")
     } catch let error as WalletSyncError {
@@ -52,7 +52,7 @@ struct LiveAlchemyClientErrorTests {
     }
     do {
       _ = try await client.getAssetTransfers(
-        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0
+        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil
       )
       Issue.record("Expected WalletSyncError.rateLimited")
     } catch let error as WalletSyncError {
@@ -74,7 +74,7 @@ struct LiveAlchemyClientErrorTests {
     }
     do {
       _ = try await client.getAssetTransfers(
-        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0
+        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil
       )
       Issue.record("Expected WalletSyncError.rateLimited")
     } catch let error as WalletSyncError {
@@ -91,7 +91,7 @@ struct LiveAlchemyClientErrorTests {
     }
     do {
       _ = try await client.getAssetTransfers(
-        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0
+        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil
       )
       Issue.record("Expected WalletSyncError.network")
     } catch let error as WalletSyncError {
@@ -110,7 +110,7 @@ struct LiveAlchemyClientErrorTests {
     }
     do {
       _ = try await client.getAssetTransfers(
-        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0
+        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil
       )
       Issue.record("Expected WalletSyncError.network")
     } catch let error as WalletSyncError {
@@ -130,7 +130,7 @@ struct LiveAlchemyClientErrorTests {
     }
     do {
       _ = try await client.getAssetTransfers(
-        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0
+        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil
       )
       Issue.record("Expected WalletSyncError.providerMalformedResponse")
     } catch let error as WalletSyncError {
@@ -161,7 +161,7 @@ struct LiveAlchemyClientErrorTests {
     }
     do {
       _ = try await client.getAssetTransfers(
-        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0
+        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil
       )
       Issue.record("Expected WalletSyncError.missingApiKey")
     } catch let error as WalletSyncError {

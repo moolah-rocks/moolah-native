@@ -135,7 +135,7 @@ struct WalletSyncEngine: Sendable {
     // 3c. ERC-20 only from Alchemy — Blockscout owns native/internal.
     try Task.checkCancellation()
     let alchemyAll = try await alchemy.getAssetTransfers(
-      chain: chain, walletAddress: walletAddress, fromBlock: fromBlock)
+      chain: chain, walletAddress: walletAddress, fromBlock: fromBlock, toBlock: nil)
     let transfers =
       adapted.transfers + wrapUnwrap.rows + alchemyAll.filter { $0.category == .erc20 }
     try Task.checkCancellation()

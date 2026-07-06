@@ -106,6 +106,41 @@ enum AlchemyTestSupport {
   }
 
   struct FixtureMissing: Error { let name: String }
+
+  /// Decodes a JSON-RPC request body — streamed (URLSession converts
+  /// `httpBody` to a stream for a custom `URLProtocol`) or in-memory — into a
+  /// Foundation object a direct-RPC dispatcher can branch on. Uses
+  /// `.fragmentsAllowed` so both a single request object and a top-level batch
+  /// array decode. Shared by the direct-RPC `URLProtocol` stubs
+  /// (`DirectRPCURLProtocolStub`, `WindowURLProtocolStub`), which each keep
+  /// their own `requestHandler` static state for parallel-suite isolation but
+  /// share this stateless body-decoding step.
+  static func jsonRPCBodyObject(_ request: URLRequest) -> Any? {
+    guard let data = requestBodyData(request) else { return nil }
+    return try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed])
+  }
+
+  /// Reads a request's body bytes, preferring the in-memory `httpBody` and
+  /// falling back to draining `httpBodyStream` (the form URLSession hands a
+  /// custom `URLProtocol`). Returns `nil` when the request carries no body.
+  private static func requestBodyData(_ request: URLRequest) -> Data? {
+    if let body = request.httpBody {
+      return body
+    }
+    guard let stream = request.httpBodyStream else { return nil }
+    stream.open()
+    defer { stream.close() }
+    var data = Data()
+    let bufferSize = 1024
+    let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+    defer { buffer.deallocate() }
+    while stream.hasBytesAvailable {
+      let read = stream.read(buffer, maxLength: bufferSize)
+      if read <= 0 { break }
+      data.append(buffer, count: read)
+    }
+    return data
+  }
 }
 
 /// `URLProtocol` stub local to the `LiveAlchemyClient` suite — the existing

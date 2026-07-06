@@ -45,7 +45,7 @@ struct LiveAlchemyClientKeyProviderTests {
     // with `.missingApiKey` before any network work.
     do {
       _ = try await client.getAssetTransfers(
-        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0)
+        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil)
       Issue.record("Expected WalletSyncError.missingApiKey")
     } catch let error as WalletSyncError {
       #expect(error.kind == .missingApiKey)
@@ -57,7 +57,7 @@ struct LiveAlchemyClientKeyProviderTests {
     // call must succeed without rebuilding the client.
     key.set("freshly-added-key")
     let transfers = try await client.getAssetTransfers(
-      chain: .ethereum, walletAddress: "0xabc", fromBlock: 0)
+      chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil)
     #expect(transfers.isEmpty)
 
     // The request URL embedded the newly-resolved key — proves the
@@ -79,13 +79,13 @@ struct LiveAlchemyClientKeyProviderTests {
         )
       })
     _ = try await client.getAssetTransfers(
-      chain: .ethereum, walletAddress: "0xabc", fromBlock: 0)
+      chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil)
 
     // Simulate a settings flow that clears the keychain.
     key.set(nil)
     do {
       _ = try await client.getAssetTransfers(
-        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0)
+        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil)
       Issue.record("Expected WalletSyncError.missingApiKey")
     } catch let error as WalletSyncError {
       #expect(error.kind == .missingApiKey)

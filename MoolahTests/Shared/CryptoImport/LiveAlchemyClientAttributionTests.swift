@@ -13,7 +13,7 @@ struct LiveAlchemyClientAttributionTests {
     }
     do {
       _ = try await client.getAssetTransfers(
-        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0)
+        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil)
       Issue.record("expected throw")
     } catch let error as WalletSyncError {
       #expect(error.provider == .alchemy)

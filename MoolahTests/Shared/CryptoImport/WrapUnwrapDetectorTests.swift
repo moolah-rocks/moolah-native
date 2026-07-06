@@ -154,10 +154,15 @@ actor StubChainClient: ChainDataClient {
     self.receipts = receipts
   }
 
+  func currentHead(chain: ChainConfig) async throws -> UInt64? {
+    nil
+  }
+
   func getAssetTransfers(
     chain: ChainConfig,
     walletAddress: String,
-    fromBlock: UInt64
+    fromBlock: UInt64,
+    toBlock: UInt64?
   ) async throws -> [AlchemyTransfer] {
     []
   }

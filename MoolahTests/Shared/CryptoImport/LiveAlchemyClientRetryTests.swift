@@ -29,7 +29,7 @@ struct LiveAlchemyClientRetryTests {
     }
 
     let transfers = try await client.getAssetTransfers(
-      chain: .ethereum, walletAddress: "0xabc", fromBlock: 0)
+      chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil)
 
     #expect(transfers.isEmpty)
     // from-page-1 (429 → retry → 200) + to-page-1 (200) = 3 requests.
@@ -46,7 +46,7 @@ struct LiveAlchemyClientRetryTests {
 
     do {
       _ = try await client.getAssetTransfers(
-        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0)
+        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil)
       Issue.record("Expected WalletSyncError.rateLimited")
     } catch let error as WalletSyncError {
       #expect(error.kind == .rateLimited(retryAfter: nil))
@@ -72,7 +72,7 @@ struct LiveAlchemyClientRetryTests {
 
     await #expect(throws: CancellationError.self) {
       _ = try await client.getAssetTransfers(
-        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0)
+        chain: .ethereum, walletAddress: "0xabc", fromBlock: 0, toBlock: nil)
     }
   }
 }
