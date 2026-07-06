@@ -13,11 +13,14 @@ final class ReportingStore {
   private(set) var error: Error?
   /// Rule 11 flags: `true` when a genuine conversion failure during the shared
   /// ledger build marked at least one instrument unavailable, so the
-  /// corresponding figure may be understated. The Reports view renders
-  /// "unavailable" for the affected surface rather than a complete-looking but
-  /// wrong number — the same treatment as
-  /// `incomeHasUnavailableData`/`expenseHasUnavailableData`. `profitLoss` still
-  /// lists the sibling instruments that resolved.
+  /// corresponding figure may be understated. Exposes the store-level contract
+  /// a future Reports/tax consumer must honour — render "unavailable" for the
+  /// affected surface rather than a complete-looking but wrong number — the
+  /// same treatment `incomeHasUnavailableData`/`expenseHasUnavailableData`
+  /// already receive on the shipped category-balances surface. No view
+  /// consumes `profitLoss`/`capitalGains*` yet (the tax-report UI is a
+  /// deferred follow-up). `profitLoss` still lists the sibling instruments
+  /// that resolved.
   private(set) var capitalGainsHasUnavailableData = false
   private(set) var profitLossHasUnavailableData = false
 

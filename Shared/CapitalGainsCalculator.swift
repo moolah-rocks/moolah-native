@@ -14,17 +14,12 @@ struct CapitalGainsResult: Sendable {
   /// unresolvable conversion during the ledger build (Rule 11), so a disposal
   /// may have been dropped and the realised-gain total may be understated. A
   /// coarse profile-wide flag: the caller must render the figure as
-  /// unavailable rather than as a complete tax number. Defaults to `false` for
-  /// the direct-construction / fixture call sites that never fail conversion.
-  let hasUnavailableData: Bool
-
-  init(
-    events: [CapitalGainEvent], openLots: [CostBasisLot], hasUnavailableData: Bool = false
-  ) {
-    self.events = events
-    self.openLots = openLots
-    self.hasUnavailableData = hasUnavailableData
-  }
+  /// unavailable rather than as a complete tax number. Declaration-site
+  /// default `false` (CODE_GUIDE §10) covers the fixture / direct-construction
+  /// call sites that never fail conversion, letting Swift synthesize the
+  /// memberwise init. `var` (not `let`) so the default keeps it in the
+  /// synthesized init — a `let` with an initial value is dropped from it.
+  var hasUnavailableData: Bool = false
 
   var totalRealizedGain: Decimal {
     events.reduce(Decimal(0)) { $0 + $1.gain }
