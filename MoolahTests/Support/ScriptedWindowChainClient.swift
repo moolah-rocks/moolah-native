@@ -22,6 +22,8 @@ final class ScriptedWindowChainClient: ChainDataClient, @unchecked Sendable {
   private var anyCallRows: [AlchemyTransfer] = []
   private var failingFromBlocks: Set<UInt64> = []
   private var fromBlocks: [UInt64] = []
+  private var receiptsByHash: [String: AlchemyTransactionReceipt] = [:]
+  private var receiptCalls: [String] = []
   private var onGetAssetTransfers: (@MainActor () async -> Void)?
 
   init(head: UInt64?) {
@@ -69,6 +71,21 @@ final class ScriptedWindowChainClient: ChainDataClient, @unchecked Sendable {
     lock.withLock { fromBlocks }
   }
 
+  /// Scripts a real receipt for `hash` — one whose `from` matches the wallet
+  /// so `makeGasLeg` actually produces a gas leg (the default sentinel
+  /// receipt has `from: ""`, which never forms a leg). Used by the
+  /// gas-leg-across-windows regression to place an outbound signed tx's
+  /// receipt so the runner attributes a real gas expense.
+  func setReceipt(_ receipt: AlchemyTransactionReceipt, forHash hash: String) {
+    lock.withLock { receiptsByHash[hash] = receipt }
+  }
+
+  /// Every `getTransactionReceipt` hash, in call order. Lets a test assert a
+  /// receipt is fetched once, not once per window.
+  var recordedReceiptCalls: [String] {
+    lock.withLock { receiptCalls }
+  }
+
   func currentHead(chain: ChainConfig) async throws -> UInt64? {
     head
   }
@@ -94,9 +111,14 @@ final class ScriptedWindowChainClient: ChainDataClient, @unchecked Sendable {
     chain: ChainConfig,
     hash: String
   ) async throws -> AlchemyTransactionReceipt {
-    // Sentinel `from: ""` never matches a wallet, so `makeGasLeg` returns
-    // nil and no gas leg is synthesised — keeps the transfer legs the
-    // tests inspect deterministic.
-    AlchemyTransactionReceipt(hash: hash, gasUsed: 0, effectiveGasPrice: 0, from: "")
+    lock.withLock { () -> AlchemyTransactionReceipt in
+      receiptCalls.append(hash)
+      // A scripted receipt (with `from == wallet`) forms a real gas leg;
+      // otherwise the sentinel `from: ""` never matches a wallet, so
+      // `makeGasLeg` returns nil and no gas leg is synthesised — keeping the
+      // transfer legs most tests inspect deterministic.
+      return receiptsByHash[hash]
+        ?? AlchemyTransactionReceipt(hash: hash, gasUsed: 0, effectiveGasPrice: 0, from: "")
+    }
   }
 }

@@ -33,7 +33,7 @@ struct TransferEventBuilderGasOnlyTests {
       account: account,
       services: services,
       importOrigin: origin,
-      signedGasTxs: [SignedGasTx(hash: hash, blockTimestamp: timestamp)])
+      signedGasTxs: [SignedGasTx(hash: hash, blockTimestamp: timestamp, blockNumber: 100)])
 
     // 21_000 gas × 1_000_000_000 wei/gas = 21_000_000_000_000 wei = 0.000021 ETH (negative: expense)
     let expectedGas =
@@ -78,7 +78,7 @@ struct TransferEventBuilderGasOnlyTests {
       account: account,
       services: services,
       importOrigin: origin,
-      signedGasTxs: [SignedGasTx(hash: hash, blockTimestamp: Date())])
+      signedGasTxs: [SignedGasTx(hash: hash, blockTimestamp: Date(), blockNumber: 100)])
 
     #expect(built.count == 1)
     let legs = try #require(built.first?.transaction.legs)
@@ -104,7 +104,7 @@ struct TransferEventBuilderGasOnlyTests {
       account: account,
       services: services,
       importOrigin: origin,
-      signedGasTxs: [SignedGasTx(hash: hash, blockTimestamp: Date())])
+      signedGasTxs: [SignedGasTx(hash: hash, blockTimestamp: Date(), blockNumber: 100)])
 
     #expect(built.isEmpty)
   }

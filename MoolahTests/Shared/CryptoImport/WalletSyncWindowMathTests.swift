@@ -92,6 +92,20 @@ struct WalletSyncWindowMathTests {
     #expect(kept.map(\.hash) == ["0xok"])
   }
 
+  @Test("partition keeps only signed-gas txs whose blockNumber is in [from, to]")
+  func partitionSignedGasTxsKeepsInRange() {
+    let signed = [
+      SignedGasTx(hash: "0xbelow", blockTimestamp: .distantPast, blockNumber: 99),
+      SignedGasTx(hash: "0xlow", blockTimestamp: .distantPast, blockNumber: 100),
+      SignedGasTx(hash: "0xmid", blockTimestamp: .distantPast, blockNumber: 150),
+      SignedGasTx(hash: "0xhigh", blockTimestamp: .distantPast, blockNumber: 200),
+      SignedGasTx(hash: "0xabove", blockTimestamp: .distantPast, blockNumber: 201),
+    ]
+    let kept = WalletSyncWindowMath.partition(
+      signed, into: WalletSyncWindow(from: 100, to: 200))
+    #expect(kept.map(\.hash) == ["0xlow", "0xmid", "0xhigh"])
+  }
+
   // MARK: - fraction
 
   @Test("fraction is the linear position between from and head")

@@ -76,10 +76,12 @@ extension SyncedAccountStore {
   /// checkpoint); a cancellation carries `windowError == nil` → no error row.
   /// Only a PRE-scan throw (`currentHead` succeeded but
   /// `validatedWalletAddress` / `resolveFromBlock` / their cancellation
-  /// checks threw, before anything was persisted) propagates out of `run`;
-  /// the `catch` clauses below handle just that case. Either way the account
-  /// is done for this cycle — it is never also sent through the single-shot
-  /// batch, which would re-scan from the same checkpoint.
+  /// checks threw, or — on the already-caught-up branch — `resolvePriorBlock`
+  /// or the empty-`candidates` watermark-refresh `apply` threw, all before any
+  /// window was scanned) propagates out of `run`; the `catch` clauses below
+  /// handle just that case. Either way the account is done for this cycle — it
+  /// is never also sent through the single-shot batch, which would re-scan
+  /// from the same checkpoint.
   private func runWindowedSync(
     account: Account, chain: ChainConfig, runner: WindowedWalletSyncRunner
   ) async -> WindowedSyncOutcome {

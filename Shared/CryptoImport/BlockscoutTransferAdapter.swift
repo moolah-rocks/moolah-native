@@ -4,12 +4,24 @@ import OSLog
 
 /// One signed transaction the wallet paid gas for, with the block
 /// timestamp needed to date a gas-only transaction (one with no value
-/// transfer of its own — `approve()`, failed, zero-movement). This is
-/// the authoritative gas set that fixes #919: it includes every tx
-/// where the wallet is the sender, regardless of value or status.
+/// transfer of its own — `approve()`, failed, zero-movement) and the
+/// block number the windowed sync runner partitions on. This is the
+/// authoritative gas set that fixes #919: it includes every tx where
+/// the wallet is the sender, regardless of value or status.
+///
+/// `blockNumber` lets `WalletSyncWindowMath.partition` slice the signed
+/// set per window exactly like the native rows. A signed tx and the
+/// transfer event it pays gas for always share the same block (they are
+/// the same on-chain transaction), so partitioning both by block keeps
+/// the gas-only-synthesis and gas-leg paths inside a single window —
+/// without it, the whole signed set was replayed into every window,
+/// synthesising a phantom gas-only transaction in an earlier window
+/// whose `"<hash>:gas"` leg then deduped the real transfer's gas leg
+/// out on a later window.
 struct SignedGasTx: Sendable, Hashable {
   let hash: String
   let blockTimestamp: Date
+  let blockNumber: UInt64
 }
 
 /// Result of normalising Blockscout rows into the existing pipeline
@@ -50,7 +62,11 @@ enum BlockscoutTransferAdapter {
         signed.append(
           SignedGasTx(
             hash: nativeTx.hash,
-            blockTimestamp: parseTimestamp(nativeTx.timestamp) ?? Date(timeIntervalSince1970: 0)))
+            blockTimestamp: parseTimestamp(nativeTx.timestamp) ?? Date(timeIntervalSince1970: 0),
+            // `.magnitude` mirrors `makeTransfer`'s blockNum encoding —
+            // Blockscout block numbers are non-negative, so this is a
+            // total conversion into the `UInt64` the window math uses.
+            blockNumber: UInt64(nativeTx.blockNumber.magnitude)))
       }
       // Value leg only for successful, non-zero transfers that touch the wallet.
       // Failed/reverted txs still paid gas (above) but did not move value.

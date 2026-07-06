@@ -32,9 +32,11 @@ struct WalletSyncBuildResult: Sendable, Hashable {
 
 /// The Blockscout native + internal + wrap/unwrap set for an account,
 /// fetched once from `fetchNativeContext(fromBlock:)`. A windowed sync
-/// runner partitions `nativeRows` by block per window and passes the
-/// matching slice to `buildWindow` alongside `signedGasTxs` and
-/// `prefetchedReceipts`, which apply uniformly across every window.
+/// runner partitions BOTH `nativeRows` and `signedGasTxs` by block per
+/// window (a signed tx shares its transfer event's block) and passes the
+/// matching slices to `buildWindow`. `prefetchedReceipts` stays whole —
+/// it's a hash→receipt lookup cache consumed only for a window's own
+/// transfers/signed txs, so an out-of-window entry simply goes unused.
 struct WalletSyncNativeContext: Sendable {
   let nativeRows: [AlchemyTransfer]
   let signedGasTxs: [SignedGasTx]
@@ -187,9 +189,9 @@ struct WalletSyncEngine: Sendable {
   /// `[fromBlock, head]` and runs wrap/unwrap synthesis over it, without
   /// touching Alchemy's ERC-20 endpoint or the candidate builder. A
   /// windowed sync runner fetches this once per account and reuses it
-  /// across every block window (`nativeRows` is partitioned per window
-  /// by the caller; `signedGasTxs` and `prefetchedReceipts` apply
-  /// uniformly).
+  /// across every block window (`nativeRows` and `signedGasTxs` are each
+  /// partitioned per window by the caller; `prefetchedReceipts` is a
+  /// hash-keyed cache used whole).
   func fetchNativeContext(
     account: Account, chain: ChainConfig, walletAddress: String, fromBlock: UInt64
   ) async throws -> WalletSyncNativeContext {
@@ -319,7 +321,11 @@ struct WalletSyncEngine: Sendable {
   /// genesis-style scan. The synced load is best-effort (`try?`): a
   /// transient checkpoint read failure falls back to the local watermark
   /// rather than failing the whole sync cycle.
-  private func resolvePriorBlock(for account: Account) async throws -> UInt64 {
+  /// Internal (not `private`) so the windowed sync runner can read the
+  /// raw prior checkpoint — it needs the un-reorg-adjusted value to stamp
+  /// `lastSyncedAt` on the already-caught-up path without lowering
+  /// `lastSyncedBlockNumber` (the reorg-subtracted `from` would drop it).
+  func resolvePriorBlock(for account: Account) async throws -> UInt64 {
     let localState = try await walletSyncState.load(accountId: account.id)
     let syncedBlock =
       (try? await checkpoints.load(accountId: account.id))?.lastSyncedBlockNumber ?? 0
