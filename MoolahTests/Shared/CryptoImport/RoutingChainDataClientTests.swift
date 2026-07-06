@@ -16,7 +16,7 @@ struct RoutingChainDataClientTests {
   private static let wallet = "0x1111111111111111111111111111111111111111"
 
   /// Scripts `eth_chainId` per endpoint URL: `op.custom.test` → chain 10
-  /// (OP Mainnet), Ethereum's default publicnode URL → chain 1. Any other
+  /// (OP Mainnet), Ethereum's default public node URL → chain 1. Any other
   /// URL is a test-authoring mistake — HTTP 404 makes that loud.
   private func chainIdHandler(_ request: URLRequest) -> (HTTPURLResponse, Data) {
     switch request.url?.absoluteString {

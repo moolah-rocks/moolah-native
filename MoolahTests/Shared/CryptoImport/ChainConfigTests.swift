@@ -65,9 +65,9 @@ struct ChainConfigTests {
 
   @Test
   func defaultRPCURLPerChain() {
-    #expect(ChainConfig.config(for: 1)?.defaultRPCURL.host == "ethereum-rpc.publicnode.com")
-    #expect(ChainConfig.config(for: 10)?.defaultRPCURL.host == "optimism-rpc.publicnode.com")
-    #expect(ChainConfig.config(for: 8453)?.defaultRPCURL.host == "base-rpc.publicnode.com")
+    #expect(ChainConfig.config(for: 1)?.defaultRPCURL.host == "eth.drpc.org")
+    #expect(ChainConfig.config(for: 10)?.defaultRPCURL.host == "optimism.drpc.org")
+    #expect(ChainConfig.config(for: 8453)?.defaultRPCURL.host == "base.drpc.org")
   }
 
   @Test
