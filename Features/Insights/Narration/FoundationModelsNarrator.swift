@@ -16,14 +16,14 @@ private let logger = Logger(subsystem: "com.moolah.app", category: "Narration")
 /// - `session.streamResponse(to: String, options: GenerationOptions)` — returns
 ///   `ResponseStream<String>`, an `AsyncSequence` of `Snapshot` values where
 ///   `snapshot.content` is a cumulative `String` (the entire response so far).
-/// - `GenerationOptions(sampling: .greedy)` — deterministic token selection.
+/// - `GenerationOptions(samplingMode: .greedy)` — deterministic token selection.
 struct FoundationModelsNarrator {
   /// Generation options passed to every `streamResponse` call.
   /// Greedy sampling produces the most deterministic output across runs,
   /// reducing the chance of the provenance guard flipping between calls.
   let options: GenerationOptions
 
-  init(options: GenerationOptions = .init(sampling: .greedy)) {
+  init(options: GenerationOptions = .init(samplingMode: .greedy)) {
     self.options = options
   }
 }
