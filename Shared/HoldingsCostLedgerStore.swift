@@ -148,6 +148,33 @@ final class HoldingsCostLedgerStore {
     return built
   }
 
+  /// Builds an uncached profile-wide ledger containing only cost-basis rows
+  /// whose parent transaction date is on or before `date`. Used by historical
+  /// tax projections where both open quantity and market value must reflect a
+  /// past point in time rather than today's open lots.
+  func ledger(through date: Date) async throws -> HoldingsCostLedger {
+    if isMigrating() { return .empty }
+    let legRows = try await transactionRepository.fetchCostBasisEventLegs()
+    let filteredRows = legRows.filter { $0.date <= date }
+    return try await HoldingsCostLedger.build(
+      legRows: filteredRows,
+      referenceCurrency: referenceCurrency,
+      conversionService: conversionService)
+  }
+
+  /// Builds an uncached profile-wide ledger containing only cost-basis rows
+  /// whose parent transaction date is before `date`. Prefer this for financial
+  /// year ranges, which are modelled as half-open intervals.
+  func ledger(before date: Date) async throws -> HoldingsCostLedger {
+    if isMigrating() { return .empty }
+    let legRows = try await transactionRepository.fetchCostBasisEventLegs()
+    let filteredRows = legRows.filter { $0.date < date }
+    return try await HoldingsCostLedger.build(
+      legRows: filteredRows,
+      referenceCurrency: referenceCurrency,
+      conversionService: conversionService)
+  }
+
   /// Full-rebuild invalidation: bumps the generation, drops the cached
   /// ledger, and cancels any in-flight build. The next `ledger()` re-runs the
   /// SQL query + FIFO pass from scratch. Called from both change-stream

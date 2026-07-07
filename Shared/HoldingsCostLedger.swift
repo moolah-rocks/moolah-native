@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Profile-global cost pass. Groups the SQL-reduced key-event legs back
 /// into per-transaction inputs, warms the needed `(instrument, day)` rates
@@ -12,15 +13,13 @@ struct HoldingsCostLedger: Sendable {
   let realisedEvents: [CapitalGainEvent]
   let flows: [HoldingsFlowEntry]
   let openLots: [CostBasisLot]
-  /// `(account, instrument)` keys whose build failed a genuine (non-cancel)
-  /// conversion. Per Rule 11 the ledger never partially sums these: a query
-  /// whose scope includes any unavailable key returns `nil`. Populated only
-  /// on a real provider failure — a `.knownZero` (unpriced / spam) values at
-  /// 0 and stays available.
-  private let unavailableKeys: Set<TouchKey>
+  /// Keys whose build hit a genuine conversion failure. `.knownZero` remains available.
+  let unavailableKeys: Set<TouchKey>
+  let unavailableInputs: Set<HoldingsCostLedgerUnavailableInput>
+  let disposalCandidates: Set<HoldingsCostLedgerDisposalCandidate>
+  let moveCandidates: Set<HoldingsCostLedgerMoveCandidate>
+  private static let logger = Logger(subsystem: "com.moolah.app", category: "HoldingsCostLedger")
 
-  /// Primary (SQL-sourced) entry: consumes the reduced key-event legs
-  /// (already ordered `(date, transaction_id, sort_order)`).
   static func build(
     legRows: [CostBasisEventLegRow],
     referenceCurrency: Instrument,
@@ -35,10 +34,7 @@ struct HoldingsCostLedger: Sendable {
       trackedAccountIds: Set(legRows.compactMap(\.accountId)))
   }
 
-  /// Convenience for unit-test / pure call sites: flattens `[Transaction]`
-  /// to `[CostBasisEventLegRow]` (mirroring the SQL query's ordering) then
-  /// runs the primary build. Production sources `legRows` from
-  /// `TransactionRepository.fetchCostBasisEventLegs()`.
+  /// Convenience for unit-test / pure call sites.
   static func build(
     transactions: [Transaction],
     referenceCurrency: Instrument,
@@ -68,18 +64,12 @@ struct HoldingsCostLedger: Sendable {
       conversionService: conversionService)
   }
 
-  // MARK: - Pass phases
-
-  /// One transaction's grouped legs, in the query's contiguous order.
   private struct TransactionGroup {
     let id: UUID
     let date: Date
     var legs: [TransactionLeg]
   }
 
-  /// Group legs back into per-transaction inputs, preserving the query's
-  /// order so each transaction's legs stay contiguous and transactions
-  /// stay in date order.
   private static func groupByTransaction(_ legRows: [CostBasisEventLegRow]) -> [TransactionGroup] {
     var order: [UUID] = []
     var byId: [UUID: TransactionGroup] = [:]
@@ -139,14 +129,20 @@ struct HoldingsCostLedger: Sendable {
     conversionService: any InstrumentConversionService,
     trackedAccountIds: Set<UUID>
   ) async throws -> HoldingsCostLedger {
-    var pass = Pass()
+    var pass = HoldingsCostLedgerPass()
     var snapshots: [InvestedSnapshot] = []
     var unavailable: Set<TouchKey> = []
+    var unavailableInputs: Set<HoldingsCostLedgerUnavailableInput> = []
+    var disposalCandidates: Set<HoldingsCostLedgerDisposalCandidate> = []
+    var moveCandidates: Set<HoldingsCostLedgerMoveCandidate> = []
 
     for group in groups {
       try Task.checkCancellation()
+      disposalCandidates.formUnion(realisedGainDisposalCandidates(in: group))
+      moveCandidates.formUnion(realisedGainMoveCandidates(in: group))
       do {
         let events = try await CostBasisEventBuilder.events(
+          sourceTransactionId: group.id,
           legs: group.legs,
           on: group.date,
           trackedAccountIds: trackedAccountIds,
@@ -160,18 +156,7 @@ struct HoldingsCostLedger: Sendable {
           pass.apply(event, on: group.date)
           touched.formUnion(touchedKeys(for: event))
         }
-        for key in touched {
-          let invested =
-            pass.engine
-            .openLots(for: key.instrument, account: key.account)
-            .reduce(Decimal(0)) { $0 + $1.remainingCost }
-          snapshots.append(
-            InvestedSnapshot(
-              date: group.date,
-              account: key.account,
-              instrument: key.instrument,
-              remainingInvested: invested))
-        }
+        snapshots.append(contentsOf: investedSnapshots(for: touched, on: group.date, pass: pass))
       } catch is CancellationError {
         throw CancellationError()
       } catch {
@@ -179,7 +164,8 @@ struct HoldingsCostLedger: Sendable {
         // `(account, instrument)` keys this transaction's non-fiat legs
         // touch. Skip its snapshots/realised/flows and keep processing the
         // rest of the profile — sibling keys stay computable.
-        unavailable.formUnion(nonFiatKeys(in: group))
+        recordUnavailableInput(
+          for: group, error: error, unavailable: &unavailable, inputs: &unavailableInputs)
       }
     }
     return HoldingsCostLedger(
@@ -187,7 +173,28 @@ struct HoldingsCostLedger: Sendable {
       realisedEvents: pass.realised,
       flows: pass.flows,
       openLots: pass.engine.allOpenLots(),
-      unavailableKeys: unavailable)
+      unavailableKeys: unavailable,
+      unavailableInputs: unavailableInputs,
+      disposalCandidates: disposalCandidates,
+      moveCandidates: moveCandidates)
+  }
+
+  private static func investedSnapshots(
+    for keys: Set<TouchKey>,
+    on date: Date,
+    pass: HoldingsCostLedgerPass
+  ) -> [InvestedSnapshot] {
+    keys.map { key in
+      let invested =
+        pass.engine
+        .openLots(for: key.instrument, account: key.account)
+        .reduce(Decimal(0)) { $0 + $1.remainingCost }
+      return InvestedSnapshot(
+        date: date,
+        account: key.account,
+        instrument: key.instrument,
+        remainingInvested: invested)
+    }
   }
 
   /// The `(account, instrument)` keys of a transaction's non-fiat legs —
@@ -198,65 +205,64 @@ struct HoldingsCostLedger: Sendable {
       .map { TouchKey(account: $0.accountId, instrument: $0.instrument) }
   }
 
-  /// Mutable accumulator threaded through the single FIFO pass: the engine
-  /// plus the realised events and market-valued flows it produces.
-  private struct Pass {
-    var engine = CostBasisEngine()
-    var realised: [CapitalGainEvent] = []
-    var flows: [HoldingsFlowEntry] = []
-
-    /// Apply one event to the engine and record its market-valued flow(s).
-    /// The touched `(account, instrument)` buckets are derived separately by
-    /// `touchedKeys(for:)`.
-    mutating func apply(_ event: CostBasisEvent, on date: Date) {
-      switch event {
-      case let .disposal(instrument, quantity, proceedsPerUnit, account):
-        realised.append(
-          contentsOf: engine.processSell(
-            instrument: instrument,
-            quantity: quantity,
-            proceedsPerUnit: proceedsPerUnit,
-            date: date,
-            account: account))
-        flows.append(
-          HoldingsFlowEntry(
-            date: date,
-            account: account,
-            instrument: instrument,
-            amount: -(quantity * proceedsPerUnit),
-            counterpartyAccount: nil))
-      case let .move(instrument, quantity, from, to, marketValue):
-        engine.moveLots(instrument: instrument, quantity: quantity, from: from, to: to)
-        flows.append(
-          HoldingsFlowEntry(
-            date: date,
-            account: from,
-            instrument: instrument,
-            amount: -marketValue,
-            counterpartyAccount: to))
-        flows.append(
-          HoldingsFlowEntry(
-            date: date,
-            account: to,
-            instrument: instrument,
-            amount: marketValue,
-            counterpartyAccount: from))
-      case let .acquisition(instrument, quantity, costPerUnit, account):
-        engine.processBuy(
-          instrument: instrument,
-          quantity: quantity,
-          costPerUnit: costPerUnit,
-          date: date,
-          account: account)
-        flows.append(
-          HoldingsFlowEntry(
-            date: date,
-            account: account,
-            instrument: instrument,
-            amount: quantity * costPerUnit,
-            counterpartyAccount: nil))
-      }
+  private static func mayEmitDisposal(in group: TransactionGroup) -> Bool {
+    group.legs.contains { leg in
+      leg.instrument.kind != .fiatCurrency
+        && ((leg.type == .trade && leg.quantity < 0)
+          || (leg.type == .expense && leg.quantity < 0))
     }
+  }
+
+  private static func realisedGainDisposalCandidates(
+    in group: TransactionGroup
+  ) -> Set<HoldingsCostLedgerDisposalCandidate> {
+    Set(
+      group.legs.compactMap { leg in
+        guard leg.instrument.kind != .fiatCurrency else { return nil }
+        guard
+          (leg.type == .trade && leg.quantity < 0)
+            || (leg.type == .expense && leg.quantity < 0)
+        else { return nil }
+        return HoldingsCostLedgerDisposalCandidate(
+          date: group.date,
+          key: TouchKey(account: leg.accountId, instrument: leg.instrument))
+      })
+  }
+
+  private static func realisedGainMoveCandidates(
+    in group: TransactionGroup
+  ) -> Set<HoldingsCostLedgerMoveCandidate> {
+    let transfers = group.legs.filter {
+      $0.type == .transfer && $0.instrument.kind != .fiatCurrency
+    }
+    guard let source = transfers.first(where: { $0.quantity < 0 }),
+      let destination = transfers.first(where: { $0.quantity > 0 }),
+      source.instrument == destination.instrument
+    else { return [] }
+    return [
+      HoldingsCostLedgerMoveCandidate(
+        date: group.date,
+        source: TouchKey(account: source.accountId, instrument: source.instrument),
+        destination: TouchKey(account: destination.accountId, instrument: destination.instrument))
+    ]
+  }
+
+  private static func recordUnavailableInput(
+    for group: TransactionGroup,
+    error: Error,
+    unavailable: inout Set<TouchKey>,
+    inputs: inout Set<HoldingsCostLedgerUnavailableInput>
+  ) {
+    let keys = nonFiatKeys(in: group)
+    unavailable.formUnion(keys)
+    logger.error(
+      "Cost-basis conversion failed for transaction \(group.id, privacy: .public) on \(group.date, privacy: .public): \(error.localizedDescription, privacy: .public)"
+    )
+    inputs.insert(
+      HoldingsCostLedgerUnavailableInput(
+        date: group.date,
+        keys: Set(keys),
+        mayAffectRealisedGains: mayEmitDisposal(in: group)))
   }
 
   /// The `(account, instrument)` buckets an event touches, whose invested
@@ -264,7 +270,7 @@ struct HoldingsCostLedger: Sendable {
   /// its source and destination bucket.
   private static func touchedKeys(for event: CostBasisEvent) -> [TouchKey] {
     switch event {
-    case let .disposal(instrument, _, _, account):
+    case let .disposal(instrument, _, _, account, _):
       return [TouchKey(account: account, instrument: instrument)]
     case let .move(instrument, _, from, to, _):
       return [
@@ -279,7 +285,7 @@ struct HoldingsCostLedger: Sendable {
   /// A holding bucket: one instrument held in one account. Carries the
   /// `Instrument` value directly (it is already on every `CostBasisEvent`
   /// case and is `Hashable`), avoiding a re-lookup by id.
-  private struct TouchKey: Hashable {
+  struct TouchKey: Hashable {
     let account: UUID?
     let instrument: Instrument
   }
@@ -301,100 +307,3 @@ struct HoldingsCostLedger: Sendable {
 }
 
 extension HoldingsCostLedger: Equatable {}
-
-extension HoldingsCostLedger {
-  /// The no-data ledger: every query returns 0 / empty. This is ONLY the
-  /// migration-gate sentinel — returned by `HoldingsCostLedgerStore.ledger()`
-  /// while the cross-chain identity migration is running, when no cost-basis
-  /// data exists yet so 0/empty is honest. It is NOT a substitute for a failed
-  /// build: a genuine build failure must propagate/throw and be surfaced as
-  /// unavailable (Rule 11), never coalesced with `(try? await ledger()) ??
-  /// .empty` — because `.empty`'s `unavailableKeys` is empty, `remainingInvested`
-  /// returns 0 (not nil), which would render a real failure as "0 invested".
-  static var empty: HoldingsCostLedger {
-    HoldingsCostLedger(
-      investedSnapshots: [], realisedEvents: [], flows: [], openLots: [], unavailableKeys: [])
-  }
-}
-
-extension HoldingsCostLedger {
-  /// Instrument ids whose build hit a genuine (non-cancel) conversion failure
-  /// (Rule 11). Consumers that read `realisedEvents` / `openLots` / `flows`
-  /// directly (`CapitalGainsCalculator`, `ProfitLossCalculator`) must consult
-  /// this: a disposal or lot for such an instrument may have been dropped, so
-  /// a figure that includes it would be understated and must be marked
-  /// unavailable rather than rendered as complete.
-  var unavailableInstrumentIds: Set<String> {
-    Set(unavailableKeys.map(\.instrument.id))
-  }
-
-  /// Remaining amount invested across `accountIds` at-or-before `day`,
-  /// carrying forward the latest change-point per (account, instrument).
-  /// Returns `nil` (never a partial sum, Rule 11) if any in-scope
-  /// `(account, instrument)` key is unavailable — i.e. any instrument held
-  /// by one of `accountIds` failed conversion.
-  func remainingInvested(accountIds: Set<UUID>, onOrBefore day: Date) -> Decimal? {
-    guard !hasUnavailable(accountIds: accountIds, instrument: nil) else { return nil }
-    return latestLevels(accountIds: accountIds, instrumentId: nil, onOrBefore: day)
-  }
-
-  /// Remaining amount invested across `accountIds` for one instrument
-  /// at-or-before `day`. Returns `nil` if that `(account, instrument)` key is
-  /// unavailable; sibling instruments do not affect it.
-  func remainingInvested(
-    accountIds: Set<UUID>, instrument: Instrument, onOrBefore day: Date
-  ) -> Decimal? {
-    guard !hasUnavailable(accountIds: accountIds, instrument: instrument) else { return nil }
-    return latestLevels(accountIds: accountIds, instrumentId: instrument.id, onOrBefore: day)
-  }
-
-  /// Whether any unavailable key is in scope: its account is in `accountIds`
-  /// and (when `instrument` is given) its instrument matches.
-  private func hasUnavailable(accountIds: Set<UUID>, instrument: Instrument?) -> Bool {
-    unavailableKeys.contains { key in
-      guard let account = key.account, accountIds.contains(account) else { return false }
-      if let instrument, key.instrument != instrument { return false }
-      return true
-    }
-  }
-
-  private func latestLevels(
-    accountIds: Set<UUID>, instrumentId: String?, onOrBefore day: Date
-  ) -> Decimal {
-    struct Key: Hashable {
-      let account: UUID?
-      let instrumentId: String
-    }
-    // Snapshots arrive in processing order (date, then transaction). For a
-    // given (account, instrument, day) the LAST-processed snapshot wins, so
-    // a later same-day transaction overwrites an earlier one — never the
-    // reverse.
-    var latest: [Key: (day: Date, value: Decimal)] = [:]
-    for snap in investedSnapshots {
-      guard let account = snap.account, accountIds.contains(account) else { continue }
-      if let want = instrumentId, snap.instrument.id != want { continue }
-      let snapDay = Calendar.utc.startOfDay(for: snap.date)
-      guard snapDay <= day else { continue }
-      let key = Key(account: account, instrumentId: snap.instrument.id)
-      if let existing = latest[key], existing.day > snapDay { continue }
-      latest[key] = (snapDay, snap.remainingInvested)
-    }
-    return latest.values.reduce(Decimal(0)) { $0 + $1.value }
-  }
-
-  /// Market-valued flows for the viewed account set, as `CashFlow`s: drop
-  /// internal moves (both endpoints in the set net to zero), keep external
-  /// buys/sells/income/spends and moves to/from accounts outside the set.
-  func cashFlows(accountIds: Set<UUID>) -> [CashFlow] {
-    flows
-      .filter { entry in
-        guard let account = entry.account, accountIds.contains(account) else { return false }
-        if let counterparty = entry.counterpartyAccount, accountIds.contains(counterparty) {
-          return false  // internal transfer within the viewed set
-        }
-        return true
-      }
-      .sorted { $0.date < $1.date }
-      .map { CashFlow(date: $0.date, amount: $0.amount) }
-  }
-}

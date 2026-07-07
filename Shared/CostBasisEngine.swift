@@ -47,13 +47,12 @@ struct CostBasisEngine: Sendable {
     quantity: Decimal,
     proceedsPerUnit: Decimal,
     date: Date,
-    account: UUID? = nil
+    account: UUID? = nil,
+    sourceTransactionId: UUID? = nil
   ) -> [CapitalGainEvent] {
     let key = BucketKey(instrumentId: instrument.id, account: account)
     var remaining = quantity
     var events: [CapitalGainEvent] = []
-    let calendar = Calendar(identifier: .gregorian)
-
     while remaining > 0 {
       guard var lots = buckets[key], !lots.isEmpty else { break }
 
@@ -61,12 +60,13 @@ struct CostBasisEngine: Sendable {
       let consumed = min(remaining, lot.remainingQuantity)
 
       let holdingDays =
-        calendar.dateComponents(
+        Calendar.utc.dateComponents(
           [.day], from: lot.acquiredDate, to: date
         ).day ?? 0
 
       events.append(
         CapitalGainEvent(
+          sourceTransactionId: sourceTransactionId,
           instrument: instrument,
           sellDate: date,
           acquiredDate: lot.acquiredDate,

@@ -125,7 +125,7 @@ struct CostBasisEventBuilderTests {
       })
     #expect(
       events.contains {
-        if case let .disposal(instrument, quantity, _, _) = $0 {
+        if case let .disposal(instrument, quantity, _, _, _) = $0 {
           return instrument == eth && quantity == dec("0.01")
         }
         return false

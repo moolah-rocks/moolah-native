@@ -18,15 +18,17 @@ enum CostBasisEvent {
   /// A lot enters holdings: a fiat-paired buy, a non-fiat income/opening
   /// balance (valued at market), or the acquiring side of a swap.
   case acquisition(instrument: Instrument, quantity: Decimal, costPerUnit: Decimal, account: UUID?)
+  // swiftlint:disable enum_case_associated_values_count
+  // The flat disposal/move payloads match the engine's hot-path destructuring;
+  // payload structs would add ceremony without reducing domain complexity.
   /// A lot leaves holdings for proceeds: a sell, or a non-fiat expense
   /// (crypto spend / gas) valued at market.
   case disposal(
-    instrument: Instrument, quantity: Decimal, proceedsPerUnit: Decimal, account: UUID?)
-  // swiftlint:disable enum_case_associated_values_count
-  // Flat 5-value shape matches the .move destructuring used identically across
-  // HoldingsCostLedger/CapitalGainsCalculator (Tasks 3–4); a payload struct
-  // would churn every call site for one case. (disable/enable pair, not :next,
-  // keeps the doc comment attached to avoid orphaned_doc_comment.)
+    instrument: Instrument,
+    quantity: Decimal,
+    proceedsPerUnit: Decimal,
+    account: UUID?,
+    sourceTransactionId: UUID?)
   /// A tracked→tracked transfer: the lot's cost carries in the engine while
   /// `marketValue` records what the moved quantity was worth on the date.
   case move(instrument: Instrument, quantity: Decimal, from: UUID?, to: UUID?, marketValue: Decimal)

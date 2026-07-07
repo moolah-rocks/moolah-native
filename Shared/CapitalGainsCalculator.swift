@@ -20,6 +20,8 @@ struct CapitalGainsResult: Sendable {
   /// memberwise init. `var` (not `let`) so the default keeps it in the
   /// synthesized init — a `let` with an initial value is dropped from it.
   var hasUnavailableData: Bool = false
+  var unavailableInstrumentIds: Set<String> = []
+  var unavailableInstruments: Set<Instrument> = []
 
   var totalRealizedGain: Decimal {
     events.reduce(Decimal(0)) { $0 + $1.gain }
@@ -57,15 +59,24 @@ enum CapitalGainsCalculator {
   /// tracked→tracked transfer is a non-event (the lot's cost carries), so it
   /// never appears here.
   static func compute(
-    ledger: HoldingsCostLedger, sellDateRange: ClosedRange<Date>? = nil
+    ledger: HoldingsCostLedger, sellDateInterval: Range<Date>? = nil
   ) -> CapitalGainsResult {
     let events = ledger.realisedEvents.filter { event in
-      sellDateRange.map { $0.contains(event.sellDate) } ?? true
+      sellDateInterval.map { $0.contains(event.sellDate) } ?? true
     }
+    let unavailableInstruments =
+      if let sellDateInterval {
+        ledger.unavailableRealisedGainInstruments(in: sellDateInterval)
+      } else {
+        ledger.unavailableInstruments
+      }
+    let unavailableInstrumentIds = Set(unavailableInstruments.map(\.id))
     return CapitalGainsResult(
       events: events,
       openLots: ledger.openLots,
-      hasUnavailableData: !ledger.unavailableInstrumentIds.isEmpty)
+      hasUnavailableData: !unavailableInstrumentIds.isEmpty,
+      unavailableInstrumentIds: unavailableInstrumentIds,
+      unavailableInstruments: unavailableInstruments)
   }
 
   /// Retained convenience for unit-test call sites: builds a profile-wide
@@ -78,13 +89,13 @@ enum CapitalGainsCalculator {
     transactions: [LegTransaction],
     profileCurrency: Instrument,
     conversionService: any InstrumentConversionService,
-    sellDateRange: ClosedRange<Date>? = nil
+    sellDateInterval: Range<Date>? = nil
   ) async throws -> CapitalGainsResult {
     let txns = transactions.map { Transaction(date: $0.date, legs: $0.legs) }
     let ledger = try await HoldingsCostLedger.build(
       transactions: txns,
       referenceCurrency: profileCurrency,
       conversionService: conversionService)
-    return compute(ledger: ledger, sellDateRange: sellDateRange)
+    return compute(ledger: ledger, sellDateInterval: sellDateInterval)
   }
 }

@@ -18,7 +18,7 @@ struct CapitalGainsCalculatorTests {
   }
 
   private func date(_ daysFromBase: Int) -> Date {
-    let calendar = Calendar(identifier: .gregorian)
+    let calendar = AustralianTaxCalendar.calendar
     guard
       let base = calendar.date(from: DateComponents(year: 2024, month: 1, day: 1)),
       let result = calendar.date(byAdding: .day, value: daysFromBase, to: base)
@@ -177,7 +177,7 @@ struct CapitalGainsCalculatorTests {
       transactions: [buyTx, sellTx],
       profileCurrency: aud,
       conversionService: FakeConversionService.fixedRates([:]),
-      sellDateRange: date(0)...date(100)
+      sellDateInterval: date(0)..<date(101)
     )
     // Sale on day 400 is outside the range
     #expect(earlyResult.events.isEmpty)

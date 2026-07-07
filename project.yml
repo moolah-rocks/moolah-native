@@ -313,7 +313,9 @@ targets:
     dependencies:
       - target: Moolah_iOS
       - package: GRDB
+        link: false
       - package: ImportExtensionKit
+        link: false
 
   MoolahTests_macOS:
     type: bundle.unit-test
@@ -333,7 +335,9 @@ targets:
     dependencies:
       - target: Moolah_macOS
       - package: GRDB
+        link: false
       - package: ImportExtensionKit
+        link: false
 
   MoolahBenchmarks_macOS:
     type: bundle.unit-test
@@ -341,6 +345,7 @@ targets:
     sources:
       - path: MoolahBenchmarks
       - path: MoolahTests/Support
+        group: MoolahTests
         excludes:
           # ExchangeSyncEngineTestSupport references CountingRegistrationResolver
           # from MoolahTests/Shared/CryptoImport, which is not in the benchmark
@@ -359,6 +364,7 @@ targets:
     dependencies:
       - target: Moolah_macOS
       - package: GRDB
+        link: false
 
   MoolahUITests_macOS:
     type: bundle.ui-testing

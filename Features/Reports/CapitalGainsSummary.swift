@@ -2,28 +2,60 @@ import Foundation
 
 /// Summary of capital gains for a financial year.
 struct CapitalGainsSummary: Sendable {
+  /// Net gains/losses by holding-period bucket, used for display.
   let shortTermGain: Decimal
   let longTermGain: Decimal
   let totalGain: Decimal
   let eventCount: Int
+  /// Positive gains from assets held 12 months or less, before capital-loss offsets.
+  let shortTermCapitalGains: Decimal
+  /// Positive gains from assets held > 12 months, before capital-loss offsets.
+  let longTermCapitalGains: Decimal
+  /// Current-year capital losses as a positive amount.
+  let capitalLosses: Decimal
+
+  init(
+    shortTermGain: Decimal,
+    longTermGain: Decimal,
+    totalGain: Decimal,
+    eventCount: Int,
+    shortTermCapitalGains: Decimal? = nil,
+    longTermCapitalGains: Decimal? = nil,
+    capitalLosses: Decimal? = nil
+  ) {
+    self.shortTermGain = shortTermGain
+    self.longTermGain = longTermGain
+    self.totalGain = totalGain
+    self.eventCount = eventCount
+    self.shortTermCapitalGains = shortTermCapitalGains ?? max(0, shortTermGain)
+    self.longTermCapitalGains = longTermCapitalGains ?? max(0, longTermGain)
+    self.capitalLosses = capitalLosses ?? -(min(0, shortTermGain) + min(0, longTermGain))
+  }
 
   /// Australian CGT discount: 50% on long-term gains for individuals.
   var discountedLongTermGain: Decimal {
-    max(0, longTermGain) / 2
+    remainingLongTermDiscountableGain / 2
   }
 
   /// Net capital gain after applying CGT discount (losses offset gains before discount).
   var netCapitalGain: Decimal {
-    let netShortTerm = shortTermGain
-    let netLongTerm = longTermGain > 0 ? discountedLongTermGain : longTermGain
-    return max(0, netShortTerm + netLongTerm)
+    remainingShortTermGain + discountedLongTermGain
+  }
+
+  private var remainingShortTermGain: Decimal {
+    max(0, shortTermCapitalGains - capitalLosses)
+  }
+
+  private var remainingLongTermDiscountableGain: Decimal {
+    let lossesAfterShortTerm = max(0, capitalLosses - shortTermCapitalGains)
+    return max(0, longTermCapitalGains - lossesAfterShortTerm)
   }
 
   /// Capital-gains values in a form suitable for populating
   /// `TaxYearAdjustments` fields. Nested because it is only ever produced
   /// by `asTaxAdjustmentValues(currency:)` below.
   struct TaxAdjustmentValues {
-    /// Gains from assets held < 12 months.
+    /// Gains from assets held 12 months or less.
     let shortTerm: InstrumentAmount
     /// Pre-discount gains from assets held > 12 months.
     let longTerm: InstrumentAmount
@@ -40,17 +72,13 @@ extension CapitalGainsSummary {
   /// Convert to values suitable for `TaxYearAdjustments` fields.
   func asTaxAdjustmentValues(currency: Instrument) -> TaxAdjustmentValues {
     let shortTerm = InstrumentAmount(
-      quantity: max(0, shortTermGain), instrument: currency
+      quantity: shortTermCapitalGains, instrument: currency
     )
     let longTerm = InstrumentAmount(
-      quantity: max(0, longTermGain), instrument: currency
+      quantity: longTermCapitalGains, instrument: currency
     )
-    // `totalLoss` sums the negative portions only, so it's always ≤ 0.
-    // Flip with unary minus to populate the `losses` field as a non-negative
-    // magnitude — never use `abs()` on a monetary quantity.
-    let totalLoss = min(0, shortTermGain) + min(0, longTermGain)
     let losses = InstrumentAmount(
-      quantity: -totalLoss, instrument: currency
+      quantity: capitalLosses, instrument: currency
     )
     return TaxAdjustmentValues(shortTerm: shortTerm, longTerm: longTerm, losses: losses)
   }

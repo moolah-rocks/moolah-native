@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Per-instrument P&L rows plus the Rule 11 unavailability set.
 struct ProfitLossResult: Sendable {
@@ -8,12 +9,15 @@ struct ProfitLossResult: Sendable {
   /// (a partial row would look complete); the caller surfaces them as
   /// "unavailable" rather than "no position."
   let unavailableInstrumentIds: Set<String>
+  let unavailableInstruments: Set<Instrument>
 }
 
 /// Computes per-instrument profit/loss from transaction history.
 ///
 /// Combines FIFO cost basis tracking with current market valuation.
 enum ProfitLossCalculator {
+  private static let logger = Logger(subsystem: "rocks.moolah.app", category: "ProfitLoss")
+
   /// Retained convenience for unit-test call sites: builds a profile-wide
   /// `HoldingsCostLedger` from `LegTransaction`s then projects, returning just
   /// the rows. Production (`ReportingStore`) uses `compute(ledger:…)` with the
@@ -84,12 +88,16 @@ enum ProfitLossCalculator {
         .remainingCostBasis += lot.remainingCost
     }
 
-    let rows = try await buildResults(
+    let projection = try await buildResults(
       from: instrumentData,
       profileCurrency: profileCurrency,
       conversionService: conversionService,
       asOfDate: asOfDate)
-    return ProfitLossResult(rows: rows, unavailableInstrumentIds: unavailable)
+    return ProfitLossResult(
+      rows: projection.rows,
+      unavailableInstrumentIds: unavailable.union(projection.unavailableInstrumentIds),
+      unavailableInstruments: ledger.unavailableInstruments.union(projection.unavailableInstruments)
+    )
   }
 
   private static func buildResults(
@@ -97,14 +105,34 @@ enum ProfitLossCalculator {
     profileCurrency: Instrument,
     conversionService: InstrumentConversionService,
     asOfDate: Date
-  ) async throws -> [InstrumentProfitLoss] {
+  ) async throws -> ProjectionResult {
     var results: [InstrumentProfitLoss] = []
+    var unavailableInstrumentIds: Set<String> = []
+    var unavailableInstruments: Set<Instrument> = []
     for (_, data) in instrumentData {
       var currentValue: Decimal = 0
       if data.currentQuantity > 0 {
-        currentValue = try await conversionService.convert(
-          data.currentQuantity, from: data.instrument, to: profileCurrency, on: asOfDate
-        )
+        do {
+          let result = try await conversionService.convertResult(
+            InstrumentAmount(quantity: data.currentQuantity, instrument: data.instrument),
+            to: profileCurrency,
+            on: asOfDate)
+          switch result {
+          case .value(let amount):
+            currentValue = amount.quantity
+          case .knownZero:
+            currentValue = 0
+          }
+        } catch is CancellationError {
+          throw CancellationError()
+        } catch {
+          logger.error(
+            "Current-value conversion failed for \(data.instrument.id, privacy: .public): \(error)"
+          )
+          unavailableInstrumentIds.insert(data.instrument.id)
+          unavailableInstruments.insert(data.instrument)
+          continue
+        }
       }
       let unrealized = currentValue - data.remainingCostBasis
       results.append(
@@ -117,7 +145,16 @@ enum ProfitLossCalculator {
           unrealizedGain: unrealized
         ))
     }
-    return results.sorted { $0.totalGain > $1.totalGain }
+    return ProjectionResult(
+      rows: results.sorted { $0.totalGain > $1.totalGain },
+      unavailableInstrumentIds: unavailableInstrumentIds,
+      unavailableInstruments: unavailableInstruments)
+  }
+
+  private struct ProjectionResult {
+    let rows: [InstrumentProfitLoss]
+    let unavailableInstrumentIds: Set<String>
+    let unavailableInstruments: Set<Instrument>
   }
 
   private struct InstrumentData {

@@ -49,6 +49,34 @@ struct ReportingStoreTestsMore {
     #expect(summary.netCapitalGain == 500)
   }
 
+  @Test func capitalGainsSummary_offsetsLossesBeforeDiscount() {
+    let summary = CapitalGainsSummary(
+      shortTermGain: -200,
+      longTermGain: 1000,
+      totalGain: 800,
+      eventCount: 2
+    )
+
+    #expect(summary.discountedLongTermGain == 400)
+    #expect(summary.netCapitalGain == 400)
+  }
+
+  @Test func capitalGainsSummary_taxAdjustmentValues_useGrossGainsAndLosses() {
+    let summary = CapitalGainsSummary(
+      shortTermGain: 0,
+      longTermGain: 800,
+      totalGain: 800,
+      eventCount: 2,
+      shortTermCapitalGains: 0,
+      longTermCapitalGains: 1000,
+      capitalLosses: 200)
+
+    let values = summary.asTaxAdjustmentValues(currency: aud)
+
+    #expect(values.longTerm.quantity == 1000)
+    #expect(values.losses.quantity == 200)
+  }
+
   // MARK: - Multi-instrument profit/loss
 
   @Test @MainActor func loadProfitLoss_aggregatesMultipleStockInstruments() async throws {
