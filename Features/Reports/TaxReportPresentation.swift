@@ -2,7 +2,8 @@ import Foundation
 
 enum TaxReportPresentation {
   static func currentFinancialYear(
-    today: Date = Date(), calendar: Calendar = AustralianTaxCalendar.calendar
+    today: Date = Date(),
+    calendar: Calendar = AustralianTaxCalendar.calendar
   ) -> Int {
     let year = calendar.component(.year, from: today)
     let month = calendar.component(.month, from: today)
@@ -10,7 +11,8 @@ enum TaxReportPresentation {
   }
 
   static func financialYears(
-    around today: Date = Date(), calendar: Calendar = AustralianTaxCalendar.calendar,
+    around today: Date = Date(),
+    calendar: Calendar = AustralianTaxCalendar.calendar,
     lookback: Int = 5
   ) -> [Int] {
     let current = currentFinancialYear(today: today, calendar: calendar)
@@ -22,7 +24,8 @@ enum TaxReportPresentation {
   }
 
   static func financialYearInterval(
-    _ year: Int, calendar: Calendar = AustralianTaxCalendar.calendar
+    _ year: Int,
+    calendar: Calendar = AustralianTaxCalendar.calendar
   ) -> Range<Date>? {
     guard
       let start = calendar.date(from: DateComponents(year: year - 1, month: 7, day: 1)),
