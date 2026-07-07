@@ -16,15 +16,25 @@ private let logger = Logger(subsystem: "com.moolah.app", category: "Narration")
 /// - `session.streamResponse(to: String, options: GenerationOptions)` — returns
 ///   `ResponseStream<String>`, an `AsyncSequence` of `Snapshot` values where
 ///   `snapshot.content` is a cumulative `String` (the entire response so far).
-/// - `GenerationOptions(samplingMode: .greedy)` — deterministic token selection.
+/// - `GenerationOptions(sampling: .greedy)` / `samplingMode: .greedy` —
+///   deterministic token selection. The FoundationModels API label changed in
+///   Swift 6.4, while CI still builds with the Swift 6.3-era label.
 struct FoundationModelsNarrator {
   /// Generation options passed to every `streamResponse` call.
   /// Greedy sampling produces the most deterministic output across runs,
   /// reducing the chance of the provenance guard flipping between calls.
   let options: GenerationOptions
 
-  init(options: GenerationOptions = .init(samplingMode: .greedy)) {
+  init(options: GenerationOptions = FoundationModelsNarrator.greedyOptions()) {
     self.options = options
+  }
+
+  private static func greedyOptions() -> GenerationOptions {
+    #if compiler(>=6.4)
+      GenerationOptions(samplingMode: .greedy)
+    #else
+      GenerationOptions(sampling: .greedy)
+    #endif
   }
 }
 
