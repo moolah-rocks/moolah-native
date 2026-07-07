@@ -9,6 +9,7 @@ import Foundation
 /// gas). Fiat legs that are not attached trade fees are non-events.
 enum CostBasisEventBuilder {
   static func events(
+    sourceTransactionId: UUID? = nil,
     legs: [TransactionLeg],
     on date: Date,
     trackedAccountIds: Set<UUID>,
@@ -21,6 +22,7 @@ enum CostBasisEventBuilder {
       contentsOf: try await tradeEvents(
         legs: legs,
         on: date,
+        sourceTransactionId: sourceTransactionId,
         referenceCurrency: referenceCurrency,
         conversionService: conversionService))
     // 2. Non-fiat `.income` / `.openingBalance` → acquisition @ market value.
@@ -35,6 +37,7 @@ enum CostBasisEventBuilder {
       contentsOf: try await nonFiatDisposals(
         legs: legs,
         on: date,
+        sourceTransactionId: sourceTransactionId,
         referenceCurrency: referenceCurrency,
         conversionService: conversionService))
     // 4. Tracked→tracked `.transfer` → move (cost carries; market value for return).
@@ -53,6 +56,7 @@ enum CostBasisEventBuilder {
   private static func tradeEvents(
     legs: [TransactionLeg],
     on date: Date,
+    sourceTransactionId: UUID?,
     referenceCurrency: Instrument,
     conversionService: any InstrumentConversionService
   ) async throws -> [CostBasisEvent] {
@@ -73,7 +77,8 @@ enum CostBasisEventBuilder {
           instrument: sell.instrument,
           quantity: sell.quantity,
           proceedsPerUnit: sell.proceedsPerUnit,
-          account: accountFor(sell.instrument, in: legs)))
+          account: accountFor(sell.instrument, in: legs),
+          sourceTransactionId: sourceTransactionId))
     }
     return events
   }
@@ -116,6 +121,7 @@ enum CostBasisEventBuilder {
   private static func nonFiatDisposals(
     legs: [TransactionLeg],
     on date: Date,
+    sourceTransactionId: UUID?,
     referenceCurrency: Instrument,
     conversionService: any InstrumentConversionService
   ) async throws -> [CostBasisEvent] {
@@ -134,7 +140,8 @@ enum CostBasisEventBuilder {
           instrument: leg.instrument,
           quantity: qty,
           proceedsPerUnit: value / qty,
-          account: leg.accountId))
+          account: leg.accountId,
+          sourceTransactionId: sourceTransactionId))
     }
     return events
   }

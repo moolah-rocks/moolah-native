@@ -9,13 +9,16 @@ struct ReportsView: View {
   let transactionStore: TransactionStore
 
   @Environment(ProfileSession.self) private var session
+  @Environment(\.spamInstruments) private var spamInstruments
 
   /// Last-used range, persisted locally so a relative preset restores as the
   /// relative preset (re-resolved against today), not the fixed dates it
   /// referred to when picked. Read/written via `ReportsPeriodStorage`.
+  @State private var selectedReport = ReportSection.incomeAndExpenses
   @State private var dateRange: DateRange
   @State private var customFrom: Date
   @State private var customTo: Date
+  @State private var selectedFinancialYear: Int
 
   /// Resolved date range, computed once when dateRange or custom dates change.
   /// Stored in @State to avoid re-evaluating Date() on every SwiftUI render cycle.
@@ -41,6 +44,8 @@ struct ReportsView: View {
     _dateRange = State(initialValue: seed.dateRange)
     _customFrom = State(initialValue: seed.customFrom)
     _customTo = State(initialValue: seed.customTo)
+    _selectedFinancialYear = State(
+      initialValue: TaxReportPresentation.currentFinancialYear())
     _resolvedFrom = State(initialValue: seed.resolvedFrom)
     _resolvedTo = State(initialValue: seed.resolvedTo)
   }
@@ -48,7 +53,12 @@ struct ReportsView: View {
   var body: some View {
     NavigationStack {
       VStack(spacing: 0) {
-        dateRangeSelector
+        ReportsSelector(
+          selectedReport: $selectedReport,
+          dateRange: $dateRange,
+          customFrom: $customFrom,
+          customTo: $customTo,
+          selectedFinancialYear: $selectedFinancialYear)
         Divider()
         reportContent
       }
@@ -60,8 +70,23 @@ struct ReportsView: View {
         uncategorisedDrillDownDestination(drillDown)
       }
     }
-    .task(id: DateRangeKey(from: resolvedFrom, to: resolvedTo)) {
+    .task(
+      id: CategoryReportLoadKey(
+        report: selectedReport, from: resolvedFrom, to: resolvedTo)
+    ) {
+      guard selectedReport == .incomeAndExpenses else { return }
       await reportingStore.loadCategoryBalances(dateRange: resolvedFrom...resolvedTo)
+    }
+    .task(
+      id: TaxReportLoadKey(
+        report: selectedReport,
+        financialYear: selectedFinancialYear,
+        spamInstruments: spamInstruments)
+    ) {
+      guard selectedReport == .capitalGains else { return }
+      await reportingStore.loadTaxReport(
+        financialYear: selectedFinancialYear,
+        excluding: spamInstruments)
     }
     .focusedSceneValue(
       \.reportsRoute,
@@ -86,6 +111,15 @@ struct ReportsView: View {
   }
 
   @ViewBuilder private var reportContent: some View {
+    switch selectedReport {
+    case .incomeAndExpenses:
+      incomeAndExpenseReportContent
+    case .capitalGains:
+      taxReportContent
+    }
+  }
+
+  @ViewBuilder private var incomeAndExpenseReportContent: some View {
     if reportingStore.isLoadingCategoryBalances {
       ProgressView("Loading report...")
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -103,6 +137,31 @@ struct ReportsView: View {
       }
     } else {
       incomeAndExpenseTables
+    }
+  }
+
+  private var taxReportContent: some View {
+    TaxReportView(
+      financialYear: selectedFinancialYear,
+      holdingsDate: reportingStore.taxReportHoldingsDate
+        ?? TaxReportPresentation.holdingsObservationDate(financialYear: selectedFinancialYear),
+      profileInstrument: reportingStore.profileCurrency,
+      summary: reportingStore.capitalGainsSummary,
+      events: reportingStore.capitalGainsResult?.events ?? [],
+      capitalGainsHasUnavailableData: reportingStore.capitalGainsHasUnavailableData,
+      capitalGainsUnavailableInstruments: reportingStore.capitalGainsUnavailableInstruments,
+      profitLoss: reportingStore.profitLoss,
+      profitLossHasUnavailableData: reportingStore.profitLossHasUnavailableData,
+      profitLossUnavailableInstruments: reportingStore.profitLossUnavailableInstruments,
+      isLoading: reportingStore.isLoading,
+      error: reportingStore.error,
+      isMigratingCrossChainIdentity: reportingStore.isMigratingCrossChainIdentity
+    ) {
+      Task {
+        await reportingStore.loadTaxReport(
+          financialYear: selectedFinancialYear,
+          excluding: spamInstruments)
+      }
     }
   }
 
@@ -192,37 +251,16 @@ struct ReportsView: View {
       transactionStore: transactionStore)
   }
 
-  /// Stable identity for the `.task(id:)` trigger — re-running the load
-  /// whenever either endpoint changes while letting SwiftUI cancel any
-  /// in-flight request when the view disappears.
-  private struct DateRangeKey: Hashable {
+  private struct CategoryReportLoadKey: Hashable {
+    let report: ReportSection
     let from: Date
     let to: Date
   }
 
-  private var dateRangeSelector: some View {
-    HStack(spacing: 16) {
-      Picker("Date Range", selection: $dateRange) {
-        ForEach(DateRange.allCases) { range in
-          Text(range.displayName).tag(range)
-        }
-      }
-      .pickerStyle(.menu)
-      #if os(macOS)
-        .frame(width: 200)
-      #endif
-
-      if dateRange == .custom {
-        DatePicker("From", selection: $customFrom, displayedComponents: .date)
-          .labelsHidden()
-
-        DatePicker("To", selection: $customTo, displayedComponents: .date)
-          .labelsHidden()
-      }
-
-      Spacer()
-    }
-    .padding()
+  private struct TaxReportLoadKey: Hashable {
+    let report: ReportSection
+    let financialYear: Int
+    let spamInstruments: Set<Instrument>
   }
 }
 

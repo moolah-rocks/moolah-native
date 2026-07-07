@@ -64,4 +64,73 @@ struct ProfitLossCalculatorUnavailabilityTests {
     let bhpRow = try #require(result.rows.first { $0.instrument == bhp })
     #expect(bhpRow.currentValue == 5_000)  // sibling still renders (100 × 50)
   }
+
+  @Test
+  func knownZeroCurrentValue_rowRendersWithZeroValue() async throws {
+    let spam = Instrument.crypto(
+      chainId: 10,
+      contractAddress: "0x21841eb46ccce03ebe57b4ee6eb547f31dfde152",
+      symbol: "SPAM",
+      name: "Spam Token",
+      decimals: 18)
+    let account = UUID()
+    let txns = [
+      Transaction(
+        date: date(0),
+        legs: [
+          TransactionLeg(accountId: account, instrument: aud, quantity: -100, type: .trade),
+          TransactionLeg(accountId: account, instrument: spam, quantity: 10, type: .trade),
+        ])
+    ]
+    let service = FakeConversionService.fixedRates([:], knownZero: [spam.id])
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: service)
+
+    let result = try await ProfitLossCalculator.compute(
+      ledger: ledger, profileCurrency: aud, conversionService: service, asOfDate: date(365))
+
+    #expect(!result.unavailableInstrumentIds.contains(spam.id))
+    let spamRow = try #require(result.rows.first { $0.instrument == spam })
+    #expect(spamRow.currentValue == 0)
+    #expect(spamRow.unrealizedGain == -100)
+  }
+
+  @Test
+  func currentValueUnavailable_rowOmittedAndFlagged_siblingRenders() async throws {
+    let spam = Instrument.crypto(
+      chainId: 10,
+      contractAddress: "0x21841eb46ccce03ebe57b4ee6eb547f31dfde152",
+      symbol: "SPAM",
+      name: "Spam Token",
+      decimals: 18)
+    let bhp = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
+    let account = UUID()
+    let txns = [
+      Transaction(
+        date: date(0),
+        legs: [
+          TransactionLeg(accountId: account, instrument: aud, quantity: -100, type: .trade),
+          TransactionLeg(accountId: account, instrument: spam, quantity: 10, type: .trade),
+        ]),
+      Transaction(
+        date: date(0),
+        legs: [
+          TransactionLeg(accountId: account, instrument: aud, quantity: -4_000, type: .trade),
+          TransactionLeg(accountId: account, instrument: bhp, quantity: 100, type: .trade),
+        ]),
+    ]
+    let service = FakeConversionService.failingInstruments(
+      [spam.id], rates: [bhp.id: 50])
+    let ledgerService = FakeConversionService.fixedRates([bhp.id: 50, spam.id: 10])
+    let ledger = try await HoldingsCostLedger.build(
+      transactions: txns, referenceCurrency: aud, conversionService: ledgerService)
+
+    let result = try await ProfitLossCalculator.compute(
+      ledger: ledger, profileCurrency: aud, conversionService: service, asOfDate: date(365))
+
+    #expect(result.unavailableInstrumentIds.contains(spam.id))
+    #expect(!result.rows.contains { $0.instrument == spam })
+    let bhpRow = try #require(result.rows.first { $0.instrument == bhp })
+    #expect(bhpRow.currentValue == 5_000)
+  }
 }

@@ -114,10 +114,73 @@ struct CostBasisEngineTests {
     engine.processBuy(instrument: bhp, quantity: 10, costPerUnit: 100, date: date(0))
 
     let events = engine.processSell(
-      instrument: bhp, quantity: 10, proceedsPerUnit: 120, date: date(366)
+      instrument: bhp, quantity: 10, proceedsPerUnit: 120, date: date(367)
     )
 
     #expect(events[0].isLongTerm == true)
+  }
+
+  @Test
+  func holdingPeriod_usesAustralianTaxCalendarAcrossLocalTimezones() throws {
+    let bhp = stockInstrument("BHP")
+    var losAngelesCalendar = Calendar(identifier: .gregorian)
+    losAngelesCalendar.locale = Locale(identifier: "en_US_POSIX")
+    losAngelesCalendar.timeZone = try #require(TimeZone(identifier: "America/Los_Angeles"))
+    let acquired = try #require(
+      losAngelesCalendar.date(
+        from: DateComponents(
+          year: 2025, month: 3, day: 7, hour: 3)))
+    let sold = try #require(
+      losAngelesCalendar.date(
+        from: DateComponents(
+          year: 2026, month: 3, day: 8, hour: 3)))
+
+    var engine = CostBasisEngine()
+    engine.processBuy(instrument: bhp, quantity: 10, costPerUnit: 100, date: acquired)
+
+    let events = engine.processSell(
+      instrument: bhp, quantity: 10, proceedsPerUnit: 120, date: sold)
+
+    #expect(events[0].holdingDays == 365)
+    #expect(events[0].isLongTerm == true)
+  }
+
+  @Test
+  func holdingPeriod_usesAustralianCivilDayForUtcInstants() throws {
+    let bhp = stockInstrument("BHP")
+    let acquired = try #require(
+      Calendar.utc.date(from: DateComponents(year: 2025, month: 6, day: 30, hour: 14, minute: 30)))
+    let soldOnAnniversaryInAustralia = try #require(
+      Calendar.utc.date(from: DateComponents(year: 2026, month: 6, day: 30, hour: 14, minute: 30)))
+    let soldNextDayInAustralia = try #require(
+      Calendar.utc.date(from: DateComponents(year: 2026, month: 7, day: 1, hour: 14, minute: 30)))
+
+    var engine = CostBasisEngine()
+    engine.processBuy(instrument: bhp, quantity: 20, costPerUnit: 100, date: acquired)
+
+    let anniversaryEvents = engine.processSell(
+      instrument: bhp, quantity: 10, proceedsPerUnit: 120, date: soldOnAnniversaryInAustralia)
+    let nextDayEvents = engine.processSell(
+      instrument: bhp, quantity: 10, proceedsPerUnit: 120, date: soldNextDayInAustralia)
+
+    #expect(anniversaryEvents[0].isLongTerm == false)
+    #expect(nextDayEvents[0].isLongTerm == true)
+  }
+
+  @Test
+  func holdingPeriod_anniversaryDayIsNotLongTerm() throws {
+    let bhp = stockInstrument("BHP")
+    let acquired = try #require(
+      AustralianTaxCalendar.calendar.date(from: DateComponents(year: 2024, month: 3, day: 1)))
+    let sold = try #require(
+      AustralianTaxCalendar.calendar.date(from: DateComponents(year: 2025, month: 3, day: 1)))
+    var engine = CostBasisEngine()
+    engine.processBuy(instrument: bhp, quantity: 10, costPerUnit: 100, date: acquired)
+
+    let events = engine.processSell(
+      instrument: bhp, quantity: 10, proceedsPerUnit: 120, date: sold)
+
+    #expect(events[0].isLongTerm == false)
   }
 
   @Test
@@ -229,10 +292,9 @@ struct CostBasisEngineTests {
   }
 
   private func date(_ daysFromBase: Int) -> Date {
-    let calendar = Calendar(identifier: .gregorian)
     guard
-      let base = calendar.date(from: DateComponents(year: 2024, month: 1, day: 1)),
-      let result = calendar.date(byAdding: .day, value: daysFromBase, to: base)
+      let base = Calendar.utc.date(from: DateComponents(year: 2024, month: 1, day: 1)),
+      let result = Calendar.utc.date(byAdding: .day, value: daysFromBase, to: base)
     else {
       fatalError("Could not construct date \(daysFromBase) days from 2024-01-01")
     }

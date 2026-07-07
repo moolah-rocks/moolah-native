@@ -17,12 +17,15 @@ final class ReportingStore {
   /// a future Reports/tax consumer must honour — render "unavailable" for the
   /// affected surface rather than a complete-looking but wrong number — the
   /// same treatment `incomeHasUnavailableData`/`expenseHasUnavailableData`
-  /// already receive on the shipped category-balances surface. No view
-  /// consumes `profitLoss`/`capitalGains*` yet (the tax-report UI is a
-  /// deferred follow-up). `profitLoss` still lists the sibling instruments
-  /// that resolved.
+  /// already receive on the shipped category-balances surface. The Reports
+  /// tax surface consumes these flags and renders the affected totals as
+  /// unavailable. `profitLoss` still lists the sibling instruments that
+  /// resolved.
   private(set) var capitalGainsHasUnavailableData = false
   private(set) var profitLossHasUnavailableData = false
+  private(set) var capitalGainsUnavailableInstruments: [Instrument] = []
+  private(set) var profitLossUnavailableInstruments: [Instrument] = []
+  private(set) var taxReportHoldingsDate: Date?
 
   /// Category balances for the Reports view, bucketed by transaction type.
   private(set) var incomeBalances: [UUID: InstrumentAmount] = [:]
@@ -139,119 +142,232 @@ final class ReportingStore {
     guard generation == categoryBalancesGeneration else { return }
     isLoadingCategoryBalances = false
   }
+}
 
-  func loadProfitLoss() async {
+extension ReportingStore {
+  func loadProfitLoss(
+    asOfDate: Date = Date(),
+    ledgerBeforeDate: Date? = nil,
+    excluding excludedInstruments: Set<Instrument> = []
+  ) async {
     // Bump-then-capture: see the `reportGeneration` doc comment.
     reportGeneration &+= 1
     let generation = reportGeneration
     isLoading = true
     error = nil
+    profitLoss = []
+    profitLossHasUnavailableData = false
+    profitLossUnavailableInstruments = []
+    _ = await performProfitLossLoad(
+      asOfDate: asOfDate,
+      ledgerBeforeDate: ledgerBeforeDate,
+      excluding: excludedInstruments,
+      generation: generation)
+    guard generation == reportGeneration else { return }
+    isLoading = false
+  }
+
+  private func performProfitLossLoad(
+    asOfDate: Date,
+    ledgerBeforeDate: Date?,
+    excluding excludedInstruments: Set<Instrument>,
+    generation: UInt64
+  ) async -> Bool {
     guard let holdingsCostLedger else {
       logger.error("loadProfitLoss called without holdingsCostLedger")
-      isLoading = false
-      return
+      return true
     }
     do {
-      // Source the profile-wide ledger from the shared provider (built once
-      // per load, shared with the positions / performance passes) instead of
-      // rebuilding from a full transaction fetch. A genuine build failure
-      // throws here and is surfaced as `error` (Rule 11 unavailable), never a
-      // partial/zero P&L.
-      let ledger = try await holdingsCostLedger.ledger()
+      // Source the profile-wide ledger from the shared provider so a genuine
+      // build failure surfaces as unavailable data, never partial/zero P&L.
+      let ledger =
+        if let ledgerBeforeDate {
+          try await holdingsCostLedger.ledger(before: ledgerBeforeDate)
+        } else {
+          try await holdingsCostLedger.ledger(through: asOfDate)
+        }
       let result = try await ProfitLossCalculator.compute(
         ledger: ledger,
         profileCurrency: profileCurrency,
         conversionService: conversionService,
-        asOfDate: Date()
+        asOfDate: asOfDate
       )
-      guard generation == reportGeneration else { return }
-      profitLoss = result.rows
+      guard generation == reportGeneration else { return false }
+      let excludedInstrumentIds = Set(excludedInstruments.map(\.id))
+      profitLoss = result.rows.filter { !excludedInstrumentIds.contains($0.instrument.id) }
       // Rule 11: an unavailable instrument's row is omitted; flag it so the
       // view marks the P&L surface unavailable rather than "no position."
-      profitLossHasUnavailableData = !result.unavailableInstrumentIds.isEmpty
+      profitLossHasUnavailableData =
+        !result.unavailableInstrumentIds.subtracting(excludedInstrumentIds).isEmpty
+      profitLossUnavailableInstruments = Self.sortedInstruments(
+        result.unavailableInstruments.filter { !excludedInstrumentIds.contains($0.id) })
+      return true
     } catch is CancellationError {
       // View teardown / supersession — never surface; the next mount
       // issues its own load.
-      guard generation == reportGeneration else { return }
-      isLoading = false
-      return
+      guard generation == reportGeneration else { return false }
+      return false
     } catch {
-      guard generation == reportGeneration else { return }
+      guard generation == reportGeneration else { return false }
       logger.error("Failed to load P&L: \(error)")
       self.error = error
+      return true
+    }
+  }
+
+  func loadTaxReport(
+    financialYear: Int,
+    excluding excludedInstruments: Set<Instrument> = [],
+    today: Date = Date()
+  ) async {
+    reportGeneration &+= 1
+    let generation = reportGeneration
+    capitalGainsResult = nil
+    capitalGainsSummary = nil
+    capitalGainsHasUnavailableData = false
+    capitalGainsUnavailableInstruments = []
+    profitLoss = []
+    profitLossHasUnavailableData = false
+    profitLossUnavailableInstruments = []
+    isLoading = true
+    error = nil
+    let dates = taxReportLoadDates(financialYear: financialYear, today: today)
+    taxReportHoldingsDate = dates.valuationDate
+    guard
+      await performCapitalGainsLoad(
+        financialYear: financialYear,
+        excluding: excludedInstruments,
+        sellDateInterval: dates.sellDateInterval,
+        generation: generation)
+    else {
+      finishLoadingIfCurrentGeneration(generation)
+      return
+    }
+    guard generation == reportGeneration else { return }
+    guard error == nil, !isMigratingCrossChainIdentity else {
+      isLoading = false
+      return
+    }
+    let priceDate =
+      TaxReportPresentation.holdingsValuationDate(
+        observationDate: dates.valuationDate)
+    guard
+      await performProfitLossLoad(
+        asOfDate: priceDate,
+        ledgerBeforeDate: dates.ledgerBeforeDate,
+        excluding: excludedInstruments,
+        generation: generation)
+    else {
+      finishLoadingIfCurrentGeneration(generation)
+      return
     }
     guard generation == reportGeneration else { return }
     isLoading = false
   }
 
-  /// Load capital gains for an Australian financial year (1 Jul to 30 Jun).
-  ///
-  /// Returns immediately (leaving `capitalGainsSummary`/`capitalGainsResult`
-  /// nil) while `isMigratingCrossChainIdentity` is true: the FIFO engine keys
-  /// lots by `instrument.id`, and lots for the same asset may still be split
-  /// across retired + canonical ids until the migration completes.
-  func loadCapitalGains(financialYear: Int) async {
+  private func taxReportLoadDates(financialYear: Int, today: Date) -> TaxReportLoadDates {
+    let valuationDate = TaxReportPresentation.holdingsObservationDate(
+      financialYear: financialYear,
+      today: today)
+    let ledgerBeforeDate = TaxReportPresentation.holdingsLedgerCutoffDate(
+      financialYear: financialYear,
+      observationDate: valuationDate)
+    let sellDateInterval =
+      TaxReportPresentation.financialYearInterval(financialYear).flatMap { financialYearInterval in
+        ledgerBeforeDate.map { financialYearInterval.lowerBound..<$0 }
+      }
+    return TaxReportLoadDates(
+      valuationDate: valuationDate,
+      ledgerBeforeDate: ledgerBeforeDate,
+      sellDateInterval: sellDateInterval)
+  }
+
+  private func finishLoadingIfCurrentGeneration(_ generation: UInt64) {
+    guard generation == reportGeneration else { return }
+    isLoading = false
+  }
+
+  func loadCapitalGains(
+    financialYear: Int,
+    excluding excludedInstruments: Set<Instrument> = [],
+    sellDateInterval requestedSellDateInterval: Range<Date>? = nil
+  ) async {
+    // Bump-then-capture: see the `reportGeneration` doc comment.
+    reportGeneration &+= 1
+    let generation = reportGeneration
+    capitalGainsResult = nil
+    capitalGainsSummary = nil
+    capitalGainsHasUnavailableData = false
+    capitalGainsUnavailableInstruments = []
     guard !isMigratingCrossChainIdentity else {
       logger.info(
         "loadCapitalGains: skipping — cross-chain identity migration not yet complete")
       return
     }
-    // Bump-then-capture: see the `reportGeneration` doc comment.
-    reportGeneration &+= 1
-    let generation = reportGeneration
     isLoading = true
     error = nil
+    _ = await performCapitalGainsLoad(
+      financialYear: financialYear,
+      excluding: excludedInstruments,
+      sellDateInterval: requestedSellDateInterval,
+      generation: generation)
+    guard generation == reportGeneration else { return }
+    isLoading = false
+  }
+
+  private func performCapitalGainsLoad(
+    financialYear: Int,
+    excluding excludedInstruments: Set<Instrument>,
+    sellDateInterval requestedSellDateInterval: Range<Date>?,
+    generation: UInt64
+  ) async -> Bool {
+    guard !isMigratingCrossChainIdentity else {
+      logger.info(
+        "loadCapitalGains: skipping — cross-chain identity migration not yet complete")
+      return true
+    }
     guard let holdingsCostLedger else {
       logger.error("loadCapitalGains called without holdingsCostLedger")
-      isLoading = false
-      return
+      return true
     }
     do {
-      // Australian FY: 1 July (year-1) to 30 June (year)
-      let calendar = Calendar(identifier: .gregorian)
       guard
-        let fyStart = calendar.date(
-          from: DateComponents(year: financialYear - 1, month: 7, day: 1)),
-        let fyEnd = calendar.date(
-          from: DateComponents(year: financialYear, month: 6, day: 30))
+        let financialYearInterval = TaxReportPresentation.financialYearInterval(financialYear)
       else {
         logger.error("Could not compute financial year \(financialYear) date range")
-        guard generation == reportGeneration else { return }
-        isLoading = false
-        return
+        guard generation == reportGeneration else { return false }
+        return true
       }
+      let sellDateInterval = requestedSellDateInterval ?? financialYearInterval
 
-      // Shared profile-wide ledger from the provider (built once per load).
-      // A genuine build failure throws → surfaced as `error`, never a partial
-      // realised set.
-      let ledger = try await holdingsCostLedger.ledger()
+      // A genuine ledger build failure throws and is surfaced as `error`,
+      // never a partial realised set.
+      let ledger = try await holdingsCostLedger.ledger(before: sellDateInterval.upperBound)
       let result = CapitalGainsCalculator.compute(
-        ledger: ledger, sellDateRange: fyStart...fyEnd)
-      guard generation == reportGeneration else { return }
-      capitalGainsResult = result
+        ledger: ledger, sellDateInterval: sellDateInterval)
+      guard generation == reportGeneration else { return false }
+      let excludedInstrumentIds = Set(excludedInstruments.map(\.id))
+      let visibleResult = Self.capitalGainsResult(result, excluding: excludedInstrumentIds)
+      capitalGainsResult = visibleResult
       // Rule 11: a conversion failure may have dropped a disposal, so the
       // realised total may be understated — flag it (a tax figure must never
       // render complete-but-wrong).
-      capitalGainsHasUnavailableData = result.hasUnavailableData
-      capitalGainsSummary = CapitalGainsSummary(
-        shortTermGain: result.shortTermGain,
-        longTermGain: result.longTermGain,
-        totalGain: result.totalRealizedGain,
-        eventCount: result.events.count
-      )
+      capitalGainsHasUnavailableData = visibleResult.hasUnavailableData
+      capitalGainsUnavailableInstruments = Self.sortedInstruments(
+        visibleResult.unavailableInstruments)
+      capitalGainsSummary = Self.capitalGainsSummary(from: visibleResult.events)
+      return true
     } catch is CancellationError {
       // View teardown / supersession — never surface; the next mount
       // issues its own load.
-      guard generation == reportGeneration else { return }
-      isLoading = false
-      return
+      guard generation == reportGeneration else { return false }
+      return false
     } catch {
-      guard generation == reportGeneration else { return }
+      guard generation == reportGeneration else { return false }
       logger.error("Failed to load capital gains: \(error)")
       self.error = error
+      return true
     }
-    guard generation == reportGeneration else { return }
-    isLoading = false
   }
 
 }
