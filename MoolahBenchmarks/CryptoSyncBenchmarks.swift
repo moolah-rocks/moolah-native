@@ -10,7 +10,7 @@ import XCTest
 /// dedup can be pinpointed by xctest output and the matching
 /// `Signposts.cryptoSync` regions in Instruments.
 ///
-/// Fixtures are synthesised in-memory; the benchmark `AlchemyClient`
+/// Fixtures are synthesised in-memory; the benchmark `ChainDataClient`
 /// returns canned `[AlchemyTransfer]` lists so the pipeline measures
 /// Swift work — building, merging, dedup, persistence, rules — rather
 /// than network variance.
@@ -78,7 +78,7 @@ final class CryptoSyncBenchmarks: XCTestCase {
           accountId: accountId, count: 5_000, in: backend)
         let store = try Self.makeStore(
           backend: backend,
-          alchemy: ScriptedBenchmarkAlchemyClient(transfersByWallet: scripted))
+          alchemy: ScriptedBenchmarkChainDataClient(transfersByWallet: scripted))
         await store.syncAccounts(try await Self.fetchAccounts(in: backend))
       }
     }
@@ -146,18 +146,18 @@ final class CryptoSyncBenchmarks: XCTestCase {
     }
     let store = try Self.makeStore(
       backend: backend,
-      alchemy: ScriptedBenchmarkAlchemyClient(transfersByWallet: scripted))
+      alchemy: ScriptedBenchmarkChainDataClient(transfersByWallet: scripted))
     let accounts = try await Self.fetchAccounts(in: backend)
     await store.syncAccounts(accounts)
   }
 
-  /// Builds a `SyncedAccountStore` with the given Alchemy stub. Uses an
-  /// in-memory token resolver and the no-op rules engine so the
+  /// Builds a `SyncedAccountStore` with the given chain-data stub. Uses
+  /// an in-memory token resolver and the no-op rules engine so the
   /// benchmark only measures pipeline-internal work.
   @MainActor
   private static func makeStore(
     backend: CloudKitBackend,
-    alchemy: any AlchemyClient
+    alchemy: any ChainDataClient
   ) throws -> SyncedAccountStore {
     let registry = StubInstrumentRegistry()
     let resolver = BenchmarkRegistrationResolver()

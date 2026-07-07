@@ -139,14 +139,13 @@ enum BenchmarkAlchemyFixtures {
 
 // MARK: - Benchmark stubs
 
-/// Scripted in-process Alchemy client used by every benchmark. Returns
-/// the transfers seeded for the requested wallet address (case-
-/// insensitive); throws on any unscripted call so a misconfigured
-/// benchmark fails loudly.
+/// Scripted in-process chain data client used by every benchmark. Returns
+/// the transfers seeded for the requested wallet address (case-insensitive);
+/// throws on any unscripted call so a misconfigured benchmark fails loudly.
 ///
 /// Implemented as an immutable `Sendable` struct — every stored value is
 /// already Sendable so there is no concurrent-mutation surface.
-struct ScriptedBenchmarkAlchemyClient: AlchemyClient, Sendable {
+struct ScriptedBenchmarkChainDataClient: ChainDataClient, Sendable {
   private let transfersByWallet: [String: [AlchemyTransfer]]
 
   init(transfersByWallet: [String: [AlchemyTransfer]]) {
@@ -155,10 +154,15 @@ struct ScriptedBenchmarkAlchemyClient: AlchemyClient, Sendable {
 
   struct UnscriptedTransfersCall: Error { let walletAddress: String }
 
+  func currentHead(chain: ChainConfig) async throws -> UInt64? {
+    nil
+  }
+
   func getAssetTransfers(
     chain: ChainConfig,
     walletAddress: String,
-    fromBlock: UInt64
+    fromBlock: UInt64,
+    toBlock: UInt64?
   ) async throws -> [AlchemyTransfer] {
     if let scripted = transfersByWallet[walletAddress.lowercased()] {
       return scripted
