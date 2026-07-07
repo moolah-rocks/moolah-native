@@ -12,11 +12,12 @@ import Testing
 /// NOT NULL` filter: null-category rows route to `uncategorised`, non-null
 /// rows to `byCategory`. `byCategory` still excludes uncategorised legs —
 /// unconditionally, regardless of whether any uncategorised legs exist in
-/// range (`categoryBalancesByCategoryUnaffectedByUncategorised` pins that
+/// range
+/// (`categoryBalancesByCategoryUnaffectedByUncategorised` pins that
 /// independence). See
 /// `plans/2026-07-05-reports-uncategorised-row-plan.md`, "Design (revised —
 /// single combined query)".
-@Suite("AnalysisRepository Contract Tests — Category Balances Uncategorised")
+@Suite("AnalysisRepository Contract Tests — Category Balances Uncategorised", .serialized)
 struct CategoryBalancesUncategorisedTests {
 
   @Test("fetchCategoryBalances routes categoryless legs to uncategorised, not byCategory")
@@ -148,5 +149,75 @@ struct CategoryBalancesUncategorisedTests {
     #expect(
       result.uncategorised
         == InstrumentAmount(quantity: -999, instrument: .defaultTestInstrument))
+  }
+
+  @Test("fetchCategoryBalances includes account-less earmark legs by default")
+  func categoryBalancesUncategorisedIncludesAccountlessEarmarksByDefault() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    let earmark = Earmark(
+      id: UUID(), name: "Holiday", instrument: .defaultTestInstrument)
+    _ = try await backend.earmarks.create(earmark)
+
+    let today = AnalysisTestHelpers.currentCalendar.startOfDay(for: Date())
+    let dateRange = today...today
+
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: today, payee: "Earmark Reserve",
+        legs: [
+          TransactionLeg(
+            accountId: nil, instrument: .defaultTestInstrument,
+            quantity: -999, type: .expense, earmarkId: earmark.id)
+        ]))
+
+    let result = try await backend.analysis.fetchCategoryBalances(
+      dateRange: dateRange, transactionType: .expense,
+      filters: nil, targetInstrument: .defaultTestInstrument)
+
+    #expect(
+      result.uncategorised
+        == InstrumentAmount(quantity: -999, instrument: .defaultTestInstrument))
+  }
+
+  @Test("Reports filter excludes account-less earmark legs from uncategorised")
+  func categoryBalancesUncategorisedExcludesAccountlessEarmarks() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    let account = Account(
+      id: UUID(), name: "Test Account", type: .bank, instrument: .defaultTestInstrument)
+    _ = try await backend.accounts.create(account)
+
+    let earmark = Earmark(
+      id: UUID(), name: "Holiday", instrument: .defaultTestInstrument)
+    _ = try await backend.earmarks.create(earmark)
+
+    let today = AnalysisTestHelpers.currentCalendar.startOfDay(for: Date())
+    let dateRange = today...today
+
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: today, payee: "Account Spending",
+        legs: [
+          TransactionLeg(
+            accountId: account.id, instrument: .defaultTestInstrument,
+            quantity: -30, type: .expense)
+        ]))
+
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: today, payee: "Earmark Reserve",
+        legs: [
+          TransactionLeg(
+            accountId: nil, instrument: .defaultTestInstrument,
+            quantity: -999, type: .expense, earmarkId: earmark.id)
+        ]))
+
+    let result = try await backend.analysis.fetchCategoryBalances(
+      dateRange: dateRange, transactionType: .expense,
+      filters: TransactionFilter(excludesAccountlessUncategorised: true),
+      targetInstrument: .defaultTestInstrument)
+
+    #expect(
+      result.uncategorised
+        == InstrumentAmount(quantity: -30, instrument: .defaultTestInstrument))
   }
 }

@@ -184,7 +184,8 @@ struct ReportsView: View {
       title: "Uncategorised",
       filter: TransactionFilter(
         dateRange: drillDown.dateRange,
-        uncategorisedLegType: drillDown.transactionType),
+        uncategorisedLegType: drillDown.transactionType,
+        excludesAccountlessUncategorised: true),
       accounts: accounts,
       categories: categories,
       earmarks: earmarks,

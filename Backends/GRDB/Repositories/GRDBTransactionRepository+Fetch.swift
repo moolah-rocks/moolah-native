@@ -190,12 +190,26 @@ extension GRDBTransactionRepository {
     if let legType = filter.uncategorisedLegType {
       request = request.filter(
         legTransactionIds(
-          where: TransactionLegRow.Columns.categoryId == nil
-            && TransactionLegRow.Columns.type == legType.rawValue
+          where: uncategorisedLegPredicate(
+            for: legType,
+            excludesAccountless: filter.excludesAccountlessUncategorised)
         ).contains(TransactionRow.Columns.id))
     }
 
     return request
+  }
+
+  private static func uncategorisedLegPredicate(
+    for legType: TransactionType,
+    excludesAccountless: Bool
+  ) -> some SQLSpecificExpressible {
+    var predicate =
+      TransactionLegRow.Columns.categoryId == nil
+      && TransactionLegRow.Columns.type == legType.rawValue
+    if excludesAccountless {
+      predicate = predicate && TransactionLegRow.Columns.accountId != nil
+    }
+    return predicate
   }
 
   /// The filtered request ordered `date DESC, id ASC` — the deterministic

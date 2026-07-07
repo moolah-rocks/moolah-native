@@ -101,35 +101,8 @@ struct TransactionRepositoryFilterTests {
 
   @Test("filters by uncategorisedLegType (type-scoped)")
   func testFiltersByUncategorizedLegType() async throws {
-    let accountId = UUID()
-    let categoryId = UUID()
-    let date = try #require(
-      Calendar.current.date(from: DateComponents(year: 2024, month: 6, day: 15)))
-
-    let uncategorisedIncome = Transaction(
-      date: date, payee: "Uncategorised Income",
-      legs: [
-        makeContractTestLeg(
-          accountId: accountId, quantity: try #require(Decimal(string: "100.00")),
-          type: .income)
-      ])
-    let uncategorisedExpense = Transaction(
-      date: date, payee: "Uncategorised Expense",
-      legs: [
-        makeContractTestLeg(
-          accountId: accountId, quantity: try #require(Decimal(string: "-50.00")),
-          type: .expense)
-      ])
-    let categorisedIncome = Transaction(
-      date: date, payee: "Categorised Income",
-      legs: [
-        makeContractTestLeg(
-          accountId: accountId, quantity: try #require(Decimal(string: "200.00")),
-          type: .income, categoryId: categoryId)
-      ])
-
     let repository = try makeContractCloudKitTransactionRepository(
-      initialTransactions: [uncategorisedIncome, uncategorisedExpense, categorisedIncome])
+      initialTransactions: try makeUncategorisedFilterTransactions())
 
     let incomePage = try await repository.fetch(
       filter: TransactionFilter(uncategorisedLegType: .income),
@@ -144,8 +117,58 @@ struct TransactionRepositoryFilterTests {
       page: 0,
       pageSize: 50
     )
-    #expect(expensePage.transactions.count == 1)
-    #expect(expensePage.transactions.first?.payee == "Uncategorised Expense")
+    #expect(expensePage.transactions.count == 2)
+    #expect(expensePage.transactions.map(\.payee).contains("Uncategorised Expense"))
+    #expect(expensePage.transactions.map(\.payee).contains("Accountless Earmark Expense"))
+
+    let reportExpensePage = try await repository.fetch(
+      filter: TransactionFilter(
+        uncategorisedLegType: .expense,
+        excludesAccountlessUncategorised: true),
+      page: 0,
+      pageSize: 50
+    )
+    #expect(reportExpensePage.transactions.count == 1)
+    #expect(reportExpensePage.transactions.first?.payee == "Uncategorised Expense")
+  }
+
+  private func makeUncategorisedFilterTransactions() throws -> [Transaction] {
+    let accountId = UUID()
+    let earmarkId = UUID()
+    let categoryId = UUID()
+    let date = try #require(
+      Calendar.current.date(from: DateComponents(year: 2024, month: 6, day: 15)))
+
+    return [
+      Transaction(
+        date: date, payee: "Uncategorised Income",
+        legs: [
+          makeContractTestLeg(
+            accountId: accountId, quantity: try #require(Decimal(string: "100.00")),
+            type: .income)
+        ]),
+      Transaction(
+        date: date, payee: "Uncategorised Expense",
+        legs: [
+          makeContractTestLeg(
+            accountId: accountId, quantity: try #require(Decimal(string: "-50.00")),
+            type: .expense)
+        ]),
+      Transaction(
+        date: date, payee: "Categorised Income",
+        legs: [
+          makeContractTestLeg(
+            accountId: accountId, quantity: try #require(Decimal(string: "200.00")),
+            type: .income, categoryId: categoryId)
+        ]),
+      Transaction(
+        date: date, payee: "Accountless Earmark Expense",
+        legs: [
+          makeContractTestLeg(
+            accountId: nil, quantity: try #require(Decimal(string: "-999.00")),
+            type: .expense, earmarkId: earmarkId)
+        ]),
+    ]
   }
 
   @Test("returns empty when no matches")

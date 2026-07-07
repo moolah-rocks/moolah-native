@@ -269,7 +269,8 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
       accountId: filters?.accountId,
       earmarkId: filters?.earmarkId,
       payee: filters?.payee,
-      categoryIds: filters?.categoryIds ?? [])
+      categoryIds: filters?.categoryIds ?? [],
+      excludesAccountlessUncategorised: filters?.excludesAccountlessUncategorised ?? false)
     // Hoisted ahead of the snapshot for the same cross-database reason
     // as `fetchDailyBalances(after:forecastUntil:)`.
     let instruments = try await instrumentResolver.instrumentMap()

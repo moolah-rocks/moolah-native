@@ -81,6 +81,7 @@ extension GRDBAnalysisRepository {
     let earmarkId: UUID?
     let payee: String?
     let categoryIds: Set<UUID>
+    let excludesAccountlessUncategorised: Bool
   }
 
   // MARK: - Query Building
@@ -103,7 +104,10 @@ extension GRDBAnalysisRepository {
   /// total, aggregated in this same pass (see `assembleCategoryBalances`).
   /// `category_id` is still selected and grouped on so the Swift assembly
   /// can route each row to `CategoryBalances.byCategory` or
-  /// `.uncategorised`.
+  /// `.uncategorised`. Report callers can opt into excluding account-less
+  /// uncategorised legs so earmark-only reserve movements do not inflate
+  /// the Reports "Uncategorised" line; earmark-specific callers keep the
+  /// default inclusive behaviour.
   ///
   /// **`categoryIds` parameterisation.** SQLite cannot bind a
   /// variable-length array to a single named parameter; an
@@ -179,6 +183,10 @@ extension GRDBAnalysisRepository {
       args.categoryIds.isEmpty
       ? SQL("")
       : SQL("AND leg.category_id IN \(args.categoryIds)")
+    let accountlessUncategorisedClause: SQL =
+      args.excludesAccountlessUncategorised
+      ? SQL("AND (leg.category_id IS NOT NULL OR leg.account_id IS NOT NULL)")
+      : SQL("")
 
     // Columns are table-qualified (`leg.`, `t.`) defensively — none of
     // the current tables in scope share a column name, but if a future
@@ -200,6 +208,7 @@ extension GRDBAnalysisRepository {
         \(earmarkClause)
         \(payeeClause)
         \(categoryClause)
+        \(accountlessUncategorisedClause)
       GROUP BY DATE(t.date), leg.category_id, leg.instrument_id
       ORDER BY DATE(t.date) ASC, leg.category_id ASC
       """

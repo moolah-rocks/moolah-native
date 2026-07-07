@@ -20,7 +20,7 @@ enum TransactionContractTestFixtures {
 // MARK: - Leg Builder
 
 func makeContractTestLeg(
-  accountId: UUID,
+  accountId: UUID?,
   quantity: Decimal,
   type: TransactionType,
   categoryId: UUID? = nil,

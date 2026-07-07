@@ -111,7 +111,7 @@ final class ReportingStore {
     do {
       let result = try await analysisRepository.fetchCategoryBalancesByType(
         dateRange: dateRange,
-        filters: TransactionFilter(),
+        filters: TransactionFilter(excludesAccountlessUncategorised: true),
         targetInstrument: profileCurrency
       )
       guard generation == categoryBalancesGeneration else { return }

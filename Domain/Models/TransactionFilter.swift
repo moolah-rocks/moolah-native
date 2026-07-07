@@ -20,6 +20,12 @@ struct TransactionFilter: Sendable, Equatable {
   /// when set, restricts the result to transactions having a leg with
   /// `categoryId == nil` and this `TransactionType`.
   var uncategorisedLegType: TransactionType?
+  /// Reports-only companion for `uncategorisedLegType` / category-balance
+  /// loads: when true, account-less uncategorised legs are excluded so
+  /// earmark-only reserve movements do not appear as uncategorised account
+  /// activity. Other callers keep the default `false` so earmark-specific
+  /// views can still show their own uncategorised totals.
+  var excludesAccountlessUncategorised: Bool
 
   init(
     accountId: UUID? = nil,
@@ -29,7 +35,8 @@ struct TransactionFilter: Sendable, Equatable {
     dateRange: ClosedRange<Date>? = nil,
     categoryIds: Set<UUID> = [],
     payee: String? = nil,
-    uncategorisedLegType: TransactionType? = nil
+    uncategorisedLegType: TransactionType? = nil,
+    excludesAccountlessUncategorised: Bool = false
   ) {
     self.accountId = accountId
     self.accountIds = accountIds
@@ -39,6 +46,7 @@ struct TransactionFilter: Sendable, Equatable {
     self.categoryIds = categoryIds
     self.payee = payee
     self.uncategorisedLegType = uncategorisedLegType
+    self.excludesAccountlessUncategorised = excludesAccountlessUncategorised
   }
 }
 
@@ -47,7 +55,7 @@ extension TransactionFilter {
     accountId != nil || !accountIds.isEmpty || earmarkId != nil
       || scheduled != .all
       || dateRange != nil || !categoryIds.isEmpty || payee != nil
-      || uncategorisedLegType != nil
+      || uncategorisedLegType != nil || excludesAccountlessUncategorised
   }
 
   /// True when *any* account-scoped predicate is present — a single
