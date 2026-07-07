@@ -35,6 +35,17 @@ extension MoolahApp {
     return seed
   }
 
+  nonisolated static func isRunningUnderXCTest() -> Bool {
+    NSClassFromString("XCTestCase") != nil
+  }
+
+  nonisolated static func shouldSuppressAutomaticMainWindow(
+    isUITesting: Bool,
+    isRunningTests: Bool
+  ) -> Bool {
+    isRunningTests && !isUITesting
+  }
+
   /// Build the `ProfileContainerManager` — either backed by the user's
   /// on-disk profile index or, under UI testing, by an in-memory one
   /// hydrated from the requested seed.

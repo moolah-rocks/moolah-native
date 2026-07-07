@@ -26,6 +26,9 @@ struct MoolahApp: App {
   /// leave `uiTestingProfileId` unset (see `UITestSeedHydrator`) so we also
   /// need a seed-agnostic flag to drive launcher presentation.
   private let isUITesting: Bool
+  /// True for app-hosted unit-test launches. Unit tests need the app binary
+  /// loaded, but they must not present SwiftUI windows.
+  private let suppressAutomaticMainWindow: Bool
   /// Stable identifier for the primary `WindowGroup(for:)`. Exposed so
   /// `UITestingLauncherView` can call `openWindow(id:)` to open a default
   /// instance with a nil binding — `ProfileWindowView` resolves the
@@ -79,6 +82,7 @@ struct MoolahApp: App {
     // shaped storage (in-memory `CloudKitBackend`) so XCUITest flows never
     // touch the user's iCloud. See guides/UI_TEST_GUIDE.md §6.
     let uiTestingSeed = Self.uiTestingSeed(from: CommandLine.arguments)
+    let isUITestingLaunch = uiTestingSeed != nil
 
     // One-shot removal of the obsolete `Caches/{exchange,stock,crypto}`
     // JSON cache directories; rate caches live in per-profile SQLite.
@@ -98,7 +102,10 @@ struct MoolahApp: App {
     containerManager = setup.manager
     syncCoordinator = coordinator
     uiTestingProfileId = setup.uiTestingProfileId
-    isUITesting = uiTestingSeed != nil
+    isUITesting = isUITestingLaunch
+    suppressAutomaticMainWindow = Self.shouldSuppressAutomaticMainWindow(
+      isUITesting: isUITestingLaunch,
+      isRunningTests: Self.isRunningUnderXCTest())
     Self.applySeedProgressFixtures(seed: uiTestingSeed, coordinator: coordinator)
 
     // UI-testing mode must NOT read the user's real UserDefaults; remote
@@ -106,7 +113,7 @@ struct MoolahApp: App {
     // would bleed into the seeded container otherwise. A per-launch
     // suite gives the store an isolated, ephemeral defaults store.
     let storeDefaults: UserDefaults
-    if uiTestingSeed != nil {
+    if isUITestingLaunch {
       let suiteName = "com.moolah.ui-testing.\(UUID().uuidString)"
       storeDefaults = UserDefaults(suiteName: suiteName) ?? .standard
       storeDefaults.removePersistentDomain(forName: suiteName)
@@ -123,7 +130,7 @@ struct MoolahApp: App {
     Self.configureSyncCoordinator(
       store: store,
       coordinator: coordinator,
-      isUITesting: uiTestingSeed != nil)
+      isUITesting: isUITestingLaunch)
 
     let sessionManager = Self.makeSessionManager(
       setup: setup, store: store, coordinator: coordinator)
@@ -204,7 +211,8 @@ struct MoolahApp: App {
       // Analysis view with a CancellationError) cannot get restored into
       // the next test's launch as a phantom second window. Production
       // launches keep the default `.automatic` behaviour.
-      .restorationBehavior(isUITesting ? .disabled : .automatic)
+      .restorationBehavior(suppressAutomaticMainWindow || isUITesting ? .disabled : .automatic)
+      .defaultLaunchBehavior(suppressAutomaticMainWindow ? .suppressed : .automatic)
       .onChange(of: scenePhase) { _, newPhase in
         handleScenePhaseChange(newPhase)
       }
