@@ -351,6 +351,11 @@ targets:
           # from MoolahTests/Shared/CryptoImport, which is not in the benchmark
           # target. Benchmarks do not call makeExchangeSyncEngine, so exclude it.
           - ExchangeSyncEngineTestSupport.swift
+          # Windowed sync test support references shared crypto-import test
+          # doubles that are intentionally outside the benchmark target.
+          # Benchmarks do not call WindowedWalletSyncRunner fixtures.
+          - WindowedRunnerFixture.swift
+          - WindowedSyncStore.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: rocks.moolah.benchmarks

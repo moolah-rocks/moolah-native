@@ -35,8 +35,8 @@ final class ExchangeRateCacheBenchmarks: XCTestCase {
 
   override static func setUp() {
     super.setUp()
-    let database = expecting("benchmark ProfileDatabase.openInMemory failed") {
-      try ProfileDatabase.openInMemory()
+    let database = expecting("benchmark ProfileIndexDatabase.openInMemory failed") {
+      try ProfileIndexDatabase.openInMemory()
     }
     _database = database
 
