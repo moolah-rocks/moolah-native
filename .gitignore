@@ -42,6 +42,7 @@ vendor/bundle
 
 # Agent temp files (test output, etc.)
 .agent-tmp/
+.codex/config.toml
 
 # tools/test-plugin npm install output (jsdom). Lockfile is committed.
 tools/test-plugin/node_modules/
