@@ -365,6 +365,8 @@ targets:
       - target: Moolah_macOS
       - package: GRDB
         link: false
+      - package: ImportExtensionKit
+        link: false
 
   MoolahUITests_macOS:
     type: bundle.ui-testing
