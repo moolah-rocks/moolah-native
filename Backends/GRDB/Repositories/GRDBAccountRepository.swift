@@ -133,9 +133,15 @@ final class GRDBAccountRepository: AccountRepository, @unchecked Sendable {
     _ account: Account,
     openingBalance: InstrumentAmount? = nil
   ) async throws -> Account {
-    guard !account.name.trimmingCharacters(in: .whitespaces).isEmpty else {
+    let normalizedName = account.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedName.isEmpty else {
       throw BackendError.validationFailed("Account name cannot be empty")
     }
+    let normalizedAccount = {
+      var copy = account
+      copy.name = normalizedName
+      return copy
+    }()
 
     // Register a non-fiat account denomination so a read issued
     // immediately after this method returns resolves it. Awaited
@@ -152,7 +158,7 @@ final class GRDBAccountRepository: AccountRepository, @unchecked Sendable {
     let inserts = try await database.write { database -> OpeningBalanceInserts in
       try Self.performAccountInsert(
         database: database,
-        account: account,
+        account: normalizedAccount,
         openingBalance: openingBalance,
         openingBalanceDate: openingBalanceDate)
     }
@@ -164,16 +170,22 @@ final class GRDBAccountRepository: AccountRepository, @unchecked Sendable {
     if let legId = inserts.legId {
       onRecordChanged(TransactionLegRow.recordType, legId)
     }
-    return account
+    return normalizedAccount
   }
 
   // `performAccountInsert` and `OpeningBalanceInserts` live in
   // `GRDBAccountRepository+Create.swift`.
 
   func update(_ account: Account) async throws -> Account {
-    guard !account.name.trimmingCharacters(in: .whitespaces).isEmpty else {
+    let normalizedName = account.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedName.isEmpty else {
       throw BackendError.validationFailed("Account name cannot be empty")
     }
+    let normalizedAccount = {
+      var copy = account
+      copy.name = normalizedName
+      return copy
+    }()
 
     // Combine the row update and the post-update position read into a
     // single `database.write` so the returned `Account` reflects the
@@ -188,34 +200,34 @@ final class GRDBAccountRepository: AccountRepository, @unchecked Sendable {
       guard
         var existing =
           try AccountRow
-          .filter(AccountRow.Columns.id == account.id)
+          .filter(AccountRow.Columns.id == normalizedAccount.id)
           .fetchOne(database)
       else {
         throw BackendError.notFound("Account not found")
       }
-      existing.name = account.name
-      existing.type = account.type.rawValue
-      existing.instrumentId = account.instrument.id
-      existing.position = account.position
-      existing.isHidden = account.isHidden
-      existing.valuationMode = account.valuationMode.rawValue
-      existing.groupId = account.groupId
-      existing.taxOwnerIdsEncoded = TaxOwnerIDListCoding.encode(account.taxOwnerIds)
+      existing.name = normalizedAccount.name
+      existing.type = normalizedAccount.type.rawValue
+      existing.instrumentId = normalizedAccount.instrument.id
+      existing.position = normalizedAccount.position
+      existing.isHidden = normalizedAccount.isHidden
+      existing.valuationMode = normalizedAccount.valuationMode.rawValue
+      existing.groupId = normalizedAccount.groupId
+      existing.taxOwnerIdsEncoded = TaxOwnerIDListCoding.encode(normalizedAccount.taxOwnerIds)
       try existing.update(database)
       try GRDBTaxOwnershipPersistence.replaceAccountOwners(
-        accountId: account.id,
-        ownerIds: account.taxOwnerIds,
+        accountId: normalizedAccount.id,
+        ownerIds: normalizedAccount.taxOwnerIds,
         in: database)
-      try markNeedsPushSync(id: account.id, in: database)
+      try markNeedsPushSync(id: normalizedAccount.id, in: database)
 
       let positions = try Self.computePositions(
-        database: database, instruments: instruments, accountId: account.id)
+        database: database, instruments: instruments, accountId: normalizedAccount.id)
       return try existing.toDomain(
         instruments: instruments,
         positions: positions,
-        taxOwnerIds: account.taxOwnerIds)
+        taxOwnerIds: normalizedAccount.taxOwnerIds)
     }
-    onRecordChanged(AccountRow.recordType, account.id)
+    onRecordChanged(AccountRow.recordType, normalizedAccount.id)
     return resolved
   }
 

@@ -158,9 +158,7 @@ final class ProfileIndexSyncHandler: Sendable {
       cachedRecord.recordID.zoneID == zoneID,
       CKRecordIDRecordName.isUsableCachedRecordName(cachedRecord.recordID.recordName)
     {
-      for key in freshRecord.allKeys() {
-        cachedRecord[key] = freshRecord[key]
-      }
+      cachedRecord.replaceUserFields(with: freshRecord)
       return cachedRecord
     }
     return freshRecord

@@ -10,8 +10,6 @@ final class ReportingStore {
   private(set) var capitalGainsSummary: CapitalGainsSummary?
   private(set) var isLoading = false
   private(set) var error: Error?
-  /// True when conversion skipped at least one instrument, so affected totals
-  /// must render unavailable rather than complete-looking but wrong.
   private(set) var capitalGainsHasUnavailableData = false
   private(set) var profitLossHasUnavailableData = false
   private(set) var capitalGainsUnavailableInstruments: [Instrument] = []
@@ -25,7 +23,6 @@ final class ReportingStore {
   private(set) var expenseBalances: [UUID: InstrumentAmount] = [:]
   private(set) var incomeUncategorised: InstrumentAmount?
   private(set) var expenseUncategorised: InstrumentAmount?
-  /// Per-column Rule 11 flags from category balance loading.
   private(set) var incomeHasUnavailableData = false
   private(set) var expenseHasUnavailableData = false
   private(set) var isLoadingCategoryBalances = false
@@ -34,15 +31,12 @@ final class ReportingStore {
   private let analysisRepository: AnalysisRepository?
   private let conversionService: InstrumentConversionService
   private(set) var profileCurrency: Instrument
-  /// Shared profile-wide cost-basis provider for realised CGT and P&L rows.
   private let holdingsCostLedger: HoldingsCostLedgerStore?
   private let taxOwnerRepository: TaxOwnerRepository?
   private let userDefaults: UserDefaults
-  private let defaultTaxOwnerId: UUID
+  private(set) var defaultTaxOwnerId: UUID
   private let logger = Logger(subsystem: "com.moolah.app", category: "ReportingStore")
 
-  /// Monotonic counters guarding against superseded async loads clobbering
-  /// newer published state.
   @ObservationIgnored private var categoryBalancesGeneration: UInt64 = 0
   @ObservationIgnored private var reportGeneration: UInt64 = 0
 
@@ -81,16 +75,22 @@ final class ReportingStore {
     self.userDefaults = userDefaults
   }
 
-  /// Loads income + expense category balances for a date range. Results are
-  /// published to `incomeBalances` / `expenseBalances` (plus
-  /// `incomeUncategorised` / `expenseUncategorised` and the
-  /// `*HasUnavailableData` flags); failures land on `categoryBalancesError`.
+  func updateDefaultTaxOwnerId(_ id: UUID) {
+    guard defaultTaxOwnerId != id else { return }
+    defaultTaxOwnerId = id
+    reportGeneration &+= 1
+    taxIncomeExpenseSummaries = []
+    taxIncomeExpenseError = nil
+    isLoading = false
+  }
+
+  /// Loads income + expense category balances for a date range into the
+  /// published balance/unavailable/error state.
   func loadCategoryBalances(dateRange: ClosedRange<Date>) async {
     guard let analysisRepository else {
       logger.error("loadCategoryBalances called without analysisRepository")
       return
     }
-    // Bump-then-capture: see the `categoryBalancesGeneration` doc comment.
     categoryBalancesGeneration &+= 1
     let generation = categoryBalancesGeneration
     isLoadingCategoryBalances = true

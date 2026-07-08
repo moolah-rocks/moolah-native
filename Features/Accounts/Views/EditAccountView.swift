@@ -27,8 +27,11 @@ struct EditAccountView: View {
   @State private var currency: Instrument
   @State private var isHidden: Bool
   @State private var valuationMode: ValuationMode
+  @State private var taxOwnerIds: [UUID]
+  @State private var taxOwners: [TaxOwner] = []
   @State private var isSubmitting = false
   @State private var errorMessage: String?
+  @State private var taxOwnerErrorMessage: String?
   @State private var showValuationPicker: Bool
   @State private var pickerShownDueToProbeFailure = false
   /// Write-only replacement for an exchange account's read-only API
@@ -81,6 +84,7 @@ struct EditAccountView: View {
     _currency = State(initialValue: account.instrument)
     _isHidden = State(initialValue: account.isHidden)
     _valuationMode = State(initialValue: account.valuationMode)
+    _taxOwnerIds = State(initialValue: account.taxOwnerIds)
     // Initial visibility: shown for `.recordedValue` accounts so legacy
     // users see the picker immediately, hidden for `.calculatedFromTrades`
     // accounts pending the snapshot probe in `.task`. See design §3.3.
@@ -102,8 +106,13 @@ struct EditAccountView: View {
   private var form: some View {
     Form {
       detailsSection
+        .disabled(isSubmitting)
       valuationSection
+        .disabled(isSubmitting)
       exchangeSection
+        .disabled(isSubmitting)
+      taxOwnerSection
+      savingStatusSection
       if let errorMessage {
         Section {
           Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
@@ -124,13 +133,15 @@ struct EditAccountView: View {
       ToolbarItem(placement: .cancellationAction) {
         Button("Cancel") { dismiss() }
           .accessibilityIdentifier(UITestIdentifiers.EditAccount.cancelButton)
+          .disabled(isSubmitting)
       }
       ToolbarItem(placement: .confirmationAction) {
         Button("Save") { Task { await save() } }
-          .disabled(!isValid || isSubmitting)
+          .disabled(Self.isSaveDisabled(name: name, isSubmitting: isSubmitting))
           .accessibilityIdentifier(UITestIdentifiers.EditAccount.saveButton)
       }
     }
+    .interactiveDismissDisabled(isSubmitting)
     .animation(.easeInOut(duration: 0.2), value: type)
     .task(id: account.id) {
       // Already shown for `.recordedValue` — skip the probe.
@@ -165,6 +176,12 @@ struct EditAccountView: View {
         assertionFailure(
           "resolvePickerVisibility threw unexpected error: \(error)")
       }
+    }
+    .task {
+      await observeTaxOwners()
+    }
+    .task {
+      await observeTaxOwnerErrors()
     }
   }
 
@@ -217,6 +234,26 @@ struct EditAccountView: View {
       }
     }
   }
+  @ViewBuilder private var taxOwnerSection: some View {
+    if let taxOwnerErrorMessage {
+      Section {
+        Label(taxOwnerErrorMessage, systemImage: "exclamationmark.triangle.fill")
+          .foregroundStyle(.red)
+      } header: {
+        Text("Tax Ownership")
+      }
+    } else {
+      TaxOwnerAssignmentSection(
+        title: "Tax Ownership",
+        owners: taxOwners,
+        defaultOwnerId: session.profile.defaultTaxOwnerId,
+        footer:
+          "Leave no owners selected to use the profile default. Select multiple owners to split tax reporting equally.",
+        selectedOwnerIds: $taxOwnerIds
+      )
+      .disabled(isSubmitting)
+    }
+  }
 
   /// Visible only for `.exchange` accounts: a read-only provider label
   /// plus a write-only `SecureField` to replace the stored API token.
@@ -245,24 +282,20 @@ struct EditAccountView: View {
     }
   }
 
-  // MARK: - Save
-
-  private var isValid: Bool {
-    !name.trimmingCharacters(in: .whitespaces).isEmpty
-  }
-
   private func save() async {
-    guard isValid else { return }
+    guard !Self.isSaveDisabled(name: name, isSubmitting: isSubmitting) else { return }
 
     isSubmitting = true
     errorMessage = nil
 
-    var updated = account
-    updated.name = name.trimmingCharacters(in: .whitespaces)
-    updated.type = type
-    updated.instrument = currency
-    updated.isHidden = isHidden
-    updated.valuationMode = valuationMode
+    let draft = EditAccountDraft(
+      name: name,
+      type: type,
+      instrument: currency,
+      isHidden: isHidden,
+      valuationMode: valuationMode,
+      taxOwnerIds: taxOwnerIds)
+    let updated = Self.updatedAccount(from: account, draft: draft, validOwners: taxOwners)
 
     do {
       // Replace the keychain token BEFORE mutating the account row so a
@@ -282,107 +315,40 @@ struct EditAccountView: View {
       isSubmitting = false
     }
   }
-}
 
-// MARK: - Previews
-
-@MainActor
-private func makePreviewView(account: Account) -> some View {
-  let backend = PreviewBackend.create()
-  let accountStore = AccountStore(
-    repository: backend.accounts,
-    conversionService: backend.conversionService,
-    targetInstrument: .AUD)
-  // In-memory preview session can't fail in practice: opens an ephemeral
-  // GRDB queue with no disk access. A trap here is acceptable in #Preview.
-  // swiftlint:disable:next force_try
-  let session = try! ProfileSession.preview()
-  return EditAccountView(account: account, accountStore: accountStore)
-    .environment(session)
-}
-
-#Preview("Bank account") {
-  makePreviewView(
-    account: Account(name: "Checking", type: .bank, instrument: .AUD))
-}
-
-#Preview("Investment account, recordedValue (picker shown)") {
-  makePreviewView(
-    account: Account(
-      name: "Legacy brokerage",
-      type: .investment,
-      instrument: .AUD,
-      valuationMode: .recordedValue))
-}
-
-#Preview("Investment account, calculatedFromTrades (picker hidden)") {
-  makePreviewView(
-    account: Account(
-      name: "New brokerage",
-      type: .investment,
-      instrument: .AUD,
-      valuationMode: .calculatedFromTrades))
-}
-
-#Preview("Exchange account (replace-token section)") {
-  makePreviewView(
-    account: Account(
-      name: "My Coinstash",
-      type: .exchange,
-      instrument: .AUD,
-      valuationMode: .calculatedFromTrades,
-      exchangeProvider: .coinstash))
-}
-
-#Preview("Exchange account (replace-token section, Accessibility3)") {
-  makePreviewView(
-    account: Account(
-      name: "My Coinstash",
-      type: .exchange,
-      instrument: .AUD,
-      valuationMode: .calculatedFromTrades,
-      exchangeProvider: .coinstash)
-  )
-  .dynamicTypeSize(.accessibility3)
-}
-
-/// Wrapper that imitates the section structure used by
-/// `EditAccountView.valuationSection` so the fail-open footer Label
-/// can render in canvas without forcing a preview-only initialiser
-/// onto the production view. Adding a debug-flagged init would widen
-/// the API surface for a concern the production code never has.
-private struct FailOpenValuationPreview: View {
-  @State private var mode: ValuationMode = .calculatedFromTrades
-  var body: some View {
-    Form {
-      Section {
-        Picker("Valuation", selection: $mode) {
-          Text("Recorded value").tag(ValuationMode.recordedValue)
-          Text("Calculated from trades").tag(ValuationMode.calculatedFromTrades)
-        }
-        .accessibilityIdentifier(UITestIdentifiers.EditAccount.valuationModePicker)
-        .accessibilityHint(mode.dataSourceHint)
-      } footer: {
-        VStack(alignment: .leading, spacing: 4) {
-          Text(mode.dataSourceDescription)
-          Label(
-            "Couldn't confirm your valuation history. Reopen the dialog to check again.",
-            systemImage: "info.circle"
-          )
-          .foregroundStyle(.secondary)
-        }
-      }
+  private func observeTaxOwners() async {
+    for await owners in session.backend.taxOwners.observeAll() {
+      guard !Task.isCancelled else { return }
+      taxOwners = owners
+      taxOwnerIds = TaxOwnerAssignmentState.prunedSelectedOwnerIds(
+        taxOwnerIds, validOwners: owners)
+      taxOwnerErrorMessage = nil
     }
-    .formStyle(.grouped)
-    .frame(minWidth: 500, minHeight: 280)
+  }
+
+  private func observeTaxOwnerErrors() async {
+    for await _ in session.backend.taxOwners.observeErrors() {
+      guard !Task.isCancelled else { return }
+      taxOwnerErrorMessage = "Couldn't load tax owners. Reopen the account editor and try again."
+    }
   }
 }
 
-#Preview("Investment account, fail-open footer") {
-  FailOpenValuationPreview()
-}
+extension EditAccountView {
+  @ViewBuilder private var savingStatusSection: some View {
+    if isSubmitting {
+      Section {
+        HStack {
+          ProgressView()
+          Text("Saving account…")
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Saving account")
+      }
+    }
+  }
 
-#Preview("Investment account, fail-open footer (Accessibility3)") {
-  FailOpenValuationPreview()
-    .dynamicTypeSize(.accessibility3)
+  static func isSaveDisabled(name: String, isSubmitting: Bool) -> Bool {
+    name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSubmitting
+  }
 }

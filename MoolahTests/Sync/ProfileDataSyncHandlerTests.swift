@@ -243,4 +243,52 @@ struct ProfileDataSyncHandlerTests {
     #expect(built.recordID.zoneID == handler.zoneID)
     #expect(built["name"] as? String == "Test")
   }
+
+  @Test("buildCKRecord clears optional user fields removed locally")
+  @MainActor
+  func buildCKRecordClearsRemovedOptionalUserFields() throws {
+    let handler = try ProfileDataSyncHandlerTestSupport.makeHandlerWithDatabase().handler
+    let accountId = UUID()
+    let cachedCK = CKRecord(
+      recordType: "AccountRecord",
+      recordID: CKRecord.ID(
+        recordType: AccountRow.recordType, uuid: accountId, zoneID: handler.zoneID)
+    )
+    cachedCK["name"] = "Joint" as CKRecordValue
+    cachedCK["taxOwnerIdsEncoded"] = UUID().uuidString as CKRecordValue
+    let cachedSystemFields = cachedCK.encodedSystemFields
+
+    let row = AccountRow(
+      id: accountId,
+      recordName: AccountRow.recordName(for: accountId),
+      name: "Joint",
+      type: "bank",
+      instrumentId: "AUD",
+      position: 0,
+      isHidden: false,
+      encodedSystemFields: cachedSystemFields,
+      valuationMode: ValuationMode.recordedValue.rawValue)
+
+    let built = handler.buildCKRecord(from: row, encodedSystemFields: cachedSystemFields)
+
+    #expect(built["name"] as? String == "Joint")
+    #expect(built["taxOwnerIdsEncoded"] == nil)
+  }
+
+  @Test("TaxOwnerRow normalises unknown CloudKit kind values")
+  func taxOwnerRowNormalisesUnknownCloudKitKindValues() throws {
+    let ownerId = UUID()
+    let record = CKRecord(
+      recordType: TaxOwnerRow.recordType,
+      recordID: CKRecord.ID(
+        recordType: TaxOwnerRow.recordType,
+        uuid: ownerId,
+        zoneID: CKRecordZone.ID(zoneName: "profile-\(UUID().uuidString)")))
+    record["name"] = "Alex" as CKRecordValue
+    record["kind"] = "company" as CKRecordValue
+
+    let row = try #require(TaxOwnerRow.fieldValues(from: record))
+
+    #expect(row.kind == TaxOwnerKind.individual.rawValue)
+  }
 }

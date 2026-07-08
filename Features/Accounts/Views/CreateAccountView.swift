@@ -73,14 +73,18 @@ struct CreateAccountView: View {
           standardFields
         }
       }
+      .disabled(isSubmitting)
       // The exchange branch renders its own Section (it carries a footer
       // — the read-only-token safety note); it can't nest inside the
       // shared Section above.
       if type == .exchange {
         ExchangeAccountCreationView(
           provider: $exchangeProvider,
-          token: $exchangeToken)
+          token: $exchangeToken
+        )
+        .disabled(isSubmitting)
       }
+      creatingStatusSection
       if let errorMessage {
         Section {
           Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
@@ -100,12 +104,20 @@ struct CreateAccountView: View {
     .toolbar {
       ToolbarItem(placement: .cancellationAction) {
         Button("Cancel") { dismiss() }
+          .disabled(isSubmitting)
       }
       ToolbarItem(placement: .confirmationAction) {
         Button("Create") { Task { await submit() } }
-          .disabled(!isValid || isSubmitting)
+          .disabled(
+            Self.isCreateDisabled(
+              name: name,
+              type: type,
+              cryptoWalletAddress: cryptoWalletAddress,
+              exchangeToken: exchangeToken,
+              isSubmitting: isSubmitting))
       }
     }
+    .interactiveDismissDisabled(isSubmitting)
   }
 
   // Shared name + type picker. The crypto branch reuses both, so they
@@ -163,32 +175,36 @@ struct CreateAccountView: View {
   }
 
   private var isValid: Bool {
-    let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedName.isEmpty else { return false }
-    if type == .crypto {
-      return Account.validatedWalletAddress(cryptoWalletAddress) != nil
-    }
-    if type == .exchange {
-      return !exchangeToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-    return true
+    !Self.isCreateDisabled(
+      name: name,
+      type: type,
+      cryptoWalletAddress: cryptoWalletAddress,
+      exchangeToken: exchangeToken,
+      isSubmitting: false)
   }
 
   private func submit() async {
-    guard isValid else { return }
+    guard
+      !Self.isCreateDisabled(
+        name: name,
+        type: type,
+        cryptoWalletAddress: cryptoWalletAddress,
+        exchangeToken: exchangeToken,
+        isSubmitting: isSubmitting)
+    else { return }
 
     isSubmitting = true
     errorMessage = nil
 
     if type == .crypto {
-      await submitCrypto()
-      isSubmitting = false
+      let created = await submitCrypto()
+      if !created { isSubmitting = false }
       return
     }
 
     if type == .exchange {
-      await submitExchange()
-      isSubmitting = false
+      let created = await submitExchange()
+      if !created { isSubmitting = false }
       return
     }
 
@@ -196,7 +212,7 @@ struct CreateAccountView: View {
     let openingBalance = InstrumentAmount(quantity: balanceDecimal, instrument: selectedInstrument)
     let newAccount = Account(
       id: UUID(),
-      name: name.trimmingCharacters(in: .whitespaces),
+      name: name.trimmingCharacters(in: .whitespacesAndNewlines),
       type: type,
       instrument: selectedInstrument,
       position: 0  // Server will set appropriate position
@@ -211,7 +227,7 @@ struct CreateAccountView: View {
     }
   }
 
-  private func submitCrypto() async {
+  private func submitCrypto() async -> Bool {
     let logic = CryptoAccountCreationLogic(
       accountStore: accountStore,
       cryptoSyncStore: cryptoSyncStore,
@@ -221,14 +237,17 @@ struct CreateAccountView: View {
     switch outcome {
     case .created:
       dismiss()
+      return true
     case .invalidAddress:
       errorMessage = "Enter a valid 0x wallet address."
+      return false
     case .failure(let error):
       errorMessage = error.localizedDescription
+      return false
     }
   }
 
-  private func submitExchange() async {
+  private func submitExchange() async -> Bool {
     // No env/session here — construct the production token store the same
     // way `ProfileSession` does (iCloud-synced keychain). The account is
     // denominated in the profile currency (`instrument`), exactly as the
@@ -244,11 +263,47 @@ struct CreateAccountView: View {
     switch outcome {
     case .created:
       dismiss()
+      return true
     case .invalidInput:
       errorMessage = "Enter your read-only API token."
+      return false
     case .failure(let error):
       errorMessage = error.localizedDescription
+      return false
     }
+  }
+}
+
+extension CreateAccountView {
+  @ViewBuilder private var creatingStatusSection: some View {
+    if isSubmitting {
+      Section {
+        HStack {
+          ProgressView()
+          Text("Creating account…")
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Creating account")
+      }
+    }
+  }
+
+  static func isCreateDisabled(
+    name: String,
+    type: AccountType,
+    cryptoWalletAddress: String,
+    exchangeToken: String,
+    isSubmitting: Bool
+  ) -> Bool {
+    let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !isSubmitting, !trimmedName.isEmpty else { return true }
+    if type == .crypto {
+      return Account.validatedWalletAddress(cryptoWalletAddress) == nil
+    }
+    if type == .exchange {
+      return exchangeToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+    return false
   }
 }
 

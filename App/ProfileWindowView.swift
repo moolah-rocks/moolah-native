@@ -138,15 +138,12 @@
           sessionResult = nil
         }
       }
-      .onChange(of: resolvedProfile?.label) { _, _ in
-        // A rename updates the cached session's profile in place — no
-        // teardown, no data reload. `ProfileSession.profile` is
-        // `@Observable`, so label-bound UI refreshes off that single
-        // assignment. Remote `dataFormatVersion` bumps that could make
-        // the profile incompatible are handled separately by
-        // `SessionManager`'s index observer, so the rename path must
-        // not rebuild the session.
-        guard let profile = resolvedProfile else { return }
+      .onChange(of: resolvedProfile) { _, profile in
+        // Metadata changes update the cached session's profile in place — no
+        // teardown, no data reload. This covers renames and default tax-owner
+        // changes; remote `dataFormatVersion` incompatibility is handled by
+        // `SessionManager`'s index observer.
+        guard let profile else { return }
         sessionManager.refreshProfile(profile)
       }
       .task {

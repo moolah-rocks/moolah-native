@@ -82,7 +82,7 @@ struct CategoryStoreTests {
     let store = CategoryStore(repository: backend.categories)
     try await store.waitForFirstEmission()
 
-    let result = await store.create(Moolah.Category(name: ""))
+    let result = await store.create(Moolah.Category(name: "\n\t\n"))
 
     #expect(result == nil)
     // Validation rejection is distinct from a repository failure — it must
@@ -100,7 +100,7 @@ struct CategoryStoreTests {
     try await store.waitForFirstEmission()
 
     var blanked = cat
-    blanked.name = ""
+    blanked.name = "\n\t "
     let result = await store.update(blanked)
 
     #expect(result == nil)
@@ -108,6 +108,23 @@ struct CategoryStoreTests {
     // not surface on `store.error`.
     #expect(store.error == nil)
     #expect(store.categories.by(id: cat.id)?.name == "Groceries")
+  }
+
+  @Test
+  func testCreateAndUpdateTrimCategoryNames() async throws {
+    let (backend, _) = try TestBackend.create()
+    let store = CategoryStore(repository: backend.categories)
+    try await store.waitForFirstEmission()
+
+    let created = try #require(await store.create(Moolah.Category(name: "\n  Groceries  \n")))
+    #expect(created.name == "Groceries")
+
+    var renamed = created
+    renamed.name = "\n Dining \t"
+    let updated = try #require(await store.update(renamed))
+    #expect(updated.name == "Dining")
+    let fetched = try #require(try await backend.categories.fetchAll().first)
+    #expect(fetched.name == "Dining")
   }
 
   /// The detail inspector fires `onUpdate` on every keystroke; the store
@@ -140,6 +157,39 @@ struct CategoryStoreTests {
 
     #expect(callCount == 1)
     #expect(lastValue == "third")
+  }
+
+  @Test
+  func testCancelDebouncedSavePreventsPendingAction() async throws {
+    let (backend, _) = try TestBackend.create()
+    let store = CategoryStore(repository: backend.categories, debounceInterval: .zero)
+
+    var callCount = 0
+    let pending = store.debouncedSave {
+      callCount += 1
+    }
+
+    store.cancelDebouncedSave()
+    await pending.value
+
+    #expect(callCount == 0)
+  }
+
+  @Test
+  func testDebouncedSaveAwaitsAsyncAction() async throws {
+    let (backend, _) = try TestBackend.create()
+    let store = CategoryStore(repository: backend.categories, debounceInterval: .zero)
+    let category = Moolah.Category(name: "Interest", isTaxReportable: true)
+
+    let liveSave = store.debouncedSave {
+      _ = await store.create(category)
+    }
+
+    await liveSave.value
+
+    let persisted = try #require(try await backend.categories.fetchAll().first)
+    #expect(persisted.name == "Interest")
+    #expect(persisted.isTaxReportable)
   }
 
   @Test

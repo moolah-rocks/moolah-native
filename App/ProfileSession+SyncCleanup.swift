@@ -68,5 +68,6 @@ extension ProfileSession {
       updated.id == profile.id,
       "updateProfile must not change identity; the session is keyed on profile.id")
     self.profile = updated
+    reportingStore.updateDefaultTaxOwnerId(updated.defaultTaxOwnerId)
   }
 }

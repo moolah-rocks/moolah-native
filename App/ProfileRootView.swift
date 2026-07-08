@@ -54,11 +54,11 @@
       .onChange(of: profileStore.activeProfileID) { _, newID in
         updateSession(for: newID)
       }
-      .onChange(of: profileStore.activeProfile?.label) { _, _ in
-        // A rename updates the cached session's profile in place — no
-        // teardown, no data reload. `ProfileSession.profile` is
-        // `@Observable`, so label-bound UI refreshes off that single
-        // assignment without rebuilding the session.
+      .onChange(of: profileStore.activeProfile) { _, _ in
+        // Metadata changes update the cached session's profile in place — no
+        // teardown, no data reload. This covers renames and default tax-owner
+        // changes; remote `dataFormatVersion` incompatibility is handled by
+        // `SessionManager`'s index observer.
         refreshSessionProfile()
       }
       .onChange(of: profileStore.profiles) { _, _ in
