@@ -78,9 +78,11 @@ extension GRDBTransactionRepository {
         leg.instrument_id   AS instrument_id,
         leg.quantity        AS quantity,
         leg.type            AS type,
-        leg.sort_order      AS sort_order
+        leg.sort_order      AS sort_order,
+        NULLIF(a.tax_owner_ids_encoded, '') AS owner_ids
     FROM transaction_leg leg
     JOIN "transaction" t ON leg.transaction_id = t.id
+    LEFT JOIN account a ON leg.account_id = a.id
     WHERE t.recur_period IS NULL
       AND leg.transaction_id IN (
           SELECT nf.transaction_id
@@ -103,9 +105,11 @@ extension GRDBTransactionRepository {
         leg.instrument_id   AS instrument_id,
         leg.quantity        AS quantity,
         leg.type            AS type,
-        leg.sort_order      AS sort_order
+        leg.sort_order      AS sort_order,
+        NULLIF(a.tax_owner_ids_encoded, '') AS owner_ids
     FROM transaction_leg leg
     JOIN "transaction" t ON leg.transaction_id = t.id
+    LEFT JOIN account a ON leg.account_id = a.id
     WHERE t.recur_period IS NULL
     ORDER BY t.date ASC, leg.transaction_id ASC, leg.sort_order ASC
     """
@@ -137,6 +141,7 @@ extension GRDBTransactionRepository {
       // Reuse the sanctioned Decimal×10^8 de-scaling — never hand-roll it.
       quantity: InstrumentAmount(storageValue: storage, instrument: instrument).quantity,
       type: type,
-      sortOrder: sortOrder)
+      sortOrder: sortOrder,
+      taxOwnerIds: TaxOwnerIDListCoding.decode(row["owner_ids"]))
   }
 }

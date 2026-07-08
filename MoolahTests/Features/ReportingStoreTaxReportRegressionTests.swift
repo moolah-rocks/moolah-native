@@ -36,53 +36,35 @@ struct ReportingStoreTaxReportRegressionTests {
         from: DateComponents(year: year, month: month, day: day)))
   }
 
-  @Test @MainActor func loadCapitalGains_keepsUnavailableCostBasisScopedToAccount()
+  @Test @MainActor func loadCapitalGains_keepsUnavailableCostBasisScopedToOwner()
     async throws
   {
     let context = try await makeBackendContext()
+    let secondOwnerId = UUID()
     let secondAccount = Account(
-      id: UUID(), name: "Second Brokerage", type: .bank, instrument: .defaultTestInstrument)
+      id: UUID(),
+      name: "Second Brokerage",
+      type: .bank,
+      instrument: .defaultTestInstrument,
+      taxOwnerIds: [secondOwnerId])
     let failedSwapDate = try date(year: 2025, month: 5, day: 1)
     let buyDate = try date(year: 2025, month: 8, day: 1)
     let sellDate = try date(year: 2026, month: 5, day: 1)
     TestBackend.seed(accounts: [secondAccount], in: context.database)
     TestBackend.seed(
-      transactions: [
-        Transaction(
-          date: failedSwapDate,
-          legs: [
-            TransactionLeg(
-              accountId: context.account.id,
-              instrument: context.spam,
-              quantity: -10,
-              type: .trade),
-            TransactionLeg(
-              accountId: context.account.id,
-              instrument: context.bhp,
-              quantity: 1,
-              type: .trade),
-          ]),
-        reportingStoreBuy(
-          instrument: context.bhp,
-          quantity: 100,
-          cost: 4_000,
-          date: buyDate,
-          in: context,
-          account: secondAccount),
-        reportingStoreSell(
-          instrument: context.bhp,
-          quantity: 100,
-          proceeds: 5_000,
-          date: sellDate,
-          in: context,
-          account: secondAccount),
-      ],
+      transactions: ownerScopedUnavailableTransactions(
+        context: context,
+        secondAccount: secondAccount,
+        failedSwapDate: failedSwapDate,
+        buyDate: buyDate,
+        sellDate: sellDate),
       in: context.database)
     let service = FakeConversionService.failingInstruments([context.spam.id])
     let store = ReportingStore(
       conversionService: service,
       profileCurrency: aud,
       holdingsCostLedger: makeLedger(context.backend.transactions, service),
+      accountRepository: context.backend.accounts,
       userDefaults: try makeDefaultsWithMigrationComplete())
 
     await store.loadCapitalGains(financialYear: 2026)
@@ -91,6 +73,39 @@ struct ReportingStoreTaxReportRegressionTests {
     #expect(store.capitalGainsHasUnavailableData == false)
     #expect(store.capitalGainsUnavailableInstruments.isEmpty)
     #expect(store.capitalGainsSummary?.totalGain == 1_000)
+  }
+
+  private func ownerScopedUnavailableTransactions(
+    context: ReportingStoreTaxBackendContext,
+    secondAccount: Account,
+    failedSwapDate: Date,
+    buyDate: Date,
+    sellDate: Date
+  ) -> [Transaction] {
+    [
+      Transaction(
+        date: failedSwapDate,
+        legs: [
+          TransactionLeg(
+            accountId: context.account.id, instrument: context.spam, quantity: -10, type: .trade),
+          TransactionLeg(
+            accountId: context.account.id, instrument: context.bhp, quantity: 1, type: .trade),
+        ]),
+      reportingStoreBuy(
+        instrument: context.bhp,
+        quantity: 100,
+        cost: 4_000,
+        date: buyDate,
+        in: context,
+        account: secondAccount),
+      reportingStoreSell(
+        instrument: context.bhp,
+        quantity: 100,
+        proceeds: 5_000,
+        date: sellDate,
+        in: context,
+        account: secondAccount),
+    ]
   }
 
   @Test @MainActor func loadCapitalGains_marksUnavailableAfterAffectedTransfer()

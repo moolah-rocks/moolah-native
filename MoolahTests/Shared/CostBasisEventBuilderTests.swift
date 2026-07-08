@@ -17,6 +17,13 @@ struct CostBasisEventBuilderTests {
     TransactionLeg(accountId: account, instrument: instrument, quantity: quantity, type: type)
   }
 
+  private func holding(
+    _ account: UUID?,
+    taxOwnerId: UUID? = nil
+  ) -> CostBasisEventHolding {
+    CostBasisEventHolding(account: account, taxOwnerId: taxOwnerId)
+  }
+
   @Test
   func fiatPairedBuy_mapsToAcquisition() async throws {
     let legs = [leg(aud, -2_000, .trade), leg(eth, 1, .trade)]
@@ -24,7 +31,10 @@ struct CostBasisEventBuilderTests {
       legs: legs, on: day, trackedAccountIds: [account], referenceCurrency: aud,
       conversionService: FakeConversionService.fixedRates([:]))
     #expect(
-      events == [.acquisition(instrument: eth, quantity: 1, costPerUnit: 2_000, account: account)])
+      events == [
+        .acquisition(
+          instrument: eth, quantity: 1, costPerUnit: 2_000, holding: holding(account))
+      ])
   }
 
   @Test
@@ -35,7 +45,8 @@ struct CostBasisEventBuilderTests {
       conversionService: FakeConversionService.fixedRates([eth.id: 4_000]))  // 1 ETH = 4000 AUD
     #expect(
       events == [
-        .acquisition(instrument: eth, quantity: dec("0.5"), costPerUnit: 4_000, account: account)
+        .acquisition(
+          instrument: eth, quantity: dec("0.5"), costPerUnit: 4_000, holding: holding(account))
       ])
   }
 
@@ -46,7 +57,10 @@ struct CostBasisEventBuilderTests {
       legs: legs, on: day, trackedAccountIds: [account], referenceCurrency: aud,
       conversionService: FakeConversionService.fixedRates([eth.id: 3_000]))
     #expect(
-      events == [.acquisition(instrument: eth, quantity: 2, costPerUnit: 3_000, account: account)])
+      events == [
+        .acquisition(
+          instrument: eth, quantity: 2, costPerUnit: 3_000, holding: holding(account))
+      ])
   }
 
   @Test
@@ -60,7 +74,8 @@ struct CostBasisEventBuilderTests {
       conversionService: FakeConversionService.fixedRates([eth.id: 2_000]))
     #expect(
       events == [
-        .acquisition(instrument: eth, quantity: dec("0.02"), costPerUnit: 2_000, account: account)
+        .acquisition(
+          instrument: eth, quantity: dec("0.02"), costPerUnit: 2_000, holding: holding(account))
       ])
   }
 
@@ -78,7 +93,8 @@ struct CostBasisEventBuilderTests {
       referenceCurrency: aud, conversionService: service)
     #expect(
       events == [
-        .acquisition(instrument: eth, quantity: dec("0.5"), costPerUnit: 4_000, account: account)
+        .acquisition(
+          instrument: eth, quantity: dec("0.5"), costPerUnit: 4_000, holding: holding(account))
       ])
   }
 
@@ -103,7 +119,10 @@ struct CostBasisEventBuilderTests {
       conversionService: FakeConversionService.fixedRates([eth.id: 5_000]))
     #expect(
       events == [
-        .move(instrument: eth, quantity: 1, from: account, to: accountB, marketValue: 5_000)
+        .move(
+          instrument: eth, quantity: 1,
+          route: CostBasisMoveRoute(from: account, to: accountB, taxOwnerId: nil),
+          marketValue: 5_000)
       ])
   }
 
@@ -125,7 +144,7 @@ struct CostBasisEventBuilderTests {
       })
     #expect(
       events.contains {
-        if case let .disposal(instrument, quantity, _, _, _) = $0 {
+        if case let .disposal(instrument, quantity, _, _) = $0 {
           return instrument == eth && quantity == dec("0.01")
         }
         return false

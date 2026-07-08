@@ -9,6 +9,9 @@ struct CostBasisLot: Sendable, Hashable, Identifiable {
   let costPerUnit: Decimal
   let originalQuantity: Decimal
   var remainingQuantity: Decimal
+  /// Tax owner partition for this lot. `nil` for legacy callers that do not
+  /// resolve tax ownership.
+  let taxOwnerId: UUID?
   /// Holding-account tag. `nil` for legacy single-bucket callers that do not
   /// segregate lots by account.
   let account: UUID?
@@ -20,7 +23,8 @@ struct CostBasisLot: Sendable, Hashable, Identifiable {
     costPerUnit: Decimal,
     originalQuantity: Decimal,
     remainingQuantity: Decimal,
-    account: UUID? = nil
+    account: UUID? = nil,
+    taxOwnerId: UUID? = nil
   ) {
     self.id = id
     self.instrument = instrument
@@ -29,6 +33,7 @@ struct CostBasisLot: Sendable, Hashable, Identifiable {
     self.originalQuantity = originalQuantity
     self.remainingQuantity = remainingQuantity
     self.account = account
+    self.taxOwnerId = taxOwnerId
   }
 
   var totalCost: Decimal { originalQuantity * costPerUnit }

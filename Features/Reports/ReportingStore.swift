@@ -33,26 +33,19 @@ final class ReportingStore {
   private(set) var profileCurrency: Instrument
   private let holdingsCostLedger: HoldingsCostLedgerStore?
   private let taxOwnerRepository: TaxOwnerRepository?
+  private let accountRepository: AccountRepository?
   private let userDefaults: UserDefaults
   private(set) var defaultTaxOwnerId: UUID
   private let logger = Logger(subsystem: "com.moolah.app", category: "ReportingStore")
 
   @ObservationIgnored private var categoryBalancesGeneration: UInt64 = 0
   @ObservationIgnored private var reportGeneration: UInt64 = 0
-
-  /// `true` while the one-shot cross-chain identity migration has not yet
-  /// completed. Capital-gains FIFO results are gated on this flag: lots for
-  /// the same asset may still be split across retired + canonical ids, so any
-  /// figure produced by `CostBasisEngine` would be wrong until migration
-  /// finishes and all ids are rewritten to canonical.
+  @ObservationIgnored private var accountObservationTask: Task<Void, Never>?
   var isMigratingCrossChainIdentity: Bool {
     !UnifiedInstrumentIdentityMigration.isComplete(in: userDefaults)
   }
-
   var taxIncomeExpenseRollup: TaxIncomeExpenseSummary? {
-    Self.taxIncomeExpenseRollup(
-      from: taxIncomeExpenseSummaries,
-      instrument: profileCurrency)
+    Self.taxIncomeExpenseRollup(from: taxIncomeExpenseSummaries, instrument: profileCurrency)
   }
 
   init(
@@ -61,6 +54,8 @@ final class ReportingStore {
     profileCurrency: Instrument,
     holdingsCostLedger: HoldingsCostLedgerStore? = nil,
     taxOwnerRepository: TaxOwnerRepository? = nil,
+    accountRepository: AccountRepository? = nil,
+    accountChanges: AsyncStream<[Account]>? = nil,
     defaultTaxOwnerId: UUID = UUID(),
     taxOwnerNames: [UUID: String] = [:],
     userDefaults: UserDefaults = .moolahShared
@@ -70,22 +65,52 @@ final class ReportingStore {
     self.profileCurrency = profileCurrency
     self.holdingsCostLedger = holdingsCostLedger
     self.taxOwnerRepository = taxOwnerRepository
+    self.accountRepository = accountRepository
     self.defaultTaxOwnerId = defaultTaxOwnerId
     self.taxOwnerNames = taxOwnerNames
     self.userDefaults = userDefaults
+    startAccountObservation(accountChanges)
   }
+
+  deinit { accountObservationTask?.cancel() }
 
   func updateDefaultTaxOwnerId(_ id: UUID) {
     guard defaultTaxOwnerId != id else { return }
     defaultTaxOwnerId = id
     reportGeneration &+= 1
+    clearCapitalGains()
     taxIncomeExpenseSummaries = []
     taxIncomeExpenseError = nil
     isLoading = false
   }
 
-  /// Loads income + expense category balances for a date range into the
-  /// published balance/unavailable/error state.
+  private func startAccountObservation(_ accountChanges: AsyncStream<[Account]>?) {
+    guard let accountChanges else { return }
+    accountObservationTask = Task { [weak self] in
+      var sawInitialEmission = false
+      for await _ in accountChanges {
+        guard sawInitialEmission else {
+          sawInitialEmission = true
+          continue
+        }
+        self?.invalidateOwnerDependentReports()
+      }
+    }
+  }
+
+  private func invalidateOwnerDependentReports() {
+    reportGeneration &+= 1
+    clearCapitalGains()
+    isLoading = false
+  }
+
+  private func clearCapitalGains() {
+    capitalGainsResult = nil
+    capitalGainsSummary = nil
+    capitalGainsHasUnavailableData = false
+    capitalGainsUnavailableInstruments = []
+  }
+
   func loadCategoryBalances(dateRange: ClosedRange<Date>) async {
     guard let analysisRepository else {
       logger.error("loadCategoryBalances called without analysisRepository")
@@ -109,12 +134,6 @@ final class ReportingStore {
       incomeHasUnavailableData = result.incomeHasUnavailableData
       expenseHasUnavailableData = result.expenseHasUnavailableData
     } catch is CancellationError {
-      // `ReportsView`'s `.task(id:)` is cancelled whenever the user
-      // changes the date range or navigates away; the cancellation
-      // propagates as `CancellationError` from the repository. Treat
-      // it as a normal lifecycle event — surfacing it would render
-      // "Swift.CancellationError error 1" in the view. A re-mount /
-      // re-keyed `.task` issues its own load.
       guard generation == categoryBalancesGeneration else { return }
       isLoadingCategoryBalances = false
       return
@@ -135,7 +154,6 @@ extension ReportingStore {
     ledgerBeforeDate: Date? = nil,
     excluding excludedInstruments: Set<Instrument> = []
   ) async {
-    // Bump-then-capture: see the `reportGeneration` doc comment.
     reportGeneration &+= 1
     let generation = reportGeneration
     isLoading = true
@@ -163,8 +181,6 @@ extension ReportingStore {
       return true
     }
     do {
-      // Source the profile-wide ledger from the shared provider so a genuine
-      // build failure surfaces as unavailable data, never partial/zero P&L.
       let ledger =
         if let ledgerBeforeDate {
           try await holdingsCostLedger.ledger(before: ledgerBeforeDate)
@@ -180,16 +196,12 @@ extension ReportingStore {
       guard generation == reportGeneration else { return false }
       let excludedInstrumentIds = Set(excludedInstruments.map(\.id))
       profitLoss = result.rows.filter { !excludedInstrumentIds.contains($0.instrument.id) }
-      // Rule 11: an unavailable instrument's row is omitted; flag it so the
-      // view marks the P&L surface unavailable rather than "no position."
       profitLossHasUnavailableData =
         !result.unavailableInstrumentIds.subtracting(excludedInstrumentIds).isEmpty
       profitLossUnavailableInstruments = Self.sortedInstruments(
         result.unavailableInstruments.filter { !excludedInstrumentIds.contains($0.id) })
       return true
     } catch is CancellationError {
-      // View teardown / supersession — never surface; the next mount
-      // issues its own load.
       guard generation == reportGeneration else { return false }
       return false
     } catch {
@@ -207,10 +219,7 @@ extension ReportingStore {
   ) async {
     reportGeneration &+= 1
     let generation = reportGeneration
-    capitalGainsResult = nil
-    capitalGainsSummary = nil
-    capitalGainsHasUnavailableData = false
-    capitalGainsUnavailableInstruments = []
+    clearCapitalGains()
     profitLoss = []
     profitLossHasUnavailableData = false
     profitLossUnavailableInstruments = []
@@ -319,16 +328,11 @@ extension ReportingStore {
     excluding excludedInstruments: Set<Instrument> = [],
     sellDateInterval requestedSellDateInterval: Range<Date>? = nil
   ) async {
-    // Bump-then-capture: see the `reportGeneration` doc comment.
     reportGeneration &+= 1
     let generation = reportGeneration
-    capitalGainsResult = nil
-    capitalGainsSummary = nil
-    capitalGainsHasUnavailableData = false
-    capitalGainsUnavailableInstruments = []
+    clearCapitalGains()
     guard !isMigratingCrossChainIdentity else {
-      logger.info(
-        "loadCapitalGains: skipping — cross-chain identity migration not yet complete")
+      logger.info("loadCapitalGains: skipping — cross-chain identity migration not yet complete")
       return
     }
     isLoading = true
@@ -349,8 +353,7 @@ extension ReportingStore {
     generation: UInt64
   ) async -> Bool {
     guard !isMigratingCrossChainIdentity else {
-      logger.info(
-        "loadCapitalGains: skipping — cross-chain identity migration not yet complete")
+      logger.info("loadCapitalGains: skipping — cross-chain identity migration not yet complete")
       return true
     }
     guard let holdingsCostLedger else {
@@ -367,26 +370,24 @@ extension ReportingStore {
       }
       let sellDateInterval = requestedSellDateInterval ?? financialYearInterval
 
-      // A genuine ledger build failure throws and is surfaced as `error`,
-      // never a partial realised set.
-      let ledger = try await holdingsCostLedger.ledger(before: sellDateInterval.upperBound)
+      let accounts = try await accountRepository?.fetchAll() ?? []
+      let resolver = TaxOwnershipResolver(
+        profileDefaultOwnerId: defaultTaxOwnerId, accounts: accounts, categories: [])
+      let ledger = try await holdingsCostLedger.ledger(
+        before: sellDateInterval.upperBound,
+        taxOwnershipResolver: resolver)
       let result = CapitalGainsCalculator.compute(
         ledger: ledger, sellDateInterval: sellDateInterval)
       guard generation == reportGeneration else { return false }
       let excludedInstrumentIds = Set(excludedInstruments.map(\.id))
       let visibleResult = Self.capitalGainsResult(result, excluding: excludedInstrumentIds)
       capitalGainsResult = visibleResult
-      // Rule 11: a conversion failure may have dropped a disposal, so the
-      // realised total may be understated — flag it (a tax figure must never
-      // render complete-but-wrong).
       capitalGainsHasUnavailableData = visibleResult.hasUnavailableData
       capitalGainsUnavailableInstruments = Self.sortedInstruments(
         visibleResult.unavailableInstruments)
       capitalGainsSummary = Self.capitalGainsSummary(from: visibleResult.events)
       return true
     } catch is CancellationError {
-      // View teardown / supersession — never surface; the next mount
-      // issues its own load.
       guard generation == reportGeneration else { return false }
       return false
     } catch {
@@ -396,5 +397,4 @@ extension ReportingStore {
       return true
     }
   }
-
 }
