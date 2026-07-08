@@ -82,6 +82,57 @@ struct CapitalGainsCalculatorOwnerTests {
   }
 
   @Test
+  func crossOwnerCustomTradeDisposesSourceAndAcquiresDestination() async throws {
+    let ledger = try await buildLedger(
+      transactions: [
+        buy(on: 0, account: accountA, shares: 100, cash: 4_000),
+        Transaction(
+          id: makeUUID("60000000-0000-0000-0000-000100000000"),
+          date: day(100),
+          legs: [
+            leg(account: accountA, instrument: bhp, quantity: -100),
+            leg(account: accountB, instrument: spam, quantity: 10),
+          ]),
+      ],
+      accounts: [
+        account(id: accountA, owners: [ownerA]),
+        account(id: accountB, owners: [ownerB]),
+      ],
+      conversionService: FakeConversionService.fixedRates([
+        bhp.id: 50,
+        spam.id: 500,
+      ]))
+
+    let ownerAResult = CapitalGainsCalculator.compute(ledger: ledger, ownerId: ownerA)
+    let ownerBResult = CapitalGainsCalculator.compute(ledger: ledger, ownerId: ownerB)
+    let allOwnersResult = CapitalGainsCalculator.compute(ledger: ledger)
+
+    #expect(
+      ownerAResult.events.count == 1,
+      "source owner must realise the disposed side of a cross-owner custom trade")
+    let ownerADisposal = try #require(ownerAResult.events.first)
+    #expect(ownerADisposal.sellDate == day(100))
+    #expect(ownerADisposal.acquiredDate == day(0))
+    #expect(ownerADisposal.quantity == 100)
+    #expect(ownerADisposal.costBasis == 4_000)
+    #expect(ownerADisposal.proceeds == 5_000)
+    #expect(ownerADisposal.gain == 1_000)
+    #expect(ownerADisposal.taxOwnerId == ownerA)
+
+    #expect(
+      ownerBResult.events.isEmpty,
+      "destination owner acquisition must not realise the source owner's gain")
+    let ownerBLot = try #require(ownerBResult.openLots.first)
+    #expect(ownerBResult.openLots.count == 1)
+    #expect(ownerBLot.account == accountB)
+    #expect(ownerBLot.acquiredDate == day(100))
+    #expect(ownerBLot.remainingQuantity == 10)
+    #expect(ownerBLot.costPerUnit == 500)
+    #expect(ownerBLot.taxOwnerId == ownerB)
+    #expect(allOwnersResult.events == ownerAResult.events)
+  }
+
+  @Test
   func jointOwnerAccountSplitsQuantityAndGainEvenly() async throws {
     let ledger = try await buildLedger(
       transactions: [
