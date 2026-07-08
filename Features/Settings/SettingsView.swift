@@ -50,8 +50,19 @@ struct SettingsView: View {
   // `+macOS` extensions can render profile detail from their respective
   // layouts.
   @ViewBuilder
-  func profileDetailView(for profile: Profile) -> some View {
-    CloudKitProfileDetailView(profile: profile)
+  func profileDetailView(for profile: Profile, session: ProfileSession?) -> some View {
+    CloudKitProfileDetailView(
+      profile: profile,
+      taxOwnerRepository: session?.backend.taxOwners
+    ) { update in
+      let updated = try await profileStore.updateProfilePersisting(
+        id: profile.id,
+        applying: update)
+      if let updated {
+        session?.updateProfile(updated)
+      }
+      return updated
+    }
   }
 
 }

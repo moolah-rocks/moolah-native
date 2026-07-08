@@ -17,23 +17,43 @@ struct SettingsScreen {
   // MARK: - Actions
 
   /// Opens the Settings scene via the system Cmd+, shortcut and waits
-  /// until the Settings window's tab toolbar is visible. The Crypto tab
-  /// button is the post-condition because every UI-testing launch we
-  /// exercise has a CloudKit profile active, so the Crypto tab is always
-  /// present in this scene.
+  /// until the Settings window's tab toolbar is visible. The Profiles tab
+  /// button is the post-condition because every UI-testing launch can show
+  /// profile management, while specialized tabs (such as Crypto) depend on
+  /// the active profile's capabilities.
   ///
   /// The lookup matches by accessibility label (the tab's title) because
   /// SwiftUI's `Tab` on macOS does not propagate
   /// `.accessibilityIdentifier(_:)` to the generated toolbar button. The
-  /// label string lives in `UITestIdentifiers.Settings.cryptoTabTitle` so
-  /// the production view and this driver share one source of truth.
+  /// label string lives in `UITestIdentifiers.TaxOwnerSettings.profilesTabTitle`
+  /// so the production view and this driver share one source of truth.
   func open() {
     Trace.record(#function)
     app.pressKeyboardShortcut(",", modifiers: .command)
-    let cryptoTab = cryptoTabButton
-    if !cryptoTab.waitForExistence(timeout: 10) {
-      Trace.recordFailure("Settings Crypto tab toolbar button did not appear")
+    let profilesTab = profilesTabButton
+    if !profilesTab.waitForExistence(timeout: 10) {
+      Trace.recordFailure("Settings Profiles tab toolbar button did not appear")
       XCTFail("Settings window did not appear within 10s of Cmd+,")
+    }
+  }
+
+  /// Switches the Settings TabView to the Profiles tab and waits for the
+  /// tax-owner management section's Add button. The active UI-test seeds
+  /// boot into an open CloudKit profile, so the Add button is the narrow
+  /// sentinel proving the Profiles detail pane has a live `TaxOwnerStore`.
+  func openProfilesTab() {
+    Trace.record(#function)
+    let tab = profilesTabButton
+    if !tab.waitForExistence(timeout: 10) {
+      Trace.recordFailure("Settings Profiles tab toolbar button did not appear")
+      XCTFail("Profiles tab toolbar button did not appear within 10s")
+      return
+    }
+    tab.click()
+    let addButton = app.element(for: UITestIdentifiers.TaxOwnerSettings.addButton)
+    if !addButton.waitForExistence(timeout: 10) {
+      Trace.recordFailure("settings.taxOwner.add did not appear after Profiles tab click")
+      XCTFail("Tax Owners section did not appear within 10s of opening Profiles Settings")
     }
   }
 
@@ -57,6 +77,15 @@ struct SettingsScreen {
   }
 
   // MARK: - Helpers
+
+  /// The Settings TabView's Profiles tab toolbar button, located by its
+  /// accessibility label (the title of the `Tab`). See `open()` for why
+  /// this driver uses label matching rather than `app.element(for:)`.
+  /// The lookup routes through `MoolahApp.toolbarButton(label:)` so the
+  /// single-resolver invariant (UI_TEST_GUIDE §3 #5) is preserved.
+  private var profilesTabButton: XCUIElement {
+    app.toolbarButton(label: UITestIdentifiers.TaxOwnerSettings.profilesTabTitle)
+  }
 
   /// The Settings TabView's Crypto tab toolbar button, located by its
   /// accessibility label (the title of the `Tab`). See `open()` for why

@@ -146,6 +146,10 @@ final class MoolahApp {
   /// after `settings.openCryptoTab()` has selected the tab.
   var cryptoSettings: CryptoSettingsScreen { CryptoSettingsScreen(app: self) }
 
+  /// Tax Owners section of the Profiles tab in the macOS Settings scene.
+  /// Available after `settings.openProfilesTab()` has selected Profiles.
+  var taxOwnerSettings: TaxOwnerSettingsScreen { TaxOwnerSettingsScreen(app: self) }
+
   /// `AddTokenSheet` (the crypto-only `InstrumentPickerSheet`). Available
   /// after `cryptoSettings.tapAddToken()` has presented the sheet.
   var addToken: AddTokenScreen { AddTokenScreen(app: self) }
@@ -192,6 +196,18 @@ final class MoolahApp {
   /// through this method so the single-resolver invariant is preserved.
   func menuItem(label: String) -> XCUIElement {
     application.menuItems[label]
+  }
+
+  /// Scroll view scoped to a Settings detail form. Settings scenes can contain
+  /// multiple scroll views (for example the Profiles sidebar list plus the
+  /// selected profile detail form), so screen drivers pass the detail form's
+  /// stable identifier instead of swiping the app-wide first match.
+  func settingsScrollView(containing identifier: String) -> XCUIElement {
+    let identifiedScrollView = application.scrollViews.matching(identifier: identifier).firstMatch
+    if identifiedScrollView.exists {
+      return identifiedScrollView
+    }
+    return application.scrollViews.containing(.any, identifier: identifier).firstMatch
   }
 
   /// Segment resolver for `Picker.segmented` controls on macOS.
