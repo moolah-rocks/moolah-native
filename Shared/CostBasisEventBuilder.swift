@@ -18,6 +18,11 @@ enum CostBasisEventBuilder {
     let taxOwnerIdsByAccount: [UUID?: [UUID]]
   }
 
+  struct OwnerAllocation {
+    let taxOwnerId: UUID?
+    let fraction: Decimal
+  }
+
   static func events(
     sourceTransactionId: UUID? = nil,
     legs: [TransactionLeg],
@@ -144,8 +149,9 @@ enum CostBasisEventBuilder {
   }
 
   /// A transfer transaction has a negative (source) and positive (dest)
-  /// `.transfer` leg of the same instrument, both tracked. Value the move
-  /// at the destination quantity's market value on `date`.
+  /// `.transfer` leg of the same non-fiat instrument, both tracked. Same-owner
+  /// fractions move without tax; source-only fractions dispose at market value;
+  /// destination-only fractions acquire a new lot at the same market value.
   private static func transferMoves(_ input: BuildInput) async throws -> [CostBasisEvent] {
     let transfers = input.legs.filter {
       $0.type == .transfer && $0.instrument.kind != .fiatCurrency
@@ -153,22 +159,45 @@ enum CostBasisEventBuilder {
     guard let source = transfers.first(where: { $0.quantity < 0 }),
       let dest = transfers.first(where: { $0.quantity > 0 }),
       source.instrument == dest.instrument,
-      let from = source.accountId, let to = dest.accountId,
-      input.trackedAccountIds.contains(from), input.trackedAccountIds.contains(to)
+      let from = source.accountId,
+      let to = dest.accountId,
+      input.trackedAccountIds.contains(from),
+      input.trackedAccountIds.contains(to)
     else { return [] }
-    let qty = dest.quantity
-    let market = try await marketValue(
-      qty,
-      of: dest.instrument,
-      on: input.date,
-      in: input.referenceCurrency,
-      using: input.conversionService)
-    return ownerAllocations(account: from, in: input.taxOwnerIdsByAccount).map { allocation in
-      .move(
-        instrument: dest.instrument,
-        quantity: qty * allocation.fraction,
-        route: CostBasisMoveRoute(from: from, to: to, taxOwnerId: allocation.taxOwnerId),
-        marketValue: market * allocation.fraction)
+    let transfer = CostBasisTransferEventBuilder.Input(
+      instrument: dest.instrument,
+      quantity: dest.quantity,
+      sourceAccount: from,
+      destinationAccount: to,
+      sourceAllocations: ownerAllocations(account: from, in: input.taxOwnerIdsByAccount),
+      destinationAllocations: ownerAllocations(account: to, in: input.taxOwnerIdsByAccount),
+      sourceTransactionId: input.sourceTransactionId)
+    let sharedEvents = CostBasisTransferEventBuilder.sharedMoveEvents(input: transfer)
+    guard
+      !CostBasisTransferEventBuilder.sourceDisposalHoldings(input: transfer).isEmpty
+        || !CostBasisTransferEventBuilder.destinationAcquisitionHoldings(input: transfer).isEmpty
+    else { return sharedEvents }
+    do {
+      let market = try await marketValue(
+        transfer.quantity,
+        of: transfer.instrument,
+        on: input.date,
+        in: input.referenceCurrency,
+        using: input.conversionService)
+      return sharedEvents
+        + CostBasisTransferEventBuilder.marketValueEvents(
+          input: CostBasisTransferEventBuilder.MarketValueInput(
+            transfer: transfer,
+            marketValue: market))
+    } catch {
+      throw CostBasisTransferEventBuilder.MarketValueFailure(
+        fallbackEvents: sharedEvents,
+        sourceDisposalHoldings: CostBasisTransferEventBuilder.sourceDisposalHoldings(
+          input: transfer),
+        destinationAcquisitionHoldings:
+          CostBasisTransferEventBuilder.destinationAcquisitionHoldings(
+            input: transfer),
+        underlyingError: error)
     }
   }
 
@@ -195,11 +224,6 @@ enum CostBasisEventBuilder {
     case .value(let converted): return converted.quantity
     case .knownZero: return 0
     }
-  }
-
-  private struct OwnerAllocation {
-    let taxOwnerId: UUID?
-    let fraction: Decimal
   }
 
   private static func holding(

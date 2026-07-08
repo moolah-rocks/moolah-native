@@ -197,13 +197,14 @@ struct CapitalGainsCalculatorOwnerTests {
   private func leg(
     account: UUID,
     instrument: Instrument,
-    quantity: Decimal
+    quantity: Decimal,
+    type: TransactionType = .trade
   ) -> TransactionLeg {
     TransactionLeg(
       accountId: account,
       instrument: instrument,
       quantity: quantity,
-      type: .trade)
+      type: type)
   }
 
   private func day(_ n: Int) -> Date {

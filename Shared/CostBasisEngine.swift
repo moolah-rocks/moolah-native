@@ -113,9 +113,15 @@ struct CostBasisEngine: Sendable {
   ) {
     let sourceKey = bucketKey(instrument: instrument, account: source, taxOwnerId: taxOwnerId)
     let destKey = bucketKey(instrument: instrument, account: destination, taxOwnerId: taxOwnerId)
-    // A same-bucket move has no economic effect, and the shared-mutation loop below
-    // would otherwise clobber the appended lots when re-writing the source bucket.
-    guard sourceKey != destKey else { return }
+    if sourceKey == destKey {
+      moveLotsWithinSharedBucket(
+        key: sourceKey,
+        quantity: quantity,
+        from: source,
+        to: destination,
+        taxOwnerId: taxOwnerId)
+      return
+    }
     var remaining = quantity
 
     while remaining > 0 {
@@ -148,15 +154,59 @@ struct CostBasisEngine: Sendable {
     }
   }
 
+  private mutating func moveLotsWithinSharedBucket(
+    key: BucketKey,
+    quantity: Decimal,
+    from source: UUID?,
+    to destination: UUID?,
+    taxOwnerId: UUID?
+  ) {
+    guard source != destination, var lots = buckets[key], !lots.isEmpty else { return }
+    var remaining = quantity
+    var index = 0
+    while remaining > 0 && index < lots.count {
+      let lot = lots[index]
+      guard lot.account == source else {
+        index += 1
+        continue
+      }
+      let moved = min(remaining, lot.remainingQuantity)
+      let movedLot = CostBasisLot(
+        id: UUID(),
+        instrument: lot.instrument,
+        acquiredDate: lot.acquiredDate,
+        costPerUnit: lot.costPerUnit,
+        originalQuantity: moved,
+        remainingQuantity: moved,
+        account: destination,
+        taxOwnerId: taxOwnerId)
+      if moved == lot.remainingQuantity {
+        lots[index] = movedLot
+      } else {
+        var sourceLot = lot
+        sourceLot.remainingQuantity -= moved
+        lots[index] = sourceLot
+        lots.insert(movedLot, at: index + 1)
+        index += 1
+      }
+      remaining -= moved
+      index += 1
+    }
+    buckets[key] = lots
+  }
+
   /// Return open lots for an instrument in a specific account/owner bucket, FIFO order.
   func openLots(
     for instrument: Instrument,
     account: UUID?,
     taxOwnerId: UUID?
   ) -> [CostBasisLot] {
-    buckets[
-      bucketKey(instrument: instrument, account: account, taxOwnerId: taxOwnerId)
-    ] ?? []
+    let lots =
+      buckets[
+        bucketKey(instrument: instrument, account: account, taxOwnerId: taxOwnerId)
+      ] ?? []
+    guard taxOwnerId != nil else { return lots }
+    return lots.filter { $0.account == account }
   }
 
   /// Return open lots for an instrument in a specific account, aggregated across owners.
