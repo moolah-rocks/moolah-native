@@ -8,77 +8,79 @@ import Foundation
 /// return); non-fiat `.expense` → disposal at market value (crypto spend /
 /// gas). Fiat legs that are not attached trade fees are non-events.
 enum CostBasisEventBuilder {
+  private struct BuildInput {
+    let sourceTransactionId: UUID?
+    let legs: [TransactionLeg]
+    let date: Date
+    let trackedAccountIds: Set<UUID>
+    let referenceCurrency: Instrument
+    let conversionService: any InstrumentConversionService
+    let taxOwnerIdsByAccount: [UUID?: [UUID]]
+  }
+
   static func events(
     sourceTransactionId: UUID? = nil,
     legs: [TransactionLeg],
     on date: Date,
     trackedAccountIds: Set<UUID>,
     referenceCurrency: Instrument,
-    conversionService: any InstrumentConversionService
+    conversionService: any InstrumentConversionService,
+    taxOwnerIdsByAccount: [UUID?: [UUID]] = [:]
   ) async throws -> [CostBasisEvent] {
+    let input = BuildInput(
+      sourceTransactionId: sourceTransactionId,
+      legs: legs,
+      date: date,
+      trackedAccountIds: trackedAccountIds,
+      referenceCurrency: referenceCurrency,
+      conversionService: conversionService,
+      taxOwnerIdsByAccount: taxOwnerIdsByAccount)
+
     var events: [CostBasisEvent] = []
     // 1. `.trade` legs → classifier (fees already folded into per-unit).
-    events.append(
-      contentsOf: try await tradeEvents(
-        legs: legs,
-        on: date,
-        sourceTransactionId: sourceTransactionId,
-        referenceCurrency: referenceCurrency,
-        conversionService: conversionService))
+    events.append(contentsOf: try await tradeEvents(input))
     // 2. Non-fiat `.income` / `.openingBalance` → acquisition @ market value.
-    events.append(
-      contentsOf: try await nonFiatAcquisitions(
-        legs: legs,
-        on: date,
-        referenceCurrency: referenceCurrency,
-        conversionService: conversionService))
+    events.append(contentsOf: try await nonFiatAcquisitions(input))
     // 3. Non-fiat `.expense` (gas / spend / send-out) → disposal @ market value.
-    events.append(
-      contentsOf: try await nonFiatDisposals(
-        legs: legs,
-        on: date,
-        sourceTransactionId: sourceTransactionId,
-        referenceCurrency: referenceCurrency,
-        conversionService: conversionService))
+    events.append(contentsOf: try await nonFiatDisposals(input))
     // 4. Tracked→tracked `.transfer` → move (cost carries; market value for return).
-    events.append(
-      contentsOf: try await transferMoves(
-        legs: legs,
-        on: date,
-        trackedAccountIds: trackedAccountIds,
-        referenceCurrency: referenceCurrency,
-        conversionService: conversionService))
+    events.append(contentsOf: try await transferMoves(input))
     return events
   }
 
   /// `.trade` legs delegate to `TradeEventClassifier`: buys → acquisitions,
   /// sells → disposals, attached fees already folded into per-unit values.
-  private static func tradeEvents(
-    legs: [TransactionLeg],
-    on date: Date,
-    sourceTransactionId: UUID?,
-    referenceCurrency: Instrument,
-    conversionService: any InstrumentConversionService
-  ) async throws -> [CostBasisEvent] {
+  private static func tradeEvents(_ input: BuildInput) async throws -> [CostBasisEvent] {
     let classification = try await TradeEventClassifier.classify(
-      legs: legs, on: date, hostCurrency: referenceCurrency, conversionService: conversionService)
+      legs: input.legs,
+      on: input.date,
+      hostCurrency: input.referenceCurrency,
+      conversionService: input.conversionService)
     var events: [CostBasisEvent] = []
     for buy in classification.buys {
-      events.append(
-        .acquisition(
-          instrument: buy.instrument,
-          quantity: buy.quantity,
-          costPerUnit: buy.costPerUnit,
-          account: accountFor(buy.instrument, in: legs)))
+      let account = accountFor(buy.instrument, in: input.legs)
+      for allocation in ownerAllocations(account: account, in: input.taxOwnerIdsByAccount) {
+        events.append(
+          .acquisition(
+            instrument: buy.instrument,
+            quantity: buy.quantity * allocation.fraction,
+            costPerUnit: buy.costPerUnit,
+            holding: holding(account: account, allocation: allocation)))
+      }
     }
     for sell in classification.sells {
-      events.append(
-        .disposal(
-          instrument: sell.instrument,
-          quantity: sell.quantity,
-          proceedsPerUnit: sell.proceedsPerUnit,
-          account: accountFor(sell.instrument, in: legs),
-          sourceTransactionId: sourceTransactionId))
+      let account = accountFor(sell.instrument, in: input.legs)
+      for allocation in ownerAllocations(account: account, in: input.taxOwnerIdsByAccount) {
+        events.append(
+          .disposal(
+            instrument: sell.instrument,
+            quantity: sell.quantity * allocation.fraction,
+            proceedsPerUnit: sell.proceedsPerUnit,
+            context: disposalContext(
+              account: account,
+              allocation: allocation,
+              sourceTransactionId: input.sourceTransactionId)))
+      }
     }
     return events
   }
@@ -88,14 +90,9 @@ enum CostBasisEventBuilder {
   /// non-fiat `.expense` — a refund (sign convention lets any type carry the
   /// opposite sign; CODE_GUIDE §16), the mirror of the negative-expense
   /// disposal in `nonFiatDisposals`.
-  private static func nonFiatAcquisitions(
-    legs: [TransactionLeg],
-    on date: Date,
-    referenceCurrency: Instrument,
-    conversionService: any InstrumentConversionService
-  ) async throws -> [CostBasisEvent] {
+  private static func nonFiatAcquisitions(_ input: BuildInput) async throws -> [CostBasisEvent] {
     var events: [CostBasisEvent] = []
-    for leg in legs
+    for leg in input.legs
     where leg.instrument.kind != .fiatCurrency
       && (leg.type == .income || leg.type == .openingBalance || leg.type == .expense)
       && leg.quantity > 0
@@ -103,45 +100,45 @@ enum CostBasisEventBuilder {
       let value = try await marketValue(
         leg.quantity,
         of: leg.instrument,
-        on: date,
-        in: referenceCurrency,
-        using: conversionService)
-      events.append(
-        .acquisition(
-          instrument: leg.instrument,
-          quantity: leg.quantity,
-          costPerUnit: value / leg.quantity,
-          account: leg.accountId))
+        on: input.date,
+        in: input.referenceCurrency,
+        using: input.conversionService)
+      for allocation in ownerAllocations(account: leg.accountId, in: input.taxOwnerIdsByAccount) {
+        events.append(
+          .acquisition(
+            instrument: leg.instrument,
+            quantity: leg.quantity * allocation.fraction,
+            costPerUnit: value / leg.quantity,
+            holding: holding(account: leg.accountId, allocation: allocation)))
+      }
     }
     return events
   }
 
   /// Non-fiat `.expense` legs (crypto spend / gas / send-out) leave holdings,
   /// realising proceeds at their market value on `date`.
-  private static func nonFiatDisposals(
-    legs: [TransactionLeg],
-    on date: Date,
-    sourceTransactionId: UUID?,
-    referenceCurrency: Instrument,
-    conversionService: any InstrumentConversionService
-  ) async throws -> [CostBasisEvent] {
+  private static func nonFiatDisposals(_ input: BuildInput) async throws -> [CostBasisEvent] {
     var events: [CostBasisEvent] = []
-    for leg in legs
+    for leg in input.legs
     where leg.instrument.kind != .fiatCurrency && leg.type == .expense && leg.quantity < 0 {
       let qty = -leg.quantity
       let value = try await marketValue(
         qty,
         of: leg.instrument,
-        on: date,
-        in: referenceCurrency,
-        using: conversionService)
-      events.append(
-        .disposal(
-          instrument: leg.instrument,
-          quantity: qty,
-          proceedsPerUnit: value / qty,
-          account: leg.accountId,
-          sourceTransactionId: sourceTransactionId))
+        on: input.date,
+        in: input.referenceCurrency,
+        using: input.conversionService)
+      for allocation in ownerAllocations(account: leg.accountId, in: input.taxOwnerIdsByAccount) {
+        events.append(
+          .disposal(
+            instrument: leg.instrument,
+            quantity: qty * allocation.fraction,
+            proceedsPerUnit: value / qty,
+            context: disposalContext(
+              account: leg.accountId,
+              allocation: allocation,
+              sourceTransactionId: input.sourceTransactionId)))
+      }
     }
     return events
   }
@@ -149,26 +146,30 @@ enum CostBasisEventBuilder {
   /// A transfer transaction has a negative (source) and positive (dest)
   /// `.transfer` leg of the same instrument, both tracked. Value the move
   /// at the destination quantity's market value on `date`.
-  private static func transferMoves(
-    legs: [TransactionLeg],
-    on date: Date,
-    trackedAccountIds: Set<UUID>,
-    referenceCurrency: Instrument,
-    conversionService: any InstrumentConversionService
-  ) async throws -> [CostBasisEvent] {
-    let transfers = legs.filter { $0.type == .transfer && $0.instrument.kind != .fiatCurrency }
+  private static func transferMoves(_ input: BuildInput) async throws -> [CostBasisEvent] {
+    let transfers = input.legs.filter {
+      $0.type == .transfer && $0.instrument.kind != .fiatCurrency
+    }
     guard let source = transfers.first(where: { $0.quantity < 0 }),
       let dest = transfers.first(where: { $0.quantity > 0 }),
       source.instrument == dest.instrument,
       let from = source.accountId, let to = dest.accountId,
-      trackedAccountIds.contains(from), trackedAccountIds.contains(to)
+      input.trackedAccountIds.contains(from), input.trackedAccountIds.contains(to)
     else { return [] }
     let qty = dest.quantity
     let market = try await marketValue(
-      qty, of: dest.instrument, on: date, in: referenceCurrency, using: conversionService)
-    return [
-      .move(instrument: dest.instrument, quantity: qty, from: from, to: to, marketValue: market)
-    ]
+      qty,
+      of: dest.instrument,
+      on: input.date,
+      in: input.referenceCurrency,
+      using: input.conversionService)
+    return ownerAllocations(account: from, in: input.taxOwnerIdsByAccount).map { allocation in
+      .move(
+        instrument: dest.instrument,
+        quantity: qty * allocation.fraction,
+        route: CostBasisMoveRoute(from: from, to: to, taxOwnerId: allocation.taxOwnerId),
+        marketValue: market * allocation.fraction)
+    }
   }
 
   /// Market value of `quantity` of `instrument` in `referenceCurrency` on
@@ -194,6 +195,39 @@ enum CostBasisEventBuilder {
     case .value(let converted): return converted.quantity
     case .knownZero: return 0
     }
+  }
+
+  private struct OwnerAllocation {
+    let taxOwnerId: UUID?
+    let fraction: Decimal
+  }
+
+  private static func holding(
+    account: UUID?, allocation: OwnerAllocation
+  ) -> CostBasisEventHolding {
+    CostBasisEventHolding(account: account, taxOwnerId: allocation.taxOwnerId)
+  }
+
+  private static func disposalContext(
+    account: UUID?,
+    allocation: OwnerAllocation,
+    sourceTransactionId: UUID?
+  ) -> CostBasisDisposalContext {
+    CostBasisDisposalContext(
+      holding: holding(account: account, allocation: allocation),
+      sourceTransactionId: sourceTransactionId)
+  }
+
+  private static func ownerAllocations(
+    account: UUID?,
+    in taxOwnerIdsByAccount: [UUID?: [UUID]]
+  ) -> [OwnerAllocation] {
+    let ownerIds = taxOwnerIdsByAccount[account] ?? []
+    guard !ownerIds.isEmpty else {
+      return [OwnerAllocation(taxOwnerId: nil, fraction: 1)]
+    }
+    let fraction = Decimal(1) / Decimal(ownerIds.count)
+    return ownerIds.map { OwnerAllocation(taxOwnerId: $0, fraction: fraction) }
   }
 
   private static func accountFor(_ instrument: Instrument, in legs: [TransactionLeg]) -> UUID? {

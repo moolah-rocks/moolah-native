@@ -14,18 +14,25 @@ extension HoldingsCostLedger {
   }
 
   var unavailableInstrumentIds: Set<String> {
-    Set(unavailableKeys.map(\.instrument.id))
+    Set(unavailableInstruments.map(\.id))
   }
 
   var unavailableInstruments: Set<Instrument> {
-    Set(unavailableKeys.map(\.instrument))
+    unavailableInstruments(ownerId: nil)
   }
 
-  func unavailableRealisedGainInstruments(in interval: Range<Date>) -> Set<Instrument> {
-    unavailableInputs.realisedGainInstruments(
+  func unavailableInstruments(ownerId: UUID?) -> Set<Instrument> {
+    Set(unavailableKeys(ownerId: ownerId).map(\.instrument))
+  }
+
+  func unavailableRealisedGainInstruments(
+    in interval: Range<Date>,
+    ownerId: UUID? = nil
+  ) -> Set<Instrument> {
+    unavailableInputs(ownerId: ownerId).realisedGainInstruments(
       in: interval,
-      disposalCandidates: disposalCandidates,
-      moveCandidates: moveCandidates)
+      disposalCandidates: disposalCandidates(ownerId: ownerId),
+      moveCandidates: moveCandidates(ownerId: ownerId))
   }
 
   func remainingInvested(accountIds: Set<UUID>, onOrBefore day: Date) -> Decimal? {
@@ -53,6 +60,40 @@ extension HoldingsCostLedger {
       .map { CashFlow(date: $0.date, amount: $0.amount) }
   }
 
+  private func unavailableKeys(ownerId: UUID?) -> Set<TouchKey> {
+    guard let ownerId else { return unavailableKeys }
+    return unavailableKeys.filter { $0.taxOwnerId == ownerId }
+  }
+
+  private func unavailableInputs(ownerId: UUID?) -> Set<HoldingsCostLedgerUnavailableInput> {
+    guard let ownerId else { return unavailableInputs }
+    return Set(
+      unavailableInputs.compactMap { input in
+        let keys = input.keys.filter { $0.taxOwnerId == ownerId }
+        guard !keys.isEmpty else { return nil }
+        return HoldingsCostLedgerUnavailableInput(
+          date: input.date,
+          keys: Set(keys),
+          mayAffectRealisedGains: input.mayAffectRealisedGains)
+      })
+  }
+
+  private func disposalCandidates(
+    ownerId: UUID?
+  ) -> Set<HoldingsCostLedgerDisposalCandidate> {
+    guard let ownerId else { return disposalCandidates }
+    return disposalCandidates.filter { $0.key.taxOwnerId == ownerId }
+  }
+
+  private func moveCandidates(
+    ownerId: UUID?
+  ) -> Set<HoldingsCostLedgerMoveCandidate> {
+    guard let ownerId else { return moveCandidates }
+    return moveCandidates.filter {
+      $0.source.taxOwnerId == ownerId || $0.destination.taxOwnerId == ownerId
+    }
+  }
+
   private func hasUnavailable(accountIds: Set<UUID>, instrument: Instrument?) -> Bool {
     unavailableKeys.contains { key in
       guard let account = key.account, accountIds.contains(account) else { return false }
@@ -67,6 +108,7 @@ extension HoldingsCostLedger {
     struct Key: Hashable {
       let account: UUID?
       let instrumentId: String
+      let taxOwnerId: UUID?
     }
     var latest: [Key: (day: Date, value: Decimal)] = [:]
     for snap in investedSnapshots {
@@ -74,7 +116,7 @@ extension HoldingsCostLedger {
       if let want = instrumentId, snap.instrument.id != want { continue }
       let snapDay = Calendar.utc.startOfDay(for: snap.date)
       guard snapDay <= day else { continue }
-      let key = Key(account: account, instrumentId: snap.instrument.id)
+      let key = Key(account: account, instrumentId: snap.instrument.id, taxOwnerId: snap.taxOwnerId)
       if let existing = latest[key], existing.day > snapDay { continue }
       latest[key] = (snapDay, snap.remainingInvested)
     }

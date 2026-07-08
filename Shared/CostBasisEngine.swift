@@ -7,24 +7,26 @@ import Foundation
 ///
 /// Not async, no repository dependencies — all data passed in. Highly testable.
 struct CostBasisEngine: Sendable {
-  /// Identifies a bucket of open lots: one instrument held in one account.
-  /// `account == nil` is the legacy single-bucket used by callers that do not
-  /// yet segregate lots by account.
+  /// Identifies a bucket of open lots: one instrument held for one tax owner,
+  /// or (for legacy unowned callers) in one account. `nil` owner/account
+  /// components preserve legacy single-bucket callers that do not resolve ownership.
   private struct BucketKey: Hashable {
     let instrumentId: String
     let account: UUID?
+    let taxOwnerId: UUID?
   }
 
-  /// Open lots grouped by `(instrument, account)`, in acquisition order (FIFO).
+  /// Open lots grouped by `(instrument, tax owner)` or legacy `(instrument, account)`.
   private var buckets: [BucketKey: [CostBasisLot]] = [:]
 
-  /// Record a buy: adds a new lot for the instrument in the given account's bucket.
+  /// Record a buy: adds a new lot for the instrument in the given account/owner bucket.
   mutating func processBuy(
     instrument: Instrument,
     quantity: Decimal,
     costPerUnit: Decimal,
     date: Date,
-    account: UUID? = nil
+    account: UUID? = nil,
+    taxOwnerId: UUID? = nil
   ) {
     let lot = CostBasisLot(
       id: UUID(),
@@ -33,13 +35,17 @@ struct CostBasisEngine: Sendable {
       costPerUnit: costPerUnit,
       originalQuantity: quantity,
       remainingQuantity: quantity,
-      account: account
+      account: account,
+      taxOwnerId: taxOwnerId
     )
-    buckets[BucketKey(instrumentId: instrument.id, account: account), default: []].append(lot)
+    buckets[
+      bucketKey(instrument: instrument, account: account, taxOwnerId: taxOwnerId),
+      default: []
+    ].append(lot)
   }
 
-  /// Record a sell: consume lots in FIFO order within the account's bucket, return
-  /// gain/loss events.
+  /// Record a sell: consume lots in FIFO order within the account/owner bucket,
+  /// return gain/loss events.
   ///
   /// If sell quantity exceeds available lots, only the available quantity is processed.
   mutating func processSell(
@@ -48,9 +54,10 @@ struct CostBasisEngine: Sendable {
     proceedsPerUnit: Decimal,
     date: Date,
     account: UUID? = nil,
+    taxOwnerId: UUID? = nil,
     sourceTransactionId: UUID? = nil
   ) -> [CapitalGainEvent] {
-    let key = BucketKey(instrumentId: instrument.id, account: account)
+    let key = bucketKey(instrument: instrument, account: account, taxOwnerId: taxOwnerId)
     var remaining = quantity
     var events: [CapitalGainEvent] = []
     while remaining > 0 {
@@ -73,7 +80,8 @@ struct CostBasisEngine: Sendable {
           quantity: consumed,
           costBasis: consumed * lot.costPerUnit,
           proceeds: consumed * proceedsPerUnit,
-          holdingDays: holdingDays
+          holdingDays: holdingDays,
+          taxOwnerId: taxOwnerId
         ))
 
       lot.remainingQuantity -= consumed
@@ -100,13 +108,14 @@ struct CostBasisEngine: Sendable {
     instrument: Instrument,
     quantity: Decimal,
     from source: UUID?,
-    to destination: UUID?
+    to destination: UUID?,
+    taxOwnerId: UUID? = nil
   ) {
+    let sourceKey = bucketKey(instrument: instrument, account: source, taxOwnerId: taxOwnerId)
+    let destKey = bucketKey(instrument: instrument, account: destination, taxOwnerId: taxOwnerId)
     // A same-bucket move has no economic effect, and the shared-mutation loop below
     // would otherwise clobber the appended lots when re-writing the source bucket.
-    guard source != destination else { return }
-    let sourceKey = BucketKey(instrumentId: instrument.id, account: source)
-    let destKey = BucketKey(instrumentId: instrument.id, account: destination)
+    guard sourceKey != destKey else { return }
     var remaining = quantity
 
     while remaining > 0 {
@@ -123,7 +132,8 @@ struct CostBasisEngine: Sendable {
           costPerUnit: lot.costPerUnit,
           originalQuantity: moved,
           remainingQuantity: moved,
-          account: destination
+          account: destination,
+          taxOwnerId: taxOwnerId
         ))
 
       lot.remainingQuantity -= moved
@@ -138,9 +148,33 @@ struct CostBasisEngine: Sendable {
     }
   }
 
-  /// Return open (unsold) lots for an instrument in a specific account's bucket, FIFO order.
+  /// Return open lots for an instrument in a specific account/owner bucket, FIFO order.
+  func openLots(
+    for instrument: Instrument,
+    account: UUID?,
+    taxOwnerId: UUID?
+  ) -> [CostBasisLot] {
+    buckets[
+      bucketKey(instrument: instrument, account: account, taxOwnerId: taxOwnerId)
+    ] ?? []
+  }
+
+  /// Return open lots for an instrument in a specific account, aggregated across owners.
   func openLots(for instrument: Instrument, account: UUID?) -> [CostBasisLot] {
-    buckets[BucketKey(instrumentId: instrument.id, account: account)] ?? []
+    buckets
+      .filter { $0.key.instrumentId == instrument.id && $0.key.account == account }
+      .flatMap(\.value)
+  }
+
+  private func bucketKey(
+    instrument: Instrument,
+    account: UUID?,
+    taxOwnerId: UUID?
+  ) -> BucketKey {
+    BucketKey(
+      instrumentId: instrument.id,
+      account: taxOwnerId == nil ? account : nil,
+      taxOwnerId: taxOwnerId)
   }
 
   /// Return open (unsold) lots for an instrument aggregated across all accounts.

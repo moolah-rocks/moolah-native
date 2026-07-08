@@ -14,25 +14,38 @@ import Foundation
 /// holding), the disposal can draw the just-acquired lot instead of being
 /// silently dropped against an empty bucket. The crypto-fee dual-role test
 /// encodes this.
+struct CostBasisEventHolding: Sendable, Equatable {
+  let account: UUID?
+  let taxOwnerId: UUID?
+}
+
+struct CostBasisDisposalContext: Sendable, Equatable {
+  let holding: CostBasisEventHolding
+  let sourceTransactionId: UUID?
+}
+
+struct CostBasisMoveRoute: Sendable, Equatable {
+  let from: UUID?
+  let to: UUID?
+  let taxOwnerId: UUID?
+}
+
 enum CostBasisEvent {
   /// A lot enters holdings: a fiat-paired buy, a non-fiat income/opening
   /// balance (valued at market), or the acquiring side of a swap.
-  case acquisition(instrument: Instrument, quantity: Decimal, costPerUnit: Decimal, account: UUID?)
-  // swiftlint:disable enum_case_associated_values_count
-  // The flat disposal/move payloads match the engine's hot-path destructuring;
-  // payload structs would add ceremony without reducing domain complexity.
+  case acquisition(
+    instrument: Instrument, quantity: Decimal, costPerUnit: Decimal, holding: CostBasisEventHolding)
   /// A lot leaves holdings for proceeds: a sell, or a non-fiat expense
   /// (crypto spend / gas) valued at market.
   case disposal(
     instrument: Instrument,
     quantity: Decimal,
     proceedsPerUnit: Decimal,
-    account: UUID?,
-    sourceTransactionId: UUID?)
+    context: CostBasisDisposalContext)
   /// A tracked→tracked transfer: the lot's cost carries in the engine while
   /// `marketValue` records what the moved quantity was worth on the date.
-  case move(instrument: Instrument, quantity: Decimal, from: UUID?, to: UUID?, marketValue: Decimal)
-  // swiftlint:enable enum_case_associated_values_count
+  case move(
+    instrument: Instrument, quantity: Decimal, route: CostBasisMoveRoute, marketValue: Decimal)
 }
 
 extension CostBasisEvent: Sendable {}
@@ -62,6 +75,7 @@ struct InvestedSnapshot {
   let date: Date
   let account: UUID?
   let instrument: Instrument
+  let taxOwnerId: UUID?
   let remainingInvested: Decimal
 }
 

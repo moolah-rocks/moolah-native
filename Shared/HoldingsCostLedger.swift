@@ -23,9 +23,10 @@ struct HoldingsCostLedger: Sendable {
   static func build(
     legRows: [CostBasisEventLegRow],
     referenceCurrency: Instrument,
-    conversionService: any InstrumentConversionService
+    conversionService: any InstrumentConversionService,
+    taxOwnershipResolver: TaxOwnershipResolver? = nil
   ) async throws -> HoldingsCostLedger {
-    let grouped = groupByTransaction(legRows)
+    let grouped = groupByTransaction(legRows, taxOwnershipResolver: taxOwnershipResolver)
     try await warmRates(grouped, referenceCurrency: referenceCurrency, using: conversionService)
     return try await runPass(
       grouped,
@@ -38,7 +39,8 @@ struct HoldingsCostLedger: Sendable {
   static func build(
     transactions: [Transaction],
     referenceCurrency: Instrument,
-    conversionService: any InstrumentConversionService
+    conversionService: any InstrumentConversionService,
+    taxOwnershipResolver: TaxOwnershipResolver? = nil
   ) async throws -> HoldingsCostLedger {
     let legRows =
       transactions
@@ -51,7 +53,10 @@ struct HoldingsCostLedger: Sendable {
             instrument: leg.instrument,
             quantity: leg.quantity,
             type: leg.type,
-            sortOrder: index)
+            sortOrder: index,
+            taxOwnerIds: taxOwnershipResolver?
+              .allocationsForAccount(leg.accountId)
+              .map(\.ownerId) ?? [])
         }
       }
       .sorted {
@@ -61,22 +66,35 @@ struct HoldingsCostLedger: Sendable {
     return try await build(
       legRows: legRows,
       referenceCurrency: referenceCurrency,
-      conversionService: conversionService)
+      conversionService: conversionService,
+      taxOwnershipResolver: taxOwnershipResolver)
   }
 
   private struct TransactionGroup {
     let id: UUID
     let date: Date
     var legs: [TransactionLeg]
+    var taxOwnerIdsByAccount: [UUID?: [UUID]]
   }
 
-  private static func groupByTransaction(_ legRows: [CostBasisEventLegRow]) -> [TransactionGroup] {
+  private static func groupByTransaction(
+    _ legRows: [CostBasisEventLegRow],
+    taxOwnershipResolver: TaxOwnershipResolver? = nil
+  ) -> [TransactionGroup] {
     var order: [UUID] = []
     var byId: [UUID: TransactionGroup] = [:]
     for row in legRows {
       if byId[row.transactionId] == nil {
         order.append(row.transactionId)
-        byId[row.transactionId] = TransactionGroup(id: row.transactionId, date: row.date, legs: [])
+        byId[row.transactionId] = TransactionGroup(
+          id: row.transactionId, date: row.date, legs: [], taxOwnerIdsByAccount: [:])
+      }
+      let ownerIds =
+        taxOwnershipResolver?
+        .allocationsForAccount(row.accountId)
+        .map(\.ownerId) ?? row.taxOwnerIds
+      if !ownerIds.isEmpty {
+        byId[row.transactionId]?.taxOwnerIdsByAccount[row.accountId] = ownerIds
       }
       byId[row.transactionId]?.legs.append(
         TransactionLeg(
@@ -147,7 +165,8 @@ struct HoldingsCostLedger: Sendable {
           on: group.date,
           trackedAccountIds: trackedAccountIds,
           referenceCurrency: referenceCurrency,
-          conversionService: conversionService)
+          conversionService: conversionService,
+          taxOwnerIdsByAccount: group.taxOwnerIdsByAccount)
         // Acquisitions before disposals so a same-txn fee/gas leg with no
         // prior lot draws the just-acquired lot instead of being dropped;
         // FIFO still drains older pre-existing lots first when they exist.
@@ -178,7 +197,9 @@ struct HoldingsCostLedger: Sendable {
       disposalCandidates: disposalCandidates,
       moveCandidates: moveCandidates)
   }
+}
 
+extension HoldingsCostLedger {
   private static func investedSnapshots(
     for keys: Set<TouchKey>,
     on date: Date,
@@ -187,12 +208,13 @@ struct HoldingsCostLedger: Sendable {
     keys.map { key in
       let invested =
         pass.engine
-        .openLots(for: key.instrument, account: key.account)
+        .openLots(for: key.instrument, account: key.account, taxOwnerId: key.taxOwnerId)
         .reduce(Decimal(0)) { $0 + $1.remainingCost }
       return InvestedSnapshot(
         date: date,
         account: key.account,
         instrument: key.instrument,
+        taxOwnerId: key.taxOwnerId,
         remainingInvested: invested)
     }
   }
@@ -202,7 +224,7 @@ struct HoldingsCostLedger: Sendable {
   private static func nonFiatKeys(in group: TransactionGroup) -> [TouchKey] {
     group.legs
       .filter { $0.instrument.kind != .fiatCurrency }
-      .map { TouchKey(account: $0.accountId, instrument: $0.instrument) }
+      .flatMap { touchKeys(account: $0.accountId, instrument: $0.instrument, in: group) }
   }
 
   private static func mayEmitDisposal(in group: TransactionGroup) -> Bool {
@@ -217,15 +239,15 @@ struct HoldingsCostLedger: Sendable {
     in group: TransactionGroup
   ) -> Set<HoldingsCostLedgerDisposalCandidate> {
     Set(
-      group.legs.compactMap { leg in
-        guard leg.instrument.kind != .fiatCurrency else { return nil }
+      group.legs.flatMap { leg -> [HoldingsCostLedgerDisposalCandidate] in
+        guard leg.instrument.kind != .fiatCurrency else { return [] }
         guard
           (leg.type == .trade && leg.quantity < 0)
             || (leg.type == .expense && leg.quantity < 0)
-        else { return nil }
-        return HoldingsCostLedgerDisposalCandidate(
-          date: group.date,
-          key: TouchKey(account: leg.accountId, instrument: leg.instrument))
+        else { return [] }
+        return touchKeys(account: leg.accountId, instrument: leg.instrument, in: group).map { key in
+          HoldingsCostLedgerDisposalCandidate(date: group.date, key: key)
+        }
       })
   }
 
@@ -239,12 +261,17 @@ struct HoldingsCostLedger: Sendable {
       let destination = transfers.first(where: { $0.quantity > 0 }),
       source.instrument == destination.instrument
     else { return [] }
-    return [
-      HoldingsCostLedgerMoveCandidate(
-        date: group.date,
-        source: TouchKey(account: source.accountId, instrument: source.instrument),
-        destination: TouchKey(account: destination.accountId, instrument: destination.instrument))
-    ]
+    let sourceKeys = touchKeys(account: source.accountId, instrument: source.instrument, in: group)
+    return Set(
+      sourceKeys.map { sourceKey in
+        HoldingsCostLedgerMoveCandidate(
+          date: group.date,
+          source: sourceKey,
+          destination: TouchKey(
+            account: destination.accountId,
+            instrument: destination.instrument,
+            taxOwnerId: sourceKey.taxOwnerId))
+      })
   }
 
   private static func recordUnavailableInput(
@@ -270,24 +297,44 @@ struct HoldingsCostLedger: Sendable {
   /// its source and destination bucket.
   private static func touchedKeys(for event: CostBasisEvent) -> [TouchKey] {
     switch event {
-    case let .disposal(instrument, _, _, account, _):
-      return [TouchKey(account: account, instrument: instrument)]
-    case let .move(instrument, _, from, to, _):
+    case let .disposal(instrument, _, _, context):
       return [
-        TouchKey(account: from, instrument: instrument),
-        TouchKey(account: to, instrument: instrument),
+        TouchKey(
+          account: context.holding.account,
+          instrument: instrument,
+          taxOwnerId: context.holding.taxOwnerId)
       ]
-    case let .acquisition(instrument, _, _, account):
-      return [TouchKey(account: account, instrument: instrument)]
+    case let .move(instrument, _, route, _):
+      return [
+        TouchKey(account: route.from, instrument: instrument, taxOwnerId: route.taxOwnerId),
+        TouchKey(account: route.to, instrument: instrument, taxOwnerId: route.taxOwnerId),
+      ]
+    case let .acquisition(instrument, _, _, holding):
+      return [
+        TouchKey(account: holding.account, instrument: instrument, taxOwnerId: holding.taxOwnerId)
+      ]
     }
   }
 
-  /// A holding bucket: one instrument held in one account. Carries the
-  /// `Instrument` value directly (it is already on every `CostBasisEvent`
-  /// case and is `Hashable`), avoiding a re-lookup by id.
+  /// A holding bucket: one instrument held in one account for one tax owner.
+  /// Carries the `Instrument` value directly (it is already on every
+  /// `CostBasisEvent` case and is `Hashable`), avoiding a re-lookup by id.
   struct TouchKey: Hashable {
     let account: UUID?
     let instrument: Instrument
+    let taxOwnerId: UUID?
+  }
+
+  private static func touchKeys(
+    account: UUID?,
+    instrument: Instrument,
+    in group: TransactionGroup
+  ) -> [TouchKey] {
+    let ownerIds = group.taxOwnerIdsByAccount[account] ?? []
+    guard !ownerIds.isEmpty else {
+      return [TouchKey(account: account, instrument: instrument, taxOwnerId: nil)]
+    }
+    return ownerIds.map { TouchKey(account: account, instrument: instrument, taxOwnerId: $0) }
   }
 
   /// Orders same-transaction events so acquisitions run before disposals

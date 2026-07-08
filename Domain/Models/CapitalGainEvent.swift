@@ -10,7 +10,29 @@ struct CapitalGainEvent: Sendable, Hashable {
   let costBasis: Decimal
   let proceeds: Decimal
   let holdingDays: Int
+  let taxOwnerId: UUID?
 
+  init(
+    sourceTransactionId: UUID?,
+    instrument: Instrument,
+    sellDate: Date,
+    acquiredDate: Date,
+    quantity: Decimal,
+    costBasis: Decimal,
+    proceeds: Decimal,
+    holdingDays: Int,
+    taxOwnerId: UUID? = nil
+  ) {
+    self.sourceTransactionId = sourceTransactionId
+    self.instrument = instrument
+    self.sellDate = sellDate
+    self.acquiredDate = acquiredDate
+    self.quantity = quantity
+    self.costBasis = costBasis
+    self.proceeds = proceeds
+    self.holdingDays = holdingDays
+    self.taxOwnerId = taxOwnerId
+  }
   /// Gain or loss. Positive = gain, negative = loss.
   var gain: Decimal { proceeds - costBasis }
 

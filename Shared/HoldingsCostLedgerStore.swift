@@ -19,17 +19,9 @@ import Foundation
 /// legitimately: no cost-basis data exists yet, so 0/empty is honest — and it
 /// does so WITHOUT querying.
 ///
-/// **Invalidation is a full rebuild on the import-inclusive dual seam.** Two
-/// streams both drop the cache: (a) `transactionChanges` =
-/// `repository.observeAll()` — the app's own GRDB connection, catching manual
-/// creates/edits/deletes; and (b) `instrumentChanges` =
-/// `instrumentChangeObserver.observeChanges()` — the **import/sync backstop**.
-/// An in-app import holds its *own* `DatabaseQueue` over the same file, so its
-/// writes never fire `observeAll()`; the importer always pings the
-/// instrument-registry stream before its per-profile write, so wiring both
-/// seams is the same belt-and-suspenders fix #1149 gave `AccountGroupStore`
-/// (`Features/Accounts/AccountGroupStore.swift`). Not invalidated on rate
-/// ticks — the value-line batch-conversion path is unchanged.
+/// **Invalidation is a full rebuild on every input seam.** Three streams drop
+/// the cache: transactions (manual edits), instruments (import/sync backstop),
+/// and accounts (tax-owner assignment changes now affect owner-aware rows).
 ///
 /// **Full rebuild, never incremental.** Any data change drops the whole
 /// cached ledger and the next `ledger()` re-runs the SQL query + FIFO pass
@@ -72,17 +64,16 @@ final class HoldingsCostLedgerStore {
     referenceCurrency: Instrument,
     isMigrating: @escaping () -> Bool = { false },
     transactionChanges: AsyncStream<[Transaction]>? = nil,
-    instrumentChanges: AsyncStream<Void>? = nil
+    instrumentChanges: AsyncStream<Void>? = nil,
+    accountChanges: AsyncStream<[Account]>? = nil
   ) {
     self.transactionRepository = transactionRepository
     self.conversionService = conversionService
     self.referenceCurrency = referenceCurrency
     self.isMigrating = isMigrating
-    guard transactionChanges != nil || instrumentChanges != nil else { return }
-    // Strong `self` capture inside the task-group children: the store is
-    // `@MainActor` and owned by `ProfileSession`, whose teardown cancels this
-    // task via `stopObserving()` / `deinit`. A `weak self` avoids retaining
-    // the store past that point.
+    guard transactionChanges != nil || instrumentChanges != nil || accountChanges != nil else {
+      return
+    }
     self.observationTask = Task { [weak self] in
       await withTaskGroup(of: Void.self) { group in
         if let transactionChanges {
@@ -90,6 +81,9 @@ final class HoldingsCostLedgerStore {
         }
         if let instrumentChanges {
           group.addTask { for await _ in instrumentChanges { await self?.invalidate() } }
+        }
+        if let accountChanges {
+          group.addTask { for await _ in accountChanges { await self?.invalidate() } }
         }
       }
     }
@@ -162,6 +156,23 @@ final class HoldingsCostLedgerStore {
       conversionService: conversionService)
   }
 
+  /// Builds an uncached owner-aware ledger containing rows on or before `date`.
+  /// Account ownership is resolved at call time so owner edits are current-state
+  /// corrections, not synthetic disposal events.
+  func ledger(
+    through date: Date,
+    taxOwnershipResolver: TaxOwnershipResolver
+  ) async throws -> HoldingsCostLedger {
+    if isMigrating() { return .empty }
+    let legRows = try await transactionRepository.fetchCostBasisEventLegs()
+    let filteredRows = legRows.filter { $0.date <= date }
+    return try await HoldingsCostLedger.build(
+      legRows: filteredRows,
+      referenceCurrency: referenceCurrency,
+      conversionService: conversionService,
+      taxOwnershipResolver: taxOwnershipResolver)
+  }
+
   /// Builds an uncached profile-wide ledger containing only cost-basis rows
   /// whose parent transaction date is before `date`. Prefer this for financial
   /// year ranges, which are modelled as half-open intervals.
@@ -173,6 +184,23 @@ final class HoldingsCostLedgerStore {
       legRows: filteredRows,
       referenceCurrency: referenceCurrency,
       conversionService: conversionService)
+  }
+
+  /// Builds an uncached owner-aware ledger containing rows before `date`.
+  /// Account ownership is resolved at call time so owner edits are current-state
+  /// corrections, not synthetic disposal events.
+  func ledger(
+    before date: Date,
+    taxOwnershipResolver: TaxOwnershipResolver
+  ) async throws -> HoldingsCostLedger {
+    if isMigrating() { return .empty }
+    let legRows = try await transactionRepository.fetchCostBasisEventLegs()
+    let filteredRows = legRows.filter { $0.date < date }
+    return try await HoldingsCostLedger.build(
+      legRows: filteredRows,
+      referenceCurrency: referenceCurrency,
+      conversionService: conversionService,
+      taxOwnershipResolver: taxOwnershipResolver)
   }
 
   /// Full-rebuild invalidation: bumps the generation, drops the cached

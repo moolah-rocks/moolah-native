@@ -203,20 +203,8 @@ extension ProfileSession {
     )
     let analysis = AnalysisStore(
       repository: backend.analysis, conversionService: backend.conversionService)
-    // Single profile-wide cost-basis provider, shared by the investment
-    // (positions/performance) and reporting (CGT/P&L) stores so the ledger is
-    // built once per data load, not per view. Wiring BOTH change seams is
-    // deliberate and load-bearing: `transactionChanges` catches manual edits on
-    // the app's own connection; `instrumentChanges` is the import/sync backstop
-    // for separate-connection writes `observeAll()` cannot see — the exact
-    // pairing #1149 gave `AccountGroupStore`. Not invalidated on rate ticks.
-    let holdingsCostLedger = HoldingsCostLedgerStore(
-      transactionRepository: backend.transactions,
-      conversionService: backend.conversionService,
-      referenceCurrency: profile.instrument,
-      isMigrating: { !UnifiedInstrumentIdentityMigration.isComplete() },
-      transactionChanges: backend.transactions.observeAll(filter: TransactionFilter()),
-      instrumentChanges: instrumentChanges?.observeChanges())
+    let holdingsCostLedger = makeHoldingsCostLedgerStore(
+      profile: profile, backend: backend, instrumentChanges: instrumentChanges)
     let investment = InvestmentStore(
       repository: backend.investments,
       transactionRepository: backend.transactions,
@@ -231,6 +219,8 @@ extension ProfileSession {
       profileCurrency: profile.instrument,
       holdingsCostLedger: holdingsCostLedger,
       taxOwnerRepository: backend.taxOwners,
+      accountRepository: backend.accounts,
+      accountChanges: backend.accounts.observeAll(),
       defaultTaxOwnerId: profile.defaultTaxOwnerId
     )
     return DomainStores(
@@ -238,6 +228,21 @@ extension ProfileSession {
       transaction: transaction, analysis: analysis, investment: investment,
       reporting: reporting
     )
+  }
+
+  private static func makeHoldingsCostLedgerStore(
+    profile: Profile,
+    backend: BackendProvider,
+    instrumentChanges: (any InstrumentChangeObserving)?
+  ) -> HoldingsCostLedgerStore {
+    HoldingsCostLedgerStore(
+      transactionRepository: backend.transactions,
+      conversionService: backend.conversionService,
+      referenceCurrency: profile.instrument,
+      isMigrating: { !UnifiedInstrumentIdentityMigration.isComplete() },
+      transactionChanges: backend.transactions.observeAll(filter: TransactionFilter()),
+      instrumentChanges: instrumentChanges?.observeChanges(),
+      accountChanges: backend.accounts.observeAll())
   }
 
   // MARK: - Insight narrator

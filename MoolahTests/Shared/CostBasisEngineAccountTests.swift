@@ -10,6 +10,9 @@ struct CostBasisEngineAccountTests {
   private let accountA = UUID()
   private let accountB = UUID()
 
+  private let ownerA = UUID()
+  private let ownerB = UUID()
+
   private func day(_ n: Int) -> Date {
     Date(timeIntervalSince1970: 1_700_000_000 + Double(n) * 86_400)
   }
@@ -82,5 +85,26 @@ struct CostBasisEngineAccountTests {
     #expect(remainA.count == 1)
     #expect(remainA[0].remainingQuantity == dec("0.5"))
     #expect(remainA[0].costPerUnit == 3_000)
+  }
+
+  @Test
+  func ownerTaggedLots_doNotShareFIFOWithinSameAccount() {
+    var engine = CostBasisEngine()
+    engine.processBuy(
+      instrument: eth, quantity: 1, costPerUnit: 2_000, date: day(0), account: accountA,
+      taxOwnerId: ownerA)
+    engine.processBuy(
+      instrument: eth, quantity: 1, costPerUnit: 3_000, date: day(1), account: accountA,
+      taxOwnerId: ownerB)
+
+    let events = engine.processSell(
+      instrument: eth, quantity: 1, proceedsPerUnit: 4_000, date: day(10), account: accountA,
+      taxOwnerId: ownerB)
+
+    #expect(events.count == 1)
+    #expect(events[0].taxOwnerId == ownerB)
+    #expect(events[0].costBasis == 3_000)
+    #expect(engine.openLots(for: eth, account: accountA, taxOwnerId: ownerA).count == 1)
+    #expect(engine.openLots(for: eth, account: accountA, taxOwnerId: ownerB).isEmpty)
   }
 }

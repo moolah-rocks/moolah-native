@@ -16,4 +16,27 @@ struct CostBasisEventLegRow: Sendable, Equatable {
   let quantity: Decimal
   let type: TransactionType
   let sortOrder: Int
+  /// Current tax-owner assignment for the holding account. Empty preserves
+  /// legacy unowned cost-basis callers.
+  let taxOwnerIds: [UUID]
+
+  init(
+    transactionId: UUID,
+    date: Date,
+    accountId: UUID?,
+    instrument: Instrument,
+    quantity: Decimal,
+    type: TransactionType,
+    sortOrder: Int,
+    taxOwnerIds: [UUID] = []
+  ) {
+    self.transactionId = transactionId
+    self.date = date
+    self.accountId = accountId
+    self.instrument = instrument
+    self.quantity = quantity
+    self.type = type
+    self.sortOrder = sortOrder
+    self.taxOwnerIds = taxOwnerIds
+  }
 }

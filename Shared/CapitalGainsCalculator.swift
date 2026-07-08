@@ -59,43 +59,53 @@ enum CapitalGainsCalculator {
   /// tracked→tracked transfer is a non-event (the lot's cost carries), so it
   /// never appears here.
   static func compute(
-    ledger: HoldingsCostLedger, sellDateInterval: Range<Date>? = nil
+    ledger: HoldingsCostLedger,
+    sellDateInterval: Range<Date>? = nil,
+    ownerId: UUID? = nil
   ) -> CapitalGainsResult {
     let events = ledger.realisedEvents.filter { event in
-      sellDateInterval.map { $0.contains(event.sellDate) } ?? true
+      (sellDateInterval.map { $0.contains(event.sellDate) } ?? true)
+        && (ownerId.map { event.taxOwnerId == $0 } ?? true)
     }
     let unavailableInstruments =
       if let sellDateInterval {
-        ledger.unavailableRealisedGainInstruments(in: sellDateInterval)
+        ledger.unavailableRealisedGainInstruments(in: sellDateInterval, ownerId: ownerId)
       } else {
-        ledger.unavailableInstruments
+        ledger.unavailableInstruments(ownerId: ownerId)
       }
     let unavailableInstrumentIds = Set(unavailableInstruments.map(\.id))
     return CapitalGainsResult(
       events: events,
-      openLots: ledger.openLots,
+      openLots: openLots(from: ledger, ownerId: ownerId),
       hasUnavailableData: !unavailableInstrumentIds.isEmpty,
       unavailableInstrumentIds: unavailableInstrumentIds,
       unavailableInstruments: unavailableInstruments)
   }
 
+  private static func openLots(
+    from ledger: HoldingsCostLedger,
+    ownerId: UUID?
+  ) -> [CostBasisLot] {
+    guard let ownerId else { return ledger.openLots }
+    return ledger.openLots.filter { $0.taxOwnerId == ownerId }
+  }
+
   /// Retained convenience for unit-test call sites: builds a profile-wide
   /// ledger from `LegTransaction`s then projects. Production (`ReportingStore`)
   /// uses `compute(ledger:)` with the shared `HoldingsCostLedgerStore` ledger
-  /// so the build is not repeated. Now that the ledger drives realisation,
-  /// income/opening-funded lots and crypto spends realise here too — not only
-  /// fiat-paired `.trade`s — matching the profile-wide model.
   static func computeWithConversion(
     transactions: [LegTransaction],
     profileCurrency: Instrument,
     conversionService: any InstrumentConversionService,
-    sellDateInterval: Range<Date>? = nil
+    sellDateInterval: Range<Date>? = nil,
+    taxOwnershipResolver: TaxOwnershipResolver? = nil
   ) async throws -> CapitalGainsResult {
     let txns = transactions.map { Transaction(date: $0.date, legs: $0.legs) }
     let ledger = try await HoldingsCostLedger.build(
       transactions: txns,
       referenceCurrency: profileCurrency,
-      conversionService: conversionService)
+      conversionService: conversionService,
+      taxOwnershipResolver: taxOwnershipResolver)
     return compute(ledger: ledger, sellDateInterval: sellDateInterval)
   }
 }
