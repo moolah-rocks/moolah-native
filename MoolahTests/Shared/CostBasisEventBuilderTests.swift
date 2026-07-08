@@ -122,7 +122,7 @@ struct CostBasisEventBuilderTests {
         .move(
           instrument: eth, quantity: 1,
           route: CostBasisMoveRoute(from: account, to: accountB, taxOwnerId: nil),
-          marketValue: 5_000)
+          marketValue: 0)
       ])
   }
 
