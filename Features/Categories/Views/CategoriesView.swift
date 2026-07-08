@@ -5,10 +5,17 @@ import SwiftUI
 struct CategoriesView: View {
   let categoryStore: CategoryStore
 
+  @Environment(ProfileSession.self) private var session
+
   @State private var showCreateSheet = false
   @State private var selectedCategory: Category?
   @State private var showDetailSheet = false
   @State private var searchText = ""
+  @State private var taxOwners: [TaxOwner] = []
+  @State private var taxOwnerErrorMessage: String?
+  @State private var createErrorMessage: String?
+  @State private var isCreatingCategory = false
+  @State private var createRequestId: UUID?
 
   private var showCategoryInspectorBinding: Binding<Bool> {
     Binding(
@@ -19,22 +26,15 @@ struct CategoriesView: View {
 
   /// Debounced auto-save from the detail inspector — the detail view
   /// fires `onUpdate` on every keystroke; the 300ms debounce coalesces
-  /// them into a single write (mirrors the transaction detail panel).
-  ///
-  /// The debounce action is kept synchronous so `debouncedSave`'s returned
-  /// task represents "the action ran" (its awaitable contract): the
-  /// optimistic `selectedCategory` re-seed happens synchronously, then the
-  /// write fires as an independent `Task`, exactly as
-  /// `TransactionInspectorModifier` does. Re-seeding only when the category
-  /// is still selected means a quick switch away while the debounce is
-  /// pending does not clobber the new selection — while the write still
-  /// lands, so the edit is never lost.
+  /// them into a single write. The optimistic `selectedCategory` re-seed
+  /// and the persistence write live inside the store-owned debounce task
+  /// so cancellation and tests observe the whole save.
   private func save(_ updated: Category) {
     categoryStore.debouncedSave {
       if selectedCategory?.id == updated.id {
         selectedCategory = updated
       }
-      Task { _ = await categoryStore.update(updated) }
+      _ = await categoryStore.update(updated)
     }
   }
 
@@ -46,14 +46,12 @@ struct CategoriesView: View {
             CategoryDetailView(
               category: selected,
               categories: categoryStore.categories,
+              taxOwners: taxOwners,
+              defaultTaxOwnerId: session.profile.defaultTaxOwnerId,
+              taxOwnerErrorMessage: taxOwnerErrorMessage,
               onUpdate: { updated in save(updated) },
-              onDelete: { id, replacementId in
-                Task {
-                  if await categoryStore.delete(id: id, withReplacement: replacementId) {
-                    selectedCategory = nil
-                  }
-                }
-              }
+              onDiscardPendingUpdate: { categoryStore.cancelDebouncedSave() },
+              onDelete: deleteCategory(id:replacementId:)
             )
             .id(selected.id)
           }
@@ -76,14 +74,12 @@ struct CategoriesView: View {
             CategoryDetailView(
               category: selected,
               categories: categoryStore.categories,
+              taxOwners: taxOwners,
+              defaultTaxOwnerId: session.profile.defaultTaxOwnerId,
+              taxOwnerErrorMessage: taxOwnerErrorMessage,
               onUpdate: { updated in save(updated) },
-              onDelete: { id, replacementId in
-                Task {
-                  if await categoryStore.delete(id: id, withReplacement: replacementId) {
-                    selectedCategory = nil
-                  }
-                }
-              }
+              onDiscardPendingUpdate: { categoryStore.cancelDebouncedSave() },
+              onDelete: deleteCategory(id:replacementId:)
             )
             .toolbar {
               ToolbarItem(placement: .confirmationAction) {
@@ -99,17 +95,28 @@ struct CategoriesView: View {
         CreateCategorySheet(
           categories: categoryStore.categories,
           initialParentId: selectedCategory?.id,
-          onCreate: { newCategory in
-            Task {
-              _ = await categoryStore.create(newCategory)
-              showCreateSheet = false
-            }
-          }
+          taxOwners: taxOwners,
+          defaultTaxOwnerId: session.profile.defaultTaxOwnerId,
+          taxOwnerErrorMessage: taxOwnerErrorMessage,
+          createErrorMessage: createErrorMessage,
+          isSubmitting: isCreatingCategory,
+          onCreate: createCategory(_:)
         )
+        .onDisappear {
+          guard !isCreatingCategory else { return }
+          createRequestId = nil
+          createErrorMessage = nil
+        }
       }
       .focusedSceneValue(\.selectedCategory, $selectedCategory)
       .focusedSceneValue(\.newCategoryAction) {
         showCreateSheet = true
+      }
+      .onChange(of: showCreateSheet) { _, isPresented in
+        if isPresented { retryTaxOwnerLoad() }
+      }
+      .onChange(of: selectedCategory?.id) { _, selectedId in
+        if selectedId != nil { retryTaxOwnerLoad() }
       }
       .onReceive(NotificationCenter.default.publisher(for: .requestCategoryEdit)) { note in
         guard let id = note.object as? UUID,
@@ -117,8 +124,119 @@ struct CategoriesView: View {
         else { return }
         selectedCategory = category
       }
+      .task {
+        await observeTaxOwners()
+      }
+      .task {
+        await observeTaxOwnerErrors()
+      }
   }
 
+  private func observeTaxOwners() async {
+    for await owners in session.backend.taxOwners.observeAll() {
+      guard !Task.isCancelled else { return }
+      taxOwners = owners
+      taxOwnerErrorMessage = nil
+      selectedCategory = selectedCategory.map { category in
+        Self.category(category, pruningTaxOwnersAgainst: owners)
+      }
+    }
+  }
+
+  private func observeTaxOwnerErrors() async {
+    for await _ in session.backend.taxOwners.observeErrors() {
+      guard !Task.isCancelled else { return }
+      taxOwnerErrorMessage = Self.taxOwnerLoadErrorMessage
+    }
+  }
+
+  private func retryTaxOwnerLoad() {
+    Task {
+      do {
+        let state = Self.taxOwnerLoadSuccess(
+          owners: try await session.backend.taxOwners.fetchAll(),
+          selectedCategory: selectedCategory)
+        taxOwners = state.owners
+        taxOwnerErrorMessage = state.errorMessage
+        selectedCategory = state.selectedCategory
+      } catch {
+        let state = Self.taxOwnerLoadFailure(selectedCategory: selectedCategory)
+        taxOwnerErrorMessage = state.errorMessage
+        selectedCategory = state.selectedCategory
+      }
+    }
+  }
+
+  private func createCategory(_ newCategory: Category) {
+    guard !isCreatingCategory else { return }
+    let requestId = UUID()
+    createRequestId = requestId
+    isCreatingCategory = true
+    createErrorMessage = nil
+
+    Task {
+      let created = await categoryStore.create(newCategory)
+      guard createRequestId == requestId else { return }
+      isCreatingCategory = false
+      if created != nil {
+        createRequestId = nil
+        showCreateSheet = false
+      } else {
+        createErrorMessage = "Couldn't create category. Check the details and try again."
+      }
+    }
+  }
+
+  private func deleteCategory(id: UUID, replacementId: UUID?) {
+    Task {
+      if await categoryStore.delete(id: id, withReplacement: replacementId),
+        selectedCategory?.id == id
+      {
+        selectedCategory = nil
+      }
+    }
+  }
+
+  static let taxOwnerLoadErrorMessage =
+    "Couldn't load tax owners. Reopen the category editor and try again."
+
+  struct TaxOwnerLoadState: Equatable {
+    let owners: [TaxOwner]
+    let errorMessage: String?
+    let selectedCategory: Category?
+  }
+
+  static func taxOwnerLoadSuccess(
+    owners: [TaxOwner],
+    selectedCategory: Category?
+  ) -> TaxOwnerLoadState {
+    TaxOwnerLoadState(
+      owners: owners,
+      errorMessage: nil,
+      selectedCategory: selectedCategory.map { category in
+        Self.category(category, pruningTaxOwnersAgainst: owners)
+      })
+  }
+
+  static func taxOwnerLoadFailure(selectedCategory: Category?) -> TaxOwnerLoadState {
+    TaxOwnerLoadState(
+      owners: [],
+      errorMessage: Self.taxOwnerLoadErrorMessage,
+      selectedCategory: selectedCategory)
+  }
+
+  static func category(_ category: Category, pruningTaxOwnersAgainst owners: [TaxOwner])
+    -> Category
+  {
+    var pruned = category
+    pruned.taxOwnerIds = TaxOwnerAssignmentState.prunedSelectedOwnerIds(
+      category.taxOwnerIds, validOwners: owners)
+    return pruned
+  }
+
+}
+
+extension CategoriesView {
   private var filteredCategories: [Category] {
     if searchText.isEmpty {
       return categoryStore.categories.roots

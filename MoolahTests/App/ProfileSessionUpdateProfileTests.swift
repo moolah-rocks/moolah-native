@@ -20,4 +20,19 @@ struct ProfileSessionUpdateProfileTests {
     #expect(session.profile.dataFormatVersion == 1)
     #expect(session.profile.id == original.id)
   }
+
+  @Test("updateProfile refreshes reporting default tax owner")
+  func updateProfileRefreshesReportingDefaultTaxOwner() throws {
+    let containerManager = try ProfileContainerManager.forTesting()
+    let original = Profile(label: "Test")
+    let session = try ProfileSession(
+      profile: original, containerManager: containerManager)
+    let newDefaultOwnerId = UUID()
+
+    var bumped = original
+    bumped.defaultTaxOwnerId = newDefaultOwnerId
+    session.updateProfile(bumped)
+
+    #expect(session.reportingStore.defaultTaxOwnerId == newDefaultOwnerId)
+  }
 }

@@ -90,4 +90,58 @@ struct CategoryAutocompleteStateTests {
 
     #expect(state.highlightedSuggestion(for: "G", in: categories) == nil)
   }
+
+  @Test
+  func testCreateCategoryAutocompleteIgnoresMutationsWhileSubmitting() {
+    let groceriesId = UUID()
+    let gymId = UUID()
+    let categories = Categories(
+      from: [
+        Category(id: groceriesId, name: "Groceries"),
+        Category(id: gymId, name: "Gym"),
+      ])
+    let suggestion = CategorySuggestion(id: groceriesId, path: "Groceries")
+    var state = CategoryAutocompleteState(showSuggestions: true, highlightedIndex: 0)
+    var parent = ParentCategorySelection(id: nil, text: "G")
+
+    #expect(
+      !CreateCategoryParentAutocomplete.shouldShowSuggestions(
+        isSubmitting: true,
+        pickerState: state,
+        visibleSuggestions: [suggestion]))
+
+    state.showSuggestions = false
+    CreateCategoryParentAutocomplete.openDropdownIfFocused(
+      isSubmitting: true,
+      isParentFocused: true,
+      pickerState: &state)
+    #expect(state.showSuggestions == false)
+    state = CategoryAutocompleteState(showSuggestions: true, highlightedIndex: 0)
+
+    CreateCategoryParentAutocomplete.acceptHighlightedParent(
+      isSubmitting: true,
+      pickerState: &state,
+      parent: &parent,
+      categories: categories)
+    #expect(parent.id == nil)
+    #expect(parent.text == "G")
+
+    CreateCategoryParentAutocomplete.selectParent(
+      isSubmitting: true,
+      suggestion: suggestion,
+      pickerState: &state,
+      parent: &parent)
+    #expect(parent.id == nil)
+    #expect(parent.text == "G")
+
+    CreateCategoryParentAutocomplete.handleParentBlur(
+      isSubmitting: true,
+      pickerState: &state,
+      parent: &parent,
+      categories: categories)
+    #expect(state.showSuggestions == false)
+    #expect(state.justSelected == false)
+    #expect(parent.id == nil)
+    #expect(parent.text == "G")
+  }
 }

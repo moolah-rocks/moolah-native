@@ -21,7 +21,7 @@ extension TaxOwnerRow: CloudKitRecordConvertible {
       id: id,
       recordName: ckRecord.recordID.recordName,
       name: fields.name ?? "",
-      kind: fields.kind ?? TaxOwnerKind.individual.rawValue,
+      kind: TaxOwnerKind(rawValue: fields.kind ?? "")?.rawValue ?? TaxOwnerKind.individual.rawValue,
       encodedSystemFields: nil)
   }
 }

@@ -116,9 +116,7 @@ extension ProfileIndexSyncHandler {
       let cachedRecord = CKRecord.fromEncodedSystemFields(cachedData),
       cachedRecord.recordID.zoneID == zoneID
     {
-      for key in freshRecord.allKeys() {
-        cachedRecord[key] = freshRecord[key]
-      }
+      cachedRecord.replaceUserFields(with: freshRecord)
       return cachedRecord
     }
     return freshRecord

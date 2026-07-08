@@ -243,12 +243,15 @@ final class CategoryStore {
   /// and the method returns `nil` for the caller.
   func create(_ category: Moolah.Category) async -> Moolah.Category? {
     error = nil
-    guard !category.name.isEmpty else {
+    let normalizedName = CategoryNameValidation.normalized(category.name)
+    guard !normalizedName.isEmpty else {
       logger.error("Rejected create of category with empty name")
       return nil
     }
+    var categoryToCreate = category
+    categoryToCreate.name = normalizedName
     do {
-      let created = try await repository.create(category)
+      let created = try await repository.create(categoryToCreate)
       logger.debug("Created category: \(created.name)")
       return created
     } catch {
@@ -262,12 +265,15 @@ final class CategoryStore {
   /// reactive observation delivers the updated category.
   func update(_ category: Moolah.Category) async -> Moolah.Category? {
     error = nil
-    guard !category.name.isEmpty else {
+    let normalizedName = CategoryNameValidation.normalized(category.name)
+    guard !normalizedName.isEmpty else {
       logger.error("Rejected update of category with empty name")
       return nil
     }
+    var categoryToUpdate = category
+    categoryToUpdate.name = normalizedName
     do {
-      let updated = try await repository.update(category)
+      let updated = try await repository.update(categoryToUpdate)
       logger.debug("Updated category: \(updated.name)")
       return updated
     } catch {
@@ -307,12 +313,33 @@ final class CategoryStore {
   @discardableResult
   func debouncedSave(perform action: @escaping @MainActor () -> Void) -> Task<Void, Never> {
     saveTask?.cancel()
-    let task = Task { [debounceInterval] in
+    let task = Task { @MainActor [debounceInterval] in
       try? await Task.sleep(for: debounceInterval)
       guard !Task.isCancelled else { return }
       action()
     }
     saveTask = task
     return task
+  }
+
+  /// Async variant used when the debounced work itself is the persistence
+  /// operation. Keeping that await inside `saveTask` means cancellation and
+  /// tests observe the whole write, not just the moment a view launched a
+  /// detached follow-up task.
+  @discardableResult
+  func debouncedSave(perform action: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+    saveTask?.cancel()
+    let task = Task { @MainActor [debounceInterval] in
+      try? await Task.sleep(for: debounceInterval)
+      guard !Task.isCancelled else { return }
+      await action()
+    }
+    saveTask = task
+    return task
+  }
+
+  func cancelDebouncedSave() {
+    saveTask?.cancel()
+    saveTask = nil
   }
 }

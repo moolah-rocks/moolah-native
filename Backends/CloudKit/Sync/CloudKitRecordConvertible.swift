@@ -109,6 +109,17 @@ extension CKRecord {
     return record.modificationDate
   }
 
+  /// Replaces the receiver's user fields with `freshRecord`'s user fields
+  /// while preserving system fields/change tags. CloudKit field writers omit
+  /// nil optional values, so a cached record can otherwise keep stale values
+  /// when a local row intentionally clears an optional field.
+  func replaceUserFields(with freshRecord: CKRecord) {
+    let keys = Set(allKeys()).union(freshRecord.allKeys())
+    for key in keys {
+      self[key] = freshRecord[key]
+    }
+  }
+
   /// True when `self` and `other` carry identical user-field values
   /// (system fields / change tag ignored). Used by the upload-ack path to
   /// decide whether a row changed locally since the version that was
