@@ -38,6 +38,8 @@ extension ProfileDataSyncHandler {
       return { try repos.importRules.dirtyIdsSync(from: $0, in: $1) }
     case CategoryRow.recordType:
       return { try repos.categories.dirtyIdsSync(from: $0, in: $1) }
+    case TaxOwnerRow.recordType:
+      return { try repos.taxOwners.dirtyIdsSync(from: $0, in: $1) }
     case TransferSuggestionRow.recordType:
       return { try repos.transferSuggestions.dirtyIdsSync(from: $0, in: $1) }
     case AccountGroupRow.recordType:
@@ -157,6 +159,8 @@ extension ProfileDataSyncHandler {
       return { try repos.importRules.clearNeedsPushBatchSync($0, in: database) }
     case CategoryRow.recordType:
       return { try repos.categories.clearNeedsPushBatchSync($0, in: database) }
+    case TaxOwnerRow.recordType:
+      return { try repos.taxOwners.clearNeedsPushBatchSync($0, in: database) }
     case TransferSuggestionRow.recordType:
       return { try repos.transferSuggestions.clearNeedsPushBatchSync($0, in: database) }
     case AccountGroupRow.recordType:
@@ -205,6 +209,8 @@ extension ProfileDataSyncHandler {
       return { try repos.importRules.clearNeedsPushBatchSync($0) }
     case CategoryRow.recordType:
       return { try repos.categories.clearNeedsPushBatchSync($0) }
+    case TaxOwnerRow.recordType:
+      return { try repos.taxOwners.clearNeedsPushBatchSync($0) }
     case TransferSuggestionRow.recordType:
       return { try repos.transferSuggestions.clearNeedsPushBatchSync($0) }
     case AccountGroupRow.recordType:
@@ -278,6 +284,8 @@ extension ProfileDataSyncHandler {
       return { try repos.importRules.setEncodedSystemFieldsBatchSync($0, in: $1) }
     case CategoryRow.recordType:
       return { try repos.categories.setEncodedSystemFieldsBatchSync($0, in: $1) }
+    case TaxOwnerRow.recordType:
+      return { try repos.taxOwners.setEncodedSystemFieldsBatchSync($0, in: $1) }
     case TransferSuggestionRow.recordType:
       return { try repos.transferSuggestions.setEncodedSystemFieldsBatchSync($0, in: $1) }
     case AccountGroupRow.recordType:

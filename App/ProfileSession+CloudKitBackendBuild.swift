@@ -87,6 +87,7 @@ extension ProfileSession {
       database: database,
       instrument: profile.instrument,
       profileLabel: profile.label,
+      defaultTaxOwnerId: profile.defaultTaxOwnerId,
       conversionService: conversionService,
       instrumentRegistry: registry,
       hooks: makeBackendHooks(hooks))
@@ -112,6 +113,8 @@ extension ProfileSession {
       onWalletSyncCheckpointDeleted: hooks.deleted,
       onCategoryChanged: hooks.changed,
       onCategoryDeleted: hooks.deleted,
+      onTaxOwnerChanged: hooks.changed,
+      onTaxOwnerDeleted: hooks.deleted,
       onTransferSuggestionChanged: hooks.changed,
       onTransferSuggestionDeleted: hooks.deleted,
       onEarmarkChanged: hooks.changed,

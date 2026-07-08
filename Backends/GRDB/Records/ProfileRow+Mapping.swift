@@ -28,6 +28,7 @@ extension ProfileRow {
     self.createdAt = profile.createdAt
     self.encodedSystemFields = nil
     self.dataFormatVersion = profile.dataFormatVersion
+    self.defaultTaxOwnerId = profile.defaultTaxOwnerId
   }
 
   /// No data is transformed or synthesised at the mapping boundary —
@@ -39,6 +40,7 @@ extension ProfileRow {
       label: label,
       currencyCode: currencyCode,
       financialYearStartMonth: financialYearStartMonth,
+      defaultTaxOwnerId: defaultTaxOwnerId,
       createdAt: createdAt,
       dataFormatVersion: dataFormatVersion)
   }

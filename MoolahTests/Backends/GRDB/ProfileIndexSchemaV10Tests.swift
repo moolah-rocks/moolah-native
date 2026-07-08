@@ -16,7 +16,7 @@ struct ProfileIndexSchemaV10Tests {
 
   @Test("schema version reflects the v10 migration")
   func versionIsLatest() {
-    #expect(ProfileIndexSchema.version == 10)
+    #expect(ProfileIndexSchema.version == 11)
   }
 
   @Test("v10 drops the cryptocompare_symbol column from instrument")

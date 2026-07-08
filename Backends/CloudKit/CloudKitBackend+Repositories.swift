@@ -10,6 +10,7 @@ extension CloudKitBackend {
     let insightDismissals: GRDBInsightDismissalRepository
     let transactions: GRDBTransactionRepository
     let categories: GRDBCategoryRepository
+    let taxOwners: GRDBTaxOwnerRepository
     let transferSuggestions: GRDBTransferSuggestionRepository
     let earmarks: GRDBEarmarkRepository
     let earmarkBudgetItems: GRDBEarmarkBudgetItemRepository
@@ -56,6 +57,7 @@ extension CloudKitBackend {
         database: database,
         onRecordChanged: hooks.onCategoryChanged,
         onRecordDeleted: hooks.onCategoryDeleted),
+      taxOwners: makeTaxOwnerRepository(database: database, hooks: hooks),
       transferSuggestions: GRDBTransferSuggestionRepository(
         database: database,
         onRecordChanged: hooks.onTransferSuggestionChanged,
@@ -80,6 +82,18 @@ extension CloudKitBackend {
         database: database,
         onRecordChanged: hooks.onImportRuleChanged,
         onRecordDeleted: hooks.onImportRuleDeleted))
+  }
+
+  private static func makeTaxOwnerRepository(
+    database: any DatabaseWriter,
+    hooks: CloudKitBackendHooks
+  ) -> GRDBTaxOwnerRepository {
+    GRDBTaxOwnerRepository(
+      database: database,
+      onRecordChanged: hooks.onTaxOwnerChanged,
+      onRecordDeleted: hooks.onTaxOwnerDeleted,
+      onAccountChanged: hooks.onAccountChanged,
+      onCategoryChanged: hooks.onCategoryChanged)
   }
 
   /// The five repositories that resolve instruments via the injected

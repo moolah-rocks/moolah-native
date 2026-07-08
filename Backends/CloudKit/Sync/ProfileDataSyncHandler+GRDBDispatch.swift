@@ -57,6 +57,8 @@ extension ProfileDataSyncHandler {
       return { handler in handler.applyBatchSaveInstrument(ckRecords:systemFields:in:) }
     case CategoryRow.recordType:
       return { handler in handler.applyBatchSaveCategory(ckRecords:systemFields:in:) }
+    case TaxOwnerRow.recordType:
+      return { handler in handler.applyBatchSaveTaxOwner(ckRecords:systemFields:in:) }
     case TransferSuggestionRow.recordType:
       return { handler in
         handler.applyBatchSaveTransferSuggestion(ckRecords:systemFields:in:)
@@ -124,7 +126,8 @@ extension ProfileDataSyncHandler {
   nonisolated private func uuidDeleter(
     for recordType: String
   ) -> ((ProfileDataSyncHandler, [UUID], Database) throws -> Void)? {
-    referenceDeleter(for: recordType)
+    taxOwnerDeleter(for: recordType)
+      ?? referenceDeleter(for: recordType)
       ?? domainDeleter(for: recordType)
       ?? syncMetadataDeleter(for: recordType)
   }

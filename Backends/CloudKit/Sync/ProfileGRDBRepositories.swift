@@ -23,6 +23,7 @@ struct ProfileGRDBRepositories: Sendable {
   let transferSuggestions: GRDBTransferSuggestionRepository
   let instruments: GRDBInstrumentRegistryRepository
   let categories: GRDBCategoryRepository
+  let taxOwners: GRDBTaxOwnerRepository
   let accounts: GRDBAccountRepository
   let accountGroups: GRDBAccountGroupRepository
   let insightDismissals: GRDBInsightDismissalRepository
@@ -87,6 +88,7 @@ extension ProfileGRDBRepositories {
       transferSuggestions: GRDBTransferSuggestionRepository(database: database),
       instruments: GRDBInstrumentRegistryRepository(database: database),
       categories: GRDBCategoryRepository(database: database),
+      taxOwners: GRDBTaxOwnerRepository(database: database),
       accounts: GRDBAccountRepository(
         database: database,
         instrumentResolver: resolver,

@@ -24,6 +24,7 @@ extension ProfileDataSyncHandler {
     // per-profile `instrument` table. No upload path consults system
     // fields on instrument rows, so they have nothing to clear.
     [
+      (TaxOwnerRow.recordType, grdbRepositories.taxOwners.clearAllSystemFieldsSync),
       (CategoryRow.recordType, grdbRepositories.categories.clearAllSystemFieldsSync),
       (AccountRow.recordType, grdbRepositories.accounts.clearAllSystemFieldsSync),
       (AccountGroupRow.recordType, grdbRepositories.accountGroups.clearAllSystemFieldsSync),
@@ -341,6 +342,8 @@ extension ProfileDataSyncHandler {
       return { try repos.importRules.setEncodedSystemFieldsBatchSync($0) }
     case CategoryRow.recordType:
       return { try repos.categories.setEncodedSystemFieldsBatchSync($0) }
+    case TaxOwnerRow.recordType:
+      return { try repos.taxOwners.setEncodedSystemFieldsBatchSync($0) }
     case TransferSuggestionRow.recordType:
       return { try repos.transferSuggestions.setEncodedSystemFieldsBatchSync($0) }
     case AccountGroupRow.recordType:

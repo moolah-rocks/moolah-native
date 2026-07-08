@@ -297,4 +297,38 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
       conversionService: conversionService,
       handlers: handlers)
   }
+
+  func fetchTaxIncomeExpenseSummaries(
+    dateInterval: Range<Date>,
+    targetInstrument: Instrument,
+    defaultTaxOwnerId: UUID
+  ) async throws -> [TaxIncomeExpenseSummary] {
+    let instruments = try await instrumentResolver.instrumentMap()
+    let aggregation = try await Self.fetchTaxIncomeExpenseAggregation(
+      database: database,
+      instruments: instruments,
+      dateInterval: dateInterval,
+      defaultTaxOwnerId: defaultTaxOwnerId)
+    let logger = self.logger
+    let handlers = TaxIncomeExpenseHandlers(
+      handleUnparseableDay: { day in
+        logger.error(
+          "fetchTaxIncomeExpenseSummaries: skipping row with unparseable day '\(day)'")
+      },
+      handleConversionFailure: { error, context in
+        logger.error(
+          """
+          fetchTaxIncomeExpenseSummaries: conversion failed for \
+          day=\(context.day, privacy: .public) \
+          instrument=\(context.instrumentId, privacy: .public) \
+          owners=\(context.ownerIds.map(\.uuidString).joined(separator: ","), privacy: .public): \
+          \(error.localizedDescription, privacy: .public)
+          """)
+      })
+    return try await Self.assembleTaxIncomeExpenseSummaries(
+      aggregation: aggregation,
+      targetInstrument: targetInstrument,
+      conversionService: conversionService,
+      handlers: handlers)
+  }
 }

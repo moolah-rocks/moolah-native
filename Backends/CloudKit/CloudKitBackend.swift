@@ -8,6 +8,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let insightDismissals: any InsightDismissalRepository
   let transactions: any TransactionRepository
   let categories: any CategoryRepository
+  let taxOwners: any TaxOwnerRepository
   let transferSuggestions: any TransferSuggestionRepository
   let earmarks: any EarmarkRepository
   let analysis: any AnalysisRepository
@@ -51,6 +52,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let grdbInsightDismissals: GRDBInsightDismissalRepository
   let grdbWalletSyncCheckpoints: GRDBWalletSyncCheckpointRepository
   let grdbCategories: GRDBCategoryRepository
+  let grdbTaxOwners: GRDBTaxOwnerRepository
   let grdbTransferSuggestions: GRDBTransferSuggestionRepository
   let grdbEarmarks: GRDBEarmarkRepository
   let grdbEarmarkBudgetItems: GRDBEarmarkBudgetItemRepository
@@ -79,6 +81,8 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     let onWalletSyncCheckpointDeleted: @Sendable (String, UUID) -> Void
     let onCategoryChanged: @Sendable (String, UUID) -> Void
     let onCategoryDeleted: @Sendable (String, UUID) -> Void
+    let onTaxOwnerChanged: @Sendable (String, UUID) -> Void
+    let onTaxOwnerDeleted: @Sendable (String, UUID) -> Void
     let onTransferSuggestionChanged: @Sendable (String, UUID) -> Void
     let onTransferSuggestionDeleted: @Sendable (String, UUID) -> Void
     let onEarmarkChanged: @Sendable (String, UUID) -> Void
@@ -107,6 +111,8 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
       onWalletSyncCheckpointDeleted: { _, _ in },
       onCategoryChanged: { _, _ in },
       onCategoryDeleted: { _, _ in },
+      onTaxOwnerChanged: { _, _ in },
+      onTaxOwnerDeleted: { _, _ in },
       onTransferSuggestionChanged: { _, _ in },
       onTransferSuggestionDeleted: { _, _ in },
       onEarmarkChanged: { _, _ in },
@@ -125,6 +131,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     database: any DatabaseWriter,
     instrument: Instrument,
     profileLabel: String,
+    defaultTaxOwnerId: UUID? = nil,
     conversionService: any InstrumentConversionService,
     instrumentRegistry: GRDBInstrumentRegistryRepository,
     hooks: CloudKitBackendHooks = .noop
@@ -153,6 +160,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.grdbWalletSyncCheckpoints = walletSyncCheckpoints
     self.grdbTransactions = repos.transactions
     self.grdbCategories = repos.categories
+    self.grdbTaxOwners = repos.taxOwners
     self.grdbTransferSuggestions = repos.transferSuggestions
     self.grdbEarmarks = repos.earmarks
     self.grdbEarmarkBudgetItems = repos.earmarkBudgetItems
@@ -167,6 +175,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.insightDismissals = repos.insightDismissals
     self.transactions = repos.transactions
     self.categories = repos.categories
+    self.taxOwners = repos.taxOwners
     self.transferSuggestions = repos.transferSuggestions
     self.earmarks = repos.earmarks
     self.analysis = repos.analysis
@@ -179,6 +188,20 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.walletSyncState = GRDBWalletSyncStateRepository(database: database)
     self.walletSyncCheckpoints = walletSyncCheckpoints
     self.groupUIState = GRDBGroupUIStateRepository(database: database)
+
+    bootstrapDefaultTaxOwner(defaultTaxOwnerId, repository: repos.taxOwners)
+  }
+
+  private func bootstrapDefaultTaxOwner(
+    _ defaultTaxOwnerId: UUID?,
+    repository: GRDBTaxOwnerRepository
+  ) {
+    guard let defaultTaxOwnerId else { return }
+    do {
+      try repository.ensureDefaultOwner(id: defaultTaxOwnerId, name: "Default owner")
+    } catch {
+      assertionFailure("Failed to bootstrap default tax owner: \(error)")
+    }
   }
 
   /// The read-side instrument resolver and the write-side registrar,

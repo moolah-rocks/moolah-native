@@ -83,6 +83,9 @@ struct Account {
   /// has not yet arrived from sync) is treated as absent by callers.
   /// There is no foreign-key enforcement.
   var groupId: UUID?
+  /// Tax owners for reports. Empty means "use the profile default tax
+  /// owner"; multiple ids split amounts equally in `TaxOwnershipResolver`.
+  var taxOwnerIds: [UUID]
 
   init(
     id: UUID = UUID(),
@@ -96,7 +99,8 @@ struct Account {
     walletAddress: String? = nil,
     chainId: Int? = nil,
     exchangeProvider: ExchangeProvider? = nil,
-    groupId: UUID? = nil
+    groupId: UUID? = nil,
+    taxOwnerIds: [UUID] = []
   ) {
     self.id = id
     self.name = name
@@ -110,6 +114,7 @@ struct Account {
     self.chainId = chainId
     self.exchangeProvider = exchangeProvider
     self.groupId = groupId
+    self.taxOwnerIds = taxOwnerIds
   }
 }
 
@@ -130,6 +135,7 @@ extension Account: Codable {
     case chainId
     case exchangeProvider
     case groupId
+    case taxOwnerIds
   }
 
   init(from decoder: Decoder) throws {
@@ -161,6 +167,7 @@ extension Account: Codable {
     exchangeProvider = try container.decodeIfPresent(
       ExchangeProvider.self, forKey: .exchangeProvider)
     groupId = try container.decodeIfPresent(UUID.self, forKey: .groupId)
+    taxOwnerIds = try container.decodeIfPresent([UUID].self, forKey: .taxOwnerIds) ?? []
   }
 
   func encode(to encoder: Encoder) throws {
@@ -176,6 +183,7 @@ extension Account: Codable {
     try container.encodeIfPresent(chainId, forKey: .chainId)
     try container.encodeIfPresent(exchangeProvider, forKey: .exchangeProvider)
     try container.encodeIfPresent(groupId, forKey: .groupId)
+    try container.encodeIfPresent(taxOwnerIds, forKey: .taxOwnerIds)
   }
 }
 
@@ -188,6 +196,7 @@ extension Account: Hashable {
       && lhs.walletAddress == rhs.walletAddress && lhs.chainId == rhs.chainId
       && lhs.exchangeProvider == rhs.exchangeProvider
       && lhs.groupId == rhs.groupId
+      && lhs.taxOwnerIds == rhs.taxOwnerIds
       && lhs.positions == rhs.positions
   }
 
@@ -203,6 +212,7 @@ extension Account: Hashable {
     hasher.combine(chainId)
     hasher.combine(exchangeProvider)
     hasher.combine(groupId)
+    hasher.combine(taxOwnerIds)
     hasher.combine(positions)
   }
 }

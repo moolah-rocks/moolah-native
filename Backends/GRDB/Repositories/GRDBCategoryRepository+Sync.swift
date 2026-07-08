@@ -148,6 +148,10 @@ extension GRDBCategoryRepository {
   ) throws {
     for row in rows {
       try row.upsert(database)
+      try GRDBTaxOwnershipPersistence.replaceCategoryOwners(
+        categoryId: row.id,
+        ownerIds: TaxOwnerIDListCoding.decode(row.taxOwnerIdsEncoded),
+        in: database)
       // D1-b (issue #1090): a peer re-creating this category clears our stale
       // deletion intent so we don't re-delete a record the server now holds.
       // Apply-path deletes below are NOT journaled — server-originated
@@ -171,6 +175,7 @@ extension GRDBCategoryRepository {
         try EarmarkBudgetItemRow
         .filter(EarmarkBudgetItemRow.Columns.categoryId == id)
         .deleteAll(database)
+      try GRDBTaxOwnershipPersistence.deleteCategoryOwners(categoryId: id, in: database)
       // category.parent_id was ON DELETE NO ACTION — children are
       // orphaned (set to NULL) in CategoryRepository.delete via
       // `orphanChildren`. Sync apply mirrors that for consistency.

@@ -25,6 +25,7 @@ struct ProfileRow {
     case createdAt = "created_at"
     case encodedSystemFields = "encoded_system_fields"
     case dataFormatVersion = "data_format_version"
+    case defaultTaxOwnerId = "default_tax_owner_id"
     case needsPush = "needs_push"
   }
 
@@ -37,6 +38,7 @@ struct ProfileRow {
     case createdAt = "created_at"
     case encodedSystemFields = "encoded_system_fields"
     case dataFormatVersion = "data_format_version"
+    case defaultTaxOwnerId = "default_tax_owner_id"
   }
 
   var id: UUID
@@ -47,6 +49,7 @@ struct ProfileRow {
   var createdAt: Date
   var encodedSystemFields: Data?
   var dataFormatVersion: Int = 0
+  var defaultTaxOwnerId: UUID?
 }
 
 extension ProfileRow: Codable {}

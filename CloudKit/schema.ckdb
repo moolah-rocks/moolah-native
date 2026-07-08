@@ -30,6 +30,7 @@ DEFINE SCHEMA
         isHidden        INT64 QUERYABLE SORTABLE,
         name            STRING QUERYABLE SEARCHABLE SORTABLE,
         position        INT64 QUERYABLE SORTABLE,
+        taxOwnerIdsEncoded STRING QUERYABLE SEARCHABLE SORTABLE,
         type            STRING QUERYABLE SEARCHABLE SORTABLE,
         valuationMode   STRING QUERYABLE SEARCHABLE SORTABLE,
         walletAddress   STRING QUERYABLE SEARCHABLE SORTABLE,
@@ -45,8 +46,10 @@ DEFINE SCHEMA
         "___modTime"    TIMESTAMP,
         "___modifiedBy" REFERENCE,
         "___recordID"   REFERENCE QUERYABLE,
+        isTaxReportable INT64 QUERYABLE SORTABLE,
         name            STRING QUERYABLE SEARCHABLE SORTABLE,
         parentId        STRING QUERYABLE SEARCHABLE SORTABLE,
+        taxOwnerIdsEncoded STRING QUERYABLE SEARCHABLE SORTABLE,
         GRANT WRITE TO "_creator",
         GRANT CREATE TO "_icloud",
         GRANT READ TO "_world"
@@ -192,8 +195,23 @@ DEFINE SCHEMA
         createdAt               TIMESTAMP QUERYABLE SORTABLE,
         currencyCode            STRING QUERYABLE SEARCHABLE SORTABLE,
         dataFormatVersion       INT64 QUERYABLE SORTABLE,
+        defaultTaxOwnerId       STRING QUERYABLE SEARCHABLE SORTABLE,
         financialYearStartMonth INT64 QUERYABLE SORTABLE,
         label                   STRING QUERYABLE SEARCHABLE SORTABLE,
+        GRANT WRITE TO "_creator",
+        GRANT CREATE TO "_icloud",
+        GRANT READ TO "_world"
+    );
+
+    RECORD TYPE TaxOwnerRecord (
+        "___createTime" TIMESTAMP,
+        "___createdBy"  REFERENCE,
+        "___etag"       STRING,
+        "___modTime"    TIMESTAMP,
+        "___modifiedBy" REFERENCE,
+        "___recordID"   REFERENCE QUERYABLE,
+        kind            STRING QUERYABLE SEARCHABLE SORTABLE,
+        name            STRING QUERYABLE SEARCHABLE SORTABLE,
         GRANT WRITE TO "_creator",
         GRANT CREATE TO "_icloud",
         GRANT READ TO "_world"

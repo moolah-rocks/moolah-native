@@ -16,8 +16,10 @@ extension CategoryRow: CloudKitRecordConvertible {
       recordType: Self.recordType, uuid: id, zoneID: zoneID)
     let record = CKRecord(recordType: Self.recordType, recordID: recordID)
     CategoryRecordCloudKitFields(
+      isTaxReportable: isTaxReportable ? 1 : 0,
       name: name,
-      parentId: parentId?.uuidString
+      parentId: parentId?.uuidString,
+      taxOwnerIdsEncoded: taxOwnerIdsEncoded
     ).write(to: record)
     return record
   }
@@ -30,6 +32,8 @@ extension CategoryRow: CloudKitRecordConvertible {
       recordName: ckRecord.recordID.recordName,
       name: fields.name ?? "",
       parentId: fields.parentId.flatMap(UUID.init(uuidString:)),
+      isTaxReportable: (fields.isTaxReportable ?? 0) != 0,
+      taxOwnerIdsEncoded: fields.taxOwnerIdsEncoded,
       // Stamped by applyGRDBBatchSave after upsert; never read from the
       // CKRecord itself.
       encodedSystemFields: nil

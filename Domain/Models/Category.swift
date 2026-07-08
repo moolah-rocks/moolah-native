@@ -1,14 +1,52 @@
 import Foundation
 
-struct Category: Codable, Sendable, Identifiable, Hashable {
+struct Category: Sendable, Identifiable, Hashable {
   let id: UUID
   var name: String
   var parentId: UUID?
+  var isTaxReportable: Bool
+  var taxOwnerIds: [UUID]
 
-  init(id: UUID = UUID(), name: String, parentId: UUID? = nil) {
+  init(
+    id: UUID = UUID(),
+    name: String,
+    parentId: UUID? = nil,
+    isTaxReportable: Bool = false,
+    taxOwnerIds: [UUID] = []
+  ) {
     self.id = id
     self.name = name
     self.parentId = parentId
+    self.isTaxReportable = isTaxReportable
+    self.taxOwnerIds = taxOwnerIds
+  }
+}
+
+extension Category: Codable {
+  private enum CodingKeys: String, CodingKey {
+    case id
+    case name
+    case parentId
+    case isTaxReportable
+    case taxOwnerIds
+  }
+
+  init(from decoder: any Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decode(UUID.self, forKey: .id)
+    name = try container.decode(String.self, forKey: .name)
+    parentId = try container.decodeIfPresent(UUID.self, forKey: .parentId)
+    isTaxReportable = try container.decodeIfPresent(Bool.self, forKey: .isTaxReportable) ?? false
+    taxOwnerIds = try container.decodeIfPresent([UUID].self, forKey: .taxOwnerIds) ?? []
+  }
+
+  func encode(to encoder: any Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(id, forKey: .id)
+    try container.encode(name, forKey: .name)
+    try container.encodeIfPresent(parentId, forKey: .parentId)
+    try container.encode(isTaxReportable, forKey: .isTaxReportable)
+    try container.encode(taxOwnerIds, forKey: .taxOwnerIds)
   }
 }
 

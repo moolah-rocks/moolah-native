@@ -65,6 +65,7 @@ extension GRDBAccountRepository {
         .tracking(
           regions: [
             AccountRow.observableRegion,
+            AccountTaxOwnerRow.observableRegion,
             TransactionRow.observableRegion,
             TransactionLegRow.observableRegion,
           ],
@@ -75,10 +76,13 @@ extension GRDBAccountRepository {
               .fetchAll(database)
             let positionsByAccount = try Self.computePositions(
               database: database, instruments: instruments)
+            let taxOwnerIdsByAccount =
+              try GRDBTaxOwnershipPersistence.accountOwnerIdsByAccount(in: database)
             return try rows.map { row in
               try row.toDomain(
                 instruments: instruments,
-                positions: positionsByAccount[row.id] ?? [])
+                positions: positionsByAccount[row.id] ?? [],
+                taxOwnerIds: taxOwnerIdsByAccount[row.id] ?? [])
             }
           }
         )

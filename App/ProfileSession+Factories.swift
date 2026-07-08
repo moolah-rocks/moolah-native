@@ -229,7 +229,9 @@ extension ProfileSession {
       analysisRepository: backend.analysis,
       conversionService: backend.conversionService,
       profileCurrency: profile.instrument,
-      holdingsCostLedger: holdingsCostLedger
+      holdingsCostLedger: holdingsCostLedger,
+      taxOwnerRepository: backend.taxOwners,
+      defaultTaxOwnerId: profile.defaultTaxOwnerId
     )
     return DomainStores(
       auth: auth, account: account, category: category, earmark: earmark,

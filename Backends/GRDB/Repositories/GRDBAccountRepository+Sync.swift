@@ -25,6 +25,10 @@ extension GRDBAccountRepository {
   ) throws {
     for row in rows {
       try row.upsert(database)
+      try GRDBTaxOwnershipPersistence.replaceAccountOwners(
+        accountId: row.id,
+        ownerIds: TaxOwnerIDListCoding.decode(row.taxOwnerIdsEncoded),
+        in: database)
     }
     for id in ids {
       // Replicates the v3-era ON DELETE CASCADE on
@@ -42,6 +46,7 @@ extension GRDBAccountRepository {
         .updateAll(
           database,
           [TransactionLegRow.Columns.accountId.set(to: nil)])
+      try GRDBTaxOwnershipPersistence.deleteAccountOwners(accountId: id, in: database)
       _ = try AccountRow.deleteOne(database, id: id)
     }
   }
@@ -218,6 +223,7 @@ extension GRDBAccountRepository {
   /// remote zone deletion.
   func deleteAllSync() throws {
     try database.write { database in
+      _ = try AccountTaxOwnerRow.deleteAll(database)
       _ = try AccountRow.deleteAll(database)
     }
   }

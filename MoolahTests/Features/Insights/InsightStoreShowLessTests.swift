@@ -145,6 +145,7 @@ private struct FailingDismissalBackend: BackendProvider, @unchecked Sendable {
   var accountGroups: any AccountGroupRepository { inner.accountGroups }
   var transactions: any TransactionRepository { inner.transactions }
   var categories: any CategoryRepository { inner.categories }
+  var taxOwners: any TaxOwnerRepository { inner.taxOwners }
   var transferSuggestions: any TransferSuggestionRepository { inner.transferSuggestions }
   var earmarks: any EarmarkRepository { inner.earmarks }
   var analysis: any AnalysisRepository { inner.analysis }
