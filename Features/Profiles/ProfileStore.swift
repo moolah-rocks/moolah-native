@@ -280,6 +280,34 @@ final class ProfileStore {
     logger.debug("Updated profile: \(profile.label)")
   }
 
+  @discardableResult
+  func updateProfilePersisting(
+    id: UUID,
+    applying update: (inout Profile) -> Void
+  ) async throws -> Profile? {
+    guard let containerManager else {
+      guard let index = profiles.firstIndex(where: { $0.id == id }) else { return nil }
+      update(&profiles[index])
+      return profiles[index]
+    }
+
+    while true {
+      guard let index = profiles.firstIndex(where: { $0.id == id }) else { return nil }
+      let base = profiles[index]
+      var updated = base
+      update(&updated)
+      guard updated != base else { return base }
+
+      try await containerManager.profileIndexRepository.upsert(updated)
+      guard let currentIndex = profiles.firstIndex(where: { $0.id == id }) else { return nil }
+      guard profiles[currentIndex] != base else {
+        profiles[currentIndex] = updated
+        logger.debug("Updated profile: \(updated.label)")
+        return updated
+      }
+    }
+  }
+
   // MARK: - Validated mutations
 
   /// Validates iCloud availability then adds the profile. Returns true on success.

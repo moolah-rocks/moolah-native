@@ -46,7 +46,7 @@
 
     var macOSLayout: some View {
       TabView {
-        Tab("Profiles", systemImage: "person.2") {
+        Tab(UITestIdentifiers.TaxOwnerSettings.profilesTabTitle, systemImage: "person.2") {
           profilesContent
         }
         if let session = activeCryptoSession,
@@ -270,8 +270,9 @@
       if let selectedID = selectedProfileID,
         let profile = profileStore.profiles.first(where: { $0.id == selectedID })
       {
-        profileDetailView(for: profile)
-          .id(selectedID)
+        let session = sessionManager.sessions[selectedID]
+        profileDetailView(for: profile, session: session)
+          .id("\(selectedID.uuidString)-\(session == nil ? "closed" : "open")")
       } else {
         // Without `maxHeight: .infinity` the `HSplitView` collapses both
         // columns to the intrinsic height of `ContentUnavailableView`, so

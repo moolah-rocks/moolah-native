@@ -156,6 +156,26 @@ struct ProfileStoreTests {
     #expect(store.profiles.isEmpty)
   }
 
+  @Test("updateProfilePersisting applies a mutation to the latest profile")
+  func updateProfilePersistingAppliesMutation() async throws {
+    let manager = try ProfileContainerManager.forTesting()
+    let store = ProfileStore(defaults: makeDefaults(), containerManager: manager)
+    let profile = makeProfile(label: "Old")
+    store.addProfile(profile)
+    await drainPendingMutations(store)
+
+    try await store.updateProfilePersisting(id: profile.id) { profile in
+      profile.label = "New"
+    }
+
+    #expect(store.profiles.first { $0.id == profile.id }?.label == "New")
+    let saved = try #require(
+      try await manager.profileIndexRepository.fetchAll().first {
+        $0.id == profile.id
+      })
+    #expect(saved.label == "New")
+  }
+
   // MARK: - Persistence
 
   @Test("active profile ID persists across instances")

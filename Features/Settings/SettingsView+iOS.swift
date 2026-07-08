@@ -87,8 +87,11 @@
       Section("Profiles") {
         ForEach(profileStore.profiles) { profile in
           NavigationLink {
-            profileDetailView(for: profile)
-              .navigationTitle(profile.label)
+            profileDetailView(
+              for: profile,
+              session: activeSession?.id == profile.id ? activeSession : nil
+            )
+            .navigationTitle(profile.label)
           } label: {
             profileRow(profile)
           }
