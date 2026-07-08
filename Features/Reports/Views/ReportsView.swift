@@ -166,7 +166,8 @@ struct ReportsView: View {
   }
 
   @ViewBuilder private var incomeAndExpenseTables: some View {
-    // Income and Expense columns: side by side on macOS, stacked on iOS.
+    // Income and Expense columns: side by side on macOS, one continuous
+    // vertical scroll on iPhone so each table can use the full viewport.
     #if os(macOS)
       HStack(spacing: 0) {
         categoryTable(
@@ -184,40 +185,14 @@ struct ReportsView: View {
           hasUnavailableData: reportingStore.expenseHasUnavailableData)
       }
     #else
-      VStack(spacing: 0) {
-        categoryTable(
-          title: "Income",
-          balances: reportingStore.incomeBalances,
-          transactionType: .income,
-          uncategorised: reportingStore.incomeUncategorised,
-          hasUnavailableData: reportingStore.incomeHasUnavailableData)
-        Divider()
-        categoryTable(
-          title: "Expenses",
-          balances: reportingStore.expenseBalances,
-          transactionType: .expense,
-          uncategorised: reportingStore.expenseUncategorised,
-          hasUnavailableData: reportingStore.expenseHasUnavailableData)
+      ScrollView {
+        LazyVStack(spacing: 0) {
+          ForEach(ReportsIncomeExpenseLayout.iOSPresentation, id: \.self) { step in
+            incomeAndExpenseTableStep(step)
+          }
+        }
       }
     #endif
-  }
-
-  private func categoryTable(
-    title: String,
-    balances: [UUID: InstrumentAmount],
-    transactionType: TransactionType,
-    uncategorised: InstrumentAmount?,
-    hasUnavailableData: Bool
-  ) -> some View {
-    CategoryBalanceTable(
-      title: title,
-      balances: balances,
-      categories: categories,
-      dateRange: resolvedFrom...resolvedTo,
-      profileInstrument: reportingStore.profileCurrency,
-      uncategorised: uncategorised,
-      transactionType: transactionType,
-      hasUnavailableData: hasUnavailableData)
   }
 
   @ViewBuilder
@@ -261,6 +236,53 @@ struct ReportsView: View {
     let report: ReportSection
     let financialYear: Int
     let spamInstruments: Set<Instrument>
+  }
+}
+
+extension ReportsView {
+  private func categoryTable(
+    title: String,
+    balances: [UUID: InstrumentAmount],
+    transactionType: TransactionType,
+    uncategorised: InstrumentAmount?,
+    hasUnavailableData: Bool,
+    listBehavior: CategoryBalanceTableListBehavior = .ownsScroll
+  ) -> some View {
+    CategoryBalanceTable(
+      title: title,
+      balances: balances,
+      categories: categories,
+      dateRange: resolvedFrom...resolvedTo,
+      profileInstrument: reportingStore.profileCurrency,
+      uncategorised: uncategorised,
+      transactionType: transactionType,
+      hasUnavailableData: hasUnavailableData,
+      listBehavior: listBehavior)
+  }
+
+  @ViewBuilder
+  private func incomeAndExpenseTableStep(_ step: ReportsIncomeExpenseLayoutStep) -> some View {
+    switch step {
+    case .singleVerticalScroll:
+      EmptyView()
+    case .income:
+      categoryTable(
+        title: "Income",
+        balances: reportingStore.incomeBalances,
+        transactionType: .income,
+        uncategorised: reportingStore.incomeUncategorised,
+        hasUnavailableData: reportingStore.incomeHasUnavailableData,
+        listBehavior: .scrollContent)
+    case .expenses:
+      Divider()
+      categoryTable(
+        title: "Expenses",
+        balances: reportingStore.expenseBalances,
+        transactionType: .expense,
+        uncategorised: reportingStore.expenseUncategorised,
+        hasUnavailableData: reportingStore.expenseHasUnavailableData,
+        listBehavior: .scrollContent)
+    }
   }
 }
 
