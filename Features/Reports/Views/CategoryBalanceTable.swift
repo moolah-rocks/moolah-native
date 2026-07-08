@@ -1,5 +1,12 @@
 import SwiftUI
 
+enum CategoryBalanceTableListBehavior {
+  /// The table owns an internal `List` scroll view.
+  case ownsScroll
+  /// The caller owns scrolling; rows render as regular vertical content.
+  case scrollContent
+}
+
 /// Displays a table of category balances grouped by root category with expandable subcategories.
 /// Used for both income and expense columns in the Reports view.
 struct CategoryBalanceTable: View {
@@ -18,6 +25,7 @@ struct CategoryBalanceTable: View {
   /// when a transient conversion failure means some rows were skipped, so
   /// the total may be understated.
   let hasUnavailableData: Bool
+  var listBehavior: CategoryBalanceTableListBehavior = .ownsScroll
 
   // Tappable-header vertical padding. Touch platforms need a taller target
   // (44pt HIG minimum) than the pointer-driven Mac; both scale with Dynamic
@@ -97,7 +105,7 @@ struct CategoryBalanceTable: View {
           systemImage: "tray",
           description: Text("No transactions found for this period"))
       } else {
-        categoryList
+        categoryRows
       }
       Divider()
       footer
@@ -132,6 +140,15 @@ struct CategoryBalanceTable: View {
     .padding()
   }
 
+  @ViewBuilder private var categoryRows: some View {
+    switch listBehavior {
+    case .ownsScroll:
+      categoryList
+    case .scrollContent:
+      categoryScrollContent
+    }
+  }
+
   private var categoryList: some View {
     List {
       ForEach(reportData) { group in
@@ -146,6 +163,15 @@ struct CategoryBalanceTable: View {
     #else
       .listStyle(.plain)
     #endif
+  }
+
+  private var categoryScrollContent: some View {
+    CategoryBalanceScrollContent(
+      reportData: reportData,
+      uncategorised: uncategorised,
+      transactionType: transactionType,
+      dateRange: dateRange,
+      headerVerticalPadding: headerVerticalPadding)
   }
 
   /// Pinned after all category sections (bottom of the list) so it reads as
