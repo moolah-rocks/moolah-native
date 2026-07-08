@@ -266,6 +266,7 @@ enum ProfileDataSyncHandlerTestSupport {
       transferSuggestions: GRDBTransferSuggestionRepository(database: database),
       instruments: registry,
       categories: GRDBCategoryRepository(database: database),
+      taxOwners: GRDBTaxOwnerRepository(database: database),
       accounts: GRDBAccountRepository(
         database: database,
         instrumentResolver: registry,

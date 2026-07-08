@@ -11,6 +11,7 @@ protocol BackendProvider: Sendable {
   var insightDismissals: any InsightDismissalRepository { get }
   var transactions: any TransactionRepository { get }
   var categories: any CategoryRepository { get }
+  var taxOwners: any TaxOwnerRepository { get }
   var transferSuggestions: any TransferSuggestionRepository { get }
   var earmarks: any EarmarkRepository { get }
   var analysis: any AnalysisRepository { get }

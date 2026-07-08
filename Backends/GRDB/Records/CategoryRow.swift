@@ -12,6 +12,8 @@ struct CategoryRow {
     case recordName = "record_name"
     case name
     case parentId = "parent_id"
+    case isTaxReportable = "is_tax_reportable"
+    case taxOwnerIdsEncoded = "tax_owner_ids_encoded"
     case encodedSystemFields = "encoded_system_fields"
     case needsPush = "needs_push"
   }
@@ -21,6 +23,8 @@ struct CategoryRow {
     case recordName = "record_name"
     case name
     case parentId = "parent_id"
+    case isTaxReportable = "is_tax_reportable"
+    case taxOwnerIdsEncoded = "tax_owner_ids_encoded"
     case encodedSystemFields = "encoded_system_fields"
   }
 
@@ -28,6 +32,8 @@ struct CategoryRow {
   var recordName: String
   var name: String
   var parentId: UUID?
+  var isTaxReportable: Bool = false
+  var taxOwnerIdsEncoded: String?
   var encodedSystemFields: Data?
 }
 

@@ -5,39 +5,27 @@ import Observation
 @Observable
 @MainActor
 final class ReportingStore {
-  // Published state
   private(set) var profitLoss: [InstrumentProfitLoss] = []
   private(set) var capitalGainsResult: CapitalGainsResult?
   private(set) var capitalGainsSummary: CapitalGainsSummary?
   private(set) var isLoading = false
   private(set) var error: Error?
-  /// Rule 11 flags: `true` when a genuine conversion failure during the shared
-  /// ledger build marked at least one instrument unavailable, so the
-  /// corresponding figure may be understated. Exposes the store-level contract
-  /// a future Reports/tax consumer must honour — render "unavailable" for the
-  /// affected surface rather than a complete-looking but wrong number — the
-  /// same treatment `incomeHasUnavailableData`/`expenseHasUnavailableData`
-  /// already receive on the shipped category-balances surface. The Reports
-  /// tax surface consumes these flags and renders the affected totals as
-  /// unavailable. `profitLoss` still lists the sibling instruments that
-  /// resolved.
+  /// True when conversion skipped at least one instrument, so affected totals
+  /// must render unavailable rather than complete-looking but wrong.
   private(set) var capitalGainsHasUnavailableData = false
   private(set) var profitLossHasUnavailableData = false
   private(set) var capitalGainsUnavailableInstruments: [Instrument] = []
   private(set) var profitLossUnavailableInstruments: [Instrument] = []
   private(set) var taxReportHoldingsDate: Date?
+  private(set) var taxIncomeExpenseSummaries: [TaxIncomeExpenseSummary] = []
+  private(set) var taxIncomeExpenseError: Error?
+  private(set) var taxOwnerNames: [UUID: String]
 
-  /// Category balances for the Reports view, bucketed by transaction type.
   private(set) var incomeBalances: [UUID: InstrumentAmount] = [:]
   private(set) var expenseBalances: [UUID: InstrumentAmount] = [:]
-  /// Total of income/expense legs with no category, `nil` when there are
-  /// none of that type in range (the Reports view omits the row in that
-  /// case rather than treating `nil` as zero).
   private(set) var incomeUncategorised: InstrumentAmount?
   private(set) var expenseUncategorised: InstrumentAmount?
-  /// Mirrors `CategoryBalances.hasUnavailableData` (Rule 11) per column —
-  /// true when a transient conversion failure caused some rows to be
-  /// skipped, so the corresponding totals may be understated.
+  /// Per-column Rule 11 flags from category balance loading.
   private(set) var incomeHasUnavailableData = false
   private(set) var expenseHasUnavailableData = false
   private(set) var isLoadingCategoryBalances = false
@@ -46,31 +34,15 @@ final class ReportingStore {
   private let analysisRepository: AnalysisRepository?
   private let conversionService: InstrumentConversionService
   private(set) var profileCurrency: Instrument
-  /// The shared profile-wide cost-basis provider. Source of the realised-CGT
-  /// events and P&L rows: `loadCapitalGains` / `loadProfitLoss` read the
-  /// ledger from here (built once per load, shared with the positions /
-  /// performance passes) instead of rebuilding from a full transaction fetch.
-  /// `nil` in previews / incidental test construction sites that never call
-  /// the reports loads.
+  /// Shared profile-wide cost-basis provider for realised CGT and P&L rows.
   private let holdingsCostLedger: HoldingsCostLedgerStore?
+  private let taxOwnerRepository: TaxOwnerRepository?
   private let userDefaults: UserDefaults
+  private let defaultTaxOwnerId: UUID
   private let logger = Logger(subsystem: "com.moolah.app", category: "ReportingStore")
 
-  /// Monotonic counters guarding against a superseded load clobbering fresher
-  /// published state (issue #1209 class) — same shape as
-  /// `AccountStore.snapshotGeneration`. Each `load…` function bumps its
-  /// counter *before* suspending and captures the post-bump value; every
-  /// publish after an `await` checks the captured value still matches the
-  /// live counter before writing, so a call superseded by a newer one
-  /// (e.g. `ReportsView`'s `.task(id:)` racing the "Try Again" button) drops
-  /// its stale result instead of publishing over the newer one.
-  ///
-  /// `loadCategoryBalances` gets its own counter (`categoryBalancesGeneration`)
-  /// since it publishes an independent set of properties
-  /// (`incomeBalances`/`expenseBalances`/…/`isLoadingCategoryBalances`).
-  /// `loadProfitLoss` and `loadCapitalGains` share `reportGeneration` because
-  /// they publish to the same `isLoading`/`error` pair — a call to either
-  /// should be able to supersede the other.
+  /// Monotonic counters guarding against superseded async loads clobbering
+  /// newer published state.
   @ObservationIgnored private var categoryBalancesGeneration: UInt64 = 0
   @ObservationIgnored private var reportGeneration: UInt64 = 0
 
@@ -83,17 +55,29 @@ final class ReportingStore {
     !UnifiedInstrumentIdentityMigration.isComplete(in: userDefaults)
   }
 
+  var taxIncomeExpenseRollup: TaxIncomeExpenseSummary? {
+    Self.taxIncomeExpenseRollup(
+      from: taxIncomeExpenseSummaries,
+      instrument: profileCurrency)
+  }
+
   init(
     analysisRepository: AnalysisRepository? = nil,
     conversionService: InstrumentConversionService,
     profileCurrency: Instrument,
     holdingsCostLedger: HoldingsCostLedgerStore? = nil,
+    taxOwnerRepository: TaxOwnerRepository? = nil,
+    defaultTaxOwnerId: UUID = UUID(),
+    taxOwnerNames: [UUID: String] = [:],
     userDefaults: UserDefaults = .moolahShared
   ) {
     self.analysisRepository = analysisRepository
     self.conversionService = conversionService
     self.profileCurrency = profileCurrency
     self.holdingsCostLedger = holdingsCostLedger
+    self.taxOwnerRepository = taxOwnerRepository
+    self.defaultTaxOwnerId = defaultTaxOwnerId
+    self.taxOwnerNames = taxOwnerNames
     self.userDefaults = userDefaults
   }
 
@@ -142,6 +126,7 @@ final class ReportingStore {
     guard generation == categoryBalancesGeneration else { return }
     isLoadingCategoryBalances = false
   }
+
 }
 
 extension ReportingStore {
@@ -229,10 +214,17 @@ extension ReportingStore {
     profitLoss = []
     profitLossHasUnavailableData = false
     profitLossUnavailableInstruments = []
+    taxIncomeExpenseSummaries = []
+    taxIncomeExpenseError = nil
     isLoading = true
     error = nil
     let dates = taxReportLoadDates(financialYear: financialYear, today: today)
     taxReportHoldingsDate = dates.valuationDate
+    await performTaxIncomeExpenseLoad(
+      financialYear: financialYear,
+      dates: dates,
+      generation: generation)
+    guard generation == reportGeneration else { return }
     guard
       await performCapitalGainsLoad(
         financialYear: financialYear,
@@ -263,6 +255,41 @@ extension ReportingStore {
     }
     guard generation == reportGeneration else { return }
     isLoading = false
+  }
+
+  private func performTaxIncomeExpenseLoad(
+    financialYear: Int,
+    dates: TaxReportLoadDates,
+    generation: UInt64
+  ) async {
+    guard let analysisRepository else { return }
+    guard
+      let dateRange = Self.taxIncomeExpenseDateRange(
+        financialYear: financialYear,
+        dates: dates)
+    else { return }
+    do {
+      async let summariesLoad = analysisRepository.fetchTaxIncomeExpenseSummaries(
+        dateInterval: dateRange,
+        targetInstrument: profileCurrency,
+        defaultTaxOwnerId: defaultTaxOwnerId)
+      async let ownersLoad = fetchTaxOwnersForReport()
+      let (summaries, owners) = try await (summariesLoad, ownersLoad)
+      guard generation == reportGeneration else { return }
+      taxIncomeExpenseSummaries = summaries
+      taxOwnerNames = Dictionary(uniqueKeysWithValues: owners.map { ($0.id, $0.name) })
+    } catch is CancellationError {
+      return
+    } catch {
+      guard generation == reportGeneration else { return }
+      logger.error("Failed to load tax income/expense: \(error)")
+      taxIncomeExpenseError = error
+    }
+  }
+
+  private func fetchTaxOwnersForReport() async throws -> [TaxOwner] {
+    guard let taxOwnerRepository else { return [] }
+    return try await taxOwnerRepository.fetchAll()
   }
 
   private func taxReportLoadDates(financialYear: Int, today: Date) -> TaxReportLoadDates {

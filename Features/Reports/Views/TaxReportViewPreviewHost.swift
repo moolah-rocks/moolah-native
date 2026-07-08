@@ -5,6 +5,9 @@ private struct TaxReportViewPreviewHost: View {
   var events: [CapitalGainEvent] = TaxReportPreviewData.events
   var capitalGainsHasUnavailableData = false
   var capitalGainsUnavailableInstruments: [Instrument] = []
+  var taxIncomeExpenseSummaries: [TaxIncomeExpenseSummary] = TaxReportPreviewData.taxIncomeExpense
+  var taxIncomeExpenseError: Error?
+  var taxOwnerNames: [UUID: String] = TaxReportPreviewData.taxOwnerNames
   var profitLoss: [InstrumentProfitLoss] = TaxReportPreviewData.holdings
   var profitLossHasUnavailableData = false
   var profitLossUnavailableInstruments: [Instrument] = []
@@ -21,6 +24,11 @@ private struct TaxReportViewPreviewHost: View {
       events: events,
       capitalGainsHasUnavailableData: capitalGainsHasUnavailableData,
       capitalGainsUnavailableInstruments: capitalGainsUnavailableInstruments,
+      taxIncomeExpenseSummaries: taxIncomeExpenseSummaries,
+      taxIncomeExpenseRollup: TaxReportPreviewData.taxIncomeExpenseRollup(
+        from: taxIncomeExpenseSummaries),
+      taxIncomeExpenseError: taxIncomeExpenseError,
+      taxOwnerNames: taxOwnerNames,
       profitLoss: profitLoss,
       profitLossHasUnavailableData: profitLossHasUnavailableData,
       profitLossUnavailableInstruments: profitLossUnavailableInstruments,
@@ -52,6 +60,13 @@ enum TaxReportPreviewData {
     symbol: "OP",
     name: "Optimism",
     decimals: 18)
+  static let ownerA = UUID()
+  static let ownerB = UUID()
+
+  static let taxOwnerNames = [
+    ownerA: "Alex",
+    ownerB: "Jordan",
+  ]
 
   static let events = [
     event(
@@ -79,6 +94,30 @@ enum TaxReportPreviewData {
     shortTermCapitalGains: 0,
     longTermCapitalGains: 1_350,
     capitalLosses: 6_636.23)
+
+  static let taxIncomeExpense = [
+    TaxIncomeExpenseSummary(
+      ownerId: ownerA,
+      taxableIncome: InstrumentAmount(quantity: 18_400, instrument: .AUD),
+      deductibleExpenses: InstrumentAmount(quantity: 2_150, instrument: .AUD)),
+    TaxIncomeExpenseSummary(
+      ownerId: ownerB,
+      taxableIncome: InstrumentAmount(quantity: 12_250, instrument: .AUD),
+      deductibleExpenses: InstrumentAmount(quantity: 1_780, instrument: .AUD)),
+  ]
+
+  static func taxIncomeExpenseRollup(
+    from summaries: [TaxIncomeExpenseSummary]
+  ) -> TaxIncomeExpenseSummary? {
+    guard let ownerId = summaries.first?.ownerId else { return nil }
+    let zero = InstrumentAmount.zero(instrument: .AUD)
+    let income = summaries.reduce(zero) { $0 + $1.taxableIncome }
+    let deductions = summaries.reduce(zero) { $0 + $1.deductibleExpenses }
+    return TaxIncomeExpenseSummary(
+      ownerId: ownerId,
+      taxableIncome: income,
+      deductibleExpenses: deductions)
+  }
 
   static let holdings = [
     InstrumentProfitLoss(
@@ -197,6 +236,14 @@ struct PreviewCapitalGainValue {
     events: [],
     profitLoss: [],
     error: PreviewReportError()
+  )
+  .frame(width: 1180, height: 760)
+}
+
+#Preview("Capital Gains Report - Tax Income Error") {
+  TaxReportViewPreviewHost(
+    taxIncomeExpenseSummaries: [],
+    taxIncomeExpenseError: PreviewReportError()
   )
   .frame(width: 1180, height: 760)
 }

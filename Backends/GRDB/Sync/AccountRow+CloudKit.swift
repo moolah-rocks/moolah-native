@@ -27,6 +27,7 @@ extension AccountRow: CloudKitRecordConvertible {
       isHidden: isHidden ? 1 : 0,
       name: name,
       position: Int64(position),
+      taxOwnerIdsEncoded: taxOwnerIdsEncoded,
       type: type,
       valuationMode: valuationMode,
       walletAddress: walletAddress
@@ -52,7 +53,8 @@ extension AccountRow: CloudKitRecordConvertible {
       walletAddress: fields.walletAddress,
       chainId: fields.chainId.map(Int.init),
       exchangeProvider: fields.exchangeProvider,
-      groupId: fields.groupId.flatMap(UUID.init(uuidString:))
+      groupId: fields.groupId.flatMap(UUID.init(uuidString:)),
+      taxOwnerIdsEncoded: fields.taxOwnerIdsEncoded
     )
   }
 

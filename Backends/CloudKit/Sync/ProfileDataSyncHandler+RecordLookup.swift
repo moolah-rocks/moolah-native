@@ -154,6 +154,7 @@ extension ProfileDataSyncHandler {
   ) throws -> CKRecord?? {
     switch recordType {
     case CategoryRow.recordType: return built(try fetchCategoryRow(id: uuid))
+    case TaxOwnerRow.recordType: return built(try fetchTaxOwnerRow(id: uuid))
     case TransferSuggestionRow.recordType: return built(try fetchTransferSuggestionRow(id: uuid))
     case AccountGroupRow.recordType: return built(try fetchAccountGroupRow(id: uuid))
     case InsightDismissalRow.recordType: return built(try fetchInsightDismissalRow(id: uuid))
@@ -225,6 +226,8 @@ extension ProfileDataSyncHandler {
     switch recordType {
     case CategoryRow.recordType:
       return { self.mapBuiltRows(try self.grdbRepositories.categories.fetchRowsSync(ids: ids)) }
+    case TaxOwnerRow.recordType:
+      return { self.mapBuiltRows(try self.grdbRepositories.taxOwners.fetchRowsSync(ids: ids)) }
     case TransferSuggestionRow.recordType:
       return {
         self.mapBuiltRows(try self.grdbRepositories.transferSuggestions.fetchRowsSync(ids: ids))
@@ -317,6 +320,10 @@ extension ProfileDataSyncHandler {
 
   private func fetchCategoryRow(id: UUID) throws -> CategoryRow? {
     try grdbRepositories.categories.fetchRowSync(id: id)
+  }
+
+  private func fetchTaxOwnerRow(id: UUID) throws -> TaxOwnerRow? {
+    try grdbRepositories.taxOwners.fetchRowSync(id: id)
   }
 
   private func fetchTransferSuggestionRow(id: UUID) throws -> TransferSuggestionRow? {

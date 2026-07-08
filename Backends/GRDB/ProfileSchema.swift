@@ -112,6 +112,8 @@ import GRDB
 /// pass as the categorised totals — so the read needs a covering index
 /// that also serves rows with a NULL `category_id`. See
 /// `ProfileSchema+LegAnalysisCategoryIncludeNull.swift`.
+/// `v23_tax_reporting` — adds tax owners, account/category owner join
+/// tables, and `category.is_tax_reportable`.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -132,7 +134,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 22
+  static let version = 23
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -183,6 +185,7 @@ enum ProfileSchema {
       migrate: widenLegAnalysisByTypeCategoryIndex)
     migrator.registerMigration(
       "v22_wallet_sync_checkpoint", migrate: addWalletSyncCheckpoint)
+    migrator.registerMigration("v23_tax_reporting", migrate: addTaxReporting)
 
     return migrator
   }

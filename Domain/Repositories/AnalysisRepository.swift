@@ -87,6 +87,18 @@ protocol AnalysisRepository: Sendable {
     targetInstrument: Instrument
   ) async throws -> CategoryBalancesByType
 
+  /// Fetch tax-reportable income and deductible expense totals for a date range.
+  ///
+  /// Only `.income` and `.expense` legs whose category is marked tax-reportable
+  /// are included. Ownership is resolved from category owners, then account
+  /// owners, then `defaultTaxOwnerId`; multiple owners split the converted
+  /// amount evenly.
+  func fetchTaxIncomeExpenseSummaries(
+    dateInterval: Range<Date>,
+    targetInstrument: Instrument,
+    defaultTaxOwnerId: UUID
+  ) async throws -> [TaxIncomeExpenseSummary]
+
   /// Load all analysis data in a single batch, avoiding redundant fetches.
   ///
   /// Backends that compute locally (CloudKit/SwiftData) should override this to fetch
@@ -159,6 +171,14 @@ struct CategoryBalancesByType: Sendable {
 }
 
 extension AnalysisRepository {
+  func fetchTaxIncomeExpenseSummaries(
+    dateInterval: Range<Date>,
+    targetInstrument: Instrument,
+    defaultTaxOwnerId: UUID
+  ) async throws -> [TaxIncomeExpenseSummary] {
+    []
+  }
+
   func fetchCategoryBalancesByType(
     dateRange: ClosedRange<Date>,
     filters: TransactionFilter?,

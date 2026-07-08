@@ -8,6 +8,10 @@ struct TaxReportView: View {
   let events: [CapitalGainEvent]
   let capitalGainsHasUnavailableData: Bool
   let capitalGainsUnavailableInstruments: [Instrument]
+  let taxIncomeExpenseSummaries: [TaxIncomeExpenseSummary]
+  let taxIncomeExpenseRollup: TaxIncomeExpenseSummary?
+  let taxIncomeExpenseError: Error?
+  let taxOwnerNames: [UUID: String]
   let profitLoss: [InstrumentProfitLoss]
   let profitLossHasUnavailableData: Bool
   let profitLossUnavailableInstruments: [Instrument]
@@ -28,7 +32,7 @@ struct TaxReportView: View {
       profileInstrument: profileInstrument)
   }
 
-  private var reportInstruments: [Instrument] {
+  var reportInstruments: [Instrument] {
     events.map(\.instrument) + profitLoss.map(\.instrument)
   }
 
@@ -45,6 +49,7 @@ struct TaxReportView: View {
           errorView(error)
         } else {
           reportSummaryTiles
+          taxIncomeExpenseSection
           realisedCapitalGainsSection
           currentHoldingsSection
         }
@@ -339,7 +344,7 @@ extension TaxReportView {
     }
   }
 
-  private func sectionHeader(_ title: String) -> some View {
+  func sectionHeader(_ title: String) -> some View {
     Text(title)
       .font(.headline)
   }
@@ -357,4 +362,5 @@ extension TaxReportView {
   private func amount(_ quantity: Decimal) -> InstrumentAmount {
     InstrumentAmount(quantity: quantity, instrument: profileInstrument)
   }
+
 }

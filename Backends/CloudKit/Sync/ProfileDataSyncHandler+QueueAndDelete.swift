@@ -70,6 +70,7 @@ extension ProfileDataSyncHandler {
     // profile-index zone via
     // `SyncCoordinator.queueUnsyncedSharedInstruments`; the per-profile
     // path deliberately does not enumerate them.
+    collectTaxOwnerIds(source: source, into: &recordIDs)
     collectCategoryIds(source: source, into: &recordIDs)
     collectAccountGroupIds(source: source, into: &recordIDs)
     collectInsightDismissalIds(source: source, into: &recordIDs)
@@ -97,6 +98,19 @@ extension ProfileDataSyncHandler {
       }
     }
     collectAllGRDBUUIDs(ids: ids, recordType: CategoryRow.recordType, into: &recordIDs)
+  }
+
+  private func collectTaxOwnerIds(
+    source: GRDBIdSource, into recordIDs: inout [CKRecord.ID]
+  ) {
+    let repo = grdbRepositories.taxOwners
+    let ids: () throws -> [UUID] = {
+      switch source {
+      case .all: return try repo.allRowIdsSync()
+      case .unsynced: return try repo.unsyncedRowIdsSync()
+      }
+    }
+    collectAllGRDBUUIDs(ids: ids, recordType: TaxOwnerRow.recordType, into: &recordIDs)
   }
 
   private func collectAccountIds(
@@ -298,6 +312,7 @@ extension ProfileDataSyncHandler {
   /// would throw `no such table`.
   private var grdbWipes: [(String, () throws -> Void)] {
     [
+      (TaxOwnerRow.recordType, { try self.grdbRepositories.taxOwners.deleteAllSync() }),
       (CategoryRow.recordType, { try self.grdbRepositories.categories.deleteAllSync() }),
       (
         AccountGroupRow.recordType,

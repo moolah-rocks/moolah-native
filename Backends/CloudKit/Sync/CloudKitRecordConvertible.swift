@@ -35,6 +35,7 @@ protocol IdentifiableRecord {
 extension ProfileRow: IdentifiableRecord {}
 extension AccountRow: IdentifiableRecord {}
 extension AccountGroupRow: IdentifiableRecord {}
+extension TaxOwnerRow: IdentifiableRecord {}
 extension InsightDismissalRow: IdentifiableRecord {}
 extension TransactionRow: IdentifiableRecord {}
 extension TransactionLegRow: IdentifiableRecord {}
@@ -64,6 +65,7 @@ extension ImportRuleRow: ValueTypeSystemFieldsReadable {}
 extension InstrumentRow: ValueTypeSystemFieldsReadable {}
 extension AccountRow: ValueTypeSystemFieldsReadable {}
 extension AccountGroupRow: ValueTypeSystemFieldsReadable {}
+extension TaxOwnerRow: ValueTypeSystemFieldsReadable {}
 extension InsightDismissalRow: ValueTypeSystemFieldsReadable {}
 extension CategoryRow: ValueTypeSystemFieldsReadable {}
 extension TransferSuggestionRow: ValueTypeSystemFieldsReadable {}
@@ -140,6 +142,7 @@ enum RecordTypeRegistry: Sendable {
     InstrumentRow.recordType: InstrumentRow.self,
     AccountRow.recordType: AccountRow.self,
     AccountGroupRow.recordType: AccountGroupRow.self,
+    TaxOwnerRow.recordType: TaxOwnerRow.self,
     InsightDismissalRow.recordType: InsightDismissalRow.self,
     TransactionRow.recordType: TransactionRow.self,
     TransactionLegRow.recordType: TransactionLegRow.self,

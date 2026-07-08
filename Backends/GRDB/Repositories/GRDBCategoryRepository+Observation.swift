@@ -36,12 +36,15 @@ extension GRDBCategoryRepository {
       // profile — no need for the row-decoder workaround the inferred
       // form depended on.
       .tracking(
-        regions: [CategoryRow.observableRegion],
+        regions: [CategoryRow.observableRegion, CategoryTaxOwnerRow.observableRegion],
         fetch: { database in
-          try CategoryRow
+          let taxOwnerIdsByCategory =
+            try GRDBTaxOwnershipPersistence.categoryOwnerIdsByCategory(in: database)
+          return
+            try CategoryRow
             .order(CategoryRow.Columns.name.asc)
             .fetchAll(database)
-            .map { $0.toDomain() }
+            .map { $0.toDomain(taxOwnerIds: taxOwnerIdsByCategory[$0.id] ?? []) }
         }
       )
       .toRetryingAsyncStream(

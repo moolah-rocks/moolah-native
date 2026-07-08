@@ -31,6 +31,7 @@ extension AccountRow {
     self.chainId = domain.chainId
     self.exchangeProvider = domain.exchangeProvider?.rawValue
     self.groupId = domain.groupId
+    self.taxOwnerIdsEncoded = TaxOwnerIDListCoding.encode(domain.taxOwnerIds)
   }
 
   /// Domain projection. `instruments` is the registry lookup
@@ -43,7 +44,8 @@ extension AccountRow {
   /// `AccountType.decoded(rawValue:)`.
   func toDomain(
     instruments: [String: Instrument] = [:],
-    positions: [Position] = []
+    positions: [Position] = [],
+    taxOwnerIds: [UUID] = []
   ) throws -> Account {
     let instrument = instruments[instrumentId] ?? Instrument.fiat(code: instrumentId)
     let resolvedExchangeProvider = exchangeProvider.flatMap(ExchangeProvider.init(rawValue:))
@@ -59,6 +61,8 @@ extension AccountRow {
       walletAddress: walletAddress,
       chainId: chainId,
       exchangeProvider: resolvedExchangeProvider,
-      groupId: groupId)
+      groupId: groupId,
+      taxOwnerIds: taxOwnerIds.isEmpty
+        ? TaxOwnerIDListCoding.decode(taxOwnerIdsEncoded) : taxOwnerIds)
   }
 }

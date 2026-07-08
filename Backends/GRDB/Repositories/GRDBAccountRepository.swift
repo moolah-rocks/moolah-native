@@ -118,10 +118,13 @@ final class GRDBAccountRepository: AccountRepository, @unchecked Sendable {
         .fetchAll(database)
       let positionsByAccount = try Self.computePositions(
         database: database, instruments: instruments)
+      let taxOwnerIdsByAccount = try GRDBTaxOwnershipPersistence.accountOwnerIdsByAccount(
+        in: database)
       return try rows.map { row in
         try row.toDomain(
           instruments: instruments,
-          positions: positionsByAccount[row.id] ?? [])
+          positions: positionsByAccount[row.id] ?? [],
+          taxOwnerIds: taxOwnerIdsByAccount[row.id] ?? [])
       }
     }
   }
@@ -197,12 +200,20 @@ final class GRDBAccountRepository: AccountRepository, @unchecked Sendable {
       existing.isHidden = account.isHidden
       existing.valuationMode = account.valuationMode.rawValue
       existing.groupId = account.groupId
+      existing.taxOwnerIdsEncoded = TaxOwnerIDListCoding.encode(account.taxOwnerIds)
       try existing.update(database)
+      try GRDBTaxOwnershipPersistence.replaceAccountOwners(
+        accountId: account.id,
+        ownerIds: account.taxOwnerIds,
+        in: database)
       try markNeedsPushSync(id: account.id, in: database)
 
       let positions = try Self.computePositions(
         database: database, instruments: instruments, accountId: account.id)
-      return try existing.toDomain(instruments: instruments, positions: positions)
+      return try existing.toDomain(
+        instruments: instruments,
+        positions: positions,
+        taxOwnerIds: account.taxOwnerIds)
     }
     onRecordChanged(AccountRow.recordType, account.id)
     return resolved

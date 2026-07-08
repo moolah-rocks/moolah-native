@@ -16,10 +16,18 @@ extension CategoryRow {
     self.recordName = Self.recordName(for: domain.id)
     self.name = domain.name
     self.parentId = domain.parentId
+    self.isTaxReportable = domain.isTaxReportable
+    self.taxOwnerIdsEncoded = TaxOwnerIDListCoding.encode(domain.taxOwnerIds)
     self.encodedSystemFields = nil
   }
 
-  func toDomain() -> Moolah.Category {
-    Moolah.Category(id: id, name: name, parentId: parentId)
+  func toDomain(taxOwnerIds: [UUID] = []) -> Moolah.Category {
+    Moolah.Category(
+      id: id,
+      name: name,
+      parentId: parentId,
+      isTaxReportable: isTaxReportable,
+      taxOwnerIds: taxOwnerIds.isEmpty
+        ? TaxOwnerIDListCoding.decode(taxOwnerIdsEncoded) : taxOwnerIds)
   }
 }

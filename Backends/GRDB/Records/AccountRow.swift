@@ -27,6 +27,7 @@ struct AccountRow {
     case chainId = "chain_id"
     case exchangeProvider = "exchange_provider"
     case groupId = "group_id"
+    case taxOwnerIdsEncoded = "tax_owner_ids_encoded"
     /// Local-only dirty flag (issue #1081). Absent from `CodingKeys` so
     /// it never crosses the wire and `upsert` leaves it untouched; set
     /// via the query builder only. Excluded from `observableRegion` (see
@@ -49,6 +50,7 @@ struct AccountRow {
     case chainId = "chain_id"
     case exchangeProvider = "exchange_provider"
     case groupId = "group_id"
+    case taxOwnerIdsEncoded = "tax_owner_ids_encoded"
   }
 
   var id: UUID
@@ -83,6 +85,7 @@ struct AccountRow {
   /// lookup treats unknown ids as nil and renders the account as
   /// standalone in its bucket.
   var groupId: UUID?
+  var taxOwnerIdsEncoded: String?
 }
 
 extension AccountRow: Codable {}

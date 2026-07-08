@@ -18,6 +18,7 @@ extension ProfileRow: CloudKitRecordConvertible {
       createdAt: createdAt,
       currencyCode: currencyCode,
       dataFormatVersion: Int64(dataFormatVersion),
+      defaultTaxOwnerId: defaultTaxOwnerId?.uuidString,
       financialYearStartMonth: Int64(financialYearStartMonth),
       label: label
     ).write(to: record)
@@ -47,7 +48,9 @@ extension ProfileRow: CloudKitRecordConvertible {
       // Stamped post-upsert by ProfileIndexSyncHandler; never read from
       // the CKRecord itself.
       encodedSystemFields: nil,
-      dataFormatVersion: fields.dataFormatVersion.map(Int.init) ?? 0
+      dataFormatVersion: fields.dataFormatVersion.map(Int.init) ?? 0,
+      defaultTaxOwnerId: fields.defaultTaxOwnerId.flatMap(UUID.init(uuidString:))
+        ?? TaxOwner.defaultOwnerId(for: id)
     )
   }
 

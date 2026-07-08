@@ -50,6 +50,9 @@ import GRDB
 ///   cross-chain crypto id at its canonical id; never synced (out of
 ///   `InstrumentRow.CodingKeys`/`toCKRecord`). See
 ///   `ProfileIndexSchema+InstrumentAliasOf.swift`.
+/// `v11_default_tax_owner`          — adds `profile.default_tax_owner_id`.
+///   The owner row lives in the per-profile DB; the index DB keeps only the
+///   fallback owner id needed before a profile is opened.
 ///
 /// Each migration body is registered here. Once shipped, migration IDs
 /// are frozen forever; splitting later is fine, merging post-ship is
@@ -63,7 +66,7 @@ enum ProfileIndexSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 10
+  static let version = 11
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -89,6 +92,7 @@ enum ProfileIndexSchema {
       "v9_add_instrument_alias_of", migrate: addInstrumentAliasOf)
     migrator.registerMigration(
       "v10_drop_cryptocompare_symbol", migrate: dropCryptoCompareSymbolColumn)
+    migrator.registerMigration("v11_default_tax_owner", migrate: addDefaultTaxOwner)
 
     return migrator
   }

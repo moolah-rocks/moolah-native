@@ -43,6 +43,8 @@ extension ProfileDataSyncHandler {
     switch recordType {
     case CategoryRow.recordType:
       return try repos.categories.fetchRowSync(id: uuid, in: database).map(builtRecord)
+    case TaxOwnerRow.recordType:
+      return try repos.taxOwners.fetchRowSync(id: uuid, in: database).map(builtRecord)
     case TransferSuggestionRow.recordType:
       return try repos.transferSuggestions.fetchRowSync(id: uuid, in: database).map(builtRecord)
     case AccountGroupRow.recordType:
@@ -185,6 +187,8 @@ extension ProfileDataSyncHandler {
     switch recordType {
     case CategoryRow.recordType:
       return try repos.categories.fetchRowSync(id: id, in: database)?.encodedSystemFields
+    case TaxOwnerRow.recordType:
+      return try repos.taxOwners.fetchRowSync(id: id, in: database)?.encodedSystemFields
     case TransferSuggestionRow.recordType:
       return try repos.transferSuggestions.fetchRowSync(id: id, in: database)?.encodedSystemFields
     case AccountGroupRow.recordType:

@@ -56,10 +56,13 @@ final class GRDBCategoryRepository: CategoryRepository, @unchecked Sendable {
 
   func fetchAll() async throws -> [Moolah.Category] {
     try await database.read { database in
-      try CategoryRow
+      let taxOwnerIdsByCategory = try GRDBTaxOwnershipPersistence.categoryOwnerIdsByCategory(
+        in: database)
+      return
+        try CategoryRow
         .order(CategoryRow.Columns.name.asc)
         .fetchAll(database)
-        .map { $0.toDomain() }
+        .map { $0.toDomain(taxOwnerIds: taxOwnerIdsByCategory[$0.id] ?? []) }
     }
   }
 
@@ -67,6 +70,10 @@ final class GRDBCategoryRepository: CategoryRepository, @unchecked Sendable {
     let row = CategoryRow(domain: category)
     try await database.write { database in
       try row.insert(database)
+      try GRDBTaxOwnershipPersistence.replaceCategoryOwners(
+        categoryId: category.id,
+        ownerIds: category.taxOwnerIds,
+        in: database)
       try markNeedsPushSync(id: category.id, in: database)
       // D1-b (issue #1090): a re-created row drops any stale deletion intent
       // in the same write, so a start-time replay can't delete the live row.
@@ -89,12 +96,18 @@ final class GRDBCategoryRepository: CategoryRepository, @unchecked Sendable {
       }
       existing.name = category.name
       existing.parentId = category.parentId
+      existing.isTaxReportable = category.isTaxReportable
+      existing.taxOwnerIdsEncoded = TaxOwnerIDListCoding.encode(category.taxOwnerIds)
       try existing.update(database)
+      try GRDBTaxOwnershipPersistence.replaceCategoryOwners(
+        categoryId: category.id,
+        ownerIds: category.taxOwnerIds,
+        in: database)
       try markNeedsPushSync(id: category.id, in: database)
       return existing
     }
     onRecordChanged(CategoryRow.recordType, category.id)
-    return updated.toDomain()
+    return updated.toDomain(taxOwnerIds: category.taxOwnerIds)
   }
 
   func delete(id: UUID, withReplacement replacementId: UUID?) async throws {
@@ -115,6 +128,7 @@ final class GRDBCategoryRepository: CategoryRepository, @unchecked Sendable {
         from: id, to: replacementId, in: database)
 
       try existing.delete(database)
+      try GRDBTaxOwnershipPersistence.deleteCategoryOwners(categoryId: id, in: database)
       try Self.markDeleteSideEffectsNeedsPush(
         orphanedChildIds: orphanedChildIds,
         reassignedLegIds: reassignedLegIds,
@@ -350,11 +364,4 @@ final class GRDBCategoryRepository: CategoryRepository, @unchecked Sendable {
     }
   }
 
-  /// Deletes every row in the table. Used by `deleteLocalData` after a
-  /// remote zone deletion.
-  func deleteAllSync() throws {
-    try database.write { database in
-      _ = try CategoryRow.deleteAll(database)
-    }
-  }
 }

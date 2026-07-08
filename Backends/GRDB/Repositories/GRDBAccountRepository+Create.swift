@@ -29,6 +29,10 @@ extension GRDBAccountRepository {
   ) throws -> OpeningBalanceInserts {
     let accountRow = AccountRow(domain: account)
     try accountRow.insert(database)
+    try GRDBTaxOwnershipPersistence.replaceAccountOwners(
+      accountId: account.id,
+      ownerIds: account.taxOwnerIds,
+      in: database)
     // Mark the freshly-inserted row dirty in the same transaction so the
     // apply path (issue #1081) never clobbers it before its first upload.
     // Uses the canonical mark helper (consistent with every other mutation

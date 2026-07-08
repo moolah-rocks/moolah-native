@@ -82,6 +82,10 @@ struct ProfileSchemaV10DropLegacyTests {
     // v20 cross-device wallet sync checkpoint (synced; highest confirmed
     // block per auto-imported account, max-merged across devices)
     "wallet_sync_checkpoint",
+    // v23 tax reporting
+    "tax_owner",
+    "account_tax_owner",
+    "category_tax_owner",
     "grdb_migrations",
   ]
 
@@ -131,6 +135,11 @@ struct ProfileSchemaV10DropLegacyTests {
     "account_by_group_id",
     // v18 durable deletion journal (issue #1090)
     "deletion_journal_by_queued_at",
+    // v23 tax reporting
+    "account_tax_owner_by_account_position",
+    "account_tax_owner_by_owner",
+    "category_tax_owner_by_category_position",
+    "category_tax_owner_by_owner",
   ]
 
   /// `DATABASE_SCHEMA_GUIDE.md` §6 rule 1 golden gate: after the FULL

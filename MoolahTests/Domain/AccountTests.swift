@@ -124,4 +124,33 @@ struct AccountTests {
     let account = try JSONDecoder().decode(Account.self, from: json)
     #expect(account.groupId == nil)
   }
+
+  @Test
+  func taxOwnerIdsRoundTripViaCodable() throws {
+    let ownerIds = [UUID(), UUID()]
+    let account = Account(
+      name: "Joint",
+      type: .bank,
+      instrument: .AUD,
+      taxOwnerIds: ownerIds)
+
+    let encoded = try JSONEncoder().encode(account)
+    let decoded = try JSONDecoder().decode(Account.self, from: encoded)
+
+    #expect(decoded.taxOwnerIds == ownerIds)
+  }
+
+  @Test
+  func accountWithoutTaxOwnerIdsDecodesAsEmpty() throws {
+    let json = Data(
+      #"""
+      {"id":"\#(UUID().uuidString)","name":"Legacy",
+       "type":"bank","position":0,"hidden":false,
+       "valuationMode":"recordedValue"}
+      """#.utf8)
+
+    let account = try JSONDecoder().decode(Account.self, from: json)
+
+    #expect(account.taxOwnerIds.isEmpty)
+  }
 }
