@@ -1,4 +1,6 @@
+import Foundation
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct TaxReportView: View {
   let financialYear: Int
@@ -10,6 +12,7 @@ struct TaxReportView: View {
   let capitalGainsUnavailableInstruments: [Instrument]
   let taxIncomeExpenseSummaries: [TaxIncomeExpenseSummary]
   let taxIncomeExpenseRollup: TaxIncomeExpenseSummary?
+  let defaultTaxOwnerId: UUID
   let taxIncomeExpenseError: Error?
   let taxOwnerNames: [UUID: String]
   let profitLoss: [InstrumentProfitLoss]
@@ -21,6 +24,9 @@ struct TaxReportView: View {
   let reload: () -> Void
 
   @State private var salesSort: CapitalGainSaleSort = .sold(ascending: false)
+  @State var exportDocument = TaxReportCSVDocument(csv: "")
+  @State var isExportPresented = false
+  @State var exportError: String?
 
   private var sortedSales: [CapitalGainSale] {
     salesSort.sorted(TaxReportPresentation.saleRows(from: events))
@@ -48,6 +54,7 @@ struct TaxReportView: View {
         } else if let error {
           errorView(error)
         } else {
+          reportToolbar
           reportSummaryTiles
           taxIncomeExpenseSection
           realisedCapitalGainsSection
@@ -57,10 +64,24 @@ struct TaxReportView: View {
       .padding()
       .frame(maxWidth: .infinity, alignment: .topLeading)
     }
+    .fileExporter(
+      isPresented: $isExportPresented,
+      document: exportDocument,
+      contentType: .commaSeparatedText,
+      defaultFilename: exportFilename
+    ) { result in
+      handleExportCompletion(result)
+    }
+    .alert("Could not export tax report", isPresented: exportErrorBinding) {
+      Button("OK", role: .cancel) {}
+    } message: {
+      Text(exportError ?? "Unknown export error")
+    }
   }
 }
 
 extension TaxReportView {
+
   @ViewBuilder private var realisedCapitalGainsSection: some View {
     VStack(alignment: .leading, spacing: 12) {
       if isLoading && summary == nil {
