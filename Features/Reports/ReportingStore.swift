@@ -16,6 +16,7 @@ final class ReportingStore {
   private(set) var profitLossUnavailableInstruments: [Instrument] = []
   private(set) var taxReportHoldingsDate: Date?
   private(set) var taxIncomeExpenseSummaries: [TaxIncomeExpenseSummary] = []
+  private(set) var taxIncomeExpenseDateInterval: Range<Date>?
   private(set) var taxIncomeExpenseError: Error?
   private(set) var taxOwnerNames: [UUID: String]
 
@@ -225,9 +226,10 @@ extension ReportingStore {
     profitLossUnavailableInstruments = []
     taxIncomeExpenseSummaries = []
     taxIncomeExpenseError = nil
+    taxIncomeExpenseDateInterval = nil
     isLoading = true
     error = nil
-    let dates = taxReportLoadDates(financialYear: financialYear, today: today)
+    let dates = Self.taxReportLoadDates(financialYear: financialYear, today: today)
     taxReportHoldingsDate = dates.valuationDate
     await performTaxIncomeExpenseLoad(
       financialYear: financialYear,
@@ -285,6 +287,7 @@ extension ReportingStore {
       async let ownersLoad = fetchTaxOwnersForReport()
       let (summaries, owners) = try await (summariesLoad, ownersLoad)
       guard generation == reportGeneration else { return }
+      taxIncomeExpenseDateInterval = dateRange
       taxIncomeExpenseSummaries = summaries
       taxOwnerNames = Dictionary(uniqueKeysWithValues: owners.map { ($0.id, $0.name) })
     } catch is CancellationError {
@@ -299,23 +302,6 @@ extension ReportingStore {
   private func fetchTaxOwnersForReport() async throws -> [TaxOwner] {
     guard let taxOwnerRepository else { return [] }
     return try await taxOwnerRepository.fetchAll()
-  }
-
-  private func taxReportLoadDates(financialYear: Int, today: Date) -> TaxReportLoadDates {
-    let valuationDate = TaxReportPresentation.holdingsObservationDate(
-      financialYear: financialYear,
-      today: today)
-    let ledgerBeforeDate = TaxReportPresentation.holdingsLedgerCutoffDate(
-      financialYear: financialYear,
-      observationDate: valuationDate)
-    let sellDateInterval =
-      TaxReportPresentation.financialYearInterval(financialYear).flatMap { financialYearInterval in
-        ledgerBeforeDate.map { financialYearInterval.lowerBound..<$0 }
-      }
-    return TaxReportLoadDates(
-      valuationDate: valuationDate,
-      ledgerBeforeDate: ledgerBeforeDate,
-      sellDateInterval: sellDateInterval)
   }
 
   private func finishLoadingIfCurrentGeneration(_ generation: UInt64) {

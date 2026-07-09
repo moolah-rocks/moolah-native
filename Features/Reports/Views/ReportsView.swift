@@ -69,6 +69,9 @@ struct ReportsView: View {
       .navigationDestination(for: UncategorisedDrillDown.self) { drillDown in
         uncategorisedDrillDownDestination(drillDown)
       }
+      .navigationDestination(for: TaxIncomeExpenseDrillDown.self) { drillDown in
+        taxIncomeExpenseDrillDownDestination(drillDown)
+      }
     }
     .task(
       id: CategoryReportLoadKey(
@@ -153,6 +156,7 @@ struct ReportsView: View {
       taxIncomeExpenseSummaries: reportingStore.taxIncomeExpenseSummaries,
       taxIncomeExpenseRollup: reportingStore.taxIncomeExpenseRollup,
       defaultTaxOwnerId: reportingStore.defaultTaxOwnerId,
+      taxIncomeExpenseDateInterval: reportingStore.taxIncomeExpenseDateInterval,
       taxIncomeExpenseError: reportingStore.taxIncomeExpenseError,
       taxOwnerNames: reportingStore.taxOwnerNames,
       profitLoss: reportingStore.profitLoss,
@@ -225,6 +229,19 @@ struct ReportsView: View {
         dateRange: drillDown.dateRange,
         uncategorisedLegType: drillDown.transactionType,
         excludesAccountlessUncategorised: true),
+      accounts: accounts,
+      categories: categories,
+      earmarks: earmarks,
+      transactionStore: transactionStore)
+  }
+
+  @ViewBuilder
+  private func taxIncomeExpenseDrillDownDestination(
+    _ drillDown: TaxIncomeExpenseDrillDown
+  ) -> some View {
+    TransactionListView(
+      title: drillDown.title,
+      filter: drillDown.filter,
       accounts: accounts,
       categories: categories,
       earmarks: earmarks,

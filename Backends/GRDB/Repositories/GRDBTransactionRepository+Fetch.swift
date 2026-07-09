@@ -130,34 +130,7 @@ extension GRDBTransactionRepository {
   static func filteredTransactionRequest(
     filter: TransactionFilter
   ) -> QueryInterfaceRequest<TransactionRow> {
-    var request = TransactionRow.all()
-
-    // Mirrors `CloudKitTransactionRepository`'s `loadAndFilter`: `.all`
-    // and `.nonScheduledOnly` both exclude scheduled rows from the
-    // page; only `.scheduledOnly` flips the predicate. Production page
-    // views never want scheduled rows interleaved with their booked
-    // counterparts, so the default filter (`.all`) keeps the
-    // non-scheduled view shape.
-    switch filter.scheduled {
-    case .all, .nonScheduledOnly:
-      request = request.filter(TransactionRow.Columns.recurPeriod == nil)
-    case .scheduledOnly:
-      request = request.filter(TransactionRow.Columns.recurPeriod != nil)
-    }
-
-    if let dateRange = filter.dateRange {
-      let start = dateRange.lowerBound
-      let end = dateRange.upperBound
-      request = request.filter(
-        TransactionRow.Columns.date >= start
-          && TransactionRow.Columns.date <= end)
-    }
-
-    if let payee = filter.payee, !payee.isEmpty {
-      let pattern = "%" + payee.lowercased() + "%"
-      request = request.filter(
-        sql: "lower(payee) LIKE ?", arguments: [pattern])
-    }
+    var request = applyingHeaderFilters(to: TransactionRow.all(), filter: filter)
 
     // Build the union of account ids the caller is filtering by: a single
     // `accountId` (single-account view) and / or an `accountIds` set
@@ -195,6 +168,8 @@ extension GRDBTransactionRepository {
             excludesAccountless: filter.excludesAccountlessUncategorised)
         ).contains(TransactionRow.Columns.id))
     }
+
+    request = applyingTaxReportableFilter(to: request, filter: filter)
 
     return request
   }

@@ -207,8 +207,12 @@ struct TransactionFilterView: View {
       earmarkId: selectedEarmarkId,
       scheduled: selectedScheduled,
       dateRange: dateRange,
+      dateInterval: filter.dateInterval,
       categoryIds: selectedCategoryIds,
-      payee: payeeText.isEmpty ? nil : payeeText
+      payee: payeeText.isEmpty ? nil : payeeText,
+      taxReportableLegType: filter.taxReportableLegType,
+      taxOwnerId: filter.taxOwnerId,
+      taxDefaultOwnerId: filter.taxDefaultOwnerId
     )
 
     onApply(newFilter)

@@ -28,6 +28,7 @@ private struct TaxReportViewPreviewHost: View {
       taxIncomeExpenseRollup: TaxReportPreviewData.taxIncomeExpenseRollup(
         from: taxIncomeExpenseSummaries),
       defaultTaxOwnerId: TaxReportPreviewData.ownerA,
+      taxIncomeExpenseDateInterval: TaxReportPresentation.financialYearInterval(2026),
       taxIncomeExpenseError: taxIncomeExpenseError,
       taxOwnerNames: taxOwnerNames,
       profitLoss: profitLoss,

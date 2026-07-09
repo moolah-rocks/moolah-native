@@ -13,6 +13,7 @@ struct TaxReportView: View {
   let taxIncomeExpenseSummaries: [TaxIncomeExpenseSummary]
   let taxIncomeExpenseRollup: TaxIncomeExpenseSummary?
   let defaultTaxOwnerId: UUID
+  let taxIncomeExpenseDateInterval: Range<Date>?
   let taxIncomeExpenseError: Error?
   let taxOwnerNames: [UUID: String]
   let profitLoss: [InstrumentProfitLoss]

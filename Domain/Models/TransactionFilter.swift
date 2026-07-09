@@ -14,6 +14,9 @@ struct TransactionFilter: Sendable, Equatable {
   var earmarkId: UUID?
   var scheduled: ScheduledFilter
   var dateRange: ClosedRange<Date>?
+  /// Half-open date interval for report drill-downs whose source query uses
+  /// `< upperBound`; intersected with `dateRange` when both are present.
+  var dateInterval: Range<Date>?
   var categoryIds: Set<UUID>
   var payee: String?
   /// Type-scoped drill-down filter for the Reports "Uncategorised" row:
@@ -26,6 +29,14 @@ struct TransactionFilter: Sendable, Equatable {
   /// activity. Other callers keep the default `false` so earmark-specific
   /// views can still show their own uncategorised totals.
   var excludesAccountlessUncategorised: Bool
+  /// Reports-only drill-down for taxable income / deduction rows. When set,
+  /// restricts the result to tax-reportable category legs of this type.
+  var taxReportableLegType: TransactionType?
+  /// Optional owner scope for `taxReportableLegType`. `nil` means all owners.
+  var taxOwnerId: UUID?
+  /// Profile default owner used when a tax-reportable leg has no category or
+  /// account owner. Required whenever `taxOwnerId` is non-nil.
+  var taxDefaultOwnerId: UUID?
 
   init(
     accountId: UUID? = nil,
@@ -33,20 +44,28 @@ struct TransactionFilter: Sendable, Equatable {
     earmarkId: UUID? = nil,
     scheduled: ScheduledFilter = .all,
     dateRange: ClosedRange<Date>? = nil,
+    dateInterval: Range<Date>? = nil,
     categoryIds: Set<UUID> = [],
     payee: String? = nil,
     uncategorisedLegType: TransactionType? = nil,
-    excludesAccountlessUncategorised: Bool = false
+    excludesAccountlessUncategorised: Bool = false,
+    taxReportableLegType: TransactionType? = nil,
+    taxOwnerId: UUID? = nil,
+    taxDefaultOwnerId: UUID? = nil
   ) {
     self.accountId = accountId
     self.accountIds = accountIds
     self.earmarkId = earmarkId
     self.scheduled = scheduled
     self.dateRange = dateRange
+    self.dateInterval = dateInterval
     self.categoryIds = categoryIds
     self.payee = payee
     self.uncategorisedLegType = uncategorisedLegType
     self.excludesAccountlessUncategorised = excludesAccountlessUncategorised
+    self.taxReportableLegType = taxReportableLegType
+    self.taxOwnerId = taxOwnerId
+    self.taxDefaultOwnerId = taxDefaultOwnerId
   }
 }
 
@@ -54,8 +73,9 @@ extension TransactionFilter {
   var hasActiveFilters: Bool {
     accountId != nil || !accountIds.isEmpty || earmarkId != nil
       || scheduled != .all
-      || dateRange != nil || !categoryIds.isEmpty || payee != nil
+      || dateRange != nil || dateInterval != nil || !categoryIds.isEmpty || payee != nil
       || uncategorisedLegType != nil || excludesAccountlessUncategorised
+      || taxReportableLegType != nil || taxOwnerId != nil || taxDefaultOwnerId != nil
   }
 
   /// True when *any* account-scoped predicate is present — a single
