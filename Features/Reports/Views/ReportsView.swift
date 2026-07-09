@@ -152,6 +152,7 @@ struct ReportsView: View {
       capitalGainsUnavailableInstruments: reportingStore.capitalGainsUnavailableInstruments,
       taxIncomeExpenseSummaries: reportingStore.taxIncomeExpenseSummaries,
       taxIncomeExpenseRollup: reportingStore.taxIncomeExpenseRollup,
+      defaultTaxOwnerId: reportingStore.defaultTaxOwnerId,
       taxIncomeExpenseError: reportingStore.taxIncomeExpenseError,
       taxOwnerNames: reportingStore.taxOwnerNames,
       profitLoss: reportingStore.profitLoss,
