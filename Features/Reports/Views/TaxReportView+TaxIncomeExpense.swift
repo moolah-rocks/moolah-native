@@ -43,11 +43,13 @@ extension TaxReportView {
         }
       } else {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 12)], spacing: 12) {
-          TaxSummaryTile(
+          taxIncomeExpenseTileLink(
+            kind: .income,
             title: "Taxable income",
             amount: summary.taxableIncome,
             caption: "Reportable income categories")
-          TaxSummaryTile(
+          taxIncomeExpenseTileLink(
+            kind: .deductions,
             title: "Deductions",
             amount: summary.deductibleExpenses,
             caption: "Reportable expense categories")
@@ -57,6 +59,24 @@ extension TaxReportView {
             caption: "Income less deductions")
         }
       }
+    }
+  }
+
+  @ViewBuilder
+  private func taxIncomeExpenseTileLink(
+    kind: TaxIncomeExpenseDrillDownKind,
+    title: String,
+    amount: InstrumentAmount,
+    caption: String
+  ) -> some View {
+    if let drillDown = taxIncomeExpenseDrillDown(kind: kind, ownerId: nil) {
+      NavigationLink(value: drillDown) {
+        TaxSummaryTile(title: title, amount: amount, caption: caption)
+      }
+      .buttonStyle(.plain)
+      .accessibilityHint("Shows matching transactions")
+    } else {
+      TaxSummaryTile(title: title, amount: amount, caption: caption)
     }
   }
 
@@ -92,11 +112,16 @@ extension TaxReportView {
             .font(.body.weight(.medium))
             .lineLimit(1)
             .truncationMode(.middle)
-          taxOwnerAmount(summary.taxableIncome, unavailable: summary.hasUnavailableData)
-          taxOwnerAmount(summary.deductibleExpenses, unavailable: summary.hasUnavailableData)
+          taxOwnerAmountLink(
+            summary.taxableIncome,
+            unavailable: summary.hasUnavailableData,
+            drillDown: taxIncomeExpenseDrillDown(kind: .income, ownerId: summary.ownerId))
+          taxOwnerAmountLink(
+            summary.deductibleExpenses,
+            unavailable: summary.hasUnavailableData,
+            drillDown: taxIncomeExpenseDrillDown(kind: .deductions, ownerId: summary.ownerId))
           taxOwnerAmount(summary.netTaxableIncome, unavailable: summary.hasUnavailableData)
         }
-        .accessibilityElement(children: .combine)
       }
     }
   }
@@ -107,12 +132,18 @@ extension TaxReportView {
         VStack(alignment: .leading, spacing: 4) {
           Text(taxOwnerName(for: summary.ownerId))
             .font(.body.weight(.medium))
-          taxOwnerCompactAmount("Income", summary.taxableIncome, summary.hasUnavailableData)
           taxOwnerCompactAmount(
-            "Deductions", summary.deductibleExpenses, summary.hasUnavailableData)
+            "Income",
+            summary.taxableIncome,
+            summary.hasUnavailableData,
+            taxIncomeExpenseDrillDown(kind: .income, ownerId: summary.ownerId))
+          taxOwnerCompactAmount(
+            "Deductions",
+            summary.deductibleExpenses,
+            summary.hasUnavailableData,
+            taxIncomeExpenseDrillDown(kind: .deductions, ownerId: summary.ownerId))
           taxOwnerCompactAmount("Net", summary.netTaxableIncome, summary.hasUnavailableData)
         }
-        .accessibilityElement(children: .combine)
       }
     }
   }
@@ -129,13 +160,31 @@ extension TaxReportView {
   private func taxOwnerCompactAmount(
     _ label: String,
     _ amount: InstrumentAmount,
-    _ unavailable: Bool
+    _ unavailable: Bool,
+    _ drillDown: TaxIncomeExpenseDrillDown? = nil
   ) -> some View {
     HStack {
       Text(label)
         .font(.caption)
         .foregroundStyle(.secondary)
       Spacer(minLength: 12)
+      taxOwnerAmountLink(amount, unavailable: unavailable, drillDown: drillDown)
+    }
+  }
+
+  @ViewBuilder
+  private func taxOwnerAmountLink(
+    _ amount: InstrumentAmount,
+    unavailable: Bool,
+    drillDown: TaxIncomeExpenseDrillDown?
+  ) -> some View {
+    if let drillDown, !unavailable {
+      NavigationLink(value: drillDown) {
+        taxOwnerAmount(amount, unavailable: unavailable)
+      }
+      .buttonStyle(.plain)
+      .accessibilityHint("Shows matching transactions")
+    } else {
       taxOwnerAmount(amount, unavailable: unavailable)
     }
   }
@@ -152,5 +201,63 @@ extension TaxReportView {
 
   private func taxOwnerName(for ownerId: UUID) -> String {
     taxOwnerNames[ownerId] ?? "Owner \(ownerId.uuidString.prefix(8))"
+  }
+
+  private func taxIncomeExpenseDrillDown(
+    kind: TaxIncomeExpenseDrillDownKind,
+    ownerId: UUID?
+  ) -> TaxIncomeExpenseDrillDown? {
+    guard let dateInterval = taxIncomeExpenseDateInterval else { return nil }
+    return TaxIncomeExpenseDrillDown(
+      kind: kind,
+      ownerId: ownerId,
+      ownerName: ownerId.map(taxOwnerName(for:)),
+      dateInterval: dateInterval,
+      defaultTaxOwnerId: defaultTaxOwnerId)
+  }
+}
+
+enum TaxIncomeExpenseDrillDownKind: Hashable {
+  case income
+  case deductions
+
+  var transactionType: TransactionType {
+    switch self {
+    case .income:
+      return .income
+    case .deductions:
+      return .expense
+    }
+  }
+
+  var title: String {
+    switch self {
+    case .income:
+      return "Taxable income"
+    case .deductions:
+      return "Deductions"
+    }
+  }
+}
+
+struct TaxIncomeExpenseDrillDown: Hashable {
+  let kind: TaxIncomeExpenseDrillDownKind
+  let ownerId: UUID?
+  let ownerName: String?
+  let dateInterval: Range<Date>
+  let defaultTaxOwnerId: UUID
+
+  var title: String {
+    guard let ownerName else { return kind.title }
+    return "\(ownerName) \(kind.title.lowercased())"
+  }
+
+  var filter: TransactionFilter {
+    TransactionFilter(
+      scheduled: .nonScheduledOnly,
+      dateInterval: dateInterval,
+      taxReportableLegType: kind.transactionType,
+      taxOwnerId: ownerId,
+      taxDefaultOwnerId: defaultTaxOwnerId)
   }
 }

@@ -12,6 +12,23 @@ extension ReportingStore {
     return interval.lowerBound..<upper
   }
 
+  static func taxReportLoadDates(financialYear: Int, today: Date) -> TaxReportLoadDates {
+    let valuationDate = TaxReportPresentation.holdingsObservationDate(
+      financialYear: financialYear,
+      today: today)
+    let ledgerBeforeDate = TaxReportPresentation.holdingsLedgerCutoffDate(
+      financialYear: financialYear,
+      observationDate: valuationDate)
+    let sellDateInterval =
+      TaxReportPresentation.financialYearInterval(financialYear).flatMap { financialYearInterval in
+        ledgerBeforeDate.map { financialYearInterval.lowerBound..<$0 }
+      }
+    return TaxReportLoadDates(
+      valuationDate: valuationDate,
+      ledgerBeforeDate: ledgerBeforeDate,
+      sellDateInterval: sellDateInterval)
+  }
+
   static func taxIncomeExpenseRollup(
     from summaries: [TaxIncomeExpenseSummary],
     instrument: Instrument

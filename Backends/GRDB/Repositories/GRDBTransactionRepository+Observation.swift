@@ -53,7 +53,7 @@ import GRDB
 extension GRDBTransactionRepository {
 
   /// Streams `TransactionPage` snapshots whenever `transaction`,
-  /// `transaction_leg`, or `account` changes. Initial value is the
+  /// `transaction_leg`, `account`, or `category` changes. Initial value is the
   /// current DB state. Instrument identity is resolved once at
   /// subscription start via `instrumentResolver` and captured into the
   /// stream; an instrument-metadata change does not re-fire this
@@ -96,6 +96,7 @@ extension GRDBTransactionRepository {
             TransactionRow.observableRegion,
             TransactionLegRow.observableRegion,
             AccountRow.observableRegion,
+            CategoryRow.observableRegion,
           ],
           fetch: { [filter, page, pageSize] database in
             let snapshot = try Self.buildFetchSnapshot(
@@ -120,8 +121,8 @@ extension GRDBTransactionRepository {
     }
   }
 
-  /// Streams `[Transaction]` snapshots whenever `transaction` or
-  /// `transaction_leg` changes. Mirrors the projection of
+  /// Streams `[Transaction]` snapshots whenever `transaction`,
+  /// `transaction_leg`, `account`, or `category` changes. Mirrors the projection of
   /// `fetchAll(filter:)`: every matching transaction with its full leg
   /// payload, ordered the same way (`date DESC, id ASC`). Instrument
   /// identity is resolved once at subscription start via
@@ -147,6 +148,8 @@ extension GRDBTransactionRepository {
           regions: [
             TransactionRow.observableRegion,
             TransactionLegRow.observableRegion,
+            AccountRow.observableRegion,
+            CategoryRow.observableRegion,
           ],
           fetch: { [filter] database in
             let filteredRows =

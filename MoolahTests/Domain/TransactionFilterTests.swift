@@ -43,6 +43,12 @@ struct TransactionFilterTests {
     #expect(filter.hasActiveFilters == true)
   }
 
+  @Test("Filter with taxReportableLegType is active")
+  func testFilterWithTaxReportableLegTypeIsActive() {
+    let filter = TransactionFilter(taxReportableLegType: .income)
+    #expect(filter.hasActiveFilters == true)
+  }
+
   @Test("Filter with non-empty accountIds is active")
   func testFilterWithAccountIdsIsActive() {
     let filter = TransactionFilter(accountIds: [UUID()])
