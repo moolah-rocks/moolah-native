@@ -42,6 +42,9 @@ Follow `guides/AI_REVIEW_GATE_GUIDE.md`. Findings are fix requests: do not ignor
 - A change that adds a heavyweight cache table to the profile DB instead of proposing a separate DB. **[Important]**
 - Schema definitions inlined into a repository or service rather than living in a single `…Schema.swift` per database. **[Important]**
 - `FileManager.copyItem` of a `*.sqlite` file (no preceding `VACUUM INTO` / `db.backup(to:)`). **[Critical]**
+- Any app startup, migration, or automatic recovery path that can delete,
+  truncate, replace, or recreate user/profile data, including Debug-only code.
+  **[Critical]**
 - `FileManager.removeItem` of a `*.sqlite` / `*.db` file without `try?` removing `-wal` and `-shm`. **[Important]**
 - `journal_mode = DELETE` flip dropping WAL without a documented reason. **[Important]**
 - `wal_checkpoint(TRUNCATE)` called on every commit (defeats WAL). **[Important]**
@@ -79,7 +82,7 @@ Follow `guides/AI_REVIEW_GATE_GUIDE.md`. Findings are fix requests: do not ignor
 
 ### Migrations (§6)
 
-- `eraseDatabaseOnSchemaChange = true` outside `#if DEBUG`. **[Critical]**
+- `eraseDatabaseOnSchemaChange = true` on an app/user database, even under `#if DEBUG`. **[Critical]**
 - Editing the body or ID of a shipped migration. Compare against the App Store / latest release git tag. **[Critical]**
 - Migration ID derived from a Swift type rather than a string literal. **[Important]**
 - Migration code referencing `RecordType.databaseTableName` or other app-side constants. **[Important]**

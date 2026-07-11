@@ -71,10 +71,6 @@ enum ProfileIndexSchema {
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
 
-    #if DEBUG
-      migrator.eraseDatabaseOnSchemaChange = true
-    #endif
-
     migrator.registerMigration("v1_initial", migrate: createProfileTable)
     migrator.registerMigration(
       "v2_data_format_version", migrate: addDataFormatVersionColumn)

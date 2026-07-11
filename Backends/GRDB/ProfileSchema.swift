@@ -139,10 +139,6 @@ enum ProfileSchema {
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
 
-    #if DEBUG
-      migrator.eraseDatabaseOnSchemaChange = true
-    #endif
-
     migrator.registerMigration("v1_initial", migrate: createInitialTables)
     migrator.registerMigration(
       "v2_csv_import_and_rules", migrate: createCSVImportAndRulesTables)

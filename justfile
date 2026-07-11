@@ -394,6 +394,11 @@ bump-version version:
 run-mac-with-logs predicate='subsystem == "com.moolah.app"' *args: generate
     bash scripts/run-with-logs.sh '{{predicate}}' {{args}}
 
+# Refuses to run while the app is open and prints the resolved paths first.
+# Reset local Development data; never targets Production.
+reset-development-data:
+    bash scripts/reset-development-data.sh
+
 # Open the project in Xcode
 open:
     open Moolah.xcodeproj
