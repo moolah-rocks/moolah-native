@@ -223,6 +223,27 @@
       <result type="txn" description="The created txn."/>
     </command>
 
+    <command name="find txns" code="Moolfntx" description="Find txns in a profile through Moolah's transaction query path. Omitted scheduled defaults to false (posted/non-scheduled txns). From date and to date are inclusive local-day bounds.">
+      <cocoa class="Moolah.FindTransactionsCommand"/>
+      <direct-parameter type="specifier" description="The profile to search."/>
+      <parameter name="account" code="Facc" type="text" optional="yes" description="Only return txns with a leg on this account name.">
+        <cocoa key="account"/>
+      </parameter>
+      <parameter name="category" code="Fcat" type="text" optional="yes" description="Only return txns with a leg in this category name or full category path.">
+        <cocoa key="category"/>
+      </parameter>
+      <parameter name="from date" code="Ffrm" type="date" optional="yes" description="Inclusive lower local transaction date bound.">
+        <cocoa key="fromDate"/>
+      </parameter>
+      <parameter name="to date" code="Ftoo" type="date" optional="yes" description="Inclusive upper local transaction date bound.">
+        <cocoa key="toDate"/>
+      </parameter>
+      <parameter name="scheduled" code="Fsch" type="boolean" optional="yes" description="true returns scheduled txns only; false returns posted/non-scheduled txns only. If omitted, false is used.">
+        <cocoa key="scheduled"/>
+      </parameter>
+      <result type="txn" list="yes" description="The matching txns."/>
+    </command>
+
     <command name="create earmark" code="Moolcrem" description="Create a new earmark in a profile.">
       <cocoa class="Moolah.CreateEarmarkCommand"/>
       <direct-parameter type="specifier" description="The profile to create the earmark in."/>
