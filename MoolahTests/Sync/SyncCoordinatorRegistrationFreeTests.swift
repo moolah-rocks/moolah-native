@@ -45,6 +45,46 @@ struct SyncCoordinatorRegistrationFreeTests {
     #expect(first === second)
   }
 
+  @Test("remote profile default owner update refreshes cached data handler")
+  func remoteProfileDefaultOwnerUpdateRefreshesCachedDataHandler() async throws {
+    let manager = try ProfileContainerManager.forTesting()
+    let coordinator = SyncCoordinator(containerManager: manager)
+    let profileId = UUID()
+    let oldDefaultOwnerId = UUID()
+    let newDefaultOwnerId = UUID()
+    let zoneID = CKRecordZone.ID(
+      zoneName: "profile-\(profileId.uuidString)",
+      ownerName: CKCurrentUserDefaultName)
+    try manager.profileIndexRepository.applyRemoteChangesSync(
+      saved: [
+        ProfileRow(
+          domain: Profile(
+            id: profileId,
+            label: "Family",
+            defaultTaxOwnerId: oldDefaultOwnerId))
+      ],
+      deleted: [])
+
+    let handler = try coordinator.handlerForProfileZone(profileId: profileId, zoneID: zoneID)
+    #expect(handler.grdbRepositories.taxOwners.defaultTaxOwnerId == oldDefaultOwnerId)
+
+    let record = CKRecord(
+      recordType: ProfileRow.recordType,
+      recordID: CKRecord.ID(
+        recordType: ProfileRow.recordType,
+        uuid: profileId,
+        zoneID: coordinator.profileIndexHandler.zoneID))
+    record["label"] = "Family" as CKRecordValue
+    record["currencyCode"] = "AUD" as CKRecordValue
+    record["financialYearStartMonth"] = 7 as CKRecordValue
+    record["createdAt"] = Date() as CKRecordValue
+    record["defaultTaxOwnerId"] = newDefaultOwnerId.uuidString as CKRecordValue
+
+    await coordinator.applyFetchedIndexChanges(saved: [record], deleted: [])
+
+    #expect(handler.grdbRepositories.taxOwners.defaultTaxOwnerId == newDefaultOwnerId)
+  }
+
   @Test("applyFetchedRecordZoneChanges writes rows for an un-sessionized profile")
   func applyWritesRowsWithoutSession() async throws {
     let manager = try ProfileContainerManager.forTesting()

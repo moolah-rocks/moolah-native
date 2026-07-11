@@ -8,31 +8,36 @@ struct CategoriesView: View {
   @Environment(ProfileSession.self) private var session
 
   @State private var showCreateSheet = false
-  @State private var selectedCategory: Category?
+  @State private var taxOwnerAssignmentStore = CategoryTaxOwnerAssignmentStore()
   @State private var showDetailSheet = false
   @State private var searchText = ""
-  @State private var taxOwners: [TaxOwner] = []
-  @State private var taxOwnerErrorMessage: String?
   @State private var createErrorMessage: String?
   @State private var isCreatingCategory = false
   @State private var createRequestId: UUID?
 
   private var showCategoryInspectorBinding: Binding<Bool> {
     Binding(
-      get: { selectedCategory != nil },
-      set: { if !$0 { selectedCategory = nil } }
+      get: { taxOwnerAssignmentStore.selectedCategory != nil },
+      set: { if !$0 { taxOwnerAssignmentStore.select(nil) } }
+    )
+  }
+
+  private var selectedCategoryBinding: Binding<Category?> {
+    Binding(
+      get: { taxOwnerAssignmentStore.selectedCategory },
+      set: { taxOwnerAssignmentStore.select($0) }
     )
   }
 
   /// Debounced auto-save from the detail inspector — the detail view
   /// fires `onUpdate` on every keystroke; the 300ms debounce coalesces
-  /// them into a single write. The optimistic `selectedCategory` re-seed
+  /// them into a single write. The optimistic selected-category re-seed
   /// and the persistence write live inside the store-owned debounce task
   /// so cancellation and tests observe the whole save.
   private func save(_ updated: Category) {
     categoryStore.debouncedSave {
-      if selectedCategory?.id == updated.id {
-        selectedCategory = updated
+      if taxOwnerAssignmentStore.selectedCategory?.id == updated.id {
+        taxOwnerAssignmentStore.select(updated)
       }
       _ = await categoryStore.update(updated)
     }
@@ -42,13 +47,13 @@ struct CategoriesView: View {
     listView
       #if os(macOS)
         .inspector(isPresented: showCategoryInspectorBinding) {
-          if let selected = selectedCategory {
+          if let selected = taxOwnerAssignmentStore.selectedCategory {
             CategoryDetailView(
               category: selected,
               categories: categoryStore.categories,
-              taxOwners: taxOwners,
+              taxOwners: taxOwnerAssignmentStore.owners,
               defaultTaxOwnerId: session.profile.defaultTaxOwnerId,
-              taxOwnerErrorMessage: taxOwnerErrorMessage,
+              taxOwnerErrorMessage: taxOwnerAssignmentStore.errorMessage,
               onUpdate: { updated in save(updated) },
               onDiscardPendingUpdate: { categoryStore.cancelDebouncedSave() },
               onDelete: deleteCategory(id:replacementId:)
@@ -58,9 +63,9 @@ struct CategoriesView: View {
         }
         .toolbar {
           ToolbarItem(placement: .primaryAction) {
-            if selectedCategory != nil {
+            if taxOwnerAssignmentStore.selectedCategory != nil {
               Button {
-                selectedCategory = nil
+                taxOwnerAssignmentStore.select(nil)
               } label: {
                 Label("Hide Details", systemImage: "sidebar.trailing")
               }
@@ -69,14 +74,14 @@ struct CategoriesView: View {
           }
         }
       #else
-        .sheet(item: $selectedCategory) { selected in
+        .sheet(item: selectedCategoryBinding) { selected in
           NavigationStack {
             CategoryDetailView(
               category: selected,
               categories: categoryStore.categories,
-              taxOwners: taxOwners,
+              taxOwners: taxOwnerAssignmentStore.owners,
               defaultTaxOwnerId: session.profile.defaultTaxOwnerId,
-              taxOwnerErrorMessage: taxOwnerErrorMessage,
+              taxOwnerErrorMessage: taxOwnerAssignmentStore.errorMessage,
               onUpdate: { updated in save(updated) },
               onDiscardPendingUpdate: { categoryStore.cancelDebouncedSave() },
               onDelete: deleteCategory(id:replacementId:)
@@ -84,7 +89,7 @@ struct CategoriesView: View {
             .toolbar {
               ToolbarItem(placement: .confirmationAction) {
                 Button("Done") {
-                  selectedCategory = nil
+                  taxOwnerAssignmentStore.select(nil)
                 }
               }
             }
@@ -94,10 +99,10 @@ struct CategoriesView: View {
       .sheet(isPresented: $showCreateSheet) {
         CreateCategorySheet(
           categories: categoryStore.categories,
-          initialParentId: selectedCategory?.id,
-          taxOwners: taxOwners,
+          initialParentId: taxOwnerAssignmentStore.selectedCategory?.id,
+          taxOwners: taxOwnerAssignmentStore.owners,
           defaultTaxOwnerId: session.profile.defaultTaxOwnerId,
-          taxOwnerErrorMessage: taxOwnerErrorMessage,
+          taxOwnerErrorMessage: taxOwnerAssignmentStore.errorMessage,
           createErrorMessage: createErrorMessage,
           isSubmitting: isCreatingCategory,
           onCreate: createCategory(_:)
@@ -108,63 +113,32 @@ struct CategoriesView: View {
           createErrorMessage = nil
         }
       }
-      .focusedSceneValue(\.selectedCategory, $selectedCategory)
+      .focusedSceneValue(\.selectedCategory, selectedCategoryBinding)
       .focusedSceneValue(\.newCategoryAction) {
         showCreateSheet = true
       }
       .onChange(of: showCreateSheet) { _, isPresented in
         if isPresented { retryTaxOwnerLoad() }
       }
-      .onChange(of: selectedCategory?.id) { _, selectedId in
+      .onChange(of: taxOwnerAssignmentStore.selectedCategory?.id) { _, selectedId in
         if selectedId != nil { retryTaxOwnerLoad() }
       }
       .onReceive(NotificationCenter.default.publisher(for: .requestCategoryEdit)) { note in
         guard let id = note.object as? UUID,
           let category = categoryStore.categories.by(id: id)
         else { return }
-        selectedCategory = category
+        taxOwnerAssignmentStore.select(category)
       }
       .task {
-        await observeTaxOwners()
+        await taxOwnerAssignmentStore.observeOwners(from: session.backend.taxOwners)
       }
       .task {
-        await observeTaxOwnerErrors()
+        await taxOwnerAssignmentStore.observeErrors(from: session.backend.taxOwners)
       }
-  }
-
-  private func observeTaxOwners() async {
-    for await owners in session.backend.taxOwners.observeAll() {
-      guard !Task.isCancelled else { return }
-      taxOwners = owners
-      taxOwnerErrorMessage = nil
-      selectedCategory = selectedCategory.map { category in
-        Self.category(category, pruningTaxOwnersAgainst: owners)
-      }
-    }
-  }
-
-  private func observeTaxOwnerErrors() async {
-    for await _ in session.backend.taxOwners.observeErrors() {
-      guard !Task.isCancelled else { return }
-      taxOwnerErrorMessage = Self.taxOwnerLoadErrorMessage
-    }
   }
 
   private func retryTaxOwnerLoad() {
-    Task {
-      do {
-        let state = Self.taxOwnerLoadSuccess(
-          owners: try await session.backend.taxOwners.fetchAll(),
-          selectedCategory: selectedCategory)
-        taxOwners = state.owners
-        taxOwnerErrorMessage = state.errorMessage
-        selectedCategory = state.selectedCategory
-      } catch {
-        let state = Self.taxOwnerLoadFailure(selectedCategory: selectedCategory)
-        taxOwnerErrorMessage = state.errorMessage
-        selectedCategory = state.selectedCategory
-      }
-    }
+    Task { await taxOwnerAssignmentStore.loadOwners(from: session.backend.taxOwners) }
   }
 
   private func createCategory(_ newCategory: Category) {
@@ -190,48 +164,11 @@ struct CategoriesView: View {
   private func deleteCategory(id: UUID, replacementId: UUID?) {
     Task {
       if await categoryStore.delete(id: id, withReplacement: replacementId),
-        selectedCategory?.id == id
+        taxOwnerAssignmentStore.selectedCategory?.id == id
       {
-        selectedCategory = nil
+        taxOwnerAssignmentStore.select(nil)
       }
     }
-  }
-
-  static let taxOwnerLoadErrorMessage =
-    "Couldn't load tax owners. Reopen the category editor and try again."
-
-  struct TaxOwnerLoadState: Equatable {
-    let owners: [TaxOwner]
-    let errorMessage: String?
-    let selectedCategory: Category?
-  }
-
-  static func taxOwnerLoadSuccess(
-    owners: [TaxOwner],
-    selectedCategory: Category?
-  ) -> TaxOwnerLoadState {
-    TaxOwnerLoadState(
-      owners: owners,
-      errorMessage: nil,
-      selectedCategory: selectedCategory.map { category in
-        Self.category(category, pruningTaxOwnersAgainst: owners)
-      })
-  }
-
-  static func taxOwnerLoadFailure(selectedCategory: Category?) -> TaxOwnerLoadState {
-    TaxOwnerLoadState(
-      owners: [],
-      errorMessage: Self.taxOwnerLoadErrorMessage,
-      selectedCategory: selectedCategory)
-  }
-
-  static func category(_ category: Category, pruningTaxOwnersAgainst owners: [TaxOwner])
-    -> Category
-  {
-    var pruned = category
-    pruned.taxOwnerIds = TaxOwnerAssignmentState.prunedSelectedOwnerIds(
-      category.taxOwnerIds, validOwners: owners)
-    return pruned
   }
 
 }
@@ -256,7 +193,7 @@ extension CategoriesView {
   }
 
   private var listView: some View {
-    List(selection: $selectedCategory) {
+    List(selection: selectedCategoryBinding) {
       ForEach(filteredCategories) { category in
         CategoryNodeView(
           category: category,
@@ -266,12 +203,12 @@ extension CategoriesView {
         .tag(category)
         .contextMenu {
           Button("Edit Category\u{2026}", systemImage: "pencil") {
-            selectedCategory = category
+            taxOwnerAssignmentStore.select(category)
           }
         }
         .swipeActions(edge: .leading) {
           Button {
-            selectedCategory = category
+            taxOwnerAssignmentStore.select(category)
           } label: {
             Label("Edit Category", systemImage: "pencil")
           }

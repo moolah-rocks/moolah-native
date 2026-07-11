@@ -198,6 +198,14 @@ final class MoolahApp {
     application.menuItems[label]
   }
 
+  func button(label: String) -> XCUIElement {
+    application.buttons[label]
+  }
+
+  func staticText(label: String) -> XCUIElement {
+    application.staticTexts[label]
+  }
+
   /// Scroll view scoped to a Settings detail form. Settings scenes can contain
   /// multiple scroll views (for example the Profiles sidebar list plus the
   /// selected profile detail form), so screen drivers pass the detail form's

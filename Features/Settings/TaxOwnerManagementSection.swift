@@ -1,3 +1,4 @@
+import Observation
 import SwiftUI
 
 struct TaxOwnerManagementSection: View {
@@ -80,11 +81,11 @@ struct TaxOwnerManagementSection: View {
       Button("Cancel", role: .cancel) {}
     } message: { owner in
       Text(
-        "This removes \(owner.name) from tax reports and clears any account or category owner assignments that reference them."
+        "This deletes \(owner.name) as a tax owner and clears any account or category assignments that reference them."
       )
     }
     .alert(
-      "Tax Owner Update Failed",
+      "Couldn’t update tax owners",
       isPresented: Binding(
         get: { store.errorMessage != nil },
         set: { if !$0 { store.clearError() } }
@@ -110,14 +111,12 @@ struct TaxOwnerManagementSection: View {
     VStack(alignment: .leading, spacing: 3) {
       HStack(spacing: 6) {
         Text(owner.name)
-          .accessibilityIdentifier(
-            UITestIdentifiers.TaxOwnerSettings.ownerName(owner.name))
         if owner.id == store.profile.defaultTaxOwnerId {
           Text("Default")
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
-            .accessibilityIdentifier(
-              UITestIdentifiers.TaxOwnerSettings.defaultBadge(owner.name))
+            .accessibilityLabel(
+              UITestIdentifiers.TaxOwnerSettings.defaultBadgeLabel(ownerName: owner.name))
         }
       }
       Text(label(for: owner.kind))
@@ -145,10 +144,9 @@ struct TaxOwnerManagementSection: View {
       .disabled(store.owners.count <= 1)
     } label: {
       Image(systemName: "ellipsis.circle")
-        .accessibilityLabel("Actions for \(owner.name)")
+        .accessibilityLabel(
+          UITestIdentifiers.TaxOwnerSettings.actionsButtonLabel(ownerName: owner.name))
     }
-    .accessibilityIdentifier(
-      UITestIdentifiers.TaxOwnerSettings.actionsButton(owner.name))
   }
 
   private func prepareDelete(_ owner: TaxOwner) {
@@ -188,7 +186,7 @@ private struct TaxOwnerEditSheet: View {
   let save: @MainActor (String, TaxOwnerKind) async throws -> Void
   @State private var name: String
   @State private var kind: TaxOwnerKind
-  @State private var errorMessage: String?
+  @State private var submission = TaxOwnerEditSubmissionStore()
 
   init(
     title: String,
@@ -216,17 +214,26 @@ private struct TaxOwnerEditSheet: View {
         .toolbar {
           ToolbarItem(placement: .cancellationAction) {
             Button("Cancel") { dismiss() }
+              .disabled(submission.isSubmitting)
               .keyboardShortcut(.escape)
           }
           ToolbarItem(placement: .confirmationAction) {
             Button(confirmationTitle) {
-              Task { await submit() }
+              Task {
+                await submission.submit(name: name, kind: kind, save: save) {
+                  dismiss()
+                }
+              }
             }
-            .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(
+              submission.isSubmitting
+                || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            )
             .accessibilityIdentifier(UITestIdentifiers.TaxOwnerSettings.editConfirmButton)
           }
         }
     }
+    .interactiveDismissDisabled(submission.isSubmitting)
   }
 
   private var editForm: some View {
@@ -243,26 +250,18 @@ private struct TaxOwnerEditSheet: View {
       }
       errorSection
     }
+    .disabled(submission.isSubmitting)
     .formStyle(.grouped)
   }
 
   private var errorSection: some View {
     Group {
-      if let errorMessage {
+      if let errorMessage = submission.errorMessage {
         Section {
           Text(errorMessage)
             .foregroundStyle(.red)
         }
       }
-    }
-  }
-
-  private func submit() async {
-    do {
-      try await save(name, kind)
-      dismiss()
-    } catch {
-      errorMessage = TaxOwnerStore.message(for: error)
     }
   }
 }
@@ -352,4 +351,38 @@ private struct DeleteDefaultTaxOwnerSheet: View {
       errorMessage = TaxOwnerStore.message(for: error)
     }
   }
+}
+
+/// Preview-only immutable repository. Mutating methods echo their inputs so
+/// sheet buttons stay wired without needing a database in canvas.
+final class PreviewTaxOwnerRepository: TaxOwnerRepository, @unchecked Sendable {
+  private let owners: [TaxOwner]
+
+  init(owners: [TaxOwner]) {
+    self.owners = owners
+  }
+
+  func fetchAll() async throws -> [TaxOwner] {
+    owners
+  }
+
+  func observeAll() -> AsyncStream<[TaxOwner]> {
+    AsyncStream { continuation in
+      continuation.yield(owners)
+    }
+  }
+
+  func observeErrors() -> AsyncStream<any Error> {
+    AsyncStream { _ in }
+  }
+
+  func create(_ owner: TaxOwner) async throws -> TaxOwner {
+    owner
+  }
+
+  func update(_ owner: TaxOwner) async throws -> TaxOwner {
+    owner
+  }
+
+  func delete(id: UUID) async throws {}
 }

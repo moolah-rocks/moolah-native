@@ -60,6 +60,9 @@
       let today = Self.dateFormatter.string(from: Date())
       let backupURL = profileDir.appending(path: "\(today).sqlite")
 
+      // Justification: SQLite forbids VACUUM inside a transaction; this still
+      // runs on GRDB's writer queue, so concurrent writes serialize around the
+      // snapshot copy.
       try await sourceDb.writeWithoutTransaction { database in
         try database.execute(literal: "VACUUM INTO \(backupURL.path)")
       }

@@ -27,7 +27,7 @@ struct CapitalGainSaleRow: View {
       VStack(alignment: .leading, spacing: 2) {
         Text(sale.instrument.displayLabel)
           .font(.headline)
-        Text("\(quantityAmount.formatted) sold \(TaxReportPresentation.dateLabel(sale.sellDate))")
+        Text(saleCaption)
           .font(.caption)
           .foregroundStyle(.secondary)
           .monospacedDigit()
@@ -35,6 +35,12 @@ struct CapitalGainSaleRow: View {
       Spacer()
       InstrumentAmountView(amount: gainAmount, font: .headline)
     }
+  }
+
+  private var saleCaption: String {
+    let sold = "\(quantityAmount.formatted) sold \(TaxReportPresentation.dateLabel(sale.sellDate))"
+    guard let ownerLabel = sale.ownerLabel else { return sold }
+    return "\(ownerLabel) • \(sold)"
   }
 
   private var saleDetails: some View {

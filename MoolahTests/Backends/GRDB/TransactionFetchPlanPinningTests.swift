@@ -118,6 +118,81 @@ struct TransactionFetchPlanPinningTests {
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction_leg"))
   }
 
+  // MARK: - Tax report drilldown filters
+
+  @Test("tax report all-owner drilldown filter avoids full scans")
+  func taxReportAllOwnerDrilldownFilterAvoidsFullScans() throws {
+    let database = try makeDatabase()
+    let detail = try planDetail(
+      database,
+      query: """
+        SELECT * FROM "transaction"
+        WHERE recur_period IS NULL
+          AND date >= ? AND date < ?
+          AND id IN (
+            SELECT leg.transaction_id
+            FROM transaction_leg leg
+            JOIN category c ON leg.category_id = c.id
+            WHERE c.is_tax_reportable = 1
+              AND leg.type = ?)
+        ORDER BY date DESC, id ASC
+        LIMIT ? OFFSET ?
+        """,
+      arguments: [
+        Date(), Date().addingTimeInterval(86_400), TransactionType.income.rawValue, 50, 0,
+      ])
+    #expect(detail.contains("leg_analysis_by_type_category"))
+    // The selective tax-leg membership list drives transaction primary-key
+    // probes, so ORDER BY date/id needs the same justified temp sort as the
+    // account-filtered page query above.
+    #expect(detail.contains("USE TEMP B-TREE FOR ORDER BY"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "c"))
+  }
+
+  @Test("tax report owner drilldown filter avoids full scans")
+  func taxReportOwnerDrilldownFilterAvoidsFullScans() throws {
+    let database = try makeDatabase()
+    let detail = try planDetail(
+      database,
+      query: """
+        SELECT * FROM "transaction"
+        WHERE recur_period IS NULL
+          AND date >= ? AND date < ?
+          AND id IN (
+            SELECT leg.transaction_id
+            FROM transaction_leg leg
+            JOIN category c ON leg.category_id = c.id
+            LEFT JOIN account a ON leg.account_id = a.id
+            WHERE c.is_tax_reportable = 1
+              AND leg.type = ?
+              AND instr(
+                ',' || COALESCE(
+                  NULLIF(c.tax_owner_ids_encoded, ''),
+                  NULLIF(a.tax_owner_ids_encoded, ''),
+                  ?
+                ) || ',',
+                ',' || ? || ','
+              ) > 0)
+        ORDER BY date DESC, id ASC
+        LIMIT ? OFFSET ?
+        """,
+      arguments: [
+        Date(), Date().addingTimeInterval(86_400), TransactionType.expense.rawValue,
+        UUID().uuidString, UUID().uuidString, 50, 0,
+      ])
+    #expect(detail.contains("leg_analysis_by_type_category"))
+    #expect(detail.contains("sqlite_autoindex_account_1"))
+    // The owner-scoped shape still drives from the selective tax-leg list;
+    // the resulting temp ORDER BY sort is intentional, not a scan regression.
+    #expect(detail.contains("USE TEMP B-TREE FOR ORDER BY"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "c"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "a"))
+  }
+
   // MARK: - Count query
 
   @Test("count query without a leg filter is a plain table scan, never a sort")

@@ -17,9 +17,16 @@ enum ProfileDataSyncHandlerTestSupport {
   /// queue outlives the handler's repository references.
   @MainActor
   static func makeHandlerWithDatabase(
-    canonicalResolver: CanonicalInstrumentResolver? = nil
+    canonicalResolver: CanonicalInstrumentResolver? = nil,
+    defaultTaxOwnerId: UUID? = nil,
+    onAccountChanged: @escaping @Sendable (String, UUID) -> Void = { _, _ in },
+    onCategoryChanged: @escaping @Sendable (String, UUID) -> Void = { _, _ in }
   ) throws -> HandlerHarness {
-    try makeHandlerAndDatabase(canonicalResolver: canonicalResolver)
+    try makeHandlerAndDatabase(
+      canonicalResolver: canonicalResolver,
+      defaultTaxOwnerId: defaultTaxOwnerId,
+      onAccountChanged: onAccountChanged,
+      onCategoryChanged: onCategoryChanged)
   }
 
   /// Same as `makeHandlerWithDatabase()` — a separate name for callers
@@ -27,7 +34,10 @@ enum ProfileDataSyncHandlerTestSupport {
   /// GRDB state".
   @MainActor
   static func makeHandlerAndDatabase(
-    canonicalResolver: CanonicalInstrumentResolver? = nil
+    canonicalResolver: CanonicalInstrumentResolver? = nil,
+    defaultTaxOwnerId: UUID? = nil,
+    onAccountChanged: @escaping @Sendable (String, UUID) -> Void = { _, _ in },
+    onCategoryChanged: @escaping @Sendable (String, UUID) -> Void = { _, _ in }
   ) throws -> HandlerHarness {
     let database = try ProfileDatabase.openInMemory()
     let profileId = UUID()
@@ -36,7 +46,11 @@ enum ProfileDataSyncHandlerTestSupport {
       ownerName: CKCurrentUserDefaultName
     )
     let bundle = try Self.makeBundle(
-      database: database, instrument: .defaultTestInstrument)
+      database: database,
+      instrument: .defaultTestInstrument,
+      defaultTaxOwnerId: defaultTaxOwnerId,
+      onAccountChanged: onAccountChanged,
+      onCategoryChanged: onCategoryChanged)
     let handler = ProfileDataSyncHandler(
       profileId: profileId,
       zoneID: zoneID,
@@ -59,6 +73,9 @@ enum ProfileDataSyncHandlerTestSupport {
     }
   }
 
+}
+
+extension ProfileDataSyncHandlerTestSupport {
   // MARK: - Row builders
   //
   // Compact constructors for the most common per-record-type rows the
@@ -253,7 +270,10 @@ enum ProfileDataSyncHandlerTestSupport {
   /// concrete repo constructors.
   static func makeBundle(
     database: any DatabaseWriter,
-    instrument: Instrument
+    instrument: Instrument,
+    defaultTaxOwnerId: UUID? = nil,
+    onAccountChanged: @escaping @Sendable (String, UUID) -> Void = { _, _ in },
+    onCategoryChanged: @escaping @Sendable (String, UUID) -> Void = { _, _ in }
   ) throws -> ProfileGRDBRepositories {
     let conversionService = FakeConversionService.fixedRates([:])
     // Shared profile-index registry over its own in-memory DB —
@@ -266,7 +286,11 @@ enum ProfileDataSyncHandlerTestSupport {
       transferSuggestions: GRDBTransferSuggestionRepository(database: database),
       instruments: registry,
       categories: GRDBCategoryRepository(database: database),
-      taxOwners: GRDBTaxOwnerRepository(database: database),
+      taxOwners: GRDBTaxOwnerRepository(
+        database: database,
+        defaultTaxOwnerId: defaultTaxOwnerId,
+        onAccountChanged: onAccountChanged,
+        onCategoryChanged: onCategoryChanged),
       accounts: GRDBAccountRepository(
         database: database,
         instrumentResolver: registry,

@@ -135,3 +135,184 @@ private let incomeAndExpenseAggregationSQL = """
   GROUP BY day, leg.instrument_id
   ORDER BY day ASC
   """
+
+extension GRDBAnalysisRepository {
+  @concurrent
+  static func assembleTaxIncomeExpenseDetails(
+    aggregation: TaxIncomeExpenseAggregation,
+    targetInstrument: Instrument,
+    conversionService: any InstrumentConversionService,
+    selection: TaxIncomeExpenseDetailSelection,
+    handlers: TaxIncomeExpenseHandlers
+  ) async throws -> [TaxIncomeExpenseDetailRow] {
+    let plan = planTaxIncomeExpense(
+      aggregation: aggregation,
+      targetInstrument: targetInstrument)
+    for dayString in plan.unparseableDays {
+      handlers.handleUnparseableDay(dayString)
+    }
+    let outcomes = try await conversionService.convertResultBatch(plan.requests)
+
+    let convertedRows = convertedTaxIncomeExpenseDetailRows(
+      plan: plan,
+      outcomes: outcomes,
+      targetInstrument: targetInstrument,
+      selection: selection,
+      handlers: handlers)
+    let unavailableRows = unavailableTaxIncomeExpenseDetailRows(
+      plan: plan,
+      aggregation: aggregation,
+      targetInstrument: targetInstrument,
+      selection: selection)
+    return mergedTaxIncomeExpenseDetailRows(convertedRows + unavailableRows)
+      .sorted(by: taxIncomeExpenseDetailRowSort)
+  }
+
+  private static func convertedTaxIncomeExpenseDetailRows(
+    plan: TaxIncomeExpensePlan,
+    outcomes: [BatchConversionOutcome],
+    targetInstrument: Instrument,
+    selection: TaxIncomeExpenseDetailSelection,
+    handlers: TaxIncomeExpenseHandlers
+  ) -> [TaxIncomeExpenseDetailRow] {
+    var rows: [TaxIncomeExpenseDetailRow] = []
+    for planned in plan.rows where planned.row.type == selection.type {
+      do {
+        let converted =
+          try planned.convertedAmount
+          ?? Self.convertedTaxIncomeExpenseAmount(
+            outcome: conversionOutcome(for: planned, in: outcomes),
+            targetInstrument: targetInstrument)
+        rows.append(
+          contentsOf: detailRows(
+            for: planned.row,
+            context: TaxIncomeExpenseDetailRowContext(
+              day: planned.day,
+              dayLabel: TaxReportPresentation.dateLabel(planned.day),
+              converted: converted,
+              instrument: planned.instrument,
+              targetInstrument: targetInstrument,
+              selectedOwnerId: selection.ownerId,
+              hasUnavailableData: false)))
+      } catch {
+        let context = TaxIncomeExpenseFailureContext(
+          day: planned.row.day,
+          instrumentId: planned.row.instrumentId,
+          ownerIds: planned.row.ownerIds)
+        handlers.handleConversionFailure(error, context)
+        rows.append(
+          contentsOf: detailRows(
+            for: planned.row,
+            context: TaxIncomeExpenseDetailRowContext(
+              day: planned.day,
+              dayLabel: TaxReportPresentation.dateLabel(planned.day),
+              converted: nil,
+              instrument: planned.instrument,
+              targetInstrument: targetInstrument,
+              selectedOwnerId: selection.ownerId,
+              hasUnavailableData: true)))
+      }
+    }
+    return rows
+  }
+
+  private static func unavailableTaxIncomeExpenseDetailRows(
+    plan: TaxIncomeExpensePlan,
+    aggregation: TaxIncomeExpenseAggregation,
+    targetInstrument: Instrument,
+    selection: TaxIncomeExpenseDetailSelection
+  ) -> [TaxIncomeExpenseDetailRow] {
+    plan.unavailableRows.flatMap { row -> [TaxIncomeExpenseDetailRow] in
+      guard row.type == selection.type else { return [] }
+      return detailRows(
+        for: row,
+        context: TaxIncomeExpenseDetailRowContext(
+          day: nil,
+          dayLabel: row.day,
+          converted: nil,
+          instrument: aggregation.instrumentMap[row.instrumentId]
+            ?? Instrument.fiat(code: row.instrumentId),
+          targetInstrument: targetInstrument,
+          selectedOwnerId: selection.ownerId,
+          hasUnavailableData: true))
+    }
+  }
+
+  private static func mergedTaxIncomeExpenseDetailRows(
+    _ rows: [TaxIncomeExpenseDetailRow]
+  ) -> [TaxIncomeExpenseDetailRow] {
+    var merged: [String: TaxIncomeExpenseDetailRow] = [:]
+    for row in rows {
+      guard let existing = merged[row.id] else {
+        merged[row.id] = row
+        continue
+      }
+      merged[row.id] = TaxIncomeExpenseDetailRow(
+        ownerId: row.ownerId,
+        categoryId: row.categoryId,
+        instrument: row.instrument,
+        day: row.day,
+        dayLabel: row.dayLabel,
+        amount: mergedAmount(existing.amount, row.amount),
+        hasUnavailableData: existing.hasUnavailableData || row.hasUnavailableData)
+    }
+    return Array(merged.values)
+  }
+
+  private static func taxIncomeExpenseDetailRowSort(
+    _ lhs: TaxIncomeExpenseDetailRow,
+    _ rhs: TaxIncomeExpenseDetailRow
+  ) -> Bool {
+    if lhs.ownerId != rhs.ownerId { return lhs.ownerId.uuidString < rhs.ownerId.uuidString }
+    if lhs.categoryId != rhs.categoryId {
+      return lhs.categoryId.uuidString < rhs.categoryId.uuidString
+    }
+    if lhs.dayLabel != rhs.dayLabel { return lhs.dayLabel < rhs.dayLabel }
+    return lhs.instrument.displayLabel < rhs.instrument.displayLabel
+  }
+
+  private static func mergedAmount(
+    _ lhs: InstrumentAmount?,
+    _ rhs: InstrumentAmount?
+  ) -> InstrumentAmount? {
+    guard let lhs, let rhs else { return nil }
+    return lhs + rhs
+  }
+
+  private struct TaxIncomeExpenseDetailRowContext {
+    let day: Date?
+    let dayLabel: String
+    let converted: InstrumentAmount?
+    let instrument: Instrument
+    let targetInstrument: Instrument
+    let selectedOwnerId: UUID?
+    let hasUnavailableData: Bool
+  }
+
+  private static func detailRows(
+    for row: TaxIncomeExpenseRow,
+    context: TaxIncomeExpenseDetailRowContext
+  ) -> [TaxIncomeExpenseDetailRow] {
+    let matchingOwnerIds = row.ownerIds.filter {
+      context.selectedOwnerId == nil || $0 == context.selectedOwnerId
+    }
+    guard !matchingOwnerIds.isEmpty else { return [] }
+    let signedAmount = context.converted.map { converted in
+      let allocated = InstrumentAmount(
+        quantity: converted.quantity / Decimal(row.ownerIds.count),
+        instrument: context.targetInstrument)
+      return row.type == .expense
+        ? InstrumentAmount.zero(instrument: context.targetInstrument) - allocated : allocated
+    }
+    return matchingOwnerIds.map { ownerId in
+      TaxIncomeExpenseDetailRow(
+        ownerId: ownerId,
+        categoryId: row.categoryId,
+        instrument: context.instrument,
+        day: context.day,
+        dayLabel: context.dayLabel,
+        amount: signedAmount,
+        hasUnavailableData: context.hasUnavailableData)
+    }
+  }
+}

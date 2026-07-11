@@ -224,6 +224,35 @@ struct TaxReportPresentationTests {
     #expect(Set(rows.map(\.instrument)) == [bhp, eth])
   }
 
+  @Test func saleRowsKeepJointOwnerSharesSeparate() throws {
+    let saleId = UUID()
+    let ownerA = UUID()
+    let ownerB = UUID()
+    let instrument = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
+    let saleDate = try date(year: 2026, month: 5, day: 1)
+    let buyDate = try date(year: 2025, month: 1, day: 1)
+
+    let rows = TaxReportPresentation.saleRows(from: [
+      event(
+        sourceTransactionId: saleId,
+        instrument: instrument,
+        sellDate: saleDate,
+        acquiredDate: buyDate,
+        value: SaleEventValue(quantity: 50, costBasis: 100, proceeds: 150),
+        taxOwnerId: ownerA),
+      event(
+        sourceTransactionId: saleId,
+        instrument: instrument,
+        sellDate: saleDate,
+        acquiredDate: buyDate,
+        value: SaleEventValue(quantity: 50, costBasis: 100, proceeds: 150),
+        taxOwnerId: ownerB),
+    ])
+
+    #expect(rows.count == 2)
+    #expect(Set(rows.map { $0.lots.first?.event.taxOwnerId }) == [ownerA, ownerB])
+  }
+
   @Test func saleRowsReportDiscountEligiblePositiveLongTermGains() throws {
     let instrument = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
     let saleId = UUID()
@@ -300,7 +329,8 @@ struct TaxReportPresentationTests {
     instrument: Instrument,
     sellDate: Date,
     acquiredDate: Date,
-    value: SaleEventValue
+    value: SaleEventValue,
+    taxOwnerId: UUID? = nil
   ) -> CapitalGainEvent {
     let holdingDays =
       Calendar.utc.dateComponents([.day], from: acquiredDate, to: sellDate).day ?? 0
@@ -312,7 +342,8 @@ struct TaxReportPresentationTests {
       quantity: value.quantity,
       costBasis: value.costBasis,
       proceeds: value.proceeds,
-      holdingDays: holdingDays)
+      holdingDays: holdingDays,
+      taxOwnerId: taxOwnerId)
   }
 
   private func date(year: Int, month: Int, day: Int) throws -> Date {

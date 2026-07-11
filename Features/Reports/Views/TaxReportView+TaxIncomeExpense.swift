@@ -2,7 +2,7 @@ import SwiftUI
 
 extension TaxReportView {
   var sortedTaxIncomeExpenseSummaries: [TaxIncomeExpenseSummary] {
-    taxIncomeExpenseSummaries.sorted {
+    selectedReport.taxIncomeExpenseSummaries.sorted {
       let lhsName = taxOwnerName(for: $0.ownerId)
       let rhsName = taxOwnerName(for: $1.ownerId)
       if lhsName != rhsName {
@@ -16,7 +16,7 @@ extension TaxReportView {
     Group {
       if let taxIncomeExpenseError {
         taxIncomeExpenseErrorView(taxIncomeExpenseError)
-      } else if let summary = taxIncomeExpenseRollup {
+      } else if let summary = selectedReport.taxIncomeExpenseRollup {
         VStack(alignment: .leading, spacing: 12) {
           sectionHeader("Taxable income and deductions")
           taxIncomeExpenseRollupView(summary)
@@ -29,36 +29,43 @@ extension TaxReportView {
   private func taxIncomeExpenseRollupView(
     _ summary: TaxIncomeExpenseSummary
   ) -> some View {
-    Group {
-      Text("All owners")
-        .font(.subheadline.weight(.semibold))
-        .foregroundStyle(.secondary)
-      if summary.hasUnavailableData {
-        ContentUnavailableView {
-          Label("Taxable income total unavailable", systemImage: "exclamationmark.triangle")
-        } description: {
-          Text(
-            "One or more owner totals are missing a price, so Moolah cannot show a reliable all-owner total yet."
-          )
-        }
-      } else {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 12)], spacing: 12) {
-          taxIncomeExpenseTileLink(
-            kind: .income,
-            title: "Taxable income",
-            amount: summary.taxableIncome,
-            caption: "Reportable income categories")
-          taxIncomeExpenseTileLink(
-            kind: .deductions,
-            title: "Deductions",
-            amount: summary.deductibleExpenses,
-            caption: "Reportable expense categories")
-          TaxSummaryTile(
-            title: "Net taxable income",
-            amount: summary.netTaxableIncome,
-            caption: "Income less deductions")
-        }
+    let ownerId = effectiveSelectedOwnerId
+    return Group {
+      if ownerSelection.isPickerVisible {
+        Text(ownerId.map(taxOwnerName(for:)) ?? "All owners")
+          .font(.subheadline.weight(.semibold))
+          .foregroundStyle(.secondary)
       }
+      taxIncomeExpenseSummaryGrid(summary, unavailable: summary.hasUnavailableData)
+    }
+  }
+
+  private func taxIncomeExpenseSummaryGrid(
+    _ summary: TaxIncomeExpenseSummary,
+    unavailable: Bool = false
+  ) -> some View {
+    LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 12)], spacing: 12) {
+      taxIncomeExpenseTileLink(
+        kind: .income,
+        title: "Taxable income",
+        amount: summary.taxableIncome,
+        unavailable: unavailable,
+        caption: unavailable
+          ? "Open to inspect unavailable income rows" : "Reportable income categories")
+      taxIncomeExpenseTileLink(
+        kind: .deductions,
+        title: "Deductions",
+        amount: summary.deductibleExpenses,
+        unavailable: unavailable,
+        caption: unavailable
+          ? "Open to inspect unavailable deduction rows" : "Reportable expense categories")
+      TaxSummaryTile(
+        title: "Net taxable income",
+        amount: summary.netTaxableIncome,
+        caption: unavailable
+          ? "Unavailable until missing prices resolve" : "Income less deductions",
+        unavailable: unavailable
+      )
     }
   }
 
@@ -67,16 +74,17 @@ extension TaxReportView {
     kind: TaxIncomeExpenseDrillDownKind,
     title: String,
     amount: InstrumentAmount,
+    unavailable: Bool,
     caption: String
   ) -> some View {
-    if let drillDown = taxIncomeExpenseDrillDown(kind: kind, ownerId: nil) {
+    if let drillDown = taxIncomeExpenseDrillDown(kind: kind, ownerId: effectiveSelectedOwnerId) {
       NavigationLink(value: drillDown) {
-        TaxSummaryTile(title: title, amount: amount, caption: caption)
+        TaxSummaryTile(title: title, amount: amount, caption: caption, unavailable: unavailable)
       }
       .buttonStyle(.plain)
-      .accessibilityHint("Shows matching transactions")
+      .accessibilityHint("Shows the tax detail rows behind this total")
     } else {
-      TaxSummaryTile(title: title, amount: amount, caption: caption)
+      TaxSummaryTile(title: title, amount: amount, caption: caption, unavailable: unavailable)
     }
   }
 
@@ -178,12 +186,12 @@ extension TaxReportView {
     unavailable: Bool,
     drillDown: TaxIncomeExpenseDrillDown?
   ) -> some View {
-    if let drillDown, !unavailable {
+    if let drillDown {
       NavigationLink(value: drillDown) {
         taxOwnerAmount(amount, unavailable: unavailable)
       }
       .buttonStyle(.plain)
-      .accessibilityHint("Shows matching transactions")
+      .accessibilityHint("Shows the tax detail rows behind this total")
     } else {
       taxOwnerAmount(amount, unavailable: unavailable)
     }
@@ -214,50 +222,5 @@ extension TaxReportView {
       ownerName: ownerId.map(taxOwnerName(for:)),
       dateInterval: dateInterval,
       defaultTaxOwnerId: defaultTaxOwnerId)
-  }
-}
-
-enum TaxIncomeExpenseDrillDownKind: Hashable {
-  case income
-  case deductions
-
-  var transactionType: TransactionType {
-    switch self {
-    case .income:
-      return .income
-    case .deductions:
-      return .expense
-    }
-  }
-
-  var title: String {
-    switch self {
-    case .income:
-      return "Taxable income"
-    case .deductions:
-      return "Deductions"
-    }
-  }
-}
-
-struct TaxIncomeExpenseDrillDown: Hashable {
-  let kind: TaxIncomeExpenseDrillDownKind
-  let ownerId: UUID?
-  let ownerName: String?
-  let dateInterval: Range<Date>
-  let defaultTaxOwnerId: UUID
-
-  var title: String {
-    guard let ownerName else { return kind.title }
-    return "\(ownerName) \(kind.title.lowercased())"
-  }
-
-  var filter: TransactionFilter {
-    TransactionFilter(
-      scheduled: .nonScheduledOnly,
-      dateInterval: dateInterval,
-      taxReportableLegType: kind.transactionType,
-      taxOwnerId: ownerId,
-      taxDefaultOwnerId: defaultTaxOwnerId)
   }
 }

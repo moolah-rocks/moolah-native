@@ -88,6 +88,7 @@ extension ProfileSession {
       instrument: profile.instrument,
       profileLabel: profile.label,
       defaultTaxOwnerId: profile.defaultTaxOwnerId,
+      implicitDefaultTaxOwnerId: ProfileIndexSchema.defaultTaxOwnerId(for: profile.id),
       conversionService: conversionService,
       instrumentRegistry: registry,
       hooks: makeBackendHooks(hooks))

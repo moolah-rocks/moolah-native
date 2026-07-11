@@ -56,31 +56,40 @@ enum ProfitLossCalculator {
   /// `asOfDate` (Rule 6). See guides/INSTRUMENT_CONVERSION_GUIDE.md Rules 1,
   /// 5, 6, and 8.
   ///
-  /// Rule 11: instruments in `ledger.unavailableInstrumentIds` (a genuine
+  /// Rule 11: instruments in the owner-scoped unavailable set (a genuine
   /// conversion failure touched their history) are OMITTED from `rows` — a
   /// row assembled from their surviving flows/lots would look complete but be
   /// understated — and returned in `unavailableInstrumentIds` so the caller
-  /// marks them unavailable. Sibling instruments still render.
+  /// marks them unavailable. Sibling owners/instruments still render.
   static func compute(
     ledger: HoldingsCostLedger,
     profileCurrency: Instrument,
     conversionService: InstrumentConversionService,
-    asOfDate: Date
+    asOfDate: Date,
+    ownerId: UUID? = nil
   ) async throws -> ProfitLossResult {
-    let unavailable = ledger.unavailableInstrumentIds
+    let unavailableInstruments = ledger.unavailableInstruments(ownerId: ownerId)
+    let unavailable = Set(unavailableInstruments.map(\.id))
     var instrumentData: [String: InstrumentData] = [:]
     for entry in ledger.flows
     where entry.counterpartyAccount == nil && entry.amount > 0
+      && ownerMatches(entry.taxOwnerId, ownerId: ownerId)
       && !unavailable.contains(entry.instrument.id)
     {
       instrumentData[entry.instrument.id, default: InstrumentData(instrument: entry.instrument)]
         .totalInvested += entry.amount
     }
-    for event in ledger.realisedEvents where !unavailable.contains(event.instrument.id) {
+    for event in ledger.realisedEvents
+    where ownerMatches(event.taxOwnerId, ownerId: ownerId)
+      && !unavailable.contains(event.instrument.id)
+    {
       instrumentData[event.instrument.id, default: InstrumentData(instrument: event.instrument)]
         .realizedGain += event.gain
     }
-    for lot in ledger.openLots where !unavailable.contains(lot.instrument.id) {
+    for lot in ledger.openLots
+    where ownerMatches(lot.taxOwnerId, ownerId: ownerId)
+      && !unavailable.contains(lot.instrument.id)
+    {
       let id = lot.instrument.id
       instrumentData[id, default: InstrumentData(instrument: lot.instrument)]
         .currentQuantity += lot.remainingQuantity
@@ -96,7 +105,7 @@ enum ProfitLossCalculator {
     return ProfitLossResult(
       rows: projection.rows,
       unavailableInstrumentIds: unavailable.union(projection.unavailableInstrumentIds),
-      unavailableInstruments: ledger.unavailableInstruments.union(projection.unavailableInstruments)
+      unavailableInstruments: unavailableInstruments.union(projection.unavailableInstruments)
     )
   }
 
@@ -149,6 +158,11 @@ enum ProfitLossCalculator {
       rows: results.sorted { $0.totalGain > $1.totalGain },
       unavailableInstrumentIds: unavailableInstrumentIds,
       unavailableInstruments: unavailableInstruments)
+  }
+
+  private static func ownerMatches(_ value: UUID?, ownerId: UUID?) -> Bool {
+    guard let ownerId else { return true }
+    return value == ownerId
   }
 
   private struct ProjectionResult {

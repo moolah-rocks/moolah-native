@@ -16,6 +16,7 @@ enum CostBasisEventBuilder {
     let referenceCurrency: Instrument
     let conversionService: any InstrumentConversionService
     let taxOwnerIdsByAccount: [UUID?: [UUID]]
+    let taxOwnerIdsByLegId: [UUID: [UUID]]
   }
 
   struct OwnerAllocation {
@@ -30,7 +31,8 @@ enum CostBasisEventBuilder {
     trackedAccountIds: Set<UUID>,
     referenceCurrency: Instrument,
     conversionService: any InstrumentConversionService,
-    taxOwnerIdsByAccount: [UUID?: [UUID]] = [:]
+    taxOwnerIdsByAccount: [UUID?: [UUID]] = [:],
+    taxOwnerIdsByLegId: [UUID: [UUID]] = [:]
   ) async throws -> [CostBasisEvent] {
     let input = BuildInput(
       sourceTransactionId: sourceTransactionId,
@@ -39,7 +41,8 @@ enum CostBasisEventBuilder {
       trackedAccountIds: trackedAccountIds,
       referenceCurrency: referenceCurrency,
       conversionService: conversionService,
-      taxOwnerIdsByAccount: taxOwnerIdsByAccount)
+      taxOwnerIdsByAccount: taxOwnerIdsByAccount,
+      taxOwnerIdsByLegId: taxOwnerIdsByLegId)
 
     var events: [CostBasisEvent] = []
     // 1. `.trade` legs → classifier (fees already folded into per-unit).
@@ -63,8 +66,9 @@ enum CostBasisEventBuilder {
       conversionService: input.conversionService)
     var events: [CostBasisEvent] = []
     for buy in classification.buys {
-      let account = accountFor(buy.instrument, in: input.legs)
-      for allocation in ownerAllocations(account: account, in: input.taxOwnerIdsByAccount) {
+      let leg = tradeLeg(for: buy.instrument, positiveQuantity: true, in: input.legs)
+      let account = leg?.accountId
+      for allocation in ownerAllocations(leg: leg, account: account, input: input) {
         events.append(
           .acquisition(
             instrument: buy.instrument,
@@ -74,8 +78,9 @@ enum CostBasisEventBuilder {
       }
     }
     for sell in classification.sells {
-      let account = accountFor(sell.instrument, in: input.legs)
-      for allocation in ownerAllocations(account: account, in: input.taxOwnerIdsByAccount) {
+      let leg = tradeLeg(for: sell.instrument, positiveQuantity: false, in: input.legs)
+      let account = leg?.accountId
+      for allocation in ownerAllocations(leg: leg, account: account, input: input) {
         events.append(
           .disposal(
             instrument: sell.instrument,
@@ -108,7 +113,7 @@ enum CostBasisEventBuilder {
         on: input.date,
         in: input.referenceCurrency,
         using: input.conversionService)
-      for allocation in ownerAllocations(account: leg.accountId, in: input.taxOwnerIdsByAccount) {
+      for allocation in ownerAllocations(leg: leg, account: leg.accountId, input: input) {
         events.append(
           .acquisition(
             instrument: leg.instrument,
@@ -133,7 +138,7 @@ enum CostBasisEventBuilder {
         on: input.date,
         in: input.referenceCurrency,
         using: input.conversionService)
-      for allocation in ownerAllocations(account: leg.accountId, in: input.taxOwnerIdsByAccount) {
+      for allocation in ownerAllocations(leg: leg, account: leg.accountId, input: input) {
         events.append(
           .disposal(
             instrument: leg.instrument,
@@ -169,8 +174,8 @@ enum CostBasisEventBuilder {
       quantity: dest.quantity,
       sourceAccount: from,
       destinationAccount: to,
-      sourceAllocations: ownerAllocations(account: from, in: input.taxOwnerIdsByAccount),
-      destinationAllocations: ownerAllocations(account: to, in: input.taxOwnerIdsByAccount),
+      sourceAllocations: ownerAllocations(leg: source, account: from, input: input),
+      destinationAllocations: ownerAllocations(leg: dest, account: to, input: input),
       sourceTransactionId: input.sourceTransactionId)
     let sharedEvents = CostBasisTransferEventBuilder.sharedMoveEvents(input: transfer)
     guard
@@ -243,10 +248,14 @@ enum CostBasisEventBuilder {
   }
 
   private static func ownerAllocations(
+    leg: TransactionLeg?,
     account: UUID?,
-    in taxOwnerIdsByAccount: [UUID?: [UUID]]
+    input: BuildInput
   ) -> [OwnerAllocation] {
-    let ownerIds = taxOwnerIdsByAccount[account] ?? []
+    let ownerIds =
+      leg.flatMap { input.taxOwnerIdsByLegId[$0.id] }
+      ?? input.taxOwnerIdsByAccount[account]
+      ?? []
     guard !ownerIds.isEmpty else {
       return [OwnerAllocation(taxOwnerId: nil, fraction: 1)]
     }
@@ -254,7 +263,16 @@ enum CostBasisEventBuilder {
     return ownerIds.map { OwnerAllocation(taxOwnerId: $0, fraction: fraction) }
   }
 
-  private static func accountFor(_ instrument: Instrument, in legs: [TransactionLeg]) -> UUID? {
-    legs.first { $0.instrument == instrument && $0.type == .trade }?.accountId
+  private static func tradeLeg(
+    for instrument: Instrument,
+    positiveQuantity: Bool,
+    in legs: [TransactionLeg]
+  ) -> TransactionLeg? {
+    legs.first {
+      $0.instrument == instrument
+        && $0.type == .trade
+        && (positiveQuantity ? $0.quantity > 0 : $0.quantity < 0)
+    }
+      ?? legs.first { $0.instrument == instrument && $0.type == .trade }
   }
 }

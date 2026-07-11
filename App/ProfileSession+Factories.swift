@@ -22,6 +22,37 @@ extension ProfileSession {
     let defiLlamaSupportCache: DefiLlamaSupportCache?
   }
 
+  struct InitInfrastructure {
+    let database: DatabaseQueue
+    let networking: NetworkingServices
+    let fallbackMetadataLookup: LateBoundCryptoMetadataLookup
+    let marketData: MarketDataServices
+  }
+
+  static func makeInitInfrastructure(
+    database: DatabaseQueue?,
+    profile: Profile,
+    containerManager: ProfileContainerManager?,
+    override networking: NetworkingServices?,
+    syncCoordinator: SyncCoordinator?
+  ) throws -> InitInfrastructure {
+    let resolvedDatabase = try Self.resolveDatabase(
+      override: database, profile: profile, containerManager: containerManager)
+    let resolvedNetworking = syncCoordinator?.sharedNetworking ?? networking ?? NetworkingServices()
+    let fallbackMetadataLookup = LateBoundCryptoMetadataLookup()
+    let marketData =
+      syncCoordinator?.sharedMarketData
+      ?? Self.makeMarketDataServices(
+        database: resolvedDatabase,
+        networking: resolvedNetworking,
+        cryptoMetadataLookup: fallbackMetadataLookup.lookup)
+    return InitInfrastructure(
+      database: resolvedDatabase,
+      networking: resolvedNetworking,
+      fallbackMetadataLookup: fallbackMetadataLookup,
+      marketData: marketData)
+  }
+
   /// Builds the fiat/stock/crypto market-data services used throughout the
   /// profile session. Standalone helper so `ProfileSession.init` can build
   /// and assign the trio in one step. Each rate service persists to the
@@ -220,7 +251,9 @@ extension ProfileSession {
       holdingsCostLedger: holdingsCostLedger,
       taxOwnerRepository: backend.taxOwners,
       accountRepository: backend.accounts,
+      categoryRepository: backend.categories,
       accountChanges: backend.accounts.observeAll(),
+      categoryChanges: backend.categories.observeAll(),
       defaultTaxOwnerId: profile.defaultTaxOwnerId
     )
     return DomainStores(

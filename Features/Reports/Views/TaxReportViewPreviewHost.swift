@@ -5,12 +5,18 @@ private struct TaxReportViewPreviewHost: View {
   var events: [CapitalGainEvent] = TaxReportPreviewData.events
   var capitalGainsHasUnavailableData = false
   var capitalGainsUnavailableInstruments: [Instrument] = []
+  var capitalGainsHasUnavailableDataByOwner: [UUID: Bool] = [:]
+  var ownerUnavailableCapitalGainsInstruments: [UUID: [Instrument]] = [:]
   var taxIncomeExpenseSummaries: [TaxIncomeExpenseSummary] = TaxReportPreviewData.taxIncomeExpense
   var taxIncomeExpenseError: Error?
   var taxOwnerNames: [UUID: String] = TaxReportPreviewData.taxOwnerNames
+  var taxOwnerKinds: [UUID: TaxOwnerKind] = TaxReportPreviewData.taxOwnerKinds
   var profitLoss: [InstrumentProfitLoss] = TaxReportPreviewData.holdings
   var profitLossHasUnavailableData = false
   var profitLossUnavailableInstruments: [Instrument] = []
+  var profitLossByOwner: [UUID: [InstrumentProfitLoss]] = [:]
+  var profitLossHasUnavailableDataByOwner: [UUID: Bool] = [:]
+  var profitLossUnavailableInstrumentsByOwner: [UUID: [Instrument]] = [:]
   var isLoading = false
   var error: Error?
   var isMigratingCrossChainIdentity = false
@@ -24,6 +30,8 @@ private struct TaxReportViewPreviewHost: View {
       events: events,
       capitalGainsHasUnavailableData: capitalGainsHasUnavailableData,
       capitalGainsUnavailableInstruments: capitalGainsUnavailableInstruments,
+      capitalGainsHasUnavailableDataByOwner: capitalGainsHasUnavailableDataByOwner,
+      ownerUnavailableCapitalGainsInstruments: ownerUnavailableCapitalGainsInstruments,
       taxIncomeExpenseSummaries: taxIncomeExpenseSummaries,
       taxIncomeExpenseRollup: TaxReportPreviewData.taxIncomeExpenseRollup(
         from: taxIncomeExpenseSummaries),
@@ -31,9 +39,13 @@ private struct TaxReportViewPreviewHost: View {
       taxIncomeExpenseDateInterval: TaxReportPresentation.financialYearInterval(2026),
       taxIncomeExpenseError: taxIncomeExpenseError,
       taxOwnerNames: taxOwnerNames,
+      taxOwnerKinds: taxOwnerKinds,
       profitLoss: profitLoss,
       profitLossHasUnavailableData: profitLossHasUnavailableData,
       profitLossUnavailableInstruments: profitLossUnavailableInstruments,
+      profitLossByOwner: profitLossByOwner,
+      profitLossHasUnavailableDataByOwner: profitLossHasUnavailableDataByOwner,
+      profitLossUnavailableInstrumentsByOwner: profitLossUnavailableInstrumentsByOwner,
       isLoading: isLoading,
       error: error,
       isMigratingCrossChainIdentity: isMigratingCrossChainIdentity,
@@ -68,6 +80,10 @@ enum TaxReportPreviewData {
   static let taxOwnerNames = [
     ownerA: "Alex",
     ownerB: "Jordan",
+  ]
+  static let taxOwnerKinds = [
+    ownerA: TaxOwnerKind.individual,
+    ownerB: TaxOwnerKind.individual,
   ]
 
   static let events = [

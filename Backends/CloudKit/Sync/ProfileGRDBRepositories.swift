@@ -74,9 +74,12 @@ extension ProfileGRDBRepositories {
   /// profile's zone purge mutate every profile's instruments.
   static func makeForApply(
     database: any GRDB.DatabaseWriter,
-    sharedRegistry: GRDBInstrumentRegistryRepository
+    sharedRegistry: GRDBInstrumentRegistryRepository,
+    defaultTaxOwnerId: UUID?,
+    implicitDefaultTaxOwnerId: UUID?,
+    onAccountChanged: @escaping @Sendable (String, UUID) -> Void = { _, _ in },
+    onCategoryChanged: @escaping @Sendable (String, UUID) -> Void = { _, _ in }
   ) -> ProfileGRDBRepositories {
-    // USD is a stable, locale-independent fiat that satisfies
     // `Instrument.fiat(code:)`'s `isoCurrencies` lookup. The choice is
     // arbitrary — only the type matters for the apply path.
     let placeholderInstrument = Instrument.fiat(code: "USD")
@@ -88,7 +91,12 @@ extension ProfileGRDBRepositories {
       transferSuggestions: GRDBTransferSuggestionRepository(database: database),
       instruments: GRDBInstrumentRegistryRepository(database: database),
       categories: GRDBCategoryRepository(database: database),
-      taxOwners: GRDBTaxOwnerRepository(database: database),
+      taxOwners: GRDBTaxOwnerRepository(
+        database: database,
+        defaultTaxOwnerId: defaultTaxOwnerId,
+        implicitDefaultTaxOwnerId: implicitDefaultTaxOwnerId,
+        onAccountChanged: onAccountChanged,
+        onCategoryChanged: onCategoryChanged),
       accounts: GRDBAccountRepository(
         database: database,
         instrumentResolver: resolver,

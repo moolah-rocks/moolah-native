@@ -94,21 +94,22 @@ struct TaxOwnerSettingsScreen {
   // MARK: - Expectations
 
   func expectOwnerVisible(_ name: String) {
-    let ownerName = app.element(for: UITestIdentifiers.TaxOwnerSettings.ownerName(name))
+    let ownerName = app.staticText(label: name)
     if !ownerName.waitForExistence(timeout: 10) {
       XCTFail("Tax owner '\(name)' did not appear within 10s")
     }
   }
 
   func expectOwnerAbsent(_ name: String) {
-    let ownerName = app.element(for: UITestIdentifiers.TaxOwnerSettings.ownerName(name))
+    let ownerName = app.staticText(label: name)
     if !ownerName.waitForNonExistence(timeout: 2) {
       XCTFail("Tax owner '\(name)' should be absent but is visible")
     }
   }
 
   func expectDefaultOwner(_ name: String) {
-    let badge = app.element(for: UITestIdentifiers.TaxOwnerSettings.defaultBadge(name))
+    let badge = app.staticText(
+      label: UITestIdentifiers.TaxOwnerSettings.defaultBadgeLabel(ownerName: name))
     if !badge.waitForExistence(timeout: 10) {
       XCTFail("Tax owner '\(name)' did not show the Default badge within 10s")
     }
@@ -117,7 +118,9 @@ struct TaxOwnerSettingsScreen {
   // MARK: - Private helpers
 
   private func openActionsMenu(for name: String) -> Bool {
-    let button = app.element(for: UITestIdentifiers.TaxOwnerSettings.actionsButton(name))
+    Trace.record(#function, detail: "name=\(name)")
+    let button = app.button(
+      label: UITestIdentifiers.TaxOwnerSettings.actionsButtonLabel(ownerName: name))
     if !button.waitForExistence(timeout: 10) {
       Trace.recordFailure("settings.taxOwner.actions.\(name) did not appear")
       XCTFail("Actions menu for tax owner '\(name)' did not appear within 10s")
@@ -129,10 +132,17 @@ struct TaxOwnerSettingsScreen {
       return false
     }
     button.click()
+    let renameItem = app.menuItem(label: UITestIdentifiers.TaxOwnerSettings.renameMenuTitle)
+    if !renameItem.waitForExistence(timeout: 10) {
+      Trace.recordFailure("Tax owner actions menu for '\(name)' did not open")
+      XCTFail("Actions menu for tax owner '\(name)' did not open within 10s")
+      return false
+    }
     return true
   }
 
   private func clickOwnerMenuItem(_ title: String) -> Bool {
+    Trace.record(#function, detail: "title=\(title)")
     let item = app.menuItem(label: title)
     if !item.waitForExistence(timeout: 10) {
       Trace.recordFailure("Tax owner menu item '\(title)' did not appear")
@@ -140,10 +150,16 @@ struct TaxOwnerSettingsScreen {
       return false
     }
     item.click()
+    if !item.waitForNonExistence(timeout: 10) {
+      Trace.recordFailure("Tax owner menu item '\(title)' did not dismiss")
+      XCTFail("Tax owner menu item '\(title)' remained visible after click")
+      return false
+    }
     return true
   }
 
   private func typeNameInPresentedSheet(_ name: String) -> Bool {
+    Trace.record(#function, detail: "name=\(name)")
     let field = app.element(for: UITestIdentifiers.TaxOwnerSettings.editNameField)
     if !field.waitForExistence(timeout: 10) {
       Trace.recordFailure("settings.taxOwner.edit.name did not appear")
@@ -172,6 +188,7 @@ struct TaxOwnerSettingsScreen {
   }
 
   private func clickEditConfirmation() -> Bool {
+    Trace.record(#function)
     let button = app.element(for: UITestIdentifiers.TaxOwnerSettings.editConfirmButton)
     if !button.waitForExistence(timeout: 10) {
       Trace.recordFailure("settings.taxOwner.edit.confirm did not appear")
@@ -195,6 +212,7 @@ struct TaxOwnerSettingsScreen {
   }
 
   private func selectReplacement(_ replacementName: String) -> Bool {
+    Trace.record(#function, detail: "replacementName=\(replacementName)")
     let picker = app.element(for: UITestIdentifiers.TaxOwnerSettings.replacementPicker)
     if !picker.waitUntilHittable(timeout: 10) {
       Trace.recordFailure("settings.taxOwner.deleteDefault.replacement was not hittable")
@@ -225,7 +243,7 @@ struct TaxOwnerSettingsScreen {
   }
 
   private func waitForOwnerName(_ name: String) {
-    let ownerName = app.element(for: UITestIdentifiers.TaxOwnerSettings.ownerName(name))
+    let ownerName = app.staticText(label: name)
     if !ownerName.waitForExistence(timeout: 10) {
       Trace.recordFailure("settings.taxOwner.name.\(name) did not appear")
       XCTFail("Tax owner '\(name)' did not appear within 10s")
@@ -233,7 +251,7 @@ struct TaxOwnerSettingsScreen {
   }
 
   private func waitForOwnerNameGone(_ name: String) {
-    let ownerName = app.element(for: UITestIdentifiers.TaxOwnerSettings.ownerName(name))
+    let ownerName = app.staticText(label: name)
     if !ownerName.waitForNonExistence(timeout: 10) {
       Trace.recordFailure("settings.taxOwner.name.\(name) remained visible")
       XCTFail("Tax owner '\(name)' remained visible after the update")
@@ -241,7 +259,8 @@ struct TaxOwnerSettingsScreen {
   }
 
   private func waitForDefaultBadge(_ name: String) {
-    let badge = app.element(for: UITestIdentifiers.TaxOwnerSettings.defaultBadge(name))
+    let badge = app.staticText(
+      label: UITestIdentifiers.TaxOwnerSettings.defaultBadgeLabel(ownerName: name))
     if !badge.waitForExistence(timeout: 10) {
       Trace.recordFailure("settings.taxOwner.defaultBadge.\(name) did not appear")
       XCTFail("Tax owner '\(name)' did not show the Default badge within 10s")

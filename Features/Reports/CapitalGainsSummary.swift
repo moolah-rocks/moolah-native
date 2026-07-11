@@ -13,6 +13,7 @@ struct CapitalGainsSummary: Sendable {
   let longTermCapitalGains: Decimal
   /// Current-year capital losses as a positive amount.
   let capitalLosses: Decimal
+  private let netCapitalGainOverride: Decimal?
 
   init(
     shortTermGain: Decimal,
@@ -21,7 +22,8 @@ struct CapitalGainsSummary: Sendable {
     eventCount: Int,
     shortTermCapitalGains: Decimal? = nil,
     longTermCapitalGains: Decimal? = nil,
-    capitalLosses: Decimal? = nil
+    capitalLosses: Decimal? = nil,
+    netCapitalGain: Decimal? = nil
   ) {
     self.shortTermGain = shortTermGain
     self.longTermGain = longTermGain
@@ -30,6 +32,7 @@ struct CapitalGainsSummary: Sendable {
     self.shortTermCapitalGains = shortTermCapitalGains ?? max(0, shortTermGain)
     self.longTermCapitalGains = longTermCapitalGains ?? max(0, longTermGain)
     self.capitalLosses = capitalLosses ?? -(min(0, shortTermGain) + min(0, longTermGain))
+    self.netCapitalGainOverride = netCapitalGain
   }
 
   /// Australian CGT discount: 50% on long-term gains for individuals.
@@ -39,7 +42,7 @@ struct CapitalGainsSummary: Sendable {
 
   /// Net capital gain after applying CGT discount (losses offset gains before discount).
   var netCapitalGain: Decimal {
-    remainingShortTermGain + discountedLongTermGain
+    netCapitalGainOverride ?? (remainingShortTermGain + discountedLongTermGain)
   }
 
   private var remainingShortTermGain: Decimal {

@@ -90,7 +90,7 @@ struct CapitalGainSalesTable: View {
     HStack(spacing: 0) {
       disclosureButton(for: sale)
       columnSpacer
-      instrumentCell(for: sale.instrument)
+      instrumentCell(for: sale)
         .frame(width: SalesTableLayout.instrument(layout), alignment: .leading)
       columnSpacer
       Text(TaxReportPresentation.dateLabel(sale.sellDate))
@@ -254,7 +254,7 @@ extension CapitalGainSalesTable {
 
   private func saleAccessibilityLabel(for sale: CapitalGainSale) -> String {
     let expanded = expandedSaleIds.contains(sale.id) ? "expanded" : "collapsed"
-    return [
+    var parts = [
       "Instrument: \(sale.instrument.displayLabel)",
       "Sold: \(TaxReportPresentation.dateLabel(sale.sellDate))",
       "Quantity: \(formattedQuantity(sale.quantity, instrument: sale.instrument))",
@@ -262,8 +262,12 @@ extension CapitalGainSalesTable {
       "Proceeds: \(formattedAmount(sale.proceeds))",
       "Gain: \(formattedAmount(sale.gain))",
       "12-month gain: \(formattedAmount(sale.discountEligibleGain))",
-      expanded,
-    ].joined(separator: ", ")
+    ]
+    if let ownerLabel = sale.ownerLabel {
+      parts.insert("Owner: \(ownerLabel)", at: 1)
+    }
+    parts.append(expanded)
+    return parts.joined(separator: ", ")
   }
 
   private func lotAccessibilityLabel(
@@ -280,11 +284,15 @@ extension CapitalGainSalesTable {
     ].joined(separator: ", ")
   }
 
-  private func instrumentCell(for instrument: Instrument) -> some View {
+  private func instrumentCell(for sale: CapitalGainSale) -> some View {
     VStack(alignment: .leading, spacing: 1) {
-      Text(instrument.displayLabel)
-      if instrument.name != instrument.displayLabel {
-        Text(instrument.name)
+      Text(sale.instrument.displayLabel)
+      if let ownerLabel = sale.ownerLabel {
+        Text(ownerLabel)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      } else if sale.instrument.name != sale.instrument.displayLabel {
+        Text(sale.instrument.name)
           .font(.caption)
           .foregroundStyle(.secondary)
       }

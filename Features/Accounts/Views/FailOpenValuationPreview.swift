@@ -60,6 +60,16 @@ private func makePreviewView(account: Account) -> some View {
   .dynamicTypeSize(.accessibility3)
 }
 
+#Preview("Bank account, tax owner assigned") {
+  let partnerOwnerId = failOpenValuationPreviewUUID("22222222-2222-2222-2222-222222222222")
+  makePreviewView(
+    account: Account(
+      name: "Shared spending",
+      type: .bank,
+      instrument: .AUD,
+      taxOwnerIds: [partnerOwnerId]))
+}
+
 /// Wrapper that imitates the section structure used by
 /// `EditAccountView.valuationSection` so the fail-open footer Label
 /// can render in canvas without forcing a preview-only initialiser
@@ -99,4 +109,11 @@ private struct FailOpenValuationPreview: View {
 #Preview("Investment account, fail-open footer (Accessibility3)") {
   FailOpenValuationPreview()
     .dynamicTypeSize(.accessibility3)
+}
+
+private func failOpenValuationPreviewUUID(_ literal: String) -> UUID {
+  guard let uuid = UUID(uuidString: literal) else {
+    fatalError("Invalid fail-open valuation preview UUID")
+  }
+  return uuid
 }

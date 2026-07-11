@@ -7,6 +7,7 @@ import Foundation
 /// transactions touching at least one non-fiat instrument are produced —
 /// the pure-fiat bulk of the table never leaves SQLite.
 struct CostBasisEventLegRow: Sendable, Equatable {
+  let id: UUID
   let transactionId: UUID
   let date: Date
   let accountId: UUID?
@@ -21,6 +22,7 @@ struct CostBasisEventLegRow: Sendable, Equatable {
   let taxOwnerIds: [UUID]
 
   init(
+    id: UUID = UUID(),
     transactionId: UUID,
     date: Date,
     accountId: UUID?,
@@ -30,6 +32,7 @@ struct CostBasisEventLegRow: Sendable, Equatable {
     sortOrder: Int,
     taxOwnerIds: [UUID] = []
   ) {
+    self.id = id
     self.transactionId = transactionId
     self.date = date
     self.accountId = accountId

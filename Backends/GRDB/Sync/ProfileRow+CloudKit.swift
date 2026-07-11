@@ -50,7 +50,7 @@ extension ProfileRow: CloudKitRecordConvertible {
       encodedSystemFields: nil,
       dataFormatVersion: fields.dataFormatVersion.map(Int.init) ?? 0,
       defaultTaxOwnerId: fields.defaultTaxOwnerId.flatMap(UUID.init(uuidString:))
-        ?? TaxOwner.defaultOwnerId(for: id)
+        ?? ProfileIndexSchema.defaultTaxOwnerId(for: id)
     )
   }
 

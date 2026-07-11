@@ -1,3 +1,6 @@
+// The tax report view co-locates owner selection, export state, and section routing to avoid widening view internals.
+// swiftlint:disable file_length
+
 import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
@@ -10,15 +13,21 @@ struct TaxReportView: View {
   let events: [CapitalGainEvent]
   let capitalGainsHasUnavailableData: Bool
   let capitalGainsUnavailableInstruments: [Instrument]
+  let capitalGainsHasUnavailableDataByOwner: [UUID: Bool]
+  let ownerUnavailableCapitalGainsInstruments: [UUID: [Instrument]]
   let taxIncomeExpenseSummaries: [TaxIncomeExpenseSummary]
   let taxIncomeExpenseRollup: TaxIncomeExpenseSummary?
   let defaultTaxOwnerId: UUID
   let taxIncomeExpenseDateInterval: Range<Date>?
   let taxIncomeExpenseError: Error?
   let taxOwnerNames: [UUID: String]
+  let taxOwnerKinds: [UUID: TaxOwnerKind]
   let profitLoss: [InstrumentProfitLoss]
   let profitLossHasUnavailableData: Bool
   let profitLossUnavailableInstruments: [Instrument]
+  let profitLossByOwner: [UUID: [InstrumentProfitLoss]]
+  let profitLossHasUnavailableDataByOwner: [UUID: Bool]
+  let profitLossUnavailableInstrumentsByOwner: [UUID: [Instrument]]
   let isLoading: Bool
   let error: Error?
   let isMigratingCrossChainIdentity: Bool
@@ -28,23 +37,64 @@ struct TaxReportView: View {
   @State var exportDocument = TaxReportCSVDocument(csv: "")
   @State var isExportPresented = false
   @State var exportError: String?
+  @State var selectedOwnerId: UUID?
 
   private var sortedSales: [CapitalGainSale] {
-    salesSort.sorted(TaxReportPresentation.saleRows(from: events))
+    salesSort.sorted(
+      TaxReportPresentation.saleRows(
+        from: selectedReport.events,
+        taxOwnerNames: taxOwnerNames,
+        defaultTaxOwnerId: defaultTaxOwnerId,
+        includeOwnerLabels: selectedReport.effectiveOwnerId == nil && ownerSelection.isPickerVisible
+      ))
   }
 
   private var financialYearEndHoldings: FinancialYearEndHoldingsPresentation {
     TaxReportPresentation.financialYearEndHoldings(
-      from: profitLoss,
+      from: selectedReport.profitLoss,
       profileInstrument: profileInstrument)
   }
 
   var reportInstruments: [Instrument] {
-    events.map(\.instrument) + profitLoss.map(\.instrument)
+    selectedReport.events.map(\.instrument) + selectedReport.profitLoss.map(\.instrument)
   }
 
   private var financialYearEndLabel: String {
     TaxReportPresentation.dateLabel(holdingsDate)
+  }
+
+  var ownerSelection: TaxReportOwnerSelection {
+    TaxReportOwnerSelection.options(for: taxOwnerNames, selectedOwnerId: selectedOwnerId)
+  }
+  var effectiveSelectedOwnerId: UUID? {
+    ownerSelection.selectedOwnerId
+  }
+  var ownerPickerSelection: Binding<UUID?> {
+    Binding(
+      get: { ownerSelection.selectedOwnerId },
+      set: { selectedOwnerId = $0 })
+  }
+
+  var selectedReport: TaxReportSelectionProjection {
+    TaxReportSelectionProjection(
+      ownerSelection: ownerSelection,
+      events: events,
+      allOwnerCapitalGainsSummary: summary,
+      capitalGainsHasUnavailableData: capitalGainsHasUnavailableData,
+      capitalGainsUnavailableInstruments: capitalGainsUnavailableInstruments,
+      capitalGainsHasUnavailableDataByOwner: capitalGainsHasUnavailableDataByOwner,
+      ownerUnavailableCapitalGainsInstruments: ownerUnavailableCapitalGainsInstruments,
+      taxIncomeExpenseSummaries: taxIncomeExpenseSummaries,
+      allOwnerTaxIncomeExpenseRollup: taxIncomeExpenseRollup,
+      profitLoss: profitLoss,
+      profitLossHasUnavailableData: profitLossHasUnavailableData,
+      profitLossUnavailableInstruments: profitLossUnavailableInstruments,
+      profitLossByOwner: profitLossByOwner,
+      profitLossHasUnavailableDataByOwner: profitLossHasUnavailableDataByOwner,
+      profitLossUnavailableInstrumentsByOwner: profitLossUnavailableInstrumentsByOwner,
+      defaultTaxOwnerId: defaultTaxOwnerId,
+      profileInstrument: profileInstrument,
+      taxOwnerKinds: taxOwnerKinds)
   }
 
   var body: some View {
@@ -56,6 +106,7 @@ struct TaxReportView: View {
           errorView(error)
         } else {
           reportToolbar
+          ownerPicker
           reportSummaryTiles
           taxIncomeExpenseSection
           realisedCapitalGainsSection
@@ -82,19 +133,31 @@ struct TaxReportView: View {
 }
 
 extension TaxReportView {
+  @ViewBuilder private var ownerPicker: some View {
+    if ownerSelection.isPickerVisible {
+      Picker("Tax owner", selection: ownerPickerSelection) {
+        ForEach(ownerSelection.choices) { choice in
+          Text(choice.label).tag(choice.id)
+        }
+      }
+      .pickerStyle(.menu)
+    }
+  }
 
   @ViewBuilder private var realisedCapitalGainsSection: some View {
     VStack(alignment: .leading, spacing: 12) {
-      if isLoading && summary == nil {
-        ProgressView("Loading capital gains...")
+      if isLoading && selectedReport.capitalGainsSummary == nil {
+        ProgressView("Loading tax report...")
           .frame(maxWidth: .infinity, minHeight: 180)
-      } else if capitalGainsHasUnavailableData && summary == nil {
+      } else if selectedReport.capitalGainsHasUnavailableData
+        && selectedReport.capitalGainsSummary == nil
+      {
         unavailableView(
           title: "Capital gains unavailable",
           description:
             "A price is missing for one or more sales, so Moolah cannot show a reliable capital gains total yet."
         )
-      } else if summary != nil {
+      } else if selectedReport.capitalGainsSummary != nil {
         disposalList
       } else {
         ContentUnavailableView(
@@ -106,12 +169,14 @@ extension TaxReportView {
   }
 
   @ViewBuilder private var reportSummaryTiles: some View {
-    if let summary, !capitalGainsHasUnavailableData {
+    if let summary = selectedReport.capitalGainsSummary,
+      !selectedReport.capitalGainsHasUnavailableData
+    {
       LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 12)], spacing: 12) {
         capitalGainsSummaryTiles(summary)
         holdingsSummaryTile
       }
-    } else if summary != nil {
+    } else if selectedReport.capitalGainsSummary != nil {
       VStack(alignment: .leading, spacing: 12) {
         unavailableView(
           title: "Capital gains total unavailable",
@@ -131,18 +196,34 @@ extension TaxReportView {
 
   @ViewBuilder
   private func capitalGainsSummaryTiles(_ summary: CapitalGainsSummary) -> some View {
-    TaxSummaryTile(
-      title: "Net capital gain",
-      amount: amount(summary.netCapitalGain),
-      caption: "After the 12-month discount")
-    TaxSummaryTile(
-      title: "Short-term",
-      amount: amount(summary.shortTermGain),
-      caption: "Held 12 months or less")
-    TaxSummaryTile(
-      title: "Long-term",
-      amount: amount(summary.longTermGain),
-      caption: "Before any discount")
+    if selectedReport.ownerScopeUsesTrustTreatment {
+      let values = summary.asTaxAdjustmentValues(currency: profileInstrument)
+      TaxSummaryTile(
+        title: "Short-term capital gains",
+        amount: values.shortTerm,
+        caption: "Before loss offsets")
+      TaxSummaryTile(
+        title: "Long-term capital gains",
+        amount: values.longTerm,
+        caption: "Before loss offsets or discounts")
+      TaxSummaryTile(
+        title: "Capital losses",
+        amount: values.losses,
+        caption: "Current-year losses")
+    } else {
+      TaxSummaryTile(
+        title: "Net capital gain",
+        amount: amount(summary.netCapitalGain),
+        caption: "After the 12-month discount")
+      TaxSummaryTile(
+        title: "Short-term",
+        amount: amount(summary.shortTermGain),
+        caption: "Held 12 months or less")
+      TaxSummaryTile(
+        title: "Long-term",
+        amount: amount(summary.longTermGain),
+        caption: "Before any discount")
+    }
     TaxSummaryTile(
       title: "Total sold gain/loss",
       amount: amount(summary.totalGain),
@@ -150,7 +231,7 @@ extension TaxReportView {
   }
 
   @ViewBuilder private var holdingsSummaryTile: some View {
-    if profitLossHasUnavailableData {
+    if selectedReport.profitLossHasUnavailableData {
       EmptyView()
     } else if !financialYearEndHoldings.rows.isEmpty {
       TaxSummaryTile(
@@ -162,7 +243,7 @@ extension TaxReportView {
 
   @ViewBuilder private var disposalList: some View {
     if sortedSales.isEmpty {
-      if capitalGainsUnavailableInstruments.isEmpty {
+      if selectedReport.capitalGainsUnavailableInstruments.isEmpty {
         ContentUnavailableView(
           "No sales",
           systemImage: "tray",
@@ -170,7 +251,7 @@ extension TaxReportView {
       } else {
         unavailableInstrumentRows(
           title: "Sales unavailable",
-          instruments: capitalGainsUnavailableInstruments)
+          instruments: selectedReport.capitalGainsUnavailableInstruments)
       }
     } else {
       VStack(alignment: .leading, spacing: 8) {
@@ -188,7 +269,7 @@ extension TaxReportView {
         #endif
         unavailableInstrumentRows(
           title: "Sales unavailable",
-          instruments: capitalGainsUnavailableInstruments)
+          instruments: selectedReport.capitalGainsUnavailableInstruments)
       }
     }
   }
@@ -210,20 +291,20 @@ extension TaxReportView {
   }
 
   @ViewBuilder private var financialYearEndHoldingsContent: some View {
-    if isLoading && profitLoss.isEmpty {
+    if isLoading && selectedReport.profitLoss.isEmpty {
       ProgressView("Loading holdings...")
         .frame(maxWidth: .infinity, minHeight: 120)
-    } else if profitLossHasUnavailableData && financialYearEndHoldings.rows.isEmpty {
+    } else if selectedReport.profitLossHasUnavailableData && financialYearEndHoldings.rows.isEmpty {
       unavailableInstrumentRows(
         title: "Holdings unavailable",
-        instruments: profitLossUnavailableInstruments)
+        instruments: selectedReport.profitLossUnavailableInstruments)
     } else if financialYearEndHoldings.rows.isEmpty {
       ContentUnavailableView(
         "No holdings at \(financialYearEndLabel)",
         systemImage: "tray",
         description: Text("No tracked investment holdings found."))
     } else {
-      financialYearEndHoldingsList(totalUnavailable: profitLossHasUnavailableData)
+      financialYearEndHoldingsList(totalUnavailable: selectedReport.profitLossHasUnavailableData)
     }
   }
 
@@ -245,7 +326,7 @@ extension TaxReportView {
       #endif
       unavailableInstrumentRows(
         title: "Holdings unavailable",
-        instruments: profitLossUnavailableInstruments)
+        instruments: selectedReport.profitLossUnavailableInstruments)
     }
   }
 
@@ -350,15 +431,15 @@ extension TaxReportView {
 
   private var migrationUnavailable: some View {
     unavailableView(
-      title: "Capital gains report not ready yet",
+      title: "Tax report not ready yet",
       description:
-        "Moolah is finishing an investment update. Capital gains will appear here once that is done."
+        "Moolah is finishing an investment update. The tax report will appear here once that is done."
     )
   }
 
   private func errorView(_ error: Error) -> some View {
     ContentUnavailableView {
-      Label("Could not load capital gains", systemImage: "exclamationmark.triangle")
+      Label("Could not load tax report", systemImage: "exclamationmark.triangle")
     } description: {
       Text(TaxReportPresentation.errorDescription(error, instruments: reportInstruments))
     } actions: {

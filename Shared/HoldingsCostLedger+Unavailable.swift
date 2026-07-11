@@ -46,7 +46,7 @@ extension HoldingsCostLedger {
         (leg.type == .trade && leg.quantity < 0)
           || (leg.type == .expense && leg.quantity < 0)
       else { return [] }
-      return touchKeys(account: leg.accountId, instrument: leg.instrument, in: group).map { key in
+      return touchKeys(for: leg, in: group).map { key in
         HoldingsCostLedgerDisposalCandidate(date: group.date, key: key)
       }
     }
@@ -66,7 +66,7 @@ extension HoldingsCostLedger {
       let destination = transfers.first(where: { $0.quantity > 0 }),
       source.instrument == destination.instrument
     else { return [] }
-    let sourceKeys = touchKeys(account: source.accountId, instrument: source.instrument, in: group)
+    let sourceKeys = touchKeys(for: source, in: group)
     return Set(
       sourceKeys.map { sourceKey in
         HoldingsCostLedgerMoveCandidate(
@@ -85,31 +85,25 @@ extension HoldingsCostLedger {
     unavailable: inout Set<TouchKey>,
     inputs: inout Set<HoldingsCostLedgerUnavailableInput>
   ) {
-    let keys = nonFiatKeys(in: group)
+    let keys = Set(nonFiatKeys(in: group))
     unavailable.formUnion(keys)
     holdingsCostLedgerUnavailableLogger.error(
       "Cost-basis conversion failed for transaction \(group.id, privacy: .public) on \(group.date, privacy: .public): \(error.localizedDescription, privacy: .public)"
     )
-    if mayEmitDirectDisposal(in: group) {
+    let realisedGainKeys = Set(realisedGainDisposalCandidates(in: group).map(\.key))
+    let costBasisOnlyKeys = keys.subtracting(realisedGainKeys)
+    if !costBasisOnlyKeys.isEmpty {
       inputs.insert(
         HoldingsCostLedgerUnavailableInput(
           date: group.date,
-          keys: Set(keys),
-          mayAffectRealisedGains: true))
-      return
+          keys: costBasisOnlyKeys,
+          mayAffectRealisedGains: false))
     }
-
-    inputs.insert(
-      HoldingsCostLedgerUnavailableInput(
-        date: group.date,
-        keys: Set(keys),
-        mayAffectRealisedGains: false))
-    let transferDisposalKeys = Set(transferDisposalCandidateKeys(in: group))
-    if !transferDisposalKeys.isEmpty {
+    if !realisedGainKeys.isEmpty {
       inputs.insert(
         HoldingsCostLedgerUnavailableInput(
           date: group.date,
-          keys: transferDisposalKeys,
+          keys: realisedGainKeys,
           mayAffectRealisedGains: true))
     }
   }
@@ -184,7 +178,7 @@ extension HoldingsCostLedger {
   private static func nonFiatKeys(in group: TransactionGroup) -> [TouchKey] {
     group.legs
       .filter { $0.instrument.kind != .fiatCurrency }
-      .flatMap { touchKeys(account: $0.accountId, instrument: $0.instrument, in: group) }
+      .flatMap { touchKeys(for: $0, in: group) }
   }
 
   private static func mayEmitDirectDisposal(in group: TransactionGroup) -> Bool {
@@ -203,11 +197,8 @@ extension HoldingsCostLedger {
       let destination = transfers.first(where: { $0.quantity > 0 }),
       source.instrument == destination.instrument
     else { return [] }
-    let destinationFractions = ownerFractions(
-      account: destination.accountId,
-      instrument: destination.instrument,
-      in: group)
-    return ownerFractions(account: source.accountId, instrument: source.instrument, in: group)
+    let destinationFractions = ownerFractions(for: destination, in: group)
+    return ownerFractions(for: source, in: group)
       .filter { owner, fraction in
         fraction > (destinationFractions[owner] ?? 0)
       }
@@ -216,25 +207,24 @@ extension HoldingsCostLedger {
       }
   }
 
-  private static func ownerFractions(
-    account: UUID?,
-    instrument: Instrument,
-    in group: TransactionGroup
-  ) -> [UUID?: Decimal] {
-    let keys = touchKeys(account: account, instrument: instrument, in: group)
+  private static func ownerFractions(for leg: TransactionLeg, in group: TransactionGroup)
+    -> [UUID?: Decimal]
+  {
+    let keys = touchKeys(for: leg, in: group)
     let fraction = Decimal(1) / Decimal(keys.count)
     return Dictionary(uniqueKeysWithValues: keys.map { ($0.taxOwnerId, fraction) })
   }
 
-  private static func touchKeys(
-    account: UUID?,
-    instrument: Instrument,
-    in group: TransactionGroup
-  ) -> [TouchKey] {
-    let ownerIds = group.taxOwnerIdsByAccount[account] ?? []
+  private static func touchKeys(for leg: TransactionLeg, in group: TransactionGroup) -> [TouchKey] {
+    let ownerIds =
+      group.taxOwnerIdsByLegId[leg.id]
+      ?? group.taxOwnerIdsByAccount[leg.accountId]
+      ?? []
     guard !ownerIds.isEmpty else {
-      return [TouchKey(account: account, instrument: instrument, taxOwnerId: nil)]
+      return [TouchKey(account: leg.accountId, instrument: leg.instrument, taxOwnerId: nil)]
     }
-    return ownerIds.map { TouchKey(account: account, instrument: instrument, taxOwnerId: $0) }
+    return ownerIds.map {
+      TouchKey(account: leg.accountId, instrument: leg.instrument, taxOwnerId: $0)
+    }
   }
 }

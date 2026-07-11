@@ -1,7 +1,6 @@
 // MoolahTests/Backends/GRDB/TaxIncomeSummaryPersistenceTests.swift
 
 import Foundation
-import GRDB
 import Testing
 
 @testable import Moolah
@@ -93,6 +92,134 @@ struct TaxIncomeSummaryPersistenceTests {
     }
   }
 
+  @Test("tax income details are tax specific and split by owner category instrument and day")
+  func taxIncomeDetailsUseTaxDimensions() async throws {
+    let usd = Instrument.USD
+    let fixture = try await makeTaxIncomeFixture(
+      conversionService: FakeConversionService.fixedRates([usd.id: 2]))
+    let ownerA = UUID()
+    let ownerB = UUID()
+    var account = fixture.account
+    account.taxOwnerIds = [ownerA, ownerB]
+    let category = try await fixture.categories.create(
+      Moolah.Category(name: "Dividends", isTaxReportable: true))
+    _ = try await fixture.accounts.create(account)
+    try await insertTaxTransaction(
+      fixture.database,
+      accountId: account.id,
+      legs: [
+        TaxTestLeg(90, .income, category.id, instrument: usd),
+        TaxTestLeg(-30, .expense, category.id),
+      ])
+
+    let incomeRows = try await fixture.analysis.fetchTaxIncomeExpenseDetails(
+      dateInterval: fixture.date..<fixture.date.addingTimeInterval(1),
+      targetInstrument: .AUD,
+      defaultTaxOwnerId: fixture.defaultOwner,
+      ownerId: ownerA,
+      type: .income)
+    let deductionRows = try await fixture.analysis.fetchTaxIncomeExpenseDetails(
+      dateInterval: fixture.date..<fixture.date.addingTimeInterval(1),
+      targetInstrument: .AUD,
+      defaultTaxOwnerId: fixture.defaultOwner,
+      ownerId: nil,
+      type: .expense)
+
+    let income = try #require(incomeRows.first)
+    #expect(incomeRows.count == 1)
+    #expect(income.ownerId == ownerA)
+    #expect(income.categoryId == category.id)
+    #expect(income.instrument == usd)
+    #expect(income.amount?.quantity == 90)
+    #expect(Set(deductionRows.map(\.ownerId)) == [ownerA, ownerB])
+    #expect(Set(deductionRows.compactMap { $0.amount?.quantity }) == [15])
+  }
+
+  @Test("tax income details group rows by Australian tax day across Sydney DST")
+  func taxIncomeDetailsGroupByAustralianTaxDayAcrossDST() async throws {
+    let fixture = try await makeTaxIncomeFixture()
+    _ = try await fixture.accounts.create(fixture.account)
+    let category = try await fixture.categories.create(
+      Moolah.Category(name: "Interest", isTaxReportable: true))
+    let sameSydneyDayStartUTC = try AnalysisTestHelpers.utcDate(
+      year: 2026, month: 1, day: 4, hour: 14)
+    let sameSydneyDayEndUTC = try AnalysisTestHelpers.utcDate(
+      year: 2026, month: 1, day: 5, hour: 12)
+    let nextSydneyDayUTC = try AnalysisTestHelpers.utcDate(
+      year: 2026, month: 1, day: 5, hour: 13)
+    try await insertTaxTransaction(
+      fixture.database,
+      accountId: fixture.account.id,
+      date: sameSydneyDayStartUTC,
+      legs: [TaxTestLeg(10, .income, category.id)])
+    try await insertTaxTransaction(
+      fixture.database,
+      accountId: fixture.account.id,
+      date: sameSydneyDayEndUTC,
+      legs: [TaxTestLeg(20, .income, category.id)])
+    try await insertTaxTransaction(
+      fixture.database,
+      accountId: fixture.account.id,
+      date: nextSydneyDayUTC,
+      legs: [TaxTestLeg(30, .income, category.id)])
+    let financialYearStart = try #require(
+      AustralianTaxCalendar.calendar.date(from: DateComponents(year: 2025, month: 7, day: 1)))
+    let financialYearEnd = try #require(
+      AustralianTaxCalendar.calendar.date(from: DateComponents(year: 2026, month: 7, day: 1)))
+
+    let rows = try await fixture.analysis.fetchTaxIncomeExpenseDetails(
+      dateInterval: financialYearStart..<financialYearEnd,
+      targetInstrument: .AUD,
+      defaultTaxOwnerId: fixture.defaultOwner,
+      ownerId: fixture.defaultOwner,
+      type: .income)
+
+    #expect(rows.map(\.amount?.quantity) == [30, 30])
+    let days = rows.compactMap(\.day).map {
+      AustralianTaxCalendar.calendar.dateComponents([.year, .month, .day], from: $0)
+    }
+    #expect(days.map(\.year) == [2026, 2026])
+    #expect(days.map(\.month) == [1, 1])
+    #expect(days.map(\.day) == [5, 6])
+  }
+
+  @Test("tax income conversion uses Australian tax day at UTC boundary")
+  func taxIncomeConversionUsesAustralianTaxDayAtUTCBoundary() async throws {
+    let usd = Instrument.USD
+    let australianTaxDay = try #require(
+      AustralianTaxCalendar.calendar.date(
+        from: DateComponents(year: 2025, month: 7, day: 1)))
+    let utcTaxDay = try AnalysisTestHelpers.utcDate(year: 2025, month: 7, day: 1, hour: 0)
+    let nextFinancialYear = try #require(
+      AustralianTaxCalendar.calendar.date(
+        from: DateComponents(year: 2026, month: 7, day: 1)))
+    let utcBoundaryInstant = try AnalysisTestHelpers.utcDate(
+      year: 2025, month: 6, day: 30, hour: 15)
+    let conversion = FakeConversionService.dateRates([
+      utcTaxDay: [usd.id: 3]
+    ])
+    let fixture = try await makeTaxIncomeFixture(conversionService: conversion)
+    _ = try await fixture.accounts.create(fixture.account)
+    let category = try await fixture.categories.create(
+      Moolah.Category(name: "Foreign interest", isTaxReportable: true))
+    try await insertTaxTransaction(
+      fixture.database,
+      accountId: fixture.account.id,
+      date: utcBoundaryInstant,
+      legs: [TaxTestLeg(100, .income, category.id, instrument: usd)])
+
+    let summaries = try await fixture.analysis.fetchTaxIncomeExpenseSummaries(
+      dateInterval: australianTaxDay..<nextFinancialYear,
+      targetInstrument: .AUD,
+      defaultTaxOwnerId: fixture.defaultOwner)
+
+    let summary = try #require(summaries.first)
+    let conversionRequest = try #require(conversion.recordedBatches.last?.first)
+    #expect(summaries.count == 1)
+    #expect(summary.taxableIncome.quantity == 300)
+    #expect(conversionRequest.date == utcTaxDay)
+  }
+
   @Test("tax reportable transaction filters use resolved tax owner")
   func taxReportableTransactionFiltersUseResolvedTaxOwner() async throws {
     let seeded = try await makeTaxReportableTransactionFilterFixture()
@@ -149,145 +276,5 @@ struct TaxIncomeSummaryPersistenceTests {
         taxDefaultOwnerId: fixture.defaultOwner))
 
     #expect(page.map(\.payee) == ["Inside boundary"])
-  }
-}
-
-struct TaxIncomeFixture {
-  let database: any DatabaseWriter
-  let accounts: GRDBAccountRepository
-  let categories: GRDBCategoryRepository
-  let transactions: GRDBTransactionRepository
-  let analysis: GRDBAnalysisRepository
-  let account: Account
-  let defaultOwner: UUID
-  let date: Date
-}
-
-struct TaxTestLeg {
-  let amount: Decimal
-  let type: TransactionType
-  let categoryId: UUID
-  let instrument: Instrument
-
-  init(
-    _ amount: Decimal,
-    _ type: TransactionType,
-    _ categoryId: UUID,
-    instrument: Instrument = .AUD
-  ) {
-    self.amount = amount
-    self.type = type
-    self.categoryId = categoryId
-    self.instrument = instrument
-  }
-}
-
-struct TaxReportableTransactionFilterFixture {
-  let fixture: TaxIncomeFixture
-  let accountOwner: UUID
-}
-
-func makeTaxReportableTransactionFilterFixture() async throws
-  -> TaxReportableTransactionFilterFixture
-{
-  let fixture = try await makeTaxIncomeFixture()
-  let accountOwner = UUID()
-  let categoryOwner = UUID()
-  var account = fixture.account
-  account.taxOwnerIds = [accountOwner]
-  _ = try await fixture.accounts.create(account)
-  let accountOwned = try await fixture.categories.create(
-    Moolah.Category(name: "Interest", isTaxReportable: true))
-  let categoryOwned = try await fixture.categories.create(
-    Moolah.Category(
-      name: "Distribution",
-      isTaxReportable: true,
-      taxOwnerIds: [categoryOwner]))
-  let ignored = try await fixture.categories.create(
-    Moolah.Category(name: "Gift", isTaxReportable: false))
-  try await insertTaxTransaction(
-    fixture.database,
-    accountId: account.id,
-    payee: "Account owner income",
-    legs: [TaxTestLeg(100, .income, accountOwned.id)])
-  try await insertTaxTransaction(
-    fixture.database,
-    accountId: account.id,
-    payee: "Category owner income",
-    legs: [TaxTestLeg(200, .income, categoryOwned.id)])
-  try await insertTaxTransaction(
-    fixture.database,
-    accountId: account.id,
-    payee: "Account owner deduction",
-    legs: [TaxTestLeg(-30, .expense, accountOwned.id)])
-  try await insertTaxTransaction(
-    fixture.database,
-    accountId: account.id,
-    payee: "Ignored income",
-    legs: [TaxTestLeg(999, .income, ignored.id)])
-  return TaxReportableTransactionFilterFixture(fixture: fixture, accountOwner: accountOwner)
-}
-
-func makeTaxIncomeFixture(
-  conversionService: any InstrumentConversionService = FakeConversionService.fixedRates([:])
-) async throws -> TaxIncomeFixture {
-  let database = try ProfileDatabase.openInMemory()
-  let registry = try SharedRegistryTestSupport.makeSharedRegistry()
-  let accounts = GRDBAccountRepository(
-    database: database,
-    instrumentResolver: registry,
-    instrumentRegistrar: registry)
-  let categories = GRDBCategoryRepository(database: database)
-  let analysis = GRDBAnalysisRepository(
-    database: database,
-    instrument: .AUD,
-    conversionService: conversionService,
-    instrumentResolver: registry)
-  let transactions = GRDBTransactionRepository(
-    database: database,
-    defaultInstrument: .AUD,
-    conversionService: conversionService,
-    instrumentResolver: registry,
-    instrumentRegistrar: registry)
-  let account = Account(
-    id: UUID(),
-    name: "Cash",
-    type: .bank,
-    instrument: .AUD)
-  return TaxIncomeFixture(
-    database: database,
-    accounts: accounts,
-    categories: categories,
-    transactions: transactions,
-    analysis: analysis,
-    account: account,
-    defaultOwner: UUID(),
-    date: Date(timeIntervalSince1970: 1_735_689_600))
-}
-
-func insertTaxTransaction(
-  _ database: any DatabaseWriter,
-  accountId: UUID,
-  payee: String = "Tax row",
-  date: Date = Date(timeIntervalSince1970: 1_735_689_600),
-  legs: [TaxTestLeg]
-) async throws {
-  let transaction = Transaction(
-    date: date,
-    payee: payee,
-    legs: legs.map { leg in
-      TransactionLeg(
-        accountId: accountId,
-        instrument: leg.instrument,
-        quantity: leg.amount,
-        type: leg.type,
-        categoryId: leg.categoryId)
-    })
-  try await database.write { database in
-    try TransactionRow(domain: transaction).insert(database)
-    for (offset, leg) in transaction.legs.enumerated() {
-      try TransactionLegRow(domain: leg, transactionId: transaction.id, sortOrder: offset)
-        .insert(database)
-    }
   }
 }

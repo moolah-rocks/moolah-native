@@ -57,7 +57,10 @@ struct ExchangeAccountCreationLogic {
   /// shared state directly so the parent view can decide how to surface
   /// success vs failure.
   func submit(
-    name: String, provider: ExchangeProvider, token: String
+    name: String,
+    provider: ExchangeProvider,
+    token: String,
+    taxOwnerIds: [UUID] = []
   ) async -> Outcome {
     let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
     let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -70,7 +73,8 @@ struct ExchangeAccountCreationLogic {
       type: .exchange,
       instrument: profileInstrument,
       valuationMode: .calculatedFromTrades,
-      exchangeProvider: provider)
+      exchangeProvider: provider,
+      taxOwnerIds: taxOwnerIds)
 
     let created: Account
     do {

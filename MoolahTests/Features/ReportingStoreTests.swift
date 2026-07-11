@@ -219,6 +219,45 @@ struct ReportingStoreTests {
     ]
   }
 
+  @Test func capitalGainsSummary_rollsUpAfterOwnerLossAndDiscountTreatment() throws {
+    let ownerWithLoss = UUID()
+    let ownerWithLongTermGain = UUID()
+    let instrument = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
+    let sellDate = try #require(
+      AustralianTaxCalendar.calendar.date(from: DateComponents(year: 2026, month: 5, day: 1)))
+    let shortTermBuyDate = try #require(
+      AustralianTaxCalendar.calendar.date(from: DateComponents(year: 2026, month: 1, day: 1)))
+    let longTermBuyDate = try #require(
+      AustralianTaxCalendar.calendar.date(from: DateComponents(year: 2024, month: 1, day: 1)))
+    let events = [
+      CapitalGainEvent(
+        sourceTransactionId: UUID(),
+        instrument: instrument,
+        sellDate: sellDate,
+        acquiredDate: shortTermBuyDate,
+        quantity: 10,
+        costBasis: 1_000,
+        proceeds: 0,
+        holdingDays: 120,
+        taxOwnerId: ownerWithLoss),
+      CapitalGainEvent(
+        sourceTransactionId: UUID(),
+        instrument: instrument,
+        sellDate: sellDate,
+        acquiredDate: longTermBuyDate,
+        quantity: 10,
+        costBasis: 0,
+        proceeds: 1_000,
+        holdingDays: 850,
+        taxOwnerId: ownerWithLongTermGain),
+    ]
+
+    let summary = ReportingStore.capitalGainsSummary(from: events)
+
+    #expect(summary.totalGain == 0)
+    #expect(summary.netCapitalGain == 500)
+  }
+
   @Test func capitalGainsSummary_taxAdjustmentValues() {
     let summary = CapitalGainsSummary(
       shortTermGain: 500,

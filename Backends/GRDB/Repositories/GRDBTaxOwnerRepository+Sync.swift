@@ -1,29 +1,58 @@
 // Backends/GRDB/Repositories/GRDBTaxOwnerRepository+Sync.swift
 
+@preconcurrency import CloudKit
 import Foundation
 import GRDB
 
 extension GRDBTaxOwnerRepository {
+  typealias RemovedOwnerReferences = GRDBTaxOwnershipPersistence.RemovedOwnerReferences
+
+  private static let emptyRemovedOwnerReferences = RemovedOwnerReferences(
+    accountIds: [], categoryIds: [])
+
   func applyRemoteChangesSync(saved rows: [TaxOwnerRow], deleted ids: [UUID]) throws {
-    try database.write { database in
+    let references = try database.write { database in
       try applyRemoteChangesSync(saved: rows, deleted: ids, in: database)
+    }
+    for accountId in references.accountIds {
+      onAccountChanged(AccountRow.recordType, accountId)
+    }
+    for categoryId in references.categoryIds {
+      onCategoryChanged(CategoryRow.recordType, categoryId)
     }
   }
 
+  @discardableResult
   func applyRemoteChangesSync(
     saved rows: [TaxOwnerRow], deleted ids: [UUID], in database: Database
-  ) throws {
+  ) throws -> RemovedOwnerReferences {
+    var allAccountIds: [UUID] = []
+    var allCategoryIds: [UUID] = []
     for row in rows {
+      guard try shouldApplyRemoteSave(row, in: database) else { continue }
       try row.upsert(database)
       try DeletionJournal.clearDataDeletion(recordName: row.recordName, in: database)
+      try DeletionJournal.clearDataTombstone(recordName: row.recordName, in: database)
     }
     for id in ids {
-      _ = try GRDBTaxOwnershipPersistence.removeOwnerReferences(
+      let references = try GRDBTaxOwnershipPersistence.removeOwnerReferences(
         ownerId: id,
-        markNeedsPush: false,
+        markNeedsPush: true,
         in: database)
+      allAccountIds.append(contentsOf: references.accountIds)
+      allCategoryIds.append(contentsOf: references.categoryIds)
       _ = try TaxOwnerRow.deleteOne(database, id: id)
+      if id == defaultTaxOwnerId {
+        try DeletionJournal.recordDataTombstone(
+          recordName: TaxOwnerRow.recordName(for: id),
+          recordType: TaxOwnerRow.recordType,
+          at: Date(),
+          in: database)
+      }
     }
+    return RemovedOwnerReferences(
+      accountIds: uniquedPreservingOrder(allAccountIds),
+      categoryIds: uniquedPreservingOrder(allCategoryIds))
   }
 
   @discardableResult
@@ -117,6 +146,33 @@ extension GRDBTaxOwnerRepository {
       try TaxOwnerRow
       .filter(TaxOwnerRow.Columns.id == id)
       .updateAll(database, [TaxOwnerRow.Columns.needsPush.set(to: true)])
+  }
+
+  private func uniquedPreservingOrder(_ ids: [UUID]) -> [UUID] {
+    var seen: Set<UUID> = []
+    var result: [UUID] = []
+    for id in ids where seen.insert(id).inserted {
+      result.append(id)
+    }
+    return result
+  }
+
+  private func shouldApplyRemoteSave(_ row: TaxOwnerRow, in database: Database) throws -> Bool {
+    guard row.id == defaultTaxOwnerId else { return true }
+    guard
+      let tombstone =
+        try DeletionJournalRow
+        .filter(
+          DeletionJournalRow.Columns.zoneName == DeletionJournal.profileDataLocalTombstoneZone
+            && DeletionJournalRow.Columns.recordName == row.recordName
+        )
+        .fetchOne(database)
+    else { return true }
+    guard
+      let incomingDate = CKRecord.modificationDate(
+        fromEncodedSystemFields: row.encodedSystemFields)
+    else { return false }
+    return incomingDate > Date(timeIntervalSince1970: tombstone.queuedAt)
   }
 
   func dirtyIdsSync(from ids: [UUID], in database: Database) throws -> Set<UUID> {

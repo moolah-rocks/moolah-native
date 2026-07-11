@@ -77,35 +77,39 @@ struct CategoryTaxControlPresentationTests {
   }
 
   @Test("category tax owner retry success clears errors and prunes selection")
-  func categoryTaxOwnerRetrySuccessClearsErrorsAndPrunesSelection() {
+  func categoryTaxOwnerRetrySuccessClearsErrorsAndPrunesSelection() async throws {
+    let (backend, _) = try TestBackend.create()
     let owner = TaxOwner(id: UUID(), name: "Alex")
     let removedOwnerId = UUID()
+    _ = try await backend.taxOwners.create(owner)
     let category = Category(
       name: "Interest",
       isTaxReportable: true,
       taxOwnerIds: [removedOwnerId, owner.id])
+    let store = CategoryTaxOwnerAssignmentStore()
+    store.select(category)
 
-    let state = CategoriesView.taxOwnerLoadSuccess(
-      owners: [owner],
-      selectedCategory: category)
+    await store.loadOwners(from: backend.taxOwners)
 
-    #expect(state.owners == [owner])
-    #expect(state.errorMessage == nil)
-    #expect(state.selectedCategory?.taxOwnerIds == [owner.id])
+    #expect(store.owners == [owner])
+    #expect(store.errorMessage == nil)
+    #expect(store.selectedCategory?.taxOwnerIds == [owner.id])
   }
 
   @Test("category tax owner retry failure preserves selection and shows error")
-  func categoryTaxOwnerRetryFailurePreservesSelectionAndShowsError() {
+  func categoryTaxOwnerRetryFailurePreservesSelectionAndShowsError() async {
     let ownerId = UUID()
     let category = Category(
       name: "Interest",
       isTaxReportable: true,
       taxOwnerIds: [ownerId])
+    let store = CategoryTaxOwnerAssignmentStore()
+    store.select(category)
 
-    let state = CategoriesView.taxOwnerLoadFailure(selectedCategory: category)
+    await store.loadOwners(from: ThrowingTaxOwnerRepository())
 
-    #expect(state.errorMessage == CategoriesView.taxOwnerLoadErrorMessage)
-    #expect(state.selectedCategory?.taxOwnerIds == [ownerId])
+    #expect(store.errorMessage == CategoryTaxOwnerAssignmentStore.loadErrorMessage)
+    #expect(store.selectedCategory?.taxOwnerIds == [ownerId])
   }
   @Test("delete confirmation discards pending save before deleting")
   func deleteConfirmationDiscardsPendingSaveBeforeDeleting() {

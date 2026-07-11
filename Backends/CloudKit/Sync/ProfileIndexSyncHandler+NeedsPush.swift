@@ -26,7 +26,7 @@ extension ProfileIndexSyncHandler {
     profileRows: [ProfileRow],
     deletedProfileIds: [UUID],
     saved: [CKRecord]
-  ) throws {
+  ) throws -> [ProfileRow] {
     try repository.database.write { database in
       let profileIds = profileRows.map(\.id)
       let dirty = try repository.dirtyIdsSync(from: profileIds, in: database)
@@ -51,6 +51,7 @@ extension ProfileIndexSyncHandler {
       if !echoes.isEmpty {
         try repository.setEncodedSystemFieldsBatchSync(echoes, in: database)
       }
+      return applicable
     }
   }
 

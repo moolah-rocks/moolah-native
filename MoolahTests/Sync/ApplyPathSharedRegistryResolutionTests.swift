@@ -48,7 +48,10 @@ struct ApplyPathSharedRegistryResolutionTests {
         binanceSymbol: nil))
 
     let bundle = ProfileGRDBRepositories.makeForApply(
-      database: perProfile, sharedRegistry: sharedRegistry)
+      database: perProfile,
+      sharedRegistry: sharedRegistry,
+      defaultTaxOwnerId: nil,
+      implicitDefaultTaxOwnerId: nil)
 
     // All four repos resolve the crypto instrument because their injected
     // resolver is the shared registry, not the per-profile shim.
@@ -81,7 +84,10 @@ struct ApplyPathSharedRegistryResolutionTests {
     let perProfile = try ProfileDatabase.openInMemory()
     let sharedRegistry = try SharedRegistryTestSupport.makeSharedRegistry()
     let bundle = ProfileGRDBRepositories.makeForApply(
-      database: perProfile, sharedRegistry: sharedRegistry)
+      database: perProfile,
+      sharedRegistry: sharedRegistry,
+      defaultTaxOwnerId: nil,
+      implicitDefaultTaxOwnerId: nil)
 
     // The per-profile `instrument` table does not exist, so it is
     // structurally impossible for the bundle's resolver to fall back to

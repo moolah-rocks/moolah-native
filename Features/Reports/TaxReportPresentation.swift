@@ -96,7 +96,16 @@ enum TaxReportPresentation {
     return formatter.string(from: date)
   }
 
-  static func saleRows(from events: [CapitalGainEvent]) -> [CapitalGainSale] {
+  static func errorMessage(_ error: any Error) -> String {
+    error.localizedDescription
+  }
+
+  static func saleRows(
+    from events: [CapitalGainEvent],
+    taxOwnerNames: [UUID: String] = [:],
+    defaultTaxOwnerId: UUID? = nil,
+    includeOwnerLabels: Bool = false
+  ) -> [CapitalGainSale] {
     let indexed = events.filter(\.isReportableSale).enumerated()
     let grouped = Dictionary(grouping: indexed) { _, event in
       saleGroupId(for: event)
@@ -113,8 +122,31 @@ enum TaxReportPresentation {
         id: saleGroupId(for: first),
         instrument: first.instrument,
         sellDate: first.sellDate,
+        ownerLabel: ownerLabel(
+          for: first.taxOwnerId,
+          taxOwnerNames: taxOwnerNames,
+          defaultTaxOwnerId: defaultTaxOwnerId,
+          includeOwnerLabels: includeOwnerLabels),
         lots: sorted.map { CapitalGainSaleLot(id: $0.offset, event: $0.element) })
     }.sorted(by: CapitalGainSale.stableAscendingOrder)
+  }
+
+  private static func ownerLabel(
+    for taxOwnerId: UUID?,
+    taxOwnerNames: [UUID: String],
+    defaultTaxOwnerId: UUID?,
+    includeOwnerLabels: Bool
+  ) -> String? {
+    guard includeOwnerLabels else { return nil }
+    guard let taxOwnerId else {
+      if let defaultTaxOwnerId, let name = taxOwnerNames[defaultTaxOwnerId], !name.isEmpty {
+        return name
+      }
+      return "Default owner"
+    }
+    if let name = taxOwnerNames[taxOwnerId], !name.isEmpty { return name }
+    if taxOwnerId == defaultTaxOwnerId { return "Default owner" }
+    return "Owner \(taxOwnerId.uuidString.prefix(8))"
   }
 
   static func financialYearEndHoldings(
@@ -139,11 +171,15 @@ enum TaxReportPresentation {
 
   private static func saleGroupId(for event: CapitalGainEvent) -> CapitalGainSaleIdentifier {
     if let sourceTransactionId = event.sourceTransactionId {
-      return .transaction(sourceTransactionId, instrumentId: event.instrument.id)
+      return .transaction(
+        sourceTransactionId,
+        instrumentId: event.instrument.id,
+        taxOwnerId: event.taxOwnerId)
     }
     return .fallback(
       [
         event.instrument.id,
+        event.taxOwnerId?.uuidString ?? "default",
         String(event.sellDate.timeIntervalSinceReferenceDate),
         String(event.acquiredDate.timeIntervalSinceReferenceDate),
         "\(event.quantity)",

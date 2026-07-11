@@ -14,6 +14,8 @@ struct TransferOwnerRegressionTests {
   private let accountA = makeUUID("10000000-0000-0000-0000-00000000000A")
   private let accountB = makeUUID("10000000-0000-0000-0000-00000000000B")
   private let accountC = makeUUID("10000000-0000-0000-0000-00000000000C")
+  private let categoryA = makeUUID("30000000-0000-0000-0000-00000000000A")
+  private let categoryB = makeUUID("30000000-0000-0000-0000-00000000000B")
   private let jointAccount = makeUUID("20000000-0000-0000-0000-000000000000")
 
   @Test
@@ -239,18 +241,58 @@ struct TransferOwnerRegressionTests {
     #expect(ownerCResult.unavailableInstruments == [bhp])
     #expect(ownerCResult.unavailableInstrumentIds == [bhp.id])
   }
+
+  @Test
+  func failedSameAccountCustomTradeUsesLegLevelCategoryOwnersForUnavailableData()
+    async throws
+  {
+    let spam = Instrument.crypto(
+      chainId: 10,
+      contractAddress: "0x21841eb46ccce03ebe57b4ee6eb547f31dfde152",
+      symbol: "SPAM",
+      name: "Spam Token",
+      decimals: 18)
+    let ledger = try await buildLedger(
+      transactions: [
+        Transaction(
+          id: makeUUID("61000000-0000-0000-0000-000000000000"),
+          date: day(100),
+          legs: [
+            leg(account: accountA, instrument: spam, quantity: -10, categoryId: categoryA),
+            leg(account: accountA, instrument: bhp, quantity: 1, categoryId: categoryB),
+          ])
+      ],
+      accounts: [account(id: accountA, owners: [ownerC])],
+      categories: [
+        category(id: categoryA, owners: [ownerA]),
+        category(id: categoryB, owners: [ownerB]),
+      ],
+      conversionService: FakeConversionService.failingInstruments([spam.id]))
+
+    let ownerAResult = CapitalGainsCalculator.compute(ledger: ledger, ownerId: ownerA)
+    let ownerBResult = CapitalGainsCalculator.compute(ledger: ledger, ownerId: ownerB)
+    let ownerCResult = CapitalGainsCalculator.compute(ledger: ledger, ownerId: ownerC)
+
+    #expect(ownerAResult.hasUnavailableData)
+    #expect(ownerAResult.unavailableInstruments == [spam])
+    #expect(ownerBResult.hasUnavailableData)
+    #expect(ownerBResult.unavailableInstruments == [bhp])
+    #expect(ownerCResult.hasUnavailableData == false)
+    #expect(ownerCResult.unavailableInstruments.isEmpty)
+  }
 }
 
 extension TransferOwnerRegressionTests {
   private func buildLedger(
     transactions: [Transaction],
     accounts: [Account],
+    categories: [Moolah.Category] = [],
     conversionService: any InstrumentConversionService = FakeConversionService.fixedRates([:])
   ) async throws -> HoldingsCostLedger {
     let resolver = TaxOwnershipResolver(
       profileDefaultOwnerId: defaultOwner,
       accounts: accounts,
-      categories: [])
+      categories: categories)
     return try await HoldingsCostLedger.build(
       transactions: transactions,
       referenceCurrency: aud,
@@ -264,6 +306,14 @@ extension TransferOwnerRegressionTests {
       name: "CGT transfer account \(id.uuidString)",
       type: .investment,
       instrument: aud,
+      taxOwnerIds: owners)
+  }
+
+  private func category(id: UUID, owners: [UUID]) -> Moolah.Category {
+    Moolah.Category(
+      id: id,
+      name: "CGT transfer category \(id.uuidString)",
+      isTaxReportable: true,
       taxOwnerIds: owners)
   }
 
@@ -319,13 +369,15 @@ extension TransferOwnerRegressionTests {
     account: UUID,
     instrument: Instrument,
     quantity: Decimal,
-    type: TransactionType = .trade
+    type: TransactionType = .trade,
+    categoryId: UUID? = nil
   ) -> TransactionLeg {
     TransactionLeg(
       accountId: account,
       instrument: instrument,
       quantity: quantity,
-      type: type)
+      type: type,
+      categoryId: categoryId)
   }
 
   private func day(_ n: Int) -> Date {

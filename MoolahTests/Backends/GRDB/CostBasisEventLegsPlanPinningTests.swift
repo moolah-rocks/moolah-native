@@ -40,14 +40,17 @@ struct CostBasisEventLegsPlanPinningTests {
   private let query = """
     SELECT
         leg.transaction_id  AS transaction_id,
+        leg.id              AS leg_id,
         t.date              AS date,
         leg.account_id      AS account_id,
         leg.instrument_id   AS instrument_id,
         leg.quantity        AS quantity,
         leg.type            AS type,
-        leg.sort_order      AS sort_order
+        leg.sort_order      AS sort_order,
+        NULLIF(a.tax_owner_ids_encoded, '') AS owner_ids
     FROM transaction_leg leg
     JOIN "transaction" t ON leg.transaction_id = t.id
+    LEFT JOIN account a ON leg.account_id = a.id
     WHERE t.recur_period IS NULL
       AND leg.transaction_id IN (
           SELECT nf.transaction_id
@@ -70,6 +73,7 @@ struct CostBasisEventLegsPlanPinningTests {
     // membership subquery rides a covering index (never a base-row scan).
     #expect(detail.contains("leg_by_transaction"))
     #expect(detail.contains("USING COVERING INDEX"))
+    #expect(detail.contains("sqlite_autoindex_account_1"))
     // Guard a future join-order regression onto the `t` alias (matches
     // every sibling analysis plan-pinning suite).
     #expect(!detail.contains("SCAN \"transaction\""))

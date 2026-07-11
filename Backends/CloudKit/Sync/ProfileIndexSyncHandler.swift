@@ -101,8 +101,9 @@ final class ProfileIndexSyncHandler: Sendable {
 
     // Profiles first, guarded by `needs_push` inside ONE transaction
     // (see `applyProfilesGuarded`).
+    let appliedProfileRows: [ProfileRow]
     do {
-      try applyProfilesGuarded(
+      appliedProfileRows = try applyProfilesGuarded(
         profileRows: savedSplit.profileRows,
         deletedProfileIds: deletedSplit.profileIds,
         saved: saved)
@@ -137,7 +138,9 @@ final class ProfileIndexSyncHandler: Sendable {
     {
       changedTypes.insert(InstrumentRow.recordType)
     }
-    return .success(changedTypes: changedTypes)
+    return .profileIndexSuccess(
+      changedTypes: changedTypes,
+      appliedProfileRows: appliedProfileRows)
   }
 
   // MARK: - Building CKRecords

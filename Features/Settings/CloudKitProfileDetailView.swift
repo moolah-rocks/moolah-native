@@ -12,14 +12,12 @@ struct CloudKitProfileDetailView: View {
   @State private var currency: Instrument
   @State private var financialYearStartMonth: Int
   @State private var taxOwnerStore: TaxOwnerStore?
-  @State private var metadataSaveTask: Task<Void, Never>?
+  @State private var metadataSaveStore: CloudKitProfileMetadataSaveStore
   private static let monthNames: [String] = {
     let formatter = DateFormatter()
     formatter.locale = Locale.current
     return formatter.monthSymbols ?? []
   }()
-
-  private let updateProfile: @MainActor ((inout Profile) -> Void) async throws -> Profile?
 
   init(
     profile: Profile,
@@ -28,24 +26,29 @@ struct CloudKitProfileDetailView: View {
       nil
     }
   ) {
-    self.updateProfile = updateProfile
     self.profile = profile
     _label = State(initialValue: profile.label)
     _currency = State(initialValue: Instrument.fiat(code: profile.currencyCode))
     _financialYearStartMonth = State(initialValue: profile.financialYearStartMonth)
+
+    let createdTaxOwnerStore: TaxOwnerStore?
     if let taxOwnerRepository {
-      _taxOwnerStore = State(
-        initialValue: TaxOwnerStore(
-          profile: profile,
-          repository: taxOwnerRepository
-        ) { updated in
-          _ = try await updateProfile { profile in
-            profile.defaultTaxOwnerId = updated.defaultTaxOwnerId
-          }
-        })
+      createdTaxOwnerStore = TaxOwnerStore(
+        profile: profile,
+        repository: taxOwnerRepository
+      ) { updated in
+        _ = try await updateProfile { profile in
+          profile.defaultTaxOwnerId = updated.defaultTaxOwnerId
+        }
+      }
     } else {
-      _taxOwnerStore = State(initialValue: nil)
+      createdTaxOwnerStore = nil
     }
+    _taxOwnerStore = State(initialValue: createdTaxOwnerStore)
+    _metadataSaveStore = State(
+      initialValue: CloudKitProfileMetadataSaveStore(updateProfile: updateProfile) { error in
+        createdTaxOwnerStore?.present(error)
+      })
   }
 
   var body: some View {
@@ -112,19 +115,30 @@ struct CloudKitProfileDetailView: View {
     let updatedCurrencyCode = currency.id
     let updatedFinancialYearStartMonth = financialYearStartMonth
 
-    let previousSave = metadataSaveTask
-    let saveTask = Task { @MainActor in
-      await previousSave?.value
-      do {
-        _ = try await updateProfile { profile in
-          profile.label = trimmedLabel
-          profile.currencyCode = updatedCurrencyCode
-          profile.financialYearStartMonth = updatedFinancialYearStartMonth
-        }
-      } catch {
-        taxOwnerStore?.present(error)
-      }
-    }
-    metadataSaveTask = saveTask
+    metadataSaveStore.scheduleSave(
+      label: trimmedLabel,
+      currencyCode: updatedCurrencyCode,
+      financialYearStartMonth: updatedFinancialYearStartMonth)
   }
+}
+
+#Preview("CloudKit profile — tax owners") {
+  let defaultOwnerId = cloudKitProfileDetailPreviewUUID("11111111-1111-1111-1111-111111111111")
+  let trustOwnerId = cloudKitProfileDetailPreviewUUID("22222222-2222-2222-2222-222222222222")
+  CloudKitProfileDetailView(
+    profile: Profile(label: "Family", defaultTaxOwnerId: defaultOwnerId),
+    taxOwnerRepository: PreviewTaxOwnerRepository(owners: [
+      TaxOwner(id: defaultOwnerId, name: "Alex", kind: .individual),
+      TaxOwner(id: trustOwnerId, name: "Family Trust", kind: .trust),
+    ])
+  ) { _ in
+    nil
+  }
+}
+
+private func cloudKitProfileDetailPreviewUUID(_ literal: String) -> UUID {
+  guard let uuid = UUID(uuidString: literal) else {
+    fatalError("Invalid CloudKit profile detail preview UUID")
+  }
+  return uuid
 }

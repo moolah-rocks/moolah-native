@@ -37,7 +37,8 @@ private enum CapitalGainSalesTablePreviewData {
     decimals: 18)
   static let expandedSaleId = CapitalGainSaleIdentifier.transaction(
     uuid("11111111-1111-1111-1111-111111111111"),
-    instrumentId: optimism.id)
+    instrumentId: optimism.id,
+    taxOwnerId: nil)
 
   static var sales: [CapitalGainSale] {
     TaxReportPresentation.saleRows(from: [

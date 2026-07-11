@@ -59,6 +59,7 @@ extension CostBasisEvent: Equatable {}
 struct HoldingsFlowEntry {
   let date: Date
   let account: UUID?
+  var taxOwnerId: UUID?
   let instrument: Instrument
   let amount: Decimal
   let counterpartyAccount: UUID?
