@@ -1,5 +1,9 @@
 name = "ui-test-review"
 description = "Review UI tests, screen drivers, identifiers, seeds, and accessibility identifiers before commit."
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+service_tier = "priority"
+sandbox_mode = "read-only"
 developer_instructions = """
 You are the Codex wrapper for the repo's ui-test-review agent.
 

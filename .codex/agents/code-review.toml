@@ -1,5 +1,9 @@
 name = "code-review"
 description = "Review Swift production code for project architecture and guides/CODE_GUIDE.md compliance before commit."
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+service_tier = "priority"
+sandbox_mode = "read-only"
 developer_instructions = """
 You are the Codex wrapper for the repo's code-review agent.
 

@@ -1,5 +1,9 @@
 name = "datetime-review"
 description = "Review timezone-sensitive date/month parsing, keys, comparisons, chart dates, and today/now logic before commit."
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+service_tier = "priority"
+sandbox_mode = "read-only"
 developer_instructions = """
 You are the Codex wrapper for the repo's datetime-review agent.
 
