@@ -1,5 +1,9 @@
 name = "concurrency-review"
 description = "Review Swift concurrency, actor isolation, async tasks, cancellation, and Sendable usage before commit."
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+service_tier = "priority"
+sandbox_mode = "read-only"
 developer_instructions = """
 You are the Codex wrapper for the repo's concurrency-review agent.
 

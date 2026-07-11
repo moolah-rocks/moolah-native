@@ -1,5 +1,9 @@
 name = "instrument-conversion-review"
 description = "Review InstrumentAmount arithmetic, conversion dates, aggregation, reporting, forecasts, and totals before commit."
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+service_tier = "priority"
+sandbox_mode = "read-only"
 developer_instructions = """
 You are the Codex wrapper for the repo's instrument-conversion-review agent.
 

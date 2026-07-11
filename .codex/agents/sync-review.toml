@@ -1,5 +1,9 @@
 name = "sync-review"
 description = "Review CloudKit sync engines, record mappings, sync queueing, and syncable repositories before commit."
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+service_tier = "priority"
+sandbox_mode = "read-only"
 developer_instructions = """
 You are the Codex wrapper for the repo's sync-review agent.
 
