@@ -46,6 +46,93 @@
       }
     }
 
+    @Test("profile-level legs flatten every transaction leg with transaction context")
+    func profileLevelLegsIncludeTransactionContext() async throws {
+      let (service, session) = try await AutomationTestSession.make()
+      _ = try await service.createAccount(profileIdentifier: "Test", name: "Checking", type: .bank)
+      _ = try await service.createAccount(profileIdentifier: "Test", name: "Savings", type: .bank)
+      let date = try #require(
+        Calendar.current.date(from: DateComponents(year: 2026, month: 3, day: 14)))
+
+      let transaction = try await service.createTransaction(
+        profileIdentifier: "Test",
+        payee: "Split Shop",
+        date: date,
+        legs: [
+          AutomationService.LegSpec(
+            accountName: "Checking",
+            amount: -42,
+            categoryName: nil,
+            earmarkName: nil),
+          AutomationService.LegSpec(
+            accountName: "Savings",
+            amount: 42,
+            categoryName: nil,
+            earmarkName: nil),
+        ])
+
+      await session.transactionStore.load(filter: TransactionFilter())
+      await expectEventually("created transaction is visible to scriptable profile") {
+        session.transactionStore.transactions.contains { $0.transaction.id == transaction.id }
+      }
+
+      let profile = ScriptableProfile(session: session)
+      let legs = profile.scriptableLegs
+
+      #expect(legs.map(\.uniqueID) == transaction.legs.map { $0.id.uuidString })
+      #expect(legs.allSatisfy { $0.transactionID == transaction.id.uuidString })
+      #expect(legs.allSatisfy { $0.transactionDate == date })
+      #expect(legs.allSatisfy { $0.payee == "Split Shop" })
+    }
+
+    @Test("profile-level legs can be filtered by account and category properties")
+    func profileLevelLegsCanBeFilteredByAccountAndCategory() async throws {
+      let (service, session) = try await AutomationTestSession.make()
+      _ = try await service.createAccount(profileIdentifier: "Test", name: "Checking", type: .bank)
+      _ = try await service.createAccount(profileIdentifier: "Test", name: "Savings", type: .bank)
+      _ = try await service.createCategory(profileIdentifier: "Test", name: "Food")
+      _ = try await service.createCategory(profileIdentifier: "Test", name: "Transport")
+      let date = try #require(
+        Calendar.current.date(from: DateComponents(year: 2026, month: 3, day: 14)))
+
+      let food = try await service.createTransaction(
+        profileIdentifier: "Test",
+        payee: "Grocer",
+        date: date,
+        legs: [
+          AutomationService.LegSpec(
+            accountName: "Checking",
+            amount: -35,
+            categoryName: "Food",
+            earmarkName: nil)
+        ])
+      _ = try await service.createTransaction(
+        profileIdentifier: "Test",
+        payee: "Train",
+        date: date,
+        legs: [
+          AutomationService.LegSpec(
+            accountName: "Savings",
+            amount: -6,
+            categoryName: "Transport",
+            earmarkName: nil)
+        ])
+
+      await session.transactionStore.load(filter: TransactionFilter())
+      await expectEventually("created transactions are visible to scriptable profile") {
+        session.transactionStore.transactions.count == 2
+      }
+
+      let profile = ScriptableProfile(session: session)
+      let checkingFoodLegs = profile.scriptableLegs.filter {
+        $0.accountName == "Checking" && $0.categoryName == "Food"
+      }
+
+      #expect(checkingFoodLegs.map(\.transactionID) == [food.id.uuidString])
+      #expect(checkingFoodLegs.map(\.payee) == ["Grocer"])
+      #expect(checkingFoodLegs.map(\.amount) == [-35])
+    }
+
     @Test("scriptable leg exposes object references for account category and earmark")
     func scriptableLegExposesObjectReferences() async throws {
       let (service, session) = try await AutomationTestSession.make()

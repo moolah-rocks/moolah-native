@@ -40,7 +40,7 @@
       _legs = transaction.legs.map { leg in
         ScriptableLeg(
           leg: leg,
-          transactionID: transaction.id.uuidString,
+          transaction: transaction,
           profileName: profileName,
           accountStore: accountStore,
           categoryStore: categoryStore,
@@ -101,17 +101,21 @@
     private let _legID: String
     private let _externalID: String
     private let _account: ScriptableAccount?
+    private let _accountName: String
     private let _amount: Double
     private let _category: ScriptableCategory?
+    private let _categoryName: String
     private let _earmark: ScriptableEarmark?
     private let _legType: String
     private let _transactionID: String
+    private let _transactionDate: Date
+    private let _payee: String
     private let _profileName: String
 
     @MainActor
     init(
       leg: TransactionLeg,
-      transactionID: String,
+      transaction: Transaction,
       profileName: String,
       accountStore: AccountStore,
       categoryStore: CategoryStore,
@@ -121,8 +125,10 @@
       _externalID = leg.externalId ?? ""
       if let account = leg.accountId.flatMap({ accountStore.accounts.by(id: $0) }) {
         _account = ScriptableAccount(account: account, profileName: profileName)
+        _accountName = account.name
       } else {
         _account = nil
+        _accountName = ""
       }
       _amount = leg.amount.doubleValue
       if let category = leg.categoryId.flatMap({ categoryStore.categories.by(id: $0) }) {
@@ -130,8 +136,10 @@
           category.parentId.flatMap { categoryStore.categories.by(id: $0)?.name } ?? ""
         _category = ScriptableCategory(
           category: category, parentName: parentName, profileName: profileName)
+        _categoryName = category.name
       } else {
         _category = nil
+        _categoryName = ""
       }
       if let earmark = leg.earmarkId.flatMap({ earmarkStore.earmarks.by(id: $0) }) {
         _earmark = ScriptableEarmark(earmark: earmark, profileName: profileName)
@@ -139,7 +147,9 @@
         _earmark = nil
       }
       _legType = leg.type.rawValue
-      _transactionID = transactionID
+      _transactionID = transaction.id.uuidString
+      _transactionDate = transaction.date
+      _payee = transaction.payee ?? ""
       _profileName = profileName
       super.init()
     }
@@ -148,10 +158,15 @@
     @objc var legID: String { _legID }
     @objc var externalID: String { _externalID }
     @objc var account: ScriptableAccount? { _account }
+    @objc var accountName: String { _accountName }
     @objc var amount: Double { _amount }
     @objc var category: ScriptableCategory? { _category }
+    @objc var categoryName: String { _categoryName }
     @objc var earmark: ScriptableEarmark? { _earmark }
     @objc var legType: String { _legType }
+    @objc var transactionID: String { _transactionID }
+    @objc var transactionDate: Date { _transactionDate }
+    @objc var payee: String { _payee }
 
     var scriptProfileName: String { _profileName }
 
