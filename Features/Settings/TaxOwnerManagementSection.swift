@@ -147,9 +147,9 @@ struct TaxOwnerManagementSection: View {
         .accessibilityLabel(
           UITestIdentifiers.TaxOwnerSettings.actionsButtonLabel(ownerName: owner.name)
         )
-        .accessibilityIdentifier(
-          UITestIdentifiers.TaxOwnerSettings.actionsButton(ownerName: owner.name))
     }
+    .accessibilityIdentifier(
+      UITestIdentifiers.TaxOwnerSettings.actionsButton(ownerName: owner.name))
   }
 
   private func prepareDelete(_ owner: TaxOwner) {
