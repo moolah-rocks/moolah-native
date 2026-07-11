@@ -119,8 +119,7 @@ struct TaxOwnerSettingsScreen {
 
   private func openActionsMenu(for name: String) -> Bool {
     Trace.record(#function, detail: "name=\(name)")
-    let button = app.button(
-      label: UITestIdentifiers.TaxOwnerSettings.actionsButtonLabel(ownerName: name))
+    let button = app.element(for: UITestIdentifiers.TaxOwnerSettings.actionsButton(ownerName: name))
     if !button.waitForExistence(timeout: 10) {
       Trace.recordFailure("settings.taxOwner.actions.\(name) did not appear")
       XCTFail("Actions menu for tax owner '\(name)' did not appear within 10s")

@@ -18,6 +18,10 @@ extension UITestIdentifiers {
       "Actions for \(ownerName)"
     }
 
+    public static func actionsButton(ownerName: String) -> String {
+      "settings.taxOwner.actions.\(ownerName)"
+    }
+
     public static func defaultBadgeLabel(ownerName: String) -> String {
       "\(ownerName) default tax owner"
     }

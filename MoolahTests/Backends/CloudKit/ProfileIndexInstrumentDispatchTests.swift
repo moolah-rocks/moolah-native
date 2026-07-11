@@ -47,10 +47,10 @@ struct ProfileIndexInstrumentDispatchTests {
     let result = harness.handler.applyRemoteChanges(saved: [record], deleted: [])
 
     switch result {
-    case let .success(changedTypes):
+    case let .profileIndexSuccess(changedTypes, _):
       #expect(changedTypes.contains(InstrumentRow.recordType))
     default:
-      Issue.record("expected .success, got \(result)")
+      Issue.record("expected .profileIndexSuccess, got \(result)")
     }
     lock.withLock { #expect(counter.value == 1) }
 
@@ -87,10 +87,10 @@ struct ProfileIndexInstrumentDispatchTests {
 
     let result = handler.applyRemoteChanges(saved: [record], deleted: [])
     switch result {
-    case let .success(changedTypes):
+    case let .profileIndexSuccess(changedTypes, _):
       #expect(!changedTypes.contains(InstrumentRow.recordType))
     default:
-      Issue.record("expected .success, got \(result)")
+      Issue.record("expected .profileIndexSuccess, got \(result)")
     }
   }
 
