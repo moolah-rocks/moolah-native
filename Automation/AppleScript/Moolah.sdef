@@ -57,6 +57,9 @@
       <element type="txn" access="r">
         <cocoa key="scriptableTransactions"/>
       </element>
+      <element type="leg" access="r">
+        <cocoa key="scriptableLegs"/>
+      </element>
       <element type="earmark" access="r">
         <cocoa key="scriptableEarmarks"/>
       </element>
@@ -127,14 +130,29 @@
       <property name="external id" code="Mlex" type="text" access="r" description="The sync source's external id for this leg, or empty string for a manual leg.">
         <cocoa key="externalID"/>
       </property>
+      <property name="transaction id" code="Ltid" type="text" access="r" description="The unique identifier of the transaction containing this leg.">
+        <cocoa key="transactionID"/>
+      </property>
+      <property name="transaction date" code="Ltdt" type="date" access="r" description="The date of the transaction containing this leg.">
+        <cocoa key="transactionDate"/>
+      </property>
+      <property name="payee" code="Mpay" type="text" access="r" description="The payee of the transaction containing this leg.">
+        <cocoa key="payee"/>
+      </property>
       <property name="account" code="Lacc" type="account" access="rw" description="The account for this leg.">
         <cocoa key="account"/>
+      </property>
+      <property name="account name" code="Lanm" type="text" access="r" description="The name of the account for this leg.">
+        <cocoa key="accountName"/>
       </property>
       <property name="amount" code="Mamt" type="real" access="rw" description="The amount of this leg.">
         <cocoa key="amount"/>
       </property>
       <property name="category" code="Lcat" type="category" access="rw" description="The category for this leg, or missing value if uncategorized.">
         <cocoa key="category"/>
+      </property>
+      <property name="category name" code="Lcnm" type="text" access="r" description="The name of the category for this leg, or empty string if uncategorized.">
+        <cocoa key="categoryName"/>
       </property>
       <property name="earmark" code="Lear" type="earmark" access="rw" description="The earmark for this leg, or missing value if unassigned.">
         <cocoa key="earmark"/>

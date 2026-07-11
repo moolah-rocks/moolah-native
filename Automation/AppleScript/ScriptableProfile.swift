@@ -14,6 +14,7 @@
     private let _currencyCode: String
     private let _accounts: [ScriptableAccount]
     private let _transactions: [ScriptableTransaction]
+    private let _legs: [ScriptableLeg]
     private let _earmarks: [ScriptableEarmark]
     private let _categories: [ScriptableCategory]
 
@@ -35,6 +36,7 @@
           earmarkStore: session.earmarkStore
         )
       }
+      _legs = _transactions.flatMap(\.scriptableLegs)
       _earmarks = session.earmarkStore.earmarks.ordered.map {
         ScriptableEarmark(earmark: $0, profileName: session.profile.label)
       }
@@ -64,6 +66,7 @@
     @objc var currencyCode: String { _currencyCode }
     @objc var scriptableAccounts: [ScriptableAccount] { _accounts }
     @objc var scriptableTransactions: [ScriptableTransaction] { _transactions }
+    @objc var scriptableLegs: [ScriptableLeg] { _legs }
     @objc var scriptableEarmarks: [ScriptableEarmark] { _earmarks }
     @objc var scriptableCategories: [ScriptableCategory] { _categories }
 

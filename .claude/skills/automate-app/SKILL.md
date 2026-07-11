@@ -134,6 +134,13 @@ moolah-tell 'find txns of profile "Test" scheduled false'
 # Get txn details
 moolah-tell 'get {payee, date, amount, transaction type} of every txn of profile "Test"'
 
+# List transaction legs directly from the profile, with transaction context
+moolah-tell 'get {transaction id, transaction date, payee, account name, category name, amount, type} of every leg of profile "Test"'
+
+# Filter legs by account/category without walking nested txns in the script
+moolah-tell 'get {transaction id, payee, amount} of every leg of profile "Test" whose account name is "Everyday"'
+moolah-tell 'get {transaction id, payee, amount} of every leg of profile "Test" whose category name is "Groceries"'
+
 # Delete a txn
 moolah-tell 'delete txn id "UUID-HERE" of profile "Test"'
 
