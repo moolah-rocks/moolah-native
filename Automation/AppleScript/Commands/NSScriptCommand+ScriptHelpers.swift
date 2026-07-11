@@ -47,10 +47,16 @@
 
   extension NSScriptCommand {
 
-    /// Resolves the profile name from the direct parameter (an object specifier).
-    /// AppleScript commands typically pass a specifier like `profile "MyProfile"`.
-    func resolveProfileName() -> String? {
+    /// Resolves the profile identifier from the direct parameter. AppleScript
+    /// commands pass either `profile "MyProfile"` (`NSNameSpecifier`) or
+    /// `profile id "UUID"` (`NSUniqueIDSpecifier`).
+    func resolveProfileIdentifier() -> String? {
       if let specifier = directParameter as? NSScriptObjectSpecifier {
+        if let idSpec = specifier as? NSUniqueIDSpecifier,
+          let uniqueID = idSpec.uniqueID as? String
+        {
+          return uniqueID
+        }
         // NSNameSpecifier: `profile "MyProfile"`
         if let nameSpec = specifier as? NSNameSpecifier {
           return nameSpec.name
@@ -61,6 +67,10 @@
         return name
       }
       return nil
+    }
+
+    func resolveProfileName() -> String? {
+      resolveProfileIdentifier()
     }
 
     /// Runs an async `@MainActor` block from an

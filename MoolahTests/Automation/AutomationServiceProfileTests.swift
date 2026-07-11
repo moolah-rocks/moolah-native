@@ -54,6 +54,22 @@ struct AutomationServiceProfileTests {
     }
   }
 
+  @Test("resolveSession rejects ambiguous profile names")
+  func rejectsAmbiguousProfileNames() async throws {
+    let (service, sessionManager) = try makeService()
+    _ = await sessionManager.session(for: makeProfile(label: "Personal"))
+    _ = await sessionManager.session(for: makeProfile(label: "Personal"))
+
+    do {
+      _ = try service.resolveSession(for: "Personal")
+      Issue.record("Expected invalidParameter for duplicate profile names")
+    } catch AutomationError.invalidParameter(let detail) {
+      #expect(detail == "Ambiguous profile name 'Personal'; use profile id.")
+    } catch {
+      Issue.record("Expected invalidParameter for duplicate profile names, got \(error)")
+    }
+  }
+
   @Test("listOpenProfiles returns all open profiles")
   func listOpenProfiles() async throws {
     let (service, sessionManager) = try makeService()

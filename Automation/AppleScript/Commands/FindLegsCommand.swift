@@ -1,21 +1,16 @@
 #if os(macOS)
   import AppKit
   import Foundation
-  import OSLog
 
-  private let logger = Logger(subsystem: "com.moolah.app", category: "FindTransactionsCommand")
-
-  /// Handles: `find txns of profile "X" account "Checking" from date ...`
-  final class FindTransactionsCommand: AppLevelScriptCommand {
+  /// Handles: `find legs of profile "X" account id "..." from date ...`
+  final class FindLegsCommand: AppLevelScriptCommand {
     private struct Result: Sendable {
-      let transactions: [ScriptableTransaction]
+      let legs: [ScriptableLeg]
     }
 
     override func performDefaultImplementation() -> Any? {
       guard let profileIdentifier = resolveProfileIdentifier() else {
-        scriptErrorNumber = -10000
-        scriptErrorString = "Missing profile specifier"
-        return nil
+        return fail("Missing profile specifier")
       }
 
       let args = evaluatedArguments ?? [:]
@@ -35,7 +30,6 @@
         (args["scheduled"] as? Bool).map { isScheduled in
           isScheduled ? ScheduledFilter.scheduledOnly : .nonScheduledOnly
         } ?? .nonScheduledOnly
-      let profileID = profileIdentifier
 
       let result: Result? = runBlockingWithError {
         @MainActor () async throws -> Result in
@@ -43,21 +37,28 @@
           throw AutomationError.operationFailed("Scripting not configured")
         }
 
-        let transactions = try await service.findTransactions(
-          profileIdentifier: profileID,
+        let found = try await service.findLegs(
+          profileIdentifier: profileIdentifier,
           accountName: accountName,
           accountId: accountId,
           categoryName: categoryName,
           categoryId: categoryId,
           fromDate: fromDate,
           toDate: toDate,
-          scheduled: scheduled
-        )
-        return Result(
-          transactions: try Self.scriptableTransactions(
-            transactions, profileIdentifier: profileID, service: service))
+          scheduled: scheduled)
+        let session = try service.resolveSession(for: profileIdentifier)
+        let legs = found.map { entry in
+          ScriptableLeg(
+            leg: entry.leg,
+            transaction: entry.transaction,
+            profileName: session.profile.label,
+            accountStore: session.accountStore,
+            categoryStore: session.categoryStore,
+            earmarkStore: session.earmarkStore)
+        }
+        return Result(legs: legs)
       }
-      return result?.transactions
+      return result?.legs
     }
 
     private func parsedUUIDArgument(_ value: Any?, label: String) throws -> UUID? {
@@ -70,22 +71,10 @@
       return uuid
     }
 
-    @MainActor
-    private static func scriptableTransactions(
-      _ transactions: [Transaction],
-      profileIdentifier: String,
-      service: AutomationService
-    ) throws -> [ScriptableTransaction] {
-      let session = try service.resolveSession(for: profileIdentifier)
-      return transactions.map { transaction in
-        ScriptableTransaction(
-          transaction: transaction,
-          profileName: session.profile.label,
-          accountStore: session.accountStore,
-          categoryStore: session.categoryStore,
-          earmarkStore: session.earmarkStore
-        )
-      }
+    private func fail(_ message: String) -> Any? {
+      scriptErrorNumber = -10000
+      scriptErrorString = message
+      return nil
     }
   }
 #endif

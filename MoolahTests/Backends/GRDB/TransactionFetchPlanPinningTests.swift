@@ -118,6 +118,29 @@ struct TransactionFetchPlanPinningTests {
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction_leg"))
   }
 
+  @Test("page query with a category filter avoids a transaction scan via the leg index")
+  func pageQueryWithCategoryFilterAvoidsFullScan() throws {
+    let database = try makeDatabase()
+    // Mirrors the `TransactionFilter.categoryIds` shape used by
+    // automation's stable category-id filter. The leg subquery must ride
+    // `leg_by_category`, then probe `"transaction"` by primary key.
+    let detail = try planDetail(
+      database,
+      query: """
+        SELECT * FROM "transaction"
+        WHERE recur_period IS NULL
+          AND id IN (
+            SELECT transaction_id FROM transaction_leg
+            WHERE category_id IN (?, ?))
+        ORDER BY date DESC, id ASC
+        LIMIT ? OFFSET ?
+        """,
+      arguments: [UUID(), UUID(), 50, 0])
+    #expect(detail.contains("leg_by_category"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction_leg"))
+  }
+
   // MARK: - Tax report drilldown filters
 
   @Test("tax report all-owner drilldown filter avoids full scans")

@@ -52,8 +52,12 @@ extension AutomationService {
   /// the snapshot once and resolves every leg against it).
   static func account(named name: String, in accounts: [Account]) throws -> Account {
     let lowered = name.lowercased()
-    guard let account = accounts.first(where: { $0.name.lowercased() == lowered }) else {
+    let matches = accounts.filter { $0.name.lowercased() == lowered }
+    guard let account = matches.first else {
       throw AutomationError.accountNotFound(name)
+    }
+    guard matches.count == 1 else {
+      throw AutomationError.invalidParameter("Ambiguous account name '\(name)'; use account id.")
     }
     return account
   }

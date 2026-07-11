@@ -241,25 +241,58 @@
       <result type="txn" description="The created txn."/>
     </command>
 
-    <command name="find txns" code="Moolfntx" description="Find txns in a profile through Moolah's transaction query path. Omitted scheduled defaults to false (posted/non-scheduled txns). From date and to date are inclusive local-day bounds.">
+    <command name="find txns" code="Moolfntx" description="Find txns in a profile through Moolah's transaction query path. Omitted scheduled defaults to false (posted/non-scheduled txns). Profile, account, and category can be supplied by name or stable id. From date and to date are inclusive local-day bounds; internally the query uses a half-open interval ending at the start of the day after to date.">
       <cocoa class="Moolah.FindTransactionsCommand"/>
       <direct-parameter type="specifier" description="The profile to search."/>
-      <parameter name="account" code="Facc" type="text" optional="yes" description="Only return txns with a leg on this account name.">
+      <parameter name="account" code="Facc" type="text" optional="yes" description="Only return txns with a leg on this account name. If duplicate names exist, use account id instead.">
         <cocoa key="account"/>
       </parameter>
-      <parameter name="category" code="Fcat" type="text" optional="yes" description="Only return txns with a leg in this category name or full category path.">
+      <parameter name="account id" code="Faid" type="text" optional="yes" description="Only return txns with a leg on this stable account UUID. Do not combine with account.">
+        <cocoa key="accountId"/>
+      </parameter>
+      <parameter name="category" code="Fcat" type="text" optional="yes" description="Only return txns with a leg in this category name or full category path. If duplicate names exist, use a full path or category id instead.">
         <cocoa key="category"/>
+      </parameter>
+      <parameter name="category id" code="Fcid" type="text" optional="yes" description="Only return txns with a leg in this stable category UUID. Do not combine with category.">
+        <cocoa key="categoryId"/>
       </parameter>
       <parameter name="from date" code="Ffrm" type="date" optional="yes" description="Inclusive lower local transaction date bound.">
         <cocoa key="fromDate"/>
       </parameter>
-      <parameter name="to date" code="Ftoo" type="date" optional="yes" description="Inclusive upper local transaction date bound.">
+      <parameter name="to date" code="Ftoo" type="date" optional="yes" description="Inclusive upper local transaction date bound; implemented as a half-open range whose exclusive upper bound is the start of the following local day.">
         <cocoa key="toDate"/>
       </parameter>
       <parameter name="scheduled" code="Fsch" type="boolean" optional="yes" description="true returns scheduled txns only; false returns posted/non-scheduled txns only. If omitted, false is used.">
         <cocoa key="scheduled"/>
       </parameter>
       <result type="txn" list="yes" description="The matching txns."/>
+    </command>
+
+    <command name="find legs" code="Moolfnlg" description="Find transaction legs in a profile through Moolah's transaction query path. Omitted scheduled defaults to false (posted/non-scheduled txns). Profile, account, and category can be supplied by name or stable id. From date and to date are inclusive local-day transaction bounds; internally the query uses a half-open interval ending at the start of the day after to date.">
+      <cocoa class="Moolah.FindLegsCommand"/>
+      <direct-parameter type="specifier" description="The profile to search."/>
+      <parameter name="account" code="Facc" type="text" optional="yes" description="Only return legs on this account name. If duplicate names exist, use account id instead.">
+        <cocoa key="account"/>
+      </parameter>
+      <parameter name="account id" code="Faid" type="text" optional="yes" description="Only return legs on this stable account UUID. Do not combine with account.">
+        <cocoa key="accountId"/>
+      </parameter>
+      <parameter name="category" code="Fcat" type="text" optional="yes" description="Only return legs in this category name or full category path. If duplicate names exist, use a full path or category id instead.">
+        <cocoa key="category"/>
+      </parameter>
+      <parameter name="category id" code="Fcid" type="text" optional="yes" description="Only return legs in this stable category UUID. Do not combine with category.">
+        <cocoa key="categoryId"/>
+      </parameter>
+      <parameter name="from date" code="Ffrm" type="date" optional="yes" description="Inclusive lower local transaction date bound.">
+        <cocoa key="fromDate"/>
+      </parameter>
+      <parameter name="to date" code="Ftoo" type="date" optional="yes" description="Inclusive upper local transaction date bound; implemented as a half-open range whose exclusive upper bound is the start of the following local day.">
+        <cocoa key="toDate"/>
+      </parameter>
+      <parameter name="scheduled" code="Fsch" type="boolean" optional="yes" description="true returns scheduled legs only; false returns posted/non-scheduled legs only. If omitted, false is used.">
+        <cocoa key="scheduled"/>
+      </parameter>
+      <result type="leg" list="yes" description="The matching legs."/>
     </command>
 
     <command name="create earmark" code="Moolcrem" description="Create a new earmark in a profile.">
