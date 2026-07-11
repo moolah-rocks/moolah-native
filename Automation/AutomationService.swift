@@ -32,261 +32,31 @@ final class AutomationService {
     self.sessionManager = sessionManager
   }
 
-  /// Resolves a profile session by name (case-insensitive) or UUID string.
+  /// Resolves a profile session by UUID string or case-insensitive name.
   func resolveSession(for identifier: String) throws -> ProfileSession {
-    if let session = sessionManager.session(named: identifier) { return session }
     if let uuid = UUID(uuidString: identifier),
       let session = sessionManager.session(forID: uuid)
     {
       return session
     }
-    throw AutomationError.profileNotFound(identifier)
+
+    let lowered = identifier.lowercased()
+    let matches = sessionManager.openProfiles.filter {
+      $0.profile.label.lowercased() == lowered
+    }
+    guard let session = matches.first else {
+      throw AutomationError.profileNotFound(identifier)
+    }
+    guard matches.count == 1 else {
+      throw AutomationError.invalidParameter(
+        "Ambiguous profile name '\(identifier)'; use profile id.")
+    }
+    return session
   }
 
   /// Returns all currently open profiles.
   func listOpenProfiles() -> [Profile] {
     sessionManager.openProfiles.map(\.profile)
-  }
-
-  // MARK: - Transaction Operations
-
-  /// Describes a single leg of a transaction for creation.
-  struct LegSpec: Sendable {
-    let accountName: String
-    let amount: Decimal
-    let categoryName: String?
-    let earmarkName: String?
-  }
-
-  /// Creates a transaction with the specified legs.
-  func createTransaction(
-    profileIdentifier: String,
-    payee: String,
-    date: Date,
-    legs: [LegSpec],
-    notes: String? = nil
-  ) async throws -> Transaction {
-    let session = try resolveSession(for: profileIdentifier)
-    let instrument = session.profile.instrument
-
-    let resolution = try await resolveLegs(
-      legs, profileIdentifier: profileIdentifier, instrument: instrument)
-    let finalLegs = normaliseTransferLegs(resolution.legs, accountIds: resolution.accountIds)
-
-    let transaction = Transaction(
-      id: UUID(),
-      date: date,
-      payee: payee,
-      notes: notes,
-      recurPeriod: nil,
-      recurEvery: nil,
-      legs: finalLegs
-    )
-
-    guard let created = await session.transactionStore.create(transaction) else {
-      throw AutomationError.operationFailed("Failed to create transaction")
-    }
-    return created
-  }
-
-  private func resolveLegs(
-    _ legs: [LegSpec], profileIdentifier: String, instrument: Instrument
-  ) async throws -> (legs: [TransactionLeg], accountIds: Set<UUID>) {
-    // Fetch the authoritative account / category / earmark snapshots once and
-    // resolve every leg against them in-memory (see `resolveAccount(named:)`
-    // for why these are repository reads rather than reactive-store reads).
-    // Hoisting out of the loop keeps a many-legged transaction to one read per
-    // store rather than one per leg.
-    let accounts = try await fetchAccounts(profileIdentifier: profileIdentifier)
-    let categories = try await fetchCategories(profileIdentifier: profileIdentifier)
-    let earmarks = try await fetchEarmarks(profileIdentifier: profileIdentifier)
-    var resolvedLegs: [TransactionLeg] = []
-    var accountIds = Set<UUID>()
-    for spec in legs {
-      let account = try Self.account(named: spec.accountName, in: accounts)
-      accountIds.insert(account.id)
-
-      let categoryId: UUID? =
-        if let categoryName = spec.categoryName {
-          try Self.category(named: categoryName, in: categories).id
-        } else {
-          nil
-        }
-
-      let earmarkId: UUID? =
-        if let earmarkName = spec.earmarkName {
-          try Self.earmark(named: earmarkName, in: earmarks).id
-        } else {
-          nil
-        }
-
-      let legType: TransactionType = spec.amount >= 0 ? .income : .expense
-      resolvedLegs.append(
-        TransactionLeg(
-          accountId: account.id,
-          instrument: instrument,
-          quantity: spec.amount,
-          type: legType,
-          categoryId: categoryId,
-          earmarkId: earmarkId
-        ))
-    }
-    return (resolvedLegs, accountIds)
-  }
-
-  private func normaliseTransferLegs(
-    _ legs: [TransactionLeg], accountIds: Set<UUID>
-  ) -> [TransactionLeg] {
-    // Transfers (2+ legs with different accounts) use .expense type on every leg.
-    guard accountIds.count > 1 else { return legs }
-    return legs.map { leg in
-      var copy = leg
-      copy.type = .expense
-      return copy
-    }
-  }
-
-  /// Lists transactions, optionally filtered by account name and/or scheduled status.
-  func listTransactions(
-    profileIdentifier: String,
-    accountName: String? = nil,
-    scheduled: ScheduledFilter = .all
-  ) async throws -> [Transaction] {
-    let session = try resolveSession(for: profileIdentifier)
-
-    var filter = TransactionFilter()
-    if let accountName {
-      let account = try await resolveAccount(
-        named: accountName, profileIdentifier: profileIdentifier)
-      filter.accountId = account.id
-    }
-    filter.scheduled = scheduled
-
-    await session.transactionStore.load(filter: filter)
-    return session.transactionStore.transactions.map(\.transaction)
-  }
-
-  /// Finds transactions through the repository query path for automation clients.
-  func findTransactions(
-    profileIdentifier: String,
-    accountName: String? = nil,
-    categoryName: String? = nil,
-    fromDate: Date? = nil,
-    toDate: Date? = nil,
-    scheduled: ScheduledFilter = .nonScheduledOnly
-  ) async throws -> [Transaction] {
-    let session = try resolveSession(for: profileIdentifier)
-
-    var filter = TransactionFilter()
-    if let accountName {
-      let account = try await resolveAccount(
-        named: accountName, profileIdentifier: profileIdentifier)
-      filter.accountId = account.id
-    }
-    if let categoryName {
-      let category = try await resolveCategory(
-        named: categoryName, profileIdentifier: profileIdentifier)
-      filter.categoryIds = [category.id]
-    }
-    if let dateInterval = try findTransactionsDateInterval(fromDate: fromDate, toDate: toDate) {
-      filter.dateInterval = dateInterval
-    }
-    filter.scheduled = scheduled
-
-    do {
-      return try await session.backend.transactions.fetchAll(filter: filter)
-    } catch {
-      throw AutomationError.operationFailed(
-        "Failed to find transactions: \(error.localizedDescription)")
-    }
-  }
-
-  private func findTransactionsDateInterval(fromDate: Date?, toDate: Date?) throws -> Range<Date>? {
-    guard fromDate != nil || toDate != nil else { return nil }
-
-    let calendar = Calendar.current
-    let lowerBound = fromDate.map { calendar.startOfDay(for: $0) } ?? .distantPast
-    guard let toDate else { return lowerBound..<Date.distantFuture }
-    let upperDayStart = calendar.startOfDay(for: toDate)
-    guard let upperBound = calendar.date(byAdding: .day, value: 1, to: upperDayStart) else {
-      throw AutomationError.invalidParameter("Could not resolve the upper date bound")
-    }
-    guard lowerBound < upperBound else {
-      throw AutomationError.invalidParameter("from date must be on or before to date")
-    }
-    return lowerBound..<upperBound
-  }
-
-  /// Updates an existing transaction's payee, date, or notes.
-  func updateTransaction(
-    profileIdentifier: String,
-    transactionId: UUID,
-    payee: String? = nil,
-    date: Date? = nil,
-    notes: String? = nil
-  ) async throws -> Transaction {
-    let session = try resolveSession(for: profileIdentifier)
-
-    let transactions = try await session.backend.transactions.fetchAll(filter: TransactionFilter())
-    guard var transaction = transactions.first(where: { $0.id == transactionId }) else {
-      throw AutomationError.transactionNotFound(transactionId.uuidString)
-    }
-
-    if let payee { transaction.payee = payee }
-    if let date { transaction.date = date }
-    if let notes { transaction.notes = notes }
-
-    do {
-      return try await session.backend.transactions.update(transaction)
-    } catch let error as AutomationError {
-      throw error
-    } catch {
-      throw AutomationError.operationFailed(
-        "Failed to update transaction: \(error.localizedDescription)")
-    }
-  }
-
-  /// Deletes a transaction by UUID.
-  func deleteTransaction(profileIdentifier: String, transactionId: UUID) async throws {
-    let session = try resolveSession(for: profileIdentifier)
-    await session.transactionStore.delete(id: transactionId)
-  }
-
-  /// Deletes every transaction with a leg on the named account so a
-  /// subsequent `synchronize` re-imports it from scratch. Per-leg dedup is
-  /// keyed on `(accountId, externalId)`; with the prior legs gone the next
-  /// sync rebuilds the account cleanly. Testing aid for synced (crypto /
-  /// exchange) accounts after an import-logic change. Returns the number of
-  /// transactions deleted.
-  @discardableResult
-  func resetImportedTransactions(
-    profileIdentifier: String, accountName: String
-  ) async throws -> Int {
-    let transactions = try await listTransactions(
-      profileIdentifier: profileIdentifier, accountName: accountName)
-    let session = try resolveSession(for: profileIdentifier)
-    for transaction in transactions {
-      await session.transactionStore.delete(id: transaction.id)
-    }
-    return transactions.count
-  }
-
-  /// Pays a scheduled transaction (creates a non-scheduled copy with today's date).
-  func payScheduledTransaction(
-    profileIdentifier: String,
-    transactionId: UUID
-  ) async throws -> TransactionStore.PayResult {
-    let session = try resolveSession(for: profileIdentifier)
-
-    guard
-      let entry = session.transactionStore.transactions.first(where: {
-        $0.transaction.id == transactionId
-      })
-    else {
-      throw AutomationError.transactionNotFound(transactionId.uuidString)
-    }
-
-    return await session.transactionStore.payScheduledTransaction(entry.transaction)
   }
 
 }

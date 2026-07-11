@@ -50,8 +50,12 @@ extension AutomationService {
   /// Case-insensitive name lookup within an already-fetched earmark list.
   static func earmark(named name: String, in earmarks: [Earmark]) throws -> Earmark {
     let lowered = name.lowercased()
-    guard let earmark = earmarks.first(where: { $0.name.lowercased() == lowered }) else {
+    let matches = earmarks.filter { $0.name.lowercased() == lowered }
+    guard let earmark = matches.first else {
       throw AutomationError.earmarkNotFound(name)
+    }
+    guard matches.count == 1 else {
+      throw AutomationError.invalidParameter("Ambiguous earmark name '\(name)'; use earmark id.")
     }
     return earmark
   }
@@ -173,11 +177,21 @@ extension AutomationService {
     let lowered = name.lowercased()
     let entries = categories.flattenedByPath()
 
-    // Try matching by path first, then by name
-    if let entry = entries.first(where: { $0.path.lowercased() == lowered }) {
+    // Try matching by path first, then by name.
+    let pathMatches = entries.filter { $0.path.lowercased() == lowered }
+    if let entry = pathMatches.first {
+      guard pathMatches.count == 1 else {
+        throw AutomationError.invalidParameter(
+          "Ambiguous category path '\(name)'; use category id.")
+      }
       return entry.category
     }
-    if let entry = entries.first(where: { $0.category.name.lowercased() == lowered }) {
+    let nameMatches = entries.filter { $0.category.name.lowercased() == lowered }
+    if let entry = nameMatches.first {
+      guard nameMatches.count == 1 else {
+        throw AutomationError.invalidParameter(
+          "Ambiguous category name '\(name)'; use category id or full path.")
+      }
       return entry.category
     }
 
