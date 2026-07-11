@@ -74,6 +74,12 @@ enum DeletionJournal {
   /// PK still holds because `record_name` is unique within one profile's DB.
   static let profileDataSentinelZone = "@profile-data"
 
+  /// Local-only per-profile tombstone sentinel. Unlike
+  /// `profileDataSentinelZone`, entries with this zone are never replayed as
+  /// CloudKit deletes; they only preserve local suppression state for records
+  /// whose absence is meaningful even after the synced delete is confirmed.
+  static let profileDataLocalTombstoneZone = "@profile-data-local-tombstone"
+
   /// Records a deletion intent inside the caller's active write transaction.
   /// MUST be called in the SAME `database.write` that deletes the local row,
   /// so a crash can never land the row-delete without the intent.
@@ -132,6 +138,39 @@ enum DeletionJournal {
   ) throws {
     try clear(
       zoneName: profileDataSentinelZone, recordName: recordName, in: database)
+  }
+
+  /// Records a per-profile local-only tombstone. These rows share the journal
+  /// table's durable `(zone_name, record_name)` key and data-wipe lifecycle, but
+  /// the sync coordinator intentionally ignores this sentinel during replay.
+  static func recordDataTombstone(
+    recordName: String, recordType: String, at date: Date, in database: Database
+  ) throws {
+    try record(
+      zoneName: profileDataLocalTombstoneZone,
+      recordName: recordName,
+      recordType: recordType,
+      at: date,
+      in: database)
+  }
+
+  /// Clears a per-profile local-only tombstone when the corresponding record is
+  /// re-created or saved by the server.
+  static func clearDataTombstone(
+    recordName: String, in database: Database
+  ) throws {
+    try clear(
+      zoneName: profileDataLocalTombstoneZone, recordName: recordName, in: database)
+  }
+
+  /// Returns whether a per-profile local-only tombstone exists.
+  static func hasDataTombstone(recordName: String, in database: Database) throws -> Bool {
+    try DeletionJournalRow
+      .filter(
+        DeletionJournalRow.Columns.zoneName == profileDataLocalTombstoneZone
+          && DeletionJournalRow.Columns.recordName == recordName
+      )
+      .fetchCount(database) > 0
   }
 
   /// Deletes every intent in this database. Called by the local bulk-teardown

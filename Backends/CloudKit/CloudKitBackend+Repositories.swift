@@ -22,26 +22,28 @@ extension CloudKitBackend {
     let importRules: GRDBImportRuleRepository
   }
 
+  struct GRDBRepositoryEnvironment {
+    let database: any DatabaseWriter
+    let instrument: Instrument
+    let defaultTaxOwnerId: UUID?
+    let implicitDefaultTaxOwnerId: UUID?
+    let conversionService: any InstrumentConversionService
+    let instrumentSeams: InstrumentSeams
+  }
+
   /// Constructs every GRDB-backed repository against the same writer
   /// and hook fan-out, bundled so `init` only has to plumb the result
   /// onto its stored properties.
   static func makeRepositories(
-    database: any DatabaseWriter,
-    instrument: Instrument,
-    conversionService: any InstrumentConversionService,
-    instrumentSeams: InstrumentSeams,
+    environment: GRDBRepositoryEnvironment,
     hooks: CloudKitBackendHooks
   ) -> GRDBRepositoryBundle {
+    let database = environment.database
     // The instrument-resolving read repos (accounts, transactions,
     // earmarks, investments, analysis) all take the instrument seams;
     // the remaining record-type repos don't, so the two groups are
     // built by separate helpers.
-    let resolving = makeResolvingRepositories(
-      database: database,
-      instrument: instrument,
-      conversionService: conversionService,
-      instrumentSeams: instrumentSeams,
-      hooks: hooks)
+    let resolving = makeResolvingRepositories(environment: environment, hooks: hooks)
     return GRDBRepositoryBundle(
       accounts: resolving.accounts,
       accountGroups: GRDBAccountGroupRepository(
@@ -57,7 +59,11 @@ extension CloudKitBackend {
         database: database,
         onRecordChanged: hooks.onCategoryChanged,
         onRecordDeleted: hooks.onCategoryDeleted),
-      taxOwners: makeTaxOwnerRepository(database: database, hooks: hooks),
+      taxOwners: makeTaxOwnerRepository(
+        database: database,
+        defaultTaxOwnerId: environment.defaultTaxOwnerId,
+        implicitDefaultTaxOwnerId: environment.implicitDefaultTaxOwnerId,
+        hooks: hooks),
       transferSuggestions: GRDBTransferSuggestionRepository(
         database: database,
         onRecordChanged: hooks.onTransferSuggestionChanged,
@@ -86,10 +92,14 @@ extension CloudKitBackend {
 
   private static func makeTaxOwnerRepository(
     database: any DatabaseWriter,
+    defaultTaxOwnerId: UUID?,
+    implicitDefaultTaxOwnerId: UUID?,
     hooks: CloudKitBackendHooks
   ) -> GRDBTaxOwnerRepository {
     GRDBTaxOwnerRepository(
       database: database,
+      defaultTaxOwnerId: defaultTaxOwnerId,
+      implicitDefaultTaxOwnerId: implicitDefaultTaxOwnerId,
       onRecordChanged: hooks.onTaxOwnerChanged,
       onRecordDeleted: hooks.onTaxOwnerDeleted,
       onAccountChanged: hooks.onAccountChanged,
@@ -111,12 +121,11 @@ extension CloudKitBackend {
   }
 
   private static func makeResolvingRepositories(
-    database: any DatabaseWriter,
-    instrument: Instrument,
-    conversionService: any InstrumentConversionService,
-    instrumentSeams: InstrumentSeams,
+    environment: GRDBRepositoryEnvironment,
     hooks: CloudKitBackendHooks
   ) -> ResolvingRepositories {
+    let database = environment.database
+    let instrumentSeams = environment.instrumentSeams
     let resolver = instrumentSeams.resolver
     return ResolvingRepositories(
       accounts: GRDBAccountRepository(
@@ -127,33 +136,33 @@ extension CloudKitBackend {
         onRecordDeleted: hooks.onAccountDeleted),
       transactions: GRDBTransactionRepository(
         database: database,
-        defaultInstrument: instrument,
-        conversionService: conversionService,
+        defaultInstrument: environment.instrument,
+        conversionService: environment.conversionService,
         instrumentResolver: resolver,
         instrumentRegistrar: instrumentSeams.registrar,
         onRecordChanged: hooks.onTransactionChanged,
         onRecordDeleted: hooks.onTransactionDeleted),
       earmarks: GRDBEarmarkRepository(
         database: database,
-        defaultInstrument: instrument,
+        defaultInstrument: environment.instrument,
         instrumentResolver: resolver,
         onRecordChanged: hooks.onEarmarkChanged,
         onRecordDeleted: hooks.onEarmarkDeleted),
       investments: GRDBInvestmentRepository(
         database: database,
-        defaultInstrument: instrument,
+        defaultInstrument: environment.instrument,
         instrumentResolver: resolver,
         onRecordChanged: hooks.onInvestmentChanged,
         onRecordDeleted: hooks.onInvestmentDeleted),
       analysis: GRDBAnalysisRepository(
         database: database,
-        instrument: instrument,
-        conversionService: conversionService,
+        instrument: environment.instrument,
+        conversionService: environment.conversionService,
         instrumentResolver: resolver),
       insightDataSource: GRDBInsightDataSource(
         database: database,
-        instrument: instrument,
-        conversionService: conversionService,
+        instrument: environment.instrument,
+        conversionService: environment.conversionService,
         instrumentResolver: resolver))
   }
 }

@@ -34,7 +34,12 @@ struct CryptoAccountCreationLogic {
   /// Persists the new crypto account and kicks off its first sync.
   /// Returns the outcome rather than mutating shared state directly so
   /// the parent view can decide how to surface success vs failure.
-  func submit(name: String, chain: ChainConfig, walletAddressInput: String) async -> Outcome {
+  func submit(
+    name: String,
+    chain: ChainConfig,
+    walletAddressInput: String,
+    taxOwnerIds: [UUID] = []
+  ) async -> Outcome {
     guard let walletAddress = Account.validatedWalletAddress(walletAddressInput) else {
       return .invalidAddress
     }
@@ -47,7 +52,8 @@ struct CryptoAccountCreationLogic {
       instrument: accountInstrument,
       valuationMode: .calculatedFromTrades,
       walletAddress: walletAddress,
-      chainId: chain.chainId
+      chainId: chain.chainId,
+      taxOwnerIds: taxOwnerIds
     )
 
     do {

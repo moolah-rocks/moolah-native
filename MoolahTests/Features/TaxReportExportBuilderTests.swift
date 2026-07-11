@@ -1,3 +1,6 @@
+// CSV tests stay in one file so row-order, escaping, owner, and unavailable-data fixtures remain comparable.
+// swiftlint:disable file_length
+
 import Foundation
 import Testing
 
@@ -29,6 +32,41 @@ struct TaxReportExportBuilderTests {
 
     #expect(csv.contains("Owner,Casey,Taxable income,,AUD,false"))
     #expect(csv.contains("Owner,Casey,Net capital gain,50,AUD,false"))
+  }
+
+  @Test
+  func csvMarksOwnerCapitalGainsUnavailableWhenOnlyGlobalUnavailableStateExists() {
+    let csv = TaxReportExportBuilder.csv(for: unavailableOwnerCapitalGainInput())
+
+    #expect(csv.contains("Owner,Casey,Net capital gain,,AUD,true"))
+    #expect(!csv.contains("Owner,Casey,Net capital gain,50,AUD,false"))
+  }
+
+  @Test
+  func csvIncludesUnavailableCapitalGainOwnerWithoutActivityRows() {
+    let csv = TaxReportExportBuilder.csv(for: ownerUnavailableCapitalGainOnlyInput())
+
+    #expect(csv.contains("Owner,Casey,Taxable income,,AUD,false"))
+    #expect(csv.contains("Owner,Casey,Net capital gain,,AUD,true"))
+    #expect(csv.contains("Sales,Casey,ETH,Missing price"))
+  }
+
+  @Test
+  func csvExportsTrustCapitalGainSupportFiguresInsteadOfIndividualNetCapitalGain() {
+    let csv = TaxReportExportBuilder.csv(for: trustOwnerCapitalGainInput())
+
+    #expect(!csv.contains("Owner,Family Trust,Net capital gain"))
+    #expect(csv.contains("Owner,Family Trust,Short-term capital gains,150,AUD,false"))
+    #expect(csv.contains("Owner,Family Trust,Long-term capital gains,300,AUD,false"))
+    #expect(csv.contains("Owner,Family Trust,Capital losses,40,AUD,false"))
+  }
+
+  @Test
+  func csvAllOwnerTrustTreatmentIgnoresInactiveTrustOwners() {
+    let csv = TaxReportExportBuilder.csv(for: inactiveTrustReportInput())
+
+    #expect(csv.contains("All owners,All owners,Net capital gain,160,AUD,false"))
+    #expect(!csv.contains("All owners,All owners,Short-term capital gains"))
   }
 
   @Test
@@ -89,6 +127,7 @@ extension TaxReportExportBuilderTests {
   private var ownerAlex: UUID { makeUUID("00000000-0000-0000-0000-0000000000A1") }
   private var ownerSam: UUID { makeUUID("00000000-0000-0000-0000-0000000000B2") }
   private var ownerCasey: UUID { makeUUID("00000000-0000-0000-0000-0000000000C3") }
+  private var ownerFamilyTrust: UUID { makeUUID("00000000-0000-0000-0000-0000000000F4") }
   private var defaultOwner: UUID { makeUUID("00000000-0000-0000-0000-0000000000D0") }
   private var saleOne: UUID { makeUUID("51000000-0000-0000-0000-000000000001") }
   private var saleTwo: UUID { makeUUID("51000000-0000-0000-0000-000000000002") }
@@ -118,6 +157,31 @@ extension TaxReportExportBuilderTests {
         taxableIncome: amount(300),
         deductibleExpenses: amount(80)),
       taxOwnerNames: ownerNames,
+      taxOwnerKinds: ownerKinds,
+      profitLoss: [],
+      profitLossHasUnavailableData: false,
+      profitLossUnavailableInstruments: [],
+      defaultTaxOwnerId: defaultOwner)
+  }
+
+  private func inactiveTrustReportInput() -> TaxReportExportInput {
+    TaxReportExportInput(
+      financialYear: 2027,
+      holdingsDate: date(year: 2027, month: 6, day: 30),
+      profileInstrument: .AUD,
+      summary: completeReportSummary,
+      events: completeReportEvents,
+      capitalGainsHasUnavailableData: false,
+      capitalGainsUnavailableInstruments: [],
+      taxIncomeExpenseSummaries: completeReportIncomeExpense,
+      taxIncomeExpenseRollup: TaxIncomeExpenseSummary(
+        ownerId: defaultOwner,
+        taxableIncome: amount(300),
+        deductibleExpenses: amount(80)),
+      taxOwnerNames: ownerNames.merging([ownerFamilyTrust: "Family Trust"]) { current, _ in
+        current
+      },
+      taxOwnerKinds: ownerKinds.merging([ownerFamilyTrust: .trust]) { current, _ in current },
       profitLoss: [],
       profitLossHasUnavailableData: false,
       profitLossUnavailableInstruments: [],
@@ -140,6 +204,7 @@ extension TaxReportExportBuilderTests {
         deductibleExpenses: amount(0),
         hasUnavailableData: true),
       taxOwnerNames: [ownerAlex: "Alex"],
+      taxOwnerKinds: [ownerAlex: .individual],
       profitLoss: [holdingProfitLoss],
       profitLossHasUnavailableData: true,
       profitLossUnavailableInstruments: [eth],
@@ -168,6 +233,7 @@ extension TaxReportExportBuilderTests {
       taxIncomeExpenseSummaries: [],
       taxIncomeExpenseRollup: nil,
       taxOwnerNames: [ownerCasey: "Casey"],
+      taxOwnerKinds: [ownerCasey: .individual],
       profitLoss: [],
       profitLossHasUnavailableData: false,
       profitLossUnavailableInstruments: [],
@@ -189,6 +255,7 @@ extension TaxReportExportBuilderTests {
         taxableIncome: amount(300),
         deductibleExpenses: amount(80)),
       taxOwnerNames: ownerNames,
+      taxOwnerKinds: ownerKinds,
       profitLoss: [ethProfitLoss, holdingProfitLoss],
       profitLossHasUnavailableData: true,
       profitLossUnavailableInstruments: [eth, bhp],
@@ -212,6 +279,104 @@ extension TaxReportExportBuilderTests {
       ],
       taxIncomeExpenseRollup: nil,
       taxOwnerNames: [ownerAlex: "Alex \"Tax\", Pty\nOwner"],
+      taxOwnerKinds: [ownerAlex: .individual],
+      profitLoss: [],
+      profitLossHasUnavailableData: false,
+      profitLossUnavailableInstruments: [],
+      defaultTaxOwnerId: defaultOwner)
+  }
+
+  private func unavailableOwnerCapitalGainInput() -> TaxReportExportInput {
+    TaxReportExportInput(
+      financialYear: 2027,
+      holdingsDate: date(year: 2027, month: 6, day: 30),
+      profileInstrument: .AUD,
+      summary: nil,
+      events: [
+        capitalGainEvent(
+          CapitalGainFixture(
+            ownerId: ownerCasey,
+            sourceTransactionId: saleThree,
+            sellDate: date(year: 2027, month: 2, day: 1),
+            acquiredDate: date(year: 2027, month: 1, day: 1),
+            quantity: 1,
+            costBasis: 50,
+            proceeds: 100))
+      ],
+      capitalGainsHasUnavailableData: true,
+      capitalGainsUnavailableInstruments: [eth],
+      taxIncomeExpenseSummaries: [],
+      taxIncomeExpenseRollup: nil,
+      taxOwnerNames: [ownerCasey: "Casey"],
+      taxOwnerKinds: [ownerCasey: .individual],
+      profitLoss: [],
+      profitLossHasUnavailableData: false,
+      profitLossUnavailableInstruments: [],
+      defaultTaxOwnerId: defaultOwner)
+  }
+
+  private func ownerUnavailableCapitalGainOnlyInput() -> TaxReportExportInput {
+    TaxReportExportInput(
+      financialYear: 2027,
+      holdingsDate: date(year: 2027, month: 6, day: 30),
+      profileInstrument: .AUD,
+      summary: nil,
+      events: [],
+      capitalGainsHasUnavailableData: false,
+      capitalGainsUnavailableInstruments: [],
+      capitalGainsHasUnavailableDataByOwner: [ownerCasey: true],
+      ownerUnavailableCapitalGainsInstruments: [ownerCasey: [eth]],
+      taxIncomeExpenseSummaries: [],
+      taxIncomeExpenseRollup: nil,
+      taxOwnerNames: [ownerCasey: "Casey"],
+      taxOwnerKinds: [ownerCasey: .individual],
+      profitLoss: [],
+      profitLossHasUnavailableData: false,
+      profitLossUnavailableInstruments: [],
+      defaultTaxOwnerId: defaultOwner)
+  }
+
+  private func trustOwnerCapitalGainInput() -> TaxReportExportInput {
+    TaxReportExportInput(
+      financialYear: 2027,
+      holdingsDate: date(year: 2027, month: 6, day: 30),
+      profileInstrument: .AUD,
+      summary: nil,
+      events: [
+        capitalGainEvent(
+          CapitalGainFixture(
+            ownerId: ownerFamilyTrust,
+            sourceTransactionId: saleOne,
+            sellDate: date(year: 2027, month: 2, day: 1),
+            acquiredDate: date(year: 2027, month: 1, day: 1),
+            quantity: 1,
+            costBasis: 50,
+            proceeds: 200)),
+        capitalGainEvent(
+          CapitalGainFixture(
+            ownerId: ownerFamilyTrust,
+            sourceTransactionId: saleTwo,
+            sellDate: date(year: 2027, month: 2, day: 2),
+            acquiredDate: date(year: 2025, month: 1, day: 1),
+            quantity: 1,
+            costBasis: 100,
+            proceeds: 400)),
+        capitalGainEvent(
+          CapitalGainFixture(
+            ownerId: ownerFamilyTrust,
+            sourceTransactionId: saleThree,
+            sellDate: date(year: 2027, month: 2, day: 3),
+            acquiredDate: date(year: 2027, month: 1, day: 1),
+            quantity: 1,
+            costBasis: 40,
+            proceeds: 0)),
+      ],
+      capitalGainsHasUnavailableData: false,
+      capitalGainsUnavailableInstruments: [],
+      taxIncomeExpenseSummaries: [],
+      taxIncomeExpenseRollup: nil,
+      taxOwnerNames: [ownerFamilyTrust: "Family Trust"],
+      taxOwnerKinds: [ownerFamilyTrust: .trust],
       profitLoss: [],
       profitLossHasUnavailableData: false,
       profitLossUnavailableInstruments: [],
@@ -295,6 +460,9 @@ extension TaxReportExportBuilderTests {
 
   private var ownerNames: [UUID: String] {
     [ownerAlex: "Alex", ownerSam: "Sam", defaultOwner: "Default owner"]
+  }
+  private var ownerKinds: [UUID: TaxOwnerKind] {
+    [ownerAlex: .individual, ownerSam: .individual, defaultOwner: .individual]
   }
 
   private func assertCompleteReport(_ csv: String) {

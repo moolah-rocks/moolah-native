@@ -132,17 +132,21 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     instrument: Instrument,
     profileLabel: String,
     defaultTaxOwnerId: UUID? = nil,
+    implicitDefaultTaxOwnerId: UUID? = nil,
     conversionService: any InstrumentConversionService,
     instrumentRegistry: GRDBInstrumentRegistryRepository,
     hooks: CloudKitBackendHooks = .noop
   ) {
     self.auth = CloudKitAuthProvider(profileLabel: profileLabel)
     let repos = Self.makeRepositories(
-      database: database,
-      instrument: instrument,
-      conversionService: conversionService,
-      instrumentSeams: InstrumentSeams(
-        resolver: instrumentRegistry, registrar: instrumentRegistry),
+      environment: GRDBRepositoryEnvironment(
+        database: database,
+        instrument: instrument,
+        defaultTaxOwnerId: defaultTaxOwnerId,
+        implicitDefaultTaxOwnerId: implicitDefaultTaxOwnerId,
+        conversionService: conversionService,
+        instrumentSeams: InstrumentSeams(
+          resolver: instrumentRegistry, registrar: instrumentRegistry)),
       hooks: hooks)
 
     // The synced wallet-sync checkpoint repo is built here (not in
@@ -189,19 +193,6 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.walletSyncCheckpoints = walletSyncCheckpoints
     self.groupUIState = GRDBGroupUIStateRepository(database: database)
 
-    bootstrapDefaultTaxOwner(defaultTaxOwnerId, repository: repos.taxOwners)
-  }
-
-  private func bootstrapDefaultTaxOwner(
-    _ defaultTaxOwnerId: UUID?,
-    repository: GRDBTaxOwnerRepository
-  ) {
-    guard let defaultTaxOwnerId else { return }
-    do {
-      try repository.ensureDefaultOwner(id: defaultTaxOwnerId, name: "Default owner")
-    } catch {
-      assertionFailure("Failed to bootstrap default tax owner: \(error)")
-    }
   }
 
   /// The read-side instrument resolver and the write-side registrar,

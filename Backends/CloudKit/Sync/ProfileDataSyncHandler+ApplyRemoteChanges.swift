@@ -83,6 +83,34 @@ extension ProfileDataSyncHandler {
     let upsertDuration: Duration
   }
 
+  nonisolated struct PostCommitSyncHooks: Sendable {
+    var accountIds: [UUID] = []
+    var categoryIds: [UUID] = []
+
+    mutating func merge(_ references: GRDBTaxOwnerRepository.RemovedOwnerReferences) {
+      accountIds.append(contentsOf: references.accountIds)
+      categoryIds.append(contentsOf: references.categoryIds)
+    }
+
+    func fire(using repositories: ProfileGRDBRepositories) {
+      for accountId in uniquedPreservingOrder(accountIds) {
+        repositories.taxOwners.onAccountChanged(AccountRow.recordType, accountId)
+      }
+      for categoryId in uniquedPreservingOrder(categoryIds) {
+        repositories.taxOwners.onCategoryChanged(CategoryRow.recordType, categoryId)
+      }
+    }
+
+    private func uniquedPreservingOrder(_ ids: [UUID]) -> [UUID] {
+      var seen: Set<UUID> = []
+      var result: [UUID] = []
+      for id in ids where seen.insert(id).inserted {
+        result.append(id)
+      }
+      return result
+    }
+  }
+
   /// Runs `applyBatchSaves` and `applyBatchDeletions` inside a single
   /// outer `database.write { ... }` (issue #872), wraps each in its
   /// signpost interval for Instruments traces, and converts a thrown
@@ -95,6 +123,7 @@ extension ProfileDataSyncHandler {
     signpostID: OSSignpostID
   ) -> ApplyResult? {
     do {
+      var postCommitHooks = PostCommitSyncHooks()
       try grdbRepositories.database.write { database in
         os_signpost(
           .begin, log: Signposts.sync, name: "applyBatchSaves", signpostID: signpostID,
@@ -112,7 +141,7 @@ extension ProfileDataSyncHandler {
           .begin, log: Signposts.sync, name: "applyBatchDeletions", signpostID: signpostID,
           "%{public}d records", deleted.count)
         do {
-          try applyBatchDeletions(deleted, in: database)
+          postCommitHooks = try applyBatchDeletions(deleted, in: database)
         } catch {
           os_signpost(
             .end, log: Signposts.sync, name: "applyBatchDeletions", signpostID: signpostID)
@@ -121,6 +150,7 @@ extension ProfileDataSyncHandler {
         os_signpost(
           .end, log: Signposts.sync, name: "applyBatchDeletions", signpostID: signpostID)
       }
+      postCommitHooks.fire(using: grdbRepositories)
       return nil
     } catch {
       logger.error(
@@ -249,9 +279,10 @@ extension ProfileDataSyncHandler {
   /// refetches rather than dropping the deletion record silently.
   nonisolated func applyBatchDeletions(
     _ deletions: [(CKRecord.ID, String)], in database: Database
-  ) throws {
+  ) throws -> PostCommitSyncHooks {
     var uuidGrouped: [String: [UUID]] = [:]
     var stringGrouped: [String: [String]] = [:]
+    var postCommitHooks = PostCommitSyncHooks()
 
     for (recordID, recordType) in deletions {
       if let uuid = recordID.uuid {
@@ -262,6 +293,11 @@ extension ProfileDataSyncHandler {
     }
 
     for (recordType, ids) in uuidGrouped {
+      if recordType == TaxOwnerRow.recordType {
+        let references = try applyBatchDeleteTaxOwner(ids: ids, in: database)
+        postCommitHooks.merge(references)
+        continue
+      }
       if try applyGRDBBatchDeletion(recordType: recordType, ids: ids, in: database) {
         continue
       }
@@ -282,6 +318,7 @@ extension ProfileDataSyncHandler {
       Self.batchLogger.warning(
         "applyBatchDeletions: unknown string-ID record type '\(recordType)' — skipping")
     }
+    return postCommitHooks
   }
 
   // MARK: - Private Helpers

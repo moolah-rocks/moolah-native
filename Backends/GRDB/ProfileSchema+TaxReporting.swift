@@ -27,7 +27,7 @@ extension ProfileSchema {
             owner_id    BLOB    NOT NULL,
             position    INTEGER NOT NULL CHECK (position >= 0),
             PRIMARY KEY (account_id, owner_id)
-        ) STRICT;
+        ) STRICT, WITHOUT ROWID;
 
         CREATE INDEX account_tax_owner_by_account_position
             ON account_tax_owner(account_id, position);
@@ -39,7 +39,7 @@ extension ProfileSchema {
             owner_id    BLOB    NOT NULL,
             position    INTEGER NOT NULL CHECK (position >= 0),
             PRIMARY KEY (category_id, owner_id)
-        ) STRICT;
+        ) STRICT, WITHOUT ROWID;
 
         CREATE INDEX category_tax_owner_by_category_position
             ON category_tax_owner(category_id, position);

@@ -99,7 +99,7 @@ extension SyncCoordinator {
 
   /// Applies fetched changes for the profile-index zone. Off-main apply + MainActor
   /// hop for observer / refetch bookkeeping. Schedules a re-fetch on save failure.
-  nonisolated private func applyFetchedIndexChanges(
+  nonisolated func applyFetchedIndexChanges(
     saved: [CKRecord],
     deleted: [(CKRecord.ID, String)]
   ) async {
@@ -120,8 +120,9 @@ extension SyncCoordinator {
     let indexResult = profileIndexHandler.applyRemoteChanges(
       saved: toApply, deleted: deletedIDs)
     switch indexResult {
-    case .success:
+    case .profileIndexSuccess(_, let appliedProfileRows):
       await MainActor.run {
+        updateCachedDefaultTaxOwnerIds(from: appliedProfileRows)
         // Successful apply proves local writes are working — reset the re-fetch
         // attempt counter so a future transient failure gets a full retry budget.
         resetRefetchAttempts()
@@ -131,10 +132,20 @@ extension SyncCoordinator {
           notifyIndexObservers()
         }
       }
+    case .success:
+      assertionFailure("Profile-index apply should return profileIndexSuccess")
     case .saveFailed(let errorDescription):
       logger.error(
         "Profile index save failed, scheduling re-fetch: \(errorDescription, privacy: .public)")
       await scheduleRefetch()
+    }
+  }
+
+  @MainActor
+  private func updateCachedDefaultTaxOwnerIds(from rows: [ProfileRow]) {
+    for row in rows {
+      guard let defaultTaxOwnerId = row.defaultTaxOwnerId else { continue }
+      updateCachedDefaultTaxOwnerId(defaultTaxOwnerId, for: row.id)
     }
   }
 
@@ -220,6 +231,8 @@ extension SyncCoordinator {
       // remote writes propagate without an explicit notification step.
       await runCrossDeviceLegDedup(
         profileId: profileId, touchedExternalIds: touchedExternalIds)
+    case .profileIndexSuccess:
+      assertionFailure("Profile-data apply should not return profileIndexSuccess")
     case .saveFailed(let errorDescription):
       logger.error(
         "Profile data save failed for \(profileId), scheduling re-fetch: \(errorDescription, privacy: .public)"

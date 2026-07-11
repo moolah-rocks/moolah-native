@@ -1,11 +1,13 @@
 import Foundation
+import GRDB
 import Testing
 
 @testable import Moolah
 
+// These assignment persistence cases share save/create helpers and cover one owner-pruning contract.
 @Suite("Tax owner assignment persistence")
 @MainActor
-struct TaxOwnerAssignmentPersistenceTests {
+struct TaxOwnerAssignmentPersistenceTests {  // swiftlint:disable:this type_body_length
   @Test("account save helper prunes stale owners at the save callsite")
   func accountSavePrunesStaleOwners() {
     let validOwner = TaxOwner(id: UUID(), name: "Alex")
@@ -72,6 +74,81 @@ struct TaxOwnerAssignmentPersistenceTests {
       taxOwnerIds: [deletedOwnerId, validOwner.id],
       validOwners: [validOwner])
     #expect(created.taxOwnerIds == [validOwner.id])
+  }
+
+  @Test("account tax owner assignment store loads owners and prunes stale selection")
+  func accountTaxOwnerAssignmentStoreLoadsAndPrunesSelection() async throws {
+    let (backend, _) = try TestBackend.create()
+    let validOwner = TaxOwner(id: UUID(), name: "Alex")
+    let deletedOwnerId = UUID()
+    _ = try await backend.taxOwners.create(validOwner)
+    let store = AccountTaxOwnerAssignmentStore(
+      selectedOwnerIds: [deletedOwnerId, validOwner.id])
+
+    await store.loadOwners(from: backend.taxOwners)
+
+    #expect(store.owners == [validOwner])
+    #expect(store.selectedOwnerIds == [validOwner.id])
+    #expect(store.errorMessage == nil)
+  }
+
+  @Test("account tax owner assignment store surfaces load failures")
+  func accountTaxOwnerAssignmentStoreSurfacesLoadFailures() async {
+    let selectedOwnerIds = [UUID()]
+    let store = AccountTaxOwnerAssignmentStore(selectedOwnerIds: selectedOwnerIds)
+
+    await store.loadOwners(from: ThrowingTaxOwnerRepository())
+
+    #expect(store.owners.isEmpty)
+    #expect(store.selectedOwnerIds == selectedOwnerIds)
+    #expect(store.errorMessage == AccountTaxOwnerAssignmentStore.loadErrorMessage)
+  }
+
+  @Test("account tax owner assignment store supports flow-specific load copy")
+  func accountTaxOwnerAssignmentStoreSupportsFlowSpecificLoadCopy() async {
+    let selectedOwnerIds = [UUID()]
+    let message = "Couldn't load tax owners. Reopen Create Account and try again."
+    let store = AccountTaxOwnerAssignmentStore(
+      selectedOwnerIds: selectedOwnerIds,
+      loadErrorMessage: message)
+
+    await store.loadOwners(from: ThrowingTaxOwnerRepository())
+
+    #expect(store.owners.isEmpty)
+    #expect(store.selectedOwnerIds == selectedOwnerIds)
+    #expect(store.errorMessage == message)
+  }
+
+  @Test("category tax owner assignment store loads owners and prunes selected category")
+  func categoryTaxOwnerAssignmentStoreLoadsAndPrunesSelectedCategory() async throws {
+    let (backend, _) = try TestBackend.create()
+    let validOwner = TaxOwner(id: UUID(), name: "Alex")
+    let deletedOwnerId = UUID()
+    _ = try await backend.taxOwners.create(validOwner)
+    var selectedCategory = Category(name: "Interest")
+    selectedCategory.taxOwnerIds = [deletedOwnerId, validOwner.id]
+    let store = CategoryTaxOwnerAssignmentStore()
+    store.select(selectedCategory)
+
+    await store.loadOwners(from: backend.taxOwners)
+
+    #expect(store.owners == [validOwner])
+    #expect(store.selectedCategory?.taxOwnerIds == [validOwner.id])
+    #expect(store.errorMessage == nil)
+  }
+
+  @Test("category tax owner assignment store surfaces load failures")
+  func categoryTaxOwnerAssignmentStoreSurfacesLoadFailures() async {
+    var selectedCategory = Category(name: "Interest")
+    selectedCategory.taxOwnerIds = [UUID()]
+    let store = CategoryTaxOwnerAssignmentStore()
+    store.select(selectedCategory)
+
+    await store.loadOwners(from: ThrowingTaxOwnerRepository())
+
+    #expect(store.owners.isEmpty)
+    #expect(store.selectedCategory?.taxOwnerIds == selectedCategory.taxOwnerIds)
+    #expect(store.errorMessage == CategoryTaxOwnerAssignmentStore.loadErrorMessage)
   }
 
   @Test("account store update persists zero one and many tax owners")
@@ -246,5 +323,76 @@ struct TaxOwnerAssignmentPersistenceTests {
     let refetched = try #require(try await backend.categories.fetchAll().first)
     #expect(refetched.isTaxReportable == false)
     #expect(refetched.taxOwnerIds.isEmpty)
+  }
+}
+
+struct ThrowingTaxOwnerRepository: TaxOwnerRepository {
+  func fetchAll() async throws -> [TaxOwner] {
+    throw BackendError.notFound("tax owners")
+  }
+
+  func observeAll() -> AsyncStream<[TaxOwner]> {
+    AsyncStream { $0.finish() }
+  }
+
+  func observeErrors() -> AsyncStream<any Error> {
+    AsyncStream { $0.finish() }
+  }
+
+  func create(_ owner: TaxOwner) async throws -> TaxOwner {
+    throw BackendError.notFound("tax owner create")
+  }
+
+  func update(_ owner: TaxOwner) async throws -> TaxOwner {
+    throw BackendError.notFound("tax owner update")
+  }
+
+  func delete(id: UUID) async throws {
+    throw BackendError.notFound("tax owner delete")
+  }
+}
+
+@Suite("Default tax owner assignment persistence")
+struct DefaultTaxOwnerPersistenceTests {
+  @Test("retired implicit default owner is not recreated")
+  func retiredImplicitDefaultOwnerIsNotRecreated() async throws {
+    let database = try ProfileDatabase.openInMemory()
+    let implicitDefaultOwnerId = UUID()
+    let replacementDefaultOwnerId = UUID()
+    let repository = GRDBTaxOwnerRepository(
+      database: database,
+      defaultTaxOwnerId: implicitDefaultOwnerId,
+      implicitDefaultTaxOwnerId: implicitDefaultOwnerId)
+    #expect(try await repository.fetchAll().map(\.id) == [implicitDefaultOwnerId])
+    _ = try await repository.create(
+      TaxOwner(id: replacementDefaultOwnerId, name: "Replacement default"))
+
+    repository.updateDefaultTaxOwnerId(replacementDefaultOwnerId)
+    try await repository.delete(id: implicitDefaultOwnerId)
+    try await database.write { database in
+      try DeletionJournal.clearDataDeletion(
+        recordName: TaxOwnerRow.recordName(for: implicitDefaultOwnerId),
+        in: database)
+    }
+
+    #expect(try await repository.fetchAll().map(\.id) == [replacementDefaultOwnerId])
+  }
+
+  @Test("deleting bootstrapped default tax owner removes the stored row")
+  func deletingBootstrappedDefaultTaxOwnerRemovesStoredRow() async throws {
+    let database = try ProfileDatabase.openInMemory()
+    let ownerId = UUID()
+    let repository = GRDBTaxOwnerRepository(database: database, defaultTaxOwnerId: ownerId)
+    try repository.bootstrapImplicitDefaultOwner()
+    #expect(try await repository.fetchAll().map(\.id) == [ownerId])
+
+    try await repository.delete(id: ownerId)
+    try await database.write { database in
+      try DeletionJournal.clearDataDeletion(
+        recordName: TaxOwnerRow.recordName(for: ownerId), in: database)
+    }
+
+    #expect(try await repository.fetchAll().isEmpty)
+    #expect(try repository.allRowIdsSync().isEmpty)
   }
 }

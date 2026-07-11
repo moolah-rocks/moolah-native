@@ -169,6 +169,7 @@ final class ProfileSession: Identifiable {
   /// `ProfileSession+SyncCleanup.swift` can cancel a pending bootstrap
   /// during teardown.
   var setUpTask: Task<Void, any Error>?
+  weak var syncCoordinator: SyncCoordinator?
 
   /// Synchronous initialiser — opens the per-profile GRDB queue and
   /// builds every store / service the session exposes. Callers must
@@ -185,32 +186,17 @@ final class ProfileSession: Identifiable {
   ) throws {
     self.profile = profile
     self.profileID = profile.id
+    self.syncCoordinator = syncCoordinator
 
-    let resolvedDatabase = try Self.resolveDatabase(
-      override: database, profile: profile, containerManager: containerManager)
-    self.database = resolvedDatabase
+    let infrastructure = try Self.makeInitInfrastructure(
+      database: database,
+      profile: profile,
+      containerManager: containerManager,
+      override: networking,
+      syncCoordinator: syncCoordinator)
+    self.database = infrastructure.database
 
-    // Prefer the app-level shared `NetworkingServices` via SyncCoordinator,
-    // fall back to the directly-injected one, then to a fresh instance for
-    // preview / test fixtures that didn't pass shared services through.
-    let resolvedNetworking = syncCoordinator?.sharedNetworking ?? networking ?? NetworkingServices()
-
-    // Prefer the app-level shared `MarketDataServices` (pointed at
-    // the profile-index DB) when the coordinator was constructed
-    // with one. All sessions then share price-cache writes / reads,
-    // so a CoinGecko fetch for `bitcoin` in profile A populates the
-    // cache that profile B reads next. Falls back to per-profile
-    // construction for legacy callers (preview / tests) that didn't
-    // pass shared services through `SyncCoordinator.init`.
-    // `makeCloudKitBackend` binds the per-profile registry into this on the
-    // fallback path; see `LateBoundCryptoMetadataLookup`.
-    let fallbackMetadataLookup = LateBoundCryptoMetadataLookup()
-    let services =
-      syncCoordinator?.sharedMarketData
-      ?? Self.makeMarketDataServices(
-        database: resolvedDatabase,
-        networking: resolvedNetworking,
-        cryptoMetadataLookup: fallbackMetadataLookup.lookup)
+    let services = infrastructure.marketData
     self.exchangeRateService = services.exchangeRate
     self.stockPriceService = services.stockPrice
     self.cryptoPriceService = services.cryptoPrice
@@ -220,8 +206,8 @@ final class ProfileSession: Identifiable {
       profile: profile,
       syncCoordinator: syncCoordinator,
       services: services,
-      database: resolvedDatabase,
-      fallbackMetadataLookup: fallbackMetadataLookup
+      database: infrastructure.database,
+      fallbackMetadataLookup: infrastructure.fallbackMetadataLookup
     )
     self.backend = backend
 
@@ -232,7 +218,7 @@ final class ProfileSession: Identifiable {
       cryptoPriceService: services.cryptoPrice,
       yahooPriceFetcher: services.yahooPriceFetcher,
       coinGeckoApiKeyProvider: services.coinGeckoApiKeyProvider,
-      networking: resolvedNetworking,
+      networking: infrastructure.networking,
       sharedRegistryStore: syncCoordinator?.sharedRegistryStore
     )
     let stores = Self.makeDomainStores(profile: profile, backend: backend)
@@ -368,26 +354,6 @@ final class ProfileSession: Identifiable {
   /// watch isn't available.
   func scanWatchedFolder() async {
     await folderScanner.scanForNewFiles()
-  }
-
-  /// Runs the bootstrap migrations off `@MainActor` and reloads the
-  /// affected stores. Idempotent: subsequent calls return the same
-  /// task so callers can `await session.setUp()` from multiple sites
-  /// (UI test seed setup, `SessionManager.session(for:)`, etc.) without
-  /// re-running anything.
-  ///
-  /// `ValuationModeMigration` is non-fatal: errors are logged but do
-  /// not propagate, because read sites auto-detect and the next launch
-  /// will retry.
-  func setUp() async throws {
-    if let existing = setUpTask {
-      return try await existing.value
-    }
-    let task = Task<Void, any Error> {
-      await self.runValuationModeMigration()
-    }
-    setUpTask = task
-    try await task.value
   }
 
   // `runValuationModeMigration` lives in

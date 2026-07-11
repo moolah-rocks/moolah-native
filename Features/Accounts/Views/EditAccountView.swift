@@ -27,11 +27,9 @@ struct EditAccountView: View {
   @State private var currency: Instrument
   @State private var isHidden: Bool
   @State private var valuationMode: ValuationMode
-  @State private var taxOwnerIds: [UUID]
-  @State private var taxOwners: [TaxOwner] = []
+  @State private var taxOwnerAssignmentStore: AccountTaxOwnerAssignmentStore
   @State private var isSubmitting = false
   @State private var errorMessage: String?
-  @State private var taxOwnerErrorMessage: String?
   @State private var showValuationPicker: Bool
   @State private var pickerShownDueToProbeFailure = false
   /// Write-only replacement for an exchange account's read-only API
@@ -84,12 +82,20 @@ struct EditAccountView: View {
     _currency = State(initialValue: account.instrument)
     _isHidden = State(initialValue: account.isHidden)
     _valuationMode = State(initialValue: account.valuationMode)
-    _taxOwnerIds = State(initialValue: account.taxOwnerIds)
+    _taxOwnerAssignmentStore = State(
+      initialValue: AccountTaxOwnerAssignmentStore(selectedOwnerIds: account.taxOwnerIds))
     // Initial visibility: shown for `.recordedValue` accounts so legacy
     // users see the picker immediately, hidden for `.calculatedFromTrades`
     // accounts pending the snapshot probe in `.task`. See design §3.3.
     _showValuationPicker = State(
       initialValue: account.valuationMode == .recordedValue)
+  }
+
+  private var taxOwnerIdsBinding: Binding<[UUID]> {
+    Binding(
+      get: { taxOwnerAssignmentStore.selectedOwnerIds },
+      set: { taxOwnerAssignmentStore.selectedOwnerIds = $0 }
+    )
   }
 
   // MARK: - Body
@@ -178,10 +184,10 @@ struct EditAccountView: View {
       }
     }
     .task {
-      await observeTaxOwners()
+      await taxOwnerAssignmentStore.observeOwners(from: session.backend.taxOwners)
     }
     .task {
-      await observeTaxOwnerErrors()
+      await taxOwnerAssignmentStore.observeErrors(from: session.backend.taxOwners)
     }
   }
 
@@ -235,7 +241,7 @@ struct EditAccountView: View {
     }
   }
   @ViewBuilder private var taxOwnerSection: some View {
-    if let taxOwnerErrorMessage {
+    if let taxOwnerErrorMessage = taxOwnerAssignmentStore.errorMessage {
       Section {
         Label(taxOwnerErrorMessage, systemImage: "exclamationmark.triangle.fill")
           .foregroundStyle(.red)
@@ -245,11 +251,11 @@ struct EditAccountView: View {
     } else {
       TaxOwnerAssignmentSection(
         title: "Tax Ownership",
-        owners: taxOwners,
+        owners: taxOwnerAssignmentStore.owners,
         defaultOwnerId: session.profile.defaultTaxOwnerId,
         footer:
           "Leave no owners selected to use the profile default. Select multiple owners to split tax reporting equally.",
-        selectedOwnerIds: $taxOwnerIds
+        selectedOwnerIds: taxOwnerIdsBinding
       )
       .disabled(isSubmitting)
     }
@@ -294,8 +300,9 @@ struct EditAccountView: View {
       instrument: currency,
       isHidden: isHidden,
       valuationMode: valuationMode,
-      taxOwnerIds: taxOwnerIds)
-    let updated = Self.updatedAccount(from: account, draft: draft, validOwners: taxOwners)
+      taxOwnerIds: taxOwnerAssignmentStore.selectedOwnerIds)
+    let updated = Self.updatedAccount(
+      from: account, draft: draft, validOwners: taxOwnerAssignmentStore.owners)
 
     do {
       // Replace the keychain token BEFORE mutating the account row so a
@@ -316,22 +323,6 @@ struct EditAccountView: View {
     }
   }
 
-  private func observeTaxOwners() async {
-    for await owners in session.backend.taxOwners.observeAll() {
-      guard !Task.isCancelled else { return }
-      taxOwners = owners
-      taxOwnerIds = TaxOwnerAssignmentState.prunedSelectedOwnerIds(
-        taxOwnerIds, validOwners: owners)
-      taxOwnerErrorMessage = nil
-    }
-  }
-
-  private func observeTaxOwnerErrors() async {
-    for await _ in session.backend.taxOwners.observeErrors() {
-      guard !Task.isCancelled else { return }
-      taxOwnerErrorMessage = "Couldn't load tax owners. Reopen the account editor and try again."
-    }
-  }
 }
 
 extension EditAccountView {

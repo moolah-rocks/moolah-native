@@ -87,6 +87,19 @@ struct ProfileSessionTests {
     // existing task on subsequent calls rather than re-running.
   }
 
+  @Test("setUp() bootstraps implicit default tax owner")
+  func setUpBootstrapsImplicitDefaultTaxOwner() async throws {
+    let containerManager = try ProfileContainerManager.forTesting()
+    let profile = makeProfile(label: "Family")
+    let session = try ProfileSession(profile: profile, containerManager: containerManager)
+
+    try await session.setUp()
+
+    let cloudBackend = try #require(session.backend as? CloudKitBackend)
+    #expect(try cloudBackend.grdbTaxOwners.allRowIdsSync() == [profile.defaultTaxOwnerId])
+    #expect(try cloudBackend.grdbTaxOwners.unsyncedRowIdsSync() == [profile.defaultTaxOwnerId])
+  }
+
   @Test("CloudKit profile exposes cryptoTokenStore on session")
   func cloudKitProfileExposesCryptoTokenStore() throws {
     let containerManager = try ProfileContainerManager.forTesting()

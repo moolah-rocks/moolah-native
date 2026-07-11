@@ -51,6 +51,7 @@ struct HoldingsCostLedgerPass {
       HoldingsFlowEntry(
         date: date,
         account: context.holding.account,
+        taxOwnerId: context.holding.taxOwnerId,
         instrument: instrument,
         amount: -(quantity * proceedsPerUnit),
         counterpartyAccount: nil))
@@ -73,6 +74,7 @@ struct HoldingsCostLedgerPass {
       HoldingsFlowEntry(
         date: date,
         account: route.from,
+        taxOwnerId: route.taxOwnerId,
         instrument: instrument,
         amount: -marketValue,
         counterpartyAccount: route.to))
@@ -80,6 +82,7 @@ struct HoldingsCostLedgerPass {
       HoldingsFlowEntry(
         date: date,
         account: route.to,
+        taxOwnerId: route.taxOwnerId,
         instrument: instrument,
         amount: marketValue,
         counterpartyAccount: route.from))
@@ -103,6 +106,7 @@ struct HoldingsCostLedgerPass {
       HoldingsFlowEntry(
         date: date,
         account: holding.account,
+        taxOwnerId: holding.taxOwnerId,
         instrument: instrument,
         amount: quantity * costPerUnit,
         counterpartyAccount: nil))

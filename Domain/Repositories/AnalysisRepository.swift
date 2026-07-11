@@ -99,6 +99,14 @@ protocol AnalysisRepository: Sendable {
     defaultTaxOwnerId: UUID
   ) async throws -> [TaxIncomeExpenseSummary]
 
+  func fetchTaxIncomeExpenseDetails(
+    dateInterval: Range<Date>,
+    targetInstrument: Instrument,
+    defaultTaxOwnerId: UUID,
+    ownerId: UUID?,
+    type: TransactionType
+  ) async throws -> [TaxIncomeExpenseDetailRow]
+
   /// Load all analysis data in a single batch, avoiding redundant fetches.
   ///
   /// Backends that compute locally (CloudKit/SwiftData) should override this to fetch
@@ -176,6 +184,16 @@ extension AnalysisRepository {
     targetInstrument: Instrument,
     defaultTaxOwnerId: UUID
   ) async throws -> [TaxIncomeExpenseSummary] {
+    []
+  }
+
+  func fetchTaxIncomeExpenseDetails(
+    dateInterval: Range<Date>,
+    targetInstrument: Instrument,
+    defaultTaxOwnerId: UUID,
+    ownerId: UUID?,
+    type: TransactionType
+  ) async throws -> [TaxIncomeExpenseDetailRow] {
     []
   }
 

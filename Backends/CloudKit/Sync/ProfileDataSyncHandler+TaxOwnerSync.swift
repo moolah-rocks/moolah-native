@@ -34,4 +34,16 @@ extension ProfileDataSyncHandler {
       }
     }
   }
+
+  nonisolated func applyBatchDeleteTaxOwner(
+    ids: [UUID], in database: Database
+  ) throws -> GRDBTaxOwnerRepository.RemovedOwnerReferences {
+    var removedReferences = GRDBTaxOwnerRepository.RemovedOwnerReferences(
+      accountIds: [], categoryIds: [])
+    try writeRemote(site: "applyGRDBBatchDeletion[TaxOwner]") {
+      removedReferences = try grdbRepositories.taxOwners.applyRemoteChangesSync(
+        saved: [], deleted: ids, in: database)
+    }
+    return removedReferences
+  }
 }

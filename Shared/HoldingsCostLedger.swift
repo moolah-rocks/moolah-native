@@ -53,7 +53,7 @@ struct HoldingsCostLedger: Sendable {
             type: leg.type,
             sortOrder: index,
             taxOwnerIds: taxOwnershipResolver?
-              .allocationsForAccount(leg.accountId)
+              .allocationsForLeg(leg)
               .map(\.ownerId) ?? [])
         }
       }
@@ -73,6 +73,7 @@ struct HoldingsCostLedger: Sendable {
     let date: Date
     var legs: [TransactionLeg]
     var taxOwnerIdsByAccount: [UUID?: [UUID]]
+    var taxOwnerIdsByLegId: [UUID: [UUID]]
   }
 
   private static func groupByTransaction(
@@ -85,17 +86,23 @@ struct HoldingsCostLedger: Sendable {
       if byId[row.transactionId] == nil {
         order.append(row.transactionId)
         byId[row.transactionId] = TransactionGroup(
-          id: row.transactionId, date: row.date, legs: [], taxOwnerIdsByAccount: [:])
+          id: row.transactionId,
+          date: row.date,
+          legs: [],
+          taxOwnerIdsByAccount: [:],
+          taxOwnerIdsByLegId: [:])
       }
       let ownerIds =
-        taxOwnershipResolver?
-        .allocationsForAccount(row.accountId)
-        .map(\.ownerId) ?? row.taxOwnerIds
+        row.taxOwnerIds.isEmpty
+        ? taxOwnershipResolver?.allocationsForAccount(row.accountId).map(\.ownerId) ?? []
+        : row.taxOwnerIds
       if !ownerIds.isEmpty {
         byId[row.transactionId]?.taxOwnerIdsByAccount[row.accountId] = ownerIds
+        byId[row.transactionId]?.taxOwnerIdsByLegId[row.id] = ownerIds
       }
       byId[row.transactionId]?.legs.append(
         TransactionLeg(
+          id: row.id,
           accountId: row.accountId,
           instrument: row.instrument,
           quantity: row.quantity,
@@ -164,7 +171,8 @@ struct HoldingsCostLedger: Sendable {
           trackedAccountIds: trackedAccountIds,
           referenceCurrency: referenceCurrency,
           conversionService: conversionService,
-          taxOwnerIdsByAccount: group.taxOwnerIdsByAccount)
+          taxOwnerIdsByAccount: group.taxOwnerIdsByAccount,
+          taxOwnerIdsByLegId: group.taxOwnerIdsByLegId)
         snapshots.append(contentsOf: applyEvents(events, to: &pass, on: group.date))
       } catch let error as CostBasisTransferEventBuilder.MarketValueFailure {
         snapshots.append(contentsOf: applyEvents(error.fallbackEvents, to: &pass, on: group.date))

@@ -6,6 +6,7 @@ import Testing
 
 @testable import Moolah
 
+// These persistence scenarios share one database fixture surface; keeping them together preserves migration context.
 @Suite("Tax reporting persistence")
 struct TaxReportingPersistenceTests {
   @Test("profile schema creates tax reporting tables and columns")
@@ -22,6 +23,26 @@ struct TaxReportingPersistenceTests {
 
       let accountColumns = try database.columns(in: "account").map(\.name)
       #expect(accountColumns.contains("tax_owner_ids_encoded"))
+
+      let taxOwnerSchema = try #require(
+        try String.fetchOne(
+          database,
+          sql: "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tax_owner'"))
+      let accountOwnerSchema = try #require(
+        try String.fetchOne(
+          database,
+          sql: """
+            SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'account_tax_owner'
+            """))
+      let categoryOwnerSchema = try #require(
+        try String.fetchOne(
+          database,
+          sql: """
+            SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'category_tax_owner'
+            """))
+      #expect(!taxOwnerSchema.uppercased().contains("WITHOUT ROWID"))
+      #expect(accountOwnerSchema.uppercased().contains("WITHOUT ROWID"))
+      #expect(categoryOwnerSchema.uppercased().contains("WITHOUT ROWID"))
     }
   }
 
@@ -32,6 +53,36 @@ struct TaxReportingPersistenceTests {
       let columns = try database.columns(in: "profile").map(\.name)
       #expect(columns.contains("default_tax_owner_id"))
     }
+  }
+
+  @Test("default tax owner migration uses the frozen deterministic id")
+  func defaultTaxOwnerMigrationUsesFrozenDeterministicId() async throws {
+    let profileId = try #require(UUID(uuidString: "12345678-1234-1234-1234-123456789ABC"))
+    let expectedOwnerId = try #require(UUID(uuidString: "3BA7919D-9658-4269-9A7A-85806FA065D0"))
+    let database = try DatabaseQueue()
+    try ProfileIndexSchema.migrator.migrate(
+      database, upTo: "v10_drop_cryptocompare_symbol")
+    try await database.write { database in
+      try database.execute(
+        sql: """
+          INSERT INTO profile (
+            id, record_name, label, currency_code, financial_year_start_month, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?)
+          """,
+        arguments: [
+          profileId, ProfileRow.recordName(for: profileId), "Migrated", "AUD", 7,
+          "2026-07-01T00:00:00Z",
+        ])
+    }
+    try ProfileIndexSchema.migrator.migrate(database)
+
+    let storedOwnerId = try await database.read { database in
+      try UUID.fetchOne(
+        database, sql: "SELECT default_tax_owner_id FROM profile WHERE id = ?",
+        arguments: [profileId])
+    }
+    #expect(storedOwnerId == expectedOwnerId)
+    #expect(storedOwnerId == TaxOwner.defaultOwnerId(for: profileId))
   }
 
   @Test("tax owner repository round-trips owners")
@@ -51,25 +102,6 @@ struct TaxReportingPersistenceTests {
 
     try await repository.delete(id: owner.id)
     #expect(try await repository.fetchAll().isEmpty)
-  }
-
-  @Test("backend bootstrap creates default tax owner row")
-  func backendBootstrapCreatesDefaultTaxOwner() async throws {
-    let database = try ProfileDatabase.openInMemory()
-    let registry = try SharedRegistryTestSupport.makeSharedRegistry()
-    let profile = Profile(label: "Family")
-    let backend = CloudKitBackend(
-      database: database,
-      instrument: profile.instrument,
-      profileLabel: profile.label,
-      defaultTaxOwnerId: profile.defaultTaxOwnerId,
-      conversionService: FakeConversionService.fixedRates([:]),
-      instrumentRegistry: registry)
-
-    let owners = try await backend.taxOwners.fetchAll()
-
-    #expect(owners.map(\.id) == [profile.defaultTaxOwnerId])
-    #expect(owners.first?.name == "Default owner")
   }
 
   @Test("account repository round-trips tax owner ids through join rows")
@@ -126,133 +158,93 @@ struct TaxReportingPersistenceTests {
     #expect(refetched.taxOwnerIds.isEmpty)
   }
 
-  @Test("deleting tax owner removes account and category references")
-  func deletingTaxOwnerRemovesReferences() async throws {
+  @Test("failed account owner replacement rolls back row and join changes")
+  func failedAccountOwnerReplacementRollsBackRowsAndJoins() async throws {
     let database = try ProfileDatabase.openInMemory()
     let registry = try SharedRegistryTestSupport.makeSharedRegistry()
-    let owner = TaxOwner(name: "Spouse")
-    let taxOwners = GRDBTaxOwnerRepository(database: database)
+    let originalOwner = UUID()
+    let replacementOwner = UUID()
     let accounts = GRDBAccountRepository(
       database: database,
       instrumentResolver: registry,
       instrumentRegistrar: registry)
-    let categories = GRDBCategoryRepository(database: database)
-
-    _ = try await taxOwners.create(owner)
-    _ = try await accounts.create(
+    let account = try await accounts.create(
       Account(
         name: "Joint",
         type: .bank,
         instrument: .AUD,
-        taxOwnerIds: [owner.id]))
-    _ = try await categories.create(
-      Moolah.Category(
-        name: "Interest",
-        isTaxReportable: true,
-        taxOwnerIds: [owner.id]))
-
-    try await taxOwners.delete(id: owner.id)
-
-    let account = try #require(try await accounts.fetchAll().first)
-    let category = try #require(try await categories.fetchAll().first)
-    #expect(account.taxOwnerIds.isEmpty)
-    #expect(category.taxOwnerIds.isEmpty)
-    try await database.read { database in
-      let accountJoinCount = try AccountTaxOwnerRow.fetchCount(database)
-      let categoryJoinCount = try CategoryTaxOwnerRow.fetchCount(database)
-      let accountEncoded = try String.fetchOne(
-        database,
-        sql: "SELECT tax_owner_ids_encoded FROM account LIMIT 1")
-      let categoryEncoded = try String.fetchOne(
-        database,
-        sql: "SELECT tax_owner_ids_encoded FROM category LIMIT 1")
-      #expect(accountJoinCount == 0)
-      #expect(categoryJoinCount == 0)
-      #expect(accountEncoded == nil)
-      #expect(categoryEncoded == nil)
-    }
-  }
-
-  @Test("failed tax owner delete preserves account and category references")
-  func failedTaxOwnerDeletePreservesReferences() async throws {
-    let database = try ProfileDatabase.openInMemory()
-    let registry = try SharedRegistryTestSupport.makeSharedRegistry()
-    let owner = TaxOwner(name: "Spouse")
-    let taxOwners = GRDBTaxOwnerRepository(database: database)
-    let accounts = GRDBAccountRepository(
-      database: database,
-      instrumentResolver: registry,
-      instrumentRegistrar: registry)
-    let categories = GRDBCategoryRepository(database: database)
-
-    _ = try await taxOwners.create(owner)
-    _ = try await accounts.create(
-      Account(
-        name: "Joint",
-        type: .bank,
-        instrument: .AUD,
-        taxOwnerIds: [owner.id]))
-    _ = try await categories.create(
-      Moolah.Category(
-        name: "Interest",
-        isTaxReportable: true,
-        taxOwnerIds: [owner.id]))
+        taxOwnerIds: [originalOwner]))
     try await database.write { database in
       try database.execute(
         sql: """
-          CREATE TRIGGER fail_tax_owner_delete
-          BEFORE DELETE ON tax_owner
+          CREATE TRIGGER fail_account_tax_owner_insert
+          BEFORE INSERT ON account_tax_owner
           BEGIN
-            SELECT RAISE(ABORT, 'forced tax owner delete failure');
+            SELECT RAISE(ABORT, 'forced account owner replacement failure');
           END
           """)
     }
 
+    var updated = account
+    updated.name = "Joint updated"
+    updated.taxOwnerIds = [replacementOwner]
     do {
-      try await taxOwners.delete(id: owner.id)
-      Issue.record("delete should fail after reference cleanup starts")
+      _ = try await accounts.update(updated)
+      Issue.record("account update should fail after owner join rows are deleted")
     } catch {
-      // Expected: the trigger aborts the same transaction that clears references.
+      // Expected: the trigger aborts the transaction after replacement starts.
     }
 
-    let account = try #require(try await accounts.fetchAll().first)
-    let category = try #require(try await categories.fetchAll().first)
-    #expect(account.taxOwnerIds == [owner.id])
-    #expect(category.taxOwnerIds == [owner.id])
-    #expect(try await taxOwners.fetchAll().map(\.id) == [owner.id])
+    let refetched = try #require(try await accounts.fetchAll().first)
+    #expect(refetched.name == "Joint")
+    #expect(refetched.taxOwnerIds == [originalOwner])
+    try await database.read { database in
+      let rows = try AccountTaxOwnerRow.fetchAll(database)
+      #expect(rows.map(\.ownerId) == [originalOwner])
+    }
   }
 
-  @Test("remote tax owner delete removes account and category references")
-  func remoteTaxOwnerDeleteRemovesReferences() async throws {
+  @Test("failed category owner replacement rolls back row and join changes")
+  func failedCategoryOwnerReplacementRollsBackRowsAndJoins() async throws {
     let database = try ProfileDatabase.openInMemory()
-    let registry = try SharedRegistryTestSupport.makeSharedRegistry()
-    let owner = TaxOwner(name: "Trust")
-    let taxOwners = GRDBTaxOwnerRepository(database: database)
-    let accounts = GRDBAccountRepository(
-      database: database,
-      instrumentResolver: registry,
-      instrumentRegistrar: registry)
+    let originalOwner = UUID()
+    let replacementOwner = UUID()
     let categories = GRDBCategoryRepository(database: database)
-
-    _ = try await taxOwners.create(owner)
-    _ = try await accounts.create(
-      Account(
-        name: "Trust brokerage",
-        type: .investment,
-        instrument: .AUD,
-        taxOwnerIds: [owner.id]))
-    _ = try await categories.create(
+    let category = try await categories.create(
       Moolah.Category(
-        name: "Distribution",
+        name: "Interest",
         isTaxReportable: true,
-        taxOwnerIds: [owner.id]))
+        taxOwnerIds: [originalOwner]))
+    try await database.write { database in
+      try database.execute(
+        sql: """
+          CREATE TRIGGER fail_category_tax_owner_insert
+          BEFORE INSERT ON category_tax_owner
+          BEGIN
+            SELECT RAISE(ABORT, 'forced category owner replacement failure');
+          END
+          """)
+    }
 
-    try taxOwners.applyRemoteChangesSync(saved: [], deleted: [owner.id])
+    var updated = category
+    updated.name = "Interest updated"
+    updated.isTaxReportable = false
+    updated.taxOwnerIds = [replacementOwner]
+    do {
+      _ = try await categories.update(updated)
+      Issue.record("category update should fail after owner join rows are deleted")
+    } catch {
+      // Expected: the trigger aborts the transaction after replacement starts.
+    }
 
-    let account = try #require(try await accounts.fetchAll().first)
-    let category = try #require(try await categories.fetchAll().first)
-    #expect(account.taxOwnerIds.isEmpty)
-    #expect(category.taxOwnerIds.isEmpty)
+    let refetched = try #require(try await categories.fetchAll().first)
+    #expect(refetched.name == "Interest")
+    #expect(refetched.isTaxReportable)
+    #expect(refetched.taxOwnerIds == [originalOwner])
+    try await database.read { database in
+      let rows = try CategoryTaxOwnerRow.fetchAll(database)
+      #expect(rows.map(\.ownerId) == [originalOwner])
+    }
   }
 
 }

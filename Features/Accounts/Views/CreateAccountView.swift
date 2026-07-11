@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CreateAccountView: View {
   @Environment(\.dismiss) private var dismiss
+  @Environment(ProfileSession.self) private var session
 
   @State private var name = ""
   @State private var type: AccountType = .bank
@@ -10,6 +11,9 @@ struct CreateAccountView: View {
   @State private var date = Date()
   @State private var isSubmitting = false
   @State private var errorMessage: String?
+  @State private var taxOwnerAssignmentStore = AccountTaxOwnerAssignmentStore(
+    selectedOwnerIds: [],
+    loadErrorMessage: "Couldn't load tax owners. Reopen Create Account and try again.")
   @FocusState private var focusedField: Field?
 
   // MARK: - Crypto-only form state
@@ -84,6 +88,7 @@ struct CreateAccountView: View {
         )
         .disabled(isSubmitting)
       }
+      taxOwnerSection
       creatingStatusSection
       if let errorMessage {
         Section {
@@ -118,6 +123,12 @@ struct CreateAccountView: View {
       }
     }
     .interactiveDismissDisabled(isSubmitting)
+    .task {
+      await taxOwnerAssignmentStore.observeOwners(from: session.backend.taxOwners)
+    }
+    .task {
+      await taxOwnerAssignmentStore.observeErrors(from: session.backend.taxOwners)
+    }
   }
 
   // Shared name + type picker. The crypto branch reuses both, so they
@@ -158,6 +169,29 @@ struct CreateAccountView: View {
     .accessibilityLabel("Initial balance")
 
     DatePicker("Opening Date", selection: $date, displayedComponents: .date)
+  }
+
+  @ViewBuilder private var taxOwnerSection: some View {
+    if let taxOwnerErrorMessage = taxOwnerAssignmentStore.errorMessage {
+      Section {
+        Label(taxOwnerErrorMessage, systemImage: "exclamationmark.triangle.fill")
+          .foregroundStyle(.red)
+      } header: {
+        Text("Tax Ownership")
+      }
+    } else {
+      TaxOwnerAssignmentSection(
+        title: "Tax Ownership",
+        owners: taxOwnerAssignmentStore.owners,
+        defaultOwnerId: session.profile.defaultTaxOwnerId,
+        footer:
+          "Leave no owners selected to use the profile default. Select multiple owners to split tax reporting equally.",
+        selectedOwnerIds: Binding(
+          get: { taxOwnerAssignmentStore.selectedOwnerIds },
+          set: { taxOwnerAssignmentStore.selectedOwnerIds = $0 })
+      )
+      .disabled(isSubmitting)
+    }
   }
 
   @ViewBuilder private var cryptoFields: some View {
@@ -210,13 +244,12 @@ struct CreateAccountView: View {
 
     let selectedInstrument = currency
     let openingBalance = InstrumentAmount(quantity: balanceDecimal, instrument: selectedInstrument)
-    let newAccount = Account(
-      id: UUID(),
-      name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+    let newAccount = Self.standardAccount(
+      name: name,
       type: type,
       instrument: selectedInstrument,
-      position: 0  // Server will set appropriate position
-    )
+      taxOwnerIds: taxOwnerAssignmentStore.selectedOwnerIds,
+      validOwners: taxOwnerAssignmentStore.owners)
 
     do {
       _ = try await accountStore.create(newAccount, openingBalance: openingBalance)
@@ -227,13 +260,21 @@ struct CreateAccountView: View {
     }
   }
 
+}
+
+extension CreateAccountView {
   private func submitCrypto() async -> Bool {
     let logic = CryptoAccountCreationLogic(
       accountStore: accountStore,
       cryptoSyncStore: cryptoSyncStore,
       accountInstrument: instrument)
     let outcome = await logic.submit(
-      name: name, chain: cryptoChain, walletAddressInput: cryptoWalletAddress)
+      name: name,
+      chain: cryptoChain,
+      walletAddressInput: cryptoWalletAddress,
+      taxOwnerIds: Self.prunedTaxOwnerIds(
+        taxOwnerAssignmentStore.selectedOwnerIds,
+        validOwners: taxOwnerAssignmentStore.owners))
     switch outcome {
     case .created:
       dismiss()
@@ -248,18 +289,18 @@ struct CreateAccountView: View {
   }
 
   private func submitExchange() async -> Bool {
-    // No env/session here — construct the production token store the same
-    // way `ProfileSession` does (iCloud-synced keychain). The account is
-    // denominated in the profile currency (`instrument`), exactly as the
-    // crypto path passes `accountInstrument: instrument`. The shared
-    // `SyncedAccountStore` (`cryptoSyncStore`) drives the initial sync.
     let logic = ExchangeAccountCreationLogic(
       accountStore: accountStore,
       tokenStore: ExchangeTokenStore(synchronizable: true),
       syncStore: cryptoSyncStore,
       profileInstrument: instrument)
     let outcome = await logic.submit(
-      name: name, provider: exchangeProvider, token: exchangeToken)
+      name: name,
+      provider: exchangeProvider,
+      token: exchangeToken,
+      taxOwnerIds: Self.prunedTaxOwnerIds(
+        taxOwnerAssignmentStore.selectedOwnerIds,
+        validOwners: taxOwnerAssignmentStore.owners))
     switch outcome {
     case .created:
       dismiss()
@@ -272,9 +313,7 @@ struct CreateAccountView: View {
       return false
     }
   }
-}
 
-extension CreateAccountView {
   @ViewBuilder private var creatingStatusSection: some View {
     if isSubmitting {
       Section {
@@ -305,6 +344,29 @@ extension CreateAccountView {
     }
     return false
   }
+
+  static func prunedTaxOwnerIds(_ selectedOwnerIds: [UUID], validOwners: [TaxOwner]) -> [UUID] {
+    TaxOwnerAssignmentState.prunedSelectedOwnerIds(selectedOwnerIds, validOwners: validOwners)
+  }
+
+  static func standardAccount(
+    name: String,
+    type: AccountType,
+    instrument: Instrument,
+    taxOwnerIds: [UUID],
+    validOwners: [TaxOwner]
+  ) -> Account {
+    Account(
+      id: UUID(),
+      name: name.trimmingCharacters(in: .whitespacesAndNewlines),
+      type: type,
+      instrument: instrument,
+      position: 0,  // Server will set appropriate position
+      taxOwnerIds: TaxOwnerAssignmentState.prunedSelectedOwnerIds(
+        taxOwnerIds,
+        validOwners: validOwners)
+    )
+  }
 }
 
 #Preview {
@@ -315,5 +377,7 @@ extension CreateAccountView {
     targetInstrument: .AUD)
 
   CreateAccountView(
-    instrument: .AUD, accountStore: accountStore)
+    instrument: .AUD, accountStore: accountStore
+  )
+  .previewProfileEnvironment()
 }

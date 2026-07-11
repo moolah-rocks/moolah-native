@@ -1,3 +1,6 @@
+// ReportingStore coordinates one observable report state machine; splitting it would expose private loading invariants.
+// swiftlint:disable file_length
+
 import Foundation
 import OSLog
 import Observation
@@ -13,12 +16,19 @@ final class ReportingStore {
   private(set) var capitalGainsHasUnavailableData = false
   private(set) var profitLossHasUnavailableData = false
   private(set) var capitalGainsUnavailableInstruments: [Instrument] = []
+  private(set) var capitalGainsHasUnavailableDataByOwner: [UUID: Bool] = [:]
+  private(set) var ownerUnavailableCapitalGainsInstruments: [UUID: [Instrument]] = [:]
   private(set) var profitLossUnavailableInstruments: [Instrument] = []
+  private(set) var profitLossByOwner: [UUID: [InstrumentProfitLoss]] = [:]
+  private(set) var profitLossHasUnavailableDataByOwner: [UUID: Bool] = [:]
+  private(set) var profitLossUnavailableInstrumentsByOwner: [UUID: [Instrument]] = [:]
   private(set) var taxReportHoldingsDate: Date?
   private(set) var taxIncomeExpenseSummaries: [TaxIncomeExpenseSummary] = []
   private(set) var taxIncomeExpenseDateInterval: Range<Date>?
   private(set) var taxIncomeExpenseError: Error?
   private(set) var taxOwnerNames: [UUID: String]
+  private(set) var taxOwnerKinds: [UUID: TaxOwnerKind]
+  private(set) var ownerDependentReportInvalidation: UInt64 = 0
 
   private(set) var incomeBalances: [UUID: InstrumentAmount] = [:]
   private(set) var expenseBalances: [UUID: InstrumentAmount] = [:]
@@ -35,6 +45,7 @@ final class ReportingStore {
   private let holdingsCostLedger: HoldingsCostLedgerStore?
   private let taxOwnerRepository: TaxOwnerRepository?
   private let accountRepository: AccountRepository?
+  private let categoryRepository: CategoryRepository?
   private let userDefaults: UserDefaults
   private(set) var defaultTaxOwnerId: UUID
   private let logger = Logger(subsystem: "com.moolah.app", category: "ReportingStore")
@@ -42,6 +53,8 @@ final class ReportingStore {
   @ObservationIgnored private var categoryBalancesGeneration: UInt64 = 0
   @ObservationIgnored private var reportGeneration: UInt64 = 0
   @ObservationIgnored private var accountObservationTask: Task<Void, Never>?
+  @ObservationIgnored private var categoryObservationTask: Task<Void, Never>?
+  @ObservationIgnored private var taxOwnerObservationTask: Task<Void, Never>?
   var isMigratingCrossChainIdentity: Bool {
     !UnifiedInstrumentIdentityMigration.isComplete(in: userDefaults)
   }
@@ -56,9 +69,12 @@ final class ReportingStore {
     holdingsCostLedger: HoldingsCostLedgerStore? = nil,
     taxOwnerRepository: TaxOwnerRepository? = nil,
     accountRepository: AccountRepository? = nil,
+    categoryRepository: CategoryRepository? = nil,
     accountChanges: AsyncStream<[Account]>? = nil,
+    categoryChanges: AsyncStream<[Category]>? = nil,
     defaultTaxOwnerId: UUID = UUID(),
     taxOwnerNames: [UUID: String] = [:],
+    taxOwnerKinds: [UUID: TaxOwnerKind] = [:],
     userDefaults: UserDefaults = .moolahShared
   ) {
     self.analysisRepository = analysisRepository
@@ -67,29 +83,54 @@ final class ReportingStore {
     self.holdingsCostLedger = holdingsCostLedger
     self.taxOwnerRepository = taxOwnerRepository
     self.accountRepository = accountRepository
+    self.categoryRepository = categoryRepository
     self.defaultTaxOwnerId = defaultTaxOwnerId
     self.taxOwnerNames = taxOwnerNames
+    self.taxOwnerKinds = taxOwnerKinds
     self.userDefaults = userDefaults
-    startAccountObservation(accountChanges)
+    accountObservationTask = makeOwnerDependentObservationTask(accountChanges)
+    categoryObservationTask = makeOwnerDependentObservationTask(categoryChanges)
+    taxOwnerObservationTask = makeTaxOwnerObservationTask(taxOwnerRepository)
   }
 
-  deinit { accountObservationTask?.cancel() }
+  deinit {
+    accountObservationTask?.cancel()
+    categoryObservationTask?.cancel()
+    taxOwnerObservationTask?.cancel()
+  }
 
   func updateDefaultTaxOwnerId(_ id: UUID) {
     guard defaultTaxOwnerId != id else { return }
     defaultTaxOwnerId = id
     reportGeneration &+= 1
+    ownerDependentReportInvalidation &+= 1
     clearCapitalGains()
-    taxIncomeExpenseSummaries = []
-    taxIncomeExpenseError = nil
+    clearProfitLoss()
+    clearTaxIncomeExpense()
     isLoading = false
   }
 
-  private func startAccountObservation(_ accountChanges: AsyncStream<[Account]>?) {
-    guard let accountChanges else { return }
-    accountObservationTask = Task { [weak self] in
+  func fetchTaxIncomeExpenseDetails(
+    dateInterval: Range<Date>,
+    ownerId: UUID?,
+    type: TransactionType
+  ) async throws -> [TaxIncomeExpenseDetailRow] {
+    guard let analysisRepository else { return [] }
+    return try await analysisRepository.fetchTaxIncomeExpenseDetails(
+      dateInterval: dateInterval,
+      targetInstrument: profileCurrency,
+      defaultTaxOwnerId: defaultTaxOwnerId,
+      ownerId: ownerId,
+      type: type)
+  }
+
+  private func makeOwnerDependentObservationTask<T>(
+    _ changes: AsyncStream<[T]>?
+  ) -> Task<Void, Never>? {
+    guard let changes else { return nil }
+    return Task { [weak self] in
       var sawInitialEmission = false
-      for await _ in accountChanges {
+      for await _ in changes {
         guard sawInitialEmission else {
           sawInitialEmission = true
           continue
@@ -99,9 +140,34 @@ final class ReportingStore {
     }
   }
 
+  private func makeTaxOwnerObservationTask(
+    _ repository: TaxOwnerRepository?
+  ) -> Task<Void, Never>? {
+    guard let repository else { return nil }
+    return Task { [weak self] in
+      var sawInitialEmission = false
+      for await owners in repository.observeAll() {
+        self?.updateTaxOwners(owners)
+        guard sawInitialEmission else {
+          sawInitialEmission = true
+          continue
+        }
+        self?.invalidateOwnerDependentReports()
+      }
+    }
+  }
+
+  private func updateTaxOwners(_ owners: [TaxOwner]) {
+    taxOwnerNames = Dictionary(uniqueKeysWithValues: owners.map { ($0.id, $0.name) })
+    taxOwnerKinds = Dictionary(uniqueKeysWithValues: owners.map { ($0.id, $0.kind) })
+  }
+
   private func invalidateOwnerDependentReports() {
     reportGeneration &+= 1
+    ownerDependentReportInvalidation &+= 1
     clearCapitalGains()
+    clearProfitLoss()
+    clearTaxIncomeExpense()
     isLoading = false
   }
 
@@ -110,6 +176,23 @@ final class ReportingStore {
     capitalGainsSummary = nil
     capitalGainsHasUnavailableData = false
     capitalGainsUnavailableInstruments = []
+    capitalGainsHasUnavailableDataByOwner = [:]
+    ownerUnavailableCapitalGainsInstruments = [:]
+  }
+
+  private func clearProfitLoss() {
+    profitLoss = []
+    profitLossHasUnavailableData = false
+    profitLossUnavailableInstruments = []
+    profitLossByOwner = [:]
+    profitLossHasUnavailableDataByOwner = [:]
+    profitLossUnavailableInstrumentsByOwner = [:]
+  }
+
+  private func clearTaxIncomeExpense() {
+    taxIncomeExpenseSummaries = []
+    taxIncomeExpenseError = nil
+    taxIncomeExpenseDateInterval = nil
   }
 
   func loadCategoryBalances(dateRange: ClosedRange<Date>) async {
@@ -182,25 +265,40 @@ extension ReportingStore {
       return true
     }
     do {
-      let ledger =
-        if let ledgerBeforeDate {
-          try await holdingsCostLedger.ledger(before: ledgerBeforeDate)
-        } else {
-          try await holdingsCostLedger.ledger(through: asOfDate)
-        }
+      let resolver = try await taxOwnershipResolver()
+      let ledger = try await profitLossLedger(
+        asOfDate: asOfDate,
+        ledgerBeforeDate: ledgerBeforeDate,
+        taxOwnershipResolver: resolver,
+        holdingsCostLedger: holdingsCostLedger)
       let result = try await ProfitLossCalculator.compute(
         ledger: ledger,
         profileCurrency: profileCurrency,
         conversionService: conversionService,
         asOfDate: asOfDate
       )
-      guard generation == reportGeneration else { return false }
       let excludedInstrumentIds = Set(excludedInstruments.map(\.id))
-      profitLoss = result.rows.filter { !excludedInstrumentIds.contains($0.instrument.id) }
-      profitLossHasUnavailableData =
+      let visibleProfitLoss = result.rows.filter {
+        !excludedInstrumentIds.contains($0.instrument.id)
+      }
+      let visibleProfitLossHasUnavailableData =
         !result.unavailableInstrumentIds.subtracting(excludedInstrumentIds).isEmpty
-      profitLossUnavailableInstruments = Self.sortedInstruments(
+      let visibleProfitLossUnavailableInstruments = Self.sortedInstruments(
         result.unavailableInstruments.filter { !excludedInstrumentIds.contains($0.id) })
+      guard
+        let ownerBreakdown = try await profitLossOwnerBreakdown(
+          ledger: ledger,
+          asOfDate: asOfDate,
+          excludedInstrumentIds: excludedInstrumentIds,
+          generation: generation)
+      else { return false }
+      guard generation == reportGeneration, !Task.isCancelled else { return false }
+      profitLoss = visibleProfitLoss
+      profitLossHasUnavailableData = visibleProfitLossHasUnavailableData
+      profitLossUnavailableInstruments = visibleProfitLossUnavailableInstruments
+      profitLossByOwner = ownerBreakdown.rowsByOwner
+      profitLossHasUnavailableDataByOwner = ownerBreakdown.unavailableByOwner
+      profitLossUnavailableInstrumentsByOwner = ownerBreakdown.unavailableInstrumentsByOwner
       return true
     } catch is CancellationError {
       guard generation == reportGeneration else { return false }
@@ -221,20 +319,21 @@ extension ReportingStore {
     reportGeneration &+= 1
     let generation = reportGeneration
     clearCapitalGains()
-    profitLoss = []
-    profitLossHasUnavailableData = false
-    profitLossUnavailableInstruments = []
-    taxIncomeExpenseSummaries = []
-    taxIncomeExpenseError = nil
-    taxIncomeExpenseDateInterval = nil
+    clearProfitLoss()
+    clearTaxIncomeExpense()
     isLoading = true
     error = nil
     let dates = Self.taxReportLoadDates(financialYear: financialYear, today: today)
     taxReportHoldingsDate = dates.valuationDate
-    await performTaxIncomeExpenseLoad(
-      financialYear: financialYear,
-      dates: dates,
-      generation: generation)
+    guard
+      await performTaxIncomeExpenseLoad(
+        financialYear: financialYear,
+        dates: dates,
+        generation: generation)
+    else {
+      finishLoadingIfCurrentGeneration(generation)
+      return
+    }
     guard generation == reportGeneration else { return }
     guard
       await performCapitalGainsLoad(
@@ -272,13 +371,13 @@ extension ReportingStore {
     financialYear: Int,
     dates: TaxReportLoadDates,
     generation: UInt64
-  ) async {
-    guard let analysisRepository else { return }
+  ) async -> Bool {
+    guard let analysisRepository else { return true }
     guard
       let dateRange = Self.taxIncomeExpenseDateRange(
         financialYear: financialYear,
         dates: dates)
-    else { return }
+    else { return true }
     do {
       async let summariesLoad = analysisRepository.fetchTaxIncomeExpenseSummaries(
         dateInterval: dateRange,
@@ -286,16 +385,20 @@ extension ReportingStore {
         defaultTaxOwnerId: defaultTaxOwnerId)
       async let ownersLoad = fetchTaxOwnersForReport()
       let (summaries, owners) = try await (summariesLoad, ownersLoad)
-      guard generation == reportGeneration else { return }
+      guard generation == reportGeneration, !Task.isCancelled else { return false }
       taxIncomeExpenseDateInterval = dateRange
       taxIncomeExpenseSummaries = summaries
       taxOwnerNames = Dictionary(uniqueKeysWithValues: owners.map { ($0.id, $0.name) })
+      taxOwnerKinds = Dictionary(uniqueKeysWithValues: owners.map { ($0.id, $0.kind) })
+      return true
     } catch is CancellationError {
-      return
+      guard generation == reportGeneration else { return false }
+      return false
     } catch {
-      guard generation == reportGeneration else { return }
+      guard generation == reportGeneration else { return false }
       logger.error("Failed to load tax income/expense: \(error)")
       taxIncomeExpenseError = error
+      return true
     }
   }
 
@@ -356,21 +459,26 @@ extension ReportingStore {
       }
       let sellDateInterval = requestedSellDateInterval ?? financialYearInterval
 
-      let accounts = try await accountRepository?.fetchAll() ?? []
-      let resolver = TaxOwnershipResolver(
-        profileDefaultOwnerId: defaultTaxOwnerId, accounts: accounts, categories: [])
+      let resolver = try await taxOwnershipResolver()
       let ledger = try await holdingsCostLedger.ledger(
         before: sellDateInterval.upperBound,
         taxOwnershipResolver: resolver)
       let result = CapitalGainsCalculator.compute(
         ledger: ledger, sellDateInterval: sellDateInterval)
-      guard generation == reportGeneration else { return false }
+      guard generation == reportGeneration, !Task.isCancelled else { return false }
       let excludedInstrumentIds = Set(excludedInstruments.map(\.id))
       let visibleResult = Self.capitalGainsResult(result, excluding: excludedInstrumentIds)
+      let ownerAvailability = capitalGainsOwnerAvailability(
+        ledger: ledger,
+        sellDateInterval: sellDateInterval,
+        excludedInstrumentIds: excludedInstrumentIds)
       capitalGainsResult = visibleResult
       capitalGainsHasUnavailableData = visibleResult.hasUnavailableData
       capitalGainsUnavailableInstruments = Self.sortedInstruments(
         visibleResult.unavailableInstruments)
+      capitalGainsHasUnavailableDataByOwner = ownerAvailability.unavailableByOwner
+      ownerUnavailableCapitalGainsInstruments =
+        ownerAvailability.unavailableInstrumentsByOwner
       capitalGainsSummary = Self.capitalGainsSummary(from: visibleResult.events)
       return true
     } catch is CancellationError {
@@ -383,4 +491,91 @@ extension ReportingStore {
       return true
     }
   }
+
+  private func taxOwnershipResolver() async throws -> TaxOwnershipResolver {
+    let accounts = try await accountRepository?.fetchAll() ?? []
+    let categories = try await categoryRepository?.fetchAll() ?? []
+    return TaxOwnershipResolver(
+      profileDefaultOwnerId: defaultTaxOwnerId, accounts: accounts, categories: categories)
+  }
+
+  private func profitLossLedger(
+    asOfDate: Date,
+    ledgerBeforeDate: Date?,
+    taxOwnershipResolver: TaxOwnershipResolver,
+    holdingsCostLedger: HoldingsCostLedgerStore
+  ) async throws -> HoldingsCostLedger {
+    if let ledgerBeforeDate {
+      try await holdingsCostLedger.ledger(
+        before: ledgerBeforeDate,
+        taxOwnershipResolver: taxOwnershipResolver)
+    } else {
+      try await holdingsCostLedger.ledger(
+        through: asOfDate,
+        taxOwnershipResolver: taxOwnershipResolver)
+    }
+  }
+
+  private func profitLossOwnerBreakdown(
+    ledger: HoldingsCostLedger,
+    asOfDate: Date,
+    excludedInstrumentIds: Set<String>,
+    generation: UInt64
+  ) async throws -> ProfitLossOwnerBreakdown? {
+    var rowsByOwner: [UUID: [InstrumentProfitLoss]] = [:]
+    var unavailableByOwner: [UUID: Bool] = [:]
+    var unavailableInstrumentsByOwner: [UUID: [Instrument]] = [:]
+    for ownerId in taxOwnerNames.keys {
+      let ownerResult = try await ProfitLossCalculator.compute(
+        ledger: ledger,
+        profileCurrency: profileCurrency,
+        conversionService: conversionService,
+        asOfDate: asOfDate,
+        ownerId: ownerId)
+      guard generation == reportGeneration, !Task.isCancelled else { return nil }
+      rowsByOwner[ownerId] = ownerResult.rows.filter {
+        !excludedInstrumentIds.contains($0.instrument.id)
+      }
+      unavailableByOwner[ownerId] =
+        !ownerResult.unavailableInstrumentIds.subtracting(excludedInstrumentIds).isEmpty
+      unavailableInstrumentsByOwner[ownerId] = Self.sortedInstruments(
+        ownerResult.unavailableInstruments.filter { !excludedInstrumentIds.contains($0.id) })
+    }
+    return ProfitLossOwnerBreakdown(
+      rowsByOwner: rowsByOwner,
+      unavailableByOwner: unavailableByOwner,
+      unavailableInstrumentsByOwner: unavailableInstrumentsByOwner)
+  }
+
+  private func capitalGainsOwnerAvailability(
+    ledger: HoldingsCostLedger,
+    sellDateInterval: Range<Date>,
+    excludedInstrumentIds: Set<String>
+  ) -> CapitalGainsOwnerAvailability {
+    var unavailableByOwner: [UUID: Bool] = [:]
+    var unavailableInstrumentsByOwner: [UUID: [Instrument]] = [:]
+    for ownerId in taxOwnerNames.keys {
+      let ownerResult = CapitalGainsCalculator.compute(
+        ledger: ledger, sellDateInterval: sellDateInterval, ownerId: ownerId)
+      let visibleOwnerResult = Self.capitalGainsResult(
+        ownerResult, excluding: excludedInstrumentIds)
+      unavailableByOwner[ownerId] = visibleOwnerResult.hasUnavailableData
+      unavailableInstrumentsByOwner[ownerId] = Self.sortedInstruments(
+        visibleOwnerResult.unavailableInstruments)
+    }
+    return CapitalGainsOwnerAvailability(
+      unavailableByOwner: unavailableByOwner,
+      unavailableInstrumentsByOwner: unavailableInstrumentsByOwner)
+  }
+}
+
+private struct ProfitLossOwnerBreakdown {
+  let rowsByOwner: [UUID: [InstrumentProfitLoss]]
+  let unavailableByOwner: [UUID: Bool]
+  let unavailableInstrumentsByOwner: [UUID: [Instrument]]
+}
+
+private struct CapitalGainsOwnerAvailability {
+  let unavailableByOwner: [UUID: Bool]
+  let unavailableInstrumentsByOwner: [UUID: [Instrument]]
 }

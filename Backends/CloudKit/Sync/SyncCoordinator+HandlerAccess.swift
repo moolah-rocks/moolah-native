@@ -60,8 +60,30 @@ extension SyncCoordinator {
       sharedInstrumentRegistry
       ?? GRDBInstrumentRegistryRepository(
         database: containerManager.profileIndexDatabase)
+    let implicitDefaultTaxOwnerId = ProfileIndexSchema.defaultTaxOwnerId(for: profileId)
+    let defaultTaxOwnerId =
+      try containerManager.profileIndexDatabase.read { database in
+        try ProfileRow.fetchOne(database, key: profileId)?.defaultTaxOwnerId
+      }
+      ?? implicitDefaultTaxOwnerId
+    let zoneID = CKRecordZone.ID(
+      zoneName: DeletionJournal.dataZoneName(for: profileId),
+      ownerName: CKCurrentUserDefaultName)
     let bundle = ProfileGRDBRepositories.makeForApply(
-      database: database, sharedRegistry: sharedRegistry)
+      database: database,
+      sharedRegistry: sharedRegistry,
+      defaultTaxOwnerId: defaultTaxOwnerId,
+      implicitDefaultTaxOwnerId: implicitDefaultTaxOwnerId,
+      onAccountChanged: { [weak self] recordType, id in
+        Task { @MainActor [weak self] in
+          self?.queueSave(recordType: recordType, id: id, zoneID: zoneID)
+        }
+      },
+      onCategoryChanged: { [weak self] recordType, id in
+        Task { @MainActor [weak self] in
+          self?.queueSave(recordType: recordType, id: id, zoneID: zoneID)
+        }
+      })
     cachedGRDBRepositories[profileId] = bundle
     return bundle
   }
@@ -80,6 +102,11 @@ extension SyncCoordinator {
   func evictCachedState(for profileId: UUID) {
     dataHandlers.removeValue(forKey: profileId)
     cachedGRDBRepositories.removeValue(forKey: profileId)
+  }
+
+  func updateCachedDefaultTaxOwnerId(_ ownerId: UUID, for profileId: UUID) {
+    dataHandlers[profileId]?.grdbRepositories.taxOwners.updateDefaultTaxOwnerId(ownerId)
+    cachedGRDBRepositories[profileId]?.taxOwners.updateDefaultTaxOwnerId(ownerId)
   }
 
   /// Removes every pending change queued for a deleted profile's data zone

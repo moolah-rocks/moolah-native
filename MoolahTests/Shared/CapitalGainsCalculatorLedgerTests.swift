@@ -96,4 +96,48 @@ struct CapitalGainsCalculatorLedgerTests {
     #expect(result.events.contains { $0.instrument == bhp })  // sibling still realised
     #expect(!result.events.contains { $0.instrument == eth })  // ETH disposal dropped
   }
+
+  @Test
+  func unavailableInputScopesRealisedGainRiskToDisposalKeys() {
+    let eth = cryptoInstrument("ETH")
+    let bhp = Instrument.stock(ticker: "BHP.AX", exchange: "ASX", name: "BHP")
+    let account = UUID()
+    let group = HoldingsCostLedger.TransactionGroup(
+      id: UUID(),
+      date: date(400),
+      legs: [
+        TransactionLeg(accountId: account, instrument: aud, quantity: 6_000, type: .trade),
+        TransactionLeg(accountId: account, instrument: bhp, quantity: -100, type: .trade),
+        TransactionLeg(accountId: account, instrument: eth, quantity: 1, type: .trade),
+      ],
+      taxOwnerIdsByAccount: [:],
+      taxOwnerIdsByLegId: [:])
+
+    var unavailable: Set<HoldingsCostLedger.TouchKey> = []
+    var inputs: Set<HoldingsCostLedgerUnavailableInput> = []
+
+    HoldingsCostLedger.recordUnavailableInput(
+      for: group,
+      error: TestConversionError(),
+      unavailable: &unavailable,
+      inputs: &inputs)
+
+    let bhpKey = HoldingsCostLedger.TouchKey(account: account, instrument: bhp, taxOwnerId: nil)
+    let ethKey = HoldingsCostLedger.TouchKey(account: account, instrument: eth, taxOwnerId: nil)
+    #expect(unavailable == [bhpKey, ethKey])
+    #expect(
+      inputs.contains(
+        HoldingsCostLedgerUnavailableInput(
+          date: group.date, keys: [bhpKey], mayAffectRealisedGains: true)))
+    #expect(
+      inputs.contains(
+        HoldingsCostLedgerUnavailableInput(
+          date: group.date, keys: [ethKey], mayAffectRealisedGains: false)))
+    #expect(
+      !inputs.contains {
+        $0.mayAffectRealisedGains && $0.keys.contains(ethKey)
+      })
+  }
+
+  private struct TestConversionError: Error {}
 }

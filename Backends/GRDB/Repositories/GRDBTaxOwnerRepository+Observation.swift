@@ -4,20 +4,26 @@ import GRDB
 
 extension GRDBTaxOwnerRepository {
   func observeAll() -> AsyncStream<[TaxOwner]> {
-    ValueObservation
-      .tracking(
-        regions: [TaxOwnerRow.observableRegion],
-        fetch: { database in
-          try TaxOwnerRow
-            .order(TaxOwnerRow.Columns.name.asc)
-            .fetchAll(database)
-            .map { $0.toDomain() }
+    AsyncStream { continuation in
+      let task = Task {
+        let owners =
+          ValueObservation
+          .tracking(
+            regions: [TaxOwnerRow.observableRegion, DeletionJournalRow.observableRegion]
+          ) { database in
+            try self.fetchRowsWithImplicitDefault(in: database)
+          }
+          .toRetryingAsyncStream(
+            in: database,
+            errorChannel: errorChannel,
+            repoMethod: "GRDBTaxOwnerRepository.observeAll")
+        for await value in owners {
+          continuation.yield(value)
         }
-      )
-      .toRetryingAsyncStream(
-        in: database,
-        errorChannel: errorChannel,
-        repoMethod: "GRDBTaxOwnerRepository.observeAll")
+        continuation.finish()
+      }
+      continuation.onTermination = { _ in task.cancel() }
+    }
   }
 
   func observeErrors() -> AsyncStream<any Error> {

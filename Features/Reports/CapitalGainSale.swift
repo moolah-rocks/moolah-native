@@ -4,6 +4,7 @@ struct CapitalGainSale: Identifiable, Hashable {
   let id: CapitalGainSaleIdentifier
   let instrument: Instrument
   let sellDate: Date
+  var ownerLabel: String?
   let lots: [CapitalGainSaleLot]
 
   var quantity: Decimal { lots.reduce(0) { $0 + $1.quantity } }
@@ -37,8 +38,9 @@ struct CapitalGainSale: Identifiable, Hashable {
 
   var stableId: String {
     switch id {
-    case let .transaction(transactionId, instrumentId):
-      return "transaction|\(transactionId.uuidString)|\(instrumentId)"
+    case let .transaction(transactionId, instrumentId, taxOwnerId):
+      return
+        "transaction|\(transactionId.uuidString)|\(instrumentId)|\(taxOwnerId?.uuidString ?? "default")"
     case .fallback(let value):
       return "fallback|\(value)"
     }

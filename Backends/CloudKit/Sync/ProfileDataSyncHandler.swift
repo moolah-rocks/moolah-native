@@ -7,6 +7,9 @@ import os
 enum ApplyResult: Sendable {
   /// Changes saved successfully. Contains the set of changed record types.
   case success(changedTypes: Set<String>)
+  /// Profile-index changes saved successfully. Carries clean-applied profile
+  /// rows whose values were actually written, excluding dirty echo rows.
+  case profileIndexSuccess(changedTypes: Set<String>, appliedProfileRows: [ProfileRow])
   /// context.save() failed. The coordinator should schedule a re-fetch.
   case saveFailed(String)
 }

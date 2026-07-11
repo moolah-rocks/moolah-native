@@ -1,3 +1,6 @@
+// The reports screen keeps its section routing together so reload, selection, and navigation state stay auditable.
+// swiftlint:disable file_length
+
 import SwiftUI
 
 /// Main Reports view displaying income and expense breakdown by category.
@@ -84,7 +87,9 @@ struct ReportsView: View {
       id: TaxReportLoadKey(
         report: selectedReport,
         financialYear: selectedFinancialYear,
-        spamInstruments: spamInstruments)
+        spamInstruments: spamInstruments,
+        defaultTaxOwnerId: reportingStore.defaultTaxOwnerId,
+        ownerInvalidation: reportingStore.ownerDependentReportInvalidation)
     ) {
       guard selectedReport == .capitalGains else { return }
       await reportingStore.loadTaxReport(
@@ -153,15 +158,23 @@ struct ReportsView: View {
       events: reportingStore.capitalGainsResult?.events ?? [],
       capitalGainsHasUnavailableData: reportingStore.capitalGainsHasUnavailableData,
       capitalGainsUnavailableInstruments: reportingStore.capitalGainsUnavailableInstruments,
+      capitalGainsHasUnavailableDataByOwner: reportingStore.capitalGainsHasUnavailableDataByOwner,
+      ownerUnavailableCapitalGainsInstruments: reportingStore
+        .ownerUnavailableCapitalGainsInstruments,
       taxIncomeExpenseSummaries: reportingStore.taxIncomeExpenseSummaries,
       taxIncomeExpenseRollup: reportingStore.taxIncomeExpenseRollup,
       defaultTaxOwnerId: reportingStore.defaultTaxOwnerId,
       taxIncomeExpenseDateInterval: reportingStore.taxIncomeExpenseDateInterval,
       taxIncomeExpenseError: reportingStore.taxIncomeExpenseError,
       taxOwnerNames: reportingStore.taxOwnerNames,
+      taxOwnerKinds: reportingStore.taxOwnerKinds,
       profitLoss: reportingStore.profitLoss,
       profitLossHasUnavailableData: reportingStore.profitLossHasUnavailableData,
       profitLossUnavailableInstruments: reportingStore.profitLossUnavailableInstruments,
+      profitLossByOwner: reportingStore.profitLossByOwner,
+      profitLossHasUnavailableDataByOwner: reportingStore.profitLossHasUnavailableDataByOwner,
+      profitLossUnavailableInstrumentsByOwner: reportingStore
+        .profitLossUnavailableInstrumentsByOwner,
       isLoading: reportingStore.isLoading,
       error: reportingStore.error,
       isMigratingCrossChainIdentity: reportingStore.isMigratingCrossChainIdentity
@@ -239,13 +252,16 @@ struct ReportsView: View {
   private func taxIncomeExpenseDrillDownDestination(
     _ drillDown: TaxIncomeExpenseDrillDown
   ) -> some View {
-    TransactionListView(
-      title: drillDown.title,
-      filter: drillDown.filter,
-      accounts: accounts,
+    TaxIncomeExpenseDetailView(
+      drillDown: drillDown,
       categories: categories,
-      earmarks: earmarks,
-      transactionStore: transactionStore)
+      taxOwnerNames: reportingStore.taxOwnerNames
+    ) {
+      try await reportingStore.fetchTaxIncomeExpenseDetails(
+        dateInterval: drillDown.dateInterval,
+        ownerId: drillDown.ownerId,
+        type: drillDown.kind.transactionType)
+    }
   }
 
   private struct CategoryReportLoadKey: Hashable {
@@ -258,6 +274,8 @@ struct ReportsView: View {
     let report: ReportSection
     let financialYear: Int
     let spamInstruments: Set<Instrument>
+    let defaultTaxOwnerId: UUID
+    let ownerInvalidation: UInt64
   }
 }
 

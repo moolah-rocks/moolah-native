@@ -73,6 +73,7 @@ extension GRDBTransactionRepository {
     """
     SELECT
         leg.transaction_id  AS transaction_id,
+        leg.id              AS leg_id,
         t.date              AS date,
         leg.account_id      AS account_id,
         leg.instrument_id   AS instrument_id,
@@ -100,6 +101,7 @@ extension GRDBTransactionRepository {
   private static let costBasisEventLegsAllLegsSQL: SQL = """
     SELECT
         leg.transaction_id  AS transaction_id,
+        leg.id              AS leg_id,
         t.date              AS date,
         leg.account_id      AS account_id,
         leg.instrument_id   AS instrument_id,
@@ -121,6 +123,7 @@ extension GRDBTransactionRepository {
   ) -> CostBasisEventLegRow? {
     guard
       let transactionId: UUID = row["transaction_id"],
+      let legId: UUID = row["leg_id"],
       // GRDB decodes the `"transaction".date` TEXT column straight to
       // `Date` via the same DatabaseValueConvertible path `TransactionRow`
       // (`var date: Date`) uses on `fetch`/`fetchAll` — no hand-rolled
@@ -134,6 +137,7 @@ extension GRDBTransactionRepository {
     else { return nil }
     let instrument = instruments[instrumentId] ?? Instrument.fiat(code: instrumentId)
     return CostBasisEventLegRow(
+      id: legId,
       transactionId: transactionId,
       date: date,
       accountId: row["account_id"],

@@ -69,5 +69,11 @@ extension ProfileSession {
       "updateProfile must not change identity; the session is keyed on profile.id")
     self.profile = updated
     reportingStore.updateDefaultTaxOwnerId(updated.defaultTaxOwnerId)
+    syncCoordinator?.updateCachedDefaultTaxOwnerId(
+      updated.defaultTaxOwnerId,
+      for: updated.id)
+    if let cloudBackend = backend as? CloudKitBackend {
+      cloudBackend.grdbTaxOwners.updateDefaultTaxOwnerId(updated.defaultTaxOwnerId)
+    }
   }
 }
