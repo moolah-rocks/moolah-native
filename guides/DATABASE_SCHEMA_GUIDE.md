@@ -218,10 +218,6 @@ enum ProfileSchema {
 
     static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
-        #if DEBUG
-        migrator.eraseDatabaseOnSchemaChange = true
-        #endif
-
         migrator.registerMigration("v1_initial") { db in
             try db.execute(sql: """
                 CREATE TABLE account (...) STRICT;
@@ -251,7 +247,7 @@ enum ProfileSchema {
 2. **IDs are string literals.** `"v1_initial"`, not `Schema.v1.rawValue`. The literal is the stable ID; it must not flow through a Swift type.
 3. **One transaction per migration.** GRDB wraps each migration; if the body throws, the migration rolls back and subsequent migrations don't run. Nesting `BEGIN` / `COMMIT` inside a migration is forbidden.
 4. **Migration code is decoupled from app code.** Use string table / column names, never `AccountRecord.databaseTableName`. The v1 migration must keep compiling unchanged through every later refactor.
-5. **`eraseDatabaseOnSchemaChange = true` is `#if DEBUG` only.** Any unconditioned use is Critical.
+5. **`eraseDatabaseOnSchemaChange = true` is forbidden for app/user databases.** Debug builds can open meaningful Development profiles, so automatic database recreation is data loss. Recover branch-local Development schema experiments with `just reset-development-data`, not app startup code.
 6. **Foreign-key handling.** `DatabaseMigrator` disables FK enforcement, runs the migration, runs `PRAGMA foreign_key_check` before commit. For migrations that **rename FK columns**, set `foreignKeyChecks: .immediate`. For migrations that **recreate a table** (the standard ALTER workaround), do not use `.immediate`.
 
    **Per-profile schema is FK-free.** As of `v5_drop_foreign_keys`, the per-profile `data.sqlite` schema declares no foreign keys. CKSyncEngine has no parent-before-child guarantee within or across batches, and an FK-enforced child insert can fault the entire write transaction and trap the sync coordinator in an infinite re-fetch loop. Integrity is enforced at the application boundary — repository sync entry points (`applyRemoteChangesSync`) and domain `delete(...)` methods replicate the cascade / null-out semantics the FKs used to provide. See `guides/SYNC_GUIDE.md` "Per-profile schema does not enforce FKs" for the contract.
@@ -285,6 +281,18 @@ PRAGMA foreign_keys = ON;
 ---
 
 ## 7. Lifecycle & Backup
+
+### No automatic data loss
+
+App startup and migration code must never delete, truncate, replace,
+drop-and-recreate, or auto-erase user/profile databases as recovery from a
+schema mismatch. This includes Debug-only code: local Development profiles can
+hold real imported data and must fail loudly instead of being silently reset.
+
+The only approved local recovery path for branch-local schema experiments is
+explicit developer tooling with hard Development/Production path guards. Use
+`just reset-development-data` to wipe the local Development zone when a
+rolled-back migration leaves it unrecoverable.
 
 ### System backup is the default
 
