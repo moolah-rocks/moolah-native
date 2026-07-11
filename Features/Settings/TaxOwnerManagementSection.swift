@@ -145,7 +145,10 @@ struct TaxOwnerManagementSection: View {
     } label: {
       Image(systemName: "ellipsis.circle")
         .accessibilityLabel(
-          UITestIdentifiers.TaxOwnerSettings.actionsButtonLabel(ownerName: owner.name))
+          UITestIdentifiers.TaxOwnerSettings.actionsButtonLabel(ownerName: owner.name)
+        )
+        .accessibilityIdentifier(
+          UITestIdentifiers.TaxOwnerSettings.actionsButton(ownerName: owner.name))
     }
   }
 

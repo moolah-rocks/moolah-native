@@ -78,8 +78,8 @@ struct ProfileIndexSyncRoundTripTests {
     }
     // The handler reports the recordTypes it touched so the coordinator
     // can fan notifications out to the matching repos.
-    guard case .success(let changedTypes) = result else {
-      Issue.record("applyRemoteChanges returned \(result), expected .success")
+    guard case .profileIndexSuccess(let changedTypes, _) = result else {
+      Issue.record("applyRemoteChanges returned \(result), expected .profileIndexSuccess")
       return
     }
     #expect(changedTypes == Set([ProfileRow.recordType]))
@@ -185,8 +185,8 @@ struct ProfileIndexSyncRoundTripTests {
     // The handler still reports success — coordinators advance the
     // change token past the dropped record because there's nothing
     // left to do for it.
-    guard case .success = result else {
-      Issue.record("applyRemoteChanges returned \(result), expected .success")
+    guard case .profileIndexSuccess = result else {
+      Issue.record("applyRemoteChanges returned \(result), expected .profileIndexSuccess")
       return
     }
     // No row was written.
