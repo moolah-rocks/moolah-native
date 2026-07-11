@@ -21,6 +21,12 @@
       <result type="boolean" description="Did the object(s) exist?"/>
     </command>
 
+    <command name="set" code="coresetd" description="Set an object's data.">
+      <cocoa class="Moolah.SetCommand"/>
+      <direct-parameter type="specifier" description="The object to set."/>
+      <parameter name="to" code="data" type="any" description="The new value."/>
+    </command>
+
     <class name="application" code="capp" description="The Moolah application.">
       <cocoa class="NSApplication"/>
       <element type="profile" access="r">
@@ -64,7 +70,7 @@
       <property name="id" code="ID  " type="text" access="r" description="The unique identifier of the account.">
         <cocoa key="uniqueID"/>
       </property>
-      <property name="name" code="pnam" type="text" access="r" description="The name of the account.">
+      <property name="name" code="pnam" type="text" access="rw" description="The name of the account.">
         <cocoa key="name"/>
       </property>
       <property name="account type" code="Maty" type="text" access="r" description="The type of account (bank, cc, asset, investment).">
@@ -76,7 +82,7 @@
       <property name="investment value" code="Mivl" type="real" access="r" description="The investment value of the account (0 if not an investment account).">
         <cocoa key="investmentValue"/>
       </property>
-      <property name="hidden" code="Mhid" type="boolean" access="r" description="Whether the account is hidden.">
+      <property name="hidden" code="Mhid" type="boolean" access="rw" description="Whether the account is hidden.">
         <cocoa key="isHidden"/>
       </property>
       <property name="positions" code="Mpos" access="r" description="Per-instrument holdings as &quot;SYMBOL=quantity&quot; strings (multi-instrument crypto/exchange accounts hold more than balance shows).">
@@ -90,13 +96,13 @@
       <property name="id" code="ID  " type="text" access="r" description="The unique identifier of the transaction.">
         <cocoa key="uniqueID"/>
       </property>
-      <property name="date" code="Mdat" type="date" access="r" description="The date of the transaction.">
+      <property name="date" code="Mdat" type="date" access="rw" description="The date of the transaction.">
         <cocoa key="date"/>
       </property>
-      <property name="payee" code="Mpay" type="text" access="r" description="The payee of the transaction.">
+      <property name="payee" code="Mpay" type="text" access="rw" description="The payee of the transaction.">
         <cocoa key="payee"/>
       </property>
-      <property name="notes" code="Mnot" type="text" access="r" description="Notes for the transaction.">
+      <property name="notes" code="Mnot" type="text" access="rw" description="Notes for the transaction.">
         <cocoa key="notes"/>
       </property>
       <property name="transaction type" code="Mtty" type="text" access="r" description="The type of transaction (income, expense, transfer, openingBalance).">
@@ -116,21 +122,24 @@
     <class name="leg" code="TLeg" description="A transaction leg." plural="legs">
       <cocoa class="Moolah.ScriptableLeg"/>
       <property name="id" code="Mlid" type="text" access="r" description="The unique identifier of the leg.">
-        <cocoa key="legID"/>
+        <cocoa key="uniqueID"/>
       </property>
       <property name="external id" code="Mlex" type="text" access="r" description="The sync source's external id for this leg, or empty string for a manual leg.">
         <cocoa key="externalID"/>
       </property>
-      <property name="account name" code="Mlan" type="text" access="r" description="The name of the account for this leg.">
-        <cocoa key="accountName"/>
+      <property name="account" code="Lacc" type="account" access="rw" description="The account for this leg.">
+        <cocoa key="account"/>
       </property>
-      <property name="amount" code="Mamt" type="real" access="r" description="The amount of this leg.">
+      <property name="amount" code="Mamt" type="real" access="rw" description="The amount of this leg.">
         <cocoa key="amount"/>
       </property>
-      <property name="category name" code="Mlcn" type="text" access="r" description="The name of the category for this leg.">
-        <cocoa key="categoryName"/>
+      <property name="category" code="Lcat" type="category" access="rw" description="The category for this leg, or missing value if uncategorized.">
+        <cocoa key="category"/>
       </property>
-      <property name="type" code="Mltp" type="text" access="r" description="The type of this leg (income, expense, transfer, openingBalance).">
+      <property name="earmark" code="Lear" type="earmark" access="rw" description="The earmark for this leg, or missing value if unassigned.">
+        <cocoa key="earmark"/>
+      </property>
+      <property name="type" code="Mltp" type="text" access="rw" description="The type of this leg (income, expense, transfer, openingBalance).">
         <cocoa key="legType"/>
       </property>
     </class>
@@ -140,13 +149,13 @@
       <property name="id" code="ID  " type="text" access="r" description="The unique identifier of the earmark.">
         <cocoa key="uniqueID"/>
       </property>
-      <property name="name" code="pnam" type="text" access="r" description="The name of the earmark.">
+      <property name="name" code="pnam" type="text" access="rw" description="The name of the earmark.">
         <cocoa key="name"/>
       </property>
       <property name="balance" code="Mbal" type="real" access="r" description="The current balance of the earmark.">
         <cocoa key="balance"/>
       </property>
-      <property name="target amount" code="Mtgt" type="real" access="r" description="The savings target amount.">
+      <property name="target amount" code="Mtgt" type="real" access="rw" description="The savings target amount.">
         <cocoa key="targetAmount"/>
       </property>
     </class>
@@ -156,7 +165,7 @@
       <property name="id" code="ID  " type="text" access="r" description="The unique identifier of the category.">
         <cocoa key="uniqueID"/>
       </property>
-      <property name="name" code="pnam" type="text" access="r" description="The name of the category.">
+      <property name="name" code="pnam" type="text" access="rw" description="The name of the category.">
         <cocoa key="name"/>
       </property>
       <property name="parent name" code="Mprn" type="text" access="r" description="The name of the parent category, or empty string if top-level.">

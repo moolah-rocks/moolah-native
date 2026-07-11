@@ -53,7 +53,8 @@
           transaction: transaction,
           profileName: profName,
           accountStore: session.accountStore,
-          categoryStore: session.categoryStore
+          categoryStore: session.categoryStore,
+          earmarkStore: session.earmarkStore
         )
       }
       return result

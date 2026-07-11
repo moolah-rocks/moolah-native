@@ -97,8 +97,14 @@
     private static func deleteEarmark(
       target: DeleteTarget, profileName: String, service: AutomationService
     ) async throws {
-      guard let name = target.name else { throw AutomationError.earmarkNotFound("unknown") }
-      let earmark = try await service.resolveEarmark(named: name, profileIdentifier: profileName)
+      let earmark: Earmark
+      if let name = target.name {
+        earmark = try await service.resolveEarmark(named: name, profileIdentifier: profileName)
+      } else if let objectID = target.id, let uuid = UUID(uuidString: objectID) {
+        earmark = try await service.resolveEarmark(id: uuid, profileIdentifier: profileName)
+      } else {
+        throw AutomationError.earmarkNotFound("unknown")
+      }
       try await service.deleteEarmark(profileIdentifier: profileName, earmarkId: earmark.id)
     }
 
@@ -106,8 +112,14 @@
     private static func deleteCategory(
       target: DeleteTarget, profileName: String, service: AutomationService
     ) async throws {
-      guard let name = target.name else { throw AutomationError.categoryNotFound("unknown") }
-      let category = try await service.resolveCategory(named: name, profileIdentifier: profileName)
+      let category: Category
+      if let name = target.name {
+        category = try await service.resolveCategory(named: name, profileIdentifier: profileName)
+      } else if let objectID = target.id, let uuid = UUID(uuidString: objectID) {
+        category = try await service.resolveCategory(id: uuid, profileIdentifier: profileName)
+      } else {
+        throw AutomationError.categoryNotFound("unknown")
+      }
       try await service.deleteCategory(profileIdentifier: profileName, categoryId: category.id)
     }
   }

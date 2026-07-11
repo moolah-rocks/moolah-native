@@ -185,12 +185,75 @@ struct AutomationServiceLegsTests {
     let updated = try await service.updateLeg(
       profileIdentifier: "Test",
       legId: legId,
-      changes: AutomationService.LegChanges(accountName: "Second", amount: -42))
+      changes: AutomationService.LegChanges(accountName: .named("Second"), amount: -42))
 
     let leg = try #require(updated.legs.first { $0.id == legId })
     #expect(leg.accountId == second.id)
     #expect(leg.quantity == -42)
     #expect(leg.type == .expense)
+  }
+
+  @Test("updateLeg can use object ids for references")
+  func updateLegChangesReferencesById() async throws {
+    let (service, session) = try await AutomationTestSession.make()
+    let first = try await service.createAccount(
+      profileIdentifier: "Test", name: "First", type: .bank)
+    let second = try await service.createAccount(
+      profileIdentifier: "Test", name: "Second", type: .bank)
+    let category = try await service.createCategory(profileIdentifier: "Test", name: "Groceries")
+    let earmark = try await service.createEarmark(profileIdentifier: "Test", name: "Weekly")
+
+    let txn = try await LegTestSupport.makeSingleLeg(
+      session: session, accountId: first.id, quantity: -100, payee: "Edit")
+    let legId = try #require(txn.legs.first).id
+
+    let updated = try await service.updateLeg(
+      profileIdentifier: "Test",
+      legId: legId,
+      changes: AutomationService.LegChanges(
+        accountName: .id(second.id),
+        categoryName: .id(category.id),
+        earmarkName: .id(earmark.id)))
+
+    let leg = try #require(updated.legs.first { $0.id == legId })
+    #expect(leg.accountId == second.id)
+    #expect(leg.categoryId == category.id)
+    #expect(leg.earmarkId == earmark.id)
+  }
+
+  @Test("updateLeg can clear category and earmark references")
+  func updateLegClearsCategoryAndEarmark() async throws {
+    let (service, session) = try await AutomationTestSession.make()
+    let account = try await service.createAccount(
+      profileIdentifier: "Test", name: "Bank", type: .bank)
+    let category = try await service.createCategory(profileIdentifier: "Test", name: "Groceries")
+    let earmark = try await service.createEarmark(profileIdentifier: "Test", name: "Weekly")
+
+    let transaction = Transaction(
+      date: Date(),
+      payee: "Shop",
+      legs: [
+        TransactionLeg(
+          accountId: account.id,
+          instrument: session.profile.instrument,
+          quantity: -25,
+          type: .expense,
+          categoryId: category.id,
+          earmarkId: earmark.id)
+      ])
+    let persisted = try await session.backend.transactions.create(transaction)
+    let legId = try #require(persisted.legs.first).id
+
+    let updated = try await service.updateLeg(
+      profileIdentifier: "Test",
+      legId: legId,
+      changes: AutomationService.LegChanges(
+        categoryName: .clear,
+        earmarkName: .clear))
+
+    let leg = try #require(updated.legs.first { $0.id == legId })
+    #expect(leg.categoryId == nil)
+    #expect(leg.earmarkId == nil)
   }
 
   @Test("updateLeg throws for a missing leg id")

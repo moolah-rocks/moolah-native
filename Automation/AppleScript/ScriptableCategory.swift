@@ -24,6 +24,8 @@
     @objc var name: String { _name }
     @objc var parentName: String { _parentName }
 
+    var scriptProfileName: String { _profileName }
+
     // MARK: - Object Specifier
 
     override var objectSpecifier: NSScriptObjectSpecifier? {
@@ -47,11 +49,11 @@
       else {
         return nil
       }
-      return NSNameSpecifier(
+      return NSUniqueIDSpecifier(
         containerClassDescription: profileDescription,
         containerSpecifier: profileSpecifier,
         key: "scriptableCategories",
-        name: _name
+        uniqueID: _uniqueID
       )
     }
   }

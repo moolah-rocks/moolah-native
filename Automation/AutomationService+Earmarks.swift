@@ -28,6 +28,16 @@ extension AutomationService {
     return try Self.earmark(named: name, in: earmarks)
   }
 
+  /// Resolves an earmark by UUID within a profile. Authoritative read — see
+  /// `resolveEarmark(named:profileIdentifier:)` for the rationale.
+  func resolveEarmark(id: UUID, profileIdentifier: String) async throws -> Earmark {
+    let earmarks = try await fetchEarmarks(profileIdentifier: profileIdentifier)
+    guard let earmark = earmarks.first(where: { $0.id == id }) else {
+      throw AutomationError.earmarkNotFound(id.uuidString)
+    }
+    return earmark
+  }
+
   /// Authoritative earmark snapshot for a profile, read straight from the
   /// repository so it reflects every committed write immediately. Mirrors
   /// `fetchAccounts` — callers that resolve several names (e.g. `resolveLegs`)
@@ -137,6 +147,16 @@ extension AutomationService {
     return try Self.category(named: name, in: categories)
   }
 
+  /// Resolves a category by UUID within a profile. Authoritative read — see
+  /// `resolveCategory(named:profileIdentifier:)` for the rationale.
+  func resolveCategory(id: UUID, profileIdentifier: String) async throws -> Category {
+    let categories = try await fetchCategories(profileIdentifier: profileIdentifier)
+    guard let entry = categories.flattenedByPath().first(where: { $0.category.id == id }) else {
+      throw AutomationError.categoryNotFound(id.uuidString)
+    }
+    return entry.category
+  }
+
   /// Authoritative category hierarchy for a profile, rebuilt from the flat
   /// repository snapshot so it reflects every committed write immediately.
   /// Mirrors `fetchAccounts` — callers that resolve several names (e.g.
@@ -185,6 +205,24 @@ extension AutomationService {
       throw AutomationError.operationFailed("Failed to create category")
     }
     return created
+  }
+
+  /// Updates an existing category's editable fields while preserving its id.
+  func updateCategory(
+    profileIdentifier: String,
+    categoryId: UUID,
+    name: String? = nil
+  ) async throws -> Category {
+    let session = try resolveSession(for: profileIdentifier)
+    guard var category = session.categoryStore.categories.by(id: categoryId) else {
+      throw AutomationError.categoryNotFound(categoryId.uuidString)
+    }
+    if let name { category.name = name }
+
+    guard let updated = await session.categoryStore.update(category) else {
+      throw AutomationError.operationFailed("Failed to update category")
+    }
+    return updated
   }
 
   /// Deletes a category, optionally replacing it with another category.

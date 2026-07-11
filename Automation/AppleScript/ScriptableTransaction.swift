@@ -21,7 +21,8 @@
       transaction: Transaction,
       profileName: String,
       accountStore: AccountStore,
-      categoryStore: CategoryStore
+      categoryStore: CategoryStore,
+      earmarkStore: EarmarkStore
     ) {
       _uniqueID = transaction.id.uuidString
       _date = transaction.date
@@ -36,14 +37,14 @@
       }
       _amount = Double(truncating: total as NSDecimalNumber)
 
-      _legs = transaction.legs.enumerated().map { index, leg in
+      _legs = transaction.legs.map { leg in
         ScriptableLeg(
           leg: leg,
           transactionID: transaction.id.uuidString,
           profileName: profileName,
           accountStore: accountStore,
           categoryStore: categoryStore,
-          index: index
+          earmarkStore: earmarkStore
         )
       }
 
@@ -58,6 +59,8 @@
     @objc var amount: Double { _amount }
     @objc var isScheduled: Bool { _isScheduled }
     @objc var scriptableLegs: [ScriptableLeg] { _legs }
+
+    var scriptProfileName: String { _profileName }
 
     // MARK: - Object Specifier
 
@@ -97,13 +100,13 @@
   final class ScriptableLeg: NSObject, Sendable {
     private let _legID: String
     private let _externalID: String
-    private let _accountName: String
+    private let _account: ScriptableAccount?
     private let _amount: Double
-    private let _categoryName: String
+    private let _category: ScriptableCategory?
+    private let _earmark: ScriptableEarmark?
     private let _legType: String
     private let _transactionID: String
     private let _profileName: String
-    private let _index: Int
 
     @MainActor
     init(
@@ -112,26 +115,45 @@
       profileName: String,
       accountStore: AccountStore,
       categoryStore: CategoryStore,
-      index: Int = 0
+      earmarkStore: EarmarkStore
     ) {
       _legID = leg.id.uuidString
       _externalID = leg.externalId ?? ""
-      _accountName = leg.accountId.flatMap { accountStore.accounts.by(id: $0)?.name } ?? ""
+      if let account = leg.accountId.flatMap({ accountStore.accounts.by(id: $0) }) {
+        _account = ScriptableAccount(account: account, profileName: profileName)
+      } else {
+        _account = nil
+      }
       _amount = leg.amount.doubleValue
-      _categoryName = leg.categoryId.flatMap { categoryStore.categories.by(id: $0)?.name } ?? ""
+      if let category = leg.categoryId.flatMap({ categoryStore.categories.by(id: $0) }) {
+        let parentName =
+          category.parentId.flatMap { categoryStore.categories.by(id: $0)?.name } ?? ""
+        _category = ScriptableCategory(
+          category: category, parentName: parentName, profileName: profileName)
+      } else {
+        _category = nil
+      }
+      if let earmark = leg.earmarkId.flatMap({ earmarkStore.earmarks.by(id: $0) }) {
+        _earmark = ScriptableEarmark(earmark: earmark, profileName: profileName)
+      } else {
+        _earmark = nil
+      }
       _legType = leg.type.rawValue
       _transactionID = transactionID
       _profileName = profileName
-      _index = index
       super.init()
     }
 
+    @objc var uniqueID: String { _legID }
     @objc var legID: String { _legID }
     @objc var externalID: String { _externalID }
-    @objc var accountName: String { _accountName }
+    @objc var account: ScriptableAccount? { _account }
     @objc var amount: Double { _amount }
-    @objc var categoryName: String { _categoryName }
+    @objc var category: ScriptableCategory? { _category }
+    @objc var earmark: ScriptableEarmark? { _earmark }
     @objc var legType: String { _legType }
+
+    var scriptProfileName: String { _profileName }
 
     // MARK: - Object Specifier
 
@@ -169,11 +191,11 @@
       else {
         return nil
       }
-      return NSIndexSpecifier(
+      return NSUniqueIDSpecifier(
         containerClassDescription: transactionDescription,
         containerSpecifier: transactionSpecifier,
         key: "scriptableLegs",
-        index: _index
+        uniqueID: _legID
       )
     }
   }
