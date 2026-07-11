@@ -126,6 +126,11 @@ moolah-tell 'tell profile "Test" to create txn with payee "Employer" amount 5000
 # List txns (payee and amount)
 moolah-tell 'get {payee, amount} of every txn of profile "Test"'
 
+# Find txns with server-side filters. `from date` and `to date` are inclusive local-day bounds;
+# omitted `scheduled` returns posted/non-scheduled txns.
+moolah-tell 'find txns of profile "Test" account "Everyday" from date (date "2026-01-01") to date (date "2026-02-01") category "Groceries"'
+moolah-tell 'find txns of profile "Test" scheduled false'
+
 # Get txn details
 moolah-tell 'get {payee, date, amount, transaction type} of every txn of profile "Test"'
 

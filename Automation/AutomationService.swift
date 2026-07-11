@@ -166,6 +166,57 @@ final class AutomationService {
     return session.transactionStore.transactions.map(\.transaction)
   }
 
+  /// Finds transactions through the repository query path for automation clients.
+  func findTransactions(
+    profileIdentifier: String,
+    accountName: String? = nil,
+    categoryName: String? = nil,
+    fromDate: Date? = nil,
+    toDate: Date? = nil,
+    scheduled: ScheduledFilter = .nonScheduledOnly
+  ) async throws -> [Transaction] {
+    let session = try resolveSession(for: profileIdentifier)
+
+    var filter = TransactionFilter()
+    if let accountName {
+      let account = try await resolveAccount(
+        named: accountName, profileIdentifier: profileIdentifier)
+      filter.accountId = account.id
+    }
+    if let categoryName {
+      let category = try await resolveCategory(
+        named: categoryName, profileIdentifier: profileIdentifier)
+      filter.categoryIds = [category.id]
+    }
+    if let dateInterval = try findTransactionsDateInterval(fromDate: fromDate, toDate: toDate) {
+      filter.dateInterval = dateInterval
+    }
+    filter.scheduled = scheduled
+
+    do {
+      return try await session.backend.transactions.fetchAll(filter: filter)
+    } catch {
+      throw AutomationError.operationFailed(
+        "Failed to find transactions: \(error.localizedDescription)")
+    }
+  }
+
+  private func findTransactionsDateInterval(fromDate: Date?, toDate: Date?) throws -> Range<Date>? {
+    guard fromDate != nil || toDate != nil else { return nil }
+
+    let calendar = Calendar.current
+    let lowerBound = fromDate.map { calendar.startOfDay(for: $0) } ?? .distantPast
+    guard let toDate else { return lowerBound..<Date.distantFuture }
+    let upperDayStart = calendar.startOfDay(for: toDate)
+    guard let upperBound = calendar.date(byAdding: .day, value: 1, to: upperDayStart) else {
+      throw AutomationError.invalidParameter("Could not resolve the upper date bound")
+    }
+    guard lowerBound < upperBound else {
+      throw AutomationError.invalidParameter("from date must be on or before to date")
+    }
+    return lowerBound..<upperBound
+  }
+
   /// Updates an existing transaction's payee, date, or notes.
   func updateTransaction(
     profileIdentifier: String,
