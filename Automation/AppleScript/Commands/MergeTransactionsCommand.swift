@@ -39,7 +39,8 @@
           transaction: merged,
           profileName: profileName,
           accountStore: session.accountStore,
-          categoryStore: session.categoryStore)
+          categoryStore: session.categoryStore,
+          earmarkStore: session.earmarkStore)
       }
       return result
     }

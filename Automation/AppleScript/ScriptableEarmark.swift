@@ -27,6 +27,8 @@
     @objc var balance: Double { _balance }
     @objc var targetAmount: Double { _targetAmount }
 
+    var scriptProfileName: String { _profileName }
+
     // MARK: - Object Specifier
 
     override var objectSpecifier: NSScriptObjectSpecifier? {
@@ -50,11 +52,11 @@
       else {
         return nil
       }
-      return NSNameSpecifier(
+      return NSUniqueIDSpecifier(
         containerClassDescription: profileDescription,
         containerSpecifier: profileSpecifier,
         key: "scriptableEarmarks",
-        name: _name
+        uniqueID: _uniqueID
       )
     }
   }

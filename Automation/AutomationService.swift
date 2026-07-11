@@ -176,31 +176,23 @@ final class AutomationService {
   ) async throws -> Transaction {
     let session = try resolveSession(for: profileIdentifier)
 
-    // Find the transaction in the store
-    guard
-      let entry = session.transactionStore.transactions.first(where: {
-        $0.transaction.id == transactionId
-      })
-    else {
+    let transactions = try await session.backend.transactions.fetchAll(filter: TransactionFilter())
+    guard var transaction = transactions.first(where: { $0.id == transactionId }) else {
       throw AutomationError.transactionNotFound(transactionId.uuidString)
     }
 
-    var transaction = entry.transaction
     if let payee { transaction.payee = payee }
     if let date { transaction.date = date }
     if let notes { transaction.notes = notes }
 
-    await session.transactionStore.update(transaction)
-
-    // Return the updated version from the store
-    guard
-      let updated = session.transactionStore.transactions.first(where: {
-        $0.transaction.id == transactionId
-      })
-    else {
-      throw AutomationError.operationFailed("Transaction update failed")
+    do {
+      return try await session.backend.transactions.update(transaction)
+    } catch let error as AutomationError {
+      throw error
+    } catch {
+      throw AutomationError.operationFailed(
+        "Failed to update transaction: \(error.localizedDescription)")
     }
-    return updated.transaction
   }
 
   /// Deletes a transaction by UUID.

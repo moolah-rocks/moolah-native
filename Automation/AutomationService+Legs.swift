@@ -9,6 +9,12 @@ import Foundation
 // wallet / exchange importers own. All members are `@MainActor` via the
 // containing class.
 extension AutomationService {
+  enum ReferenceChange: Sendable, Equatable {
+    case unchanged
+    case clear
+    case id(UUID)
+    case named(String)
+  }
 
   /// Describes the new leg to append in `addLeg(profileIdentifier:transactionId:draft:)`.
   /// `instrumentId` omitted (`nil`) defaults to the profile's instrument; an
@@ -43,19 +49,19 @@ extension AutomationService {
   /// a `nil` field keeps the leg's current value.
   struct LegChanges: Sendable {
     let type: String?
-    let accountName: String?
+    let accountName: ReferenceChange
     let instrumentId: String?
     let amount: Decimal?
-    let categoryName: String?
-    let earmarkName: String?
+    let categoryName: ReferenceChange
+    let earmarkName: ReferenceChange
 
     init(
       type: String? = nil,
-      accountName: String? = nil,
+      accountName: ReferenceChange = .unchanged,
       instrumentId: String? = nil,
       amount: Decimal? = nil,
-      categoryName: String? = nil,
-      earmarkName: String? = nil
+      categoryName: ReferenceChange = .unchanged,
+      earmarkName: ReferenceChange = .unchanged
     ) {
       self.type = type
       self.accountName = accountName
@@ -64,6 +70,10 @@ extension AutomationService {
       self.categoryName = categoryName
       self.earmarkName = earmarkName
     }
+  }
+
+  static func referenceChange(named name: String?) -> ReferenceChange {
+    name.map(ReferenceChange.named) ?? .unchanged
   }
 
   /// Appends a new leg to the transaction identified by `transactionId`.
@@ -119,12 +129,10 @@ extension AutomationService {
     let session = try resolveSession(for: profileIdentifier)
     let located = try await Self.locateLeg(legId: legId, in: session)
 
-    let resolvedAccountId: UUID? =
-      if let accountName = changes.accountName {
-        try await resolveAccount(named: accountName, profileIdentifier: profileIdentifier).id
-      } else {
-        located.leg.accountId
-      }
+    let resolvedAccountId = try await resolveAccountChange(
+      changes.accountName,
+      current: located.leg.accountId,
+      profileIdentifier: profileIdentifier)
     let resolvedInstrument: Instrument =
       if let instrumentId = changes.instrumentId {
         try await resolveInstrument(instrumentId, session: session)
@@ -133,12 +141,14 @@ extension AutomationService {
       }
     let resolvedType: TransactionType =
       if let type = changes.type { try Self.transactionType(type) } else { located.leg.type }
-    let resolvedCategoryId: UUID? =
-      try await resolveOptionalCategory(changes.categoryName, profileIdentifier: profileIdentifier)
-      ?? located.leg.categoryId
-    let resolvedEarmarkId: UUID? =
-      try await resolveOptionalEarmark(changes.earmarkName, profileIdentifier: profileIdentifier)
-      ?? located.leg.earmarkId
+    let resolvedCategoryId = try await resolveCategoryChange(
+      changes.categoryName,
+      current: located.leg.categoryId,
+      profileIdentifier: profileIdentifier)
+    let resolvedEarmarkId = try await resolveEarmarkChange(
+      changes.earmarkName,
+      current: located.leg.earmarkId,
+      profileIdentifier: profileIdentifier)
 
     // Rebuild the leg keeping id / externalId / counterpartyAddress.
     let edited = TransactionLeg(
@@ -254,6 +264,57 @@ extension AutomationService {
   ) async throws -> UUID? {
     guard let name else { return nil }
     return try await resolveCategory(named: name, profileIdentifier: profileIdentifier).id
+  }
+
+  private func resolveAccountChange(
+    _ change: ReferenceChange,
+    current: UUID?,
+    profileIdentifier: String
+  ) async throws -> UUID? {
+    switch change {
+    case .unchanged:
+      current
+    case .clear:
+      nil
+    case .id(let accountId):
+      try await resolveAccount(id: accountId, profileIdentifier: profileIdentifier).id
+    case .named(let accountName):
+      try await resolveAccount(named: accountName, profileIdentifier: profileIdentifier).id
+    }
+  }
+
+  private func resolveCategoryChange(
+    _ change: ReferenceChange,
+    current: UUID?,
+    profileIdentifier: String
+  ) async throws -> UUID? {
+    switch change {
+    case .unchanged:
+      current
+    case .clear:
+      nil
+    case .id(let categoryId):
+      try await resolveCategory(id: categoryId, profileIdentifier: profileIdentifier).id
+    case .named(let categoryName):
+      try await resolveCategory(named: categoryName, profileIdentifier: profileIdentifier).id
+    }
+  }
+
+  private func resolveEarmarkChange(
+    _ change: ReferenceChange,
+    current: UUID?,
+    profileIdentifier: String
+  ) async throws -> UUID? {
+    switch change {
+    case .unchanged:
+      current
+    case .clear:
+      nil
+    case .id(let earmarkId):
+      try await resolveEarmark(id: earmarkId, profileIdentifier: profileIdentifier).id
+    case .named(let earmarkName):
+      try await resolveEarmark(named: earmarkName, profileIdentifier: profileIdentifier).id
+    }
   }
 
   /// Resolves an optional earmark name to its id, or `nil` when unset.

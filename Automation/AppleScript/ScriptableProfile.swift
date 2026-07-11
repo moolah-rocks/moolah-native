@@ -31,7 +31,8 @@
           transaction: $0.transaction,
           profileName: session.profile.label,
           accountStore: session.accountStore,
-          categoryStore: session.categoryStore
+          categoryStore: session.categoryStore,
+          earmarkStore: session.earmarkStore
         )
       }
       _earmarks = session.earmarkStore.earmarks.ordered.map {

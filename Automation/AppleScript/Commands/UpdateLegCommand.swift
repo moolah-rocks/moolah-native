@@ -39,17 +39,18 @@
           legId: legId,
           changes: AutomationService.LegChanges(
             type: type,
-            accountName: accountName,
+            accountName: AutomationService.referenceChange(named: accountName),
             instrumentId: instrumentId,
             amount: amount,
-            categoryName: categoryName,
-            earmarkName: earmarkName))
+            categoryName: AutomationService.referenceChange(named: categoryName),
+            earmarkName: AutomationService.referenceChange(named: earmarkName)))
         let session = try service.resolveSession(for: profileName)
         return ScriptableTransaction(
           transaction: updated,
           profileName: profileName,
           accountStore: session.accountStore,
-          categoryStore: session.categoryStore)
+          categoryStore: session.categoryStore,
+          earmarkStore: session.earmarkStore)
       }
       return result
     }

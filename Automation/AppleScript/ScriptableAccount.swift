@@ -42,6 +42,8 @@
     @objc var isHidden: Bool { _isHidden }
     @objc var positions: [String] { _positions }
 
+    var scriptProfileName: String { _profileName }
+
     // MARK: - Object Specifier
 
     override var objectSpecifier: NSScriptObjectSpecifier? {
@@ -65,11 +67,11 @@
       else {
         return nil
       }
-      return NSNameSpecifier(
+      return NSUniqueIDSpecifier(
         containerClassDescription: profileDescription,
         containerSpecifier: profileSpecifier,
         key: "scriptableAccounts",
-        name: _name
+        uniqueID: _uniqueID
       )
     }
   }
