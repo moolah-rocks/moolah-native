@@ -1,7 +1,7 @@
 import Foundation
 
 /// One step in the FIFO cost-basis machine. Consumers
-/// (`CapitalGainsCalculator`, `InvestmentStore` cost-basis snapshot,
+/// (`CapitalGainsCalculator`, holdings-cost ledger,
 /// `PositionsHistoryBuilder`) read these structurally.
 struct TradeBuyEvent: Sendable, Equatable {
   let instrument: Instrument

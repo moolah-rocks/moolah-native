@@ -10,33 +10,4 @@ extension InvestmentValueRow {
   static func recordName(for id: UUID) -> String {
     "\(recordType)|\(id.uuidString)"
   }
-
-  /// Builds a row from a domain `InvestmentValue`. `InvestmentValue`
-  /// does not carry an `accountId`, `id`, or `instrumentId` — the
-  /// repository supplies them.
-  init(
-    id: UUID = UUID(),
-    domain value: InvestmentValue,
-    accountId: UUID
-  ) {
-    self.id = id
-    self.recordName = Self.recordName(for: id)
-    self.accountId = accountId
-    self.date = value.date
-    self.value = value.value.storageValue
-    self.instrumentId = value.value.instrument.id
-    self.encodedSystemFields = nil
-  }
-
-  /// Domain projection. Reconstructs the amount in the row's recorded
-  /// `instrumentId`, falling back to ambient fiat when no synced
-  /// `instrument` row exists. Repositories that need a precise
-  /// `Instrument` (e.g. for stock display) reconstruct it via
-  /// `InstrumentRegistryRepository` before showing the result.
-  func toDomain() -> InvestmentValue {
-    let instrument = Instrument.fiat(code: instrumentId)
-    return InvestmentValue(
-      date: date,
-      value: InstrumentAmount(storageValue: value, instrument: instrument))
-  }
 }

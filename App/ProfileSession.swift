@@ -44,18 +44,11 @@ final class ProfileSession: Identifiable {
   /// from the consumer's perspective.
   private(set) var insightStore: InsightStore?
   let analysisStore: AnalysisStore
-  let investmentStore: InvestmentStore
   let reportingStore: ReportingStore
   /// The single profile-wide cost-basis provider — the same instance
-  /// `makeDomainStores` builds once and injects into BOTH `investmentStore`
-  /// (positions / performance) and `reportingStore` (CGT / P&L). Exposed so
-  /// the positions split modifier can reach it via the environment session.
-  /// Surfaced through `investmentStore` (which holds the shared reference)
-  /// rather than a separate stored property so `init` stays within its
-  /// `function_body_length` budget. Its observation is torn down in
-  /// `cleanupSync`. `nil` only in preview / legacy sessions that don't wire a
-  /// provider.
-  var holdingsCostLedgerStore: HoldingsCostLedgerStore? { investmentStore.holdingsCostLedger }
+  /// The single profile-wide cost-basis provider shared by reporting and
+  /// position surfaces. Its observation is torn down in `cleanupSync`.
+  let holdingsCostLedgerStore: HoldingsCostLedgerStore
   let exchangeRateService: ExchangeRateService
   let stockPriceService: StockPriceService
   let cryptoPriceService: CryptoPriceService
@@ -152,9 +145,8 @@ final class ProfileSession: Identifiable {
   /// because `runPragmaOptimize` lives in
   /// `ProfileSession+DatabaseMaintenance.swift`; mutated only there.
   var pragmaOptimizeRunCount: Int = 0
-  /// Tasks spawned by cross-store side effects (e.g.
-  /// `seedBuiltInCryptoPresets`, the `cryptoTokenStore` ->
-  /// `investmentStore.revaluateLoadedPositions` callback). Kept
+  /// Tasks spawned by cross-store side effects (e.g. RPC endpoint reloads).
+  /// Kept
   /// reachable so `cleanupSync` can cancel in-flight work (per
   /// `guides/CONCURRENCY_GUIDE.md` §8). Module-internal so
   /// `ProfileSession+SyncCleanup.swift` can drain the list on teardown.
@@ -228,7 +220,7 @@ final class ProfileSession: Identifiable {
     self.earmarkStore = stores.earmark
     self.transactionStore = stores.transaction
     self.analysisStore = stores.analysis
-    self.investmentStore = stores.investment
+    self.holdingsCostLedgerStore = stores.holdingsCostLedger
     self.reportingStore = stores.reporting
     // CSV import: ImportStore owns the pipeline orchestration; the
     // staging store lives per-profile on disk so pending/failed files

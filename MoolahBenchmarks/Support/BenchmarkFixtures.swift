@@ -11,7 +11,6 @@ struct BenchmarkScale: Sendable {
   let accounts: Int
   let categories: Int
   let earmarks: Int
-  let investmentValues: Int
   /// Number of accounts designated as investment type (placed at the end).
   let investmentAccounts: Int
 
@@ -20,7 +19,6 @@ struct BenchmarkScale: Sendable {
     accounts: 31,
     categories: 158,
     earmarks: 21,
-    investmentValues: 2_711,
     investmentAccounts: 6
   )
 
@@ -29,7 +27,6 @@ struct BenchmarkScale: Sendable {
     accounts: 62,
     categories: 316,
     earmarks: 42,
-    investmentValues: 5_422,
     investmentAccounts: 12
   )
 }
@@ -40,7 +37,7 @@ struct BenchmarkScale: Sendable {
 ///
 /// Real data profile (1x):
 /// - 18,662 transactions across 31 accounts (top 3 hold ~85%)
-/// - 158 categories, 21 earmarks, 2,711 investment values
+/// - 158 categories and 21 earmarks
 /// - ~0.2% scheduled transactions
 enum BenchmarkFixtures {
 
@@ -84,12 +81,6 @@ enum BenchmarkFixtures {
         seedTransactions(
           scale: scale,
           ids: SeedIds(accounts: accountIds, categories: categoryIds, earmarks: earmarkIds),
-          database: database,
-          instrument: instrument
-        )
-        seedInvestmentValues(
-          scale: scale,
-          accountIds: accountIds,
           database: database,
           instrument: instrument
         )

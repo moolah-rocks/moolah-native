@@ -15,7 +15,7 @@ struct AccountStoreConversionTestsMoreExtra {
     // Position-derived totals contribute for every investment-like account.
     let account = Account(
       id: accountId, name: "Portfolio", type: .investment, instrument: aud,
-      valuationMode: .calculatedFromTrades)
+    )
 
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(accounts: [account], in: database)
@@ -98,7 +98,7 @@ struct AccountStoreConversionTestsMoreExtra {
     // Use `calculatedFromTrades` so positions are summed for the total.
     let account = Account(
       id: accountId, name: "Portfolio", type: .investment, instrument: .AUD,
-      valuationMode: .calculatedFromTrades)
+    )
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(accounts: [account], in: database)
 
@@ -133,55 +133,6 @@ struct AccountStoreConversionTestsMoreExtra {
     }
   }
 
-  /// Legacy snapshots are inert even when the account still carries the
-  /// recorded-value enum. The aggregate values positions exactly once.
-  @Test
-  func computeConvertedInvestmentTotalIgnoresLegacySnapshot()
-    async throws
-  {
-    let accountId = UUID()
-    let account = Account(
-      id: accountId, name: "Brokerage", type: .investment, instrument: .AUD,
-      valuationMode: .recordedValue)
-    let (backend, database) = try TestBackend.create()
-    TestBackend.seed(accounts: [account], in: database)
-
-    let rawTx = Transaction(
-      date: Date(),
-      legs: [
-        TransactionLeg(
-          accountId: accountId, instrument: .AUD,
-          quantity: dec("100.00"), type: .openingBalance)
-      ])
-    TestBackend.seed(transactions: [rawTx], in: database)
-    TestBackend.seed(
-      investmentValues: [
-        accountId: [
-          InvestmentValue(
-            date: Date(),
-            value: InstrumentAmount(quantity: dec("2000.00"), instrument: .AUD))
-        ]
-      ],
-      in: database)
-
-    let conversion = FakeConversionService.fixedRates([
-      "AUD": dec("0.5")
-    ])
-    let store = AccountStore(
-      repository: backend.accounts,
-      conversionService: conversion,
-      targetInstrument: .USD)
-    try await store.waitForNextEmission(
-      matching: { $0.accounts.by(id: accountId) != nil },
-      description: "seeded account observed"
-    )
-
-    await expectEventually("position value converts once to 50 USD") {
-      let total = try? await store.computeConvertedInvestmentTotal(in: .USD)
-      return total?.instrument == .USD && total?.quantity == dec("50.00")
-    }
-  }
-
   /// Same-instrument positions and target must hit the fast path without
   /// stacking spurious conversions. For a profile where account instrument,
   /// positions, and target all share a currency, the result equals the raw
@@ -195,7 +146,7 @@ struct AccountStoreConversionTestsMoreExtra {
     let account = Account(
       id: accountId, name: "Portfolio", type: .investment,
       instrument: .defaultTestInstrument,
-      valuationMode: .calculatedFromTrades)
+    )
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(accounts: [account], in: database)
 

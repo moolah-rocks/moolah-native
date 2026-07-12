@@ -14,7 +14,6 @@ extension CloudKitBackend {
     let transferSuggestions: GRDBTransferSuggestionRepository
     let earmarks: GRDBEarmarkRepository
     let earmarkBudgetItems: GRDBEarmarkBudgetItemRepository
-    let investments: GRDBInvestmentRepository
     let transactionLegs: GRDBTransactionLegRepository
     let analysis: GRDBAnalysisRepository
     let insightDataSource: GRDBInsightDataSource
@@ -73,7 +72,6 @@ extension CloudKitBackend {
         database: database,
         onRecordChanged: hooks.onEarmarkBudgetItemChanged,
         onRecordDeleted: hooks.onEarmarkBudgetItemDeleted),
-      investments: resolving.investments,
       transactionLegs: GRDBTransactionLegRepository(
         database: database,
         onRecordChanged: hooks.onTransactionLegChanged,
@@ -115,7 +113,6 @@ extension CloudKitBackend {
     let accounts: GRDBAccountRepository
     let transactions: GRDBTransactionRepository
     let earmarks: GRDBEarmarkRepository
-    let investments: GRDBInvestmentRepository
     let analysis: GRDBAnalysisRepository
     let insightDataSource: GRDBInsightDataSource
   }
@@ -148,12 +145,6 @@ extension CloudKitBackend {
         instrumentResolver: resolver,
         onRecordChanged: hooks.onEarmarkChanged,
         onRecordDeleted: hooks.onEarmarkDeleted),
-      investments: GRDBInvestmentRepository(
-        database: database,
-        defaultInstrument: environment.instrument,
-        instrumentResolver: resolver,
-        onRecordChanged: hooks.onInvestmentChanged,
-        onRecordDeleted: hooks.onInvestmentDeleted),
       analysis: GRDBAnalysisRepository(
         database: database,
         instrument: environment.instrument,

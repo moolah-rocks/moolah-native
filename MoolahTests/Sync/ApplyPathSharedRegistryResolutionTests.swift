@@ -14,7 +14,7 @@ import Testing
 /// (`ProfileIndexSyncHandler` + the shared registry); the per-profile
 /// `ProfileDataSyncHandler` traps/skips them. The
 /// `instrumentResolver` / `instrumentRegistrar` injected into the
-/// txn/account/earmark/investment repos by `makeForApply` are the
+/// transaction, account, and earmark repos by `makeForApply` are the
 /// shared registry. The apply path never invokes them (it writes raw
 /// Rows via `applyRemoteChangesSync`), and there is no per-profile
 /// `instrument` table, so any apply-time instrument resolution lands
@@ -53,17 +53,14 @@ struct ApplyPathSharedRegistryResolutionTests {
       defaultTaxOwnerId: nil,
       implicitDefaultTaxOwnerId: nil)
 
-    // All four repos resolve the crypto instrument because their injected
+    // All three repos resolve the crypto instrument because their injected
     // resolver is the shared registry, not the per-profile shim.
     let txnMap = try await bundle.transactions.instrumentResolver.instrumentMap()
     let accountMap = try await bundle.accounts.instrumentResolver.instrumentMap()
     let earmarkMap = try await bundle.earmarks.instrumentResolver.instrumentMap()
-    let investmentMap =
-      try await bundle.investmentValues.instrumentResolver.instrumentMap()
     #expect(txnMap[crypto.id]?.kind == .cryptoToken)
     #expect(accountMap[crypto.id]?.kind == .cryptoToken)
     #expect(earmarkMap[crypto.id]?.kind == .cryptoToken)
-    #expect(investmentMap[crypto.id]?.kind == .cryptoToken)
 
     // The per-profile `instrument` table does not exist — resolution
     // through it is structurally impossible, a strictly stronger

@@ -25,22 +25,17 @@ struct DataExporterTests {
 
   private func makeBackendWithData() async throws -> CloudKitBackend {
     let (backend, _) = try TestBackend.create(instrument: instrument)
-    let investmentAccount = try await seedAccountsAndEarmarks(backend: backend)
+    try await seedAccountsAndEarmarks(backend: backend)
     try await seedBackendTransactions(backend: backend)
-    try await backend.investments.setValue(
-      accountId: investmentAccount.id,
-      date: Date(),
-      value: InstrumentAmount(quantity: dec("5000.00"), instrument: instrument)
-    )
     return backend
   }
 
-  private func seedAccountsAndEarmarks(backend: CloudKitBackend) async throws -> Account {
+  private func seedAccountsAndEarmarks(backend: CloudKitBackend) async throws {
     _ = try await backend.accounts.create(
       Account(name: "Checking", type: .bank, instrument: instrument), openingBalance: nil)
     _ = try await backend.accounts.create(
       Account(name: "Savings", type: .bank, instrument: instrument), openingBalance: nil)
-    let investmentAccount = try await backend.accounts.create(
+    _ = try await backend.accounts.create(
       Account(name: "Portfolio", type: .investment, instrument: instrument), openingBalance: nil)
 
     let food = try await backend.categories.create(Category(name: "Food"))
@@ -51,7 +46,6 @@ struct DataExporterTests {
     let budgetAmount = InstrumentAmount(quantity: dec("50.00"), instrument: instrument)
     try await backend.earmarks.setBudget(
       earmarkId: holiday.id, categoryId: food.id, amount: budgetAmount)
-    return investmentAccount
   }
 
   private func seedBackendTransactions(backend: CloudKitBackend) async throws {
@@ -111,7 +105,6 @@ struct DataExporterTests {
     #expect(data.categories.count == 2)
     #expect(data.earmarks.count == 1)
     #expect(data.transactions.count == 3)
-    #expect(data.investmentValues.count == 1)
 
     // Verify progress was reported
     let steps = progressSteps.steps
@@ -139,25 +132,6 @@ struct DataExporterTests {
     #expect(firstBudgetItem.amount.quantity == dec("50.00"))
   }
 
-  @Test("exports investment values per investment account")
-  func exportInvestmentValues() async throws {
-    let backend = try await makeBackendWithData()
-    let exporter = DataExporter(backend: backend)
-
-    let data = try await exporter.export(
-      profileLabel: "Test",
-      currencyCode: instrument.id,
-      financialYearStartMonth: 7,
-      defaultTaxOwnerId: defaultTaxOwnerId
-    ) { _ in }
-
-    let investmentAccount = try #require(data.accounts.first { $0.type == .investment })
-    let values = try #require(data.investmentValues[investmentAccount.id])
-    #expect(values.count == 1)
-    let firstValue = try #require(values.first)
-    #expect(firstValue.value.quantity == dec("5000.00"))
-  }
-
   @Test("exports empty data from empty backend")
   func exportEmpty() async throws {
     let (backend, _) = try TestBackend.create()
@@ -174,7 +148,6 @@ struct DataExporterTests {
     #expect(data.categories.isEmpty)
     #expect(data.earmarks.isEmpty)
     #expect(data.transactions.isEmpty)
-    #expect(data.investmentValues.isEmpty)
   }
 
   @Test("includes scheduled transactions in export")

@@ -59,11 +59,6 @@ struct ObservationRegionTests {
     try assertProfileIndexRegionExcludesSystemFields(InstrumentRow.observableRegion)
   }
 
-  @Test("InvestmentValueRow.observableRegion excludes encoded_system_fields")
-  func investmentValueRowRegion() throws {
-    try assertProfileRegionExcludesSystemFields(InvestmentValueRow.observableRegion)
-  }
-
   @Test("CSVImportProfileRow.observableRegion excludes encoded_system_fields")
   func csvImportProfileRowRegion() throws {
     try assertProfileRegionExcludesSystemFields(CSVImportProfileRow.observableRegion)

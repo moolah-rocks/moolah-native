@@ -106,7 +106,7 @@ struct AccountStoreMutationsTests {
       name: "Brokerage", type: .investment, balance: 0, in: database)
     _ = AccountStoreTestSupport.seedAccount(
       name: "ETH Wallet", type: .crypto,
-      valuationMode: .calculatedFromTrades, in: database)
+      in: database)
     let store = AccountStore(
       repository: backend.accounts, conversionService: FakeConversionService.fixedRates([:]),
       targetInstrument: .defaultTestInstrument)

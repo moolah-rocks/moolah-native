@@ -43,7 +43,7 @@ struct AcctRepoSharedInstrumentResolutionTests {
 
     let account = Account(
       name: "Trust - Ethereum", type: .crypto, instrument: eth,
-      valuationMode: .calculatedFromTrades, walletAddress: "0xabc",
+      walletAddress: "0xabc",
       chainId: 1)
     let leg = TransactionLeg(
       accountId: account.id, instrument: eth, quantity: 5, type: .income)
@@ -88,7 +88,7 @@ struct AcctRepoSharedInstrumentResolutionTests {
 
     let account = Account(
       name: "Trust - Ethereum", type: .crypto, instrument: eth,
-      valuationMode: .calculatedFromTrades, walletAddress: "0xabc",
+      walletAddress: "0xabc",
       chainId: 1)
     let leg = TransactionLeg(
       accountId: account.id, instrument: eth, quantity: 5, type: .income)

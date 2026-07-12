@@ -85,14 +85,12 @@ private func syncedAccountHeaderPreview(
     name: "Preview Wallet",
     type: .crypto,
     instrument: .AUD,
-    valuationMode: .calculatedFromTrades,
     walletAddress: "0xa4b572ea1b6f734fc88a0a004c5301f8dad54d60",
     chainId: 10)
   let exchangeAccount = Account(
     name: "Coinstash",
     type: .exchange,
     instrument: .AUD,
-    valuationMode: .calculatedFromTrades,
     exchangeProvider: .coinstash)
   if syncing {
     // Drive the crypto header's sync button into its in-progress state:

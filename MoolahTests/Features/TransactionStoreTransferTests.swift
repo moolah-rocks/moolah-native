@@ -118,7 +118,7 @@ struct TransactionStoreTransferTests {
     // ignore positions for displayBalance).
     let investment = TransactionStoreTestSupport.acct(
       id: investmentId, name: "Investment", type: .investment, balance: 500,
-      valuationMode: .calculatedFromTrades)
+    )
     let transfer = Transaction(
       date: try TransactionStoreTestSupport.makeDate("2024-01-15"),
       payee: "",

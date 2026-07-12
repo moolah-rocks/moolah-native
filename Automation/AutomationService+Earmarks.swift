@@ -1,6 +1,6 @@
 import Foundation
 
-// Earmark / category / investment / analysis / refresh / crypto-sync
+// Earmark / category / position / analysis / refresh / crypto-sync
 // handlers. All members are `@MainActor` via the containing class.
 extension AutomationService {
 
@@ -262,36 +262,11 @@ extension AutomationService {
     }
   }
 
-  // MARK: - Investment Operations
-
-  /// Sets the investment value for an account on a given date.
-  func setInvestmentValue(
-    profileIdentifier: String,
-    accountName: String,
-    date: Date,
-    value: Decimal
-  ) async throws {
-    let session = try resolveSession(for: profileIdentifier)
-    let account = try await resolveAccount(
-      named: accountName, profileIdentifier: profileIdentifier)
-
-    guard account.type == .investment else {
-      throw AutomationError.invalidParameter(
-        "Account '\(accountName)' is not an investment account")
-    }
-
-    let instrument = session.profile.instrument
-    let amount = InstrumentAmount(quantity: value, instrument: instrument)
-    await session.investmentStore.setValue(accountId: account.id, date: date, value: amount)
-  }
-
   /// Returns positions for a given investment account.
   func getPositions(profileIdentifier: String, accountName: String) async throws -> [Position] {
-    let session = try resolveSession(for: profileIdentifier)
     let account = try await resolveAccount(
       named: accountName, profileIdentifier: profileIdentifier)
-    await session.investmentStore.loadPositions(accountId: account.id)
-    return session.investmentStore.positions
+    return account.positions
   }
 
   // MARK: - Analysis Operations

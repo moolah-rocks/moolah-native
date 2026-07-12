@@ -50,7 +50,6 @@ actor DataExporter {
     let earmarks: [Earmark]
     let earmarkBudgets: [UUID: [EarmarkBudgetItem]]
     let transactions: [Transaction]
-    let investmentValues: [UUID: [InvestmentValue]]
   }
 
   private func downloadAllStages(
@@ -93,17 +92,6 @@ actor DataExporter {
       try await fetchAllTransactions()
     }
 
-    progress(.downloading(step: "investment values"))
-    let investmentValues = try await runStage(
-      "investment values", signpost: "export.investmentValues", signpostID: signpostID
-    ) {
-      var values: [UUID: [InvestmentValue]] = [:]
-      for account in accounts where account.type == .investment {
-        values[account.id] = try await fetchAllInvestmentValues(accountId: account.id)
-      }
-      return values
-    }
-
     return StagedDownloads(
       accounts: accounts,
       accountGroups: accountGroups,
@@ -111,8 +99,7 @@ actor DataExporter {
       taxOwners: taxOwners,
       earmarks: earmarks,
       earmarkBudgets: budgets,
-      transactions: transactions,
-      investmentValues: investmentValues)
+      transactions: transactions)
   }
 
   private func downloadTaxOwners(
@@ -173,8 +160,7 @@ actor DataExporter {
       categories: stages.categories,
       earmarks: stages.earmarks,
       earmarkBudgets: stages.earmarkBudgets,
-      transactions: stages.transactions,
-      investmentValues: stages.investmentValues
+      transactions: stages.transactions
     )
   }
 
@@ -203,27 +189,5 @@ actor DataExporter {
       filter: TransactionFilter(scheduled: .scheduledOnly))
     let existingIds = Set(nonScheduled.map(\.id))
     return nonScheduled + scheduled.filter { !existingIds.contains($0.id) }
-  }
-
-  private func fetchAllInvestmentValues(accountId: UUID) async throws -> [InvestmentValue] {
-    var allValues: [InvestmentValue] = []
-    var page = 0
-    let pageSize = 200
-
-    while true {
-      let result = try await backend.investments.fetchValues(
-        accountId: accountId,
-        page: page,
-        pageSize: pageSize
-      )
-      allValues.append(contentsOf: result.values)
-
-      if result.values.count < pageSize {
-        break
-      }
-      page += 1
-    }
-
-    return allValues
   }
 }

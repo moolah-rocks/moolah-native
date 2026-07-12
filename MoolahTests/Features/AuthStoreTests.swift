@@ -124,7 +124,6 @@ private struct TestAuthBackend: BackendProvider {
   let earmarks: any EarmarkRepository
   let analysis: any AnalysisRepository
   let insightDataSource: any InsightDataSource
-  let investments: any InvestmentRepository
   let conversionService: any InstrumentConversionService
   let csvImportProfiles: any CSVImportProfileRepository
   let importRules: any ImportRuleRepository
@@ -145,7 +144,6 @@ private struct TestAuthBackend: BackendProvider {
     self.earmarks = backend.earmarks
     self.analysis = backend.analysis
     self.insightDataSource = backend.insightDataSource
-    self.investments = backend.investments
     self.conversionService = backend.conversionService
     self.csvImportProfiles = backend.csvImportProfiles
     self.importRules = backend.importRules

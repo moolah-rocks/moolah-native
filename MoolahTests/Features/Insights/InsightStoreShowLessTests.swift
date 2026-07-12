@@ -150,7 +150,6 @@ private struct FailingDismissalBackend: BackendProvider, @unchecked Sendable {
   var earmarks: any EarmarkRepository { inner.earmarks }
   var analysis: any AnalysisRepository { inner.analysis }
   var insightDataSource: any InsightDataSource { inner.insightDataSource }
-  var investments: any InvestmentRepository { inner.investments }
   var conversionService: any InstrumentConversionService { inner.conversionService }
   var csvImportProfiles: any CSVImportProfileRepository { inner.csvImportProfiles }
   var importRules: any ImportRuleRepository { inner.importRules }

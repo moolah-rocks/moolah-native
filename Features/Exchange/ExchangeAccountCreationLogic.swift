@@ -72,7 +72,6 @@ struct ExchangeAccountCreationLogic {
       name: trimmedName,
       type: .exchange,
       instrument: profileInstrument,
-      valuationMode: .calculatedFromTrades,
       exchangeProvider: provider,
       taxOwnerIds: taxOwnerIds)
 

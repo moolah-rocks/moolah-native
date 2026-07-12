@@ -19,7 +19,6 @@ struct ExportedData {
   let earmarks: [Earmark]
   let earmarkBudgets: [UUID: [EarmarkBudgetItem]]
   let transactions: [Transaction]
-  let investmentValues: [UUID: [InvestmentValue]]
 
   init(
     version: Int = ExportFormatVersion.current,
@@ -35,8 +34,7 @@ struct ExportedData {
     categories: [Category],
     earmarks: [Earmark],
     earmarkBudgets: [UUID: [EarmarkBudgetItem]],
-    transactions: [Transaction],
-    investmentValues: [UUID: [InvestmentValue]]
+    transactions: [Transaction]
   ) {
     self.version = version
     self.exportedAt = exportedAt
@@ -52,7 +50,6 @@ struct ExportedData {
     self.earmarks = earmarks
     self.earmarkBudgets = earmarkBudgets
     self.transactions = transactions
-    self.investmentValues = investmentValues
   }
 }
 
@@ -74,7 +71,6 @@ extension ExportedData: Codable {
     case earmarks
     case earmarkBudgets
     case transactions
-    case investmentValues
   }
 
   /// Custom decoding keeps exports written before account groups and tax
@@ -120,8 +116,6 @@ extension ExportedData: Codable {
     earmarkBudgets = try container.decode(
       [UUID: [EarmarkBudgetItem]].self, forKey: .earmarkBudgets)
     transactions = try container.decode([Transaction].self, forKey: .transactions)
-    investmentValues = try container.decode(
-      [UUID: [InvestmentValue]].self, forKey: .investmentValues)
   }
 
   func encode(to encoder: any Encoder) throws {
@@ -155,7 +149,6 @@ extension ExportedData: Codable {
     try container.encode(earmarks, forKey: .earmarks)
     try container.encode(earmarkBudgets, forKey: .earmarkBudgets)
     try container.encode(transactions, forKey: .transactions)
-    try container.encode(investmentValues, forKey: .investmentValues)
   }
 }
 
@@ -186,8 +179,7 @@ extension ExportedData {
       categories: categories,
       earmarks: earmarks,
       earmarkBudgets: earmarkBudgets,
-      transactions: transactions,
-      investmentValues: investmentValues
+      transactions: transactions
     )
   }
 
@@ -200,7 +192,6 @@ extension ExportedData {
       }
       + earmarkBudgets.values.flatMap { items in items.map(\.amount.instrument) }
       + transactions.flatMap { transaction in transaction.legs.map(\.instrument) }
-      + investmentValues.values.flatMap { values in values.map(\.value.instrument) }
   }
 }
 

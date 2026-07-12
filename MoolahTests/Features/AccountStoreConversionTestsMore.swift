@@ -11,7 +11,7 @@ struct AccountStoreConversionTestsMore {
     let accountId = UUID()
     let account = Account(
       id: accountId, name: "Portfolio", type: .investment, instrument: .AUD,
-      valuationMode: .recordedValue)
+    )
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(accounts: [account], in: database)
 

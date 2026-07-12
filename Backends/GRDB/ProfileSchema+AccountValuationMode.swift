@@ -8,7 +8,7 @@ extension ProfileSchema {
   /// Default `'recordedValue'` backfills every existing row so the
   /// CHECK constraint stays satisfied; per
   /// `guides/DATABASE_SCHEMA_GUIDE.md` enum-shaped TEXT columns must
-  /// pin the raw values from the matching Swift enum (`ValuationMode`).
+  /// pin the legacy wire values used by older app versions.
   static func addAccountValuationMode(_ database: Database) throws {
     try database.execute(
       sql: """

@@ -129,7 +129,7 @@ final class CanonicalInstrumentResolver: @unchecked Sendable {
 
   /// Refreshes once, then rebuilds on every registry-change tick. Mirrors the
   /// `for await _ in observeChanges()` pattern used by the per-profile stores
-  /// (e.g. `InvestmentStore`). Returns the task so the owner can cancel it.
+  /// Returns the task so the owner can cancel it.
   ///
   /// The `changes` stream is injected (not fetched from `registry`) so callers
   /// can share a single `observeChanges()` subscription across multiple

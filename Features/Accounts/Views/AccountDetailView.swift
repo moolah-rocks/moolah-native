@@ -98,7 +98,6 @@ struct AccountDetailView: View {
     // chain's native token — match production so the preview exercises
     // the real `multiInstrumentPositionsSplit` branch.
     instrument: .AUD,
-    valuationMode: .calculatedFromTrades,
     walletAddress: "0x0000000000000000000000000000000000000000",
     chainId: 1)
   // In-memory preview session can't fail in practice: opens an ephemeral

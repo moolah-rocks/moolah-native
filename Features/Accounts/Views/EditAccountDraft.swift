@@ -13,7 +13,6 @@ struct EditAccountDraft: Equatable, Sendable {
     updated.type = type
     updated.instrument = instrument
     updated.isHidden = isHidden
-    updated.valuationMode = .calculatedFromTrades
     updated.taxOwnerIds = taxOwnerIds
     return updated
   }

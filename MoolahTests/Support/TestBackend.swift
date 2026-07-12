@@ -335,27 +335,6 @@ enum TestBackend {
     return categories
   }
 
-  /// Seeds investment values into the in-memory store. Auto-seeds a stub
-  /// account row for any `accountId` the test didn't seed explicitly,
-  /// matching the SwiftData-era seeding pattern.
-  @discardableResult
-  static func seed(
-    investmentValues: [UUID: [InvestmentValue]],
-    in database: any DatabaseWriter,
-    instrument: Instrument = .defaultTestInstrument
-  ) -> [UUID: [InvestmentValue]] {
-    writeOrTrap(database) { database in
-      for (accountId, values) in investmentValues {
-        try ensurePlaceholderAccount(
-          database: database, id: accountId, instrument: instrument)
-        for value in values {
-          try InvestmentValueRow(domain: value, accountId: accountId).insert(database)
-        }
-      }
-    }
-    return investmentValues
-  }
-
   /// Seeds earmark budget items into the in-memory store. Auto-seeds a
   /// stub earmark row keyed by `earmarkId` and stub category rows for
   /// every `item.categoryId` the test didn't seed explicitly.

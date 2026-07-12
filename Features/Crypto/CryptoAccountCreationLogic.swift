@@ -50,7 +50,6 @@ struct CryptoAccountCreationLogic {
       name: trimmedName,
       type: .crypto,
       instrument: accountInstrument,
-      valuationMode: .calculatedFromTrades,
       walletAddress: walletAddress,
       chainId: chain.chainId,
       taxOwnerIds: taxOwnerIds

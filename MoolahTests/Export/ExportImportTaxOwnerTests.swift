@@ -86,8 +86,7 @@ struct ExportImportTaxOwnerTests {
       ],
       earmarks: [],
       earmarkBudgets: [:],
-      transactions: [],
-      investmentValues: [:])
+      transactions: [])
     let database = try ProfileDatabase.openInMemory()
 
     _ = try await CloudKitDataImporter(database: database, currencyCode: instrument.id)
@@ -139,8 +138,7 @@ struct ExportImportTaxOwnerTests {
       categories: [Category(name: "Written First", taxOwnerIds: [owner.id])],
       earmarks: [],
       earmarkBudgets: [:],
-      transactions: [],
-      investmentValues: [:])
+      transactions: [])
 
     await #expect(throws: (any Error).self) {
       _ = try await CloudKitDataImporter(database: database, currencyCode: instrument.id)

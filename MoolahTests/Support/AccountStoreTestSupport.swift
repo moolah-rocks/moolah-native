@@ -16,12 +16,11 @@ enum AccountStoreTestSupport {
     balance: Decimal = 0,
     position: Int = 0,
     isHidden: Bool = false,
-    valuationMode: ValuationMode = .recordedValue,
     in database: any DatabaseWriter
   ) -> Account {
     let account = Account(
       id: id, name: name, type: type, instrument: instrument, position: position,
-      isHidden: isHidden, valuationMode: valuationMode)
+      isHidden: isHidden)
     let balanceAmount = InstrumentAmount(quantity: balance, instrument: instrument)
     TestBackend.seed(
       accounts: [(account: account, openingBalance: balanceAmount)],
@@ -121,27 +120,6 @@ final class FailingAccountRepository: AccountRepository, @unchecked Sendable {
     let observers = state.withLock { Array($0.continuations.values) }
     for continuation in observers {
       continuation.yield(snapshot)
-    }
-  }
-
-  /// In-memory equivalent of the GRDB single-SQL backfill: flips every
-  /// investment account in the local array to `.calculatedFromTrades`.
-  /// The fake doesn't model investment-value snapshots, so "no
-  /// snapshots" is implicit — every investment account in this fake
-  /// represents the migration's positive case. No tests on this fake
-  /// currently exercise the migration; the conformance is here to
-  /// satisfy the protocol.
-  func backfillValuationModeForUnsnapshotInvestmentAccounts() async throws -> Int {
-    if shouldFail { throw BackendError.networkUnavailable }
-    return state.withLock { state -> Int in
-      var changed = 0
-      for index in state.accounts.indices where state.accounts[index].type == .investment {
-        if state.accounts[index].valuationMode != .calculatedFromTrades {
-          state.accounts[index].valuationMode = .calculatedFromTrades
-          changed += 1
-        }
-      }
-      return changed
     }
   }
 }

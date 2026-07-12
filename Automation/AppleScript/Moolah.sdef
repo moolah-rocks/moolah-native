@@ -82,9 +82,6 @@
       <property name="balance" code="Mbal" type="real" access="r" description="The current balance of the account.">
         <cocoa key="balance"/>
       </property>
-      <property name="investment value" code="Mivl" type="real" access="r" description="The investment value of the account (0 if not an investment account).">
-        <cocoa key="investmentValue"/>
-      </property>
       <property name="hidden" code="Mhid" type="boolean" access="rw" description="Whether the account is hidden.">
         <cocoa key="isHidden"/>
       </property>

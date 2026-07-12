@@ -18,7 +18,6 @@ struct ActiveExport: Sendable, Equatable, Identifiable {
     case "categories": return "Fetching categories…"
     case "earmarks": return "Fetching earmarks…"
     case "transactions": return "Fetching transactions…"
-    case "investment values": return "Fetching investment values…"
     case "encoding": return "Encoding file…"
     case "writing": return "Writing file…"
     default:

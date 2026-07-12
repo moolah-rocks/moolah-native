@@ -51,7 +51,7 @@ struct AccountStoreLoadingTests {
     // Investment-like accounts always contribute their positions.
     _ = AccountStoreTestSupport.seedAccount(
       name: "Investment", type: .investment, balance: Decimal(2_000_000) / 100,
-      valuationMode: .calculatedFromTrades, in: database)
+      in: database)
     _ = AccountStoreTestSupport.seedAccount(
       name: "Hidden", type: .asset, balance: Decimal(100_000_000) / 100, isHidden: true,
       in: database)

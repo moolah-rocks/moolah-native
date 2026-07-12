@@ -176,7 +176,7 @@ struct AnalysisMultiInstrumentHoldingTests {
         ]))
     // Day2: stale market value = 200 USD on investment account. Bank tick to ensure
     // a daily-balance entry is emitted on day2.
-    try await backend.investments.setValue(
+    try await backend.seedLegacyInvestmentValue(
       accountId: investment.id, date: day2,
       value: InstrumentAmount(quantity: 200, instrument: usd))
     _ = try await backend.transactions.create(

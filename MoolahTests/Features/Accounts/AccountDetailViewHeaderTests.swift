@@ -9,7 +9,6 @@ struct AccountDetailViewHeaderTests {
   func cryptoWithChainShowsHeader() {
     let account = Account(
       name: "Wallet", type: .crypto, instrument: .AUD,
-      valuationMode: .calculatedFromTrades,
       walletAddress: "0x0000000000000000000000000000000000000000", chainId: 1)
     #expect(AccountDetailLayout.showsSyncedHeader(for: account))
   }
@@ -18,7 +17,7 @@ struct AccountDetailViewHeaderTests {
   func cryptoWithoutChainHidesHeader() {
     let account = Account(
       name: "Wallet", type: .crypto, instrument: .AUD,
-      valuationMode: .calculatedFromTrades, walletAddress: "0xabc", chainId: nil)
+      walletAddress: "0xabc", chainId: nil)
     #expect(!AccountDetailLayout.showsSyncedHeader(for: account))
   }
 
@@ -26,7 +25,7 @@ struct AccountDetailViewHeaderTests {
   func exchangeShowsHeader() {
     let account = Account(
       name: "Coinstash", type: .exchange, instrument: .AUD,
-      valuationMode: .calculatedFromTrades, exchangeProvider: .coinstash)
+      exchangeProvider: .coinstash)
     #expect(AccountDetailLayout.showsSyncedHeader(for: account))
   }
 
@@ -43,7 +42,7 @@ struct AccountDetailViewHeaderTests {
   func investmentHidesHeader() {
     let account = Account(
       name: "Portfolio", type: .investment, instrument: .AUD,
-      valuationMode: .calculatedFromTrades)
+    )
     #expect(!AccountDetailLayout.showsSyncedHeader(for: account))
   }
 }

@@ -29,7 +29,6 @@ struct AutomationServiceSyncedAccountTests {
     #expect(account.type == .crypto)
     #expect(account.walletAddress == walletAddress)
     #expect(account.chainId == 1)
-    #expect(account.valuationMode == .calculatedFromTrades)
   }
 
   @Test("createCryptoAccount rejects an unsupported chain id")
@@ -75,7 +74,6 @@ struct AutomationServiceSyncedAccountTests {
     #expect(account.name == "Coinstash")
     #expect(account.type == .exchange)
     #expect(account.exchangeProvider == .coinstash)
-    #expect(account.valuationMode == .calculatedFromTrades)
     #expect(try tokenStore.token(for: account.id) == "TOK123")
 
     tokenStore.delete(for: account.id)

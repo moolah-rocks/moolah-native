@@ -116,7 +116,7 @@ enum WindowedSyncStore {
   ) throws -> Account {
     let account = Account(
       name: "Exchange", type: .exchange, instrument: .AUD,
-      valuationMode: .calculatedFromTrades, exchangeProvider: .coinstash)
+      exchangeProvider: .coinstash)
     _ = TestBackend.seed(accounts: [account], in: fixture.database)
 
     let tokenStore = ExchangeTokenStore(synchronizable: false)

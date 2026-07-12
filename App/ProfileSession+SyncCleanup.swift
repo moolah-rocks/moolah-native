@@ -30,8 +30,7 @@ extension ProfileSession {
     setUpTask = nil
 
     // Cancel any in-flight cross-store side-effect work
-    // (`seedBuiltInCryptoPresets`, the cryptoTokenStore ->
-    // `investmentStore.revaluateLoadedPositions` callback). Tasks are
+    // (for example, RPC endpoint reloads). Tasks are
     // append-only, so draining the array empties future iterations.
     for task in crossStoreUpdateTasks {
       task.cancel()
@@ -50,9 +49,8 @@ extension ProfileSession {
     categoryStore.stopObserving()
     importRuleStore.stopObserving()
     transactionStore.stopObserving()
-    investmentStore.stopObserving()
     analysisStore.stopObserving()
-    holdingsCostLedgerStore?.stopObserving()
+    holdingsCostLedgerStore.stopObserving()
   }
 
   // MARK: - Profile Update

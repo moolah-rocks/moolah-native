@@ -22,7 +22,7 @@ enum SidebarAccount {
   /// single-toggle-pane layout in `AccountDetailSplitTests`.
   case everydayFiat
   /// The Portfolio account from the `.investmentTradeReady` seed. Type
-  /// `.investment`, `valuationMode = .calculatedFromTrades`, with two buy
+  /// `.investment`, with two buy
   /// trades producing a net VGS.AX position (non-host holding). Drives
   /// `AccountDetailUnifiedLayoutTests` to exercise the Increment-4
   /// `AccountDetailView(alwaysShowsFullSurface: true)` dispatch path.

@@ -19,12 +19,12 @@ struct GRDBDailyBalancesAggregationTests {
     let tradesAccount = Account(
       id: UUID(), name: "Trades Account", type: .investment,
       instrument: .defaultTestInstrument,
-      valuationMode: .calculatedFromTrades)
+    )
     _ = try await backend.accounts.create(tradesAccount)
     let snapshotAccount = Account(
       id: UUID(), name: "Snapshot Account", type: .investment,
       instrument: .defaultTestInstrument,
-      valuationMode: .recordedValue)
+    )
     _ = try await backend.accounts.create(snapshotAccount)
 
     let aggregation = try await backend.fetchAggregationForTesting(
@@ -40,12 +40,12 @@ struct GRDBDailyBalancesAggregationTests {
     let tradesAccount = Account(
       id: UUID(), name: "Trades Account", type: .investment,
       instrument: .defaultTestInstrument,
-      valuationMode: .calculatedFromTrades)
+    )
     _ = try await backend.accounts.create(tradesAccount)
     let snapshotAccount = Account(
       id: UUID(), name: "Snapshot Account", type: .investment,
       instrument: .defaultTestInstrument,
-      valuationMode: .recordedValue)
+    )
     _ = try await backend.accounts.create(snapshotAccount)
     let bankAccount = Account(
       id: UUID(), name: "Cash", type: .bank,
@@ -87,7 +87,7 @@ struct GRDBDailyBalancesAggregationTests {
     let snapshotAccount = Account(
       id: UUID(), name: "Snapshot Account", type: .investment,
       instrument: .defaultTestInstrument,
-      valuationMode: .recordedValue)
+    )
     _ = try await backend.accounts.create(snapshotAccount)
 
     let aggregation = try await backend.fetchAggregationForTesting(

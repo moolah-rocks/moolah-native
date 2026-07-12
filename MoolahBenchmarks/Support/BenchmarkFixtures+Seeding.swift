@@ -164,45 +164,4 @@ extension BenchmarkFixtures {
     let categories: [UUID]
     let earmarks: [UUID]
   }
-
-  static func seedInvestmentValues(
-    scale: BenchmarkScale,
-    accountIds: [UUID],
-    database: Database,
-    instrument: Instrument
-  ) {
-    // Investment accounts are the last N in the account list.
-    let investmentAccountIds = Array(accountIds.suffix(scale.investmentAccounts))
-    guard !investmentAccountIds.isEmpty else { return }
-
-    guard let sixMonthsAgo = Calendar.current.date(byAdding: .month, value: -6, to: Date()) else {
-      preconditionFailure("Calendar failed to compute a date six months ago")
-    }
-    let timeSpan = Date().timeIntervalSince(sixMonthsAgo)
-
-    for i in 0..<scale.investmentValues {
-      let id = deterministicUUID(namespace: 0x06, index: i)
-      let investAccountId = investmentAccountIds[i % investmentAccountIds.count]
-
-      let fraction = Double(i) / Double(max(1, scale.investmentValues - 1))
-      let date = sixMonthsAgo.addingTimeInterval(fraction * timeSpan)
-
-      // Value between 100 and 5000 units.
-      let value = InstrumentAmount(
-        quantity: Decimal((i % 4900 + 100)), instrument: instrument
-      ).storageValue
-
-      let row = InvestmentValueRow(
-        id: id,
-        recordName: InvestmentValueRow.recordName(for: id),
-        accountId: investAccountId,
-        date: date,
-        value: value,
-        instrumentId: instrument.id,
-        encodedSystemFields: nil)
-      expecting("benchmark investment value insert failed") {
-        try row.insert(database)
-      }
-    }
-  }
 }

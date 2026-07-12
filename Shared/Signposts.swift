@@ -10,7 +10,7 @@ enum Signposts {
   static let importPipeline = OSLog(subsystem: "com.moolah.app", category: "ImportPipeline")
   /// Per-stage boundaries for the profile export pipeline
   /// (`DataExporter.export`). Each step (accounts, categories, earmarks,
-  /// transactions, investmentValues) emits its own region so hangs surface
+  /// transactions) emits its own region so hangs surface
   /// in Instruments rather than as a user-reported silent failure.
   static let export = OSLog(subsystem: "com.moolah.app", category: "Export")
   /// Per-stage boundaries for the crypto wallet sync pipeline. Named

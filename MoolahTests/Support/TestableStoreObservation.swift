@@ -301,10 +301,3 @@ extension TransactionStore: TestableStoreObservation {
   /// snapshot is the store itself.
   var snapshot: TransactionStore { self }
 }
-
-extension InvestmentStore: TestableStoreObservation {
-  var observationTicks: AsyncStream<Void> { testObservationTickStream }
-  /// Tests assert directly against published `@Observable` state; the
-  /// snapshot is the store itself.
-  var snapshot: InvestmentStore { self }
-}

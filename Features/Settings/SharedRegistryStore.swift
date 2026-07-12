@@ -12,8 +12,8 @@ import OSLog
 /// (`registrations`, `instruments`, `providerMappings`,
 /// `registrationsVersion`) and the methods that mutate the shared
 /// registry (`setStatus`, `removeRegistration`, `loadRegistrations`).
-/// Per-session UI state — `isLoading`, `error`, `onRegistrationsChanged`
-/// — lives in the per-session `CryptoTokenStore` façade, which proxies
+/// Per-session UI state — `isLoading` and `error` — lives in the
+/// per-session `CryptoTokenStore` façade, which proxies
 /// data reads through this store and catches mutation errors locally
 /// so a transient failure in one session doesn't leak onto every
 /// Settings screen.

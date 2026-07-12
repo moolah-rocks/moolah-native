@@ -33,7 +33,7 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
   /// before it reaches the valuator so multi-account group hosts never stamp a
   /// misleading chain.
   let accountChainId: Int?
-  /// `true` for investment `.calculatedFromTrades` hosts: forces the
+  /// `true` for investment hosts: forces the
   /// performance tiles + positions pane on even when only host currency
   /// remains (every holding sold). Other hosts leave it `false` and gate
   /// each element on whether the account actually holds non-host positions.
@@ -247,7 +247,7 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
   /// data yet → invested `0` → suppressed).
   private func sharedLedger() async -> HoldingsCostLedger? {
     do {
-      return try await session?.holdingsCostLedgerStore?.ledger()
+      return try await session?.holdingsCostLedgerStore.ledger()
     } catch is CancellationError {
       return nil
     } catch {

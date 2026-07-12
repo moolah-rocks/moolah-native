@@ -258,28 +258,4 @@ struct DeletionJournalRepositoryTests {
     #expect(try await entries(database).isEmpty)
   }
 
-  @Test("investment removeValue journals the deleted value under the sentinel zone")
-  func investmentRemoveValueJournals() async throws {
-    let database = try makeDatabase()
-    let repo = GRDBInvestmentRepository(
-      database: database,
-      defaultInstrument: .AUD,
-      instrumentResolver: try SharedRegistryTestSupport.makeSharedRegistry())
-    let accountId = UUID()
-    let amount = InstrumentAmount(quantity: 100, instrument: .AUD)
-    try await repo.setValue(accountId: accountId, date: Self.date, value: amount)
-    #expect(try await entries(database).isEmpty)
-
-    try await repo.removeValue(accountId: accountId, date: Self.date)
-    let recorded = try await entries(database)
-    #expect(recorded.count == 1)
-    #expect(recorded.first?.zoneName == DeletionJournal.profileDataSentinelZone)
-    #expect(recorded.first?.recordType == InvestmentValueRow.recordType)
-
-    // `setValue` after a remove mints a NEW value id (a new record), so the
-    // removed value's deletion correctly still stands — D1-b clears a tombstone
-    // only when the SAME id is re-created, which the other suites cover.
-    try await repo.setValue(accountId: accountId, date: Self.date, value: amount)
-    #expect(try await entries(database).count == 1)
-  }
 }

@@ -20,8 +20,6 @@ extension UITestSeedHydrator {
     let type: AccountType
     let instrumentId: String
     let position: Int
-    /// Persisted compatibility field. Runtime valuation is position-derived.
-    let valuationMode: ValuationMode
     /// Optional back-reference into `account_group.id`. `nil` for a
     /// standalone account; set to the owning group's id to make the
     /// account a member (drives the group-scope filter test).
@@ -37,7 +35,6 @@ extension UITestSeedHydrator {
       type: AccountType,
       instrumentId: String,
       position: Int,
-      valuationMode: ValuationMode = .calculatedFromTrades,
       groupId: UUID? = nil,
       walletAddress: String? = nil,
       chainId: Int? = nil
@@ -47,7 +44,6 @@ extension UITestSeedHydrator {
       self.type = type
       self.instrumentId = instrumentId
       self.position = position
-      self.valuationMode = valuationMode
       self.groupId = groupId
       self.walletAddress = walletAddress
       self.chainId = chainId
@@ -144,7 +140,7 @@ extension UITestSeedHydrator {
       position: spec.position,
       isHidden: false,
       encodedSystemFields: nil,
-      valuationMode: spec.valuationMode.rawValue,
+      valuationMode: "calculatedFromTrades",
       walletAddress: spec.walletAddress,
       chainId: spec.chainId,
       groupId: spec.groupId)

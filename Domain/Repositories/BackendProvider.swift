@@ -19,7 +19,6 @@ protocol BackendProvider: Sendable {
   /// recent-candidate window the deterministic `InsightEngine` consumes.
   /// Built from the same per-profile database as `analysis`.
   var insightDataSource: any InsightDataSource { get }
-  var investments: any InvestmentRepository { get }
   var conversionService: any InstrumentConversionService { get }
   var csvImportProfiles: any CSVImportProfileRepository { get }
   var importRules: any ImportRuleRepository { get }

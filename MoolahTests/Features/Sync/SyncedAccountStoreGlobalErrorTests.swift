@@ -229,7 +229,7 @@ struct SyncedAccountStoreGlobalErrorTests {
   ) throws -> Account {
     let account = Account(
       name: "Coinstash", type: .exchange, instrument: .AUD,
-      valuationMode: .calculatedFromTrades, exchangeProvider: .coinstash)
+      exchangeProvider: .coinstash)
     _ = TestBackend.seed(accounts: [account], in: fixture.database)
     let tokenStore = ExchangeTokenStore(synchronizable: false)
     try tokenStore.save(token: token, for: account.id)

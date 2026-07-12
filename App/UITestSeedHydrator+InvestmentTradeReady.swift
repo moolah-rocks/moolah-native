@@ -3,8 +3,7 @@ import GRDB
 
 // Investment-trade-ready seed helpers for `UITestSeedHydrator`.
 //
-// Seeds a CloudKit-backed AUD profile with one `.investment` account whose
-// `valuationMode` is `.calculatedFromTrades`. Two buy trades produce a net
+// Seeds a CloudKit-backed AUD profile with one `.investment` account. Two buy trades produce a net
 // 30 VGS.AX position (non-host holding), which triggers both the Increment-4
 // `AccountDetailView(alwaysShowsFullSurface: true)` routing and the macOS
 // pinned-positions layout (`hasNonHostHoldings == true`).
@@ -44,8 +43,7 @@ extension UITestSeedHydrator {
     }
 
     try database.write { profileDatabase in
-      // Investment account: type `.investment`, valuationMode
-      // `.calculatedFromTrades`. This is the account type that exercises the
+      // This account type exercises the
       // Increment-4 `AccountDetailView(alwaysShowsFullSurface: true)` dispatch.
       try upsertAccount(
         AccountSpec(
@@ -53,8 +51,7 @@ extension UITestSeedHydrator {
           name: fixtures.portfolioAccountName,
           type: .investment,
           instrumentId: audInstrument.id,
-          position: 0,
-          valuationMode: .calculatedFromTrades),
+          position: 0),
         in: profileDatabase)
 
       try seedInvestmentTradeReadyTrades(

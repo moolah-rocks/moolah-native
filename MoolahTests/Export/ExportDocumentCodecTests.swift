@@ -38,11 +38,7 @@ struct ExportDocumentCodecTests {
     let legs = try #require(transactions.first?["legs"] as? [[String: Any]])
     #expect(legs.first?["instrument"] as? String == fixture.stock.id)
 
-    let values = try #require(root["investmentValues"] as? [Any])
-    let accountValues = try #require(
-      uuidDictionaryValue(in: values, for: fixture.accountId) as? [[String: Any]])
-    let value = try #require(accountValues.first?["value"] as? [String: Any])
-    #expect(value["instrument"] as? String == fixture.crypto.id)
+    #expect(root["investmentValues"] == nil)
   }
 
   @Test("version 2 round trip preserves mixed instrument definitions and quantities")
@@ -62,8 +58,6 @@ struct ExportDocumentCodecTests {
     #expect(decoded.transactions.first?.notes == "Preserve ordinary transaction fields")
     #expect(decoded.transactions.first?.legs.first?.instrument == fixture.stock)
     #expect(decoded.transactions.first?.legs.first?.quantity == dec("10"))
-    #expect(decoded.investmentValues[fixture.accountId]?.first?.value.instrument == fixture.crypto)
-    #expect(decoded.investmentValues[fixture.accountId]?.first?.value.quantity == dec("2.5"))
   }
 
   @Test("version 1 export with embedded instruments still decodes")
@@ -79,7 +73,6 @@ struct ExportDocumentCodecTests {
 
     #expect(decoded.version == 1)
     #expect(decoded.accounts.first?.instrument == fixture.stock)
-    #expect(decoded.investmentValues[fixture.accountId]?.first?.value.instrument == fixture.crypto)
     #expect(Set(decoded.instruments) == Set(fixture.data.instruments))
   }
 
@@ -130,16 +123,14 @@ struct ExportDocumentCodecTests {
       categories: fixture.data.categories,
       earmarks: fixture.data.earmarks,
       earmarkBudgets: fixture.data.earmarkBudgets,
-      transactions: fixture.data.transactions,
-      investmentValues: fixture.data.investmentValues
+      transactions: fixture.data.transactions
     )
 
     let encoded = try ExportDocumentCodec().encode(incomplete)
     let decoded = try ExportDocumentCodec().decode(encoded)
 
-    #expect(Set(decoded.instruments) == Set(fixture.data.instruments))
+    #expect(Set(decoded.instruments) == Set([Instrument.AUD, Instrument.USD, fixture.stock]))
     #expect(decoded.accounts.first?.instrument == fixture.stock)
-    #expect(decoded.investmentValues[fixture.accountId]?.first?.value.instrument == fixture.crypto)
   }
 
   @Test("version 2 cannot be encoded without the export document codec")
@@ -162,28 +153,6 @@ struct ExportDocumentCodecTests {
     }
   }
 
-  @Test("instrument references materially reduce a large investment history export")
-  func versionTwoIsMateriallySmaller() throws {
-    let stock = Instrument.stock(
-      ticker: "BHP.AX", exchange: "ASX", name: "BHP Group Limited", decimals: 4)
-    let accountId = UUID()
-    let start = Date(timeIntervalSince1970: 1_700_000_000)
-    let values = (0..<500).map { offset in
-      InvestmentValue(
-        date: start.addingTimeInterval(TimeInterval(offset * 86_400)),
-        value: InstrumentAmount(quantity: Decimal(offset) / 10, instrument: stock)
-      )
-    }
-    let legacy = makeInvestmentHistory(
-      version: 1, accountId: accountId, instrument: stock, values: values)
-    let current = makeInvestmentHistory(
-      version: 2, accountId: accountId, instrument: stock, values: values)
-
-    let legacySize = try legacyEncoder().encode(legacy).count
-    let currentSize = try ExportDocumentCodec().encode(current).count
-
-    #expect(currentSize < legacySize * 3 / 5)
-  }
 }
 
 extension ExportDocumentCodecTests {
@@ -192,7 +161,6 @@ extension ExportDocumentCodecTests {
     let accountId: UUID
     let earmarkId: UUID
     let stock: Instrument
-    let crypto: Instrument
   }
 
   private struct MixedFixtureIds {
@@ -225,15 +193,13 @@ extension ExportDocumentCodecTests {
       categories: [Category(id: ids.categoryId, name: "Investing")],
       earmarks: makeFixtureEarmarks(ids: ids),
       earmarkBudgets: makeFixtureBudgets(ids: ids),
-      transactions: makeFixtureTransactions(ids: ids, stock: stock),
-      investmentValues: makeFixtureInvestmentValues(ids: ids, crypto: crypto)
+      transactions: makeFixtureTransactions(ids: ids, stock: stock)
     )
     return MixedInstrumentFixture(
       data: data,
       accountId: ids.accountId,
       earmarkId: ids.earmarkId,
-      stock: stock,
-      crypto: crypto)
+      stock: stock)
   }
 
   private func makeFixtureAccounts(ids: MixedFixtureIds, stock: Instrument) -> [Account] {
@@ -294,47 +260,6 @@ extension ExportDocumentCodecTests {
     ]
   }
 
-  private func makeFixtureInvestmentValues(
-    ids: MixedFixtureIds,
-    crypto: Instrument
-  ) -> [UUID: [InvestmentValue]] {
-    [
-      ids.accountId: [
-        InvestmentValue(
-          date: Date(timeIntervalSince1970: 1_700_200_000),
-          value: InstrumentAmount(quantity: dec("2.5"), instrument: crypto))
-      ]
-    ]
-  }
-
-  private func makeInvestmentHistory(
-    version: Int,
-    accountId: UUID,
-    instrument: Instrument,
-    values: [InvestmentValue]
-  ) -> ExportedData {
-    ExportedData(
-      version: version,
-      exportedAt: Date(timeIntervalSince1970: 1_700_000_000),
-      profileLabel: "Large history",
-      currencyCode: Instrument.AUD.id,
-      financialYearStartMonth: 7,
-      instruments: [Instrument.AUD, instrument],
-      accounts: [
-        Account(
-          id: accountId,
-          name: "Brokerage",
-          type: .investment,
-          instrument: instrument)
-      ],
-      categories: [],
-      earmarks: [],
-      earmarkBudgets: [:],
-      transactions: [],
-      investmentValues: [accountId: values]
-    )
-  }
-
   private func legacyEncoder() -> JSONEncoder {
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
@@ -358,4 +283,5 @@ extension ExportDocumentCodecTests {
     }
     return nil
   }
+
 }

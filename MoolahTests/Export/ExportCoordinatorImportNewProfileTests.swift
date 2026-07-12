@@ -143,8 +143,7 @@ struct ExportCoordinatorImportNewProfileTests {
       categories: [],
       earmarks: [],
       earmarkBudgets: [:],
-      transactions: [],
-      investmentValues: [:]
+      transactions: []
     )
     let badURL = makeTempFileURL()
     defer { try? FileManager.default.removeItem(at: badURL) }

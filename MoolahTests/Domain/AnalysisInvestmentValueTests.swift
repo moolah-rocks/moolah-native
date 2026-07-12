@@ -33,7 +33,7 @@ struct AnalysisInvestmentValueTests {
         ]))
 
     let day2 = try AnalysisTestHelpers.date(year: 2025, month: 3, day: 2)
-    try await backend.investments.setValue(
+    try await backend.seedLegacyInvestmentValue(
       accountId: investmentAccount.id,
       date: day2,
       value: InstrumentAmount(quantity: 9_999, instrument: .defaultTestInstrument))
@@ -114,7 +114,7 @@ struct AnalysisInvestmentValueTests {
     // Persisted for backward-compatible storage and sync only. It must not
     // participate in the runtime historical balance fold.
     let preWindowDate = try AnalysisTestHelpers.date(year: 2025, month: 2, day: 15)
-    try await backend.investments.setValue(
+    try await backend.seedLegacyInvestmentValue(
       accountId: investmentAccount.id,
       date: preWindowDate,
       value: InstrumentAmount(quantity: 1000, instrument: .defaultTestInstrument))
