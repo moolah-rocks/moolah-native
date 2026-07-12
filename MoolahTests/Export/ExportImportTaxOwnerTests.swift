@@ -31,9 +31,7 @@ struct ExportImportTaxOwnerTests {
       backend: seed.backend,
       profile: sourceProfile)
 
-    let exported = try JSONDecoder.exportDecoder.decode(
-      ExportedData.self,
-      from: Data(contentsOf: fileURL))
+    let exported = try ExportDocumentCodec().decode(Data(contentsOf: fileURL))
     #expect(exported.defaultTaxOwnerId == seed.defaultOwner.id)
     #expect(Set(exported.taxOwners) == [seed.defaultOwner, seed.trustOwner])
 
@@ -182,9 +180,7 @@ struct ExportImportTaxOwnerTests {
       }
       """
 
-    let exported = try JSONDecoder.exportDecoder.decode(
-      ExportedData.self,
-      from: Data(legacyJSON.utf8))
+    let exported = try ExportDocumentCodec().decode(Data(legacyJSON.utf8))
     #expect(exported.defaultTaxOwnerId == nil)
     #expect(exported.taxOwners.isEmpty)
   }

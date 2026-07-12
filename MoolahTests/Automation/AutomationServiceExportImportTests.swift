@@ -67,7 +67,7 @@
 
       #expect(FileManager.default.fileExists(atPath: tempURL.path))
       let data = try Data(contentsOf: tempURL)
-      let decoded = try JSONDecoder.exportDecoder.decode(ExportedData.self, from: data)
+      let decoded = try ExportDocumentCodec().decode(data)
       #expect(decoded.profileLabel == "Test Profile")
       #expect(decoded.currencyCode == "AUD")
       #expect(decoded.accounts.count == 1)

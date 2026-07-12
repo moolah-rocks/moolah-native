@@ -159,20 +159,15 @@ actor DataExporter {
     financialYearStartMonth: Int,
     defaultTaxOwnerId: UUID
   ) -> ExportedData {
-    let instruments = collectInstruments(
-      currencyCode: currencyCode,
-      accounts: stages.accounts,
-      accountGroups: stages.accountGroups,
-      transactions: stages.transactions)
-    return ExportedData(
-      version: 1,
+    ExportedData(
+      version: ExportFormatVersion.current,
       exportedAt: Date(),
       profileLabel: profileLabel,
       currencyCode: currencyCode,
       financialYearStartMonth: financialYearStartMonth,
       defaultTaxOwnerId: defaultTaxOwnerId,
       taxOwners: stages.taxOwners,
-      instruments: instruments,
+      instruments: [Instrument.fiat(code: currencyCode)],
       accounts: stages.accounts,
       accountGroups: stages.accountGroups,
       categories: stages.categories,
@@ -199,28 +194,6 @@ actor DataExporter {
     } catch {
       throw ExportError.exportFailed(step: step, underlying: error)
     }
-  }
-
-  private func collectInstruments(
-    currencyCode: String,
-    accounts: [Account],
-    accountGroups: [AccountGroup],
-    transactions: [Transaction]
-  ) -> [Instrument] {
-    let profileInstrument = Instrument.fiat(code: currencyCode)
-    var instrumentsById: [String: Instrument] = [profileInstrument.id: profileInstrument]
-    for account in accounts {
-      instrumentsById[account.instrument.id] = account.instrument
-    }
-    for group in accountGroups {
-      instrumentsById[group.instrument.id] = group.instrument
-    }
-    for txn in transactions {
-      for leg in txn.legs {
-        instrumentsById[leg.instrument.id] = leg.instrument
-      }
-    }
-    return Array(instrumentsById.values)
   }
 
   private func fetchAllTransactions() async throws -> [Transaction] {

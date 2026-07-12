@@ -65,7 +65,7 @@ struct ExportImportAccountGroupsTests {
     try await coordinator.exportToFile(url: tempURL, backend: seed.backend, profile: profile)
 
     let data = try Data(contentsOf: tempURL)
-    let decoded = try JSONDecoder.exportDecoder.decode(ExportedData.self, from: data)
+    let decoded = try ExportDocumentCodec().decode(data)
 
     #expect(decoded.accountGroups.count == 2)
     #expect(decoded.accountGroups.contains { $0.id == seed.savings.id })
@@ -134,7 +134,7 @@ struct ExportImportAccountGroupsTests {
       }
       """
     let data = Data(legacyJSON.utf8)
-    let decoded = try JSONDecoder.exportDecoder.decode(ExportedData.self, from: data)
+    let decoded = try ExportDocumentCodec().decode(data)
     #expect(decoded.accountGroups.isEmpty)
   }
 }
