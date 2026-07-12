@@ -238,29 +238,6 @@ extension ProfileDataSyncHandler {
     }
   }
 
-  nonisolated func applyBatchSaveInvestmentValue(
-    ckRecords: [CKRecord], systemFields: [String: Data], in database: Database
-  ) throws {
-    let context = GRDBBatchSaveContext(
-      ckRecords: ckRecords,
-      systemFields: systemFields,
-      site: "applyGRDBBatchSave[InvestmentValue]")
-    let rows = mapRows(
-      context: context,
-      fieldValues: InvestmentValueRow.fieldValues(from:),
-      idKey: { $0.id.uuidString },
-      stamp: stampSystemFields,
-      canonicalize: { row in
-        var row = row
-        row.instrumentId = self.canonicalInstrumentId(for: row.instrumentId)
-        return row
-      })
-    try writeRemote(site: context.site) {
-      try grdbRepositories.investmentValues.applyRemoteChangesSync(
-        saved: rows, deleted: [], in: database)
-    }
-  }
-
   nonisolated func applyBatchSaveTransaction(
     ckRecords: [CKRecord], systemFields: [String: Data], in database: Database
   ) throws {

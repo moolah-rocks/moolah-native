@@ -16,7 +16,7 @@ struct V9AddCounterpartyAddressMigrationTests {
   @Test("transaction_leg gains counterparty_address column (TEXT, nullable)")
   func transactionLegGainsCounterpartyAddressColumn() throws {
     let queue = try DatabaseQueue()
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v9_add_counterparty_address")
     try queue.read { database in
       let columns = try database.columns(in: "transaction_leg")
       let counterpartyColumn = try #require(
@@ -29,7 +29,7 @@ struct V9AddCounterpartyAddressMigrationTests {
   @Test("legacy leg row inserted without counterparty_address reads back nil")
   func legacyLegDecodesWithNilCounterparty() throws {
     let queue = try DatabaseQueue()
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v9_add_counterparty_address")
     try queue.write { database in
       try Self.seedAccountAndTransaction(database)
       // Insert WITHOUT specifying counterparty_address — simulates a row
@@ -60,7 +60,7 @@ struct V9AddCounterpartyAddressMigrationTests {
   @Test("counterparty_address round-trips through the table")
   func counterpartyAddressRoundTrips() throws {
     let queue = try DatabaseQueue()
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v9_add_counterparty_address")
     try queue.write { database in
       try Self.seedAccountAndTransaction(database)
       try database.execute(

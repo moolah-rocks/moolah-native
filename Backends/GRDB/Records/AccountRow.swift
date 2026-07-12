@@ -22,7 +22,6 @@ struct AccountRow {
     case position
     case isHidden = "is_hidden"
     case encodedSystemFields = "encoded_system_fields"
-    case valuationMode = "valuation_mode"
     case walletAddress = "wallet_address"
     case chainId = "chain_id"
     case exchangeProvider = "exchange_provider"
@@ -45,7 +44,6 @@ struct AccountRow {
     case position
     case isHidden = "is_hidden"
     case encodedSystemFields = "encoded_system_fields"
-    case valuationMode = "valuation_mode"
     case walletAddress = "wallet_address"
     case chainId = "chain_id"
     case exchangeProvider = "exchange_provider"
@@ -63,8 +61,6 @@ struct AccountRow {
   var position: Int
   var isHidden: Bool
   var encodedSystemFields: Data?
-  /// Legacy compatibility field. Runtime valuation is always trade-derived.
-  var valuationMode: String
   /// `0x…` lowercased wallet address, populated when `type == "crypto"`.
   /// Defaulted to `nil` so existing memberwise-init call sites continue
   /// to compile.

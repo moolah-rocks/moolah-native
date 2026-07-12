@@ -60,9 +60,6 @@ extension UnifiedInstrumentIdentityMigration {
       ),
       database.cachedStatement(
         sql: "UPDATE account_group SET instrument_id = ?, needs_push = 1 WHERE instrument_id = ?"),
-      database.cachedStatement(
-        sql: "UPDATE investment_value SET instrument_id = ?, needs_push = 1 WHERE instrument_id = ?"
-      ),
       // Defensive: account.instrument_id is normally a fiat denomination, but the
       // schema does not enforce it — rewrite a retired crypto id if present.
       database.cachedStatement(

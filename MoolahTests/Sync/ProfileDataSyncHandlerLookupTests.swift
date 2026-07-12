@@ -27,7 +27,6 @@ struct ProfileDataSyncHandlerLookupTests {
         position: 0,
         isHidden: false,
         encodedSystemFields: nil,
-        valuationMode: "recordedValue"
       ).upsert(database)
       try TransactionRow(
         id: txnId,
@@ -76,7 +75,6 @@ struct ProfileDataSyncHandlerLookupTests {
         position: 0,
         isHidden: false,
         encodedSystemFields: nil,
-        valuationMode: "recordedValue"
       ).upsert(database)
     }
 

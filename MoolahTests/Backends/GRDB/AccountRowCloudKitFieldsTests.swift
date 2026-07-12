@@ -4,35 +4,24 @@ import Testing
 
 @testable import Moolah
 
-@Suite("AccountRow ↔ CKRecord round-trip (valuationMode)")
+@Suite("AccountRow ↔ CKRecord retired valuation field")
 struct AccountRowCloudKitFieldsTests {
-  @Test("explicit valuationMode round-trips")
-  func roundTrip() throws {
-    for raw in ["recordedValue", "calculatedFromTrades"] {
-      let row = AccountRow(
-        id: UUID(), recordName: "AccountRecord|x", name: "B",
-        type: "investment", instrumentId: "AUD", position: 0,
-        isHidden: false, encodedSystemFields: nil, valuationMode: raw)
-      let zoneID = CKRecordZone.ID(zoneName: "z", ownerName: CKCurrentUserDefaultName)
-      let record = row.toCKRecord(in: zoneID)
-      let decoded = try #require(AccountRow.fieldValues(from: record))
-      #expect(decoded.valuationMode == raw)
-    }
-  }
-
-  @Test("missing CKRecord field decodes as recordedValue")
-  func missingFieldFallsBack() throws {
+  @Test("account round trip neither reads nor writes the retired field")
+  func retiredFieldIsIgnored() throws {
+    let id = UUID()
+    let row = AccountRow(
+      id: id, recordName: "AccountRecord|\(id.uuidString)", name: "Brokerage",
+      type: "investment", instrumentId: "AUD", position: 0,
+      isHidden: false, encodedSystemFields: nil)
     let zoneID = CKRecordZone.ID(zoneName: "z", ownerName: CKCurrentUserDefaultName)
-    let recordID = CKRecord.ID(
-      recordType: AccountRow.recordType, uuid: UUID(), zoneID: zoneID)
-    let record = CKRecord(recordType: AccountRow.recordType, recordID: recordID)
-    record["name"] = "B"
-    record["type"] = "investment"
-    record["instrumentId"] = "AUD"
-    record["position"] = Int64(0)
-    record["isHidden"] = Int64(0)
-    // valuationMode intentionally not set
+
+    let record = row.toCKRecord(in: zoneID)
+    #expect(record["valuationMode"] == nil)
+    record["valuationMode"] = "recordedValue" as CKRecordValue
+
     let decoded = try #require(AccountRow.fieldValues(from: record))
-    #expect(decoded.valuationMode == "recordedValue")
+    #expect(decoded.id == id)
+    #expect(decoded.name == "Brokerage")
+    #expect(decoded.toCKRecord(in: zoneID)["valuationMode"] == nil)
   }
 }

@@ -176,7 +176,6 @@ extension ProfileDataSyncHandler {
     case TransactionLegRow.recordType: return built(try fetchTransactionLegRow(id: uuid))
     case EarmarkRow.recordType: return built(try fetchEarmarkRow(id: uuid))
     case EarmarkBudgetItemRow.recordType: return built(try fetchEarmarkBudgetItemRow(id: uuid))
-    case InvestmentValueRow.recordType: return built(try fetchInvestmentValueRow(id: uuid))
     default: return nil
     }
   }
@@ -277,10 +276,6 @@ extension ProfileDataSyncHandler {
       return {
         self.mapBuiltRows(try self.grdbRepositories.earmarkBudgetItems.fetchRowsSync(ids: ids))
       }
-    case InvestmentValueRow.recordType:
-      return {
-        self.mapBuiltRows(try self.grdbRepositories.investmentValues.fetchRowsSync(ids: ids))
-      }
     default:
       return nil
     }
@@ -348,10 +343,6 @@ extension ProfileDataSyncHandler {
 
   private func fetchEarmarkBudgetItemRow(id: UUID) throws -> EarmarkBudgetItemRow? {
     try grdbRepositories.earmarkBudgetItems.fetchRowSync(id: id)
-  }
-
-  private func fetchInvestmentValueRow(id: UUID) throws -> InvestmentValueRow? {
-    try grdbRepositories.investmentValues.fetchRowSync(id: id)
   }
 
   private func fetchCSVImportProfileRow(id: UUID) throws -> CSVImportProfileRow? {

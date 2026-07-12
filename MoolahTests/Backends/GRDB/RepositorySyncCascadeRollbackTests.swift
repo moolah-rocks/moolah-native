@@ -19,7 +19,7 @@ import Testing
 @Suite("Sync delete cascades roll back atomically on failure")
 struct RepositorySyncCascadeRollbackTests {
   @Test
-  func accountSyncDeleteRollsBackInvestmentValueAndLegEdits() async throws {
+  func accountSyncDeleteRollsBackLegEdits() async throws {
     let database = try ProfileDatabase.openInMemory()
     let registry = try SharedRegistryTestSupport.makeSharedRegistry()
     let accountRepo = GRDBAccountRepository(
@@ -77,13 +77,12 @@ struct RepositorySyncCascadeRollbackTests {
   private struct AccountFixture {
     let accountId: UUID
     let legId: UUID
-    let ivId: UUID
   }
 
   private static func seedAccountScenario(in database: any DatabaseWriter) async throws
     -> AccountFixture
   {
-    let fixture = AccountFixture(accountId: UUID(), legId: UUID(), ivId: UUID())
+    let fixture = AccountFixture(accountId: UUID(), legId: UUID())
     let txId = UUID()
     try await database.write { database in
       try database.execute(
@@ -95,8 +94,6 @@ struct RepositorySyncCascadeRollbackTests {
           INSERT INTO transaction_leg (id, record_name, transaction_id, account_id, instrument_id,
                                        quantity, type, sort_order)
             VALUES (?, 'leg-1', ?, ?, 'USD', 100, 'expense', 0);
-          INSERT INTO investment_value (id, record_name, account_id, date, value, instrument_id)
-            VALUES (?, 'iv-1', ?, '2026-01-01', 100000, 'USD');
           CREATE TRIGGER force_failure BEFORE DELETE ON account
           BEGIN
             SELECT RAISE(ABORT, 'forced failure for rollback test');
@@ -104,7 +101,6 @@ struct RepositorySyncCascadeRollbackTests {
           """,
         arguments: [
           fixture.accountId, txId, fixture.legId, txId, fixture.accountId,
-          fixture.ivId, fixture.accountId,
         ])
     }
     return fixture
@@ -114,13 +110,6 @@ struct RepositorySyncCascadeRollbackTests {
     database: any DatabaseReader, fixture: AccountFixture
   ) async throws {
     try await database.read { database in
-      let ivCount =
-        try Int.fetchOne(
-          database,
-          sql: "SELECT COUNT(*) FROM investment_value WHERE id = ?",
-          arguments: [fixture.ivId]) ?? -1
-      #expect(ivCount == 1, "investment_value delete must roll back")
-
       let legAccountCount =
         try Int.fetchOne(
           database,

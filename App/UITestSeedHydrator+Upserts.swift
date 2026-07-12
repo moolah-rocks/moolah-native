@@ -140,7 +140,6 @@ extension UITestSeedHydrator {
       position: spec.position,
       isHidden: false,
       encodedSystemFields: nil,
-      valuationMode: "calculatedFromTrades",
       walletAddress: spec.walletAddress,
       chainId: spec.chainId,
       groupId: spec.groupId)

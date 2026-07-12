@@ -63,9 +63,6 @@ struct NeedsPushMutationTests {
         pragmaRows: Row.fetchAll(database, sql: "PRAGMA table_info(earmark_budget_item)"),
         unquoted: "earmark_budget_item")
       try expectNeedsPushColumn(
-        pragmaRows: Row.fetchAll(database, sql: "PRAGMA table_info(investment_value)"),
-        unquoted: "investment_value")
-      try expectNeedsPushColumn(
         pragmaRows: Row.fetchAll(database, sql: "PRAGMA table_info(\"transaction\")"),
         unquoted: "transaction")
       try expectNeedsPushColumn(

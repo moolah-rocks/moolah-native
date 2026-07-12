@@ -28,8 +28,6 @@ private struct ProfileSnapshot: Equatable {
   let ebiNeedsPush: [Int]
   let groupInstrumentIds: [String]
   let groupNeedsPush: [Int]
-  let ivInstrumentIds: [String]
-  let ivNeedsPush: [Int]
   let acctInstrumentIds: [String]
   let acctNeedsPush: [Int]
 }
@@ -56,10 +54,6 @@ private func fetchProfileSnapshot(_ database: Database) throws -> ProfileSnapsho
     database, sql: "SELECT instrument_id FROM account_group ORDER BY rowid")
   let grpNp = try Int.fetchAll(
     database, sql: "SELECT needs_push FROM account_group ORDER BY rowid")
-  let ivIds = try String.fetchAll(
-    database, sql: "SELECT instrument_id FROM investment_value ORDER BY rowid")
-  let ivNp = try Int.fetchAll(
-    database, sql: "SELECT needs_push FROM investment_value ORDER BY rowid")
   let acctIds = try String.fetchAll(
     database, sql: "SELECT instrument_id FROM account ORDER BY rowid")
   let acctNp = try Int.fetchAll(
@@ -69,7 +63,6 @@ private func fetchProfileSnapshot(_ database: Database) throws -> ProfileSnapsho
     earmarkInstrumentIds: emkIds, earmarkSavingsTargetIds: emkStIds, earmarkNeedsPush: emkNp,
     ebiInstrumentIds: ebiIds, ebiNeedsPush: ebiNp,
     groupInstrumentIds: grpIds, groupNeedsPush: grpNp,
-    ivInstrumentIds: ivIds, ivNeedsPush: ivNp,
     acctInstrumentIds: acctIds, acctNeedsPush: acctNp)
 }
 

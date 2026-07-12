@@ -12,7 +12,7 @@ extension ProfileDataSyncHandler {
   // MARK: - Applying Remote Changes
 
   /// Applies remote changes (inserts/updates/deletions) to the local
-  /// stores. The eight per-profile record types route through the GRDB
+  /// stores. Per-profile record types route through the GRDB
   /// dispatch tables in `+GRDBDispatch`; `ProfileRecord` is handled by
   /// `ProfileIndexSyncHandler` on the profile-index zone and is logged
   /// and skipped if it reaches this path.

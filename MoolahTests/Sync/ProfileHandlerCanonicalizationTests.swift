@@ -183,42 +183,6 @@ struct ProfileHandlerCanonicalizationTests {
   }
 
   @Test
-  func incomingInvestmentValueCanonicalizesInstrument() async throws {
-    let harness = try await MainActor.run {
-      try ProfileDataSyncHandlerTestSupport.makeHandlerAndDatabase(
-        canonicalResolver: CanonicalInstrumentResolver())
-    }
-    let id = UUID()
-    let value = ProfileDataSyncHandlerTestSupport.investmentValueRow(
-      id: id, accountId: UUID(), instrumentId: "8453:native")
-    _ = harness.handler.applyRemoteChanges(
-      saved: [value.toCKRecord(in: harness.handler.zoneID)], deleted: [])
-    let stored = try await harness.database.read { database in
-      try InvestmentValueRow
-        .filter(InvestmentValueRow.Columns.id == id).fetchOne(database)
-    }
-    #expect(stored?.instrumentId == "1:native")
-  }
-
-  @Test
-  func incomingInvestmentValueWithNilResolverStoredUnchanged() async throws {
-    let harness = try await MainActor.run {
-      try ProfileDataSyncHandlerTestSupport.makeHandlerAndDatabase(
-        canonicalResolver: nil)
-    }
-    let id = UUID()
-    let value = ProfileDataSyncHandlerTestSupport.investmentValueRow(
-      id: id, accountId: UUID(), instrumentId: "8453:native")
-    _ = harness.handler.applyRemoteChanges(
-      saved: [value.toCKRecord(in: harness.handler.zoneID)], deleted: [])
-    let stored = try await harness.database.read { database in
-      try InvestmentValueRow
-        .filter(InvestmentValueRow.Columns.id == id).fetchOne(database)
-    }
-    #expect(stored?.instrumentId == "8453:native")
-  }
-
-  @Test
   func incomingAccountGroupCanonicalizesInstrument() async throws {
     let harness = try await MainActor.run {
       try ProfileDataSyncHandlerTestSupport.makeHandlerAndDatabase(

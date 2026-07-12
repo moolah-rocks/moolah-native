@@ -95,27 +95,6 @@ struct CloudKitAnalysisTestBackend: BackendProvider, @unchecked Sendable {
 }
 
 extension CloudKitAnalysisTestBackend {
-  /// Seeds a retired investment-value row to verify that runtime analysis
-  /// ignores data retained solely for sync compatibility.
-  func seedLegacyInvestmentValue(
-    accountId: UUID,
-    date: Date,
-    value: InstrumentAmount
-  ) async throws {
-    let id = UUID()
-    try await database.write { database in
-      try InvestmentValueRow(
-        id: id,
-        recordName: InvestmentValueRow.recordName(for: id),
-        accountId: accountId,
-        date: date,
-        value: value.storageValue,
-        instrumentId: value.instrument.id,
-        encodedSystemFields: nil
-      ).insert(database)
-    }
-  }
-
   /// Test-only entry point that exposes `fetchDailyBalancesAggregation`
   /// for aggregation-layer integration tests. Production callers go
   /// through `analysis.fetchDailyBalances(...)`; this shim lets tests

@@ -22,6 +22,10 @@
 ///      the "deprecated field is suddenly invisible" race.
 ///
 /// History (newest first):
+/// - 10: snapshot valuation retirement. Deprecates `AccountRecord.valuationMode`
+///       and removes local support for `InvestmentValueRecord`. Older builds
+///       would continue writing both retired representations, so the version
+///       fence prevents them from reopening a profile after this cleanup.
 /// - 9: multi-owner tax sync. Adds the synced `TaxOwnerRecord` type plus
 ///      tax-owner assignment fields on synced account/category records and the
 ///      profile-level default tax owner id. Older builds don't know the record
@@ -95,5 +99,5 @@
 /// cloud without a `dataFormatVersion` field reads as `0` and is
 /// trivially compatible with any v1+ build.
 enum DataFormatVersion {
-  static let current: Int = 9
+  static let current: Int = 10
 }

@@ -34,7 +34,7 @@ struct ExchangeAccountMigrationTests {
   @Test
   func v11AllowsExchangeTypeAndStoresProvider() throws {
     let queue = try DatabaseQueue()
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v11_add_exchange_account_fields")
     try queue.write { database in
       try database.execute(
         sql: """
@@ -55,7 +55,7 @@ struct ExchangeAccountMigrationTests {
   @Test
   func v11RejectsUnknownExchangeProvider() throws {
     let queue = try DatabaseQueue()
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v11_add_exchange_account_fields")
     do {
       try queue.write { database in
         try database.execute(

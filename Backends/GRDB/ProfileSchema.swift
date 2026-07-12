@@ -117,6 +117,9 @@ import GRDB
 /// `v24_trade_only_valuation` — normalises every existing account to
 /// transaction-derived position valuation while leaving legacy snapshot
 /// rows intact for temporary storage and sync compatibility.
+/// `v25_retire_investment_value_persistence` — journals one durable CloudKit
+/// deletion per legacy snapshot, drops the snapshot table, and drops account's
+/// retired valuation-mode column.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -137,7 +140,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 24
+  static let version = 25
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -187,6 +190,8 @@ enum ProfileSchema {
     migrator.registerMigration("v23_tax_reporting", migrate: addTaxReporting)
     migrator.registerMigration(
       "v24_trade_only_valuation", migrate: migrateToTradeOnlyValuation)
+    migrator.registerMigration(
+      "v25_retire_investment_value_persistence", migrate: retireInvestmentValuePersistence)
 
     return migrator
   }

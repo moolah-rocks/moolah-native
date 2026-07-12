@@ -28,7 +28,6 @@ struct ProfileSchemaV10DropLegacyTests {
     "earmark_budget_item",
     "transaction",
     "transaction_leg",
-    "investment_value",
   ]
 
   /// After the full `ProfileSchema.migrator` runs (including v10), none
@@ -65,7 +64,6 @@ struct ProfileSchemaV10DropLegacyTests {
     "earmark_budget_item",
     "transaction",
     "transaction_leg",
-    "investment_value",
     "wallet_sync_state",
     // v13 transfer suggestion (content-addressed pair; replaces dismissed_transfer_pair)
     "transfer_suggestion",
@@ -125,8 +123,6 @@ struct ProfileSchemaV10DropLegacyTests {
     "leg_analysis_by_type_category",
     "leg_analysis_by_earmark_type",
     "leg_dedup_by_account_external",
-    // v3 investment_value (rebuilt v5)
-    "iv_by_account_date_value",
     // v13 transfer suggestion
     "transfer_suggestion_by_tx_a",
     "transfer_suggestion_by_tx_b",

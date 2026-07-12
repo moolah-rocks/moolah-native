@@ -108,20 +108,6 @@ struct UnifiedIdentityRewritePlanPinningTests {
     #expect(PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "account_group"))
   }
 
-  // MARK: - investment_value
-
-  @Test("investment_value instrument_id UPDATE is an intentional full-table SCAN (no index)")
-  func investmentValueInstrumentIdScan() throws {
-    let database = try PlanPinningTestHelpers.makeDatabase()
-    let detail = try PlanPinningTestHelpers.planDetail(
-      database,
-      query:
-        "UPDATE investment_value SET instrument_id = ?, needs_push = 1 WHERE instrument_id = ?",
-      arguments: ["1:native", "10:native"])
-    // No instrument_id index on investment_value — intentional SCAN.
-    #expect(PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "investment_value"))
-  }
-
   // MARK: - account (defensive)
 
   @Test("account instrument_id UPDATE is an intentional full-table SCAN (no index)")

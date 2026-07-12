@@ -155,7 +155,6 @@ struct ProfileDataSyncHandlerQueueTests {
     let categoryId = UUID()
     let earmarkId = UUID()
     let budgetItemId = UUID()
-    let investmentValueId = UUID()
     let instrumentId = "AUD"
     let suggestedAt = Date(timeIntervalSince1970: 1_700_000_000)
     // Content-addressed id of the unordered transaction-id pair —
@@ -188,10 +187,6 @@ struct ProfileDataSyncHandlerQueueTests {
         id: budgetItemId, earmarkId: earmarkId, categoryId: categoryId,
         instrumentId: instrumentId
       ).upsert(database)
-      try ProfileDataSyncHandlerTestSupport.investmentValueRow(
-        id: investmentValueId, accountId: accountId,
-        instrumentId: instrumentId
-      ).upsert(database)
       try ProfileDataSyncHandlerTestSupport.transactionRow(
         id: txnId, payee: "Test"
       ).upsert(database)
@@ -215,9 +210,8 @@ struct ProfileDataSyncHandlerQueueTests {
     let recordIDs = handler.queueUnsyncedRecords()
     let recordNames = Set(recordIDs.map(\.recordName))
 
-    // The per-profile handler does not enumerate instrument rows
-    // (count would be 9 if it did; the shared registry covers them).
-    #expect(recordNames.count == 8)
+    // The per-profile handler does not enumerate instrument rows.
+    #expect(recordNames.count == 7)
     #expect(!recordNames.contains(seed.instrumentId))
     #expect(recordNames.contains("\(AccountRow.recordType)|\(seed.accountId.uuidString)"))
     #expect(recordNames.contains("\(CategoryRow.recordType)|\(seed.categoryId.uuidString)"))
@@ -225,9 +219,6 @@ struct ProfileDataSyncHandlerQueueTests {
     #expect(
       recordNames.contains(
         "\(EarmarkBudgetItemRow.recordType)|\(seed.budgetItemId.uuidString)"))
-    #expect(
-      recordNames.contains(
-        "\(InvestmentValueRow.recordType)|\(seed.investmentValueId.uuidString)"))
     #expect(recordNames.contains("\(TransactionRow.recordType)|\(seed.txnId.uuidString)"))
     #expect(recordNames.contains("\(TransactionLegRow.recordType)|\(seed.legId.uuidString)"))
     #expect(

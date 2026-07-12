@@ -41,7 +41,6 @@ extension ProfileDataSyncHandler {
         EarmarkBudgetItemRow.recordType,
         grdbRepositories.earmarkBudgetItems.clearAllSystemFieldsSync
       ),
-      (InvestmentValueRow.recordType, grdbRepositories.investmentValues.clearAllSystemFieldsSync),
       (TransactionRow.recordType, grdbRepositories.transactions.clearAllSystemFieldsSync),
       (TransactionLegRow.recordType, grdbRepositories.transactionLegs.clearAllSystemFieldsSync),
       (CSVImportProfileRow.recordType, grdbRepositories.csvImportProfiles.clearAllSystemFieldsSync),
@@ -369,8 +368,6 @@ extension ProfileDataSyncHandler {
       return { try repos.earmarks.setEncodedSystemFieldsBatchSync($0) }
     case EarmarkBudgetItemRow.recordType:
       return { try repos.earmarkBudgetItems.setEncodedSystemFieldsBatchSync($0) }
-    case InvestmentValueRow.recordType:
-      return { try repos.investmentValues.setEncodedSystemFieldsBatchSync($0) }
     case TransactionRow.recordType:
       return { try repos.transactions.setEncodedSystemFieldsBatchSync($0) }
     case TransactionLegRow.recordType:

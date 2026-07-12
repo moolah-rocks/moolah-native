@@ -190,25 +190,6 @@ struct AnalysisPlanPinningTests {
     #expect(!detail.contains("SCAN transaction_leg"))
   }
 
-  // MARK: - investment_value
-
-  @Test("investment-value listing uses iv_by_account_date_value for paginated reads")
-  func investmentValueByAccountDateUsesIndex() throws {
-    let database = try makeDatabase()
-    let detail = try planDetail(
-      database,
-      query: """
-        SELECT id FROM investment_value WHERE account_id = ? ORDER BY date DESC LIMIT 50
-        """,
-      arguments: [UUID()])
-    // The value-extended composite covers the (account_id, date)
-    // prefix used by paginated reads as well as the daily-balance
-    // queries that also read value/instrument_id, so a single index
-    // serves both. The failure case is a SCAN.
-    #expect(detail.contains("iv_by_account_date_value"))
-    #expect(!detail.contains("SCAN investment_value"))
-  }
-
   // MARK: - earmark_budget_item
 
   @Test("budget-item lookup by earmark_id uses ebi_by_earmark")

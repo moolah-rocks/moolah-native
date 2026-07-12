@@ -210,7 +210,6 @@ final class GRDBAccountRepository: AccountRepository, @unchecked Sendable {
       existing.instrumentId = normalizedAccount.instrument.id
       existing.position = normalizedAccount.position
       existing.isHidden = normalizedAccount.isHidden
-      existing.valuationMode = "calculatedFromTrades"
       existing.groupId = normalizedAccount.groupId
       existing.taxOwnerIdsEncoded = TaxOwnerIDListCoding.encode(normalizedAccount.taxOwnerIds)
       try existing.update(database)

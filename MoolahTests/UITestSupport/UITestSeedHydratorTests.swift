@@ -84,14 +84,6 @@ final class UITestSeedHydratorTests: XCTestCase {
     )
     XCTAssertEqual(usd.instrumentId, UITestFixtures.TradeBaseline.usdAccountInstrumentCode)
 
-    let tradesBrokerage = try XCTUnwrap(
-      accounts.first { $0.id == UITestFixtures.TradeBaseline.tradesBrokerageAccountId }
-    )
-    XCTAssertEqual(tradesBrokerage.valuationMode, "calculatedFromTrades")
-    let brokerage = try XCTUnwrap(
-      accounts.first { $0.id == UITestFixtures.TradeBaseline.brokerageAccountId }
-    )
-    XCTAssertEqual(brokerage.valuationMode, "calculatedFromTrades")
   }
 
   func testHydrateTradeBaselineSeedsTheTradeTransaction() throws {

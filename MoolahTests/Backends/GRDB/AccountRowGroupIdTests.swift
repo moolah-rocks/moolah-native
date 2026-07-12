@@ -32,7 +32,6 @@ struct AccountRowGroupIdTests {
       id: UUID(), recordName: "AccountRecord|x", name: "Coinstash",
       type: "exchange", instrumentId: "AUD", position: 0,
       isHidden: false, encodedSystemFields: nil,
-      valuationMode: "calculatedFromTrades",
       walletAddress: nil, chainId: nil,
       exchangeProvider: "coinstash",
       groupId: groupId)
@@ -46,7 +45,6 @@ struct AccountRowGroupIdTests {
       id: UUID(), recordName: "AccountRecord|x", name: "Chequing",
       type: "bank", instrumentId: "AUD", position: 0,
       isHidden: false, encodedSystemFields: nil,
-      valuationMode: "recordedValue",
       walletAddress: nil, chainId: nil,
       exchangeProvider: nil,
       groupId: nil)
@@ -61,7 +59,6 @@ struct AccountRowGroupIdTests {
       id: UUID(), recordName: "AccountRecord|x", name: "Coinstash",
       type: "exchange", instrumentId: "AUD", position: 0,
       isHidden: false, encodedSystemFields: nil,
-      valuationMode: "calculatedFromTrades",
       walletAddress: nil, chainId: nil,
       exchangeProvider: "coinstash",
       groupId: groupId)
@@ -77,7 +74,6 @@ struct AccountRowGroupIdTests {
       id: UUID(), recordName: "AccountRecord|x", name: "Chequing",
       type: "bank", instrumentId: "AUD", position: 0,
       isHidden: false, encodedSystemFields: nil,
-      valuationMode: "recordedValue",
       walletAddress: nil, chainId: nil,
       exchangeProvider: nil,
       groupId: nil)

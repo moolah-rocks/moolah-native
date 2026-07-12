@@ -191,43 +191,27 @@ struct CoreFinancialGraphSyncRoundTripTests {
     #expect(resolved.encodedSystemFields == ckRecord.encodedSystemFields)
   }
 
-  // MARK: - InvestmentValueRow
-
-  @Test("InvestmentValue upsert round-trips through CKSyncEngine apply")
-  func investmentValueRoundTrip() async throws {
+  @Test("stale snapshot change is ignored without aborting sibling records")
+  func staleSnapshotDoesNotAbortBatch() async throws {
     let harness = try ProfileDataSyncHandlerTestSupport.makeHandlerWithDatabase()
-    let accountId = UUID()
-    let valueId = UUID()
-    try await harness.database.write { database in
-      try AccountRow(
-        domain: Account(
-          id: accountId, name: "Brokerage", type: .investment, instrument: .AUD)
-      )
-      .insert(database)
-    }
-    let source = InvestmentValueRow(
-      id: valueId,
-      recordName: InvestmentValueRow.recordName(for: valueId),
-      accountId: accountId,
-      date: Date(timeIntervalSince1970: 1_700_000_000),
-      value: InstrumentAmount(quantity: 5000, instrument: .AUD).storageValue,
-      instrumentId: Instrument.AUD.id,
-      encodedSystemFields: nil)
-    let ckRecord = source.toCKRecord(in: Self.zoneID)
+    let account = AccountRow(
+      domain: Account(name: "Current", type: .investment, instrument: .AUD))
+    let staleID = CKRecord.ID(
+      recordName: "InvestmentValueRecord|\(UUID().uuidString)", zoneID: Self.zoneID)
+    let stale = CKRecord(recordType: "InvestmentValueRecord", recordID: staleID)
+    stale["value"] = Int64(123)
 
-    let result = harness.handler.applyRemoteChanges(saved: [ckRecord], deleted: [])
-    if case .saveFailed(let message) = result {
-      Issue.record("applyRemoteChanges reported saveFailed: \(message)")
-    }
+    let result = harness.handler.applyRemoteChanges(
+      saved: [stale, account.toCKRecord(in: Self.zoneID)], deleted: [])
 
-    let row = try await harness.database.read { database in
-      try InvestmentValueRow.filter(InvestmentValueRow.Columns.id == valueId)
-        .fetchOne(database)
+    guard case .success = result else {
+      Issue.record("stale snapshot aborted fetched-changes batch: \(result)")
+      return
     }
-    let resolved = try #require(row)
-    #expect(resolved.id == valueId)
-    #expect(resolved.accountId == accountId)
-    #expect(resolved.encodedSystemFields == ckRecord.encodedSystemFields)
+    let stored = try await harness.database.read { database in
+      try AccountRow.fetchOne(database, key: account.id)
+    }
+    #expect(stored?.name == "Current")
   }
 
 }

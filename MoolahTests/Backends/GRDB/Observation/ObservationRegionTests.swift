@@ -158,7 +158,6 @@ struct ObservationRegionTests {
         position: 0,
         isHidden: false,
         encodedSystemFields: nil,
-        valuationMode: "recordedValue",
         walletAddress: nil,
         chainId: nil
       ).insert(database)

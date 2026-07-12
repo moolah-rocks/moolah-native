@@ -22,7 +22,6 @@ struct AccountRowExchangeProviderTests {
       id: UUID(), recordName: "AccountRecord|x", name: "Coinstash",
       type: "exchange", instrumentId: "AUD", position: 0,
       isHidden: false, encodedSystemFields: nil,
-      valuationMode: "calculatedFromTrades",
       walletAddress: nil, chainId: nil,
       exchangeProvider: "coinstash")
     let account = try row.toDomain()
@@ -35,7 +34,6 @@ struct AccountRowExchangeProviderTests {
       id: UUID(), recordName: "AccountRecord|x", name: "FutureExchange",
       type: "exchange", instrumentId: "AUD", position: 0,
       isHidden: false, encodedSystemFields: nil,
-      valuationMode: "calculatedFromTrades",
       walletAddress: nil, chainId: nil,
       exchangeProvider: "future-unknown-provider")
     let account = try row.toDomain()
@@ -48,7 +46,6 @@ struct AccountRowExchangeProviderTests {
       id: UUID(), recordName: "AccountRecord|x", name: "NilExchange",
       type: "exchange", instrumentId: "AUD", position: 0,
       isHidden: false, encodedSystemFields: nil,
-      valuationMode: "calculatedFromTrades",
       walletAddress: nil, chainId: nil,
       exchangeProvider: nil)
     let account = try row.toDomain()

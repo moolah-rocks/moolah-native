@@ -10,7 +10,7 @@ struct AccountValuationModeMigrationTests {
   @Test("column exists on the account table after migration")
   func columnExists() throws {
     let queue = try DatabaseQueue()
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v6_account_valuation_mode")
     try queue.read { database in
       let columns = try database.columns(in: "account")
       #expect(columns.contains { $0.name == "valuation_mode" })
@@ -20,7 +20,7 @@ struct AccountValuationModeMigrationTests {
   @Test("CHECK constraint rejects unknown raw values")
   func checkConstraintRejectsBadValues() throws {
     let queue = try DatabaseQueue()
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v6_account_valuation_mode")
     try queue.write { database in
       do {
         try database.execute(
@@ -44,7 +44,7 @@ struct AccountValuationModeMigrationTests {
   @Test("INSERT omitting valuation_mode column receives DEFAULT recordedValue")
   func newRowWithoutValuationModeGetsDefault() throws {
     let queue = try DatabaseQueue()
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v6_account_valuation_mode")
     try queue.write { database in
       try database.execute(
         sql: """

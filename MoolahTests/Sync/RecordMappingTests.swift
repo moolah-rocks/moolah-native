@@ -30,8 +30,7 @@ struct RecordMappingTests {
       instrumentId: "USD",
       position: 2,
       isHidden: true,
-      encodedSystemFields: nil,
-      valuationMode: "calculatedFromTrades"
+      encodedSystemFields: nil
     )
 
     let ckRecord = row.toCKRecord(in: zoneID)
@@ -45,7 +44,7 @@ struct RecordMappingTests {
     #expect(ckRecord["instrumentId"] as? String == "USD")
     #expect(ckRecord["position"] as? Int == 2)
     #expect(ckRecord["isHidden"] as? Int == 1)
-    #expect(ckRecord["valuationMode"] as? String == "calculatedFromTrades")
+    #expect(ckRecord["valuationMode"] == nil)
 
     let restored = try #require(AccountRow.fieldValues(from: ckRecord))
     #expect(restored.id == row.id)
@@ -54,7 +53,6 @@ struct RecordMappingTests {
     #expect(restored.instrumentId == "USD")
     #expect(restored.position == 2)
     #expect(restored.isHidden == true)
-    #expect(restored.valuationMode == "calculatedFromTrades")
   }
 
   @Test
@@ -280,10 +278,6 @@ struct RecordMappingTests {
     let budgetItemRecord = CKRecord(
       recordType: EarmarkBudgetItemRow.recordType, recordID: malformedID)
     #expect(EarmarkBudgetItemRow.fieldValues(from: budgetItemRecord) == nil)
-
-    let investmentRecord = CKRecord(
-      recordType: InvestmentValueRow.recordType, recordID: malformedID)
-    #expect(InvestmentValueRow.fieldValues(from: investmentRecord) == nil)
 
     let profileRowRecord = CKRecord(recordType: ProfileRow.recordType, recordID: malformedID)
     #expect(ProfileRow.fieldValues(from: profileRowRecord) == nil)

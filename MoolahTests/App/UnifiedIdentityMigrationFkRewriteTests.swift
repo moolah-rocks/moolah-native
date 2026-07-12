@@ -31,11 +31,6 @@ private func seedUnmappedRows(_ database: Database) throws {
     sql:
       "INSERT INTO account_group (id, record_name, name, bucket, instrument_id, position) VALUES (?, ?, 'AUD Accounts', 'current', 'AUD', 0)",
     arguments: [groupId, "AG|\(groupId.uuidString)"])
-  let ivId = UUID()
-  try database.execute(
-    sql:
-      "INSERT INTO investment_value (id, record_name, account_id, date, value, instrument_id) VALUES (?, ?, ?, '2024-01-01', 500, 'AUD')",
-    arguments: [ivId, "IV|\(ivId.uuidString)", UUID()])
   let acctId = UUID()
   try database.execute(
     sql:
@@ -82,10 +77,6 @@ struct UnifiedIdentityMigrationFkRewriteTests {
       try String.fetchAll(database, sql: "SELECT instrument_id FROM account_group")
     }
     #expect(groupIds == ["1:native"])
-    let ivIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM investment_value")
-    }
-    #expect(ivIds == ["1:native"])
     let acctIds = try await queue.read { database in
       try String.fetchAll(database, sql: "SELECT instrument_id FROM account")
     }
@@ -100,8 +91,6 @@ struct UnifiedIdentityMigrationFkRewriteTests {
     #expect(ebiNP == 1)
     let grpNP = try await needsPushCount("account_group", in: queue)
     #expect(grpNP == 1)
-    let ivNP = try await needsPushCount("investment_value", in: queue)
-    #expect(ivNP == 1)
     let actNP = try await needsPushCount("account", in: queue)
     #expect(actNP == 1)
   }
@@ -135,10 +124,6 @@ struct UnifiedIdentityMigrationFkRewriteTests {
       try String.fetchAll(database, sql: "SELECT instrument_id FROM account_group")
     }
     #expect(groupIds == ["AUD"])
-    let ivIds = try await queue.read { database in
-      try String.fetchAll(database, sql: "SELECT instrument_id FROM investment_value")
-    }
-    #expect(ivIds == ["AUD"])
     let acctIds = try await queue.read { database in
       try String.fetchAll(database, sql: "SELECT instrument_id FROM account")
     }
@@ -153,8 +138,6 @@ struct UnifiedIdentityMigrationFkRewriteTests {
     #expect(ebiNP == 0)
     let grpNP = try await needsPushCount("account_group", in: queue)
     #expect(grpNP == 0)
-    let ivNP = try await needsPushCount("investment_value", in: queue)
-    #expect(ivNP == 0)
     let actNP = try await needsPushCount("account", in: queue)
     #expect(actNP == 0)
   }
