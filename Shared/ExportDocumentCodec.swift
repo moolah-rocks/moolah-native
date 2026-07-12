@@ -48,18 +48,18 @@ struct ExportDocumentCodec {
 }
 
 extension ExportDocumentCodec {
-  fileprivate struct ExportVersionEnvelope: Decodable {
+  private struct ExportVersionEnvelope: Decodable {
     let version: Int
   }
 
-  fileprivate static func makeEncoder() -> JSONEncoder {
+  private static func makeEncoder() -> JSONEncoder {
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     return encoder
   }
 
-  fileprivate static func makeDecoder() -> JSONDecoder {
+  private static func makeDecoder() -> JSONDecoder {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
     return decoder

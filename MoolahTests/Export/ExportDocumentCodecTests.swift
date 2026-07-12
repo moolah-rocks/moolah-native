@@ -187,7 +187,7 @@ struct ExportDocumentCodecTests {
 }
 
 extension ExportDocumentCodecTests {
-  fileprivate struct MixedInstrumentFixture {
+  private struct MixedInstrumentFixture {
     let data: ExportedData
     let accountId: UUID
     let earmarkId: UUID
@@ -195,14 +195,14 @@ extension ExportDocumentCodecTests {
     let crypto: Instrument
   }
 
-  fileprivate struct MixedFixtureIds {
+  private struct MixedFixtureIds {
     let accountId = UUID()
     let groupId = UUID()
     let earmarkId = UUID()
     let categoryId = UUID()
   }
 
-  fileprivate func makeMixedInstrumentFixture(version: Int = 2) -> MixedInstrumentFixture {
+  private func makeMixedInstrumentFixture(version: Int = 2) -> MixedInstrumentFixture {
     let ids = MixedFixtureIds()
     let stock = Instrument.stock(
       ticker: "BHP.AX", exchange: "ASX", name: "BHP Group Limited", decimals: 4)
@@ -236,7 +236,7 @@ extension ExportDocumentCodecTests {
       crypto: crypto)
   }
 
-  fileprivate func makeFixtureAccounts(ids: MixedFixtureIds, stock: Instrument) -> [Account] {
+  private func makeFixtureAccounts(ids: MixedFixtureIds, stock: Instrument) -> [Account] {
     [
       Account(
         id: ids.accountId,
@@ -247,7 +247,7 @@ extension ExportDocumentCodecTests {
     ]
   }
 
-  fileprivate func makeFixtureGroups(ids: MixedFixtureIds, stock: Instrument) -> [AccountGroup] {
+  private func makeFixtureGroups(ids: MixedFixtureIds, stock: Instrument) -> [AccountGroup] {
     [
       AccountGroup(
         id: ids.groupId,
@@ -257,7 +257,7 @@ extension ExportDocumentCodecTests {
     ]
   }
 
-  fileprivate func makeFixtureEarmarks(ids: MixedFixtureIds) -> [Earmark] {
+  private func makeFixtureEarmarks(ids: MixedFixtureIds) -> [Earmark] {
     [
       Earmark(
         id: ids.earmarkId,
@@ -267,7 +267,7 @@ extension ExportDocumentCodecTests {
     ]
   }
 
-  fileprivate func makeFixtureBudgets(ids: MixedFixtureIds) -> [UUID: [EarmarkBudgetItem]] {
+  private func makeFixtureBudgets(ids: MixedFixtureIds) -> [UUID: [EarmarkBudgetItem]] {
     [
       ids.earmarkId: [
         EarmarkBudgetItem(
@@ -277,8 +277,7 @@ extension ExportDocumentCodecTests {
     ]
   }
 
-  fileprivate func makeFixtureTransactions(ids: MixedFixtureIds, stock: Instrument) -> [Transaction]
-  {
+  private func makeFixtureTransactions(ids: MixedFixtureIds, stock: Instrument) -> [Transaction] {
     [
       Transaction(
         date: Date(timeIntervalSince1970: 1_700_100_000),
@@ -295,7 +294,7 @@ extension ExportDocumentCodecTests {
     ]
   }
 
-  fileprivate func makeFixtureInvestmentValues(
+  private func makeFixtureInvestmentValues(
     ids: MixedFixtureIds,
     crypto: Instrument
   ) -> [UUID: [InvestmentValue]] {
@@ -308,7 +307,7 @@ extension ExportDocumentCodecTests {
     ]
   }
 
-  fileprivate func makeInvestmentHistory(
+  private func makeInvestmentHistory(
     version: Int,
     accountId: UUID,
     instrument: Instrument,
@@ -336,18 +335,18 @@ extension ExportDocumentCodecTests {
     )
   }
 
-  fileprivate func legacyEncoder() -> JSONEncoder {
+  private func legacyEncoder() -> JSONEncoder {
     let encoder = JSONEncoder()
     encoder.dateEncodingStrategy = .iso8601
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
     return encoder
   }
 
-  fileprivate func jsonObject(from data: Data) throws -> [String: Any] {
+  private func jsonObject(from data: Data) throws -> [String: Any] {
     try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
   }
 
-  fileprivate func uuidDictionaryValue(in encoded: [Any], for key: UUID) -> Any? {
+  private func uuidDictionaryValue(in encoded: [Any], for key: UUID) -> Any? {
     var index = 0
     while index + 1 < encoded.count {
       if let candidate = encoded[index] as? String,

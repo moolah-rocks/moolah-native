@@ -45,7 +45,7 @@ set -euo pipefail
 
 # name | version | arm64_tahoe bottle sha256 (from the homebrew-core formula)
 PINNED_TOOLS=(
-  "swiftlint|0.63.3|9543efe7eb3d5c29413789fda02c3f8d70e4df5e3e4c4f8272dc6497be286aab"
+  "swiftlint|0.65.0|d6ce40835012e9821e8224956856f6221ae491ab379accf85f4097a92a02939f"
   "swift-format|602.0.0|df0fdcc1a40fd5424122f4db14f70df46b02de3b9046943e4155b560e79ae0df"
   "xcodegen|2.45.4|f8763683b5538a556ac4de3a86132558a086fdd976ac4088ff87d09fae1982b5"
 )
