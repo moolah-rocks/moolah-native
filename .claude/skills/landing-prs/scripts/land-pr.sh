@@ -3,8 +3,8 @@
 # land-pr.sh — land a PR via GitHub's native merge queue.
 #
 # Detects whether the PR targets main (queue directly) or a feature branch
-# (kicks off a background watcher that auto-retargets + auto-enqueues once
-# the parent merges). See SKILL.md alongside this script for details.
+# (waits for its parent before retargeting + auto-enqueuing). In both cases,
+# a background watcher continues until the PR actually merges.
 
 set -euo pipefail
 
@@ -17,14 +17,13 @@ usage: land-pr.sh <PR> [--repo OWNER/REPO]
                   current-context repo.
 
 Behaviour:
-  base == main:    enables automerge (rebase) immediately. Exits.
+  base == main:    enables automerge, then monitors until the PR merges.
   base != main:    finds the parent PR (the open PR whose head matches the
-                   child's base), starts watch-stacked-pr.sh under nohup,
-                   and exits. The watcher retargets the child to main and
-                   enables automerge once the parent merges.
+                   child's base), then monitors it. The watcher retargets the
+                   child to main and enables automerge once the parent merges.
 
 Exit codes:
-  0   success (automerge enabled, or watcher backgrounded)
+  0   watcher backgrounded successfully
   1   couldn't find a parent PR for a stacked child
   2   usage error
 USAGE
@@ -65,13 +64,31 @@ REPO_FLAG=()
 # Resolve the PR's base. gh exits non-zero if the PR doesn't exist.
 base=$(gh pr view "$PR" ${REPO_FLAG[@]+"${REPO_FLAG[@]}"} --json baseRefName --jq '.baseRefName')
 
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+log_dir=".agent-tmp/landing-prs"
+mkdir -p "$log_dir"
+log_file="$log_dir/watch-$PR.log"
+
+start_watcher() {
+  nohup bash "$script_dir/watch-pr.sh" "$@" >"$log_file" 2>&1 &
+  watcher_pid=$!
+  disown "$watcher_pid" 2>/dev/null || true
+
+  echo "Watcher started (PID=$watcher_pid); it will run until PR #$PR merges or needs a fix."
+  echo "Log: $log_file"
+  echo "Tail with: tail -f $log_file"
+  echo "Cancel with: kill $watcher_pid  (or: pkill -f 'watch-pr.sh $PR ')"
+}
+
 if [[ "$base" == "main" || "$base" == "master" ]]; then
   echo "PR #$PR targets '$base' → enabling automerge (rebase)."
   # The merge method is overridden by the queue's configured method on this
   # repo (REBASE), but we pass --rebase to be explicit. gh prints a harmless
   # warning if it conflicts; we don't gate on it.
   gh pr merge "$PR" ${REPO_FLAG[@]+"${REPO_FLAG[@]}"} --auto --rebase
-  echo "Done. Native merge queue will land it when checks pass."
+  watcher_args=("$PR" --automerge-enabled)
+  [[ -n "$REPO" ]] && watcher_args+=(--repo "$REPO")
+  start_watcher "${watcher_args[@]}"
   exit 0
 fi
 
@@ -96,23 +113,6 @@ fi
 
 echo "Parent: PR #$parent → child: PR #$PR"
 
-# Background the watcher. State / logs in .agent-tmp/landing-prs/ (gitignored).
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-log_dir=".agent-tmp/landing-prs"
-mkdir -p "$log_dir"
-log_file="$log_dir/watch-$PR.log"
-
-watcher_args=("$PR" "$parent")
+watcher_args=("$PR" --parent "$parent")
 [[ -n "$REPO" ]] && watcher_args+=(--repo "$REPO")
-
-nohup bash "$script_dir/watch-stacked-pr.sh" "${watcher_args[@]}" \
-  >"$log_file" 2>&1 &
-watcher_pid=$!
-
-# Detach from the parent shell so the watcher survives session exit.
-disown "$watcher_pid" 2>/dev/null || true
-
-echo "Watcher started (PID=$watcher_pid)."
-echo "Log: $log_file"
-echo "Tail with: tail -f $log_file"
-echo "Cancel with: kill $watcher_pid  (or: pkill -f 'watch-stacked-pr.sh $PR ')"
+start_watcher "${watcher_args[@]}"
