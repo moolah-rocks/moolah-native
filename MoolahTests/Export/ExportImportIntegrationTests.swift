@@ -108,7 +108,7 @@ struct ExportImportIntegrationTests {
 
     // Verify file exists and is valid JSON
     let data = try Data(contentsOf: tempURL)
-    let decoded = try JSONDecoder.exportDecoder.decode(ExportedData.self, from: data)
+    let decoded = try ExportDocumentCodec().decode(data)
 
     #expect(decoded.profileLabel == "Test Profile")
     #expect(decoded.currencyCode == instrument.id)

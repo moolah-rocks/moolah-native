@@ -132,18 +132,17 @@ Only the representation of `Instrument` changes while the export codec is active
 export-specific contexts carried in `Encoder.userInfo` / `Decoder.userInfo`:
 
 ```swift
-final class ExportInstrumentDecodingContext {
-  private(set) var instrumentsById: [String: Instrument] = [:]
+final class InstrumentReferenceCodingContext: Sendable {
+  private let instrumentsById: OSAllocatedUnfairLock<[String: Instrument]>
 
   func install(_ instruments: [Instrument]) throws
   func resolve(id: String, codingPath: [any CodingKey]) throws -> Instrument
 }
 ```
 
-The encoder context holds the validated catalogue and marks nested instruments as references. The
-decoder context is a local reference object created for one synchronous decode operation; it starts
-empty, then receives the catalogue before any reference-bearing field is decoded. Neither context
-is global, task-local, or shared across export operations.
+The context holds the catalogue and marks nested instruments as references. Its mutable catalogue
+is lock-protected to satisfy the SDK's `Encoder.userInfo` Sendable requirement. A fresh context is
+created for each codec pass; it is not global, task-local, or shared across export operations.
 
 Give `Instrument` an explicit `Codable` conformance with two paths:
 
@@ -161,10 +160,9 @@ catalogue entries; every other top-level property is passed straight to its doma
 conformance. The existing custom decoder must decode and install `instruments` before decoding
 accounts, groups, earmarks, budgets, transactions, or investment values.
 
-The context exposes a narrowly scoped `withFullRepresentation` operation used only by
-`FullInstrument`. It temporarily selects the ordinary full-object branch for that synchronous
-nested encode/decode call, then restores reference mode with `defer`. This avoids duplicating
-instrument metadata inside the wrapper.
+`FullInstrument` calls narrowly scoped full-representation helpers on `Instrument` directly. This
+avoids duplicating instrument metadata inside the wrapper without adding traversal-wide mutable
+mode state to the context.
 
 This leaves only the top-level `ExportedData` field list as an explicit export maintenance point.
 That list already defines which repositories belong in a profile backup, so adding a new top-level
@@ -202,20 +200,17 @@ error remains user-facing.
 
 When encoding v2:
 
-1. Build `[String: Instrument]` from `ExportedData.instruments`.
-2. Reject duplicate IDs whose definitions differ. Identical duplicate entries should also be
-   normalised to one catalogue entry so new exports are canonical.
-3. Encode `ExportedData` with the reference context active; its catalogue wrapper emits full
-   instruments while normal nested domain encoding emits IDs.
-4. On every nested `Instrument.encode`, require the concrete instrument to exactly match the
-   catalogue definition for its ID before emitting the string. Validation therefore discovers
-   instrument-bearing fields through normal Codable traversal rather than a second hand-maintained
-   walk.
+1. Seed a discovery context from `ExportedData.instruments`, rejecting conflicting duplicate IDs.
+2. Perform a discarded discovery encode. Every nested `Instrument.encode` registers its exact
+   definition through normal Codable traversal, so future instrument-bearing fields are included
+   without another hand-maintained walk.
+3. Freeze the discovered catalogue into a strict context and perform the final encode. Its
+   catalogue wrapper emits full instruments while normal nested domain encoding emits IDs.
+4. On every nested `Instrument.encode` in the strict pass, require the concrete instrument to
+   exactly match the catalogue definition for its ID before emitting the string.
 
-`DataExporter.collectInstruments` must include instruments from all exported locations, not only
-accounts, groups, and transaction legs. Add earmarks, savings targets, budget items, and investment
-values to make catalogue closure explicit. This also protects future data shapes where a child
-instrument differs from its owner.
+`DataExporter` seeds the profile's fiat instrument. The codec discovers all other referenced
+instruments automatically.
 
 When decoding v2, `ExportedData.init(from:)`:
 
@@ -265,8 +260,9 @@ Add codec-focused tests before implementation:
 - A v2 export contains one full definition per instrument and no nested `instrument` objects.
 - Every v2 instrument-bearing location emits the expected instrument ID, including savings goals,
   budgets, transaction legs, and investment values.
-- A new field on a synthesised-Codable exported fixture appears without changing export-specific
-  code; this pins the automatic-field contract.
+- An instrument absent from the initial catalogue is discovered through normal Codable traversal.
+- Existing ordinary model fields round-trip without export-specific serializers; this pins the
+  automatic-field contract.
 - Normal, non-export `Instrument` Codable still emits and accepts a full instrument object.
 - A mixed fiat/stock/crypto v2 round trip preserves exact instruments and monetary quantities.
 - A checked-in or inline version 1 fixture using embedded instruments still decodes and imports.
@@ -274,7 +270,8 @@ Add codec-focused tests before implementation:
   imports successfully.
 - A v2 file with a missing instrument reference fails before profile creation.
 - A v2 catalogue with conflicting definitions for one ID fails deterministically.
-- Encoding fails if a referenced instrument is absent from, or conflicts with, the catalogue.
+- Encoding automatically discovers a referenced instrument absent from the seed catalogue, but
+  still fails if definitions conflict.
 - A version greater than 2 produces `ExportError.unsupportedVersion` and does not create a profile.
 - A high-cardinality fixture (many transaction legs and investment values) asserts that v2 is
   materially smaller than the equivalent v1 output. Compare byte counts using the same formatting;
@@ -290,8 +287,7 @@ selection, progress, and error presentation do not change.
 1. Add failing codec tests and a frozen representative v1 fixture.
 2. Introduce format constants, export instrument coding contexts, `FullInstrument`, and
    `ExportDocumentCodec` with strict reference resolution.
-3. Expand `DataExporter.collectInstruments` to all instrument-bearing export fields and add closure
-   tests.
+3. Add discovery and strict encoding passes so catalogue closure follows normal Codable traversal.
 4. Route export and both import paths through the codec; remove the export-specific raw
    `JSONEncoder`/`JSONDecoder` helpers once all call sites migrate.
 5. Update integration and automation tests, run `just format`, `just format-check`, the focused

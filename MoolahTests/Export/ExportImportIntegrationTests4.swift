@@ -47,7 +47,7 @@ struct ExportImportIntegrationTests4 {
 
     // Serialized JSON must list all four instruments for the importer to rehydrate them
     let exportedJSON = try Data(contentsOf: tempURL)
-    let decoded = try JSONDecoder.exportDecoder.decode(ExportedData.self, from: exportedJSON)
+    let decoded = try ExportDocumentCodec().decode(exportedJSON)
     let exportedInstrumentIds = Set(decoded.instruments.map(\.id))
     #expect(exportedInstrumentIds == [aud.id, usd.id, bhp.id, eth.id])
 

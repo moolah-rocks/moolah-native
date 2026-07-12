@@ -67,7 +67,7 @@ final class ExportCoordinator {
 
     state = .exporting(step: "encoding")
     progress("encoding")
-    let data = try JSONEncoder.exportEncoder.encode(exported)
+    let data = try ExportDocumentCodec().encode(exported)
 
     state = .exporting(step: "writing")
     progress("writing")
@@ -112,12 +112,7 @@ final class ExportCoordinator {
       throw ExportError.fileReadFailed(url, underlying: error)
     }
 
-    let exported: ExportedData
-    do {
-      exported = try JSONDecoder.exportDecoder.decode(ExportedData.self, from: jsonData)
-    } catch {
-      throw ExportError.importFailed(underlying: error)
-    }
+    let exported = try decodeExportedData(jsonData)
 
     return try await importFromData(
       exported,
@@ -139,7 +134,7 @@ final class ExportCoordinator {
     syncCoordinator: SyncCoordinator?,
     instrumentRegistrar: (any InstrumentRegistering)?
   ) async throws -> ImportResult {
-    guard exported.version <= 1 else {
+    guard exported.version <= ExportFormatVersion.current else {
       throw ExportError.unsupportedVersion(exported.version)
     }
 
@@ -212,12 +207,7 @@ final class ExportCoordinator {
       throw ExportError.fileReadFailed(url, underlying: error)
     }
 
-    let exported: ExportedData
-    do {
-      exported = try JSONDecoder.exportDecoder.decode(ExportedData.self, from: jsonData)
-    } catch {
-      throw ExportError.importFailed(underlying: error)
-    }
+    let exported = try decodeExportedData(jsonData)
 
     let importedDefaultTaxOwnerId = exported.defaultTaxOwnerId.flatMap { ownerId in
       exported.taxOwners.contains { $0.id == ownerId } ? ownerId : nil
@@ -251,5 +241,15 @@ final class ExportCoordinator {
     }
 
     return newProfile.id
+  }
+
+  private func decodeExportedData(_ jsonData: Data) throws -> ExportedData {
+    do {
+      return try ExportDocumentCodec().decode(jsonData)
+    } catch let error as ExportError {
+      throw error
+    } catch {
+      throw ExportError.importFailed(underlying: error)
+    }
   }
 }

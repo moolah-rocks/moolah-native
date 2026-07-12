@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-struct Instrument: Codable, Sendable, Hashable, Identifiable {
+struct Instrument: Sendable, Hashable, Identifiable {
   enum Kind: String, Codable, Sendable, CaseIterable {
     case fiatCurrency
     case stock

@@ -134,7 +134,7 @@ struct ExportCoordinatorImportNewProfileTests {
     // Write a file that passes JSON decode but has an unsupported version so
     // the import throws after profileStore.addProfile has already been called.
     let exported = ExportedData(
-      version: 99,
+      version: ExportFormatVersion.current,
       exportedAt: Date(),
       profileLabel: "Bad Version Profile",
       currencyCode: "AUD",
@@ -148,8 +148,10 @@ struct ExportCoordinatorImportNewProfileTests {
     )
     let badURL = makeTempFileURL()
     defer { try? FileManager.default.removeItem(at: badURL) }
-    let data = try JSONEncoder.exportEncoder.encode(exported)
-    try data.write(to: badURL)
+    let encoded = try ExportDocumentCodec().encode(exported)
+    var json = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    json["version"] = 99
+    try JSONSerialization.data(withJSONObject: json).write(to: badURL)
 
     let containerManager = try ProfileContainerManager.forTesting()
     let profileStore = try makeProfileStore(containerManager: containerManager)

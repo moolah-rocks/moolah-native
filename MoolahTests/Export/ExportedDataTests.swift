@@ -22,8 +22,8 @@ struct ExportedDataTests {
       exportedAt: exportDate,
       instrument: instrument)
 
-    let data = try JSONEncoder.exportEncoder.encode(original)
-    let decoded = try JSONDecoder.exportDecoder.decode(ExportedData.self, from: data)
+    let data = try ExportDocumentCodec().encode(original)
+    let decoded = try ExportDocumentCodec().decode(data)
 
     #expect(decoded.version == original.version)
     #expect(decoded.exportedAt == original.exportedAt)
@@ -50,11 +50,12 @@ struct ExportedDataTests {
     instrument: Instrument
   ) -> ExportedData {
     ExportedData(
-      version: 1,
+      version: ExportFormatVersion.current,
       exportedAt: exportedAt,
       profileLabel: "My Profile",
       currencyCode: "AUD",
       financialYearStartMonth: 7,
+      instruments: [instrument],
       accounts: [
         Account(
           id: accountId, name: "Checking", type: .bank,
@@ -97,7 +98,7 @@ struct ExportedDataTests {
   @Test("version field is present in JSON output")
   func versionFieldInJSON() throws {
     let exported = ExportedData(
-      version: 1,
+      version: ExportFormatVersion.current,
       exportedAt: Date(),
       profileLabel: "Test",
       currencyCode: "USD",
@@ -110,11 +111,11 @@ struct ExportedDataTests {
       investmentValues: [:]
     )
 
-    let data = try JSONEncoder.exportEncoder.encode(exported)
+    let data = try ExportDocumentCodec().encode(exported)
     let object = try JSONSerialization.jsonObject(with: data)
     let json = try #require(object as? [String: Any])
 
-    #expect(json["version"] as? Int == 1)
+    #expect(json["version"] as? Int == ExportFormatVersion.current)
     #expect(json["profileLabel"] as? String == "Test")
     #expect(json["currencyCode"] as? String == "USD")
     #expect(json["financialYearStartMonth"] as? Int == 1)

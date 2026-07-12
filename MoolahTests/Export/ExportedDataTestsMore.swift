@@ -16,7 +16,7 @@ struct ExportedDataTestsMore {
       investmentValues: [:]
     )
 
-    #expect(exported.version == 1)
+    #expect(exported.version == ExportFormatVersion.current)
     #expect(exported.profileLabel.isEmpty)
     #expect(exported.currencyCode.isEmpty)
     #expect(exported.financialYearStartMonth == 1)
@@ -27,8 +27,8 @@ struct ExportedDataTestsMore {
     let ids = MultiCurrencyFixtureIds()
     let original = Self.makeMultiCurrencyFixture(ids: ids)
 
-    let data = try JSONEncoder.exportEncoder.encode(original)
-    let decoded = try JSONDecoder.exportDecoder.decode(ExportedData.self, from: data)
+    let data = try ExportDocumentCodec().encode(original)
+    let decoded = try ExportDocumentCodec().decode(data)
 
     let aud = Instrument.AUD
     let usd = Instrument.USD
@@ -102,7 +102,7 @@ struct ExportedDataTestsMore {
       chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
 
     return ExportedData(
-      version: 1,
+      version: ExportFormatVersion.current,
       exportedAt: Date(timeIntervalSince1970: 1_700_000_000),
       profileLabel: "Multi-currency profile",
       currencyCode: aud.id,

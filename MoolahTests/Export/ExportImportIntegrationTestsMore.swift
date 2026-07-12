@@ -69,7 +69,7 @@ struct ExportImportIntegrationTestsMore {
   @Test("importFromFile rejects unsupported version")
   func rejectsUnsupportedVersion() async throws {
     let exported = ExportedData(
-      version: 99,
+      version: ExportFormatVersion.current,
       exportedAt: Date(),
       profileLabel: "Test",
       currencyCode: "AUD",
@@ -84,8 +84,10 @@ struct ExportImportIntegrationTestsMore {
     let tempURL = FileManager.default.temporaryDirectory.appending(
       path: "\(UUID().uuidString).json")
     defer { try? FileManager.default.removeItem(at: tempURL) }
-    let data = try JSONEncoder.exportEncoder.encode(exported)
-    try data.write(to: tempURL)
+    let encoded = try ExportDocumentCodec().encode(exported)
+    var json = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    json["version"] = 99
+    try JSONSerialization.data(withJSONObject: json).write(to: tempURL)
 
     let database = try ProfileDatabase.openInMemory()
     let coordinator = ExportCoordinator()
