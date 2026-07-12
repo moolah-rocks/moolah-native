@@ -218,7 +218,7 @@ extension AutomationService {
 
   // MARK: - Leg Resolution Helpers
 
-  fileprivate func resolveLegs(
+  private func resolveLegs(
     _ legs: [LegSpec], profileIdentifier: String, instrument: Instrument
   ) async throws -> (legs: [TransactionLeg], accountIds: Set<UUID>) {
     let accounts = try await fetchAccounts(profileIdentifier: profileIdentifier)
@@ -258,7 +258,7 @@ extension AutomationService {
     return (resolvedLegs, accountIds)
   }
 
-  fileprivate func normaliseTransferLegs(
+  private func normaliseTransferLegs(
     _ legs: [TransactionLeg], accountIds: Set<UUID>
   ) -> [TransactionLeg] {
     // Transfers (2+ legs with different accounts) use .expense type on every leg.
@@ -272,7 +272,7 @@ extension AutomationService {
 
   // MARK: - Find Filter Helpers
 
-  fileprivate func resolvedFindFilters(
+  private func resolvedFindFilters(
     account: (name: String?, id: UUID?),
     category: (name: String?, id: UUID?),
     dates: (from: Date?, to: Date?),
@@ -297,7 +297,7 @@ extension AutomationService {
     return ResolvedFindFilters(filter: filter, accountId: accountId, categoryId: categoryId)
   }
 
-  fileprivate func resolvedAccountId(
+  private func resolvedAccountId(
     name: String?,
     id: UUID?,
     profileIdentifier: String
@@ -314,7 +314,7 @@ extension AutomationService {
     return nil
   }
 
-  fileprivate func resolvedCategoryId(
+  private func resolvedCategoryId(
     name: String?,
     id: UUID?,
     profileIdentifier: String
@@ -331,7 +331,7 @@ extension AutomationService {
     return nil
   }
 
-  fileprivate func findTransactionsDateInterval(fromDate: Date?, toDate: Date?) throws -> Range<
+  private func findTransactionsDateInterval(fromDate: Date?, toDate: Date?) throws -> Range<
     Date
   >? {
     guard fromDate != nil || toDate != nil else { return nil }
@@ -349,12 +349,12 @@ extension AutomationService {
     return lowerBound..<upperBound
   }
 
-  fileprivate static func leg(_ leg: TransactionLeg, matchesAccountId accountId: UUID?) -> Bool {
+  private static func leg(_ leg: TransactionLeg, matchesAccountId accountId: UUID?) -> Bool {
     guard let accountId else { return true }
     return leg.accountId == accountId
   }
 
-  fileprivate static func leg(_ leg: TransactionLeg, matchesCategoryId categoryId: UUID?) -> Bool {
+  private static func leg(_ leg: TransactionLeg, matchesCategoryId categoryId: UUID?) -> Bool {
     guard let categoryId else { return true }
     return leg.categoryId == categoryId
   }
