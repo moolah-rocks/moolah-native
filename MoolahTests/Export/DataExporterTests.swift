@@ -21,6 +21,7 @@ private final class ProgressTracker: Sendable {
 struct DataExporterTests {
 
   private let instrument = Instrument.defaultTestInstrument
+  private let defaultTaxOwnerId = UUID()
 
   private func makeBackendWithData() async throws -> CloudKitBackend {
     let (backend, _) = try TestBackend.create(instrument: instrument)
@@ -98,7 +99,8 @@ struct DataExporterTests {
     let data = try await exporter.export(
       profileLabel: "Test",
       currencyCode: instrument.id,
-      financialYearStartMonth: 7
+      financialYearStartMonth: 7,
+      defaultTaxOwnerId: defaultTaxOwnerId
     ) { progress in
       if case .downloading(let step) = progress {
         progressSteps.record(step)
@@ -126,7 +128,8 @@ struct DataExporterTests {
     let data = try await exporter.export(
       profileLabel: "Test",
       currencyCode: instrument.id,
-      financialYearStartMonth: 7
+      financialYearStartMonth: 7,
+      defaultTaxOwnerId: defaultTaxOwnerId
     ) { _ in }
 
     let earmark = try #require(data.earmarks.first)
@@ -144,7 +147,8 @@ struct DataExporterTests {
     let data = try await exporter.export(
       profileLabel: "Test",
       currencyCode: instrument.id,
-      financialYearStartMonth: 7
+      financialYearStartMonth: 7,
+      defaultTaxOwnerId: defaultTaxOwnerId
     ) { _ in }
 
     let investmentAccount = try #require(data.accounts.first { $0.type == .investment })
@@ -162,7 +166,8 @@ struct DataExporterTests {
     let data = try await exporter.export(
       profileLabel: "Test",
       currencyCode: instrument.id,
-      financialYearStartMonth: 7
+      financialYearStartMonth: 7,
+      defaultTaxOwnerId: defaultTaxOwnerId
     ) { _ in }
 
     #expect(data.accounts.isEmpty)
@@ -180,7 +185,8 @@ struct DataExporterTests {
     let data = try await exporter.export(
       profileLabel: "Test",
       currencyCode: instrument.id,
-      financialYearStartMonth: 7
+      financialYearStartMonth: 7,
+      defaultTaxOwnerId: defaultTaxOwnerId
     ) { _ in }
 
     let scheduled = data.transactions.filter { $0.isScheduled }

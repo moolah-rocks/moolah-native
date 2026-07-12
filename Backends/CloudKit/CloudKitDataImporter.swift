@@ -6,13 +6,15 @@ struct ImportResult: Sendable {
   let accountCount: Int
   let accountGroupCount: Int
   let categoryCount: Int
+  let taxOwnerCount: Int
   let earmarkCount: Int
   let budgetItemCount: Int
   let transactionCount: Int
   let investmentValueCount: Int
 
   var totalCount: Int {
-    accountCount + accountGroupCount + categoryCount + earmarkCount + budgetItemCount
+    accountCount + accountGroupCount + categoryCount + taxOwnerCount + earmarkCount
+      + budgetItemCount
       + transactionCount + investmentValueCount
   }
 }
@@ -74,6 +76,7 @@ struct CloudKitDataImporter {
       accountCount: data.accounts.count,
       accountGroupCount: data.accountGroups.count,
       categoryCount: data.categories.count,
+      taxOwnerCount: data.taxOwners.count,
       earmarkCount: data.earmarks.count,
       budgetItemCount: budgetItemCount,
       transactionCount: data.transactions.count,
@@ -95,6 +98,7 @@ struct CloudKitDataImporter {
     // table; fiat is ambient and a no-op in `registerResolvable`.
     try await registerInstruments(data: data)
     try await database.write { database in
+      try Self.writeTaxOwners(data: data, database: database)
       try Self.writeCategories(data: data, database: database)
       // Groups before accounts so a member's `groupId` resolves to a
       // present group row (the schema omits the FK constraint to allow
@@ -103,6 +107,14 @@ struct CloudKitDataImporter {
       try Self.writeAccountsAndEarmarks(data: data, database: database)
       try Self.writeTransactions(data: data, database: database)
       try Self.writeInvestmentValues(data: data, database: database)
+    }
+  }
+
+  nonisolated private static func writeTaxOwners(
+    data: ExportedData, database: Database
+  ) throws {
+    for owner in data.taxOwners {
+      try TaxOwnerRow(domain: owner).upsert(database)
     }
   }
 
@@ -158,8 +170,15 @@ struct CloudKitDataImporter {
   nonisolated private static func writeCategories(
     data: ExportedData, database: Database
   ) throws {
+    let validOwnerIds = Set(data.taxOwners.map(\.id))
     for category in data.categories {
-      try CategoryRow(domain: category).upsert(database)
+      var normalizedCategory = category
+      normalizedCategory.taxOwnerIds = category.taxOwnerIds.filter(validOwnerIds.contains)
+      try CategoryRow(domain: normalizedCategory).upsert(database)
+      try GRDBTaxOwnershipPersistence.replaceCategoryOwners(
+        categoryId: category.id,
+        ownerIds: normalizedCategory.taxOwnerIds,
+        in: database)
     }
   }
 
@@ -174,8 +193,15 @@ struct CloudKitDataImporter {
   nonisolated private static func writeAccountsAndEarmarks(
     data: ExportedData, database: Database
   ) throws {
+    let validOwnerIds = Set(data.taxOwners.map(\.id))
     for account in data.accounts {
-      try AccountRow(domain: account).upsert(database)
+      var normalizedAccount = account
+      normalizedAccount.taxOwnerIds = account.taxOwnerIds.filter(validOwnerIds.contains)
+      try AccountRow(domain: normalizedAccount).upsert(database)
+      try GRDBTaxOwnershipPersistence.replaceAccountOwners(
+        accountId: account.id,
+        ownerIds: normalizedAccount.taxOwnerIds,
+        in: database)
     }
     for earmark in data.earmarks {
       try EarmarkRow(domain: earmark).upsert(database)
