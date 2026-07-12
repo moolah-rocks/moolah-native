@@ -6,10 +6,8 @@ import GRDB
 /// - `+DailyBalancesTypes.swift` holds the row, bundle, handler, and
 ///   context types shared across the siblings.
 /// - `+DailyBalancesAggregation.swift` holds the four SQL fetches.
-/// - `+DailyBalancesInvestmentValues.swift` holds the per-day
-///   recorded-value snapshot fold-in.
-/// - `+DailyBalancesTradesMode.swift` holds the per-day trades-mode
-///   position-valuation fold-in (sister of the snapshot fold).
+/// - `+DailyBalancesInvestmentPositions.swift` holds the per-day
+///   investment-position valuation fold.
 /// - `+DailyBalancesForecast.swift` holds the forecast extrapolation.
 ///
 /// Mirrors the `+ExpenseBreakdown.swift`, `+CategoryBalances.swift`,
@@ -28,8 +26,8 @@ extension GRDBAnalysisRepository {
   // MARK: - Public assembly entry point
 
   /// Walks the per-day deltas, mutates a `PositionBook`, calls
-  /// `PositionBook.dailyBalance(...)` once per day, then folds in the
-  /// investment-value overrides, runs best-fit linear regression, and
+  /// `PositionBook.dailyBalance(...)` once per day, then values investment
+  /// positions, runs best-fit linear regression, and
   /// generates the forecast tail. Conversion runs outside the
   /// `database.read` closure (in this async helper) so the
   /// `Database` reference stays inside the snapshot.
@@ -64,7 +62,6 @@ extension GRDBAnalysisRepository {
   ) async throws -> [DailyBalance] {
     let context = DailyBalancesAssemblyContext(
       investmentAccountIds: aggregation.investmentAccountIds,
-      tradesModeInvestmentAccountIds: aggregation.tradesModeInvestmentAccountIds,
       instrumentMap: aggregation.instrumentMap,
       profileInstrument: profileInstrument,
       conversionService: conversionService)
@@ -80,15 +77,9 @@ extension GRDBAnalysisRepository {
       context: context,
       handlers: handlers)
 
-    try await applyInvestmentValues(
-      aggregation.investmentValues,
-      to: &dailyBalances,
-      context: context,
-      handlers: handlers)
-
-    try await applyTradesModePositionValuations(
-      priorRows: aggregation.priorTradesModeAccountRows,
-      postRows: aggregation.tradesModeAccountRows,
+    try await applyInvestmentPositionValuations(
+      priorRows: aggregation.priorInvestmentAccountRows,
+      postRows: aggregation.investmentAccountRows,
       to: &dailyBalances,
       context: context,
       handlers: handlers)
@@ -113,9 +104,7 @@ extension GRDBAnalysisRepository {
   /// Seed the position book with pre-`after` rows under
   /// `asStartingBalance: true` semantics. Earmark rows use the same
   /// math as the per-leg `apply` would produce (sum quantities into
-  /// `earmarks`); account rows feed both `accounts` and (for
-  /// investment accounts) `accountsFromTransfers` regardless of leg
-  /// type, mirroring the per-leg `asStartingBalance: true` fast path.
+  /// `earmarks`); account rows seed the primary per-account position book.
   ///
   /// Returns the seeded book directly — pre-`after` deltas are not
   /// emitted as `DailyBalance` rows, so there's no per-day walk on the
@@ -130,14 +119,6 @@ extension GRDBAnalysisRepository {
       let instrument = resolveInstrument(row.instrumentId, in: context.instrumentMap)
       let quantity = InstrumentAmount(storageValue: row.qty, instrument: instrument).quantity
       book.accounts[row.accountId, default: [:]][instrument, default: 0] += quantity
-      if context.investmentAccountIds.contains(row.accountId) {
-        // `asStartingBalance: true` — every leg type on an investment
-        // account contributes to `accountsFromTransfers` so the
-        // post-cutoff `.investmentTransfersOnly` reading rule sees
-        // the historical position as a baseline.
-        book.accountsFromTransfers[
-          row.accountId, default: [:]][instrument, default: 0] += quantity
-      }
     }
     for row in earmarkRows {
       let instrument = resolveInstrument(row.instrumentId, in: context.instrumentMap)
@@ -225,22 +206,17 @@ extension GRDBAnalysisRepository {
 
   /// Build the per-day `BalanceContext` for the historic walk.
   ///
-  /// Trades-mode accounts contribute to investmentValue via
-  /// `applyTradesModePositionValuations`, not to bankTotal. Including them
+  /// Investment-like accounts contribute to investmentValue via
+  /// `applyInvestmentPositionValuations`, not to bankTotal. Including them
   /// in `BalanceContext.investmentAccountIds` excludes them from
   /// `PositionBook.dailyBalanceRequests`'s
   /// `for ... where !investmentAccountIds` sum (no double-count) without
-  /// changing `accountsFromTransfers` membership (which `seedPriorBook` /
-  /// `applyDailyDeltas` gate on the recorded-value-only set, so the
-  /// `.investmentTransfersOnly` read continues to see only recorded-value
-  /// transfer cash).
+  /// changing position accumulation.
   private static func makeBalanceContext(
     _ context: DailyBalancesAssemblyContext
   ) -> PositionBook.BalanceContext {
-    let allInvestmentIds =
-      context.investmentAccountIds.union(context.tradesModeInvestmentAccountIds)
-    return PositionBook.BalanceContext(
-      investmentAccountIds: allInvestmentIds,
+    PositionBook.BalanceContext(
+      investmentAccountIds: context.investmentAccountIds,
       profileInstrument: context.profileInstrument,
       rule: .investmentTransfersOnly,
       conversionService: context.conversionService)
@@ -337,9 +313,8 @@ extension GRDBAnalysisRepository {
   }
 
   /// Apply one day's account and earmark deltas to the in-place
-  /// `PositionBook`. Account rows update `accounts` and (for transfer
-  /// legs into investment accounts) `accountsFromTransfers`; earmark
-  /// rows update `earmarks`. Saved/spent earmark dicts are NOT touched
+  /// `PositionBook`. Account rows update `accounts`; earmark rows update
+  /// `earmarks`. Saved/spent earmark dictionaries are not touched
   /// — `PositionBook.dailyBalance(...)` reads only `earmarks` for the
   /// `earmarked` sum, so writing them would be wasted work.
   private static func applyDailyDeltas(
@@ -352,10 +327,6 @@ extension GRDBAnalysisRepository {
       let instrument = resolveInstrument(row.instrumentId, in: context.instrumentMap)
       let quantity = InstrumentAmount(storageValue: row.qty, instrument: instrument).quantity
       book.accounts[row.accountId, default: [:]][instrument, default: 0] += quantity
-      if context.investmentAccountIds.contains(row.accountId), row.type == "transfer" {
-        book.accountsFromTransfers[
-          row.accountId, default: [:]][instrument, default: 0] += quantity
-      }
     }
     for row in earmarkRows {
       let instrument = resolveInstrument(row.instrumentId, in: context.instrumentMap)

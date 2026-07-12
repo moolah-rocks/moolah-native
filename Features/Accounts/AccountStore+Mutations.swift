@@ -20,15 +20,8 @@ extension AccountStore {
   ) async throws -> Account {
     setError(nil)
 
-    // User-driven account creation lands in trades mode by default for
-    // investment accounts: any caller-provided `.recordedValue` is silently
-    // promoted to `.calculatedFromTrades`. Migration / sync paths that need
-    // to write `.recordedValue` go through `accountRepository.update(_:)`
-    // directly, not this method.
     var toCreate = account
-    if toCreate.type == .investment && toCreate.valuationMode == .recordedValue {
-      toCreate.valuationMode = .calculatedFromTrades
-    }
+    toCreate.valuationMode = .calculatedFromTrades
 
     do {
       let created = try await repository.create(
@@ -46,8 +39,10 @@ extension AccountStore {
   /// rationale; the reactive observation delivers the updated account.
   func update(_ account: Account) async throws -> Account {
     setError(nil)
+    var toUpdate = account
+    toUpdate.valuationMode = .calculatedFromTrades
     do {
-      let updated = try await repository.update(account)
+      let updated = try await repository.update(toUpdate)
       mutationLogger.debug("Updated account: \(updated.name)")
       return updated
     } catch {

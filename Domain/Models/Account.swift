@@ -95,7 +95,7 @@ struct Account {
     positions: [Position] = [],
     position: Int = 0,
     isHidden: Bool = false,
-    valuationMode: ValuationMode = .recordedValue,
+    valuationMode: ValuationMode = .calculatedFromTrades,
     walletAddress: String? = nil,
     chainId: Int? = nil,
     exchangeProvider: ExchangeProvider? = nil,
@@ -161,7 +161,8 @@ extension Account: Codable {
     position = try container.decode(Int.self, forKey: .position)
     isHidden = try container.decode(Bool.self, forKey: .isHidden)
     valuationMode =
-      try container.decodeIfPresent(ValuationMode.self, forKey: .valuationMode) ?? .recordedValue
+      try container.decodeIfPresent(ValuationMode.self, forKey: .valuationMode)
+      ?? .calculatedFromTrades
     walletAddress = try container.decodeIfPresent(String.self, forKey: .walletAddress)
     chainId = try container.decodeIfPresent(Int.self, forKey: .chainId)
     exchangeProvider = try container.decodeIfPresent(

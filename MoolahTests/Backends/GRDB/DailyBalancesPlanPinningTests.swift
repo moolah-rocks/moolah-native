@@ -195,10 +195,9 @@ struct DailyBalancesPlanPinningTests {
     let database = try makeDatabase()
     // Mirrors the per-account id loader driven by
     // `GRDBAnalysisRepository.fetchInvestmentAccountIds`. The
-    // production SQL filters on an investment-like `type`
-    // (`investmentLikeTypesSQLList`) AND `valuation_mode =
-    // 'recordedValue'` so the snapshot fold only applies to
-    // recorded-value investment-like accounts. The `account_by_type`
+    // production SQL filters only on an investment-like `type`
+    // (`investmentLikeTypesSQLList`), deliberately ignoring the legacy
+    // valuation-mode column. The `account_by_type`
     // index keys on `(type)` and serves the selective type `IN` list
     // via per-value index seeks; the `valuation_mode` predicate filters
     // the candidate rows post-seek. SQLite emits `SEARCH account USING
@@ -209,65 +208,9 @@ struct DailyBalancesPlanPinningTests {
       query: """
         SELECT id FROM account
         WHERE type IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
-          AND valuation_mode = 'recordedValue'
         """)
     #expect(detail.contains("SEARCH account USING INDEX account_by_type"))
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "account"))
   }
 
-  @Test("fetchTradesModeInvestmentAccountIds uses account_by_type")
-  func fetchTradesModeInvestmentAccountIdsUsesAccountByType() throws {
-    let database = try makeDatabase()
-    // Mirrors the per-account id loader driven by
-    // `GRDBAnalysisRepository.fetchTradesModeInvestmentAccountIds`. The
-    // production SQL filters on an investment-like `type`
-    // (`investmentLikeTypesSQLList`) AND `valuation_mode =
-    // 'calculatedFromTrades'`. The `account_by_type` index keys on
-    // `(type)` and serves the selective type `IN` list via per-value
-    // index seeks; the `valuation_mode` predicate filters the candidate
-    // rows post-seek. SQLite emits `SEARCH account USING INDEX
-    // account_by_type` for this shape, which is *not* a full table
-    // scan.
-    let detail = try planDetail(
-      database,
-      query: """
-        SELECT id FROM account
-        WHERE type IN (\(GRDBAnalysisRepository.investmentLikeTypesSQLList))
-          AND valuation_mode = 'calculatedFromTrades'
-        """)
-    #expect(detail.contains("SEARCH account USING INDEX account_by_type"))
-    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "account"))
-  }
-
-  @Test("fetchDailyBalances investment-value lookup uses iv_by_account_date_value")
-  func fetchDailyBalancesInvestmentValuesUseAccountDateIndex() throws {
-    let database = try makeDatabase()
-    // Mirrors the per-account snapshot loader driven by
-    // `GRDBAnalysisRepository.fetchDailyBalances`. The composite
-    // `iv_by_account_date_value` covers `(account_id, date, value,
-    // instrument_id)` so the SELECT list is served by the index —
-    // SQLite emits `SCAN ... USING COVERING INDEX`, which is the
-    // no-base-row read shape we want; that is *not* a full table scan
-    // and `planHasFullTableScanOf` correctly distinguishes it from a
-    // bare `SCAN`.
-    //
-    // Note: there is intentionally no `:after` lower bound on the
-    // production query — the cursor walk in `applyInvestmentValues`
-    // needs every historical snapshot so the most-recent pre-window
-    // value can carry forward into the first in-window day.
-    let detail = try planDetail(
-      database,
-      query: """
-        SELECT account_id, date, value, instrument_id
-        FROM investment_value
-        ORDER BY account_id ASC, date ASC
-        """)
-    #expect(detail.contains("iv_by_account_date_value"))
-    #expect(detail.contains("USING COVERING INDEX"))
-    // No alias on `investment_value` here — pin the bare-table form
-    // against the helper, which catches `SCAN investment_value` not
-    // followed by ` USING `.
-    #expect(
-      !PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "investment_value"))
-  }
 }

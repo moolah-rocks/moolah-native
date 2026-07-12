@@ -5,10 +5,7 @@ import XCTest
 enum SidebarAccount {
   case checking
   case brokerage
-  /// `.tradeBaseline`'s second investment account: `.calculatedFromTrades`
-  /// mode with no `InvestmentValue` snapshots. Drives the
-  /// "picker hidden for new trade-driven accounts" branch in
-  /// `EditAccountValuationPickerTests`.
+  /// `.tradeBaseline`'s second position-valued investment account.
   case tradesBrokerage
   /// The Brokerage account from the `.tradeReady` seed (different UUID from
   /// `.brokerage`, which uses the `.tradeBaseline` seed fixture).

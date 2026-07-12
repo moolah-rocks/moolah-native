@@ -2,14 +2,14 @@ import Foundation
 
 @testable import Moolah
 
-/// Shared helpers for the trades-mode position-valuation fold tests
-/// (`GRDBDailyBalancesTradesModeTests` and its sibling suites).
-enum TradesModeFoldTestSupport {
+/// Shared helpers for the investment-position valuation fold tests
+/// (`DailyBalanceInvestmentPositionTests` and its sibling suites).
+enum InvestmentPositionFoldTestSupport {
 
   /// Build the standard `DailyBalancesHandlers` for fold-contract
-  /// tests. The trades-mode fold only ever invokes
-  /// `handleInvestmentValueFailure` — the other two callbacks are
-  /// no-ops. Pass `InvestmentValueFailureLog.append` (or a
+  /// tests. The investment-position fold only ever invokes
+  /// `handlePositionValuationFailure` — the other two callbacks are
+  /// no-ops. Pass `PositionValuationFailureLog.append` (or a
   /// `{ _, _ in }` no-op for cases that don't assert on failures).
   static func makeHandlers(
     failures: @escaping @Sendable (Error, Date) -> Void
@@ -17,7 +17,7 @@ enum TradesModeFoldTestSupport {
     GRDBAnalysisRepository.DailyBalancesHandlers(
       handleUnparseableDay: { _ in },
       handleConversionFailure: { _, _ in },
-      handleInvestmentValueFailure: failures)
+      handlePositionValuationFailure: failures)
   }
 
   /// Zero-everything `DailyBalance` placeholder so the fold has an
@@ -35,10 +35,8 @@ enum TradesModeFoldTestSupport {
       isForecast: false)
   }
 
-  /// Pre-seeded `DailyBalance` mirroring a recorded-value snapshot
-  /// contribution on the day. Used by tests that exercise the
-  /// add-not-overwrite contract for `investmentValue` /
-  /// `netWorth`.
+  /// Pre-seeded `DailyBalance` carrying a stale investment value. Used by
+  /// tests that exercise the fold's replace-not-add contract.
   static func preSeededDailyBalance(on dayKey: Date) -> DailyBalance {
     DailyBalance(
       date: dayKey,
@@ -57,18 +55,15 @@ enum TradesModeFoldTestSupport {
   }
 
   /// Build a `DailyBalancesAssemblyContext` parameterised for the
-  /// trades-mode fold: empty `investmentAccountIds` (the
-  /// snapshot/recorded-value fold isn't under test), explicit
-  /// trades-mode ids, instrument map, and conversion service. Profile
-  /// instrument is the default test instrument (AUD).
+  /// investment-position fold: explicit account ids, instrument map, and
+  /// conversion service. Profile instrument is the default test instrument (AUD).
   static func makeContext(
-    tradesIds: Set<UUID>,
+    investmentIds: Set<UUID>,
     instrumentMap: [String: Instrument],
     conversionService: any InstrumentConversionService
   ) -> GRDBAnalysisRepository.DailyBalancesAssemblyContext {
     GRDBAnalysisRepository.DailyBalancesAssemblyContext(
-      investmentAccountIds: [],
-      tradesModeInvestmentAccountIds: tradesIds,
+      investmentAccountIds: investmentIds,
       instrumentMap: instrumentMap,
       profileInstrument: .defaultTestInstrument,
       conversionService: conversionService)

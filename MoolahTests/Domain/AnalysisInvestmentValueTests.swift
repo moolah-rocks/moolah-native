@@ -3,13 +3,13 @@ import Testing
 
 @testable import Moolah
 
-/// Contract tests for investment-value override behaviour and bestFit linear
+/// Contract tests for position-derived investment history and bestFit linear
 /// regression over `dailyBalance` history.
-@Suite("AnalysisRepository Contract Tests — Investment Value")
+@Suite("AnalysisRepository Contract Tests — Investment Positions")
 struct AnalysisInvestmentValueTests {
 
-  @Test("fetchDailyBalances computes investmentValue from investment values")
-  func dailyBalancesInvestmentValue() async throws {
+  @Test("fetchDailyBalances derives investment value from positions and ignores snapshots")
+  func dailyBalancesDerivesInvestmentValueFromPositions() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let investmentAccount = Account(
       id: UUID(), name: "Portfolio", type: .investment, instrument: .defaultTestInstrument)
@@ -36,7 +36,7 @@ struct AnalysisInvestmentValueTests {
     try await backend.investments.setValue(
       accountId: investmentAccount.id,
       date: day2,
-      value: InstrumentAmount(quantity: 550, instrument: .defaultTestInstrument))
+      value: InstrumentAmount(quantity: 9_999, instrument: .defaultTestInstrument))
 
     _ = try await backend.transactions.create(
       Transaction(
@@ -53,8 +53,8 @@ struct AnalysisInvestmentValueTests {
     let day2Balance = try #require(balances.first { $0.date == day2Start })
     let day2InvestmentValue = try #require(day2Balance.investmentValue)
     #expect(
-      day2InvestmentValue == InstrumentAmount(quantity: 550, instrument: .defaultTestInstrument),
-      "investmentValue should reflect the recorded market value")
+      day2InvestmentValue == InstrumentAmount(quantity: 500, instrument: .defaultTestInstrument),
+      "investmentValue should carry the 500 position and ignore the snapshot")
     #expect(
       day2Balance.netWorth == day2Balance.balance + day2InvestmentValue,
       "netWorth should be balance + investmentValue")
@@ -100,9 +100,8 @@ struct AnalysisInvestmentValueTests {
     #expect(abs(day3Fit.quantity - 30) <= tolerance)
   }
 
-  @Test(
-    "fetchDailyBalances with after cutoff carries pre-window investment-value snapshots forward")
-  func dailyBalancesPreWindowInvestmentSnapshotCarriedForward() async throws {
+  @Test("fetchDailyBalances with after cutoff ignores pre-window snapshots")
+  func dailyBalancesPreWindowInvestmentSnapshotIgnored() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let investmentAccount = Account(
       id: UUID(), name: "Portfolio", type: .investment, instrument: .defaultTestInstrument)
@@ -112,12 +111,8 @@ struct AnalysisInvestmentValueTests {
       id: UUID(), name: "Bank", type: .bank, instrument: .defaultTestInstrument)
     _ = try await backend.accounts.create(bankAccount)
 
-    // Snapshot dated before the `after` cutoff. The cursor walk inside
-    // `applyInvestmentValues` must observe this row so it can carry the
-    // most-recent pre-window value forward into the first post-cutoff
-    // day. A SQL filter that drops snapshots strictly older than `after`
-    // breaks this — the per-account `latestByAccount` map starts empty
-    // and the in-window day reports a zero `investmentValue`.
+    // Persisted for backward-compatible storage and sync only. It must not
+    // participate in the runtime historical balance fold.
     let preWindowDate = try AnalysisTestHelpers.date(year: 2025, month: 2, day: 15)
     try await backend.investments.setValue(
       accountId: investmentAccount.id,
@@ -141,14 +136,8 @@ struct AnalysisInvestmentValueTests {
       after: cutoff, forecastUntil: nil)
     let firstWindowDayStart = AnalysisTestHelpers.calendar.startOfDay(for: firstWindowDay)
     let firstWindowBalance = try #require(balances.first { $0.date == firstWindowDayStart })
-    let investmentValue = try #require(firstWindowBalance.investmentValue)
-    #expect(
-      investmentValue == InstrumentAmount(quantity: 1000, instrument: .defaultTestInstrument),
-      "Pre-window investment-value snapshot must carry forward into the in-window day")
-    #expect(
-      firstWindowBalance.netWorth
-        == firstWindowBalance.balance + investmentValue,
-      "netWorth must reflect the carried-forward investment value")
+    #expect(firstWindowBalance.investmentValue == nil)
+    #expect(firstWindowBalance.netWorth == firstWindowBalance.balance)
   }
 
   @Test("fetchDailyBalances returns nil bestFit with fewer than 2 data points")

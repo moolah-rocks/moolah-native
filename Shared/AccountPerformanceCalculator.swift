@@ -17,10 +17,8 @@ import Foundation
 ///     regression the old negative-`contributions` path could not produce).
 ///
 /// The single-account (`compute`) and multi-instrument (`computeMultiInstrument`)
-/// entry points now run the same ledger read; they differ only in whether the
-/// caller supplies one account id or a set. `computeLegacy` (manual-valuation
-/// accounts, which have no ledger) keeps its own net-deposit / Modified-Dietz
-/// derivation and is unchanged.
+/// entry points run the same ledger read; they differ only in whether the
+/// caller supplies one account id or a set.
 enum AccountPerformanceCalculator {
 
   // MARK: - Position-tracked (single account, ledger-sourced)
@@ -165,47 +163,6 @@ enum AccountPerformanceCalculator {
       flows: flows, terminalValue: currentValue.quantity, terminalDate: now)
   }
 
-  // MARK: - Manual valuation
-
-  /// Manual-valuation accounts (the legacy path): cash flows are derived
-  /// from consecutive `dailyBalance` deltas; the terminal value is the
-  /// most recent `InvestmentValue`. Synchronous — no instrument conversion
-  /// is performed. This method assumes every `AccountDailyBalance.balance`
-  /// is denominated in `instrument`; callers must ensure this invariant
-  /// holds (legacy accounts are mono-instrument by construction). Passing
-  /// mixed-instrument balances produces arithmetically meaningless flows
-  /// without trapping.
-  ///
-  /// `now` is injected so tests can pin the reference date. Production
-  /// callers pass `Date()`.
-  static func computeLegacy(
-    dailyBalances: [AccountDailyBalance],
-    values: [InvestmentValue],
-    instrument: Instrument,
-    now: Date = Date()
-  ) -> AccountPerformance {
-    guard let latest = values.max(by: { $0.date < $1.date }) else {
-      return .unavailable(in: instrument)
-    }
-
-    let sortedBalances = dailyBalances.sorted { $0.date < $1.date }
-    var flows: [CashFlow] = []
-    var prior = Decimal(0)
-    for entry in sortedBalances {
-      let delta = entry.balance.quantity - prior
-      if delta != 0 {
-        flows.append(CashFlow(date: entry.date, amount: delta))
-      }
-      prior = entry.balance.quantity
-    }
-
-    return assemble(
-      flows: flows,
-      currentValue: latest.value,
-      profileCurrency: instrument,
-      now: now)
-  }
-
   /// Sum of valued positions in `profileCurrency`, or `nil` if any row's
   /// `value` is missing — Rule 11 forbids partial sums.
   private static func aggregatedValue(
@@ -223,97 +180,4 @@ enum AccountPerformanceCalculator {
     return total
   }
 
-  /// Assembles the legacy (manual-valuation) `AccountPerformance` from
-  /// net-deposit flows and the terminal value. Here `amountInvested` carries
-  /// the net-deposit sum and the percentage is Modified Dietz — the correct
-  /// derivation for accounts with no cost-basis lots. The ledger path uses
-  /// `assembleFromLedger` (remaining cost basis + IRR) instead.
-  private static func assemble(
-    flows: [CashFlow],
-    currentValue: InstrumentAmount?,
-    profileCurrency: Instrument,
-    now: Date
-  ) -> AccountPerformance {
-    guard let currentValue else {
-      // Row 6: V failed but flows were extracted successfully. Surface
-      // the invested amount and firstFlowDate so the caller can show
-      // partial information (e.g. the "since Mar 2023" subtitle on the
-      // Return tile remains useful even when the rate itself is
-      // unavailable). profitLoss / profitLossPercent / annualisedReturn
-      // all require V and stay nil.
-      let netDeposits = flows.reduce(Decimal(0)) { $0 + $1.amount }
-      return AccountPerformance(
-        instrument: profileCurrency,
-        currentValue: nil,
-        amountInvested: InstrumentAmount(
-          quantity: netDeposits, instrument: profileCurrency),
-        profitLoss: nil,
-        profitLossPercent: nil,
-        annualisedReturn: nil,
-        firstFlowDate: flows.first?.date)
-    }
-    guard let firstFlow = flows.first else {
-      // No flows: the entire current value is treated as gain. A manual
-      // account with a value but no recorded deposits has no baseline against
-      // which to subtract. Same formula gives P/L = 0 when currentValue is
-      // also zero (empty account).
-      return AccountPerformance(
-        instrument: profileCurrency,
-        currentValue: currentValue,
-        amountInvested: .zero(instrument: profileCurrency),
-        profitLoss: currentValue,
-        profitLossPercent: nil,
-        annualisedReturn: nil,
-        firstFlowDate: nil)
-    }
-
-    let netDeposits = flows.reduce(Decimal(0)) { $0 + $1.amount }
-    // Decimal has no fractional `pow`; convert to Double at the IRR/Modified
-    // Dietz boundary.
-    let terminal = Double(truncating: currentValue.quantity as NSDecimalNumber)
-    let totalDays = max(now.timeIntervalSince(firstFlow.date) / 86_400, 0)
-
-    let plQuantity = currentValue.quantity - netDeposits
-    let plPercent = modifiedDietzPercent(
-      flows: flows, terminal: terminal, totalDays: totalDays)
-    let annualised = IRRSolver.annualisedReturn(
-      flows: flows, terminalValue: currentValue.quantity, terminalDate: now)
-
-    return AccountPerformance(
-      instrument: profileCurrency,
-      currentValue: currentValue,
-      amountInvested: InstrumentAmount(
-        quantity: netDeposits, instrument: profileCurrency),
-      profitLoss: InstrumentAmount(quantity: plQuantity, instrument: profileCurrency),
-      profitLossPercent: plPercent,
-      annualisedReturn: annualised,
-      firstFlowDate: firstFlow.date)
-  }
-
-  /// `(V − ΣCᵢ) / Σ(wᵢ · Cᵢ)` with `wᵢ = (T − tᵢ) / T`. Same formula
-  /// `IRRSolver` uses internally as its Newton-Raphson seed; we expose it
-  /// here so the result is shown directly as the period return without
-  /// re-deriving it from `IRRSolver`'s annualised output. Used by the legacy
-  /// manual-valuation path only.
-  ///
-  /// Returns `nil` for spans < 1 day or zero weighted-capital.
-  private static func modifiedDietzPercent(
-    flows: [CashFlow], terminal: Double, totalDays: Double
-  ) -> Decimal? {
-    guard totalDays >= 1, let firstFlow = flows.first else { return nil }
-    // Decimal has no fractional `pow`; convert to Double at the Modified
-    // Dietz boundary.
-    let firstDate = firstFlow.date
-    var contributionSum = 0.0
-    var weightedSum = 0.0
-    for flow in flows {
-      let days = flow.date.timeIntervalSince(firstDate) / 86_400
-      let weight = (totalDays - days) / totalDays
-      let amount = Double(truncating: flow.amount as NSDecimalNumber)
-      contributionSum += amount
-      weightedSum += weight * amount
-    }
-    guard weightedSum != 0 else { return nil }
-    return Decimal((terminal - contributionSum) / weightedSum)
-  }
 }

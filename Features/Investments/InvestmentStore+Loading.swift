@@ -4,7 +4,7 @@ import Foundation
 //
 // `loadValues` and `loadDailyBalances` paginate against the repository
 // and write into `values` / `dailyBalances`. `loadAllData` is the
-// view-driven entry point that branches on `Account.valuationMode`.
+// position-derived view entry point.
 //
 // `setValue` / `removeValue` are pass-through writes to the repository;
 // the reactive observation in `+Observation.swift` re-emits and updates
@@ -17,8 +17,8 @@ extension InvestmentStore {
   ///
   /// Per `guides/CONCURRENCY_GUIDE.md`, pagination loops must check
   /// `Task.isCancelled` after each network round-trip so that when the
-  /// caller is cancelled (e.g. the `.task` on `InvestmentAccountView`
-  /// tears down) we stop paginating immediately rather than fetching
+  /// caller is cancelled (e.g. its owning detail task tears down) we stop
+  /// paginating immediately rather than fetching
   /// every remaining page and then discarding the result.
   func loadValues(accountId: UUID) async {
     setActiveAccount(accountId)
@@ -77,17 +77,8 @@ extension InvestmentStore {
     }
   }
 
-  /// Loads the full dataset required by `InvestmentAccountView`, branching on
-  /// the account's `valuationMode`. Keeps the branching logic out of the view
-  /// so `.task`/`.refreshable` blocks stay one-liners.
-  ///
-  /// `setActiveAccount(...)` is only invoked on the `.recordedValue`
-  /// branch — the per-account `observeValues(...)` subscription drives
-  /// the `values` array, and the trades-mode UI does not read `values`.
-  /// Subscribing on the trades branch would populate `values` from any
-  /// pre-existing snapshot rows for the account (legacy data, or rows
-  /// recorded before the user switched modes), which would confuse
-  /// callers that pin "trades-mode means values is empty" semantics.
+  /// Loads the position-derived dataset for an investment account. Legacy
+  /// valuation snapshots are deliberately not read.
   func loadAllData(account: Account, profileCurrency: Instrument) async {
     // Authoritative load: supersede any in-flight rate-tick / previous-account
     // pass so its late publish can't clobber this account's data (#1209).
@@ -95,41 +86,6 @@ extension InvestmentStore {
     setLoadedHostCurrency(profileCurrency)
     setAccountPerformance(nil)  // clear stale data immediately
     await refreshAssetKeys()
-    switch account.valuationMode {
-    case .recordedValue:
-      await loadRecordedValueBranch(account: account, profileCurrency: profileCurrency)
-    case .calculatedFromTrades:
-      await loadTradesBranch(account: account, profileCurrency: profileCurrency)
-    }
-  }
-
-  private func loadRecordedValueBranch(account: Account, profileCurrency: Instrument) async {
-    setActiveAccount(account.id)
-    // `loadValues` and `loadDailyBalances` each paginate against the
-    // backend (potentially many round-trips on accounts with long
-    // history) and write disjoint state (`self.values` vs
-    // `self.dailyBalances`). Running them in parallel turns the
-    // wall-clock latency from `t(values) + t(balances)` to `max(...)`
-    // — measurable on accounts with multi-page history. Both methods
-    // are `@MainActor`-isolated, so the actual writes still serialise
-    // on the main actor.
-    async let loadedValues: Void = loadValues(accountId: account.id)
-    async let loadedBalances: Void = loadDailyBalances(
-      accountId: account.id, hostCurrency: profileCurrency)
-    _ = await (loadedValues, loadedBalances)
-    guard !Task.isCancelled else { return }
-    setAccountPerformance(
-      AccountPerformanceCalculator.computeLegacy(
-        dailyBalances: dailyBalances,
-        values: values,
-        instrument: profileCurrency))
-  }
-
-  private func loadTradesBranch(account: Account, profileCurrency: Instrument) async {
-    // Trades-mode accounts derive value from `positions`, not from
-    // `investment_value` snapshots, so don't subscribe to the per-
-    // account values stream. Clear any leftover state from a prior
-    // recordedValue load so the views see a clean slate.
     setActiveAccount(nil)
     await loadPositions(accountId: account.id, accountChainId: account.chainId)
     guard !Task.isCancelled else { return }
@@ -137,24 +93,6 @@ extension InvestmentStore {
     guard !Task.isCancelled else { return }
     await refreshPositionTrackedPerformance(
       accountId: account.id, profileCurrency: profileCurrency)
-  }
-
-  /// Recompute the legacy `accountPerformance` from the in-memory `values`
-  /// and `dailyBalances` arrays after a `setValue` / `removeValue`
-  /// mutation. Synchronous: the legacy path doesn't need conversion.
-  ///
-  /// Uses `loadedHostCurrency` to match `loadAllData`'s legacy branch —
-  /// `dailyBalances` are always in `loadedHostCurrency` (converted by
-  /// `loadDailyBalances`), so callers must not pass a different
-  /// instrument. The `.AUD` final fallback only fires if a mutation
-  /// happens before `loadAllData` ran, which should not occur in
-  /// practice.
-  func refreshLegacyPerformance() {
-    setAccountPerformance(
-      AccountPerformanceCalculator.computeLegacy(
-        dailyBalances: dailyBalances,
-        values: values,
-        instrument: loadedHostCurrency ?? .AUD))
   }
 
   func setValue(accountId: UUID, date: Date, value: InstrumentAmount) async {
@@ -175,7 +113,6 @@ extension InvestmentStore {
       updated.append(newValue)
       updated.sort()
       setValues(updated)
-      refreshLegacyPerformance()
     } catch {
       logger.error("Failed to set investment value: \(error.localizedDescription)")
       setError(error)
@@ -193,7 +130,6 @@ extension InvestmentStore {
       var updated = values
       updated.removeAll { $0.date.isSameDay(as: date) }
       setValues(updated)
-      refreshLegacyPerformance()
     } catch {
       logger.error("Failed to remove investment value: \(error.localizedDescription)")
       setError(error)

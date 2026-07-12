@@ -215,9 +215,8 @@ struct TransactionStoreLoadRaceTests {
   }
 
   /// A `load(filter:)` cancelled mid-fetch must not surface
-  /// `CancellationError` as a user-facing error. The InvestmentAccountView
-  /// flips `initialLoadComplete` on account switch, which unmounts the
-  /// embedded `TransactionListView` and cancels its in-flight load; the
+  /// `CancellationError` as a user-facing error. Switching detail accounts
+  /// unmounts `TransactionListView` and cancels its in-flight load; the
   /// surrounding alert observer treats any non-nil `store.error` as
   /// presentable, so leaking the cancellation produced a spurious "Operation
   /// failed: Swift.CancellationError" dialog on every subsequent visit to an

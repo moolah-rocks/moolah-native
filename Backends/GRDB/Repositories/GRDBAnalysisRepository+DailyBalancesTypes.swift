@@ -57,15 +57,8 @@ extension GRDBAnalysisRepository {
   ///
   /// - `priorAccountRows` / `priorEarmarkRows` seed the `PositionBook`
   ///   with pre-`after` legs under the `asStartingBalance: true`
-  ///   semantics (every leg type on an investment account contributes
-  ///   to `accountsFromTransfers`, matching the
-  ///   `investmentTransfersOnly: false` baseline applied before the
-  ///   cutoff).
+  ///   semantics in the primary per-account position book.
   /// - `accountRows` / `earmarkRows` carry the post-`after` deltas.
-  /// - `investmentValues` carries every `investment_value` row — all
-  ///   historical snapshots are loaded so the cursor walk in
-  ///   `applyInvestmentValues` can carry the most recent pre-window
-  ///   value forward into the first in-window day.
   /// - `scheduled` carries the scheduled `[Transaction]` for the
   ///   forecast extrapolation — the forecast path stays Swift-only
   ///   because SQL can't extrapolate recurring patterns.
@@ -74,19 +67,14 @@ extension GRDBAnalysisRepository {
     let priorEarmarkRows: [DailyBalanceEarmarkRow]
     let accountRows: [DailyBalanceAccountRow]
     let earmarkRows: [DailyBalanceEarmarkRow]
-    let investmentValues: [InvestmentValueSnapshot]
+    /// Account ids of every investment-like account. Drives the per-day
+    /// position-valuation fold regardless of the persisted legacy mode.
     let investmentAccountIds: Set<UUID>
-    /// Account ids of trades-mode investment accounts. Drives the new
-    /// per-day position-valuation fold; recorded-value accounts are
-    /// carried in `investmentAccountIds` and drive the snapshot fold.
-    let tradesModeInvestmentAccountIds: Set<UUID>
-    /// Pre-cutoff `transaction_leg` SUM rows filtered to trades-mode
-    /// investment accounts only. Pre-fold seed for the new fold's
-    /// cumulative position dict.
-    let priorTradesModeAccountRows: [DailyBalanceAccountRow]
-    /// Post-cutoff `transaction_leg` SUM rows filtered to trades-mode
-    /// investment accounts only.
-    let tradesModeAccountRows: [DailyBalanceAccountRow]
+    /// Pre-cutoff `transaction_leg` SUM rows filtered to investment-like
+    /// accounts. Pre-fold seed for the cumulative position dictionary.
+    let priorInvestmentAccountRows: [DailyBalanceAccountRow]
+    /// Post-cutoff `transaction_leg` SUM rows filtered to investment-like accounts.
+    let investmentAccountRows: [DailyBalanceAccountRow]
     let scheduled: [Transaction]
     let instrumentMap: [String: Instrument]
     let forecastUntil: Date?
@@ -105,29 +93,25 @@ extension GRDBAnalysisRepository {
   /// `assembleDailyBalances`. Matches the
   /// `ExpenseBreakdownHandlers` / `CategoryBalancesHandlers` /
   /// `IncomeAndExpenseHandlers` shape so future analysis methods can
-  /// share the same handler pattern. Investment-value failures use
-  /// their own callback because they fire at the post-loop fold-in
-  /// step and carry per-account context — folding them into
-  /// `handleConversionFailure` would dilute the per-day signal.
+  /// share the same handler pattern. Position-valuation failures use their
+  /// own callback because they fire after the primary daily-balance walk.
   struct DailyBalancesHandlers: Sendable {
     let handleUnparseableDay: @Sendable (String) -> Void
     let handleConversionFailure: @Sendable (Error, DailyBalancesFailureContext) -> Void
-    let handleInvestmentValueFailure: @Sendable (Error, Date) -> Void
+    let handlePositionValuationFailure: @Sendable (Error, Date) -> Void
   }
 
   /// Fixed inputs that stay constant across every per-day call inside
-  /// `walkDays` and the investment-value fold-in. Lifts the
-  /// `investmentAccountIds`, `instrumentMap`, `profileInstrument`, and
-  /// `conversionService` references out of every helper signature so
+  /// `walkDays` and the investment-position fold. Lifts the
+  /// investment account ids, `instrumentMap`, `profileInstrument`, and the
+  /// `conversionService` reference out of every helper signature so
   /// each function fits SwiftLint's `function_parameter_count` budget.
   struct DailyBalancesAssemblyContext: Sendable {
+    /// Account ids of every investment-like account — read by
+    /// `applyInvestmentPositionValuations` to early-exit when the
+    /// profile has none. Investment accounts contribute through the
+    /// position fold, not through `accountsFromTransfers`.
     let investmentAccountIds: Set<UUID>
-    /// Account ids of trades-mode investment accounts — read by
-    /// `applyTradesModePositionValuations` to early-exit when the
-    /// profile has none. None of the seed/walk helpers consult this
-    /// field; trades-mode accounts contribute through the new fold,
-    /// not through `accountsFromTransfers`.
-    let tradesModeInvestmentAccountIds: Set<UUID>
     let instrumentMap: [String: Instrument]
     let profileInstrument: Instrument
     let conversionService: any InstrumentConversionService

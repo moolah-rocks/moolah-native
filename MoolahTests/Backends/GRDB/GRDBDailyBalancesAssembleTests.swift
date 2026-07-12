@@ -61,11 +61,9 @@ struct GRDBDailyBalancesAssembleTests {
       priorEarmarkRows: [],
       accountRows: accountRows,
       earmarkRows: [],
-      investmentValues: [],
       investmentAccountIds: [],
-      tradesModeInvestmentAccountIds: [],
-      priorTradesModeAccountRows: [],
-      tradesModeAccountRows: [],
+      priorInvestmentAccountRows: [],
+      investmentAccountRows: [],
       scheduled: [],
       instrumentMap: [usd: .fiat(code: usd)],
       forecastUntil: nil)
@@ -90,7 +88,7 @@ struct GRDBDailyBalancesAssembleTests {
           failures.append(callback.index)
         }
       },
-      handleInvestmentValueFailure: { _, _ in })
+      handlePositionValuationFailure: { _, _ in })
 
     // The walker MUST NOT throw on per-day conversion failure — Rule 11
     // scoping plus the chart-rendering rationale documented on
@@ -130,7 +128,7 @@ struct GRDBDailyBalancesAssembleTests {
           visited.append(callback.index)
         }
       },
-      handleInvestmentValueFailure: { _, _ in })
+      handlePositionValuationFailure: { _, _ in })
 
     let result = try await GRDBAnalysisRepository.assembleDailyBalances(
       aggregation: aggregation,
@@ -164,7 +162,7 @@ struct GRDBDailyBalancesAssembleTests {
       handleConversionFailure: { _, _ in
         visited.append(-1)
       },
-      handleInvestmentValueFailure: { _, _ in })
+      handlePositionValuationFailure: { _, _ in })
 
     await #expect(throws: CancellationError.self) {
       _ = try await GRDBAnalysisRepository.assembleDailyBalances(
@@ -184,89 +182,4 @@ struct GRDBDailyBalancesAssembleTests {
     #expect(conversionService.recordedBatches.count == 1)
   }
 
-  @Test("snapshot fold drops the day from dailyBalances on per-day conversion failure")
-  func snapshotFoldDropsDayOnFailure() async throws {
-    // Build an aggregation with one investment-value snapshot on day D.
-    let day = try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 12)
-    let dayKey = Calendar.current.startOfDay(for: day)
-    let usd = Instrument.fiat(code: "USD")
-    let accountId = UUID()
-    let aggregation = makeSnapshotFoldAggregation(
-      day: day, accountId: accountId, usd: usd)
-    // Seed the dailyBalances dict directly so we test the fold in
-    // isolation. Insert a placeholder DailyBalance for `dayKey` so the
-    // fold has a key to drop.
-    var dailyBalances: [Date: DailyBalance] = [
-      dayKey: makePlaceholderDailyBalance(on: dayKey)
-    ]
-    let conversionService = FakeConversionService.dateRates([:], failingDates: [dayKey])
-    let captured = InvestmentValueFailureLog()
-    let handlers = GRDBAnalysisRepository.DailyBalancesHandlers(
-      handleUnparseableDay: { _ in },
-      handleConversionFailure: { _, _ in },
-      handleInvestmentValueFailure: { error, date in
-        captured.append(error, date)
-      })
-    let context = GRDBAnalysisRepository.DailyBalancesAssemblyContext(
-      investmentAccountIds: aggregation.investmentAccountIds,
-      tradesModeInvestmentAccountIds: aggregation.tradesModeInvestmentAccountIds,
-      instrumentMap: aggregation.instrumentMap,
-      profileInstrument: .defaultTestInstrument,
-      conversionService: conversionService)
-
-    try await GRDBAnalysisRepository.applyInvestmentValues(
-      aggregation.investmentValues,
-      to: &dailyBalances,
-      context: context,
-      handlers: handlers)
-
-    // Rule 11: a snapshot conversion failure on day D must drop day D
-    // from dailyBalances. Sibling days (none here) are unaffected.
-    #expect(dailyBalances[dayKey] == nil)
-    let snapshot = captured.snapshot()
-    #expect(snapshot.count == 1)
-    #expect(snapshot.first?.1 == dayKey)
-  }
-
-  /// Build a single-snapshot aggregation for the snapshot-fold Rule 11
-  /// test. Extracted out of the test body to keep
-  /// `snapshotFoldDropsDayOnFailure` under SwiftLint's function-body
-  /// budget.
-  private func makeSnapshotFoldAggregation(
-    day: Date, accountId: UUID, usd: Instrument
-  ) -> GRDBAnalysisRepository.DailyBalancesAggregation {
-    GRDBAnalysisRepository.DailyBalancesAggregation(
-      priorAccountRows: [],
-      priorEarmarkRows: [],
-      accountRows: [],
-      earmarkRows: [],
-      investmentValues: [
-        InvestmentValueSnapshot(
-          accountId: accountId, date: day,
-          value: InstrumentAmount(quantity: 100, instrument: usd))
-      ],
-      investmentAccountIds: [accountId],
-      tradesModeInvestmentAccountIds: [],
-      priorTradesModeAccountRows: [],
-      tradesModeAccountRows: [],
-      scheduled: [],
-      instrumentMap: ["USD": usd],
-      forecastUntil: nil)
-  }
-
-  /// Zero-everything `DailyBalance` placeholder so the snapshot fold
-  /// has an entry to remove. Same extraction reason as
-  /// `makeSnapshotFoldAggregation`.
-  private func makePlaceholderDailyBalance(on dayKey: Date) -> DailyBalance {
-    DailyBalance(
-      date: dayKey,
-      balance: .zero(instrument: .defaultTestInstrument),
-      earmarked: .zero(instrument: .defaultTestInstrument),
-      availableFunds: .zero(instrument: .defaultTestInstrument),
-      investments: .zero(instrument: .defaultTestInstrument),
-      investmentValue: nil,
-      netWorth: .zero(instrument: .defaultTestInstrument),
-      bestFit: nil,
-      isForecast: false)
-  }
 }

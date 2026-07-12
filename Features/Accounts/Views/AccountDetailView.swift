@@ -1,8 +1,6 @@
 import SwiftUI
 
-/// The single unified account-detail view for every account type except
-/// `.recordedValue` investment accounts (deprecated; they keep
-/// `InvestmentAccountView.legacyValuationsLayout`). Composes an optional
+/// The single unified account-detail view for every account type. Composes an optional
 /// synced-account header above the shared
 /// `TransactionListView(...).multiInstrumentPositionsSplit(...)` container —
 /// which itself renders the data-driven `[Transactions | Positions | Chart]`

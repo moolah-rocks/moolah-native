@@ -7,11 +7,11 @@ import Testing
 @MainActor
 struct AccountStoreConversionTestsMore {
   @Test
-  func displayBalanceForInvestmentAccountPrefersInvestmentValue() async throws {
+  func displayBalanceForRecordedModeInvestmentUsesPositions() async throws {
     let accountId = UUID()
-    // Default `recordedValue` mode — investment-value snapshot drives the balance.
     let account = Account(
-      id: accountId, name: "Portfolio", type: .investment, instrument: .AUD)
+      id: accountId, name: "Portfolio", type: .investment, instrument: .AUD,
+      valuationMode: .recordedValue)
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(accounts: [account], in: database)
 
@@ -29,25 +29,13 @@ struct AccountStoreConversionTestsMore {
     let store = AccountStore(
       repository: backend.accounts, conversionService: conversion,
       targetInstrument: .AUD)
-    // This wait is a load-bearing ORDERING BARRIER (not a read-gate): it ensures
-    // the initial observeAll snapshot has landed before `updateInvestmentValue`,
-    // so a late initial emission can't clobber the externally-set snapshot back
-    // to zero. Do NOT replace it with a value poll.
     try await store.waitForNextEmission(
       matching: { !($0.positions(for: accountId).isEmpty) },
       description: "USD position observed"
     )
 
-    // recordedValue + no snapshot → balance = 0 (positions are NOT a fallback).
-    let sumBalance = try await store.displayBalance(for: accountId)
-    #expect(sumBalance == .zero(instrument: .AUD))
-
-    // Investment value set externally → recorded mode uses the snapshot verbatim.
-    let externalValue = InstrumentAmount(
-      quantity: dec("999.00"), instrument: .AUD)
-    await store.updateInvestmentValue(accountId: accountId, value: externalValue)
-    let override = try await store.displayBalance(for: accountId)
-    #expect(override == externalValue)
+    let balance = try await store.displayBalance(for: accountId)
+    #expect(balance == InstrumentAmount(quantity: dec("150.00"), instrument: .AUD))
   }
 
   @Test

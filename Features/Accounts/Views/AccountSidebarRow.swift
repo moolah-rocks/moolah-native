@@ -65,11 +65,8 @@ struct SidebarRowView: View {
   let amount: InstrumentAmount?
   var isSelected: Bool = false
   /// When non-nil, the row replaces the amount with this short label
-  /// (e.g. "Not set") and the accompanying VoiceOver phrase. Used by
-  /// `AccountSidebarRow` for recorded-value investment accounts that have
-  /// no recorded snapshot, so the sidebar doesn't roll a synthetic `$0` into
-  /// the user's mental model of the column. See guides/UI_GUIDE.md §"Not set"
-  /// and `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11 for the rationale.
+  /// (e.g. "Not set") and the accompanying VoiceOver phrase. Retained as a
+  /// generic row affordance for callers whose amount is genuinely unavailable.
   var unsetIndicator: String?
   /// Optional secondary text rendered below the name, in `.caption` /
   /// `.secondary`. Used by member rows under a group to surface chain
@@ -204,14 +201,8 @@ private struct SidebarRowAccessibility: ViewModifier {
 
 /// Sidebar row for an account. Reads the converted balance from
 /// `AccountStore.convertedBalances` (populated and retried by the store
-/// when conversions fail). Shows a spinner while no balance is available.
-///
-/// Recorded-value investment accounts with no externally-set value render
-/// "Not set" instead of `$0` once the initial conversion pass has completed
-/// — `$0` would be indistinguishable from "user entered zero" and would
-/// roll into net-worth as a real number rather than a missing one. See
-/// `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11 and the design note in
-/// `plans/per-account-valuation-mode.md`.
+/// when conversions fail). Shows a spinner while no balance is available;
+/// investment-like accounts use the same position-derived path as detail views.
 struct AccountSidebarRow: View {
   let account: Account
   var isSelected: Bool = false
@@ -230,7 +221,7 @@ struct AccountSidebarRow: View {
       name: account.name,
       amount: accountStore.convertedBalances[account.id],
       isSelected: isSelected,
-      unsetIndicator: accountStore.hasUnrecordedValue(account) ? "Not set" : nil,
+      unsetIndicator: nil,
       secondaryText: isMember ? memberSecondaryText : nil,
       isEditing: isEditing,
       onRename: onRename

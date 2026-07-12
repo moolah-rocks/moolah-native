@@ -168,7 +168,7 @@ struct AnalysisDailyBalancesTests {
     #expect(todayBalance.availableFunds.quantity == 10)
   }
 
-  @Test("daily balance + investments equals sum of current + investment account balances")
+  @Test("daily balance + position value equals total net worth")
   func balanceInvariantCrossCheck() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let accounts = try await seedCrossCheckAccounts(backend: backend)
@@ -182,8 +182,8 @@ struct AnalysisDailyBalancesTests {
 
     // balance = 5000 - 2000 + 1000 = 4000 cents = 40.00
     #expect(todayBalance.balance.quantity == 40)
-    // investments = 2000 cents = 20.00
-    #expect(todayBalance.investments.quantity == 20)
+    // position-derived investmentValue = 2000 cents = 20.00
+    #expect(todayBalance.investmentValue?.quantity == 20)
     // netWorth = 4000 + 2000 = 6000 cents = 60.00
     #expect(todayBalance.netWorth.quantity == 60)
   }

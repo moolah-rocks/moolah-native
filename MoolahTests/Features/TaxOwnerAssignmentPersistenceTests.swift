@@ -24,7 +24,6 @@ struct TaxOwnerAssignmentPersistenceTests {  // swiftlint:disable:this type_body
         type: .bank,
         instrument: .defaultTestInstrument,
         isHidden: false,
-        valuationMode: .recordedValue,
         taxOwnerIds: [deletedOwnerId, validOwner.id]),
       validOwners: [validOwner])
 

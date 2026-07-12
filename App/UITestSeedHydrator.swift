@@ -183,10 +183,6 @@ enum UITestSeedHydrator {
 
     try database.write { database in
       try seedTradeBaselineAccounts(instrument: instrument, in: database)
-      // Snapshots depend on accounts existing; transactions don't depend on
-      // either. Order accounts → snapshots → transactions so the
-      // dependency chain reads top-to-bottom.
-      try seedTradeBaselineInvestmentValues(instrument: instrument, in: database)
       try seedTradeBaselineTransactions(instrument: instrument, in: database)
       try seedTradeBaselineRenameTargets(instrument: instrument, in: database)
     }
@@ -230,9 +226,7 @@ enum UITestSeedHydrator {
         position: 2),
       in: database)
 
-    // A second investment account in `.calculatedFromTrades` mode with
-    // no `InvestmentValue` snapshots, so `EditAccountValuationPickerTests`
-    // can verify the picker stays hidden for new trade-driven accounts.
+    // A second investment account used by trade-focused UI tests.
     try upsertAccount(
       AccountSpec(
         id: fixtures.tradesBrokerageAccountId,
@@ -241,24 +235,6 @@ enum UITestSeedHydrator {
         instrumentId: instrument.id,
         position: 3,
         valuationMode: .calculatedFromTrades),
-      in: database)
-  }
-
-  /// Seed one `InvestmentValue` snapshot on the existing
-  /// `.recordedValue`-mode brokerage account, so
-  /// `EditAccountValuationPickerTests` can verify the picker is shown
-  /// for the legacy-with-data scenario.
-  private static func seedTradeBaselineInvestmentValues(
-    instrument: Instrument, in database: Database
-  ) throws {
-    let fixtures = UITestFixtures.TradeBaseline.self
-    try upsertInvestmentValue(
-      UITestInvestmentValueSeed(
-        id: fixtures.brokerageSnapshotId,
-        accountId: fixtures.brokerageAccountId,
-        date: fixtures.brokerageSnapshotDate,
-        instrumentId: instrument.id,
-        cents: fixtures.brokerageSnapshotCents),
       in: database)
   }
 

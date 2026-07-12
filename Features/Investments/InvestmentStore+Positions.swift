@@ -209,7 +209,7 @@ extension InvestmentStore {
   /// `App/ContentView+AccountDetail.swift`), which computes performance via
   /// `MultiInstrumentPositionsSplitModifier`. This single-account path is
   /// currently exercised by tests; it is kept in parity with that path so a
-  /// future caller (or the `InvestmentAccountView` surface) can rely on it.
+  /// future single-account caller can rely on it.
   func refreshPositionTrackedPerformance(
     accountId: UUID, profileCurrency: Instrument
   ) async {

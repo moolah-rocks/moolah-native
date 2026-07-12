@@ -12,8 +12,7 @@ struct AccountStoreConversionTestsMoreExtra {
     let usd = Instrument.USD
     let eur = Instrument.fiat(code: "EUR")
     let accountId = UUID()
-    // Use `calculatedFromTrades` so position-derived totals contribute
-    // (recordedValue + no snapshot → 0).
+    // Position-derived totals contribute for every investment-like account.
     let account = Account(
       id: accountId, name: "Portfolio", type: .investment, instrument: aud,
       valuationMode: .calculatedFromTrades)
@@ -134,22 +133,19 @@ struct AccountStoreConversionTestsMoreExtra {
     }
   }
 
-  /// When an investment account has an externally-supplied value (e.g. from
-  /// `InvestmentStore.valuatePositions`), `computeConvertedInvestmentTotal`
-  /// must use that value verbatim and convert it *once* to the target —
-  /// never re-sum the raw positions, and never double-convert.
+  /// Legacy snapshots are inert even when the account still carries the
+  /// recorded-value enum. The aggregate values positions exactly once.
   @Test
-  func computeConvertedInvestmentTotalUsesExternalValueWhenProvided()
+  func computeConvertedInvestmentTotalIgnoresLegacySnapshot()
     async throws
   {
     let accountId = UUID()
     let account = Account(
-      id: accountId, name: "Brokerage", type: .investment, instrument: .AUD)
+      id: accountId, name: "Brokerage", type: .investment, instrument: .AUD,
+      valuationMode: .recordedValue)
     let (backend, database) = try TestBackend.create()
     TestBackend.seed(accounts: [account], in: database)
 
-    // Seed raw positions that would produce a different total than the
-    // external value — this makes it provable the external value is used.
     let rawTx = Transaction(
       date: Date(),
       legs: [
@@ -158,6 +154,15 @@ struct AccountStoreConversionTestsMoreExtra {
           quantity: dec("100.00"), type: .openingBalance)
       ])
     TestBackend.seed(transactions: [rawTx], in: database)
+    TestBackend.seed(
+      investmentValues: [
+        accountId: [
+          InvestmentValue(
+            date: Date(),
+            value: InstrumentAmount(quantity: dec("2000.00"), instrument: .AUD))
+        ]
+      ],
+      in: database)
 
     let conversion = FakeConversionService.fixedRates([
       "AUD": dec("0.5")
@@ -171,15 +176,9 @@ struct AccountStoreConversionTestsMoreExtra {
       description: "seeded account observed"
     )
 
-    // External valuation in AUD (e.g. latest InvestmentValue): 2000 AUD.
-    let externalValue = InstrumentAmount(
-      quantity: dec("2000.00"), instrument: .AUD)
-    await store.updateInvestmentValue(accountId: accountId, value: externalValue)
-
-    // 2000 AUD -> USD at 0.5 = 1000 USD (external value converted once)
-    await expectEventually("external value converts once to 1000 USD") {
+    await expectEventually("position value converts once to 50 USD") {
       let total = try? await store.computeConvertedInvestmentTotal(in: .USD)
-      return total?.instrument == .USD && total?.quantity == dec("1000.00")
+      return total?.instrument == .USD && total?.quantity == dec("50.00")
     }
   }
 

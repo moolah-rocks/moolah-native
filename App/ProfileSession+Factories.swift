@@ -223,7 +223,7 @@ extension ProfileSession {
     let auth = AuthStore(backend: backend)
     let account = AccountStore(
       repository: backend.accounts, conversionService: backend.conversionService,
-      targetInstrument: profile.instrument, investmentRepository: backend.investments,
+      targetInstrument: profile.instrument,
       instrumentChanges: instrumentChanges)
     let category = CategoryStore(
       repository: backend.categories, instrumentChanges: instrumentChanges)

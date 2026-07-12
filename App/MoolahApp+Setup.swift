@@ -52,16 +52,6 @@ extension MoolahApp {
   static func makeContainerSetup(uiTestingSeed: UITestSeed?) -> ContainerSetup {
     do {
       if let seed = uiTestingSeed {
-        // Each `--ui-testing` launch starts from a fresh in-memory
-        // `ProfileContainerManager` with a different seed, but
-        // `UserDefaults.moolahShared` persists across xctest launches in
-        // the same runner. `ValuationModeMigration`'s per-profile gate
-        // flags would otherwise short-circuit any newer profile that
-        // happens to reuse a dead UUID (rare) and — more importantly —
-        // leave stale state visible to tests that read
-        // `UserDefaults.moolahShared`. Production code paths never enter
-        // this branch.
-        ValuationModeMigration.resetGateFlags(in: .moolahShared)
         UnifiedInstrumentIdentityMigration.resetGateFlag(in: .moolahShared)
         UnifiedInstrumentIdentityAliasCleanup.resetGateFlag(in: .moolahShared)
         let manager = try ProfileContainerManager.forTesting()

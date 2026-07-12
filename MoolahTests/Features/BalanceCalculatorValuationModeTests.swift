@@ -6,30 +6,20 @@ import Testing
 @Suite("AccountBalanceCalculator + ValuationMode")
 @MainActor
 struct BalanceCalculatorValuationModeTests {
-  @Test("recordedValue + snapshot → balance = snapshot")
-  func recordedWithSnapshot() async throws {
-    let calculator = AccountBalanceCalculator(
-      conversionService: FakeConversionService.fixedRates([:]), targetInstrument: .AUD)
-    let account = Account(
-      name: "B", type: .investment, instrument: .AUD,
-      valuationMode: .recordedValue)
-    let snapshot = InstrumentAmount(quantity: 1234, instrument: .AUD)
-    let balance = try await calculator.displayBalance(
-      for: account, investmentValue: snapshot)
-    #expect(balance == snapshot)
-  }
-
-  @Test("recordedValue + missing snapshot → balance = zero (NOT positions sum)")
-  func recordedWithoutSnapshotIsZero() async throws {
+  @Test(
+    "recordedValue investment-like accounts value positions",
+    arguments: [
+      AccountType.investment, .crypto, .exchange,
+    ])
+  func recordedModeValuesPositions(type: AccountType) async throws {
     let calculator = AccountBalanceCalculator(
       conversionService: FakeConversionService.fixedRates([:]), targetInstrument: .AUD)
     var account = Account(
-      name: "B", type: .investment, instrument: .AUD,
+      name: "B", type: type, instrument: .AUD,
       valuationMode: .recordedValue)
-    account.positions = [Position(instrument: .AUD, quantity: 999)]
-    let balance = try await calculator.displayBalance(
-      for: account, investmentValue: nil)
-    #expect(balance == .zero(instrument: .AUD))
+    account.positions = [Position(instrument: .AUD, quantity: 500)]
+    let balance = try await calculator.displayBalance(for: account)
+    #expect(balance == InstrumentAmount(quantity: 500, instrument: .AUD))
   }
 
   @Test("calculatedFromTrades → positions sum (snapshot ignored)")
@@ -40,9 +30,7 @@ struct BalanceCalculatorValuationModeTests {
       name: "B", type: .investment, instrument: .AUD,
       valuationMode: .calculatedFromTrades)
     account.positions = [Position(instrument: .AUD, quantity: 500)]
-    let snapshot = InstrumentAmount(quantity: 9999, instrument: .AUD)
-    let balance = try await calculator.displayBalance(
-      for: account, investmentValue: snapshot)
+    let balance = try await calculator.displayBalance(for: account)
     #expect(balance == InstrumentAmount(quantity: 500, instrument: .AUD))
   }
 
@@ -54,14 +42,12 @@ struct BalanceCalculatorValuationModeTests {
       name: "Checking", type: .bank, instrument: .AUD,
       valuationMode: .recordedValue)
     account.positions = [Position(instrument: .AUD, quantity: 42)]
-    let snapshot = InstrumentAmount(quantity: 9999, instrument: .AUD)
-    let balance = try await calculator.displayBalance(
-      for: account, investmentValue: snapshot)
+    let balance = try await calculator.displayBalance(for: account)
     #expect(balance == InstrumentAmount(quantity: 42, instrument: .AUD))
   }
 
-  @Test("totalConverted: recordedValue investment uses cache value")
-  func totalConvertedRecordedMode() async throws {
+  @Test("totalConverted: recordedValue investment sums positions")
+  func totalConvertedRecordedModeSumsPositions() async throws {
     let calculator = AccountBalanceCalculator(
       conversionService: FakeConversionService.fixedRates([:]), targetInstrument: .AUD)
     var withSnapshot = Account(
@@ -73,13 +59,9 @@ struct BalanceCalculatorValuationModeTests {
       valuationMode: .recordedValue)
     withoutSnapshot.positions = [Position(instrument: .AUD, quantity: 999)]
 
-    let cache = InvestmentValueCache(repository: nil)
-    cache.set(InstrumentAmount(quantity: 100, instrument: .AUD), for: withSnapshot.id)
-    // withoutSnapshot has no cache entry.
-
     let total = try await calculator.totalConverted(
-      for: [withSnapshot, withoutSnapshot], to: .AUD, using: cache)
-    #expect(total == InstrumentAmount(quantity: 100, instrument: .AUD))
+      for: [withSnapshot, withoutSnapshot], to: .AUD)
+    #expect(total == InstrumentAmount(quantity: 1998, instrument: .AUD))
   }
 
   @Test("totalConverted: calculatedFromTrades sums positions, ignores cache")
@@ -90,10 +72,7 @@ struct BalanceCalculatorValuationModeTests {
       name: "A", type: .investment, instrument: .AUD,
       valuationMode: .calculatedFromTrades)
     account.positions = [Position(instrument: .AUD, quantity: 500)]
-    let cache = InvestmentValueCache(repository: nil)
-    cache.set(InstrumentAmount(quantity: 99, instrument: .AUD), for: account.id)
-    let total = try await calculator.totalConverted(
-      for: [account], to: .AUD, using: cache)
+    let total = try await calculator.totalConverted(for: [account], to: .AUD)
     #expect(total == InstrumentAmount(quantity: 500, instrument: .AUD))
   }
 
@@ -107,8 +86,9 @@ struct BalanceCalculatorValuationModeTests {
   /// on (a regression to a historic date would silently misvalue every
   /// wallet).
   @Test(
-    "crypto account: native-token positions convert to the profile currency at the current date")
-  func cryptoAccountConvertsPositionsAtCurrentDate() async throws {
+    "investment-like accounts convert foreign positions at the current date",
+    arguments: [AccountType.investment, .crypto, .exchange])
+  func investmentAccountConvertsPositionsAtCurrentDate(type: AccountType) async throws {
     let eth = Instrument.crypto(
       chainId: 1,
       contractAddress: "0x0000000000000000000000000000000000000000",
@@ -124,20 +104,18 @@ struct BalanceCalculatorValuationModeTests {
     let calculator = AccountBalanceCalculator(
       conversionService: conversion, targetInstrument: .AUD)
     var account = Account(
-      name: "Hardware Wallet", type: .crypto, instrument: .AUD,
+      name: "Investment Account", type: type, instrument: .AUD,
       valuationMode: .calculatedFromTrades)
     account.positions = [Position(instrument: eth, quantity: 2)]
 
     // Default path uses `Date()` (well past `recent`): the wallet reflects
     // today's rate — 2 ETH × 4000 — not the historic 1000.
-    let current = try await calculator.displayBalance(
-      for: account, investmentValue: nil)
+    let current = try await calculator.displayBalance(for: account)
     #expect(current == InstrumentAmount(quantity: 8000, instrument: .AUD))
 
     // Pinning a historic date selects the historic rate, proving the
     // conversion is genuinely date-driven and the default really is "now".
-    let asOfHistoric = try await calculator.displayBalance(
-      for: account, investmentValue: nil, date: historic)
+    let asOfHistoric = try await calculator.displayBalance(for: account, date: historic)
     #expect(asOfHistoric == InstrumentAmount(quantity: 2000, instrument: .AUD))
   }
 
@@ -169,8 +147,7 @@ struct BalanceCalculatorValuationModeTests {
       Position(instrument: spam, quantity: 1_000_000),  // → 0
     ]
 
-    let balance = try await calculator.displayBalance(
-      for: account, investmentValue: nil)
+    let balance = try await calculator.displayBalance(for: account)
     #expect(balance == InstrumentAmount(quantity: 400, instrument: .AUD))
   }
 
@@ -191,8 +168,7 @@ struct BalanceCalculatorValuationModeTests {
     ]
 
     await #expect(throws: (any Error).self) {
-      _ = try await calculator.displayBalance(
-        for: account, investmentValue: nil)
+      _ = try await calculator.displayBalance(for: account)
     }
   }
 

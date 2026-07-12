@@ -174,8 +174,8 @@ final class ProfileSession: Identifiable {
   /// Synchronous initialiser — opens the per-profile GRDB queue and
   /// builds every store / service the session exposes. Callers must
   /// invoke `try await session.setUp()` before any code path that
-  /// expects post-bootstrap state (e.g. `ValuationModeMigration`
-  /// effects) to be visible — `SessionManager.session(for:)` schedules
+  /// expects post-bootstrap state to be visible —
+  /// `SessionManager.session(for:)` schedules
   /// this automatically when it creates the session.
   init(
     profile: Profile,
@@ -356,6 +356,4 @@ final class ProfileSession: Identifiable {
     await folderScanner.scanForNewFiles()
   }
 
-  // `runValuationModeMigration` lives in
-  // `ProfileSession+ValuationMigration.swift`.
 }

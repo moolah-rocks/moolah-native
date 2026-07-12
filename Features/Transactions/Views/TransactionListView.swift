@@ -104,9 +104,8 @@ struct TransactionListView: View {
   }
 
   /// Embedded init — parent provides selection binding and handles the
-  /// inspector. Used by `InvestmentAccountView` and `EarmarkDetailView` so
-  /// their leaf-owned `@State selectedTransaction` survives inner-leaf
-  /// `.id(...)` tear-downs.
+  /// inspector. Used by leaves such as `EarmarkDetailView` that own
+  /// transaction selection outside the list.
   init(
     title: String,
     filter: TransactionFilter,

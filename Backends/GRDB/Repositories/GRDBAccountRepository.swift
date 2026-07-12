@@ -231,35 +231,6 @@ final class GRDBAccountRepository: AccountRepository, @unchecked Sendable {
     return resolved
   }
 
-  /// Single-statement bootstrap migration: flips every investment
-  /// account without an `InvestmentValue` snapshot to
-  /// `valuationMode = .calculatedFromTrades`. Runs inside one
-  /// `database.write { … }` so the whole pass is one transaction / one
-  /// fsync — replaces the historic per-account loop driven by
-  /// `ValuationModeMigration.run()`.
-  ///
-  /// Idempotency lives one level up — `ValuationModeMigration` gates
-  /// the call on a per-profile `UserDefaults` flag and never invokes
-  /// this method twice for the same install.
-  ///
-  /// Hooks are deliberately not fired: this runs at bootstrap before
-  /// any sync subscriber is attached, and the new value is locally
-  /// derived state (CKSyncEngine treats `valuation_mode` like any
-  /// other field — the next remote upload will surface the change via
-  /// the regular store path).
-  func backfillValuationModeForUnsnapshotInvestmentAccounts() async throws -> Int {
-    try await database.write { database in
-      try database.execute(
-        literal: """
-          UPDATE account
-          SET valuation_mode = \(ValuationMode.calculatedFromTrades.rawValue)
-          WHERE type = \(AccountType.investment.rawValue)
-            AND id NOT IN (SELECT DISTINCT account_id FROM investment_value)
-          """)
-      return database.changesCount
-    }
-  }
-
   func delete(id: UUID) async throws {
     // Soft-delete: flip `is_hidden = true` on the matching row.
     // Rejects deletes against an account with non-zero positions —

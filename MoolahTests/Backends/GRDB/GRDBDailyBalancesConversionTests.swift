@@ -84,10 +84,9 @@ struct GRDBDailyBalancesConversionTests {
     #expect(dayTwoBalance.balance.instrument == .defaultTestInstrument)
   }
 
-  @Test("daily balances convert investment-value snapshots at the day's rate")
-  func dailyBalancesInvestmentValueConvertAtCorrectDayRate() async throws {
-    // Pins that `applyInvestmentValues` converts each day's
-    // investment-value override at *that day's* rate. The conversion
+  @Test("daily balances convert investment positions at the day's rate")
+  func dailyBalancesInvestmentPositionConvertAtCorrectDayRate() async throws {
+    // Pins that the position fold converts each day's holding at *that day's* rate. The conversion
     // service seeds two rate windows that bracket the test day: an
     // early rate that applies on `day` (2025-06-10) and a much later
     // rate (2026-01-01) that would only apply if the conversion ran on
@@ -112,30 +111,28 @@ struct GRDBDailyBalancesConversionTests {
       id: UUID(), name: "Portfolio", type: .investment, instrument: .defaultTestInstrument)
     _ = try await backend.accounts.create(investmentAccount)
 
-    // A bank account with a same-day transaction so the historic walk
-    // emits a `DailyBalance` row for `day` — without it the
-    // `applyInvestmentValues` fold-in has no day key to write into.
+    // A bank account supplies the other side of the investment transfer.
     let bankAccount = Account(
       id: UUID(), name: "Bank", type: .bank, instrument: .defaultTestInstrument)
     _ = try await backend.accounts.create(bankAccount)
     _ = try await backend.transactions.create(
       Transaction(
-        date: day, payee: "Interest",
+        date: day, payee: "Invest",
         legs: [
           TransactionLeg(
             accountId: bankAccount.id, instrument: .defaultTestInstrument,
-            quantity: 10, type: .income)
+            quantity: -100, type: .transfer),
+          TransactionLeg(
+            accountId: investmentAccount.id, instrument: Instrument.fiat(code: "USD"),
+            quantity: 100, type: .transfer),
         ]))
 
-    // 100 USD investment value on `day`. At the day's 1.5 USD→profile
-    // rate the converted total is 150. A regression that converted
-    // every snapshot at `Date()` (today) would pick the 2026-01-01
-    // window instead and yield 100 * 3.0 = 300 — fails the assertion.
+    // A conflicting snapshot remains persisted but cannot affect the result.
     let usd = Instrument.fiat(code: "USD")
     try await backend.investments.setValue(
       accountId: investmentAccount.id,
       date: day,
-      value: InstrumentAmount(quantity: 100, instrument: usd))
+      value: InstrumentAmount(quantity: 9_999, instrument: usd))
 
     let balances = try await backend.analysis.fetchDailyBalances(
       after: nil, forecastUntil: nil)

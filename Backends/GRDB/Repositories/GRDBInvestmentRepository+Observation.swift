@@ -119,10 +119,8 @@ extension GRDBInvestmentRepository {
     }
   }
 
-  /// Tick stream over all `investment_value` rows. Used by
-  /// `AccountStore` to refresh its `investmentValueCache` and recompute
-  /// `convertedInvestmentTotal` whenever any investment value changes,
-  /// without requiring a per-account subscription. `Void`-emitting so
+  /// Tick stream over all `investment_value` rows for compatibility
+  /// consumers that need a database-wide change signal. `Void`-emitting so
   /// `removeDuplicates()` can't be applied (every emission is
   /// indistinguishable); we therefore use the explicit-region
   /// `tracking(regions:fetch:)` form so a fresh-install profile with

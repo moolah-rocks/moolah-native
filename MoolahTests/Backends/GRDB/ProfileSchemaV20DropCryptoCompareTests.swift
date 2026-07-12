@@ -17,10 +17,10 @@ import Testing
 struct ProfileSchemaV20DropCryptoCompareTests {
   @Test("schema version reflects the latest migration")
   func versionIsLatest() {
-    // Bumped alongside `v23_tax_reporting` — see
+    // Bumped alongside `v24_trade_only_valuation` — see
     // `ProfileSchema.version`'s doc comment ("bumped each time a
     // migration is added").
-    #expect(ProfileSchema.version == 23)
+    #expect(ProfileSchema.version == 24)
   }
 
   @Test("v20 migration runs cleanly (per-profile instrument table was already dropped by v10)")

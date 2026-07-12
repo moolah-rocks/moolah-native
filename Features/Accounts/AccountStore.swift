@@ -23,24 +23,13 @@ final class AccountStore {
   /// from "conversion ran and produced no balance".
   private(set) var hasCompletedInitialConversion: Bool = false
 
-  // `repository`, `conversionService`, and `investmentRepository` are
+  // `repository` and `conversionService` are
   // deliberately not `private` so the sibling `+Observation.swift`
   // extension can subscribe to their reactive streams. Treat them as
   // private-by-convention from elsewhere in the module.
   let repository: AccountRepository
   let conversionService: any InstrumentConversionService
   let targetInstrument: Instrument
-  /// Investment repository — captured separately from the read-through
-  /// cache so the observation pipeline can subscribe to its
-  /// `observeAllValues()` tick stream. `nil` in tests / previews that
-  /// don't pass an investment repository (no investment-value writes
-  /// will reach the store; `convertedInvestmentTotal` falls back to the
-  /// position sum).
-  let investmentRepository: (any InvestmentRepository)?
-  /// Read-through cache of externally-set investment values. `internal`
-  /// (rather than `private`) so the `+ConvertedTotals.swift` extension
-  /// file can pass it to the balance calculator without a wrapper.
-  let investmentValueCache: InvestmentValueCache
   /// `internal` so the `+ConvertedTotals.swift` extension can call the
   /// calculator directly. Stays `let` — mutating it externally would
   /// invalidate the retry loop's invariants.
@@ -111,15 +100,12 @@ final class AccountStore {
     repository: AccountRepository,
     conversionService: any InstrumentConversionService,
     targetInstrument: Instrument,
-    investmentRepository: (any InvestmentRepository)? = nil,
     retryDelay: Duration = .seconds(30),
     instrumentChanges: (any InstrumentChangeObserving)? = nil
   ) {
     self.repository = repository
     self.conversionService = conversionService
     self.targetInstrument = targetInstrument
-    self.investmentRepository = investmentRepository
-    self.investmentValueCache = InvestmentValueCache(repository: investmentRepository)
     self.balanceCalculator = AccountBalanceCalculator(
       conversionService: conversionService, targetInstrument: targetInstrument)
     self.retryDelay = retryDelay
@@ -168,14 +154,13 @@ final class AccountStore {
   /// the Layer 7 signpost 4 interval so `SyncReactivityBenchmarks` and
   /// Instruments traces can attribute `mainThreadMs` to this method.
   /// The nested `recomputeConvertedTotals` call has its own signpost;
-  /// the outer interval includes both bodies plus `preloadInvestmentValues`.
+  /// the outer interval includes both bodies.
   /// Internal (not `private`) so the entry-point shims in
   /// `+Observation.swift` can drive it across the file split.
   func apply(accounts fresh: [Account]) async {
     await withReactiveStoreSignpost("account-store-apply") {
       let started = ContinuousClock.now
       self.accounts = Accounts(from: fresh)
-      await preloadInvestmentValues()
       await recomputeConvertedTotals()
       testObservationTickContinuation.yield(())
       testApplyMainThreadNanos &+= nanoseconds(since: started)
@@ -240,7 +225,7 @@ final class AccountStore {
   }
 
   // Read-only query helpers (`currentAccounts`, `investmentAccounts`,
-  // `displayBalance`, `hasUnrecordedValue`, `canDelete`, `canToggleHidden`,
+  // `displayBalance`, `canDelete`, `canToggleHidden`,
   // `positions(for:)`) live in `AccountStore+Queries.swift`.
 
   // MARK: - Balance recomputation
@@ -333,8 +318,7 @@ final class AccountStore {
     await balanceCalculator.compute(
       allAccounts: accounts.ordered,
       currentAccounts: currentAccounts,
-      investmentAccounts: investmentAccounts,
-      investmentValues: investmentValueCache)
+      investmentAccounts: investmentAccounts)
   }
 
   /// Publishes a computed snapshot, unless a fresher authoritative

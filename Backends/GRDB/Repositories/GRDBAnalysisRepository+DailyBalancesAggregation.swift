@@ -18,11 +18,8 @@ extension GRDBAnalysisRepository {
   /// - per-`(day, earmark, instrument, type)` SUMs split the same
   ///   way;
   /// - the scheduled `[Transaction]` for forecast extrapolation;
-  /// - the accounts table (so we know which accounts are
-  ///   investments — split into recorded-value and trades-mode);
-  /// - every `investment_value` row (the cursor walk needs the
-  ///   pre-window snapshots so it can carry the most-recent value
-  ///   forward into the first in-window day);
+  /// - the accounts table (so every investment-like account can be
+  ///   valued from positions);
   /// - the instrument map.
   ///
   /// One snapshot keeps the four leg-side reads and the scheduled
@@ -64,42 +61,29 @@ extension GRDBAnalysisRepository {
       database: database, after: after)
     let investmentAccountIds = try Self.fetchInvestmentAccountIds(
       database: database)
-    let tradesModeInvestmentAccountIds =
-      try Self.fetchTradesModeInvestmentAccountIds(database: database)
-    // `instruments` is resolved via the injected resolver before this
-    // snapshot opens so `fetchInvestmentValueSnapshots` can resolve each
-    // row's instrument to its registered `Instrument` (with the right
-    // `kind` for stock / crypto investments) instead of falling back to
-    // fiat-by-id.
     let instrumentMap = instruments
-    let investmentValues = try Self.fetchInvestmentValueSnapshots(
-      database: database,
-      investmentAccountIds: investmentAccountIds,
-      instrumentMap: instrumentMap)
     let scheduled =
       forecastUntil != nil
       ? try Self.fetchScheduledTransactions(
         database: database, instruments: instrumentMap) : []
-    // Pre-filter trades-mode rows out of the already-fetched arrays.
+    // Pre-filter investment-position rows out of the already-fetched arrays.
     // Doing the filter inside the read closure (not later) keeps every
     // input the assembly walk needs inside one MVCC snapshot and saves
     // re-checking membership inside the per-day fold.
-    let priorTradesModeAccountRows = priorAccountRows.filter {
-      tradesModeInvestmentAccountIds.contains($0.accountId)
+    let priorInvestmentAccountRows = priorAccountRows.filter {
+      investmentAccountIds.contains($0.accountId)
     }
-    let tradesModeAccountRows = accountRows.filter {
-      tradesModeInvestmentAccountIds.contains($0.accountId)
+    let investmentAccountRows = accountRows.filter {
+      investmentAccountIds.contains($0.accountId)
     }
     return DailyBalancesAggregation(
       priorAccountRows: priorAccountRows,
       priorEarmarkRows: priorEarmarkRows,
       accountRows: accountRows,
       earmarkRows: earmarkRows,
-      investmentValues: investmentValues,
       investmentAccountIds: investmentAccountIds,
-      tradesModeInvestmentAccountIds: tradesModeInvestmentAccountIds,
-      priorTradesModeAccountRows: priorTradesModeAccountRows,
-      tradesModeAccountRows: tradesModeAccountRows,
+      priorInvestmentAccountRows: priorInvestmentAccountRows,
+      investmentAccountRows: investmentAccountRows,
       scheduled: scheduled,
       instrumentMap: instrumentMap,
       forecastUntil: forecastUntil)

@@ -16,12 +16,10 @@ extension AccountStore {
     try await balanceCalculator.totalConverted(for: currentAccounts, to: target)
   }
 
-  /// Total value of investment accounts in `target`. Uses cached external
-  /// values when present; otherwise sums positions. Single-pass to avoid
-  /// the double-conversion a two-phase approach would chain.
+  /// Total value of investment accounts in `target`, summing positions in a
+  /// single pass to avoid chaining two conversions.
   func computeConvertedInvestmentTotal(in target: Instrument) async throws -> InstrumentAmount {
-    try await balanceCalculator.totalConverted(
-      for: investmentAccounts, to: target, using: investmentValueCache)
+    try await balanceCalculator.totalConverted(for: investmentAccounts, to: target)
   }
 
   /// Net worth (current + investment) in `target`.

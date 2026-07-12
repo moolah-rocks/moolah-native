@@ -4,17 +4,17 @@ import Testing
 @testable import Moolah
 
 /// Aggregation-layer integration tests pinning that
-/// `fetchDailyBalancesAggregation` populates the trades-mode fields
+/// `fetchDailyBalancesAggregation` populates the investment position fields
 /// from `readDailyBalancesAggregation`. The fold-contract tests in
-/// `GRDBDailyBalancesTradesModeTests` exercise the new fold by
+/// `DailyBalanceInvestmentPositionTests` exercise the new fold by
 /// constructing `DailyBalancesAggregation` directly; these tests
 /// pin the SQL-to-struct wiring so a regression in the aggregation
 /// builder doesn't ship past every fold-contract assertion.
-@Suite("GRDBAnalysisRepository fetchDailyBalancesAggregation — trades-mode fields")
+@Suite("GRDBAnalysisRepository fetchDailyBalancesAggregation — investment position fields")
 struct GRDBDailyBalancesAggregationTests {
 
-  @Test("populates tradesModeInvestmentAccountIds for trades-mode accounts")
-  func populatesTradesModeAccountIds() async throws {
+  @Test("populates investment account ids regardless of persisted valuation mode")
+  func populatesInvestmentAccountIds() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let tradesAccount = Account(
       id: UUID(), name: "Trades Account", type: .investment,
@@ -30,13 +30,11 @@ struct GRDBDailyBalancesAggregationTests {
     let aggregation = try await backend.fetchAggregationForTesting(
       after: nil, forecastUntil: nil)
 
-    #expect(aggregation.tradesModeInvestmentAccountIds.contains(tradesAccount.id))
-    #expect(!aggregation.tradesModeInvestmentAccountIds.contains(snapshotAccount.id))
+    #expect(aggregation.investmentAccountIds.contains(tradesAccount.id))
     #expect(aggregation.investmentAccountIds.contains(snapshotAccount.id))
-    #expect(!aggregation.investmentAccountIds.contains(tradesAccount.id))
   }
 
-  @Test("priorTradesModeAccountRows / tradesModeAccountRows hold only trades-mode account rows")
+  @Test("position rows include every investment account and exclude bank accounts")
   func filtersAccountRowsByMode() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let tradesAccount = Account(
@@ -77,14 +75,14 @@ struct GRDBDailyBalancesAggregationTests {
     let aggregation = try await backend.fetchAggregationForTesting(
       after: cutoff, forecastUntil: nil)
 
-    let priorIds = Set(aggregation.priorTradesModeAccountRows.map(\.accountId))
-    let postIds = Set(aggregation.tradesModeAccountRows.map(\.accountId))
-    #expect(priorIds == [tradesAccount.id])
-    #expect(postIds == [tradesAccount.id])
+    let priorIds = Set(aggregation.priorInvestmentAccountRows.map(\.accountId))
+    let postIds = Set(aggregation.investmentAccountRows.map(\.accountId))
+    #expect(priorIds == [tradesAccount.id, snapshotAccount.id])
+    #expect(postIds == [tradesAccount.id, snapshotAccount.id])
   }
 
-  @Test("empty trades-mode profile produces empty arrays")
-  func emptyTradesModeProfileEmptyArrays() async throws {
+  @Test("recorded-value-only profile still produces position inputs")
+  func recordedValueProfileProducesPositionInputs() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let snapshotAccount = Account(
       id: UUID(), name: "Snapshot Account", type: .investment,
@@ -95,8 +93,8 @@ struct GRDBDailyBalancesAggregationTests {
     let aggregation = try await backend.fetchAggregationForTesting(
       after: nil, forecastUntil: nil)
 
-    #expect(aggregation.tradesModeInvestmentAccountIds.isEmpty)
-    #expect(aggregation.priorTradesModeAccountRows.isEmpty)
-    #expect(aggregation.tradesModeAccountRows.isEmpty)
+    #expect(aggregation.investmentAccountIds == [snapshotAccount.id])
+    #expect(aggregation.priorInvestmentAccountRows.isEmpty)
+    #expect(aggregation.investmentAccountRows.isEmpty)
   }
 }

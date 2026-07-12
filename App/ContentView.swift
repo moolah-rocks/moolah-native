@@ -23,7 +23,6 @@ struct ContentView: View {
   @Environment(EarmarkStore.self) var earmarkStore
   @Environment(AccountGroupStore.self) var accountGroupStore
   @Environment(AnalysisStore.self) private var analysisStore
-  @Environment(InvestmentStore.self) var investmentStore
   @Environment(ReportingStore.self) private var reportingStore
 
   #if os(macOS)
