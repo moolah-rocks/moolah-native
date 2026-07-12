@@ -1,8 +1,7 @@
 name = "database-code-review"
 description = "Review GRDB records, repositories, SQL safety, query plans, and database queue usage before commit."
-model = "gpt-5.5"
+model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
-service_tier = "priority"
 sandbox_mode = "read-only"
 developer_instructions = """
 You are the Codex wrapper for the repo's database-code-review agent.

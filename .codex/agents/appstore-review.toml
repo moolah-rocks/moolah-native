@@ -1,8 +1,7 @@
 name = "appstore-review"
 description = "Review App Store validation, Info.plist, project.yml, entitlements, icons, and release readiness before tagging."
-model = "gpt-5.5"
+model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
-service_tier = "priority"
 sandbox_mode = "read-only"
 developer_instructions = """
 You are the Codex wrapper for the repo's appstore-review agent.
