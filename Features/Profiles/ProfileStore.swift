@@ -181,6 +181,35 @@ final class ProfileStore {
     logger.debug("Added profile: \(profile.label) (\(profile.id))")
   }
 
+  /// Adds a profile and does not return until its profile-index row is
+  /// durable. Import uses this path so post-import sync cannot construct a
+  /// per-profile handler before metadata such as `defaultTaxOwnerId` exists.
+  func addProfilePersisting(_ profile: Profile) async throws {
+    guard let containerManager else {
+      logger.error("Cannot add CloudKit profile without ProfileContainerManager")
+      return
+    }
+    let previousActiveID = activeProfileID
+    profiles.append(profile)
+    let isFirstProfile = profiles.count == 1
+    if isFirstProfile {
+      activeProfileID = profile.id
+      saveActiveProfileID()
+    }
+
+    do {
+      try await containerManager.profileIndexRepository.upsert(profile)
+      logger.debug("Added and persisted profile: \(profile.label) (\(profile.id))")
+    } catch {
+      profiles.removeAll { $0.id == profile.id }
+      if isFirstProfile, activeProfileID == profile.id {
+        activeProfileID = previousActiveID
+        saveActiveProfileID()
+      }
+      throw error
+    }
+  }
+
   func removeProfile(_ id: UUID) {
     guard let index = profiles.firstIndex(where: { $0.id == id }) else {
       logger.debug("Removed profile: \(id) — not present")
@@ -244,6 +273,25 @@ final class ProfileStore {
     }
     onProfileRemoved?(id)
     logger.debug("Removed profile: \(id)")
+  }
+
+  /// Removes a profile only after its profile-index deletion commits. Import
+  /// rollback uses this path so an asynchronous profile reload cannot
+  /// resurrect metadata between an in-memory removal and the durable delete.
+  func removeProfilePersisting(_ id: UUID) async throws {
+    guard profiles.contains(where: { $0.id == id }) else { return }
+    if let containerManager {
+      _ = try await containerManager.profileIndexRepository.delete(id: id)
+      containerManager.evictCachedStore(for: id)
+      containerManager.deleteStore(for: id)
+    }
+    profiles.removeAll { $0.id == id }
+    if activeProfileID == id {
+      activeProfileID = profiles.first?.id
+      saveActiveProfileID()
+    }
+    onProfileRemoved?(id)
+    logger.debug("Removed and persisted profile deletion: \(id)")
   }
 
   func setActiveProfile(_ id: UUID) {

@@ -19,6 +19,7 @@ actor DataExporter {
     profileLabel: String,
     currencyCode: String,
     financialYearStartMonth: Int,
+    defaultTaxOwnerId: UUID,
     progress: @escaping @Sendable (ExportProgress) -> Void
   ) async throws -> ExportedData {
     let signpostID = OSSignpostID(log: Signposts.export)
@@ -32,7 +33,8 @@ actor DataExporter {
       stages: stages,
       profileLabel: profileLabel,
       currencyCode: currencyCode,
-      financialYearStartMonth: financialYearStartMonth)
+      financialYearStartMonth: financialYearStartMonth,
+      defaultTaxOwnerId: defaultTaxOwnerId)
     progress(.downloadComplete(data))
     return data
   }
@@ -44,6 +46,7 @@ actor DataExporter {
     let accounts: [Account]
     let accountGroups: [AccountGroup]
     let categories: [Category]
+    let taxOwners: [TaxOwner]
     let earmarks: [Earmark]
     let earmarkBudgets: [UUID: [EarmarkBudgetItem]]
     let transactions: [Transaction]
@@ -68,12 +71,13 @@ actor DataExporter {
       try await backend.accountGroups.fetchAll()
     }
 
-    progress(.downloading(step: "categories"))
-    let categories = try await runStage(
-      "categories", signpost: "export.categories", signpostID: signpostID
-    ) {
-      try await backend.categories.fetchAll()
-    }
+    let categories = try await downloadCategories(
+      progress: progress,
+      signpostID: signpostID)
+
+    let taxOwners = try await downloadTaxOwners(
+      progress: progress,
+      signpostID: signpostID)
 
     progress(.downloading(step: "earmarks"))
     let (earmarks, budgets) = try await runStage(
@@ -104,10 +108,35 @@ actor DataExporter {
       accounts: accounts,
       accountGroups: accountGroups,
       categories: categories,
+      taxOwners: taxOwners,
       earmarks: earmarks,
       earmarkBudgets: budgets,
       transactions: transactions,
       investmentValues: investmentValues)
+  }
+
+  private func downloadTaxOwners(
+    progress: @escaping @Sendable (ExportProgress) -> Void,
+    signpostID: OSSignpostID
+  ) async throws -> [TaxOwner] {
+    progress(.downloading(step: "tax owners"))
+    return try await runStage(
+      "tax owners", signpost: "export.taxOwners", signpostID: signpostID
+    ) {
+      try await backend.taxOwners.fetchAll()
+    }
+  }
+
+  private func downloadCategories(
+    progress: @escaping @Sendable (ExportProgress) -> Void,
+    signpostID: OSSignpostID
+  ) async throws -> [Category] {
+    progress(.downloading(step: "categories"))
+    return try await runStage(
+      "categories", signpost: "export.categories", signpostID: signpostID
+    ) {
+      try await backend.categories.fetchAll()
+    }
   }
 
   /// Fetch every earmark together with its budget items, returned as a
@@ -127,7 +156,8 @@ actor DataExporter {
     stages: StagedDownloads,
     profileLabel: String,
     currencyCode: String,
-    financialYearStartMonth: Int
+    financialYearStartMonth: Int,
+    defaultTaxOwnerId: UUID
   ) -> ExportedData {
     let instruments = collectInstruments(
       currencyCode: currencyCode,
@@ -140,6 +170,8 @@ actor DataExporter {
       profileLabel: profileLabel,
       currencyCode: currencyCode,
       financialYearStartMonth: financialYearStartMonth,
+      defaultTaxOwnerId: defaultTaxOwnerId,
+      taxOwners: stages.taxOwners,
       instruments: instruments,
       accounts: stages.accounts,
       accountGroups: stages.accountGroups,

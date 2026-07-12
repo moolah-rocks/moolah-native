@@ -33,12 +33,12 @@ final class ExportCoordinator {
   ///   - backend: The backend for the profile (provides repositories)
   ///   - profile: The profile to export
   ///   - progress: Optional callback fired on `@MainActor` with a stage name
-  ///     (`accounts`, `categories`, `earmarks`, `transactions`,
-  ///     `investment values`, `encoding`, `writing`) so the UI can render a
-  ///     progress indicator. The download stages are forwarded from
-  ///     `DataExporter`; `encoding` and `writing` are emitted around the
-  ///     JSON serialisation and atomic file write that run inside this
-  ///     method.
+  ///     (`accounts`, `account groups`, `categories`, `tax owners`,
+  ///     `earmarks`, `transactions`, `investment values`, `encoding`,
+  ///     `writing`) so the UI can render a progress indicator. The download
+  ///     stages are forwarded from `DataExporter`; `encoding` and `writing`
+  ///     are emitted around the JSON serialisation and atomic file write that
+  ///     run inside this method.
   func exportToFile(
     url: URL,
     backend: any BackendProvider,
@@ -52,7 +52,8 @@ final class ExportCoordinator {
     let exported = try await exporter.export(
       profileLabel: profile.label,
       currencyCode: profile.currencyCode,
-      financialYearStartMonth: profile.financialYearStartMonth
+      financialYearStartMonth: profile.financialYearStartMonth,
+      defaultTaxOwnerId: profile.defaultTaxOwnerId
     ) { [weak self] exportProgress in
       Task { @MainActor in
         switch exportProgress {
@@ -218,12 +219,16 @@ final class ExportCoordinator {
       throw ExportError.importFailed(underlying: error)
     }
 
+    let importedDefaultTaxOwnerId = exported.defaultTaxOwnerId.flatMap { ownerId in
+      exported.taxOwners.contains { $0.id == ownerId } ? ownerId : nil
+    }
     let newProfile = Profile(
       label: exported.profileLabel,
       currencyCode: exported.currencyCode,
-      financialYearStartMonth: exported.financialYearStartMonth
+      financialYearStartMonth: exported.financialYearStartMonth,
+      defaultTaxOwnerId: importedDefaultTaxOwnerId
     )
-    profileStore.addProfile(newProfile)
+    try await profileStore.addProfilePersisting(newProfile)
 
     do {
       let database = try containerManager.database(for: newProfile.id)
@@ -235,8 +240,14 @@ final class ExportCoordinator {
         instrumentRegistrar: instrumentRegistrar ?? syncCoordinator?.sharedInstrumentRegistry
       )
     } catch {
-      profileStore.removeProfile(newProfile.id)
-      throw error
+      let importError = error
+      do {
+        try await profileStore.removeProfilePersisting(newProfile.id)
+      } catch {
+        logger.error(
+          "Failed to roll back imported profile \(newProfile.id): \(error, privacy: .public)")
+      }
+      throw importError
     }
 
     return newProfile.id

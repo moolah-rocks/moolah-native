@@ -7,6 +7,8 @@ struct ExportedData {
   let profileLabel: String
   let currencyCode: String
   let financialYearStartMonth: Int
+  let defaultTaxOwnerId: UUID?
+  let taxOwners: [TaxOwner]
   let instruments: [Instrument]
   let accounts: [Account]
   /// Sidebar account groups. Accounts reference their group by
@@ -25,6 +27,8 @@ struct ExportedData {
     profileLabel: String = "",
     currencyCode: String = "",
     financialYearStartMonth: Int = 1,
+    defaultTaxOwnerId: UUID? = nil,
+    taxOwners: [TaxOwner] = [],
     instruments: [Instrument] = [],
     accounts: [Account],
     accountGroups: [AccountGroup] = [],
@@ -39,6 +43,8 @@ struct ExportedData {
     self.profileLabel = profileLabel
     self.currencyCode = currencyCode
     self.financialYearStartMonth = financialYearStartMonth
+    self.defaultTaxOwnerId = defaultTaxOwnerId
+    self.taxOwners = taxOwners
     self.instruments = instruments
     self.accounts = accounts
     self.accountGroups = accountGroups
@@ -53,10 +59,11 @@ struct ExportedData {
 extension ExportedData: Sendable {}
 
 extension ExportedData: Codable {
-  /// Custom decoding so export files written before `accountGroups`
-  /// existed still import: the key is optional and defaults to empty.
-  /// Every other field keeps its original required semantics. `encode`
-  /// and `CodingKeys` stay synthesised, so new exports always write the key.
+  /// Custom decoding keeps exports written before account groups and tax
+  /// ownership metadata existed importable. Missing collection keys default
+  /// to empty; a missing default-owner id remains `nil` so a newly imported
+  /// profile derives its own default. Encoding remains synthesised, so new
+  /// exports always write every key.
   init(from decoder: any Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     version = try container.decode(Int.self, forKey: .version)
@@ -64,6 +71,8 @@ extension ExportedData: Codable {
     profileLabel = try container.decode(String.self, forKey: .profileLabel)
     currencyCode = try container.decode(String.self, forKey: .currencyCode)
     financialYearStartMonth = try container.decode(Int.self, forKey: .financialYearStartMonth)
+    defaultTaxOwnerId = try container.decodeIfPresent(UUID.self, forKey: .defaultTaxOwnerId)
+    taxOwners = try container.decodeIfPresent([TaxOwner].self, forKey: .taxOwners) ?? []
     instruments = try container.decode([Instrument].self, forKey: .instruments)
     accounts = try container.decode([Account].self, forKey: .accounts)
     accountGroups =

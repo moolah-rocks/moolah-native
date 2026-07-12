@@ -15,6 +15,9 @@ struct ImportEntityCounts: Sendable, Equatable {
   let accounts: Int
   let accountGroups: Int
   let categories: Int
+  let taxOwners: Int
+  let accountTaxOwners: Int
+  let categoryTaxOwners: Int
   let earmarks: Int
   let transactions: Int
   let investmentValues: Int
@@ -41,6 +44,9 @@ struct ImportVerifier {
         accounts: AccountRow.fetchCount(database),
         accountGroups: AccountGroupRow.fetchCount(database),
         categories: CategoryRow.fetchCount(database),
+        taxOwners: TaxOwnerRow.fetchCount(database),
+        accountTaxOwners: AccountTaxOwnerRow.fetchCount(database),
+        categoryTaxOwners: CategoryTaxOwnerRow.fetchCount(database),
         earmarks: EarmarkRow.fetchCount(database),
         transactions: TransactionRow.fetchCount(database),
         investmentValues: InvestmentValueRow.fetchCount(database)
@@ -48,10 +54,18 @@ struct ImportVerifier {
     }
 
     let expectedInvestmentValueCount = exported.investmentValues.values.reduce(0) { $0 + $1.count }
+    let validOwnerIds = Set(exported.taxOwners.map(\.id))
     let expectedCounts = ImportEntityCounts(
       accounts: exported.accounts.count,
       accountGroups: exported.accountGroups.count,
       categories: exported.categories.count,
+      taxOwners: exported.taxOwners.count,
+      accountTaxOwners: exported.accounts.reduce(0) {
+        $0 + Set($1.taxOwnerIds).intersection(validOwnerIds).count
+      },
+      categoryTaxOwners: exported.categories.reduce(0) {
+        $0 + Set($1.taxOwnerIds).intersection(validOwnerIds).count
+      },
       earmarks: exported.earmarks.count,
       transactions: exported.transactions.count,
       investmentValues: expectedInvestmentValueCount
