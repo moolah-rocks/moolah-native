@@ -15,6 +15,7 @@ extension CryptoPriceService {
     in range: ClosedRange<Date>
   ) async -> WarmOutcome {
     let tokenId = instrument.id
+    await applyExplicitFirstTradeFloorIfAvailable(tokenId: tokenId)
     if !hydrated.contains(tokenId) {
       do { try await loadCache(tokenId: tokenId) } catch {
         logger.warning(

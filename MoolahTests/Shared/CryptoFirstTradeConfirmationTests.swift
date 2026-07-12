@@ -4,10 +4,9 @@ import Testing
 
 @testable import Moolah
 
-/// Verifies that `CryptoPriceService` sets `firstTradedOn` on the in-memory
-/// cache after a backward window walk terminates on no-progress with no
-/// operational error, and that a transient (rate-limit) error during the walk
-/// leaves `firstTradedOn` unchanged.
+/// Verifies that `CryptoPriceService` records first-trade floors only from
+/// explicit provider metadata. Empty historical windows are not proof that a
+/// token did not trade yet.
 @Suite("CryptoPriceService — first-trade confirmation")
 struct CryptoFirstTradeConfirmationTests {
   private let ethInstrument = Instrument.crypto(
@@ -27,6 +26,7 @@ struct CryptoFirstTradeConfirmationTests {
   private func makeService(
     clients: [any CryptoPriceClient],
     database: DatabaseQueue,
+    firstTradeFloorLookup: @Sendable @escaping (String) async -> String? = { _ in nil },
     now: @Sendable @escaping () -> Date
   ) throws -> CryptoPriceService {
     let utc = try #require(TimeZone(identifier: "UTC"))
@@ -34,17 +34,13 @@ struct CryptoFirstTradeConfirmationTests {
       clients: clients,
       database: database,
       resolutionClient: nil,
+      firstTradeFloorLookup: firstTradeFloorLookup,
       now: now,
       timeZone: utc)
   }
 
-  /// Providers serve prices only for dates >= floor F. When a date before F
-  /// is requested the backward extension walk finds no new data (empty return,
-  /// no error) and terminates on no-progress. At that point `firstTradedOn`
-  /// must be set to the earliest date that any provider actually served (the
-  /// cache's `earliestDate`).
-  @Test("backward walk that exhausts all providers sets firstTradedOn to the earliest served date")
-  func confirmsFirstTrade() async throws {
+  @Test("backward no-progress does not infer firstTradedOn")
+  func emptyBackwardWalkLeavesFirstTradeUnconfirmed() async throws {
     // Floor date: providers have prices from 2020-01-10 onward.
     let floorDate = "2020-01-10"
     let database = try ProfileIndexDatabase.openInMemory()
@@ -68,14 +64,89 @@ struct CryptoFirstTradeConfirmationTests {
       for: ethInstrument, mapping: ethMapping, on: try date(floorDate))
 
     // Requesting a date before the floor triggers the backward extension loop.
-    // The provider returns empty for all pre-floor windows → no-progress → sets firstTradedOn.
+    // The provider returns empty for all pre-floor windows. That can mean a
+    // provider horizon, not pre-listing, so it must not set firstTradedOn.
     _ = try? await service.price(
       for: ethInstrument, mapping: ethMapping, on: try date("2019-12-01"))
 
     let firstTradedOn = await service.caches["1:native"]?.firstTradedOn
-    let earliestDate = await service.caches["1:native"]?.earliestDate
-    #expect(firstTradedOn != nil, "firstTradedOn should be set after exhausting backward walk")
-    #expect(firstTradedOn == earliestDate, "firstTradedOn should equal the cache's earliestDate")
+    #expect(firstTradedOn == nil)
+  }
+
+  @Test("explicit provider floor drives beforeFirstTrade and persists with price rows")
+  func explicitProviderFloorPersistsWithPrices() async throws {
+    let floorDate = "2020-01-10"
+    let database = try ProfileIndexDatabase.openInMemory()
+    let frozen = try date("2026-01-01")
+    let client = FixedCryptoPriceClient(prices: [
+      "1:native": [
+        "2020-01-10": dec("200.00"),
+        "2020-01-11": dec("201.00"),
+      ]
+    ])
+    let service = try makeService(
+      clients: [client],
+      database: database,
+      firstTradeFloorLookup: { tokenId in tokenId == "1:native" ? floorDate : nil },
+      now: { frozen })
+
+    await #expect(
+      throws: CryptoPriceError.beforeFirstTrade(tokenId: "1:native", date: "2019-12-01")
+    ) {
+      _ = try await service.price(
+        for: ethInstrument, mapping: ethMapping, on: try date("2019-12-01"))
+    }
+
+    _ = try await service.price(for: ethInstrument, mapping: ethMapping, on: try date(floorDate))
+
+    let firstTradedOn = await service.caches["1:native"]?.firstTradedOn
+    #expect(firstTradedOn == floorDate)
+    let stored = try await database.read { database in
+      try CryptoTokenMetaRecord
+        .filter(CryptoTokenMetaRecord.Columns.tokenId == "1:native")
+        .fetchOne(database)
+    }
+    #expect(stored?.firstTradedOn == floorDate)
+  }
+
+  @Test("purge invalidates an explicit provider floor")
+  func purgeInvalidatesExplicitProviderFloor() async throws {
+    let database = try ProfileIndexDatabase.openInMemory()
+    let frozen = try date("2026-01-01")
+    let service = try makeService(
+      clients: [FixedCryptoPriceClient()],
+      database: database,
+      firstTradeFloorLookup: { _ in "2020-01-10" },
+      now: { frozen })
+
+    await service.applyExplicitFirstTradeFloorIfAvailable(tokenId: ethInstrument.id)
+    #expect(await service.explicitFirstTradeFloors[ethInstrument.id] == "2020-01-10")
+
+    await service.purgeCache(instrumentId: ethInstrument.id)
+
+    #expect(await service.explicitFirstTradeFloors[ethInstrument.id] == nil)
+  }
+
+  @Test("purge invalidates a suspended provider-floor lookup")
+  func purgeInvalidatesSuspendedProviderFloorLookup() async throws {
+    let database = try ProfileIndexDatabase.openInMemory()
+    let frozen = try date("2026-01-01")
+    let lookup = SuspendedFirstTradeFloorLookup()
+    let service = try makeService(
+      clients: [FixedCryptoPriceClient()],
+      database: database,
+      firstTradeFloorLookup: { _ in await lookup.value() },
+      now: { frozen })
+
+    let applyTask = Task {
+      await service.applyExplicitFirstTradeFloorIfAvailable(tokenId: ethInstrument.id)
+    }
+    await lookup.waitUntilStarted()
+    await service.purgeCache(instrumentId: ethInstrument.id)
+    await lookup.resume(returning: "2020-01-10")
+    await applyTask.value
+
+    #expect(await service.explicitFirstTradeFloors[ethInstrument.id] == nil)
   }
 
   /// When a provider throws a transient (rate-limit) error during the backward
@@ -126,5 +197,32 @@ struct CryptoFirstTradeConfirmationTests {
     #expect(
       firstTradedOn == nil,
       "firstTradedOn must remain nil when walk terminates on operational error")
+  }
+}
+
+private actor SuspendedFirstTradeFloorLookup {
+  private var valueContinuation: CheckedContinuation<String?, Never>?
+  private var startContinuations: [CheckedContinuation<Void, Never>] = []
+
+  func value() async -> String? {
+    await withCheckedContinuation { continuation in
+      valueContinuation = continuation
+      for startContinuation in startContinuations {
+        startContinuation.resume()
+      }
+      startContinuations.removeAll()
+    }
+  }
+
+  func waitUntilStarted() async {
+    guard valueContinuation == nil else { return }
+    await withCheckedContinuation { continuation in
+      startContinuations.append(continuation)
+    }
+  }
+
+  func resume(returning value: String?) {
+    valueContinuation?.resume(returning: value)
+    valueContinuation = nil
   }
 }

@@ -77,21 +77,13 @@ struct DefiLlamaClient: CryptoPriceClient, Sendable {
     let (data, _) = try await http.data(for: URLRequest(url: url))
     let prices = try DefiLlamaWireFormat.parseChart(data, confidenceFloor: confidenceFloor)
 
-    // Opportunistically promote support when the fetch returned prices.
-    // Only update the cache on a non-empty result so a legitimately empty
-    // window (e.g. deep-history before a token's first DEX liquidity, or a
-    // low-confidence read gated by the floor) does not demote a token that
-    // is genuinely supported. The `/prices/first` startup probe
-    // (`refreshSupport`) is the sole writer of `supported: false`.
-    // ISO `YYYY-MM-DD` strings compare chronologically, so taking the min
-    // keeps the recorded earliest date monotonically non-increasing.
+    // Opportunistically promote support when the fetch returned prices, but do
+    // not infer `earliestDate` from this chart window. Only `/prices/first`
+    // reports the provider's actual first data point; a successful arbitrary
+    // chart fetch proves support, not first-trade date.
     if !prices.isEmpty {
-      let windowFloor = prices.keys.min()
-      let floor = [cached?.earliestDate, windowFloor].compactMap { $0 }.min()
-      await supportCache?.upsert(
+      await supportCache?.markSupportedPreservingEarliestDate(
         instrumentId: mapping.instrumentId,
-        supported: true,
-        earliestDate: floor,
         lastChecked: Date())
     }
 

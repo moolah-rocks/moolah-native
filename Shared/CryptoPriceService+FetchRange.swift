@@ -3,31 +3,14 @@ import Foundation
 // MARK: - First-trade confirmation + window-fetch coalescing
 
 extension CryptoPriceService {
-  /// Sets `caches[tokenId].firstTradedOn` to `earliestDate` and persists it
-  /// when a backward window walk terminated on no-progress with no operational
-  /// failure and `firstTradedOn` has not yet been confirmed. Idempotent:
-  /// skipped when `firstTradedOn` is already set or `earliestDate` is empty.
-  ///
-  /// Call only after a backward window exits with `boundsKeys == before` and
-  /// *before* re-reading bounds: bounds haven't moved, so the current
-  /// `earliestDate` is the confirmed floor.
-  ///
-  /// `internal` (not `private`) so the `PriceSeriesOrchestrating`
-  /// `confirmFirstTradeOnBackwardExhaustion` plug in the sibling
-  /// `CryptoPriceService+PriceSeriesOrchestrating.swift` extension can call it.
+  /// Backward no-progress is not proof of a first-trade floor: providers can
+  /// return empty windows because of history horizons, sparse coverage, or plan
+  /// limits. First-trade floors are recorded only from explicit provider
+  /// metadata (`applyExplicitFirstTradeFloorIfAvailable`).
   func confirmFirstTradedOnIfExhausted(
-    tokenId: String,
-    lastFetchError: (any Error)?
-  ) async throws {
-    guard lastFetchError == nil,
-      var cache = caches[tokenId],
-      cache.firstTradedOn == nil,
-      !cache.earliestDate.isEmpty
-    else { return }
-    cache.firstTradedOn = cache.earliestDate
-    caches[tokenId] = cache
-    try await persistFirstTradedOn(tokenId: tokenId, date: cache.earliestDate)
-  }
+    tokenId _: String,
+    lastFetchError _: (any Error)?
+  ) async throws {}
 
   /// Returns the current cache bounds for `tokenId` as `DateKey` (`Int32`
   /// yyyymmdd) values. Returns `(nil, nil)` when the cache is cold.

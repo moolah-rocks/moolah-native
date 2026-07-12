@@ -83,6 +83,14 @@ actor CryptoPriceService {
   /// file, no sibling-file extension reads it.
   private var metadataCache: [String: CryptoRegistration] = [:]
   private let metadataLookup: @Sendable (String) async throws -> CryptoRegistration?
+  /// Explicit first-trade floors from provider metadata, keyed by token id.
+  /// These are trustworthy enough to drive `.beforeFirstTrade`; generic empty
+  /// price windows are not.
+  var explicitFirstTradeFloors: [String: String] = [:]
+  /// Per-token invalidation generation for floor lookups that suspend. A purge
+  /// advances the generation so an older lookup cannot republish stale state.
+  private var firstTradeFloorGenerations: [String: UInt64] = [:]
+  private let firstTradeFloorLookup: @Sendable (String) async -> String?
   /// Injected clock so tests can pin "today" deterministically.
   let now: @Sendable () -> Date
   /// Injected zone used by `cappedToYesterday` to compute "yesterday".
@@ -95,6 +103,7 @@ actor CryptoPriceService {
     database: any DatabaseWriter,
     resolutionClient: (any TokenResolutionClient)? = nil,
     metadataLookup: @Sendable @escaping (String) async throws -> CryptoRegistration? = { _ in nil },
+    firstTradeFloorLookup: @Sendable @escaping (String) async -> String? = { _ in nil },
     now: @Sendable @escaping () -> Date = { Date() },
     timeZone: TimeZone = .current
   ) {
@@ -102,6 +111,7 @@ actor CryptoPriceService {
     self.database = database
     self.resolutionClient = resolutionClient ?? NoOpTokenResolutionClient()
     self.metadataLookup = metadataLookup
+    self.firstTradeFloorLookup = firstTradeFloorLookup
     self.now = now
     self.timeZone = timeZone
     self.dateFormatter = ISO8601DateFormatter()
@@ -181,6 +191,8 @@ actor CryptoPriceService {
     caches.removeValue(forKey: instrumentId)
     hydrated.remove(instrumentId)
     metadataCache.removeValue(forKey: instrumentId)
+    explicitFirstTradeFloors.removeValue(forKey: instrumentId)
+    firstTradeFloorGenerations[instrumentId, default: 0] &+= 1
     // `registration(for:)` co-stores a wrapped-native token's registration
     // under BOTH the wrapper's id and the resolved native lookup id, so a
     // purge must evict both directions or a stale co-stored entry survives:
@@ -294,6 +306,7 @@ actor CryptoPriceService {
   ) async throws -> Decimal {
     retainPendingFetchContext(for: instrument.id, instrument: instrument, mapping: mapping)
     defer { releasePendingFetchContext(for: instrument.id) }
+    await applyExplicitFirstTradeFloorIfAvailable(tokenId: instrument.id)
     return try await price(instrumentKey: instrument.id, on: date)
   }
 
@@ -309,7 +322,31 @@ actor CryptoPriceService {
   ) async throws -> [(date: Date, price: Decimal)] {
     retainPendingFetchContext(for: instrument.id, instrument: instrument, mapping: mapping)
     defer { releasePendingFetchContext(for: instrument.id) }
+    await applyExplicitFirstTradeFloorIfAvailable(tokenId: instrument.id)
     return try await prices(instrumentKey: instrument.id, in: range)
+  }
+
+  func applyExplicitFirstTradeFloorIfAvailable(tokenId: String) async {
+    if caches[tokenId]?.firstTradedOn != nil || explicitFirstTradeFloors[tokenId] != nil {
+      return
+    }
+    let generation = firstTradeFloorGenerations[tokenId, default: 0]
+    guard let floor = await firstTradeFloorLookup(tokenId) else { return }
+    guard firstTradeFloorGenerations[tokenId, default: 0] == generation,
+      caches[tokenId]?.firstTradedOn == nil,
+      explicitFirstTradeFloors[tokenId] == nil
+    else { return }
+    explicitFirstTradeFloors[tokenId] = floor
+    guard var cache = caches[tokenId], cache.firstTradedOn == nil else { return }
+    cache.firstTradedOn = floor
+    caches[tokenId] = cache
+    do {
+      try await persistFirstTradedOn(tokenId: tokenId, date: floor)
+    } catch {
+      logger.warning(
+        "persist explicit firstTradeFloor failed for \(tokenId, privacy: .public): \(error.localizedDescription, privacy: .public)"
+      )
+    }
   }
 
   // `currentPrices(for:)` (the live / spot endpoint) and
@@ -325,7 +362,7 @@ actor CryptoPriceService {
 // + first-trade floor back through per-service code.
 //
 // `boundsKeys(tokenId:)`, `parseInterval(_:)`, `fetchWindowCoalesced(...)`,
-// `fetchRange(instrument:mapping:from:to:)`, and `confirmFirstTradedOnIfExhausted`
+// `fetchRange(instrument:mapping:from:to:)`, and the backward no-progress hook
 // live in `CryptoPriceService+FetchRange.swift`; `mergeReturningDelta` lives in
 // `CryptoPriceService+Merge.swift`; and `NoOpTokenResolutionClient` lives in its
 // own sibling file.

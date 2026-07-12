@@ -152,7 +152,13 @@ extension ProfileSession {
         // runs the free-tier CoinGecko path (it treats `nil` as opt-out).
         coinGeckoApiKeyProvider: { coinGeckoApiKeyProvider() ?? "" },
         localResolver: localResolver),
-      metadataLookup: metadataLookup
+      metadataLookup: metadataLookup,
+      firstTradeFloorLookup: { tokenId in
+        guard let support = await defiLlamaSupportCache?.support(for: tokenId),
+          support.supported
+        else { return nil }
+        return support.earliestDate
+      }
     )
   }
 

@@ -189,6 +189,7 @@ final class SQLiteCoinGeckoCatalogStorageTests {
     let stale = try SQLiteCoinGeckoCatalog.make(
       directory: tempDir, apiKeyProvider: { nil }, networking: networking)
     try await stale.writeMetaSchemaVersionForTesting(999)
+    await stale.closeForTesting()
 
     let reopened = try SQLiteCoinGeckoCatalog.make(
       directory: tempDir, apiKeyProvider: { nil }, networking: networking)
