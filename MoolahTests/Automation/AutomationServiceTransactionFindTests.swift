@@ -242,7 +242,7 @@ struct AutomationServiceTransactionFindTests {
 }
 
 extension AutomationServiceTransactionFindTests {
-  fileprivate func expectAccountNotFound(
+  private func expectAccountNotFound(
     _ expected: String,
     operation: () async throws -> Void
   ) async {
@@ -256,7 +256,7 @@ extension AutomationServiceTransactionFindTests {
     }
   }
 
-  fileprivate func expectCategoryNotFound(
+  private func expectCategoryNotFound(
     _ expected: String,
     operation: () async throws -> Void
   ) async {
@@ -270,7 +270,7 @@ extension AutomationServiceTransactionFindTests {
     }
   }
 
-  fileprivate func expectInvalidParameter(
+  private func expectInvalidParameter(
     _ expected: String,
     operation: () async throws -> Void
   ) async {
@@ -284,7 +284,7 @@ extension AutomationServiceTransactionFindTests {
     }
   }
 
-  fileprivate func createTransaction(
+  private func createTransaction(
     _ service: AutomationService,
     payee: String,
     account: String,
@@ -311,12 +311,12 @@ extension AutomationServiceTransactionFindTests {
       ])
   }
 
-  fileprivate static func date(year: Int, month: Int, day: Int, hour: Int = 0) throws -> Date {
+  private static func date(year: Int, month: Int, day: Int, hour: Int = 0) throws -> Date {
     try #require(
       Calendar.current.date(from: DateComponents(year: year, month: month, day: day, hour: hour)))
   }
 
-  fileprivate func date(year: Int, month: Int, day: Int, hour: Int = 0) throws -> Date {
+  private func date(year: Int, month: Int, day: Int, hour: Int = 0) throws -> Date {
     try Self.date(year: year, month: month, day: day, hour: hour)
   }
 }
