@@ -49,12 +49,11 @@
           notes: notes
         )
         let session = try service.resolveSession(for: profName)
+        let snapshot = ScriptableProfileSnapshot(session: session).including(
+          transaction: transaction)
         return ScriptableTransaction(
           transaction: transaction,
-          profileName: profName,
-          accountStore: session.accountStore,
-          categoryStore: session.categoryStore,
-          earmarkStore: session.earmarkStore
+          snapshot: snapshot
         )
       }
       return result

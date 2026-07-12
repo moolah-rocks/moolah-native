@@ -12,7 +12,6 @@
     private let _targetAmount: Double
     private let _profileName: String
 
-    @MainActor
     init(earmark: Earmark, profileName: String) {
       _uniqueID = earmark.id.uuidString
       _name = earmark.name

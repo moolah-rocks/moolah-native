@@ -93,6 +93,9 @@ moolah-tell 'get balance of account "Savings" of profile "Test"'
 # Get all account names and balances
 moolah-tell 'get {name, balance} of every account of profile "Test"'
 
+# List every transaction with a leg on an account
+moolah-tell 'get {payee, amount} of every txn of account "Everyday" of profile "Test"'
+
 # Get per-instrument holdings (multi-instrument crypto/exchange accounts).
 # `balance` only reflects the account's primary instrument; `positions`
 # returns a list of "SYMBOL=quantity" strings for every held instrument.

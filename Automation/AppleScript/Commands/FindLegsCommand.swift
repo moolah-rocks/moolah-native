@@ -47,14 +47,13 @@
           toDate: toDate,
           scheduled: scheduled)
         let session = try service.resolveSession(for: profileIdentifier)
+        let snapshot = ScriptableProfileSnapshot(session: session).including(
+          transactions: found.map(\.transaction))
         let legs = found.map { entry in
           ScriptableLeg(
             leg: entry.leg,
             transaction: entry.transaction,
-            profileName: session.profile.label,
-            accountStore: session.accountStore,
-            categoryStore: session.categoryStore,
-            earmarkStore: session.earmarkStore)
+            snapshot: snapshot)
         }
         return Result(legs: legs)
       }

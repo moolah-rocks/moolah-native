@@ -92,6 +92,9 @@
         <cocoa key="positions"/>
         <type type="text" list="yes"/>
       </property>
+      <element type="txn" access="r">
+        <cocoa key="scriptableTransactions"/>
+      </element>
     </class>
 
     <class name="txn" code="Txn " description="A financial transaction." plural="txns">

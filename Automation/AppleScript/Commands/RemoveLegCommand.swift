@@ -30,12 +30,10 @@
         let updated = try await service.removeLeg(
           profileIdentifier: profileName, legId: legId)
         let session = try service.resolveSession(for: profileName)
+        let snapshot = ScriptableProfileSnapshot(session: session).including(transaction: updated)
         return ScriptableTransaction(
           transaction: updated,
-          profileName: profileName,
-          accountStore: session.accountStore,
-          categoryStore: session.categoryStore,
-          earmarkStore: session.earmarkStore)
+          snapshot: snapshot)
       }
       return result
     }

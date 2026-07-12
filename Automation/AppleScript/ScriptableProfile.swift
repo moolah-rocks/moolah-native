@@ -20,20 +20,18 @@
 
     @MainActor
     init(session: ProfileSession) {
+      let snapshot = ScriptableProfileSnapshot(session: session)
       _uniqueID = session.profile.id.uuidString
       _name = session.profile.label
       _currencyCode = session.profile.currencyCode
 
       _accounts = session.accountStore.accounts.ordered.map {
-        ScriptableAccount(account: $0, profileName: session.profile.label)
+        ScriptableAccount(account: $0, snapshot: snapshot)
       }
       _transactions = session.transactionStore.transactions.map {
         ScriptableTransaction(
           transaction: $0.transaction,
-          profileName: session.profile.label,
-          accountStore: session.accountStore,
-          categoryStore: session.categoryStore,
-          earmarkStore: session.earmarkStore
+          snapshot: snapshot
         )
       }
       _legs = _transactions.flatMap(\.scriptableLegs)
@@ -54,7 +52,7 @@
         return ScriptableCategory(
           category: $0.category,
           parentName: parentName,
-          profileName: session.profile.label
+          profileName: snapshot.profileName
         )
       }
 

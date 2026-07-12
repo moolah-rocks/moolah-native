@@ -16,13 +16,9 @@
     private let _legs: [ScriptableLeg]
     private let _profileName: String
 
-    @MainActor
     init(
       transaction: Transaction,
-      profileName: String,
-      accountStore: AccountStore,
-      categoryStore: CategoryStore,
-      earmarkStore: EarmarkStore
+      snapshot: ScriptableProfileSnapshot
     ) {
       _uniqueID = transaction.id.uuidString
       _date = transaction.date
@@ -30,7 +26,7 @@
       _notes = transaction.notes ?? ""
       _transactionType = transaction.legs.first?.type.rawValue ?? "expense"
       _isScheduled = transaction.isScheduled
-      _profileName = profileName
+      _profileName = snapshot.profileName
 
       let total = transaction.legs.reduce(Decimal(0)) { sum, leg in
         sum + leg.quantity
@@ -41,10 +37,7 @@
         ScriptableLeg(
           leg: leg,
           transaction: transaction,
-          profileName: profileName,
-          accountStore: accountStore,
-          categoryStore: categoryStore,
-          earmarkStore: earmarkStore
+          snapshot: snapshot
         )
       }
 
@@ -112,37 +105,32 @@
     private let _payee: String
     private let _profileName: String
 
-    @MainActor
     init(
       leg: TransactionLeg,
       transaction: Transaction,
-      profileName: String,
-      accountStore: AccountStore,
-      categoryStore: CategoryStore,
-      earmarkStore: EarmarkStore
+      snapshot: ScriptableProfileSnapshot
     ) {
       _legID = leg.id.uuidString
       _externalID = leg.externalId ?? ""
-      if let account = leg.accountId.flatMap({ accountStore.accounts.by(id: $0) }) {
-        _account = ScriptableAccount(account: account, profileName: profileName)
+      if let account = leg.accountId.flatMap({ snapshot.account(id: $0) }) {
+        _account = ScriptableAccount(account: account, snapshot: snapshot)
         _accountName = account.name
       } else {
         _account = nil
         _accountName = ""
       }
       _amount = leg.amount.doubleValue
-      if let category = leg.categoryId.flatMap({ categoryStore.categories.by(id: $0) }) {
-        let parentName =
-          category.parentId.flatMap { categoryStore.categories.by(id: $0)?.name } ?? ""
+      if let category = leg.categoryId.flatMap({ snapshot.category(id: $0) }) {
+        let parentName = snapshot.parentName(for: category)
         _category = ScriptableCategory(
-          category: category, parentName: parentName, profileName: profileName)
+          category: category, parentName: parentName, profileName: snapshot.profileName)
         _categoryName = category.name
       } else {
         _category = nil
         _categoryName = ""
       }
-      if let earmark = leg.earmarkId.flatMap({ earmarkStore.earmarks.by(id: $0) }) {
-        _earmark = ScriptableEarmark(earmark: earmark, profileName: profileName)
+      if let earmark = leg.earmarkId.flatMap({ snapshot.earmark(id: $0) }) {
+        _earmark = ScriptableEarmark(earmark: earmark, profileName: snapshot.profileName)
       } else {
         _earmark = nil
       }
@@ -150,7 +138,7 @@
       _transactionID = transaction.id.uuidString
       _transactionDate = transaction.date
       _payee = transaction.payee ?? ""
-      _profileName = profileName
+      _profileName = snapshot.profileName
       super.init()
     }
 

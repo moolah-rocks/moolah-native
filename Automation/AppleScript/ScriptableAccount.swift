@@ -14,9 +14,9 @@
     private let _isHidden: Bool
     private let _profileName: String
     private let _positions: [String]
+    private let _snapshot: ScriptableProfileSnapshot
 
-    @MainActor
-    init(account: Account, profileName: String) {
+    init(account: Account, snapshot: ScriptableProfileSnapshot) {
       _uniqueID = account.id.uuidString
       _name = account.name
       _accountType = account.type.rawValue
@@ -25,7 +25,8 @@
       _balance = primaryPosition?.amount.doubleValue ?? 0
       _investmentValue = 0
       _isHidden = account.isHidden
-      _profileName = profileName
+      _profileName = snapshot.profileName
+      _snapshot = snapshot
       // One "SYMBOL=quantity" entry per held instrument, ordered by
       // instrument id (matches `Position` ordering). Multi-instrument
       // accounts (crypto / exchange) hold more than the primary; `balance`
@@ -41,6 +42,12 @@
     @objc var investmentValue: Double { _investmentValue }
     @objc var isHidden: Bool { _isHidden }
     @objc var positions: [String] { _positions }
+    @objc var scriptableTransactions: [ScriptableTransaction] {
+      guard let accountID = UUID(uuidString: _uniqueID) else { return [] }
+      return _snapshot.transactions(for: accountID).map {
+        ScriptableTransaction(transaction: $0, snapshot: _snapshot)
+      }
+    }
 
     var scriptProfileName: String { _profileName }
 
