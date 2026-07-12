@@ -31,7 +31,7 @@ struct RecordMappingTests {
       position: 2,
       isHidden: true,
       encodedSystemFields: nil,
-      valuationMode: ValuationMode.calculatedFromTrades.rawValue
+      valuationMode: "calculatedFromTrades"
     )
 
     let ckRecord = row.toCKRecord(in: zoneID)
@@ -45,7 +45,7 @@ struct RecordMappingTests {
     #expect(ckRecord["instrumentId"] as? String == "USD")
     #expect(ckRecord["position"] as? Int == 2)
     #expect(ckRecord["isHidden"] as? Int == 1)
-    #expect(ckRecord["valuationMode"] as? String == ValuationMode.calculatedFromTrades.rawValue)
+    #expect(ckRecord["valuationMode"] as? String == "calculatedFromTrades")
 
     let restored = try #require(AccountRow.fieldValues(from: ckRecord))
     #expect(restored.id == row.id)
@@ -54,7 +54,7 @@ struct RecordMappingTests {
     #expect(restored.instrumentId == "USD")
     #expect(restored.position == 2)
     #expect(restored.isHidden == true)
-    #expect(restored.valuationMode == ValuationMode.calculatedFromTrades.rawValue)
+    #expect(restored.valuationMode == "calculatedFromTrades")
   }
 
   @Test

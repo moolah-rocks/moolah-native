@@ -13,7 +13,6 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let earmarks: any EarmarkRepository
   let analysis: any AnalysisRepository
   let insightDataSource: any InsightDataSource
-  let investments: any InvestmentRepository
   let conversionService: any InstrumentConversionService
   let csvImportProfiles: any CSVImportProfileRepository
   let importRules: any ImportRuleRepository
@@ -56,7 +55,6 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let grdbTransferSuggestions: GRDBTransferSuggestionRepository
   let grdbEarmarks: GRDBEarmarkRepository
   let grdbEarmarkBudgetItems: GRDBEarmarkBudgetItemRepository
-  let grdbInvestments: GRDBInvestmentRepository
   let grdbTransactions: GRDBTransactionRepository
   let grdbTransactionLegs: GRDBTransactionLegRepository
 
@@ -89,8 +87,6 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     let onEarmarkDeleted: @Sendable (String, UUID) -> Void
     let onEarmarkBudgetItemChanged: @Sendable (String, UUID) -> Void
     let onEarmarkBudgetItemDeleted: @Sendable (String, UUID) -> Void
-    let onInvestmentChanged: @Sendable (String, UUID) -> Void
-    let onInvestmentDeleted: @Sendable (String, UUID) -> Void
     let onTransactionChanged: @Sendable (String, UUID) -> Void
     let onTransactionDeleted: @Sendable (String, UUID) -> Void
     let onTransactionLegChanged: @Sendable (String, UUID) -> Void
@@ -119,8 +115,6 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
       onEarmarkDeleted: { _, _ in },
       onEarmarkBudgetItemChanged: { _, _ in },
       onEarmarkBudgetItemDeleted: { _, _ in },
-      onInvestmentChanged: { _, _ in },
-      onInvestmentDeleted: { _, _ in },
       onTransactionChanged: { _, _ in },
       onTransactionDeleted: { _, _ in },
       onTransactionLegChanged: { _, _ in },
@@ -168,7 +162,6 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.grdbTransferSuggestions = repos.transferSuggestions
     self.grdbEarmarks = repos.earmarks
     self.grdbEarmarkBudgetItems = repos.earmarkBudgetItems
-    self.grdbInvestments = repos.investments
     self.grdbTransactionLegs = repos.transactionLegs
     self.grdbCSVImportProfiles = repos.csvImportProfiles
     self.grdbImportRules = repos.importRules
@@ -184,7 +177,6 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.earmarks = repos.earmarks
     self.analysis = repos.analysis
     self.insightDataSource = repos.insightDataSource
-    self.investments = repos.investments
     self.csvImportProfiles = repos.csvImportProfiles
     self.importRules = repos.importRules
     self.instrumentRegistryRepository = instrumentRegistry

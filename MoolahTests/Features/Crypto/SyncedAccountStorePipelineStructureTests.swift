@@ -182,7 +182,6 @@ struct SyncedAccountStorePipelineStructureTests {
       name: "Wallet \(walletAddress.suffix(4))",
       type: .crypto,
       instrument: chain.nativeInstrument,
-      valuationMode: .calculatedFromTrades,
       walletAddress: walletAddress.lowercased(),
       chainId: chain.chainId)
     _ = TestBackend.seed(accounts: [account], in: database)

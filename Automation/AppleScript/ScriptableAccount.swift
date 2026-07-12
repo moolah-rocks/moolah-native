@@ -10,7 +10,6 @@
     private let _name: String
     private let _accountType: String
     private let _balance: Double
-    private let _investmentValue: Double
     private let _isHidden: Bool
     private let _profileName: String
     private let _positions: [String]
@@ -23,7 +22,6 @@
       // Compute balance from positions
       let primaryPosition = account.positions.first(where: { $0.instrument == account.instrument })
       _balance = primaryPosition?.amount.doubleValue ?? 0
-      _investmentValue = 0
       _isHidden = account.isHidden
       _profileName = snapshot.profileName
       _snapshot = snapshot
@@ -39,7 +37,6 @@
     @objc var name: String { _name }
     @objc var accountType: String { _accountType }
     @objc var balance: Double { _balance }
-    @objc var investmentValue: Double { _investmentValue }
     @objc var isHidden: Bool { _isHidden }
     @objc var positions: [String] { _positions }
     @objc var scriptableTransactions: [ScriptableTransaction] {

@@ -122,8 +122,6 @@ extension ProfileSession {
       onEarmarkDeleted: hooks.deleted,
       onEarmarkBudgetItemChanged: hooks.changed,
       onEarmarkBudgetItemDeleted: hooks.deleted,
-      onInvestmentChanged: hooks.changed,
-      onInvestmentDeleted: hooks.deleted,
       onTransactionChanged: hooks.changed,
       onTransactionDeleted: hooks.deleted,
       onTransactionLegChanged: hooks.changed,

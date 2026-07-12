@@ -12,8 +12,7 @@ struct ExportedDataTestsMore {
       categories: [],
       earmarks: [],
       earmarkBudgets: [:],
-      transactions: [],
-      investmentValues: [:]
+      transactions: []
     )
 
     #expect(exported.version == ExportFormatVersion.current)
@@ -78,11 +77,6 @@ struct ExportedDataTestsMore {
     #expect(cryptoLeg?.instrument.ticker == "ETH")
     #expect(cryptoLeg?.instrument.decimals == 18)
 
-    // Investment values keep their instrument
-    let decodedStockValues = decoded.investmentValues[ids.investmentAccountId]
-    #expect(decodedStockValues?.first?.value.instrument == bhp)
-    let decodedCryptoValues = decoded.investmentValues[ids.cryptoEarmarkAccountId]
-    #expect(decodedCryptoValues?.first?.value.instrument == eth)
   }
 
   private struct MultiCurrencyFixtureIds {
@@ -124,8 +118,7 @@ struct ExportedDataTestsMore {
           )
         ]
       ],
-      transactions: makeMultiCurrencyTransactions(ids: ids, aud: aud, usd: usd, bhp: bhp, eth: eth),
-      investmentValues: makeMultiCurrencyInvestmentValues(ids: ids, bhp: bhp, eth: eth)
+      transactions: makeMultiCurrencyTransactions(ids: ids, aud: aud, usd: usd, bhp: bhp, eth: eth)
     )
   }
 
@@ -187,25 +180,6 @@ struct ExportedDataTestsMore {
           )
         ]
       ),
-    ]
-  }
-
-  private static func makeMultiCurrencyInvestmentValues(
-    ids: MultiCurrencyFixtureIds, bhp: Instrument, eth: Instrument
-  ) -> [UUID: [InvestmentValue]] {
-    [
-      ids.investmentAccountId: [
-        InvestmentValue(
-          date: Date(timeIntervalSince1970: 1_700_400_000),
-          value: InstrumentAmount(quantity: dec("10"), instrument: bhp)
-        )
-      ],
-      ids.cryptoEarmarkAccountId: [
-        InvestmentValue(
-          date: Date(timeIntervalSince1970: 1_700_500_000),
-          value: InstrumentAmount(quantity: dec("0.25"), instrument: eth)
-        )
-      ],
     ]
   }
 }

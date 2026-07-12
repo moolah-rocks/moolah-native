@@ -1,10 +1,9 @@
 import SwiftUI
 
 extension View {
-  /// Injects both a `ProfileStore` and a `ProfileSession` into the view
-  /// hierarchy for `#Preview` use. Required by any view that uses
-  /// `.profileNavigationTitle(...)` — that modifier reads both from
-  /// `@Environment` and crashes if either is missing.
+  /// Injects a `ProfileStore`, `ProfileSession`, and the session's
+  /// `ImportStore` into the view hierarchy for `#Preview` use. Required by
+  /// views that use `.profileNavigationTitle(...)` or `TransactionListView`.
   ///
   /// Defaults to no-profile preview environments. Pass an explicit
   /// `profileStore` (e.g. `ProfileStore.preview(profiles: [fixture])`)
@@ -28,5 +27,6 @@ extension View {
       self
       .environment(profileStore)
       .environment(resolvedSession)
+      .environment(resolvedSession.importStore)
   }
 }

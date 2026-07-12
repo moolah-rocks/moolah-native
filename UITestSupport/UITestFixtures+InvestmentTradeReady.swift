@@ -18,8 +18,8 @@ extension UITestFixtures {
   ///
   /// Entities (all fixed, deterministic):
   ///   - Profile `personal` — label "Personal", currency AUD, CloudKit-backed.
-  ///   - Account `portfolio` — "Portfolio", **investment**, AUD denomination,
-  ///     `valuationMode = .calculatedFromTrades`. Two buy trade transactions
+  ///   - Account `portfolio` — "Portfolio", **investment**, AUD denomination.
+  ///     Two buy trade transactions
   ///     produce a net 30 VGS.AX position (non-host holding), which
   ///     triggers both the Increment-4
   ///     `AccountDetailView(alwaysShowsFullSurface: true)` routing and the
@@ -36,7 +36,7 @@ extension UITestFixtures {
     public static let profileLabel = "Personal"
     public static let profileCurrencyCode = "AUD"
 
-    /// `.investment` account in `.calculatedFromTrades` mode. Two buy trades
+    /// `.investment` account. Two buy trades
     /// produce a net 30 VGS.AX position so `hasNonHostHoldings == true`
     /// triggers the macOS pinned-positions layout.
     public static let portfolioAccountId = uuidLiteral("A4000000-0000-0000-0000-000000000010")

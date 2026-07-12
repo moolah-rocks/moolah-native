@@ -78,8 +78,7 @@ struct ExportImportIntegrationTestsMore {
       categories: [],
       earmarks: [],
       earmarkBudgets: [:],
-      transactions: [],
-      investmentValues: [:]
+      transactions: []
     )
     let tempURL = FileManager.default.temporaryDirectory.appending(
       path: "\(UUID().uuidString).json")

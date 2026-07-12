@@ -182,23 +182,11 @@ extension ProfileSession {
       store: store, discovery: discovery, reloadRPCEndpoints: reloadRPCEndpoints)
   }
 
-  /// Wires the crypto-token-store side effects. When a registration's
-  /// `pricingStatus` flips (e.g. the user marks a token `.spam` from
-  /// preferences), the loaded investment account re-valuates so the spam
-  /// position drops out of `valuedPositions` without navigating away and
-  /// back (Issue #790). And when the user edits the custom RPC endpoint list,
-  /// the live sync routing resolver is reset in place so wallet sync picks
-  /// the new list up on its next run without a relaunch. Both spawned Tasks
-  /// are tracked in `crossStoreUpdateTasks` so `cleanupSync` can cancel them
-  /// on session teardown.
+  /// Wires the RPC-endpoint side effect. When the user edits the custom RPC
+  /// endpoint list, the live sync routing resolver is reset in place so wallet
+  /// sync picks the new list up on its next run without a relaunch. Spawned
+  /// tasks are tracked in `crossStoreUpdateTasks` for session teardown.
   func wireCrossStoreSideEffects() {
-    let investmentStore = self.investmentStore
-    self.cryptoTokenStore?.onRegistrationsChanged = { [weak self] in
-      let task = Task { @MainActor in
-        await investmentStore.revaluateLoadedPositions()
-      }
-      self?.crossStoreUpdateTasks.append(task)
-    }
     self.cryptoTokenStore?.onRPCEndpointsChanged = { [weak self] in
       guard let reload = self?.reloadRPCEndpoints else { return }
       let task = Task { await reload() }

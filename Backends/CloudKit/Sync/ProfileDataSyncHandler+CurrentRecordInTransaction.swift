@@ -42,21 +42,25 @@ extension ProfileDataSyncHandler {
     let repos = grdbRepositories
     switch recordType {
     case CategoryRow.recordType:
-      return try repos.categories.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(try repos.categories.fetchRowSync(id: uuid, in: database).map(builtRecord))
     case TaxOwnerRow.recordType:
-      return try repos.taxOwners.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(try repos.taxOwners.fetchRowSync(id: uuid, in: database).map(builtRecord))
     case TransferSuggestionRow.recordType:
-      return try repos.transferSuggestions.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(
+        try repos.transferSuggestions.fetchRowSync(id: uuid, in: database).map(builtRecord))
     case AccountGroupRow.recordType:
-      return try repos.accountGroups.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(try repos.accountGroups.fetchRowSync(id: uuid, in: database).map(builtRecord))
     case InsightDismissalRow.recordType:
-      return try repos.insightDismissals.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(
+        try repos.insightDismissals.fetchRowSync(id: uuid, in: database).map(builtRecord))
     case WalletSyncCheckpointRow.recordType:
-      return try repos.walletSyncCheckpoints.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(
+        try repos.walletSyncCheckpoints.fetchRowSync(id: uuid, in: database).map(builtRecord))
     case CSVImportProfileRow.recordType:
-      return try repos.csvImportProfiles.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(
+        try repos.csvImportProfiles.fetchRowSync(id: uuid, in: database).map(builtRecord))
     case ImportRuleRow.recordType:
-      return try repos.importRules.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(try repos.importRules.fetchRowSync(id: uuid, in: database).map(builtRecord))
     default:
       return nil
     }
@@ -69,17 +73,20 @@ extension ProfileDataSyncHandler {
     let repos = grdbRepositories
     switch recordType {
     case AccountRow.recordType:
-      return try repos.accounts.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(try repos.accounts.fetchRowSync(id: uuid, in: database).map(builtRecord))
     case TransactionRow.recordType:
-      return try repos.transactions.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(try repos.transactions.fetchRowSync(id: uuid, in: database).map(builtRecord))
     case TransactionLegRow.recordType:
-      return try repos.transactionLegs.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(
+        try repos.transactionLegs.fetchRowSync(id: uuid, in: database).map(builtRecord))
     case EarmarkRow.recordType:
-      return try repos.earmarks.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(try repos.earmarks.fetchRowSync(id: uuid, in: database).map(builtRecord))
     case EarmarkBudgetItemRow.recordType:
-      return try repos.earmarkBudgetItems.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(
+        try repos.earmarkBudgetItems.fetchRowSync(id: uuid, in: database).map(builtRecord))
     case InvestmentValueRow.recordType:
-      return try repos.investmentValues.fetchRowSync(id: uuid, in: database).map(builtRecord)
+      return .some(
+        try repos.investmentValues.fetchRowSync(id: uuid, in: database).map(builtRecord))
     default:
       return nil
     }

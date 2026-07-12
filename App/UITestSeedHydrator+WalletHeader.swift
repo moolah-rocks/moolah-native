@@ -44,7 +44,6 @@ extension UITestSeedHydrator {
           type: .crypto,
           instrumentId: instrument.id,
           position: 0,
-          valuationMode: .calculatedFromTrades,
           walletAddress: fixtures.walletAddress,
           chainId: fixtures.walletChainId),
         in: profileDatabase)

@@ -75,11 +75,12 @@ struct ExportProgressTests {
     // the UI silently jumps past it — a visible UX regression.
     let expected: Set<String> = [
       "starting", "accounts", "categories", "earmarks",
-      "transactions", "investment values", "encoding", "writing",
+      "transactions", "encoding", "writing",
     ]
     #expect(
       expected.isSubset(of: Set(collector.steps)),
       "missing stages: \(expected.subtracting(Set(collector.steps)))")
+    #expect(!collector.steps.contains("investment values"))
 
     // Order invariant: `starting` first, then downloads, then encoding, then writing.
     #expect(collector.steps.first == "starting")

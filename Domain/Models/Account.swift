@@ -75,7 +75,6 @@ struct Account {
   /// Provider for a centralised-exchange account. Required when
   /// `type == .exchange`; nil otherwise.
   var exchangeProvider: ExchangeProvider?
-  var valuationMode: ValuationMode
   /// Back-reference into `AccountGroup.id`. When non-nil, this account
   /// belongs to the named group; when nil, it belongs to no group.
   ///
@@ -95,7 +94,6 @@ struct Account {
     positions: [Position] = [],
     position: Int = 0,
     isHidden: Bool = false,
-    valuationMode: ValuationMode = .calculatedFromTrades,
     walletAddress: String? = nil,
     chainId: Int? = nil,
     exchangeProvider: ExchangeProvider? = nil,
@@ -109,7 +107,6 @@ struct Account {
     self.positions = positions
     self.position = position
     self.isHidden = isHidden
-    self.valuationMode = valuationMode
     self.walletAddress = walletAddress
     self.chainId = chainId
     self.exchangeProvider = exchangeProvider
@@ -130,7 +127,6 @@ extension Account: Codable {
     case instrument
     case position
     case isHidden = "hidden"
-    case valuationMode
     case walletAddress
     case chainId
     case exchangeProvider
@@ -160,9 +156,6 @@ extension Account: Codable {
     positions = []
     position = try container.decode(Int.self, forKey: .position)
     isHidden = try container.decode(Bool.self, forKey: .isHidden)
-    valuationMode =
-      try container.decodeIfPresent(ValuationMode.self, forKey: .valuationMode)
-      ?? .calculatedFromTrades
     walletAddress = try container.decodeIfPresent(String.self, forKey: .walletAddress)
     chainId = try container.decodeIfPresent(Int.self, forKey: .chainId)
     exchangeProvider = try container.decodeIfPresent(
@@ -179,7 +172,6 @@ extension Account: Codable {
     try container.encode(instrument, forKey: .instrument)
     try container.encode(position, forKey: .position)
     try container.encode(isHidden, forKey: .isHidden)
-    try container.encode(valuationMode, forKey: .valuationMode)
     try container.encodeIfPresent(walletAddress, forKey: .walletAddress)
     try container.encodeIfPresent(chainId, forKey: .chainId)
     try container.encodeIfPresent(exchangeProvider, forKey: .exchangeProvider)
@@ -193,7 +185,6 @@ extension Account: Hashable {
     lhs.id == rhs.id && lhs.name == rhs.name && lhs.type == rhs.type
       && lhs.instrument == rhs.instrument
       && lhs.position == rhs.position && lhs.isHidden == rhs.isHidden
-      && lhs.valuationMode == rhs.valuationMode
       && lhs.walletAddress == rhs.walletAddress && lhs.chainId == rhs.chainId
       && lhs.exchangeProvider == rhs.exchangeProvider
       && lhs.groupId == rhs.groupId
@@ -208,7 +199,6 @@ extension Account: Hashable {
     hasher.combine(instrument)
     hasher.combine(position)
     hasher.combine(isHidden)
-    hasher.combine(valuationMode)
     hasher.combine(walletAddress)
     hasher.combine(chainId)
     hasher.combine(exchangeProvider)

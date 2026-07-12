@@ -90,10 +90,10 @@ struct SyncedAccountStoreTransferDetectionTests {
   ) throws -> (Account, Account) {
     let accountA = Account(
       name: "Exchange A", type: .exchange, instrument: .AUD,
-      valuationMode: .calculatedFromTrades, exchangeProvider: .coinstash)
+      exchangeProvider: .coinstash)
     let accountB = Account(
       name: "Exchange B", type: .exchange, instrument: .AUD,
-      valuationMode: .calculatedFromTrades, exchangeProvider: .coinstash)
+      exchangeProvider: .coinstash)
     _ = TestBackend.seed(accounts: [accountA, accountB], in: fixture.database)
 
     let tokenStore = ExchangeTokenStore(synchronizable: false)

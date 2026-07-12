@@ -21,7 +21,7 @@ struct ProfileSessionTests {
     #expect(session.transactionStore.transactions.isEmpty)
     #expect(session.categoryStore.categories.roots.isEmpty)
     #expect(session.earmarkStore.earmarks.ordered.isEmpty)
-    #expect(session.investmentStore.values.isEmpty)
+    #expect(!session.holdingsCostLedgerStore.hasCachedLedger)
   }
 
   @Test("session ID matches profile ID")
@@ -44,12 +44,6 @@ struct ProfileSessionTests {
 
     #expect(session1.id != session2.id)
   }
-
-  // The previous `onInvestmentValueChanged` callback wiring has been
-  // removed — `AccountStore` now subscribes directly to
-  // `investmentRepository.observeAllValues()`. End-to-end coverage that
-  // an investment-value write reaches the account store lives in
-  // `AccountStoreSyncRefreshTests.investmentValueWriteReachesAccountStore`.
 
   /// Regression for #102: a CloudKit profile must use `FullConversionService`,
   /// not `FiatConversionService`, so stock and crypto positions can be

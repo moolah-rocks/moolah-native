@@ -129,7 +129,7 @@ struct GRDBDailyBalancesConversionTests {
 
     // A conflicting snapshot remains persisted but cannot affect the result.
     let usd = Instrument.fiat(code: "USD")
-    try await backend.investments.setValue(
+    try await backend.seedLegacyInvestmentValue(
       accountId: investmentAccount.id,
       date: day,
       value: InstrumentAmount(quantity: 9_999, instrument: usd))

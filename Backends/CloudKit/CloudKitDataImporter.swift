@@ -10,12 +10,11 @@ struct ImportResult: Sendable {
   let earmarkCount: Int
   let budgetItemCount: Int
   let transactionCount: Int
-  let investmentValueCount: Int
 
   var totalCount: Int {
     accountCount + accountGroupCount + categoryCount + taxOwnerCount + earmarkCount
       + budgetItemCount
-      + transactionCount + investmentValueCount
+      + transactionCount
   }
 }
 
@@ -66,10 +65,8 @@ struct CloudKitDataImporter {
     progress?("done", 1.0)
 
     let budgetItemCount = data.earmarkBudgets.values.reduce(0) { $0 + $1.count }
-    let investmentValueCount = data.investmentValues.values.reduce(0) { $0 + $1.count }
-
     logger.info(
-      "Import complete: \(data.accounts.count) accounts, \(data.accountGroups.count) groups, \(data.transactions.count) transactions, \(investmentValueCount) investment values"
+      "Import complete: \(data.accounts.count) accounts, \(data.accountGroups.count) groups, \(data.transactions.count) transactions"
     )
 
     return ImportResult(
@@ -79,8 +76,7 @@ struct CloudKitDataImporter {
       taxOwnerCount: data.taxOwners.count,
       earmarkCount: data.earmarks.count,
       budgetItemCount: budgetItemCount,
-      transactionCount: data.transactions.count,
-      investmentValueCount: investmentValueCount
+      transactionCount: data.transactions.count
     )
   }
 
@@ -106,7 +102,6 @@ struct CloudKitDataImporter {
       try Self.writeAccountGroups(data: data, database: database)
       try Self.writeAccountsAndEarmarks(data: data, database: database)
       try Self.writeTransactions(data: data, database: database)
-      try Self.writeInvestmentValues(data: data, database: database)
     }
   }
 
@@ -224,16 +219,6 @@ struct CloudKitDataImporter {
         // per-profile `instrument` table.
         try TransactionLegRow(domain: leg, transactionId: txn.id, sortOrder: index)
           .upsert(database)
-      }
-    }
-  }
-
-  nonisolated private static func writeInvestmentValues(
-    data: ExportedData, database: Database
-  ) throws {
-    for (accountId, values) in data.investmentValues {
-      for value in values {
-        try InvestmentValueRow(domain: value, accountId: accountId).upsert(database)
       }
     }
   }

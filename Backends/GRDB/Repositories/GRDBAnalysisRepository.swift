@@ -3,7 +3,7 @@ import GRDB
 import OSLog
 
 /// GRDB-backed implementation of `AnalysisRepository`. Reads the core
-/// financial graph (accounts, transactions, legs, investment values)
+/// financial graph (accounts, transactions, and legs)
 /// from `data.sqlite`. Every method drives a SQL aggregation that
 /// pushes the per-(day, dimension) GROUP BY into SQLite and converts
 /// the summed rows in Swift on each row's own day — preserving the

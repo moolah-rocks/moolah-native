@@ -110,12 +110,6 @@ struct CryptoAccountCreationStoreTests {
     #expect(created.chainId == ChainConfig.ethereum.chainId)
     #expect(created.instrument == Self.profileInstrument)
     #expect(created.name == "Hardware Wallet")
-    // Crypto wallets compute balance from leg aggregation, so they ship
-    // as `.calculatedFromTrades` from creation. The `Account` default is
-    // `.recordedValue`; without an explicit mode every reader that gates
-    // on `valuationMode` would see the wrong intent.
-    #expect(created.valuationMode == .calculatedFromTrades)
-
     // `AccountStore` mirrors the repository through reactive observation
     // — there is no optimistic insert, so the new account lands in
     // `accounts` only once the GRDB write commits and `observeAll()`

@@ -157,7 +157,7 @@ struct GRDBCreatePathRegistersInstrumentTests {
       decimals: 18)
     let account = Account(
       name: "Trust - Ethereum", type: .crypto, instrument: eth,
-      valuationMode: .calculatedFromTrades, walletAddress: "0xabc",
+      walletAddress: "0xabc",
       chainId: 1)
     let leg = TransactionLeg(
       accountId: account.id, instrument: eth, quantity: 3, type: .income)
@@ -195,7 +195,7 @@ struct GRDBCreatePathRegistersInstrumentTests {
       decimals: 18)
     let account = Account(
       name: "Trust - Ethereum", type: .crypto, instrument: eth,
-      valuationMode: .calculatedFromTrades, walletAddress: "0xabc",
+      walletAddress: "0xabc",
       chainId: 1)
 
     _ = try await repo.create(account)
@@ -230,7 +230,7 @@ struct GRDBCreatePathRegistersInstrumentTests {
       decimals: 18)
     let account = Account(
       name: "Trust - Ethereum", type: .crypto, instrument: eth,
-      valuationMode: .calculatedFromTrades, walletAddress: "0xabc",
+      walletAddress: "0xabc",
       chainId: 1)
     let leg = TransactionLeg(
       accountId: account.id, instrument: eth, quantity: 3, type: .income)
@@ -277,7 +277,7 @@ struct GRDBCreatePathRegistersInstrumentTests {
     let aud = Instrument.fiat(code: "AUD")
     let account = Account(
       name: "Test Account", type: .crypto, instrument: eth,
-      valuationMode: .calculatedFromTrades, walletAddress: "0xtest",
+      walletAddress: "0xtest",
       chainId: 1)
 
     // Seed the account row so FK-like constraints are satisfied, mirroring

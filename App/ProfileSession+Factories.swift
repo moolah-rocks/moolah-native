@@ -200,7 +200,7 @@ extension ProfileSession {
     let earmark: EarmarkStore
     let transaction: TransactionStore
     let analysis: AnalysisStore
-    let investment: InvestmentStore
+    let holdingsCostLedger: HoldingsCostLedgerStore
     let reporting: ReportingStore
   }
 
@@ -242,14 +242,6 @@ extension ProfileSession {
       repository: backend.analysis, conversionService: backend.conversionService)
     let holdingsCostLedger = makeHoldingsCostLedgerStore(
       profile: profile, backend: backend, instrumentChanges: instrumentChanges)
-    let investment = InvestmentStore(
-      repository: backend.investments,
-      transactionRepository: backend.transactions,
-      conversionService: backend.conversionService,
-      instrumentChanges: instrumentChanges,
-      instrumentRegistry: backend.instrumentRegistry,
-      holdingsCostLedger: holdingsCostLedger
-    )
     let reporting = ReportingStore(
       analysisRepository: backend.analysis,
       conversionService: backend.conversionService,
@@ -264,7 +256,7 @@ extension ProfileSession {
     )
     return DomainStores(
       auth: auth, account: account, category: category, earmark: earmark,
-      transaction: transaction, analysis: analysis, investment: investment,
+      transaction: transaction, analysis: analysis, holdingsCostLedger: holdingsCostLedger,
       reporting: reporting
     )
   }

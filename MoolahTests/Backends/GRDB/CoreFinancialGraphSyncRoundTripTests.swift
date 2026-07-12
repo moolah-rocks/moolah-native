@@ -205,10 +205,14 @@ struct CoreFinancialGraphSyncRoundTripTests {
       )
       .insert(database)
     }
-    let value = InvestmentValue(
+    let source = InvestmentValueRow(
+      id: valueId,
+      recordName: InvestmentValueRow.recordName(for: valueId),
+      accountId: accountId,
       date: Date(timeIntervalSince1970: 1_700_000_000),
-      value: InstrumentAmount(quantity: 5000, instrument: .AUD))
-    let source = InvestmentValueRow(id: valueId, domain: value, accountId: accountId)
+      value: InstrumentAmount(quantity: 5000, instrument: .AUD).storageValue,
+      instrumentId: Instrument.AUD.id,
+      encodedSystemFields: nil)
     let ckRecord = source.toCKRecord(in: Self.zoneID)
 
     let result = harness.handler.applyRemoteChanges(saved: [ckRecord], deleted: [])

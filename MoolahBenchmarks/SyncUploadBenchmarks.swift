@@ -42,7 +42,7 @@ final class SyncUploadBenchmarks: XCTestCase {
       walletSyncCheckpoints: result.backend.grdbWalletSyncCheckpoints,
       earmarks: result.backend.grdbEarmarks,
       earmarkBudgetItems: result.backend.grdbEarmarkBudgetItems,
-      investmentValues: result.backend.grdbInvestments,
+      investmentValues: GRDBInvestmentRepository(database: result.database),
       transactions: result.backend.grdbTransactions,
       transactionLegs: result.backend.grdbTransactionLegs,
       database: result.database)

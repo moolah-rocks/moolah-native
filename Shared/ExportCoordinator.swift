@@ -34,7 +34,7 @@ final class ExportCoordinator {
   ///   - profile: The profile to export
   ///   - progress: Optional callback fired on `@MainActor` with a stage name
   ///     (`accounts`, `account groups`, `categories`, `tax owners`,
-  ///     `earmarks`, `transactions`, `investment values`, `encoding`,
+  ///     `earmarks`, `transactions`, `encoding`,
   ///     `writing`) so the UI can render a progress indicator. The download
   ///     stages are forwarded from `DataExporter`; `encoding` and `writing`
   ///     are emitted around the JSON serialisation and atomic file write that

@@ -42,7 +42,6 @@
 
     { "slug": "investments-and-crypto", "title": "Investments and crypto", "parent": null },
     { "slug": "add-an-investment-account", "title": "Add an investment account", "parent": "investments-and-crypto" },
-    { "slug": "record-an-investment-snapshot", "title": "Record an investment value snapshot", "parent": "investments-and-crypto" },
     { "slug": "record-a-trade", "title": "Record a trade", "parent": "investments-and-crypto" },
     { "slug": "add-a-crypto-wallet", "title": "Add a crypto wallet account", "parent": "investments-and-crypto" },
     { "slug": "add-an-exchange-account", "title": "Add an exchange account", "parent": "investments-and-crypto" },

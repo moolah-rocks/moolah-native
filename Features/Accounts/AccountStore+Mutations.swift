@@ -20,12 +20,9 @@ extension AccountStore {
   ) async throws -> Account {
     setError(nil)
 
-    var toCreate = account
-    toCreate.valuationMode = .calculatedFromTrades
-
     do {
       let created = try await repository.create(
-        toCreate, openingBalance: openingBalance)
+        account, openingBalance: openingBalance)
       mutationLogger.debug("Created account: \(created.name)")
       return created
     } catch {
@@ -39,10 +36,8 @@ extension AccountStore {
   /// rationale; the reactive observation delivers the updated account.
   func update(_ account: Account) async throws -> Account {
     setError(nil)
-    var toUpdate = account
-    toUpdate.valuationMode = .calculatedFromTrades
     do {
-      let updated = try await repository.update(toUpdate)
+      let updated = try await repository.update(account)
       mutationLogger.debug("Updated account: \(updated.name)")
       return updated
     } catch {

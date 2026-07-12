@@ -72,7 +72,6 @@
     <li><a href="investments-and-crypto.html" aria-current="page">Investments and crypto</a>
       <ul>
         <li><a href="add-an-investment-account.html">Add an investment account</a></li>
-        <li><a href="record-an-investment-snapshot.html">Record an investment value snapshot</a></li>
         <li><a href="record-a-trade.html">Record a trade</a></li>
         <li><a href="add-a-crypto-wallet.html">Add a crypto wallet account</a></li>
         <li><a href="add-an-exchange-account.html">Add an exchange account</a></li>
@@ -123,17 +122,13 @@
   <h2>Three account types</h2>
   <p>Three of Moolah's account types live in this section. They all feed the <strong>Investment Total</strong> at the foot of the sidebar.</p>
   <ul>
-    <li><strong>Investment</strong> — a brokerage or retirement account. You enter values yourself, or let Moolah work the value out from trades you record.</li>
+    <li><strong>Investment</strong> — a brokerage or retirement account. Moolah works out positions and current value from the trades you record.</li>
     <li><strong>Crypto Wallet</strong> — an on-chain wallet on Ethereum, OP Mainnet, or Base. Moolah pulls transactions from Alchemy directly to your device.</li>
     <li><strong>Exchange</strong> — a Coinstash account. Moolah pulls trades from Coinstash directly to your device, using a read-only API token you create.</li>
   </ul>
 
   <h2>How an investment account tracks value</h2>
-  <p>Investment accounts have two valuation modes. You choose one when you create the account, and you can change it later from <strong>Edit Account</strong>.</p>
-  <ul>
-    <li><strong>Recorded value</strong> — you note the account's value from time to time. Moolah uses your snapshots in the net worth graph.</li>
-    <li><strong>Calculated from trades</strong> — you record buys, sells, and swaps as trade transactions. Moolah works out positions and the current value at market prices.</li>
-  </ul>
+  <p>Record buys, sells, and swaps as trade transactions. Moolah uses those trades to calculate your positions and current value at market prices.</p>
 
   <h2>How crypto wallet sync works</h2>
   <p>A crypto wallet account holds a 0x address on one of the supported chains. Moolah pulls on-chain activity from two providers on every sync, and they cover different things. Blockscout supplies the native and internal ETH activity — it's the authoritative source, so if it can't be reached the sync stops with an error. Alchemy supplies the ERC-20 token transfers. The Alchemy API key is yours — you create it on Alchemy and paste it into Moolah; Blockscout needs no key. Token prices come from DefiLlama and CoinGecko, with Binance as a fallback. Moolah doesn't sit in the middle of any of these calls.</p>

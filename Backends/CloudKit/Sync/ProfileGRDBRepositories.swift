@@ -109,10 +109,7 @@ extension ProfileGRDBRepositories {
         defaultInstrument: placeholderInstrument,
         instrumentResolver: resolver),
       earmarkBudgetItems: GRDBEarmarkBudgetItemRepository(database: database),
-      investmentValues: GRDBInvestmentRepository(
-        database: database,
-        defaultInstrument: placeholderInstrument,
-        instrumentResolver: resolver),
+      investmentValues: GRDBInvestmentRepository(database: database),
       transactions: GRDBTransactionRepository(
         database: database,
         defaultInstrument: placeholderInstrument,

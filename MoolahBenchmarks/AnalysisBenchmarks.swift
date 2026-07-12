@@ -4,7 +4,7 @@ import XCTest
 @testable import Moolah
 
 /// Benchmarks for AnalysisRepository — measures loadAll and fetchCategoryBalances
-/// on a realistic x2-scale dataset (37k transactions, 62 accounts, 5k investment values).
+/// on a realistic x2-scale dataset (37k transactions and 62 accounts).
 final class AnalysisBenchmarks: XCTestCase {
 
   nonisolated(unsafe) private static var _backend: CloudKitBackend?

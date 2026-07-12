@@ -29,7 +29,7 @@ struct UnknownEnumRawValueTests {
       position: 0,
       isHidden: false,
       encodedSystemFields: nil,
-      valuationMode: ValuationMode.recordedValue.rawValue)
+      valuationMode: "recordedValue")
 
     #expect(
       throws: BackendError.dataCorrupted("Unknown AccountType raw value: future_account_type")

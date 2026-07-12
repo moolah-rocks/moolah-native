@@ -233,8 +233,7 @@ enum UITestSeedHydrator {
         name: fixtures.tradesBrokerageAccountName,
         type: .investment,
         instrumentId: instrument.id,
-        position: 3,
-        valuationMode: .calculatedFromTrades),
+        position: 3),
       in: database)
   }
 

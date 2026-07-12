@@ -100,7 +100,7 @@ extension ProfileDataSyncHandlerTestSupport {
       position: position,
       isHidden: isHidden,
       encodedSystemFields: encodedSystemFields,
-      valuationMode: ValuationMode.recordedValue.rawValue)
+      valuationMode: "recordedValue")
   }
 
   static func transactionRow(
@@ -303,10 +303,7 @@ extension ProfileDataSyncHandlerTestSupport {
         defaultInstrument: instrument,
         instrumentResolver: registry),
       earmarkBudgetItems: GRDBEarmarkBudgetItemRepository(database: database),
-      investmentValues: GRDBInvestmentRepository(
-        database: database,
-        defaultInstrument: instrument,
-        instrumentResolver: registry),
+      investmentValues: GRDBInvestmentRepository(database: database),
       transactions: GRDBTransactionRepository(
         database: database,
         defaultInstrument: instrument,

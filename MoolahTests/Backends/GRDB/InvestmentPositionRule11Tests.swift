@@ -192,7 +192,7 @@ struct InvestmentPositionRule11Tests {
     let usd = Instrument.fiat(code: "USD")
     let tradesAccount = Account(
       id: UUID(), name: "Trades", type: .investment, instrument: aud,
-      valuationMode: .calculatedFromTrades)
+    )
     _ = try await backend.accounts.create(tradesAccount)
 
     let day = try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 12)

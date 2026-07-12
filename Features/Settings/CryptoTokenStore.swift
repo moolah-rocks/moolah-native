@@ -3,9 +3,8 @@ import Foundation
 import OSLog
 
 /// Per-session façade over the app-level `SharedRegistryStore`. Owns
-/// the per-session UI state (`error`, `isLoading`, the
-/// `onRegistrationsChanged` callback for cross-store side effects) and
-/// the per-session keychain reads. Registry data
+/// the per-session UI state (`error`, `isLoading`) and keychain reads.
+/// Registry data
 /// (`registrations`, `instruments`, `providerMappings`,
 /// `registrationsVersion`) lives on the shared store so a mutation
 /// from any session is immediately visible to every session's UI.
@@ -57,14 +56,6 @@ final class CryptoTokenStore {
   private(set) var isLoading = false
 
   private(set) var error: String?
-
-  /// Fired after a successful registry mutation that may change a
-  /// registration's `pricingStatus` or remove a row. Wired by
-  /// `ProfileSession` to drive the per-store re-aggregation that
-  /// otherwise wouldn't observe registry changes — e.g. so the
-  /// `InvestmentStore`'s `valuedPositions` drops a freshly-marked
-  /// `.spam` token from the account's position list. Issue #790.
-  var onRegistrationsChanged: (@MainActor () -> Void)?
 
   /// Fired after a successful RPC-endpoint edit (not the revert path) — wired
   /// by `ProfileSession` to reset the live `RPCEndpointResolver`.
@@ -133,13 +124,6 @@ final class CryptoTokenStore {
   /// test targets can set it.
   var rpcProbeOverride: (@Sendable ([String]) async -> [RPCEndpointResolver.Probe])?
 
-  /// Subscription to the registry's change stream so per-session side
-  /// effects fire when ANY session (including this one) mutates the
-  /// shared registry. The `onRegistrationsChanged` callback drives
-  /// `InvestmentStore` revaluation; cross-session conversion-cache
-  /// invalidation also fires here.
-  private var observationTask: Task<Void, Never>?
-
   /// Designated initialiser — accepts the keychain stores explicitly.
   /// Production constructs both stores against the iCloud-synced
   /// keychain at the canonical service / account ids (see the
@@ -172,28 +156,6 @@ final class CryptoTokenStore {
     KeychainStore(
       service: KeychainServices.apiKeys, account: "cryptocompare", synchronizable: true
     ).clear()
-
-    let stream = registry.observeChanges()
-    self.observationTask = Task { @MainActor [weak self] in
-      for await _ in stream {
-        self?.handleRegistryChangeTick()
-      }
-    }
-  }
-
-  deinit {
-    // Swift 6 nonisolated deinit; the task is owned by the per-
-    // session `CryptoTokenStore` instance, which `ProfileSession`
-    // (`@MainActor`) holds as a stored let property. The only
-    // deallocation path is when `ProfileSession` releases the last
-    // strong reference, and that release happens on the main actor
-    // (`SessionManager`'s teardown is `@MainActor`-isolated). The
-    // assumption therefore holds; a future refactor that introduces
-    // a non-`@MainActor` owner traps immediately instead of racing
-    // the observation infrastructure.
-    MainActor.assumeIsolated {
-      observationTask?.cancel()
-    }
   }
 
   /// Production convenience initialiser — wires the keychain stores to
@@ -300,11 +262,6 @@ final class CryptoTokenStore {
       // rather than serving a now-orphan cached price.
       await cryptoPriceService.purgeCache(instrumentId: registration.id)
       error = nil
-      // `onRegistrationsChanged` is fired centrally by
-      // `handleRegistryChangeTick` on the next observation tick — the
-      // local mutation we just performed will trigger that tick via
-      // the registry's `notifySubscribers`. Firing it here too would
-      // double-invoke `InvestmentStore.revaluateLoadedPositions`.
     } catch {
       logger.error("Failed to remove registration: \(error, privacy: .public)")
       self.error = error.localizedDescription
@@ -347,34 +304,10 @@ final class CryptoTokenStore {
       // store flushes this session's `FullConversionService` cache.
       await conversionService.invalidateCache(for: registration.instrument)
       error = nil
-      // `onRegistrationsChanged` fires from `handleRegistryChangeTick`
-      // on the upcoming registry tick (triggered by the mutation
-      // above). Firing here too would double-invoke
-      // `InvestmentStore.revaluateLoadedPositions`.
     } catch {
       logger.error("Failed to set pricing status: \(error, privacy: .public)")
       self.error = error.localizedDescription
     }
-  }
-
-  // MARK: - Cross-session change tick
-
-  /// Fired by the `observeChanges()` subscription on every registry
-  /// mutation — local OR remote-arriving via CKSyncEngine. The shared
-  /// store reloads its data fields automatically; this hook fires
-  /// per-session side effects (cross-store revaluation, cache
-  /// invalidation) so a mutation through profile A ripples through
-  /// profile B's UI within one cycle.
-  ///
-  /// The hook intentionally does NOT invalidate per-instrument
-  /// conversion caches here — the cache is keyed by date pairs that
-  /// change every conversion call, so over-invalidating on every
-  /// remote tick would thrash. Conversion-cache invalidation lives
-  /// inside `setStatus(_:for:)` for the local-mutation path; the
-  /// next conversion call after a remote-arriving status change
-  /// re-reads the registry on cache miss.
-  private func handleRegistryChangeTick() {
-    onRegistrationsChanged?()
   }
 
   /// Internal write seam for `error`, used by `CryptoTokenStore+APIKeys`

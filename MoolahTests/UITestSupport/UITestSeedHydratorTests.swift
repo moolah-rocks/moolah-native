@@ -87,11 +87,11 @@ final class UITestSeedHydratorTests: XCTestCase {
     let tradesBrokerage = try XCTUnwrap(
       accounts.first { $0.id == UITestFixtures.TradeBaseline.tradesBrokerageAccountId }
     )
-    XCTAssertEqual(tradesBrokerage.valuationMode, ValuationMode.calculatedFromTrades.rawValue)
+    XCTAssertEqual(tradesBrokerage.valuationMode, "calculatedFromTrades")
     let brokerage = try XCTUnwrap(
       accounts.first { $0.id == UITestFixtures.TradeBaseline.brokerageAccountId }
     )
-    XCTAssertEqual(brokerage.valuationMode, ValuationMode.calculatedFromTrades.rawValue)
+    XCTAssertEqual(brokerage.valuationMode, "calculatedFromTrades")
   }
 
   func testHydrateTradeBaselineSeedsTheTradeTransaction() throws {

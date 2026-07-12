@@ -63,9 +63,7 @@ struct AccountRow {
   var position: Int
   var isHidden: Bool
   var encodedSystemFields: Data?
-  /// Raw value of `ValuationMode` (`"recordedValue"` /
-  /// `"calculatedFromTrades"`). Decoded with a `recordedValue` fallback
-  /// to tolerate forward-incompatible schema migrations.
+  /// Legacy compatibility field. Runtime valuation is always trade-derived.
   var valuationMode: String
   /// `0x…` lowercased wallet address, populated when `type == "crypto"`.
   /// Defaulted to `nil` so existing memberwise-init call sites continue

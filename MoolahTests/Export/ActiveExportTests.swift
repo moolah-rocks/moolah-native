@@ -12,8 +12,6 @@ struct ActiveExportTests {
     #expect(ActiveExport.stageLabel(for: "categories") == "Fetching categories…")
     #expect(ActiveExport.stageLabel(for: "earmarks") == "Fetching earmarks…")
     #expect(ActiveExport.stageLabel(for: "transactions") == "Fetching transactions…")
-    #expect(
-      ActiveExport.stageLabel(for: "investment values") == "Fetching investment values…")
     #expect(ActiveExport.stageLabel(for: "encoding") == "Encoding file…")
     #expect(ActiveExport.stageLabel(for: "writing") == "Writing file…")
   }

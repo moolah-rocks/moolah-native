@@ -26,7 +26,7 @@ extension AccountRow {
     self.position = domain.position
     self.isHidden = domain.isHidden
     self.encodedSystemFields = nil
-    self.valuationMode = domain.valuationMode.rawValue
+    self.valuationMode = "calculatedFromTrades"
     self.walletAddress = domain.walletAddress
     self.chainId = domain.chainId
     self.exchangeProvider = domain.exchangeProvider?.rawValue
@@ -57,7 +57,6 @@ extension AccountRow {
       positions: positions,
       position: position,
       isHidden: isHidden,
-      valuationMode: ValuationMode(rawValue: valuationMode) ?? .recordedValue,
       walletAddress: walletAddress,
       chainId: chainId,
       exchangeProvider: resolvedExchangeProvider,

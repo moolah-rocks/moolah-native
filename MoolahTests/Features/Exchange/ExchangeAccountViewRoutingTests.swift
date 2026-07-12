@@ -15,7 +15,7 @@ struct ExchangeAccountViewRoutingTests {
   func exchangeAccountRoutesToUnifiedViewWithHeader() throws {
     let account = Account(
       name: "Coinstash", type: .exchange,
-      instrument: .AUD, valuationMode: .calculatedFromTrades,
+      instrument: .AUD,
       exchangeProvider: .coinstash)
     #expect(AccountDetailLayout.showsSyncedHeader(for: account))
     let session = try ProfileSession.preview()

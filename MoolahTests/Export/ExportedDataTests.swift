@@ -39,7 +39,11 @@ struct ExportedDataTests {
     #expect(decoded.earmarks.first?.id == earmarkId)
     #expect(decoded.earmarkBudgets[earmarkId]?.count == 1)
     #expect(decoded.transactions.count == original.transactions.count)
-    #expect(decoded.investmentValues.isEmpty)
+    let object = try JSONSerialization.jsonObject(with: data)
+    let json = try #require(object as? [String: Any])
+    #expect(json["investmentValues"] == nil)
+    let accountJSON = try #require((json["accounts"] as? [[String: Any]])?.first)
+    #expect(accountJSON["valuationMode"] == nil)
   }
 
   private static func makeSingleCurrencyFixture(
@@ -90,8 +94,7 @@ struct ExportedDataTests {
             )
           ]
         )
-      ],
-      investmentValues: [:]
+      ]
     )
   }
 
@@ -107,8 +110,7 @@ struct ExportedDataTests {
       categories: [],
       earmarks: [],
       earmarkBudgets: [:],
-      transactions: [],
-      investmentValues: [:]
+      transactions: []
     )
 
     let data = try ExportDocumentCodec().encode(exported)
@@ -119,5 +121,34 @@ struct ExportedDataTests {
     #expect(json["profileLabel"] as? String == "Test")
     #expect(json["currencyCode"] as? String == "USD")
     #expect(json["financialYearStartMonth"] as? Int == 1)
+  }
+
+  @Test("legacy snapshot fields are ignored while current data imports")
+  func legacySnapshotFieldsAreIgnored() throws {
+    let accountId = UUID()
+    let original = Self.makeSingleCurrencyFixture(
+      accountId: accountId,
+      categoryId: UUID(),
+      earmarkId: UUID(),
+      exportedAt: Date(timeIntervalSince1970: 1_700_000_000),
+      instrument: instrument)
+    let encoded = try ExportDocumentCodec().encode(original)
+    var json = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    json["investmentValues"] = [
+      accountId.uuidString: [
+        ["date": 1_700_000_000, "value": ["quantity": "5000", "instrument": "AUD"]]
+      ]
+    ]
+    var accounts = try #require(json["accounts"] as? [[String: Any]])
+    accounts[0]["valuationMode"] = "recordedValue"
+    json["accounts"] = accounts
+
+    let legacyData = try JSONSerialization.data(withJSONObject: json)
+    let decoded = try ExportDocumentCodec().decode(legacyData)
+
+    #expect(decoded.accounts.map(\.id) == [accountId])
+    #expect(decoded.categories.count == 1)
+    #expect(decoded.earmarks.count == 1)
+    #expect(decoded.transactions.count == 1)
   }
 }
