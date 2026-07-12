@@ -7,11 +7,8 @@ import Foundation
 //      stream that drives `apply(accounts:)`.
 //   2. `conversionService.observeRates()` / `observeErrors()` — rate
 //      ticks that drive a balance recompute (no DB re-fetch needed).
-//   3. `investmentRepository.observeAllValues()` / `observeErrors()` —
-//      a tick stream over the `investment_value` table that drives a
-//      cache refresh + recompute.
 //
-// A fourth surface, the shared instrument registry's
+// A third surface, the shared instrument registry's
 // `observeChanges()` stream, is owned by `instrumentChangeObservationTask`
 // (spawned from `init`) and drained by `observeInstrumentRegistryChanges`
 // below — kept separate from the always-on `TaskGroup` for the same
@@ -29,8 +26,6 @@ extension AccountStore {
     let accountErrors = repository.observeErrors()
     let rateStream = conversionService.observeRates()
     let rateErrors = conversionService.observeErrors()
-    let investmentValuesTick = investmentRepository?.observeAllValues()
-    let investmentErrors = investmentRepository?.observeErrors()
     await withTaskGroup(of: Void.self) { group in
       addCoreObservationTasks(
         to: &group,
@@ -38,10 +33,6 @@ extension AccountStore {
         accountErrors: accountErrors,
         rateStream: rateStream,
         rateErrors: rateErrors)
-      addInvestmentObservationTasks(
-        to: &group,
-        valuesTick: investmentValuesTick,
-        errors: investmentErrors)
       // Cancellation of `observationTask` cancels the group; the
       // `for await` loops exit; the group returns naturally.
     }
@@ -67,26 +58,6 @@ extension AccountStore {
     }
     group.addTask { [self] in
       for await error in rateErrors { await self.surfaceObservationError(error) }
-    }
-  }
-
-  /// Wires the optional investment-repository subscriptions into `group`.
-  /// `nil` streams (no investment repository configured — preview /
-  /// degraded launches) are simply skipped.
-  private func addInvestmentObservationTasks(
-    to group: inout TaskGroup<Void>,
-    valuesTick: AsyncStream<Void>?,
-    errors: AsyncStream<any Error>?
-  ) {
-    if let valuesTick {
-      group.addTask { [self] in
-        for await _ in valuesTick { await self.refreshInvestmentValuesAndRecompute() }
-      }
-    }
-    if let errors {
-      group.addTask { [self] in
-        for await error in errors { await self.surfaceObservationError(error) }
-      }
     }
   }
 
@@ -153,39 +124,6 @@ extension AccountStore {
 
   /// Per-emission entry point for the rate-tick subscription.
   func recomputeForRateTick() async {
-    await recomputeConvertedTotals()
-  }
-
-  /// Re-hydrate `investmentValueCache` from the repository and trigger
-  /// a balance recompute. Driven by `investmentRepository.observeAllValues()`
-  /// so a sync-driven write to `investment_value` reaches this store
-  /// without the cross-store callback path.
-  func refreshInvestmentValuesAndRecompute() async {
-    await preloadInvestmentValues()
-    await recomputeConvertedTotals()
-  }
-
-  /// Asks `investmentValueCache` to hydrate itself with the latest value for
-  /// every investment account. Without this, `displayBalance` falls back to
-  /// summing positions until `InvestmentStore` happens to call
-  /// `updateInvestmentValue(accountId:value:)`, so the sidebar flashes the
-  /// transaction sum until the user opens an investment account. See
-  /// `InvestmentValueCache.preload(for:)` for the failure-tolerant details.
-  func preloadInvestmentValues() async {
-    // Only `recordedValue` investment accounts read from the snapshot cache;
-    // `calculatedFromTrades` accounts derive their value from positions, so
-    // their snapshot fetch would be a wasted round-trip.
-    let investmentAccountIds = accounts.ordered
-      .filter { $0.type == .investment && $0.valuationMode == .recordedValue }
-      .map(\.id)
-    await investmentValueCache.preload(for: investmentAccountIds)
-  }
-
-  /// Updates the investment value for a specific account locally.
-  /// Called when `InvestmentStore` sets or removes a value.
-  func updateInvestmentValue(accountId: UUID, value: InstrumentAmount?) async {
-    guard accounts.by(id: accountId) != nil else { return }
-    investmentValueCache.set(value, for: accountId)
     await recomputeConvertedTotals()
   }
 

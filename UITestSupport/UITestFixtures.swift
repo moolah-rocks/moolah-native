@@ -22,16 +22,9 @@ public enum UITestFixtures {
   /// Entities (all fixed, deterministic):
   ///   - Profile `personal` — label "Personal", currency AUD, CloudKit-backed.
   ///   - Account `checking` — "Checking", bank, AUD.
-  ///   - Account `brokerage` — "Brokerage", investment, AUD,
-  ///     `valuationMode = .recordedValue` (legacy). One
-  ///     `InvestmentValue` snapshot for $12,345.00 on 2026-04-15 UTC, so
-  ///     `EditAccountValuationPickerTests` can assert the picker is
-  ///     shown for the legacy-with-data scenario.
+  ///   - Account `brokerage` — "Brokerage", investment, AUD.
   ///   - Account `tradesBrokerage` — "Trades brokerage", investment,
-  ///     AUD, `valuationMode = .calculatedFromTrades` and **no**
-  ///     `InvestmentValue` snapshots. Drives the
-  ///     "calculatedFromTrades + no snapshots → picker hidden" half of
-  ///     the same test pair.
+  ///     AUD, valued from its positions.
   ///   - Account `usd` — "USD Savings", bank, USD.
   ///   - Transaction `bhpPurchase` — trade on 2026-04-01 UTC, payee
   ///     "BHP Purchase". Two legs in the profile instrument: −5,000.00 AUD
@@ -63,10 +56,7 @@ public enum UITestFixtures {
     public static let usdAccountName = "USD Savings"
     public static let usdAccountInstrumentCode = "USD"
 
-    /// Investment account in `.calculatedFromTrades` mode with no
-    /// `InvestmentValue` snapshots. Drives the
-    /// "calculatedFromTrades + no snapshots → picker hidden" test in
-    /// `EditAccountValuationPickerTests`.
+    /// Second position-valued investment account.
     public static let tradesBrokerageAccountId =
       uuidLiteral("A1000000-0000-0000-0000-000000000013")
     public static let tradesBrokerageAccountName = "Trades brokerage"
@@ -85,17 +75,6 @@ public enum UITestFixtures {
     public static let renameTargetGroupId =
       uuidLiteral("A1000000-0000-0000-0000-0000000000F1")
     public static let renameTargetGroupName = "Investments Group"
-
-    /// One `InvestmentValue` snapshot for the existing `brokerage`
-    /// (recordedValue mode) account. Drives the "recordedValue + has
-    /// snapshot → picker shown" test in
-    /// `EditAccountValuationPickerTests`.
-    public static let brokerageSnapshotId =
-      uuidLiteral("A1000000-0000-0000-0000-000000000060")
-    public static let brokerageSnapshotCents = 1_234_500  // 12,345.00 AUD
-    /// 2026-04-15 00:00:00 UTC.
-    public static let brokerageSnapshotDate =
-      Date(timeIntervalSince1970: 1_776_211_200)
 
     public static let bhpPurchaseId = uuidLiteral("A1000000-0000-0000-0000-000000000020")
     public static let bhpPurchasePayee = "BHP Purchase"

@@ -6,7 +6,7 @@ import Testing
 /// End-to-end multi-instrument smoke tests — starting balances across an
 /// `after` cutoff, whole-portfolio combinations (bank + investment + earmark +
 /// USD + rate-varying), forecast continuation from multi-currency actuals, and
-/// the Option A single-currency starting-balance pin.
+/// a single-currency starting-balance pin.
 @Suite("AnalysisRepository Contract Tests — Multi-Instrument Smoke")
 struct AnalysisMultiInstrumentSmokeTests {
 
@@ -58,8 +58,8 @@ struct AnalysisMultiInstrumentSmokeTests {
     let post = try #require(balances.first { $0.date == postKey })
     // bank: 200 AUD + 50 EUR * 1.7 + 40 USD * 1.5 + 0.01 = 345.01 AUD
     #expect(post.balance.quantity == (try AnalysisTestHelpers.decimal("345.01")))
-    // investments (Option A): 100 USD * 1.5 = 150 AUD
-    #expect(post.investments.quantity == 150)
+    // position-derived value: 100 USD * 1.5 = 150 AUD
+    #expect(post.investmentValue?.quantity == 150)
     #expect(post.balance.instrument == .defaultTestInstrument)
   }
 
@@ -110,11 +110,11 @@ struct AnalysisMultiInstrumentSmokeTests {
     }
 
     // Spot-check day3: bank = 1000+100-200 AUD + (-50 USD * 1.6 = -80) = 820 AUD
-    // investments (transfers-only) = 200 USD * 1.6 = 320 AUD
+    // position-derived value = 200 USD * 1.6 = 320 AUD
     let day3Balance = try #require(
       balances.first { $0.date == AnalysisTestHelpers.calendar.startOfDay(for: day3) })
     #expect(day3Balance.balance.quantity == 820)
-    #expect(day3Balance.investments.quantity == 320)
+    #expect(day3Balance.investmentValue?.quantity == 320)
     #expect(day3Balance.earmarked.quantity == 100)
   }
 
@@ -153,9 +153,8 @@ struct AnalysisMultiInstrumentSmokeTests {
     #expect(forecastEntry.investments.quantity == 300)
   }
 
-  @Test(
-    "single-currency starting balance includes pre-after non-transfer investment legs (Option A)")
-  func singleCurrencyOptionAStartingBalance() async throws {
+  @Test("single-currency starting balance includes pre-after investment positions")
+  func singleCurrencyStartingBalance() async throws {
     let backend = try CloudKitAnalysisTestBackend()
 
     let bank = Account(
@@ -200,9 +199,7 @@ struct AnalysisMultiInstrumentSmokeTests {
 
     let day = try #require(
       balances.first { $0.date == AnalysisTestHelpers.calendar.startOfDay(for: day12) })
-    // Option A: pre-after openingBalance + income on investment account contribute
-    // to the transfers-only baseline (snapshot at `after`).
-    #expect(day.investments.quantity == 600)
+    #expect(day.investmentValue?.quantity == 600)
     #expect(day.balance.quantity == 10)
   }
 

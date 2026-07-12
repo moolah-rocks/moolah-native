@@ -248,24 +248,18 @@ extension GRDBAnalysisRepository {
   ) async throws -> [DailyBalance] {
     var book = startingBook
     var forecastBalances: [Date: DailyBalance] = [:]
-    // Trades-mode accounts contribute to investmentValue via the
-    // historic per-day fold; forecast days don't get a trades-mode
-    // contribution and would otherwise sum the raw quantity into
-    // `balance`. Including the trades-mode set in
-    // BalanceContext.investmentAccountIds excludes those accounts
-    // from PositionBook.dailyBalance's bankTotal sum. The second use
-    // of context.investmentAccountIds below (book.apply) is left
-    // unchanged — it gates accountsFromTransfers membership and must
-    // stay recorded-value-only.
-    let allInvestmentIds =
-      context.investmentAccountIds.union(context.tradesModeInvestmentAccountIds)
+    // Forecasts value every investment-like account directly from the
+    // position book. The account-id set keeps those positions out of
+    // `balance`; `.allLegs` places their full current value in the forecast's
+    // investment total. `book.apply` receives an empty set because the
+    // legacy transfer-only accumulator is no longer part of valuation.
     let balanceContext = PositionBook.BalanceContext(
-      investmentAccountIds: allInvestmentIds,
+      investmentAccountIds: context.investmentAccountIds,
       profileInstrument: context.profileInstrument,
-      rule: .investmentTransfersOnly,
+      rule: .allLegs,
       conversionService: context.conversionService)
     for instance in converted {
-      book.apply(instance, investmentAccountIds: context.investmentAccountIds)
+      book.apply(instance, investmentAccountIds: [])
       let dayKey = Calendar.current.startOfDay(for: instance.date)
       do {
         forecastBalances[dayKey] = try await book.dailyBalance(

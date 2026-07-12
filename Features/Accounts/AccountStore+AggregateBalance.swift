@@ -25,7 +25,6 @@ extension AccountStore {
       // than silently undercount.
       return nil
     }
-    return try await balanceCalculator.totalConverted(
-      for: resolved, to: target, using: investmentValueCache)
+    return try await balanceCalculator.totalConverted(for: resolved, to: target)
   }
 }

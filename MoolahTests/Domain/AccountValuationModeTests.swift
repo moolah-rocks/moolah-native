@@ -5,10 +5,10 @@ import Testing
 
 @Suite("Account.valuationMode")
 struct AccountValuationModeTests {
-  @Test("default is recordedValue")
-  func defaultIsRecordedValue() {
+  @Test("default is calculatedFromTrades")
+  func defaultIsCalculatedFromTrades() {
     let account = Account(name: "Brokerage", type: .investment, instrument: .AUD)
-    #expect(account.valuationMode == .recordedValue)
+    #expect(account.valuationMode == .calculatedFromTrades)
   }
 
   @Test("explicit init sets the field")
@@ -30,7 +30,7 @@ struct AccountValuationModeTests {
     }
   }
 
-  @Test("Codable decodes missing key as recordedValue")
+  @Test("Codable decodes missing key as calculatedFromTrades")
   func codableMissingKey() throws {
     let json = Data(
       """
@@ -45,7 +45,7 @@ struct AccountValuationModeTests {
       }
       """.utf8)
     let decoded = try JSONDecoder().decode(Account.self, from: json)
-    #expect(decoded.valuationMode == .recordedValue)
+    #expect(decoded.valuationMode == .calculatedFromTrades)
   }
 
   @Test("Equality includes valuationMode")

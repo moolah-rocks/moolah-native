@@ -188,40 +188,6 @@ struct AccountStoreSyncRefreshTests {
     }
   }
 
-  @Test("AccountStore reflects InvestmentValue writes via observeAll")
-  func investmentValueWriteReachesAccountStore() async throws {
-    let (backend, _) = try TestBackend.create()
-    let investmentAccount = try await backend.accounts.create(
-      Account(
-        name: "Brokerage",
-        type: .investment,
-        instrument: .defaultTestInstrument,
-        valuationMode: .recordedValue
-      ),
-      openingBalance: nil
-    )
-    let store = AccountStore(
-      repository: backend.accounts,
-      conversionService: backend.conversionService,
-      targetInstrument: .defaultTestInstrument,
-      investmentRepository: backend.investments
-    )
-    try await store.waitForFirstEmission()
-
-    // Write directly to investment_value via the GRDB layer (simulating
-    // a remote sync update).
-    try await backend.investments.setValue(
-      accountId: investmentAccount.id,
-      date: .now,
-      value: InstrumentAmount(quantity: 12345, instrument: .defaultTestInstrument)
-    )
-
-    try await store.waitForNextEmission(
-      matching: { $0.convertedBalances[investmentAccount.id]?.quantity == 12345 },
-      description: "investment value reaches account store"
-    )
-  }
-
   @Test("stale instrument-registry refresh does not clobber a fresher accounts snapshot")
   func staleRegistryRefreshIsDropped() async throws {
     // Regression for the `AutomationServiceAccountTests` flake: the

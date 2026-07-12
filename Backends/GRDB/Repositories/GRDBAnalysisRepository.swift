@@ -66,23 +66,14 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
   // shared row-decoder helpers (`decodeAccountDeltaRows`,
   // `decodeEarmarkDeltaRows`).
   //
-  // `+DailyBalancesInvestmentValues.swift` — `applyInvestmentValues`
-  // plus its two-phase helpers (`accumulateInvestmentValueDays` /
-  // `assembleInvestmentValueDays`, around the `InvestmentValuePlan`
-  // plan type) and the private cursor helper
-  // (`advanceInvestmentCursor`); also owns the SQL fetches that produce
-  // its inputs (`fetchInvestmentAccountIds`,
-  // `fetchInvestmentValueSnapshots`,
-  // `fetchTradesModeInvestmentAccountIds`).
-  //
-  // `+DailyBalancesTradesMode.swift` — `applyTradesModePositionValuations`
-  // fold + its two-phase helpers (`accumulateTradesModeDays` /
-  // `assembleTradesModeDays`, around the `TradesModeDayPlan` plan type)
-  // and private helpers (`seedTradesModePriorPositions`,
-  // `buildTradesModeEntries`, `mergeTradesModeTotal`,
-  // `TradesModePositionEntry`).
-  // Pre-filtered trades-mode rows arrive via the aggregation; the fold
-  // computes per-day position valuations and adds them onto
+  // `+DailyBalancesInvestmentPositions.swift` — `applyInvestmentPositionValuations`
+  // fold + its two-phase helpers (`accumulateInvestmentPositionDays` /
+  // `assembleInvestmentPositionDays`, around the `InvestmentPositionDayPlan` plan type)
+  // and private helpers (`seedPriorInvestmentPositions`,
+  // `buildInvestmentPositionEntries`, `mergeInvestmentPositionTotal`,
+  // `InvestmentPositionEntry`).
+  // Pre-filtered investment rows arrive via the aggregation; the fold
+  // computes per-day position valuations and writes
   // `DailyBalance.investmentValue`.
   //
   // `+DailyBalancesForecast.swift` — `generateForecast` plus its
@@ -178,10 +169,10 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
           Sibling days continue to render.
           """)
       },
-      handleInvestmentValueFailure: { error, date in
+      handlePositionValuationFailure: { error, date in
         logger.warning(
           """
-          fetchDailyBalances: investment-value conversion failed for \
+          fetchDailyBalances: investment-position conversion failed for \
           date=\(date, privacy: .public): \
           \(error.localizedDescription, privacy: .public). \
           Sibling days continue to render.

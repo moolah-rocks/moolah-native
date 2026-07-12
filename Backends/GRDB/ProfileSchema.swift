@@ -114,6 +114,9 @@ import GRDB
 /// `ProfileSchema+LegAnalysisCategoryIncludeNull.swift`.
 /// `v23_tax_reporting` — adds tax owners, account/category owner join
 /// tables, and `category.is_tax_reportable`.
+/// `v24_trade_only_valuation` — normalises every existing account to
+/// transaction-derived position valuation while leaving legacy snapshot
+/// rows intact for temporary storage and sync compatibility.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -134,7 +137,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 23
+  static let version = 24
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -182,6 +185,8 @@ enum ProfileSchema {
     migrator.registerMigration(
       "v22_wallet_sync_checkpoint", migrate: addWalletSyncCheckpoint)
     migrator.registerMigration("v23_tax_reporting", migrate: addTaxReporting)
+    migrator.registerMigration(
+      "v24_trade_only_valuation", migrate: migrateToTradeOnlyValuation)
 
     return migrator
   }

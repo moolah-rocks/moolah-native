@@ -1,21 +1,4 @@
-import OSLog
 import SwiftUI
-
-/// Outcome of the snapshot-presence probe used to decide whether
-/// `EditAccountView` offers the Valuation picker. Lifted to module
-/// scope (rather than nested inside `EditAccountView`) because tests
-/// reference it directly via `@testable import Moolah`. Specific
-/// name disambiguates from any future "picker visibility" state in
-/// other features. See
-/// `plans/2026-05-05-restrict-valuation-picker-design.md` §3.3.
-enum ValuationPickerVisibility: Equatable, Sendable {
-  case hidden
-  case shown
-  case shownAfterFailure
-}
-
-private let editAccountLogger = Logger(
-  subsystem: "com.moolah.app", category: "EditAccountView")
 
 struct EditAccountView: View {
   // MARK: - Environment & state
@@ -26,12 +9,9 @@ struct EditAccountView: View {
   @State private var type: AccountType
   @State private var currency: Instrument
   @State private var isHidden: Bool
-  @State private var valuationMode: ValuationMode
   @State private var taxOwnerAssignmentStore: AccountTaxOwnerAssignmentStore
   @State private var isSubmitting = false
   @State private var errorMessage: String?
-  @State private var showValuationPicker: Bool
-  @State private var pickerShownDueToProbeFailure = false
   /// Write-only replacement for an exchange account's read-only API
   /// token. Empty = keep the stored token (handled by
   /// `EditExchangeTokenLogic.applyTokenChange`).
@@ -45,33 +25,6 @@ struct EditAccountView: View {
     case name
   }
 
-  // MARK: - Picker visibility
-
-  /// Resolves whether the Valuation picker should be shown for an
-  /// investment account currently in `.calculatedFromTrades` mode.
-  /// Pure async function over a closure-typed probe so the rule is
-  /// directly unit-testable. The `accountId` parameter exists so the
-  /// warning log on probe failure can identify which account
-  /// triggered it; supply the real account ID for diagnosability.
-  /// Re-throws `CancellationError` per the structured-concurrency
-  /// contract; converts any other error into `.shownAfterFailure`
-  /// (fail-open).
-  static func resolvePickerVisibility(
-    accountId: UUID,
-    snapshotProbe: () async throws -> Bool
-  ) async throws -> ValuationPickerVisibility {
-    do {
-      return try await snapshotProbe() ? .shown : .hidden
-    } catch let error as CancellationError {
-      throw error
-    } catch {
-      editAccountLogger.warning(
-        "valuation snapshot probe failed for \(accountId, privacy: .public): \(error.localizedDescription, privacy: .public)"
-      )
-      return .shownAfterFailure
-    }
-  }
-
   // MARK: - Init
 
   init(account: Account, accountStore: AccountStore) {
@@ -81,14 +34,8 @@ struct EditAccountView: View {
     _type = State(initialValue: account.type)
     _currency = State(initialValue: account.instrument)
     _isHidden = State(initialValue: account.isHidden)
-    _valuationMode = State(initialValue: account.valuationMode)
     _taxOwnerAssignmentStore = State(
       initialValue: AccountTaxOwnerAssignmentStore(selectedOwnerIds: account.taxOwnerIds))
-    // Initial visibility: shown for `.recordedValue` accounts so legacy
-    // users see the picker immediately, hidden for `.calculatedFromTrades`
-    // accounts pending the snapshot probe in `.task`. See design §3.3.
-    _showValuationPicker = State(
-      initialValue: account.valuationMode == .recordedValue)
   }
 
   private var taxOwnerIdsBinding: Binding<[UUID]> {
@@ -112,8 +59,6 @@ struct EditAccountView: View {
   private var form: some View {
     Form {
       detailsSection
-        .disabled(isSubmitting)
-      valuationSection
         .disabled(isSubmitting)
       exchangeSection
         .disabled(isSubmitting)
@@ -149,40 +94,6 @@ struct EditAccountView: View {
     }
     .interactiveDismissDisabled(isSubmitting)
     .animation(.easeInOut(duration: 0.2), value: type)
-    .task(id: account.id) {
-      // Already shown for `.recordedValue` — skip the probe.
-      guard !showValuationPicker else { return }
-      do {
-        let result = try await Self.resolvePickerVisibility(
-          accountId: account.id,
-          snapshotProbe: {
-            try await !session.backend.investments
-              .fetchValues(accountId: account.id, page: 0, pageSize: 1)
-              .values.isEmpty
-          })
-        switch result {
-        case .hidden:
-          showValuationPicker = false
-          pickerShownDueToProbeFailure = false
-        case .shown:
-          showValuationPicker = true
-          pickerShownDueToProbeFailure = false
-        case .shownAfterFailure:
-          showValuationPicker = true
-          pickerShownDueToProbeFailure = true
-        }
-      } catch is CancellationError {
-        // View is being dismissed or `account.id` changed; leave state
-        // unchanged so SwiftUI's teardown is clean.
-      } catch {
-        // Unreachable: `resolvePickerVisibility` converts every
-        // non-cancellation error into `.shownAfterFailure`. Asserting
-        // here turns any future regression into a debug-build crash
-        // rather than silently swallowing the error.
-        assertionFailure(
-          "resolvePickerVisibility threw unexpected error: \(error)")
-      }
-    }
     .task {
       await taxOwnerAssignmentStore.observeOwners(from: session.backend.taxOwners)
     }
@@ -211,35 +122,6 @@ struct EditAccountView: View {
     }
   }
 
-  /// Visible only for investment accounts that already have legacy
-  /// `InvestmentValue` data (or are currently in `.recordedValue` mode).
-  /// New trade-driven accounts never see this section. Footer text
-  /// describes the active mode so the user can predict what the
-  /// sidebar balance will read; on probe failure, an additional info
-  /// note explains that valuation history couldn't be confirmed.
-  @ViewBuilder private var valuationSection: some View {
-    if type == .investment, showValuationPicker {
-      Section {
-        Picker("Valuation", selection: $valuationMode) {
-          Text("Recorded value").tag(ValuationMode.recordedValue)
-          Text("Calculated from trades").tag(ValuationMode.calculatedFromTrades)
-        }
-        .accessibilityIdentifier(UITestIdentifiers.EditAccount.valuationModePicker)
-        .accessibilityHint(valuationMode.dataSourceHint)
-      } footer: {
-        VStack(alignment: .leading, spacing: 4) {
-          Text(valuationMode.dataSourceDescription)
-          if pickerShownDueToProbeFailure {
-            Label(
-              "Couldn't confirm your valuation history. Reopen the dialog to check again.",
-              systemImage: "info.circle"
-            )
-            .foregroundStyle(.secondary)
-          }
-        }
-      }
-    }
-  }
   @ViewBuilder private var taxOwnerSection: some View {
     if let taxOwnerErrorMessage = taxOwnerAssignmentStore.errorMessage {
       Section {
@@ -299,7 +181,6 @@ struct EditAccountView: View {
       type: type,
       instrument: currency,
       isHidden: isHidden,
-      valuationMode: valuationMode,
       taxOwnerIds: taxOwnerAssignmentStore.selectedOwnerIds)
     let updated = Self.updatedAccount(
       from: account, draft: draft, validOwners: taxOwnerAssignmentStore.owners)

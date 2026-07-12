@@ -36,8 +36,7 @@ struct AccountBalanceCalculator {
   func compute(
     allAccounts: [Account],
     currentAccounts: [Account],
-    investmentAccounts: [Account],
-    investmentValues: InvestmentValueCache
+    investmentAccounts: [Account]
   ) async -> Snapshot {
     var anyFailed = false
     var newBalances: [UUID: InstrumentAmount] = [:]
@@ -52,10 +51,7 @@ struct AccountBalanceCalculator {
     // Iterate all accounts so per-account display works regardless of showHidden.
     for account in allAccounts {
       do {
-        let balance = try await displayBalance(
-          for: account,
-          investmentValue: investmentValues.value(for: account.id),
-          date: date)
+        let balance = try await displayBalance(for: account, date: date)
         guard !Task.isCancelled else { return cancelledSnapshot() }
         newBalances[account.id] = balance
       } catch {
@@ -88,10 +84,8 @@ struct AccountBalanceCalculator {
     )
   }
 
-  /// Sum every account's contribution converted to `target`. Investment
-  /// accounts in `recordedValue` mode contribute their cached snapshot (or
-  /// zero when none is set); every other account sums positions directly to
-  /// `target` in one pass — avoiding the double-conversion a naive
+  /// Sum every account's positions directly to `target` in one pass —
+  /// avoiding the double-conversion a naive
   /// `positions → account instrument → target` implementation would incur.
   ///
   /// Positions whose conversion resolves to `.knownZero` (an `.unpriced`
@@ -100,32 +94,16 @@ struct AccountBalanceCalculator {
   /// total unavailable per Rule 11. See issue #790.
   func totalConverted(
     for accounts: [Account],
-    to target: Instrument,
-    using investmentValues: InvestmentValueCache? = nil
+    to target: Instrument
   ) async throws -> InstrumentAmount {
     var total = InstrumentAmount.zero(instrument: target)
     let date = Date()
-    // recordedValue snapshots keep their existing `convertAmount` semantics
-    // (throw on failure, throw on knownZero). Every other account's
-    // cross-instrument positions accumulate into one flat batch resolved by a
+    // Cross-instrument positions accumulate into one flat batch resolved by a
     // single `convertResultBatch`. Same-instrument positions sum inline
     // (Rule 8). A `.failure` outcome rethrows so the whole total is marked
     // unavailable (Rule 11); `.knownZero` contributes zero (#790).
     var requests: [BatchConversionRequest] = []
     for account in accounts {
-      if account.type == .investment, account.valuationMode == .recordedValue {
-        let snapshot =
-          investmentValues?.value(for: account.id)
-          ?? .zero(instrument: account.instrument)
-        if snapshot.instrument == target {
-          total += snapshot
-        } else {
-          total += try await conversionService.convertAmount(
-            snapshot, to: target, on: date)
-        }
-        try Task.checkCancellation()
-        continue
-      }
       for position in account.positions {
         if position.amount.instrument == target {
           total += position.amount
@@ -146,10 +124,8 @@ struct AccountBalanceCalculator {
     return total
   }
 
-  /// The display balance for an account in its own instrument. Investment
-  /// accounts in `recordedValue` mode return the externally-provided
-  /// snapshot (or zero when absent); all other accounts sum every position
-  /// converted via the conversion service.
+  /// The display balance for an account in its own instrument, derived by
+  /// summing every position converted via the conversion service.
   ///
   /// Positions whose conversion resolves to `.knownZero` (an `.unpriced`
   /// / `.spam` crypto registration) contribute zero to the displayed
@@ -166,11 +142,8 @@ struct AccountBalanceCalculator {
   /// Pass `date` to share a conversion timestamp across a multi-account
   /// pass; defaults to `Date()` for one-shot callers.
   func displayBalance(
-    for account: Account, investmentValue: InstrumentAmount?, date: Date = Date()
+    for account: Account, date: Date = Date()
   ) async throws -> InstrumentAmount {
-    if account.type == .investment, account.valuationMode == .recordedValue {
-      return investmentValue ?? .zero(instrument: account.instrument)
-    }
     let target = account.instrument
     var total = InstrumentAmount.zero(instrument: target)
     // Sum same-instrument positions inline (Rule 8 fast path); batch the
@@ -207,19 +180,29 @@ struct AccountBalanceCalculator {
     balances: [UUID: InstrumentAmount],
     on date: Date
   ) async -> (InstrumentAmount, Bool) {
-    // Collect one request per account, bailing if any account is missing
-    // from `balances` (same as the serial guard). Resolve all in one
+    // Sum target-instrument balances inline and collect one request per
+    // foreign account, bailing if any account is missing from `balances`.
+    // Resolve all foreign balances in one
     // `convertResultBatch`; any `.failure` marks the whole aggregate
     // unavailable — an inaccurate aggregate is worse than no aggregate.
     var requests: [BatchConversionRequest] = []
+    var foreignAccounts: [Account] = []
+    var total = InstrumentAmount.zero(instrument: targetInstrument)
     requests.reserveCapacity(list.count)
+    foreignAccounts.reserveCapacity(list.count)
     for account in list {
       guard let balance = balances[account.id] else {
         return (.zero(instrument: targetInstrument), false)
       }
+      if balance.instrument == targetInstrument {
+        total += balance
+        continue
+      }
       requests.append(
         BatchConversionRequest(amount: balance, target: targetInstrument, date: date))
+      foreignAccounts.append(account)
     }
+    guard !requests.isEmpty else { return (total, true) }
     let outcomes: [BatchConversionOutcome]
     do {
       outcomes = try await conversionService.convertResultBatch(requests)
@@ -227,8 +210,7 @@ struct AccountBalanceCalculator {
       // Cancellation: caller re-checks `Task.isCancelled` and short-circuits.
       return (.zero(instrument: targetInstrument), false)
     }
-    var total = InstrumentAmount.zero(instrument: targetInstrument)
-    for (account, outcome) in zip(list, outcomes) {
+    for (account, outcome) in zip(foreignAccounts, outcomes) {
       switch outcome {
       case .value(let converted): total += converted
       case .knownZero:

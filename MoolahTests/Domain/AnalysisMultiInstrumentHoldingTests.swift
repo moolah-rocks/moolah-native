@@ -6,7 +6,7 @@ import Testing
 /// Multi-instrument `PositionBook` coverage for holding revaluation — the
 /// USD->AUD rate shifts across days and the daily balance must track the
 /// effective rate. Also covers USD-denominated investment accounts with and
-/// without market-value overrides.
+/// without inert legacy snapshots.
 @Suite("AnalysisRepository Contract Tests — Multi-Instrument Holding")
 struct AnalysisMultiInstrumentHoldingTests {
 
@@ -82,11 +82,10 @@ struct AnalysisMultiInstrumentHoldingTests {
     #expect(day1Balance.balance.instrument == .defaultTestInstrument)
   }
 
-  @Test("multi-currency investment account with no market value record")
+  @Test("multi-currency investment account is valued from positions")
   func multiCurrencyInvestmentNoMarketValue() async throws {
-    // USD-denominated investment account with deposits in USD; no market value
-    // overrides. Verify investmentValue == nil and `investments` reflects the
-    // position-tracking total (snapshot+transfer-deltas under Option A).
+    // USD-denominated investment account with deposits in USD. Verify the
+    // sole position fold populates `investmentValue` at each day's rate.
     let usd = Instrument.fiat(code: "USD")
     let day1 = try AnalysisTestHelpers.date(year: 2025, month: 7, day: 1)
     let day2 = try AnalysisTestHelpers.date(year: 2025, month: 7, day: 2)
@@ -134,25 +133,18 @@ struct AnalysisMultiInstrumentHoldingTests {
       balances.first { $0.date == AnalysisTestHelpers.calendar.startOfDay(for: day2) })
     let day3Balance = try #require(
       balances.first { $0.date == AnalysisTestHelpers.calendar.startOfDay(for: day3) })
-    #expect(day1Balance.investmentValue == nil)
-    #expect(day2Balance.investmentValue == nil)
-    #expect(day3Balance.investmentValue == nil)
-
     // Day1: 100 USD * 1.5 = 150; Day2: 150 USD * 1.6 = 240; Day3: 150 USD * 1.7 = 255.
-    #expect(day1Balance.investments.quantity == 150)
-    #expect(day2Balance.investments.quantity == 240)
-    #expect(day3Balance.investments.quantity == 255)
+    #expect(day1Balance.investmentValue?.quantity == 150)
+    #expect(day2Balance.investmentValue?.quantity == 240)
+    #expect(day3Balance.investmentValue?.quantity == 255)
 
-    // netWorth uses `investments` (no override) — bank + investments.
+    // netWorth uses the position-derived investmentValue.
     // Day1: -100 AUD bank + 150 AUD investments = 50 AUD
     #expect(day1Balance.netWorth.quantity == 50)
   }
 
-  @Test("applyInvestmentValues override still wins on multi-currency investments")
-  func investmentValueOverrideWinsMultiCurrency() async throws {
-    // USD investment account with a USD market-value override. The override
-    // (converted to profile) must take precedence in netWorth over the
-    // position-tracking total.
+  @Test("snapshot is inert for multi-currency investments")
+  func investmentValueSnapshotIsInertMultiCurrency() async throws {
     let usd = Instrument.fiat(code: "USD")
     let rate = try AnalysisTestHelpers.decimal("1.5")
     let conversion = FakeConversionService.fixedRates(["USD": rate])
@@ -182,7 +174,7 @@ struct AnalysisMultiInstrumentHoldingTests {
             accountId: investment.id, instrument: usd,
             quantity: 100, type: .transfer),
         ]))
-    // Day2: market value = 200 USD on investment account. Bank tick to ensure
+    // Day2: stale market value = 200 USD on investment account. Bank tick to ensure
     // a daily-balance entry is emitted on day2.
     try await backend.investments.setValue(
       accountId: investment.id, date: day2,
@@ -201,15 +193,12 @@ struct AnalysisMultiInstrumentHoldingTests {
 
     let day2Balance = try #require(
       balances.first { $0.date == AnalysisTestHelpers.calendar.startOfDay(for: day2) })
-    let override = try #require(day2Balance.investmentValue)
-    // investmentValue override = 200 USD * 1.5 = 300 AUD.
-    #expect(override.quantity == 300)
-    #expect(override.instrument == .defaultTestInstrument)
-    // netWorth uses the override, NOT the position-tracking total.
-    // bank = -100 + 0.01 = -99.99 AUD; netWorth = -99.99 + 300 = 200.01 AUD.
-    #expect(day2Balance.netWorth.quantity == (try AnalysisTestHelpers.decimal("200.01")))
-    // The position-tracking total is also exposed via `investments`.
-    #expect(day2Balance.investments.quantity == 150)
+    let positionValue = try #require(day2Balance.investmentValue)
+    #expect(positionValue.quantity == 150)
+    #expect(positionValue.instrument == .defaultTestInstrument)
+    // bank = -100 + 0.01 = -99.99 AUD; netWorth = -99.99 + 150 = 50.01 AUD.
+    #expect(day2Balance.netWorth.quantity == (try AnalysisTestHelpers.decimal("50.01")))
+    #expect(day2Balance.investments.quantity == 0)
   }
 
   // MARK: - Helpers

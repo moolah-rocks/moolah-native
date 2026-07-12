@@ -50,9 +50,8 @@ struct AnalysisPositiveAmountTransferTests {
     let balances = try await backend.analysis.fetchDailyBalances(after: nil, forecastUntil: nil)
     let todayBalance = try #require(balances.last)
 
-    // Deposit: investments -= (-1000) = +1000; positive from_inv: investments += 5000
-    // Total investments = 6000 cents = 60.00
-    #expect(todayBalance.investments.quantity == 60)
+    // The two investment legs produce a 6000-cent position value.
+    #expect(todayBalance.investmentValue?.quantity == 60)
 
     // Deposit: balance += (-1000) = -1000; positive from_inv: balance -= 5000 = -6000
     #expect(todayBalance.balance.quantity == -60)

@@ -20,9 +20,7 @@ extension UITestSeedHydrator {
     let type: AccountType
     let instrumentId: String
     let position: Int
-    /// Defaults to `.recordedValue` to preserve the historic seed
-    /// behaviour. Pass `.calculatedFromTrades` for accounts seeded for
-    /// the EditAccountView visibility tests.
+    /// Persisted compatibility field. Runtime valuation is position-derived.
     let valuationMode: ValuationMode
     /// Optional back-reference into `account_group.id`. `nil` for a
     /// standalone account; set to the owning group's id to make the
@@ -39,7 +37,7 @@ extension UITestSeedHydrator {
       type: AccountType,
       instrumentId: String,
       position: Int,
-      valuationMode: ValuationMode = .recordedValue,
+      valuationMode: ValuationMode = .calculatedFromTrades,
       groupId: UUID? = nil,
       walletAddress: String? = nil,
       chainId: Int? = nil
@@ -218,29 +216,6 @@ extension UITestSeedHydrator {
       bucket: spec.bucketRawValue,
       instrumentId: spec.instrumentId,
       position: spec.position,
-      encodedSystemFields: nil)
-    try row.upsert(database)
-  }
-
-  /// Inserts a single `InvestmentValue` snapshot for an investment
-  /// account. Idempotent — if a row with the same id already exists
-  /// (e.g. on re-hydration), `upsert` overwrites with the same values.
-  /// Synchronous for the same reason as the rest of this file:
-  /// `UITestSeedHydrator.hydrate` runs synchronously during
-  /// `MoolahApp.init`, before any actor or `Task` is in scope.
-  static func upsertInvestmentValue(
-    _ spec: UITestInvestmentValueSeed,
-    in database: Database
-  ) throws {
-    let row = InvestmentValueRow(
-      id: spec.id,
-      recordName: InvestmentValueRow.recordName(for: spec.id),
-      accountId: spec.accountId,
-      date: spec.date,
-      // Cents are quantity × 10^2; `InstrumentAmount.storageValue` is
-      // quantity × 10^8 — so multiply by 10^6 (1_000_000) to convert.
-      value: Int64(spec.cents) * 1_000_000,
-      instrumentId: spec.instrumentId,
       encodedSystemFields: nil)
     try row.upsert(database)
   }

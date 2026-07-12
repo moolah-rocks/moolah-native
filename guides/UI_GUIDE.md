@@ -94,9 +94,9 @@ forces SwiftUI to fully tear down the previous leaf's `NavigationStack`
 never coexist, so the AppKit toolbar bridge cannot double-register
 `com.apple.SwiftUI.search`.
 
-Two prior incidents drove this design — `InvestmentAccountView` flipping
-between `legacyValuationsLayout` and `positionTrackedLayout` after `.task`
-resolved (commit `010fb55b`), and the crypto-account `accountDetail`
+Two prior incidents drove this design — the retired investment detail leaf
+flipping between two layouts after `.task` resolved (commit `010fb55b`),
+and the crypto-account `accountDetail`
 wrapping the wallet header + `TransactionListView` in a `VStack` whose
 first child appeared/disappeared with `account.type == .crypto` (PR #821,
 commit `08a99a2d`). Both fired the same
@@ -108,8 +108,8 @@ new instance.
 **Searchable invariant (two-part rule, exhaustive):**
 
 1. Any leaf that contains a `TransactionListView` (e.g.,
-   `StandardAccountView`, `CryptoWalletAccountView`, `AllTransactionsView`,
-   `EarmarkDetailView`, `InvestmentAccountView`, `UpcomingView`) registers
+   `AccountDetailView`, `AllTransactionsView`, `EarmarkDetailView`,
+   `UpcomingView`) registers
    exactly one `.searchable(text:)`, and it lives inside
    `TransactionListView`. No other code in such a leaf may register
    `.searchable`.
@@ -133,9 +133,9 @@ does not affect layout, but keeping the modifier at the leaf level scopes
 the inspector's binding to the leaf's `@State selectedTransaction`. Do
 not move it up to the `ContentView.detail` level.
 
-**Composition shells** (`PositionsTransactionsSplit`, and after PR-3 /
-PR-2: `RecordedValueInvestmentLayout`, `EarmarkOverviewWithTabs`) are
-content-only: they do not register `.toolbar` or `.searchable`.
+**Composition shells** (`PositionsChartTransactionsSplit` and
+`EarmarkOverviewWithTabs`) are content-only: they do not register `.toolbar`
+or `.searchable`.
 
 The `code-review` and `ui-review` agents flag any new view that violates
 the searchable invariant. Treat agent findings on this rule as Critical.
@@ -651,7 +651,8 @@ Detail panels (transaction detail, category detail) use SwiftUI's `.inspector()`
 
 **Use `TransactionInspectorModifier`** (via `.transactionInspector()`) for transaction detail panels. It handles both platforms and includes a toolbar close button on macOS.
 
-**When a view embeds `TransactionListView`** (e.g., `EarmarkDetailView`, `InvestmentAccountView`), the parent must:
+**When a view embeds `TransactionListView` and owns selection** (e.g.,
+`EarmarkDetailView`), the parent must:
 1. Own the `@State var selectedTransaction: Transaction?`
 2. Pass a binding to `TransactionListView` via the `selectedTransaction:` parameter
 3. Attach `.transactionInspector()` at its own level

@@ -46,8 +46,7 @@ extension InvestmentStore {
   ///
   /// Idempotent: a no-op when called with the currently-active id and
   /// the existing task is alive. Pass `nil` to clear the active context
-  /// (used by tear-down paths and the trades-mode branch of
-  /// `loadAllData`).
+  /// (used by tear-down and position-valued loading paths).
   func setActiveAccount(_ accountId: UUID?) {
     if loadedAccountId == accountId, perAccountObservationTask?.isCancelled == false {
       return
@@ -78,32 +77,22 @@ extension InvestmentStore {
       // outer guard (#1209).
       guard loadedAccountId == accountId else { return }
       setValues(page.values)
-      // Recompute the legacy performance from the new values + the
-      // existing dailyBalances (set by `loadDailyBalances`).
-      refreshLegacyPerformance()
       yieldTestObservationTick()
     }
   }
 
-  /// Drives the rate-tick recompute. Re-runs the legacy daily-balance
-  /// aggregation (which is conversion-sensitive) and the position
-  /// valuations against the active account, if any. The values stream
+  /// Drives the rate-tick recompute. Re-runs the compatibility daily-balance
+  /// projection and position valuations against the active account, if any. The values stream
   /// is conversion-free and is driven by the per-account observation,
   /// so we don't touch `values` here.
   func recomputeOnRateTick() async {
     guard let accountId = loadedAccountId, let host = loadedHostCurrency else { return }
-    // Capture before the first suspension. `loadDailyBalances` / `valuatePositions`
-    // carry their own guards, but the synchronous `refreshLegacyPerformance` below
-    // reads the in-memory `dailyBalances` / `values` — if an authoritative load
-    // superseded this rate tick, those may be the previous account's, so skip the
-    // legacy recompute rather than clobber the switched-to account (#1209).
     let generation = snapshotGeneration
     await loadDailyBalances(accountId: accountId, hostCurrency: host)
     if !positions.isEmpty {
       await valuatePositions(profileCurrency: host, on: Date())
     }
     guard generation == snapshotGeneration else { return }
-    refreshLegacyPerformance()
     yieldTestObservationTick()
   }
 

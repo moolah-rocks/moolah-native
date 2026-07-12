@@ -88,7 +88,6 @@ struct TaxOwnerAssignmentControlsTests {
           type: .bank,
           instrument: .defaultTestInstrument,
           isHidden: false,
-          valuationMode: .recordedValue,
           taxOwnerIds: [])
       ).taxOwnerIds.isEmpty)
     #expect(
@@ -99,7 +98,6 @@ struct TaxOwnerAssignmentControlsTests {
           type: .bank,
           instrument: .defaultTestInstrument,
           isHidden: false,
-          valuationMode: .recordedValue,
           taxOwnerIds: [ownerA])
       ).taxOwnerIds == [ownerA])
     #expect(
@@ -110,7 +108,6 @@ struct TaxOwnerAssignmentControlsTests {
           type: .bank,
           instrument: .defaultTestInstrument,
           isHidden: false,
-          valuationMode: .recordedValue,
           taxOwnerIds: [ownerA, ownerB])
       ).taxOwnerIds == [ownerA, ownerB])
   }
@@ -129,7 +126,6 @@ struct TaxOwnerAssignmentControlsTests {
         type: .bank,
         instrument: .defaultTestInstrument,
         isHidden: false,
-        valuationMode: .recordedValue,
         taxOwnerIds: []))
 
     #expect(updated.name == "Joint Account")

@@ -5,11 +5,11 @@ import Testing
 
 /// Multi-day, Rule 11 failure-scoping, carry-forward, priors-seed, and
 /// end-to-end pipeline tests for
-/// `GRDBAnalysisRepository.applyTradesModePositionValuations`. Same
-/// fold and helpers (`TradesModeFoldTestSupport`) as
-/// `GRDBDailyBalancesTradesModeTests`, partitioned by topic.
-@Suite("GRDBAnalysisRepository applyTradesModePositionValuations — Rule 11 / cross-day")
-struct GRDBDailyBalancesTradesModeRule11Tests {
+/// `GRDBAnalysisRepository.applyInvestmentPositionValuations`. Same
+/// fold and helpers (`InvestmentPositionFoldTestSupport`) as
+/// `DailyBalanceInvestmentPositionTests`, partitioned by topic.
+@Suite("GRDBAnalysisRepository applyInvestmentPositionValuations — Rule 11 / cross-day")
+struct InvestmentPositionRule11Tests {
 
   @Test("case 4: per-day conversion failure drops day from dailyBalances")
   func ruleEleven_perDayFailureScopedToDay() async throws {
@@ -34,19 +34,19 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
       ],
       failingDates: [keyOne])
     var balances: [Date: DailyBalance] = [
-      keyOne: TradesModeFoldTestSupport.placeholderBalance(at: keyOne),
-      keyTwo: TradesModeFoldTestSupport.placeholderBalance(at: keyTwo),
+      keyOne: InvestmentPositionFoldTestSupport.placeholderBalance(at: keyOne),
+      keyTwo: InvestmentPositionFoldTestSupport.placeholderBalance(at: keyTwo),
     ]
-    let context = TradesModeFoldTestSupport.makeContext(
-      tradesIds: [accountId],
+    let context = InvestmentPositionFoldTestSupport.makeContext(
+      investmentIds: [accountId],
       instrumentMap: ["USD": usd],
       conversionService: conversion)
-    let captured = InvestmentValueFailureLog()
-    let handlers = TradesModeFoldTestSupport.makeHandlers { error, date in
+    let captured = PositionValuationFailureLog()
+    let handlers = InvestmentPositionFoldTestSupport.makeHandlers { error, date in
       captured.append(error, date)
     }
 
-    try await GRDBAnalysisRepository.applyTradesModePositionValuations(
+    try await GRDBAnalysisRepository.applyInvestmentPositionValuations(
       priorRows: [], postRows: [rowOne],
       to: &balances, context: context, handlers: handlers)
 
@@ -61,7 +61,7 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
     #expect(snapshot.first?.1 == keyOne)
   }
 
-  @Test("case 6: trades-fold failure on day D after snapshot-fold success drops day")
+  @Test("case 6: position failure drops a day with a stale pre-existing value")
   func mixedFoldFailureDropsDay() async throws {
     let day = try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 10, hour: 12)
     let dayKey = Calendar.current.startOfDay(for: day)
@@ -71,21 +71,21 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
       day: "2025-06-10", sampleDate: day,
       accountId: accountId, instrumentId: "USD", type: "trade", qty: 1_000_000_000)
     let conversion = FakeConversionService.dateRates([:], failingDates: [dayKey])
-    // Pre-seed the day as if applyInvestmentValues had succeeded with
-    // a recorded-value snapshot total of 100.
+    // Pre-seed a stale total to prove a position-conversion failure drops
+    // the day instead of leaving an older value visible.
     var balances: [Date: DailyBalance] = [
-      dayKey: TradesModeFoldTestSupport.preSeededDailyBalance(on: dayKey)
+      dayKey: InvestmentPositionFoldTestSupport.preSeededDailyBalance(on: dayKey)
     ]
-    let context = TradesModeFoldTestSupport.makeContext(
-      tradesIds: [accountId],
+    let context = InvestmentPositionFoldTestSupport.makeContext(
+      investmentIds: [accountId],
       instrumentMap: ["USD": usd],
       conversionService: conversion)
-    let captured = InvestmentValueFailureLog()
-    let handlers = TradesModeFoldTestSupport.makeHandlers { error, date in
+    let captured = PositionValuationFailureLog()
+    let handlers = InvestmentPositionFoldTestSupport.makeHandlers { error, date in
       captured.append(error, date)
     }
 
-    try await GRDBAnalysisRepository.applyTradesModePositionValuations(
+    try await GRDBAnalysisRepository.applyInvestmentPositionValuations(
       priorRows: [], postRows: [row],
       to: &balances, context: context, handlers: handlers)
 
@@ -110,18 +110,18 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
         "USD": try AnalysisTestHelpers.decimal("1.5")
       ]
     ])
-    // Simulate a snapshot-fold dropout on day 1: dailyBalances has
-    // entries only for day 2 (day 1 was removed by an earlier fold).
+    // The primary walk omitted day 1, but its position delta must still
+    // carry into the day 2 valuation.
     var balances: [Date: DailyBalance] = [
-      keyTwo: TradesModeFoldTestSupport.placeholderBalance(at: keyTwo)
+      keyTwo: InvestmentPositionFoldTestSupport.placeholderBalance(at: keyTwo)
     ]
-    let context = TradesModeFoldTestSupport.makeContext(
-      tradesIds: [accountId],
+    let context = InvestmentPositionFoldTestSupport.makeContext(
+      investmentIds: [accountId],
       instrumentMap: ["USD": usd],
       conversionService: conversion)
-    let handlers = TradesModeFoldTestSupport.makeHandlers { _, _ in }
+    let handlers = InvestmentPositionFoldTestSupport.makeHandlers { _, _ in }
 
-    try await GRDBAnalysisRepository.applyTradesModePositionValuations(
+    try await GRDBAnalysisRepository.applyInvestmentPositionValuations(
       priorRows: [], postRows: [rowOne],
       to: &balances, context: context, handlers: handlers)
 
@@ -152,15 +152,15 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
       ]
     ])
     var balances: [Date: DailyBalance] = [
-      dayKey: TradesModeFoldTestSupport.placeholderBalance(at: dayKey)
+      dayKey: InvestmentPositionFoldTestSupport.placeholderBalance(at: dayKey)
     ]
-    let context = TradesModeFoldTestSupport.makeContext(
-      tradesIds: [accountId],
+    let context = InvestmentPositionFoldTestSupport.makeContext(
+      investmentIds: [accountId],
       instrumentMap: ["USD": usd],
       conversionService: conversion)
-    let handlers = TradesModeFoldTestSupport.makeHandlers { _, _ in }
+    let handlers = InvestmentPositionFoldTestSupport.makeHandlers { _, _ in }
 
-    try await GRDBAnalysisRepository.applyTradesModePositionValuations(
+    try await GRDBAnalysisRepository.applyInvestmentPositionValuations(
       priorRows: [prior], postRows: [],
       to: &balances, context: context, handlers: handlers)
 
@@ -171,15 +171,15 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
     #expect(value.quantity == expected)
   }
 
-  @Test("case 14: end-to-end pipeline does not double-count trades-mode positions in netWorth")
+  @Test("case 14: end-to-end pipeline does not double-count investment positions in netWorth")
   func endToEndNetWorthSingleCount() async throws {
     // Round-trip through the real fetchDailyBalances pipeline: a
-    // trades-mode account with one trade leg on day D. After
+    // investment-position account with one trade leg on day D. After
     // walkDays, `existing.balance` would normally include the trade
-    // position (because trades-mode accounts aren't in the
+    // position (because investment-position accounts aren't in the
     // recorded-value `investmentAccountIds` set used by
     // PositionBook.dailyBalance). The fix in Task 6 step 3 unions
-    // trades-mode ids into BalanceContext.investmentAccountIds so
+    // investment-position ids into BalanceContext.investmentAccountIds so
     // those positions are excluded from balance and contribute only
     // via investmentValue. This test pins that fix.
     let conversion = FakeConversionService.dateRates([
@@ -213,7 +213,7 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
 
     // 10 USD * 1.5 = 15 AUD on day D. Critically:
     // - investmentValue == 15 AUD (from the new fold).
-    // - balance == 0 AUD (the trades-mode account's USD position is
+    // - balance == 0 AUD (the investment-position account's USD position is
     //   excluded from bankTotal because it's now in
     //   BalanceContext.investmentAccountIds — the double-count fix).
     // - netWorth == 15 AUD (single count, not 30).
@@ -244,14 +244,14 @@ struct GRDBDailyBalancesTradesModeRule11Tests {
       qty: 1_000_000_000)
     let task = Task {
       var balances: [Date: DailyBalance] = [
-        dayKey: TradesModeFoldTestSupport.placeholderBalance(at: dayKey)
+        dayKey: InvestmentPositionFoldTestSupport.placeholderBalance(at: dayKey)
       ]
-      let context = TradesModeFoldTestSupport.makeContext(
-        tradesIds: [accountId],
+      let context = InvestmentPositionFoldTestSupport.makeContext(
+        investmentIds: [accountId],
         instrumentMap: [aud.id: aud],
         conversionService: FakeConversionService.dateRates([:]))
-      let handlers = TradesModeFoldTestSupport.makeHandlers { _, _ in }
-      try await GRDBAnalysisRepository.applyTradesModePositionValuations(
+      let handlers = InvestmentPositionFoldTestSupport.makeHandlers { _, _ in }
+      try await GRDBAnalysisRepository.applyInvestmentPositionValuations(
         priorRows: [], postRows: [row],
         to: &balances, context: context, handlers: handlers)
     }

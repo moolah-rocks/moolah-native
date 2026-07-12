@@ -6,7 +6,7 @@ import Testing
 /// Rule 11 (`INSTRUMENT_CONVERSION_GUIDE.md`) for the forecast tail:
 /// a per-instance conversion failure during forecast pre-conversion
 /// must NOT abort the whole forecast. Every sibling analysis path
-/// (historic walk, investment values, trades-mode fold, forecast
+/// (historic walk, investment values, investment-position fold, forecast
 /// accumulator) already degrades per-unit; the forecast pre-conversion
 /// step was the one path that rethrew, surfacing on the Analysis page
 /// as a full-screen sync error.
@@ -46,7 +46,6 @@ struct GRDBForecastRule11Tests {
     let conversion = FakeConversionService.failingInstruments([unmapped.id])
     let context = GRDBAnalysisRepository.DailyBalancesAssemblyContext(
       investmentAccountIds: [],
-      tradesModeInvestmentAccountIds: [],
       instrumentMap: [unmapped.id: unmapped, aud.id: aud],
       profileInstrument: aud,
       conversionService: conversion)
@@ -78,7 +77,6 @@ struct GRDBForecastRule11Tests {
       leg: TransactionLeg(accountId: UUID(), instrument: token, quantity: 1, type: .expense))
     let context = GRDBAnalysisRepository.DailyBalancesAssemblyContext(
       investmentAccountIds: [],
-      tradesModeInvestmentAccountIds: [],
       instrumentMap: [token.id: token, aud.id: aud],
       profileInstrument: aud,
       conversionService: CancellingConversionService())

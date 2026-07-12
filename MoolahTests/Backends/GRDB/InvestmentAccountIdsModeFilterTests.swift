@@ -4,32 +4,21 @@ import Testing
 
 @testable import Moolah
 
-/// The daily-balance investment-account loaders split accounts by
-/// valuation mode — `fetchInvestmentAccountIds` owns the recorded-value
-/// snapshot fold, `fetchTradesModeInvestmentAccountIds` owns the
-/// trades-mode position valuation. Both must classify by the
+/// The daily-balance investment-account loader ignores valuation mode and
+/// classifies by the
 /// *investment-like* account types (`investment`, `crypto`, `exchange`),
 /// not the literal `type = 'investment'`. A crypto or exchange account
 /// missing from these sets leaks into the bank-balance (`.balance`) sum,
 /// overstating current funds and understating investments.
-@Suite("Investment-account id loaders filter by investment-like type and mode")
+@Suite("Investment-account id loader ignores legacy valuation mode")
 struct InvestmentAccountIdsModeFilterTests {
-  @Test("recorded-value loader returns every investment-like recordedValue account")
-  func recordedValueLoaderCoversInvestmentLikeTypes() throws {
+  @Test("returns every investment-like account in either persisted mode")
+  func loaderCoversInvestmentLikeTypes() throws {
     let queue = try makeAccountsQueue()
     let ids = try queue.read { database in
       try GRDBAnalysisRepository.fetchInvestmentAccountIds(database: database)
     }
-    #expect(ids == Set(Self.recordedInvestmentLikeIds))
-  }
-
-  @Test("trades-mode loader returns every investment-like calculatedFromTrades account")
-  func tradesModeLoaderCoversInvestmentLikeTypes() throws {
-    let queue = try makeAccountsQueue()
-    let ids = try queue.read { database in
-      try GRDBAnalysisRepository.fetchTradesModeInvestmentAccountIds(database: database)
-    }
-    #expect(ids == Set(Self.tradesInvestmentLikeIds))
+    #expect(ids == Set(Self.recordedInvestmentLikeIds + Self.tradesInvestmentLikeIds))
   }
 
   // The investment-like ids expected from each loader: one investment,

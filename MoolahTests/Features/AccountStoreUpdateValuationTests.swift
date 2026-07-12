@@ -3,13 +3,8 @@ import Testing
 
 @testable import Moolah
 
-/// Pins the save flow used by `EditAccountView`'s Valuation picker: the
-/// view assigns the user's choice onto a mutable copy of the account and
-/// hands it to `AccountStore.update(_:)`. Exercising the store directly
-/// avoids spinning up XCUITest infrastructure (no edit-account driver,
-/// no seed, no sheet-open identifier exists today) while still pinning
-/// the behaviour the picker relies on.
-@Suite("AccountStore.update (valuation)")
+/// Pins that edits cannot reintroduce the retired runtime valuation mode.
+@Suite("AccountStore.update valuation canonicalization")
 @MainActor
 struct AccountStoreUpdateValuationTests {
   @Test("changing valuationMode and saving persists via the store")
@@ -39,8 +34,8 @@ struct AccountStoreUpdateValuationTests {
     #expect(row.valuationMode == .calculatedFromTrades)
   }
 
-  @Test("switching from calculatedFromTrades back to recordedValue persists")
-  func savesRoundTripBackToRecordedValue() async throws {
+  @Test("recordedValue input is canonicalized to calculatedFromTrades")
+  func recordedValueInputIsCanonicalized() async throws {
     let (backend, database) = try TestBackend.create()
     let original = AccountStoreTestSupport.seedAccount(
       name: "Brokerage", type: .investment, balance: 0,
@@ -58,9 +53,9 @@ struct AccountStoreUpdateValuationTests {
     updated.valuationMode = .recordedValue
     let saved = try await store.update(updated)
 
-    #expect(saved.valuationMode == .recordedValue)
+    #expect(saved.valuationMode == .calculatedFromTrades)
     let fetched = try await backend.accounts.fetchAll()
     let row = try #require(fetched.first { $0.id == original.id })
-    #expect(row.valuationMode == .recordedValue)
+    #expect(row.valuationMode == .calculatedFromTrades)
   }
 }

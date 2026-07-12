@@ -39,42 +39,6 @@ struct InvestmentStorePerformanceTests {
     #expect(perf.amountInvested == InstrumentAmount(quantity: 0, instrument: aud))
   }
 
-  @Test("loadAllData populates accountPerformance for a legacy-valuation account")
-  func loadAllDataLegacyPerformance() async throws {
-    let account = Account(
-      name: "Brokerage", type: .investment, instrument: .AUD,
-      valuationMode: .recordedValue)
-    let aud = Instrument.AUD
-    let calendar = Calendar.current
-    let earlierDate = try #require(
-      calendar.date(from: DateComponents(year: 2024, month: 1, day: 1)))
-    let laterDate = try #require(
-      calendar.date(from: DateComponents(year: 2025, month: 1, day: 1)))
-    let (backend, database) = try TestBackend.create()
-    TestBackend.seed(
-      investmentValues: [
-        account.id: [
-          InvestmentValue(
-            date: earlierDate,
-            value: InstrumentAmount(quantity: 10_000, instrument: aud)),
-          InvestmentValue(
-            date: laterDate,
-            value: InstrumentAmount(quantity: 11_000, instrument: aud)),
-        ]
-      ],
-      in: database
-    )
-    let store = InvestmentStore(
-      repository: backend.investments,
-      transactionRepository: backend.transactions,
-      conversionService: backend.conversionService)
-
-    await store.loadAllData(account: account, profileCurrency: aud)
-
-    let perf = try #require(store.accountPerformance)
-    #expect(perf.currentValue == InstrumentAmount(quantity: 11_000, instrument: aud))
-  }
-
   @Test("loadAllData without a ledger provider leaves accountPerformance nil")
   func loadAllDataNoLedgerProviderLeavesPerformanceNil() async throws {
     let aud = Instrument.AUD
@@ -146,76 +110,4 @@ struct InvestmentStorePerformanceTests {
     #expect(store.accountPerformance?.currentValue == nil)
   }
 
-  @Test("setValue refreshes accountPerformance on the legacy path")
-  func setValueRefreshesPerformance() async throws {
-    let account = Account(
-      name: "Brokerage", type: .investment, instrument: .AUD,
-      valuationMode: .recordedValue)
-    let aud = Instrument.AUD
-    let calendar = Calendar.current
-    let earlierDate = try #require(
-      calendar.date(from: DateComponents(year: 2024, month: 1, day: 1)))
-    let laterDate = try #require(
-      calendar.date(from: DateComponents(year: 2025, month: 1, day: 1)))
-    let (backend, database) = try TestBackend.create()
-    TestBackend.seed(
-      investmentValues: [
-        account.id: [
-          InvestmentValue(
-            date: earlierDate,
-            value: InstrumentAmount(quantity: 10_000, instrument: aud))
-        ]
-      ],
-      in: database
-    )
-    let store = InvestmentStore(
-      repository: backend.investments,
-      transactionRepository: backend.transactions,
-      conversionService: backend.conversionService)
-    await store.loadAllData(account: account, profileCurrency: aud)
-
-    await store.setValue(
-      accountId: account.id, date: laterDate,
-      value: InstrumentAmount(quantity: 12_000, instrument: aud))
-
-    let perf = try #require(store.accountPerformance)
-    #expect(perf.currentValue == InstrumentAmount(quantity: 12_000, instrument: aud))
-  }
-
-  @Test("removeValue refreshes accountPerformance on the legacy path")
-  func removeValueRefreshesPerformance() async throws {
-    let account = Account(
-      name: "Brokerage", type: .investment, instrument: .AUD,
-      valuationMode: .recordedValue)
-    let aud = Instrument.AUD
-    let calendar = Calendar.current
-    let earlierDate = try #require(
-      calendar.date(from: DateComponents(year: 2024, month: 1, day: 1)))
-    let laterDate = try #require(
-      calendar.date(from: DateComponents(year: 2025, month: 1, day: 1)))
-    let (backend, database) = try TestBackend.create()
-    TestBackend.seed(
-      investmentValues: [
-        account.id: [
-          InvestmentValue(
-            date: earlierDate,
-            value: InstrumentAmount(quantity: 10_000, instrument: aud)),
-          InvestmentValue(
-            date: laterDate,
-            value: InstrumentAmount(quantity: 11_000, instrument: aud)),
-        ]
-      ],
-      in: database
-    )
-    let store = InvestmentStore(
-      repository: backend.investments,
-      transactionRepository: backend.transactions,
-      conversionService: backend.conversionService)
-    await store.loadAllData(account: account, profileCurrency: aud)
-
-    await store.removeValue(accountId: account.id, date: laterDate)
-
-    let perf = try #require(store.accountPerformance)
-    #expect(perf.currentValue == InstrumentAmount(quantity: 10_000, instrument: aud))
-  }
 }

@@ -310,12 +310,6 @@ public enum UITestIdentifiers {
   // MARK: - EditAccount
 
   public enum EditAccount {
-    /// Valuation-mode picker shown for legacy investment accounts in
-    /// `.recordedValue` mode or `.calculatedFromTrades` accounts that
-    /// still have at least one `InvestmentValue` snapshot. Identifier
-    /// pinned by `EditAccountView.valuationSection`.
-    public static let valuationModePicker = "editAccount.valuationMode"
-
     /// Cancel toolbar button. Drivers click it to dismiss the dialog
     /// after assertions run, AND use it as the presence sentinel for
     /// `expectVisible()` — Cancel is the only element that's

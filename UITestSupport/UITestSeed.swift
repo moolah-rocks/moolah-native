@@ -291,26 +291,3 @@ public struct UITestHistoricalExpense: Sendable {
     now.addingTimeInterval(-Double(daysAgo) * 86_400)
   }
 }
-
-/// One `InvestmentValue` snapshot row hydrated alongside an
-/// investment account. Stored in the `investment_value` table by
-/// `UITestSeedHydrator+Upserts.upsertInvestmentValue`. Used by the
-/// `EditAccountView` valuation-picker visibility test:
-/// `.recordedValue` accounts that have at least one snapshot show
-/// the picker; accounts with no snapshots in `.calculatedFromTrades`
-/// hide it.
-public struct UITestInvestmentValueSeed: Sendable {
-  public let id: UUID
-  public let accountId: UUID
-  public let date: Date
-  public let instrumentId: String
-  public let cents: Int
-
-  public init(id: UUID, accountId: UUID, date: Date, instrumentId: String, cents: Int) {
-    self.id = id
-    self.accountId = accountId
-    self.date = date
-    self.instrumentId = instrumentId
-    self.cents = cents
-  }
-}
