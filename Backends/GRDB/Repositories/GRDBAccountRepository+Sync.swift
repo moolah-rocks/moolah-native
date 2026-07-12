@@ -31,15 +31,9 @@ extension GRDBAccountRepository {
         in: database)
     }
     for id in ids {
-      // Replicates the v3-era ON DELETE CASCADE on
-      // `investment_value.account_id` and ON DELETE SET NULL on
-      // `transaction_leg.account_id` after `v5_drop_foreign_keys`
-      // removed the FKs. Same write transaction so the cascade is
-      // atomic with the parent delete.
-      _ =
-        try InvestmentValueRow
-        .filter(InvestmentValueRow.Columns.accountId == id)
-        .deleteAll(database)
+      // Replicates the v3-era ON DELETE SET NULL on
+      // `transaction_leg.account_id` after `v5_drop_foreign_keys` removed
+      // the FK. Same write transaction so the cleanup is atomic with delete.
       _ =
         try TransactionLegRow
         .filter(TransactionLegRow.Columns.accountId == id)

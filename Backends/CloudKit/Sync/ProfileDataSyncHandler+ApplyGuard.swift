@@ -65,8 +65,6 @@ extension ProfileDataSyncHandler {
       return { try repos.earmarks.dirtyIdsSync(from: $0, in: $1) }
     case EarmarkBudgetItemRow.recordType:
       return { try repos.earmarkBudgetItems.dirtyIdsSync(from: $0, in: $1) }
-    case InvestmentValueRow.recordType:
-      return { try repos.investmentValues.dirtyIdsSync(from: $0, in: $1) }
     case TransactionRow.recordType:
       return { try repos.transactions.dirtyIdsSync(from: $0, in: $1) }
     case TransactionLegRow.recordType:
@@ -186,8 +184,6 @@ extension ProfileDataSyncHandler {
       return { try repos.earmarks.clearNeedsPushBatchSync($0, in: database) }
     case EarmarkBudgetItemRow.recordType:
       return { try repos.earmarkBudgetItems.clearNeedsPushBatchSync($0, in: database) }
-    case InvestmentValueRow.recordType:
-      return { try repos.investmentValues.clearNeedsPushBatchSync($0, in: database) }
     case TransactionRow.recordType:
       return { try repos.transactions.clearNeedsPushBatchSync($0, in: database) }
     case TransactionLegRow.recordType:
@@ -236,8 +232,6 @@ extension ProfileDataSyncHandler {
       return { try repos.earmarks.clearNeedsPushBatchSync($0) }
     case EarmarkBudgetItemRow.recordType:
       return { try repos.earmarkBudgetItems.clearNeedsPushBatchSync($0) }
-    case InvestmentValueRow.recordType:
-      return { try repos.investmentValues.clearNeedsPushBatchSync($0) }
     case TransactionRow.recordType:
       return { try repos.transactions.clearNeedsPushBatchSync($0) }
     case TransactionLegRow.recordType:
@@ -311,8 +305,6 @@ extension ProfileDataSyncHandler {
       return { try repos.earmarks.setEncodedSystemFieldsBatchSync($0, in: $1) }
     case EarmarkBudgetItemRow.recordType:
       return { try repos.earmarkBudgetItems.setEncodedSystemFieldsBatchSync($0, in: $1) }
-    case InvestmentValueRow.recordType:
-      return { try repos.investmentValues.setEncodedSystemFieldsBatchSync($0, in: $1) }
     case TransactionRow.recordType:
       return { try repos.transactions.setEncodedSystemFieldsBatchSync($0, in: $1) }
     case TransactionLegRow.recordType:

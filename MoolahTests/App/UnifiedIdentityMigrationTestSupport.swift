@@ -190,7 +190,7 @@ extension MigrationTestHarness {
   func allInstrumentIds(_ profileId: UUID, _ table: String) async throws -> [String] {
     let allowed: Set<String> = [
       "transaction_leg", "earmark", "earmark_budget_item",
-      "account_group", "investment_value", "account",
+      "account_group", "account",
     ]
     precondition(allowed.contains(table), "allInstrumentIds: unlisted table '\(table)'")
     let queue = try cache.database(for: profileId)
@@ -243,7 +243,7 @@ private func fetchTableSnapshot(_ database: Database) throws -> [String: [String
   var snap: [String: [String]] = [:]
   let tables = [
     "transaction_leg", "earmark", "earmark_budget_item",
-    "account_group", "investment_value", "account",
+    "account_group", "account",
   ]
   for table in tables {
     // Allowlist guard consistent with the file-wide pattern (DATABASE_CODE_GUIDE §4),
@@ -260,8 +260,8 @@ private func fetchTableSnapshot(_ database: Database) throws -> [String: [String
 
 // MARK: - Seeding helpers
 
-/// Inserts one row into each of the six FK tables (transaction_leg, earmark,
-/// earmark_budget_item, account_group, investment_value) and the defensive
+/// Inserts one row into each retained FK table (transaction_leg, earmark,
+/// earmark_budget_item, account_group) and the defensive
 /// account column. All instrument_id columns point at `10:native` (retired).
 /// The earmark.savings_target_instrument_id is set to `8453:native` so both
 /// retired ids are covered in a two-entry mapping.
@@ -289,11 +289,6 @@ func seedRetiredRows(_ database: Database) throws {
     sql:
       "INSERT INTO account_group (id, record_name, name, bucket, instrument_id, position) VALUES (?, ?, 'ETH Wallets', 'investments', '10:native', 0)",
     arguments: [groupId, "AG|\(groupId.uuidString)"])
-  let ivId = UUID()
-  try database.execute(
-    sql:
-      "INSERT INTO investment_value (id, record_name, account_id, date, value, instrument_id) VALUES (?, ?, ?, '2024-01-01', 1000, '10:native')",
-    arguments: [ivId, "IV|\(ivId.uuidString)", UUID()])
   let acctId = UUID()
   try database.execute(
     sql:
@@ -310,7 +305,7 @@ func seedRetiredRows(_ database: Database) throws {
 func needsPushCount(_ table: String, in queue: DatabaseQueue) async throws -> Int {
   let allowed: Set<String> = [
     "transaction_leg", "earmark", "earmark_budget_item",
-    "account_group", "investment_value", "account",
+    "account_group", "account",
   ]
   precondition(allowed.contains(table), "needsPushCount: unlisted table '\(table)'")
   return try await queue.read { database in

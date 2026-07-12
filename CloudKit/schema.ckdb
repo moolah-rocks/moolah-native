@@ -32,6 +32,7 @@ DEFINE SCHEMA
         position        INT64 QUERYABLE SORTABLE,
         taxOwnerIdsEncoded STRING QUERYABLE SEARCHABLE SORTABLE,
         type            STRING QUERYABLE SEARCHABLE SORTABLE,
+        // DEPRECATED: snapshot valuation removed; all accounts are trade-valued
         valuationMode   STRING QUERYABLE SEARCHABLE SORTABLE,
         walletAddress   STRING QUERYABLE SEARCHABLE SORTABLE,
         GRANT WRITE TO "_creator",

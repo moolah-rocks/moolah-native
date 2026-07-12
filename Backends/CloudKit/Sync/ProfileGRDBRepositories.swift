@@ -30,7 +30,6 @@ struct ProfileGRDBRepositories: Sendable {
   let walletSyncCheckpoints: GRDBWalletSyncCheckpointRepository
   let earmarks: GRDBEarmarkRepository
   let earmarkBudgetItems: GRDBEarmarkBudgetItemRepository
-  let investmentValues: GRDBInvestmentRepository
   let transactions: GRDBTransactionRepository
   let transactionLegs: GRDBTransactionLegRepository
   /// Shared writer used by `ProfileDataSyncHandler.applyRemoteChanges` to
@@ -109,7 +108,6 @@ extension ProfileGRDBRepositories {
         defaultInstrument: placeholderInstrument,
         instrumentResolver: resolver),
       earmarkBudgetItems: GRDBEarmarkBudgetItemRepository(database: database),
-      investmentValues: GRDBInvestmentRepository(database: database),
       transactions: GRDBTransactionRepository(
         database: database,
         defaultInstrument: placeholderInstrument,

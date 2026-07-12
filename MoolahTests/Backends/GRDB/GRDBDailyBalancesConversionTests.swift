@@ -127,13 +127,6 @@ struct GRDBDailyBalancesConversionTests {
             quantity: 100, type: .transfer),
         ]))
 
-    // A conflicting snapshot remains persisted but cannot affect the result.
-    let usd = Instrument.fiat(code: "USD")
-    try await backend.seedLegacyInvestmentValue(
-      accountId: investmentAccount.id,
-      date: day,
-      value: InstrumentAmount(quantity: 9_999, instrument: usd))
-
     let balances = try await backend.analysis.fetchDailyBalances(
       after: nil, forecastUntil: nil)
     let dayStart = AnalysisTestHelpers.calendar.startOfDay(for: day)

@@ -5,8 +5,7 @@ import Testing
 
 /// Multi-instrument `PositionBook` coverage for holding revaluation — the
 /// USD->AUD rate shifts across days and the daily balance must track the
-/// effective rate. Also covers USD-denominated investment accounts with and
-/// without inert legacy snapshots.
+/// effective rate. Also covers USD-denominated investment accounts.
 @Suite("AnalysisRepository Contract Tests — Multi-Instrument Holding")
 struct AnalysisMultiInstrumentHoldingTests {
 
@@ -143,8 +142,8 @@ struct AnalysisMultiInstrumentHoldingTests {
     #expect(day1Balance.netWorth.quantity == 50)
   }
 
-  @Test("snapshot is inert for multi-currency investments")
-  func investmentValueSnapshotIsInertMultiCurrency() async throws {
+  @Test("fixed-rate multi-currency investment remains position-derived")
+  func fixedRateInvestmentRemainsPositionDerived() async throws {
     let usd = Instrument.fiat(code: "USD")
     let rate = try AnalysisTestHelpers.decimal("1.5")
     let conversion = FakeConversionService.fixedRates(["USD": rate])
@@ -174,11 +173,7 @@ struct AnalysisMultiInstrumentHoldingTests {
             accountId: investment.id, instrument: usd,
             quantity: 100, type: .transfer),
         ]))
-    // Day2: stale market value = 200 USD on investment account. Bank tick to ensure
-    // a daily-balance entry is emitted on day2.
-    try await backend.seedLegacyInvestmentValue(
-      accountId: investment.id, date: day2,
-      value: InstrumentAmount(quantity: 200, instrument: usd))
+    // Bank tick ensures a daily-balance entry is emitted on day2.
     _ = try await backend.transactions.create(
       Transaction(
         date: day2, payee: "Tick",

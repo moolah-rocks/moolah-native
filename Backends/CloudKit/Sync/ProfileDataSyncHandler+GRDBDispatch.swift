@@ -91,8 +91,6 @@ extension ProfileDataSyncHandler {
       return { handler in handler.applyBatchSaveEarmark(ckRecords:systemFields:in:) }
     case EarmarkBudgetItemRow.recordType:
       return { handler in handler.applyBatchSaveEarmarkBudgetItem(ckRecords:systemFields:in:) }
-    case InvestmentValueRow.recordType:
-      return { handler in handler.applyBatchSaveInvestmentValue(ckRecords:systemFields:in:) }
     case TransactionRow.recordType:
       return { handler in handler.applyBatchSaveTransaction(ckRecords:systemFields:in:) }
     case TransactionLegRow.recordType:
@@ -227,13 +225,6 @@ extension ProfileDataSyncHandler {
       return { handler, ids, database in
         try handler.writeRemote(site: "applyGRDBBatchDeletion[EarmarkBudgetItem]") {
           try handler.grdbRepositories.earmarkBudgetItems.applyRemoteChangesSync(
-            saved: [], deleted: ids, in: database)
-        }
-      }
-    case InvestmentValueRow.recordType:
-      return { handler, ids, database in
-        try handler.writeRemote(site: "applyGRDBBatchDeletion[InvestmentValue]") {
-          try handler.grdbRepositories.investmentValues.applyRemoteChangesSync(
             saved: [], deleted: ids, in: database)
         }
       }

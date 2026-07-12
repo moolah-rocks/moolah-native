@@ -20,8 +20,6 @@ private func assertAllFKsCanonical(_ profileId: UUID, harness: MigrationTestHarn
   #expect(ebiIds.allSatisfy { !$0.hasPrefix("10:") && !$0.hasPrefix("8453:") })
   let groupIds = try await harness.allInstrumentIds(profileId, "account_group")
   #expect(groupIds.allSatisfy { !$0.hasPrefix("10:") && !$0.hasPrefix("8453:") })
-  let ivIds = try await harness.allInstrumentIds(profileId, "investment_value")
-  #expect(ivIds.allSatisfy { !$0.hasPrefix("10:") && !$0.hasPrefix("8453:") })
   let acctIds = try await harness.allInstrumentIds(profileId, "account")
   #expect(acctIds.allSatisfy { !$0.hasPrefix("10:") && !$0.hasPrefix("8453:") })
 }

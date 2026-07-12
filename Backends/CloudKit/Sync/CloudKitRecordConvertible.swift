@@ -43,7 +43,6 @@ extension CategoryRow: IdentifiableRecord {}
 extension TransferSuggestionRow: IdentifiableRecord {}
 extension EarmarkRow: IdentifiableRecord {}
 extension EarmarkBudgetItemRow: IdentifiableRecord {}
-extension InvestmentValueRow: IdentifiableRecord {}
 extension CSVImportProfileRow: IdentifiableRecord {}
 extension ImportRuleRow: IdentifiableRecord {}
 extension WalletSyncCheckpointRow: IdentifiableRecord {}
@@ -73,7 +72,6 @@ extension EarmarkRow: ValueTypeSystemFieldsReadable {}
 extension EarmarkBudgetItemRow: ValueTypeSystemFieldsReadable {}
 extension TransactionRow: ValueTypeSystemFieldsReadable {}
 extension TransactionLegRow: ValueTypeSystemFieldsReadable {}
-extension InvestmentValueRow: ValueTypeSystemFieldsReadable {}
 extension WalletSyncCheckpointRow: ValueTypeSystemFieldsReadable {}
 
 // MARK: - CKRecord System Fields
@@ -161,7 +159,6 @@ enum RecordTypeRegistry: Sendable {
     TransferSuggestionRow.recordType: TransferSuggestionRow.self,
     EarmarkRow.recordType: EarmarkRow.self,
     EarmarkBudgetItemRow.recordType: EarmarkBudgetItemRow.self,
-    InvestmentValueRow.recordType: InvestmentValueRow.self,
     CSVImportProfileRow.recordType: CSVImportProfileRow.self,
     ImportRuleRow.recordType: ImportRuleRow.self,
     WalletSyncCheckpointRow.recordType: WalletSyncCheckpointRow.self,

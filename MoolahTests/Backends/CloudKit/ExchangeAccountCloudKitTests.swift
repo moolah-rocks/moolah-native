@@ -25,7 +25,6 @@ struct ExchangeAccountCloudKitTests {
       position: 0,
       isHidden: false,
       encodedSystemFields: nil,
-      valuationMode: "calculatedFromTrades",
       walletAddress: nil,
       chainId: nil,
       exchangeProvider: "coinstash")
@@ -46,7 +45,6 @@ struct ExchangeAccountCloudKitTests {
       position: 0,
       isHidden: false,
       encodedSystemFields: nil,
-      valuationMode: "calculatedFromTrades",
       walletAddress: nil,
       chainId: nil,
       exchangeProvider: "future-exchange")
@@ -67,7 +65,6 @@ struct ExchangeAccountCloudKitTests {
       position: 0,
       isHidden: false,
       encodedSystemFields: nil,
-      valuationMode: "calculatedFromTrades",
       walletAddress: nil,
       chainId: nil,
       exchangeProvider: "coinstash")

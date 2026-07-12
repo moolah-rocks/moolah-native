@@ -84,9 +84,6 @@ extension ProfileDataSyncHandler {
     case EarmarkBudgetItemRow.recordType:
       return .some(
         try repos.earmarkBudgetItems.fetchRowSync(id: uuid, in: database).map(builtRecord))
-    case InvestmentValueRow.recordType:
-      return .some(
-        try repos.investmentValues.fetchRowSync(id: uuid, in: database).map(builtRecord))
     default:
       return nil
     }
@@ -230,8 +227,6 @@ extension ProfileDataSyncHandler {
       return try repos.earmarks.fetchRowSync(id: id, in: database)?.encodedSystemFields
     case EarmarkBudgetItemRow.recordType:
       return try repos.earmarkBudgetItems.fetchRowSync(id: id, in: database)?.encodedSystemFields
-    case InvestmentValueRow.recordType:
-      return try repos.investmentValues.fetchRowSync(id: id, in: database)?.encodedSystemFields
     default:
       return nil
     }

@@ -15,7 +15,7 @@ struct TradeOnlyValuationMigrationTests {
 
     let snapshotBefore = try snapshotRow(id: snapshotId, from: queue)
     let financialGraphBefore = try financialGraphRows(from: queue)
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v24_trade_only_valuation")
 
     let modes = try queue.read { database in
       try String.fetchAll(
@@ -119,7 +119,7 @@ struct TradeOnlyValuationMigrationTests {
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
       arguments: [
-        id, InvestmentValueRow.recordName(for: id), accountId,
+        id, "InvestmentValueRecord|\(id.uuidString)", accountId,
         Date(timeIntervalSince1970: 1_700_000_000), 12_345, "AUD", true,
       ])
   }

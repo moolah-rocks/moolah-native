@@ -8,7 +8,7 @@ import Testing
 @Suite("AnalysisRepository Contract Tests — Investment Positions")
 struct AnalysisInvestmentValueTests {
 
-  @Test("fetchDailyBalances derives investment value from positions and ignores snapshots")
+  @Test("fetchDailyBalances derives investment value from positions")
   func dailyBalancesDerivesInvestmentValueFromPositions() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let investmentAccount = Account(
@@ -33,11 +33,6 @@ struct AnalysisInvestmentValueTests {
         ]))
 
     let day2 = try AnalysisTestHelpers.date(year: 2025, month: 3, day: 2)
-    try await backend.seedLegacyInvestmentValue(
-      accountId: investmentAccount.id,
-      date: day2,
-      value: InstrumentAmount(quantity: 9_999, instrument: .defaultTestInstrument))
-
     _ = try await backend.transactions.create(
       Transaction(
         date: day2, payee: "Interest",
@@ -54,7 +49,7 @@ struct AnalysisInvestmentValueTests {
     let day2InvestmentValue = try #require(day2Balance.investmentValue)
     #expect(
       day2InvestmentValue == InstrumentAmount(quantity: 500, instrument: .defaultTestInstrument),
-      "investmentValue should carry the 500 position and ignore the snapshot")
+      "investmentValue should carry the 500 position")
     #expect(
       day2Balance.netWorth == day2Balance.balance + day2InvestmentValue,
       "netWorth should be balance + investmentValue")
@@ -100,8 +95,8 @@ struct AnalysisInvestmentValueTests {
     #expect(abs(day3Fit.quantity - 30) <= tolerance)
   }
 
-  @Test("fetchDailyBalances with after cutoff ignores pre-window snapshots")
-  func dailyBalancesPreWindowInvestmentSnapshotIgnored() async throws {
+  @Test("fetchDailyBalances with after cutoff emits no value for an empty investment position")
+  func dailyBalancesPreWindowEmptyInvestmentPosition() async throws {
     let backend = try CloudKitAnalysisTestBackend()
     let investmentAccount = Account(
       id: UUID(), name: "Portfolio", type: .investment, instrument: .defaultTestInstrument)
@@ -110,14 +105,6 @@ struct AnalysisInvestmentValueTests {
     let bankAccount = Account(
       id: UUID(), name: "Bank", type: .bank, instrument: .defaultTestInstrument)
     _ = try await backend.accounts.create(bankAccount)
-
-    // Persisted for backward-compatible storage and sync only. It must not
-    // participate in the runtime historical balance fold.
-    let preWindowDate = try AnalysisTestHelpers.date(year: 2025, month: 2, day: 15)
-    try await backend.seedLegacyInvestmentValue(
-      accountId: investmentAccount.id,
-      date: preWindowDate,
-      value: InstrumentAmount(quantity: 1000, instrument: .defaultTestInstrument))
 
     // First in-window day for the historic walk; sits *after* the cutoff
     // and carries a transaction so the historic span emits a row for it.

@@ -29,7 +29,6 @@ extension AccountRow: CloudKitRecordConvertible {
       position: Int64(position),
       taxOwnerIdsEncoded: taxOwnerIdsEncoded,
       type: type,
-      valuationMode: valuationMode,
       walletAddress: walletAddress
     ).write(to: record)
     return record
@@ -49,7 +48,6 @@ extension AccountRow: CloudKitRecordConvertible {
       // Stamped by applyGRDBBatchSave after upsert; never read from the
       // CKRecord itself.
       encodedSystemFields: nil,
-      valuationMode: fields.valuationMode ?? "recordedValue",
       walletAddress: fields.walletAddress,
       chainId: fields.chainId.map(Int.init),
       exchangeProvider: fields.exchangeProvider,

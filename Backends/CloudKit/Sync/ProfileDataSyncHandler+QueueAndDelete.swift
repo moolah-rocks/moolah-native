@@ -78,7 +78,6 @@ extension ProfileDataSyncHandler {
     collectAccountIds(source: source, into: &recordIDs)
     collectEarmarkIds(source: source, into: &recordIDs)
     collectEarmarkBudgetItemIds(source: source, into: &recordIDs)
-    collectInvestmentValueIds(source: source, into: &recordIDs)
     collectTransactionIds(source: source, into: &recordIDs)
     collectTransactionLegIds(source: source, into: &recordIDs)
     collectCSVImportProfileIds(source: source, into: &recordIDs)
@@ -191,19 +190,6 @@ extension ProfileDataSyncHandler {
       }
     }
     collectAllGRDBUUIDs(ids: ids, recordType: EarmarkBudgetItemRow.recordType, into: &recordIDs)
-  }
-
-  private func collectInvestmentValueIds(
-    source: GRDBIdSource, into recordIDs: inout [CKRecord.ID]
-  ) {
-    let repo = grdbRepositories.investmentValues
-    let ids: () throws -> [UUID] = {
-      switch source {
-      case .all: return try repo.allRowIdsSync()
-      case .unsynced: return try repo.unsyncedRowIdsSync()
-      }
-    }
-    collectAllGRDBUUIDs(ids: ids, recordType: InvestmentValueRow.recordType, into: &recordIDs)
   }
 
   private func collectTransactionIds(
@@ -331,10 +317,6 @@ extension ProfileDataSyncHandler {
       (
         EarmarkBudgetItemRow.recordType,
         { try self.grdbRepositories.earmarkBudgetItems.deleteAllSync() }
-      ),
-      (
-        InvestmentValueRow.recordType,
-        { try self.grdbRepositories.investmentValues.deleteAllSync() }
       ),
       (TransactionRow.recordType, { try self.grdbRepositories.transactions.deleteAllSync() }),
       (

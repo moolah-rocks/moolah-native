@@ -29,7 +29,7 @@ enum ApplyResult: Sendable {
 final class ProfileDataSyncHandler {
   nonisolated let profileId: UUID
   nonisolated let zoneID: CKRecordZone.ID
-  /// GRDB-backed repos for the eight per-profile record types. Used by
+  /// GRDB-backed repos for the per-profile record types. Used by
   /// the dispatch tables in `+ApplyRemoteChanges`, `+QueueAndDelete`,
   /// `+RecordLookup`, and `+SystemFields` so each per-type save/delete
   /// handler can address the right repository without leaking GRDB

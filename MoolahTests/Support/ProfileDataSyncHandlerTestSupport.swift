@@ -100,7 +100,7 @@ extension ProfileDataSyncHandlerTestSupport {
       position: position,
       isHidden: isHidden,
       encodedSystemFields: encodedSystemFields,
-      valuationMode: "recordedValue")
+    )
   }
 
   static func transactionRow(
@@ -222,24 +222,6 @@ extension ProfileDataSyncHandlerTestSupport {
       encodedSystemFields: encodedSystemFields)
   }
 
-  static func investmentValueRow(
-    id: UUID,
-    accountId: UUID,
-    date: Date = Date(),
-    value: Int64 = 0,
-    instrumentId: String = Instrument.defaultTestInstrument.id,
-    encodedSystemFields: Data? = nil
-  ) -> InvestmentValueRow {
-    InvestmentValueRow(
-      id: id,
-      recordName: InvestmentValueRow.recordName(for: id),
-      accountId: accountId,
-      date: date,
-      value: value,
-      instrumentId: instrumentId,
-      encodedSystemFields: encodedSystemFields)
-  }
-
   static func transactionLegRow(
     id: UUID,
     transactionId: UUID,
@@ -303,7 +285,6 @@ extension ProfileDataSyncHandlerTestSupport {
         defaultInstrument: instrument,
         instrumentResolver: registry),
       earmarkBudgetItems: GRDBEarmarkBudgetItemRepository(database: database),
-      investmentValues: GRDBInvestmentRepository(database: database),
       transactions: GRDBTransactionRepository(
         database: database,
         defaultInstrument: instrument,

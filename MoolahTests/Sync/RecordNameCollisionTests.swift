@@ -86,7 +86,7 @@ struct RecordNameCollisionTests {
       position: 0,
       isHidden: false,
       encodedSystemFields: nil,
-      valuationMode: "recordedValue")
+    )
 
     let built = handler.buildCKRecord(from: row, encodedSystemFields: nil)
     #expect(
@@ -122,7 +122,7 @@ struct RecordNameCollisionTests {
       position: 0,
       isHidden: false,
       encodedSystemFields: legacySystemFields,
-      valuationMode: "recordedValue")
+    )
 
     let built = handler.buildCKRecord(from: row, encodedSystemFields: legacySystemFields)
     #expect(

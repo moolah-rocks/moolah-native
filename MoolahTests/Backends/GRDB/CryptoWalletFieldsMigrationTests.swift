@@ -10,7 +10,7 @@ struct CryptoWalletFieldsMigrationTests {
   @Test("account gains wallet_address and chain_id; type CHECK accepts crypto")
   func accountColumnsAndCheck() throws {
     let queue = try DatabaseQueue()
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v8_add_crypto_wallet_fields")
     try queue.read { database in
       let columns = try database.columns(in: "account").map(\.name)
       #expect(columns.contains("wallet_address"))
@@ -36,7 +36,7 @@ struct CryptoWalletFieldsMigrationTests {
   @Test("account.type CHECK still rejects unknown values")
   func accountTypeCheckRejectsUnknown() throws {
     let queue = try DatabaseQueue()
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v8_add_crypto_wallet_fields")
     try queue.write { database in
       do {
         try database.execute(
@@ -59,7 +59,7 @@ struct CryptoWalletFieldsMigrationTests {
   @Test("transaction_leg gains external_id with partial-unique dedup index")
   func transactionLegExternalIdAndIndex() throws {
     let queue = try DatabaseQueue()
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v8_add_crypto_wallet_fields")
     try queue.read { database in
       let columns = try database.columns(in: "transaction_leg").map(\.name)
       #expect(columns.contains("external_id"))
@@ -71,7 +71,7 @@ struct CryptoWalletFieldsMigrationTests {
   @Test("partial unique index rejects duplicate (account_id, external_id)")
   func dedupIndexRejectsDuplicate() throws {
     let queue = try DatabaseQueue()
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v8_add_crypto_wallet_fields")
     let accountId = Data(repeating: 7, count: 16)
     try queue.write { database in
       try Self.seedAccountAndTransaction(database, accountId: accountId)
@@ -90,7 +90,7 @@ struct CryptoWalletFieldsMigrationTests {
   @Test("partial unique index allows multiple NULL externalIds on same account")
   func dedupIndexAllowsMultipleNulls() throws {
     let queue = try DatabaseQueue()
-    try ProfileSchema.migrator.migrate(queue)
+    try ProfileSchema.migrator.migrate(queue, upTo: "v8_add_crypto_wallet_fields")
     let accountId = Data(repeating: 7, count: 16)
     try queue.write { database in
       try Self.seedAccountAndTransaction(database, accountId: accountId)
