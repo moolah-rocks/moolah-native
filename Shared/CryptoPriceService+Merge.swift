@@ -23,6 +23,7 @@ extension CryptoPriceService {
     var deltaRecords: [CryptoPriceRecord] = []
 
     if var existing = caches[tokenId] {
+      existing.firstTradedOn = existing.firstTradedOn ?? explicitFirstTradeFloors[tokenId]
       for (dateKey, price) in newPrices {
         guard let key = DateKey.from(isoString: dateKey) else { continue }  // malformed wire date — unusable as a sorted key; skip
         if existing.prices.exact(key) != price {
@@ -50,7 +51,7 @@ extension CryptoPriceService {
         earliestDate: earliest,
         latestDate: latest,
         prices: series,
-        firstTradedOn: nil
+        firstTradedOn: explicitFirstTradeFloors[tokenId]
       )
     }
 

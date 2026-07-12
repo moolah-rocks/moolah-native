@@ -53,9 +53,8 @@ extension CryptoPriceService {
   /// so the `INSERT OR REPLACE` does not clobber them.
   ///
   /// `persistFirstTradedOn` is separate from `persistDelta` to avoid the cost
-  /// of a redundant meta write on every delta flush: it runs only once, after
-  /// the backward walk exhaustion. Callers must have already updated
-  /// `caches[tokenId].firstTradedOn` before calling this.
+  /// of a redundant meta write on every delta flush. Callers must have already
+  /// updated `caches[tokenId].firstTradedOn` before calling this.
   func persistFirstTradedOn(tokenId: String, date: String) async throws {
     guard let cache = caches[tokenId] else { return }
     let meta = CryptoTokenMetaRecord(

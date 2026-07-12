@@ -13,7 +13,7 @@ struct DefiLlamaSupport: Sendable, Equatable {
 /// Local-only, drop-and-recreate cache of which tokens DefiLlama can price,
 /// backed by `<directory>/defillama-support.sqlite`. Unlike the #1140 catalogs
 /// it holds no downloaded list — it is a bottom-up per-token memoization filled
-/// by the startup probe (see `refreshSupport`, Task 6). SQLite work runs on the
+/// by the `refreshSupport` startup probe. SQLite work runs on the
 /// actor's serial executor; the non-`Sendable` `CatalogDatabase` never escapes.
 actor DefiLlamaSupportCache {
   static let log = Logger(subsystem: "moolah.instrument-registry", category: "defillama-support")
@@ -91,9 +91,10 @@ actor DefiLlamaSupportCache {
       let instrumentId = registration.instrument.id
       if let existing = support(for: instrumentId),
         existing.supported,
+        existing.earliestDate != nil,
         now.timeIntervalSince(existing.lastChecked) < Self.maxAge
       {
-        continue  // fresh + supported → skip
+        continue  // fresh + supported with a known first point → skip
       }
       guard
         let coinId = DefiLlamaCoinID.make(
@@ -155,6 +156,17 @@ actor DefiLlamaSupportCache {
     let lastChecked = Date(timeIntervalSince1970: sqlite3_column_double(statement, 2))
     return DefiLlamaSupport(
       supported: supported, earliestDate: earliest, lastChecked: lastChecked)
+  }
+
+  /// Marks a token supported without replacing an earliest date that may have
+  /// arrived from `/prices/first` while an arbitrary chart request was in
+  /// flight. The read and write stay within one actor turn.
+  func markSupportedPreservingEarliestDate(instrumentId: String, lastChecked: Date) {
+    upsert(
+      instrumentId: instrumentId,
+      supported: true,
+      earliestDate: support(for: instrumentId)?.earliestDate,
+      lastChecked: lastChecked)
   }
 
   /// Inserts or replaces the support row for `instrumentId`. Infallible: a

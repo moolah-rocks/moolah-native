@@ -139,8 +139,8 @@ final class DefiLlamaClientTests {
     #expect(await cache.support(for: wethMapping.instrumentId)?.supported == true)
   }
 
-  @Test("a successful fetch records support in the cache")
-  func recordsSupportOnSuccess() async throws {
+  @Test("a successful chart fetch records support without inferring earliest date")
+  func recordsSupportOnSuccessWithoutEarliestDate() async throws {
     let tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
       .appendingPathComponent("dl-rec-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -159,6 +159,7 @@ final class DefiLlamaClientTests {
     let day = Date(timeIntervalSince1970: 1_704_067_200)
     _ = try await client.dailyPrices(for: wethMapping, in: day...day)
     #expect(await cache.support(for: wethMapping.instrumentId)?.supported == true)
+    #expect(await cache.support(for: wethMapping.instrumentId)?.earliestDate == nil)
   }
 
   @Test("a window entirely before the cached floor returns empty with no network call")

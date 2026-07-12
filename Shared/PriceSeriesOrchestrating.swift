@@ -30,8 +30,8 @@ protocol PriceSeriesOrchestrating: Actor, Sendable {
   /// Plug 2a — confirmed first-trade floor (`YYYY-MM-DD`); `nil` by default
   /// (the no-floor case, e.g. stock).
   func firstTradeFloor(for instrumentKey: String) -> String?
-  /// Plug 2b — confirm+persist the floor on a no-error backward exhaustion;
-  /// a no-op by default (the no-floor case, e.g. stock).
+  /// Plug 2b — service-specific hook when a backward extension makes no
+  /// progress; a no-op by default.
   func confirmFirstTradeOnBackwardExhaustion(
     instrumentKey: String, lastFetchError: (any Error)?) async throws
 
@@ -47,7 +47,7 @@ extension PriceSeriesOrchestrating {
 
   /// No first-trade floor by default; services with a floor (crypto) override.
   func firstTradeFloor(for instrumentKey: String) -> String? { nil }
-  /// Nothing to confirm without a floor; services with one (crypto) override.
+  /// Nothing to do by default.
   func confirmFirstTradeOnBackwardExhaustion(
     instrumentKey: String, lastFetchError: (any Error)?
   ) async throws {}

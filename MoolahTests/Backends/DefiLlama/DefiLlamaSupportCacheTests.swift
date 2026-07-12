@@ -59,6 +59,23 @@ final class DefiLlamaSupportCacheTests {
     #expect(row?.lastChecked == later)
   }
 
+  @Test("marking supported preserves the current earliest date")
+  func markSupportedPreservesEarliestDate() async throws {
+    let cache = try makeCache()
+    await cache.upsert(
+      instrumentId: "1:0xabc", supported: true, earliestDate: "2021-06-01",
+      lastChecked: Date(timeIntervalSince1970: 1))
+
+    let later = Date(timeIntervalSince1970: 2)
+    await cache.markSupportedPreservingEarliestDate(
+      instrumentId: "1:0xabc", lastChecked: later)
+
+    let row = await cache.support(for: "1:0xabc")
+    #expect(row?.supported == true)
+    #expect(row?.earliestDate == "2021-06-01")
+    #expect(row?.lastChecked == later)
+  }
+
   @Test("schema version bump drops and recreates the file")
   func schemaBumpRecreates() async throws {
     let networking = makeNetworking()
@@ -135,5 +152,25 @@ final class DefiLlamaSupportCacheTests {
     #expect(called.get() == false)  // nothing to probe → no network call
     // The spam token must not have been recorded at all.
     #expect(await cache.support(for: "1:0xccc") == nil)
+  }
+
+  @Test("probe refreshes a fresh supported row that lacks an earliest date")
+  func probeRefreshesSupportedRowWithoutEarliestDate() async throws {
+    let networking = makeNetworking()
+    let cache = try DefiLlamaSupportCache.make(directory: tempDir, networking: networking)
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    await cache.upsert(
+      instrumentId: "1:0xaaa", supported: true, earliestDate: nil, lastChecked: now)
+    StubURLProtocol.handlers["coins.llama.fi:/prices/first/ethereum:0xaaa"] = { _ in
+      let body = """
+        {"coins":{"ethereum:0xaaa":{"timestamp":1367107200,"price":135.3}}}
+        """
+      return (HTTPURLResponse.ok(etag: ""), Data(body.utf8))
+    }
+
+    let registration = registration(instrumentId: "1:0xaaa", coingeckoId: nil)
+    await cache.refreshSupport(for: [registration], now: now.addingTimeInterval(3600))
+
+    #expect(await cache.support(for: "1:0xaaa")?.earliestDate == "2013-04-28")
   }
 }

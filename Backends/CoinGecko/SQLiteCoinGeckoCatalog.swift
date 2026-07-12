@@ -208,4 +208,8 @@ extension SQLiteCoinGeckoCatalog {
     try database.bind(statement, at: 1, to: version)
     try database.step(statement)
   }
+
+  func closeForTesting() {
+    database.close()
+  }
 }

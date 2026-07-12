@@ -64,12 +64,14 @@ final class CatalogDatabase {
         shouldClose = false  // caller takes ownership of the live handle
         return database
       }
-      // Mismatch: close the stale handle (via the defer), then drop the file
+      // Mismatch: close the stale handle, then drop the file
       // and its WAL sidecars and recreate clean. `<db>-wal` / `<db>-shm` are
       // produced by WAL mode and must go too so the database starts empty.
-      // `database` is dropped here while still owning `handle`; null it out
-      // first so its `deinit` does not double-close the defer-closed handle.
+      // Null out `database` ownership before closing the raw handle so its
+      // `deinit` does not double-close it.
       database.handle = nil
+      sqlite3_close_v2(handle)
+      shouldClose = false
       try FileManager.default.removeItem(at: dbURL)
       try? FileManager.default.removeItem(at: URL(fileURLWithPath: dbURL.path + "-wal"))
       try? FileManager.default.removeItem(at: URL(fileURLWithPath: dbURL.path + "-shm"))

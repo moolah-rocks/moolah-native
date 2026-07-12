@@ -29,11 +29,12 @@ extension CryptoPriceService: PriceSeriesOrchestrating {
 
   /// Plug 2a — the confirmed first-trade floor (`YYYY-MM-DD`), if known.
   func firstTradeFloor(for instrumentKey: String) -> String? {
-    caches[instrumentKey]?.firstTradedOn
+    caches[instrumentKey]?.firstTradedOn ?? explicitFirstTradeFloors[instrumentKey]
   }
 
-  /// Plug 2b — confirm+persist the first-trade floor on a clean backward
-  /// exhaustion. Wraps the existing `confirmFirstTradedOnIfExhausted`.
+  /// Plug 2b — backward no-progress is not a trustworthy first-trade signal.
+  /// The crypto service keeps this no-op hook so the shared orchestrator can
+  /// remain stock/crypto agnostic.
   func confirmFirstTradeOnBackwardExhaustion(
     instrumentKey: String, lastFetchError: (any Error)?
   ) async throws {
