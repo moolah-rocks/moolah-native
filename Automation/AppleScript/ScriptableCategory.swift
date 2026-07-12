@@ -11,7 +11,6 @@
     private let _parentName: String
     private let _profileName: String
 
-    @MainActor
     init(category: Category, parentName: String, profileName: String) {
       _uniqueID = category.id.uuidString
       _name = category.name

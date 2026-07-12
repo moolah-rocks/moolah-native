@@ -77,13 +77,12 @@
       service: AutomationService
     ) throws -> [ScriptableTransaction] {
       let session = try service.resolveSession(for: profileIdentifier)
+      let snapshot = ScriptableProfileSnapshot(session: session).including(
+        transactions: transactions)
       return transactions.map { transaction in
         ScriptableTransaction(
           transaction: transaction,
-          profileName: session.profile.label,
-          accountStore: session.accountStore,
-          categoryStore: session.categoryStore,
-          earmarkStore: session.earmarkStore
+          snapshot: snapshot
         )
       }
     }

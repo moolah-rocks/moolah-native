@@ -38,12 +38,10 @@
         let merged = try await service.combineTransactions(
           profileIdentifier: profileName, ids: ids)
         let session = try service.resolveSession(for: profileName)
+        let snapshot = ScriptableProfileSnapshot(session: session).including(transaction: merged)
         return ScriptableTransaction(
           transaction: merged,
-          profileName: profileName,
-          accountStore: session.accountStore,
-          categoryStore: session.categoryStore,
-          earmarkStore: session.earmarkStore)
+          snapshot: snapshot)
       }
       return result
     }

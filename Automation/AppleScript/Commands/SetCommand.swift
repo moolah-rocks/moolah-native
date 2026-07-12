@@ -97,7 +97,9 @@
           profileIdentifier: account.scriptProfileName,
           accountId: accountId,
           changes: changes)
-        return ScriptableAccount(account: updated, profileName: account.scriptProfileName)
+        let session = try service.resolveSession(for: account.scriptProfileName)
+        let snapshot = ScriptableProfileSnapshot(session: session).including(account: updated)
+        return ScriptableAccount(account: updated, snapshot: snapshot)
       }
       return result
     }
@@ -141,12 +143,10 @@
           date: date,
           notes: notes)
         let session = try service.resolveSession(for: transaction.scriptProfileName)
+        let snapshot = ScriptableProfileSnapshot(session: session).including(transaction: updated)
         return ScriptableTransaction(
           transaction: updated,
-          profileName: transaction.scriptProfileName,
-          accountStore: session.accountStore,
-          categoryStore: session.categoryStore,
-          earmarkStore: session.earmarkStore)
+          snapshot: snapshot)
       }
       return result
     }
@@ -185,12 +185,10 @@
           legId: legId,
           changes: changes)
         let session = try service.resolveSession(for: leg.scriptProfileName)
+        let snapshot = ScriptableProfileSnapshot(session: session).including(transaction: updated)
         return ScriptableTransaction(
           transaction: updated,
-          profileName: leg.scriptProfileName,
-          accountStore: session.accountStore,
-          categoryStore: session.categoryStore,
-          earmarkStore: session.earmarkStore)
+          snapshot: snapshot)
       }
       return result
     }

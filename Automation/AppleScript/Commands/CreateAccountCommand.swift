@@ -41,7 +41,9 @@
         let service = try Self.requireService()
         let account = try await service.createAccount(
           profileIdentifier: profileName, name: name, type: type)
-        return ScriptableAccount(account: account, profileName: profileName)
+        let session = try service.resolveSession(for: profileName)
+        let snapshot = ScriptableProfileSnapshot(session: session).including(account: account)
+        return ScriptableAccount(account: account, snapshot: snapshot)
       }
       return result
     }
@@ -61,7 +63,9 @@
           name: name,
           walletAddress: walletAddress,
           chainId: chain)
-        return ScriptableAccount(account: account, profileName: profileName)
+        let session = try service.resolveSession(for: profileName)
+        let snapshot = ScriptableProfileSnapshot(session: session).including(account: account)
+        return ScriptableAccount(account: account, snapshot: snapshot)
       }
       return result
     }
@@ -84,7 +88,9 @@
           provider: provider,
           token: token,
           tokenStore: ExchangeTokenStore(synchronizable: true))
-        return ScriptableAccount(account: account, profileName: profileName)
+        let session = try service.resolveSession(for: profileName)
+        let snapshot = ScriptableProfileSnapshot(session: session).including(account: account)
+        return ScriptableAccount(account: account, snapshot: snapshot)
       }
       return result
     }

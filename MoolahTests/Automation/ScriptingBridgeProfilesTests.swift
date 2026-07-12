@@ -159,12 +159,9 @@
             categoryId: category.id,
             earmarkId: earmark.id)
         ])
-      let scriptable = ScriptableTransaction(
-        transaction: transaction,
-        profileName: session.profile.label,
-        accountStore: session.accountStore,
-        categoryStore: session.categoryStore,
-        earmarkStore: session.earmarkStore)
+      let snapshot = ScriptableProfileSnapshot(session: session).including(
+        transaction: transaction)
+      let scriptable = ScriptableTransaction(transaction: transaction, snapshot: snapshot)
       let leg = try #require(scriptable.scriptableLegs.first)
 
       #expect(leg.uniqueID == transaction.legs[0].id.uuidString)
@@ -174,6 +171,136 @@
       #expect(leg.category?.name == "Food")
       #expect(leg.earmark?.uniqueID == earmark.id.uuidString)
       #expect(leg.earmark?.name == "Groceries")
+    }
+  }
+
+  extension ScriptingBridgeProfilesTests {
+    @Test("account exposes transactions containing one of its legs")
+    func accountExposesTransactionsContainingItsLegs() async throws {
+      let (service, session) = try await AutomationTestSession.make()
+      let checking = try await service.createAccount(
+        profileIdentifier: "Test", name: "Checking", type: .bank)
+      let savings = try await service.createAccount(
+        profileIdentifier: "Test", name: "Savings", type: .bank)
+
+      let checkingOnly = try await service.createTransaction(
+        profileIdentifier: "Test",
+        payee: "Market",
+        date: Date(timeIntervalSince1970: 1_700_000_000),
+        legs: [
+          AutomationService.LegSpec(
+            accountName: "Checking",
+            amount: -25,
+            categoryName: nil,
+            earmarkName: nil)
+        ])
+      let transfer = try await service.createTransaction(
+        profileIdentifier: "Test",
+        payee: "Transfer",
+        date: Date(timeIntervalSince1970: 1_700_086_400),
+        legs: [
+          AutomationService.LegSpec(
+            accountName: "Checking",
+            amount: -100,
+            categoryName: nil,
+            earmarkName: nil),
+          AutomationService.LegSpec(
+            accountName: "Savings",
+            amount: 100,
+            categoryName: nil,
+            earmarkName: nil),
+        ])
+
+      await session.transactionStore.load(filter: TransactionFilter())
+      await expectEventually("created transactions are visible to the scriptable profile") {
+        session.transactionStore.transactions.count == 2
+      }
+
+      let profile = ScriptableProfile(session: session)
+      let checkingAccount = try #require(
+        profile.scriptableAccounts.first { $0.uniqueID == checking.id.uuidString })
+      let savingsAccount = try #require(
+        profile.scriptableAccounts.first { $0.uniqueID == savings.id.uuidString })
+
+      #expect(
+        Set(checkingAccount.scriptableTransactions.map(\.uniqueID))
+          == Set([checkingOnly.id.uuidString, transfer.id.uuidString]))
+      #expect(savingsAccount.scriptableTransactions.map(\.uniqueID) == [transfer.id.uuidString])
+    }
+
+    @Test("account reached through a leg exposes its transactions without recursion")
+    func legAccountExposesTransactionsWithoutRecursion() async throws {
+      let (service, session) = try await AutomationTestSession.make()
+      _ = try await service.createAccount(
+        profileIdentifier: "Test", name: "Checking", type: .bank)
+      let transaction = try await service.createTransaction(
+        profileIdentifier: "Test",
+        payee: "Market",
+        date: Date(timeIntervalSince1970: 1_700_000_000),
+        legs: [
+          AutomationService.LegSpec(
+            accountName: "Checking",
+            amount: -25,
+            categoryName: nil,
+            earmarkName: nil)
+        ])
+
+      await session.transactionStore.load(filter: TransactionFilter())
+      await expectEventually("created transaction is visible to the scriptable profile") {
+        session.transactionStore.transactions.count == 1
+      }
+
+      let profile = ScriptableProfile(session: session)
+      let account = try #require(profile.scriptableLegs.first?.account)
+
+      #expect(account.scriptableTransactions.map(\.uniqueID) == [transaction.id.uuidString])
+    }
+
+    @Test("find results share returned transactions through their leg accounts")
+    func findResultsShareTransactionsThroughLegAccounts() async throws {
+      let (service, session) = try await AutomationTestSession.make()
+      let checking = try await service.createAccount(
+        profileIdentifier: "Test", name: "Checking", type: .bank)
+
+      await expectEventually("created account is visible to the scriptable snapshot") {
+        session.accountStore.accounts.by(id: checking.id) != nil
+      }
+
+      let baseSnapshot = ScriptableProfileSnapshot(session: session)
+      let first = try await service.createTransaction(
+        profileIdentifier: "Test",
+        payee: "First",
+        date: Date(timeIntervalSince1970: 1_700_000_000),
+        legs: [
+          AutomationService.LegSpec(
+            accountName: "Checking",
+            amount: -10,
+            categoryName: nil,
+            earmarkName: nil)
+        ])
+      let second = try await service.createTransaction(
+        profileIdentifier: "Test",
+        payee: "Second",
+        date: Date(timeIntervalSince1970: 1_700_086_400),
+        legs: [
+          AutomationService.LegSpec(
+            accountName: "Checking",
+            amount: -20,
+            categoryName: nil,
+            earmarkName: nil)
+        ])
+
+      let returned = [first, second]
+      let sharedSnapshot = baseSnapshot.including(transactions: returned)
+      let scriptableResults = returned.map {
+        ScriptableTransaction(transaction: $0, snapshot: sharedSnapshot)
+      }
+      let expectedIDs = Set(returned.map { $0.id.uuidString })
+
+      for result in scriptableResults {
+        let account = try #require(result.scriptableLegs.first?.account)
+        #expect(Set(account.scriptableTransactions.map(\.uniqueID)) == expectedIDs)
+      }
     }
   }
 #endif

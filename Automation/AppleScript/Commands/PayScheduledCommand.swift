@@ -45,12 +45,11 @@
         switch payResult {
         case .paid(let updatedScheduled):
           if let updated = updatedScheduled {
+            let snapshot = ScriptableProfileSnapshot(session: session).including(
+              transaction: updated)
             return ScriptableTransaction(
               transaction: updated,
-              profileName: profName,
-              accountStore: session.accountStore,
-              categoryStore: session.categoryStore,
-              earmarkStore: session.earmarkStore
+              snapshot: snapshot
             )
           }
           throw AutomationError.operationFailed(
