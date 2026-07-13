@@ -14,6 +14,7 @@ struct TaxOwnerRow {
     case kind
     case encodedSystemFields = "encoded_system_fields"
     case needsPush = "needs_push"
+    case implicitPlaceholderMarker = "is_implicit_placeholder"
   }
 
   enum CodingKeys: String, CodingKey {
@@ -22,6 +23,7 @@ struct TaxOwnerRow {
     case name
     case kind
     case encodedSystemFields = "encoded_system_fields"
+    case implicitPlaceholderMarker = "is_implicit_placeholder"
   }
 
   var id: UUID
@@ -29,6 +31,11 @@ struct TaxOwnerRow {
   var name: String
   var kind: String
   var encodedSystemFields: Data?
+  /// `nil` only for rows that predate the local placeholder marker; otherwise
+  /// `0` is explicit data and `1` is a local placeholder. The schema pins the
+  /// integer domain. Bootstrap classifies the deterministic default owner, and
+  /// all new local and remote rows write an explicit value.
+  var implicitPlaceholderMarker: Int? = 0
 }
 
 extension TaxOwnerRow: Codable {}

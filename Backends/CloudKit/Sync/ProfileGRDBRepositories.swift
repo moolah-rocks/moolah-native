@@ -78,24 +78,26 @@ extension ProfileGRDBRepositories {
     implicitDefaultTaxOwnerId: UUID?,
     onAccountChanged: @escaping @Sendable (String, UUID) -> Void = { _, _ in },
     onCategoryChanged: @escaping @Sendable (String, UUID) -> Void = { _, _ in }
-  ) -> ProfileGRDBRepositories {
+  ) throws -> ProfileGRDBRepositories {
     // `Instrument.fiat(code:)`'s `isoCurrencies` lookup. The choice is
     // arbitrary — only the type matters for the apply path.
     let placeholderInstrument = Instrument.fiat(code: "USD")
     let resolver: any InstrumentMapResolving = sharedRegistry
     let registrar: any InstrumentRegistering = sharedRegistry
+    let taxOwners = GRDBTaxOwnerRepository(
+      database: database,
+      defaultTaxOwnerId: defaultTaxOwnerId,
+      implicitDefaultTaxOwnerId: implicitDefaultTaxOwnerId,
+      onAccountChanged: onAccountChanged,
+      onCategoryChanged: onCategoryChanged)
+    try taxOwners.bootstrapImplicitDefaultOwner()
     return ProfileGRDBRepositories(
       csvImportProfiles: GRDBCSVImportProfileRepository(database: database),
       importRules: GRDBImportRuleRepository(database: database),
       transferSuggestions: GRDBTransferSuggestionRepository(database: database),
       instruments: GRDBInstrumentRegistryRepository(database: database),
       categories: GRDBCategoryRepository(database: database),
-      taxOwners: GRDBTaxOwnerRepository(
-        database: database,
-        defaultTaxOwnerId: defaultTaxOwnerId,
-        implicitDefaultTaxOwnerId: implicitDefaultTaxOwnerId,
-        onAccountChanged: onAccountChanged,
-        onCategoryChanged: onCategoryChanged),
+      taxOwners: taxOwners,
       accounts: GRDBAccountRepository(
         database: database,
         instrumentResolver: resolver,

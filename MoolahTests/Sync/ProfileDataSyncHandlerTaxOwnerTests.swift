@@ -7,6 +7,30 @@ import Testing
 
 @Suite("ProfileDataSyncHandler — tax owner remote changes")
 struct ProfileDataSyncHandlerTaxOwnerTests {
+  @Test("stale remote echo cannot overwrite an explicit default owner rename")
+  func staleRemoteEchoCannotOverwriteExplicitDefaultOwnerRename() async throws {
+    let defaultOwnerId = UUID()
+    let harness = try await MainActor.run {
+      try ProfileDataSyncHandlerTestSupport.makeHandlerAndDatabase(
+        defaultTaxOwnerId: defaultOwnerId)
+    }
+    let repository = harness.handler.grdbRepositories.taxOwners
+    try repository.bootstrapImplicitDefaultOwner()
+    _ = try await repository.update(TaxOwner(id: defaultOwnerId, name: "Adrian"))
+    let stale = TaxOwnerRow(
+      domain: TaxOwner(id: defaultOwnerId, name: "Default owner")
+    ).toCKRecord(in: harness.handler.zoneID)
+
+    let result = harness.handler.applyRemoteChanges(saved: [stale], deleted: [])
+
+    guard case .success = result else {
+      Issue.record("Expected .success but got \(result)")
+      return
+    }
+    #expect(try await repository.fetchAll() == [TaxOwner(id: defaultOwnerId, name: "Adrian")])
+    #expect(try repository.dirtyIdsSync(from: [defaultOwnerId]) == [defaultOwnerId])
+  }
+
   @Test("remote default tax owner delete through handler records tombstone")
   func remoteDefaultTaxOwnerDeleteThroughHandlerRecordsTombstone() async throws {
     let defaultOwnerId = UUID()
