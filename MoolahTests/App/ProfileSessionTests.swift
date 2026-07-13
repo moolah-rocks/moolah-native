@@ -90,8 +90,8 @@ struct ProfileSessionTests {
     try await session.setUp()
 
     let cloudBackend = try #require(session.backend as? CloudKitBackend)
-    #expect(try cloudBackend.grdbTaxOwners.allRowIdsSync() == [profile.defaultTaxOwnerId])
-    #expect(try cloudBackend.grdbTaxOwners.unsyncedRowIdsSync() == [profile.defaultTaxOwnerId])
+    #expect(try cloudBackend.grdbTaxOwners.allRowIdsSync().isEmpty)
+    #expect(try cloudBackend.grdbTaxOwners.unsyncedRowIdsSync().isEmpty)
   }
 
   @Test("CloudKit profile exposes cryptoTokenStore on session")

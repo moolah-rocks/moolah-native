@@ -77,6 +77,10 @@ extension GRDBTaxOwnerRepository {
     try database.read { database in
       try TaxOwnerRow
         .filter(TaxOwnerRow.Columns.encodedSystemFields == nil)
+        .filter(
+          TaxOwnerRow.Columns.implicitPlaceholderMarker == 0
+            || TaxOwnerRow.Columns.implicitPlaceholderMarker == nil
+        )
         .select(TaxOwnerRow.Columns.id, as: UUID.self)
         .fetchAll(database)
     }
@@ -85,6 +89,10 @@ extension GRDBTaxOwnerRepository {
   func allRowIdsSync() throws -> [UUID] {
     try database.read { database in
       try TaxOwnerRow
+        .filter(
+          TaxOwnerRow.Columns.implicitPlaceholderMarker == 0
+            || TaxOwnerRow.Columns.implicitPlaceholderMarker == nil
+        )
         .select(TaxOwnerRow.Columns.id, as: UUID.self)
         .fetchAll(database)
     }
@@ -99,6 +107,10 @@ extension GRDBTaxOwnerRepository {
   func fetchRowSync(id: UUID, in database: Database) throws -> TaxOwnerRow? {
     try TaxOwnerRow
       .filter(TaxOwnerRow.Columns.id == id)
+      .filter(
+        TaxOwnerRow.Columns.implicitPlaceholderMarker == 0
+          || TaxOwnerRow.Columns.implicitPlaceholderMarker == nil
+      )
       .fetchOne(database)
   }
 
@@ -107,6 +119,10 @@ extension GRDBTaxOwnerRepository {
     return try database.read { database in
       try TaxOwnerRow
         .filter(idSet.contains(TaxOwnerRow.Columns.id))
+        .filter(
+          TaxOwnerRow.Columns.implicitPlaceholderMarker == 0
+            || TaxOwnerRow.Columns.implicitPlaceholderMarker == nil
+        )
         .fetchAll(database)
     }
   }

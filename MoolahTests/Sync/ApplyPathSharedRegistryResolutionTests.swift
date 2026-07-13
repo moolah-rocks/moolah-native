@@ -47,7 +47,7 @@ struct ApplyPathSharedRegistryResolutionTests {
         coingeckoId: "usd-coin",
         binanceSymbol: nil))
 
-    let bundle = ProfileGRDBRepositories.makeForApply(
+    let bundle = try ProfileGRDBRepositories.makeForApply(
       database: perProfile,
       sharedRegistry: sharedRegistry,
       defaultTaxOwnerId: nil,
@@ -80,7 +80,7 @@ struct ApplyPathSharedRegistryResolutionTests {
   func applyBundleIgnoresPerProfileInstrumentTable() async throws {
     let perProfile = try ProfileDatabase.openInMemory()
     let sharedRegistry = try SharedRegistryTestSupport.makeSharedRegistry()
-    let bundle = ProfileGRDBRepositories.makeForApply(
+    let bundle = try ProfileGRDBRepositories.makeForApply(
       database: perProfile,
       sharedRegistry: sharedRegistry,
       defaultTaxOwnerId: nil,

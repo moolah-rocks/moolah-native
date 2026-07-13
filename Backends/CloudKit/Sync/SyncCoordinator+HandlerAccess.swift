@@ -69,7 +69,7 @@ extension SyncCoordinator {
     let zoneID = CKRecordZone.ID(
       zoneName: DeletionJournal.dataZoneName(for: profileId),
       ownerName: CKCurrentUserDefaultName)
-    let bundle = ProfileGRDBRepositories.makeForApply(
+    let bundle = try ProfileGRDBRepositories.makeForApply(
       database: database,
       sharedRegistry: sharedRegistry,
       defaultTaxOwnerId: defaultTaxOwnerId,

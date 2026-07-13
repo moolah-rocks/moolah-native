@@ -25,12 +25,12 @@ struct TaxOwnerDefaultPersistenceTests {
 
     #expect(owners.map(\.id) == [profile.defaultTaxOwnerId])
     #expect(owners.first?.name == "Default owner")
-    #expect(try backend.grdbTaxOwners.allRowIdsSync() == [profile.defaultTaxOwnerId])
-    #expect(try backend.grdbTaxOwners.unsyncedRowIdsSync() == [profile.defaultTaxOwnerId])
+    #expect(try backend.grdbTaxOwners.allRowIdsSync().isEmpty)
+    #expect(try backend.grdbTaxOwners.unsyncedRowIdsSync().isEmpty)
   }
 
-  @Test("bootstrapped default tax owner queues a save")
-  func bootstrappedDefaultTaxOwnerQueuesSave() async throws {
+  @Test("bootstrapped default tax owner remains a clean local placeholder")
+  func bootstrappedDefaultTaxOwnerRemainsCleanPlaceholder() async throws {
     let database = try ProfileDatabase.openInMemory()
     let ownerId = UUID()
     let recorder = TaxOwnerChangeRecorder()
@@ -42,8 +42,114 @@ struct TaxOwnerDefaultPersistenceTests {
 
     #expect(try await repository.fetchAll().map(\.id) == [ownerId])
 
+    #expect(recorder.ids.isEmpty)
+    #expect(try repository.allRowIdsSync().isEmpty)
+    #expect(try repository.unsyncedRowIdsSync().isEmpty)
+    #expect(try repository.fetchRowSync(id: ownerId) == nil)
+  }
+
+  @Test("failed bootstrap rolls back the placeholder write")
+  func failedBootstrapRollsBackPlaceholderWrite() async throws {
+    let database = try ProfileDatabase.openInMemory()
+    let ownerId = UUID()
+    let repository = GRDBTaxOwnerRepository(database: database, defaultTaxOwnerId: ownerId)
+    try await database.write { database in
+      try database.execute(
+        sql: """
+          CREATE TRIGGER seed_deletion_after_owner_insert
+          AFTER INSERT ON tax_owner
+          BEGIN
+            INSERT INTO deletion_journal (zone_name, record_name, record_type, queued_at)
+            VALUES ('@profile-data', NEW.record_name, 'TaxOwnerRecord', 0);
+          END;
+
+          CREATE TRIGGER fail_deletion_clear
+          BEFORE DELETE ON deletion_journal
+          WHEN OLD.zone_name = '@profile-data'
+          BEGIN
+            SELECT RAISE(ABORT, 'forced journal clear failure');
+          END;
+          """)
+    }
+
+    #expect(throws: DatabaseError.self) {
+      try repository.bootstrapImplicitDefaultOwner()
+    }
+
+    let counts = try await database.read { database in
+      (
+        owners: try TaxOwnerRow.fetchCount(database),
+        journal: try DeletionJournalRow.fetchCount(database)
+      )
+    }
+    #expect(counts.owners == 0)
+    #expect(counts.journal == 0)
+  }
+
+  @Test("downloaded renamed default owner replaces local placeholder")
+  func downloadedRenamedDefaultOwnerReplacesLocalPlaceholder() async throws {
+    let database = try ProfileDatabase.openInMemory()
+    let ownerId = UUID()
+    let repository = GRDBTaxOwnerRepository(database: database, defaultTaxOwnerId: ownerId)
+    try repository.bootstrapImplicitDefaultOwner()
+    var serverRow = TaxOwnerRow(domain: TaxOwner(id: ownerId, name: "Adrian"))
+    serverRow.encodedSystemFields = Data([0x01])
+
+    try repository.applyRemoteChangesSync(saved: [serverRow], deleted: [])
+
+    #expect(try await repository.fetchAll() == [TaxOwner(id: ownerId, name: "Adrian")])
+    #expect(try repository.allRowIdsSync() == [ownerId])
+    #expect(try repository.unsyncedRowIdsSync().isEmpty)
+  }
+
+  @Test("renaming local placeholder converts it to explicit synced data")
+  func renamingLocalPlaceholderConvertsItToExplicitData() async throws {
+    let database = try ProfileDatabase.openInMemory()
+    let ownerId = UUID()
+    let recorder = TaxOwnerChangeRecorder()
+    let repository = GRDBTaxOwnerRepository(
+      database: database,
+      defaultTaxOwnerId: ownerId,
+      onRecordChanged: recorder.record(_:_:))
+    try repository.bootstrapImplicitDefaultOwner()
+
+    _ = try await repository.update(TaxOwner(id: ownerId, name: "Adrian"))
+
     #expect(recorder.ids == [ownerId])
+    #expect(try repository.allRowIdsSync() == [ownerId])
     #expect(try repository.unsyncedRowIdsSync() == [ownerId])
+    let row = try #require(try repository.fetchRowSync(id: ownerId))
+    #expect(row.toCKRecord(in: CKRecordZone.ID(zoneName: "profile-test"))["name"] == "Adrian")
+  }
+
+  @Test("clearing system fields keeps explicit default owner syncable")
+  func clearingSystemFieldsKeepsExplicitDefaultOwnerSyncable() async throws {
+    let database = try ProfileDatabase.openInMemory()
+    let ownerId = UUID()
+    let repository = GRDBTaxOwnerRepository(database: database, defaultTaxOwnerId: ownerId)
+    try repository.bootstrapImplicitDefaultOwner()
+    _ = try await repository.update(TaxOwner(id: ownerId, name: "Adrian"))
+    _ = try repository.clearNeedsPushBatchSync([ownerId])
+    try repository.clearAllSystemFieldsSync()
+
+    #expect(try repository.allRowIdsSync() == [ownerId])
+    #expect(try repository.unsyncedRowIdsSync() == [ownerId])
+  }
+
+  @Test("explicit non-default owner remains syncable beside placeholder")
+  func explicitNonDefaultOwnerRemainsSyncable() async throws {
+    let database = try ProfileDatabase.openInMemory()
+    let defaultOwnerId = UUID()
+    let explicitOwner = TaxOwner(id: UUID(), name: "Family trust", kind: .trust)
+    let repository = GRDBTaxOwnerRepository(
+      database: database,
+      defaultTaxOwnerId: defaultOwnerId)
+    try repository.bootstrapImplicitDefaultOwner()
+
+    _ = try await repository.create(explicitOwner)
+
+    #expect(try Set(repository.allRowIdsSync()) == [explicitOwner.id])
+    #expect(try Set(repository.unsyncedRowIdsSync()) == [explicitOwner.id])
   }
 
   @Test("fetching implicit default tax owner does not queue a save")

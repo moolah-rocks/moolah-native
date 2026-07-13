@@ -75,6 +75,7 @@ final class GRDBTaxOwnerRepository: TaxOwnerRepository, @unchecked Sendable {
       {
         existing.name = owner.name
         existing.kind = owner.kind.rawValue
+        existing.implicitPlaceholderMarker = 0
         try existing.update(database)
       } else if owner.id == defaultTaxOwnerId {
         try TaxOwnerRow(domain: owner).insert(database)
@@ -130,12 +131,15 @@ final class GRDBTaxOwnerRepository: TaxOwnerRepository, @unchecked Sendable {
 
   func bootstrapImplicitDefaultOwner() throws {
     guard let defaultTaxOwnerId, defaultTaxOwnerId == implicitDefaultTaxOwnerId else { return }
-    let inserted = try database.write { database -> Bool in
+    try database.write { database in
       let existing =
         try TaxOwnerRow
         .filter(TaxOwnerRow.Columns.id == defaultTaxOwnerId)
         .fetchOne(database)
-      guard existing == nil else { return false }
+      if let existing {
+        try classifyLegacyDefaultOwnerIfNeeded(existing, in: database)
+        return
+      }
       let recordName = TaxOwnerRow.recordName(for: defaultTaxOwnerId)
       let wasDeleted =
         try DeletionJournal.hasDataTombstone(recordName: recordName, in: database)
@@ -145,17 +149,13 @@ final class GRDBTaxOwnerRepository: TaxOwnerRepository, @unchecked Sendable {
               && DeletionJournalRow.Columns.recordName == recordName
           )
           .fetchCount(database) > 0
-      guard !wasDeleted else { return false }
-      try TaxOwnerRow(
-        domain: TaxOwner(id: defaultTaxOwnerId, name: defaultTaxOwnerName)
-      ).insert(database)
-      try markNeedsPushSync(id: defaultTaxOwnerId, in: database)
+      guard !wasDeleted else { return }
+      var placeholder = TaxOwnerRow(
+        domain: TaxOwner(id: defaultTaxOwnerId, name: defaultTaxOwnerName))
+      placeholder.implicitPlaceholderMarker = 1
+      try placeholder.insert(database)
       try DeletionJournal.clearDataDeletion(recordName: recordName, in: database)
       try DeletionJournal.clearDataTombstone(recordName: recordName, in: database)
-      return true
-    }
-    if inserted {
-      onRecordChanged(TaxOwnerRow.recordType, defaultTaxOwnerId)
     }
   }
 
@@ -176,6 +176,39 @@ final class GRDBTaxOwnerRepository: TaxOwnerRepository, @unchecked Sendable {
     return owners
   }
 
+  static func fetchRows(in database: Database) throws -> [TaxOwner] {
+    try TaxOwnerRow
+      .order(TaxOwnerRow.Columns.name.asc)
+      .fetchAll(database)
+      .map { $0.toDomain() }
+  }
+}
+
+extension GRDBTaxOwnerRepository {
+  private func classifyLegacyDefaultOwnerIfNeeded(
+    _ owner: TaxOwnerRow, in database: Database
+  ) throws {
+    guard owner.implicitPlaceholderMarker == nil else { return }
+    let needsPush =
+      try TaxOwnerRow
+      .filter(TaxOwnerRow.Columns.id == owner.id)
+      .select(TaxOwnerRow.Columns.needsPush, as: Bool.self)
+      .fetchOne(database) ?? false
+    let isLegacyPlaceholder =
+      owner.name == defaultTaxOwnerName
+      && owner.kind == TaxOwnerKind.individual.rawValue
+      && needsPush
+    _ =
+      try TaxOwnerRow
+      .filter(TaxOwnerRow.Columns.id == owner.id)
+      .updateAll(
+        database,
+        [
+          TaxOwnerRow.Columns.implicitPlaceholderMarker.set(to: isLegacyPlaceholder ? 1 : 0),
+          TaxOwnerRow.Columns.needsPush.set(to: isLegacyPlaceholder ? false : needsPush),
+        ])
+  }
+
   private func implicitDefaultOwnerIfNeeded(
     existingOwnerIds: Set<UUID>,
     in database: Database
@@ -193,12 +226,5 @@ final class GRDBTaxOwnerRepository: TaxOwnerRepository, @unchecked Sendable {
         .fetchCount(database) > 0
     guard !wasDeleted else { return nil }
     return TaxOwner(id: defaultTaxOwnerId, name: defaultTaxOwnerName)
-  }
-
-  static func fetchRows(in database: Database) throws -> [TaxOwner] {
-    try TaxOwnerRow
-      .order(TaxOwnerRow.Columns.name.asc)
-      .fetchAll(database)
-      .map { $0.toDomain() }
   }
 }

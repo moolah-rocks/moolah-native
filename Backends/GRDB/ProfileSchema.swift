@@ -140,7 +140,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 25
+  static let version = 26
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -192,6 +192,8 @@ enum ProfileSchema {
       "v24_trade_only_valuation", migrate: migrateToTradeOnlyValuation)
     migrator.registerMigration(
       "v25_retire_investment_value_persistence", migrate: retireInvestmentValuePersistence)
+    migrator.registerMigration(
+      "v26_tax_owner_placeholder", migrate: addTaxOwnerPlaceholderMarker)
 
     return migrator
   }
