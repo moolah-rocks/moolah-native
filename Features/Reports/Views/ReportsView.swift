@@ -3,6 +3,20 @@
 
 import SwiftUI
 
+struct TaxReportLoadKey: Hashable {
+  let report: ReportSection
+  let financialYear: Int
+  let spamInstruments: Set<Instrument>
+  let defaultTaxOwnerId: UUID
+  let ownerInvalidation: UInt64
+  let transactionInvalidation: UInt64
+}
+
+struct TaxRelevantTransactionObservationKey: Hashable {
+  let report: ReportSection
+  let financialYear: Int
+}
+
 /// Main Reports view displaying income and expense breakdown by category.
 struct ReportsView: View {
   let reportingStore: ReportingStore
@@ -89,12 +103,22 @@ struct ReportsView: View {
         financialYear: selectedFinancialYear,
         spamInstruments: spamInstruments,
         defaultTaxOwnerId: reportingStore.defaultTaxOwnerId,
-        ownerInvalidation: reportingStore.ownerDependentReportInvalidation)
+        ownerInvalidation: reportingStore.ownerDependentReportInvalidation,
+        transactionInvalidation: transactionStore.taxRelevantContentGeneration)
     ) {
       guard selectedReport == .capitalGains else { return }
       await reportingStore.loadTaxReport(
         financialYear: selectedFinancialYear,
         excluding: spamInstruments)
+    }
+    .task(
+      id: TaxRelevantTransactionObservationKey(
+        report: selectedReport, financialYear: selectedFinancialYear)
+    ) {
+      guard selectedReport == .capitalGains,
+        let filter = taxRelevantTransactionObservationFilter
+      else { return }
+      await transactionStore.observeTaxRelevantChanges(filter: filter)
     }
     .focusedSceneValue(
       \.reportsRoute,
@@ -187,6 +211,16 @@ struct ReportsView: View {
     }
   }
 
+  private var taxRelevantTransactionObservationFilter: TransactionFilter? {
+    guard
+      let dateInterval = TaxReportPresentation.financialYearInterval(
+        selectedFinancialYear)
+    else { return nil }
+    return TransactionFilter(
+      scheduled: .nonScheduledOnly,
+      dateInterval: dateInterval)
+  }
+
   @ViewBuilder private var incomeAndExpenseTables: some View {
     // Income and Expense columns: side by side on macOS, one continuous
     // vertical scroll on iPhone so each table can use the full viewport.
@@ -248,35 +282,12 @@ struct ReportsView: View {
       transactionStore: transactionStore)
   }
 
-  @ViewBuilder
-  private func taxIncomeExpenseDrillDownDestination(
-    _ drillDown: TaxIncomeExpenseDrillDown
-  ) -> some View {
-    TaxIncomeExpenseDetailView(
-      drillDown: drillDown,
-      categories: categories,
-      taxOwnerNames: reportingStore.taxOwnerNames
-    ) {
-      try await reportingStore.fetchTaxIncomeExpenseDetails(
-        dateInterval: drillDown.dateInterval,
-        ownerId: drillDown.ownerId,
-        type: drillDown.kind.transactionType)
-    }
-  }
-
   private struct CategoryReportLoadKey: Hashable {
     let report: ReportSection
     let from: Date
     let to: Date
   }
 
-  private struct TaxReportLoadKey: Hashable {
-    let report: ReportSection
-    let financialYear: Int
-    let spamInstruments: Set<Instrument>
-    let defaultTaxOwnerId: UUID
-    let ownerInvalidation: UInt64
-  }
 }
 
 extension ReportsView {
@@ -337,13 +348,13 @@ private func seedReportsPreview(
   backend: any BackendProvider,
   account: Account,
   ids: ReportsPreviewIds
-) async {
-  _ = try? await backend.accounts.create(
+) async throws {
+  _ = try await backend.accounts.create(
     account, openingBalance: InstrumentAmount(quantity: 5_000, instrument: .AUD))
-  _ = try? await backend.categories.create(Category(id: ids.salaryId, name: "Salary"))
-  _ = try? await backend.categories.create(Category(id: ids.groceriesId, name: "Groceries"))
-  _ = try? await backend.categories.create(Category(id: ids.rentId, name: "Rent"))
-  _ = try? await backend.transactions.create(
+  _ = try await backend.categories.create(Category(id: ids.salaryId, name: "Salary"))
+  _ = try await backend.categories.create(Category(id: ids.groceriesId, name: "Groceries"))
+  _ = try await backend.categories.create(Category(id: ids.rentId, name: "Rent"))
+  _ = try await backend.transactions.create(
     Transaction(
       date: Date(),
       payee: "Employer",
@@ -355,7 +366,7 @@ private func seedReportsPreview(
           type: .income,
           categoryId: ids.salaryId)
       ]))
-  _ = try? await backend.transactions.create(
+  _ = try await backend.transactions.create(
     Transaction(
       date: Date().addingTimeInterval(-86400),
       payee: "Supermarket",
@@ -367,7 +378,7 @@ private func seedReportsPreview(
           type: .expense,
           categoryId: ids.groceriesId)
       ]))
-  _ = try? await backend.transactions.create(
+  _ = try await backend.transactions.create(
     Transaction(
       date: Date().addingTimeInterval(-2 * 86400),
       payee: "Landlord",
@@ -381,16 +392,30 @@ private func seedReportsPreview(
       ]))
 }
 
-#Preview {
-  let backend = PreviewBackend.create()
-  let transactionStore = TransactionStore(
+@MainActor
+private func reportsPreviewTransactionStore(
+  backend: any BackendProvider
+) -> TransactionStore {
+  TransactionStore(
     repository: backend.transactions,
     conversionService: backend.conversionService,
     targetInstrument: .AUD)
-  let reportingStore = ReportingStore(
+}
+
+@MainActor
+private func reportsPreviewReportingStore(
+  backend: any BackendProvider
+) -> ReportingStore {
+  ReportingStore(
     analysisRepository: backend.analysis,
     conversionService: backend.conversionService,
     profileCurrency: .AUD)
+}
+
+#Preview {
+  let backend = PreviewBackend.create()
+  let transactionStore = reportsPreviewTransactionStore(backend: backend)
+  let reportingStore = reportsPreviewReportingStore(backend: backend)
   let ids = ReportsPreviewIds()
   let categories = Categories(from: [
     Category(id: ids.salaryId, name: "Salary"),
@@ -412,6 +437,10 @@ private func seedReportsPreview(
   .previewProfileEnvironment(session: session)
   .frame(width: 900, height: 600)
   .task {
-    await seedReportsPreview(backend: backend, account: account, ids: ids)
+    do {
+      try await seedReportsPreview(backend: backend, account: account, ids: ids)
+    } catch {
+      assertionFailure("Could not seed reports preview: \(error)")
+    }
   }
 }

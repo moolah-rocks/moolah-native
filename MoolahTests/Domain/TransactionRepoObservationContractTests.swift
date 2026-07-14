@@ -115,6 +115,81 @@ struct TransactionRepoObservationContractTests {
     #expect(afterCreate?.totalCount == 1)
   }
 
+  @Test("tax invalidation emits when an older off-page transaction changes")
+  func taxInvalidationEmitsForOffPageChange() async throws {
+    let (backend, _) = try TestBackend.create()
+    let account = try await makeAccount(backend: backend, name: "Checking")
+    let filter = TransactionFilter(accountId: account.id)
+    let baseDate = Date(timeIntervalSinceReferenceDate: 10_000)
+    var oldest = try await backend.transactions.create(
+      makeTransaction(
+        amount: 10,
+        accountId: account.id,
+        payee: "Oldest",
+        date: baseDate))
+    _ = try await backend.transactions.create(
+      makeTransaction(
+        amount: 20,
+        accountId: account.id,
+        payee: "Middle",
+        date: baseDate.addingTimeInterval(60)))
+    _ = try await backend.transactions.create(
+      makeTransaction(
+        amount: 30,
+        accountId: account.id,
+        payee: "Newest",
+        date: baseDate.addingTimeInterval(120)))
+
+    var pageIterator = backend.transactions.observe(
+      filter: filter, page: 0, pageSize: 1
+    ).makeAsyncIterator()
+    let initialPage = await pageIterator.next()
+    #expect(initialPage?.transactions.first?.payee == "Newest")
+
+    var invalidationIterator = backend.transactions.observeTaxRelevantChanges(
+      filter: filter
+    ).makeAsyncIterator()
+    _ = await invalidationIterator.next()
+
+    oldest.payee = "Edited off page"
+    _ = try await backend.transactions.update(oldest)
+
+    _ = await invalidationIterator.next()
+    let unchangedPage = try await backend.transactions.fetch(filter: filter, page: 0, pageSize: 1)
+    #expect(unchangedPage.transactions.first?.payee == "Newest")
+  }
+
+  @Test("tax invalidation emits when account ownership changes")
+  func taxInvalidationEmitsForAccountOwnershipChange() async throws {
+    let (backend, _) = try TestBackend.create()
+    var account = try await makeAccount(backend: backend, name: "Checking")
+    var iterator = backend.transactions.observeTaxRelevantChanges(
+      filter: TransactionFilter()
+    ).makeAsyncIterator()
+    _ = await iterator.next()
+
+    account.taxOwnerIds = [UUID()]
+    _ = try await backend.accounts.update(account)
+
+    _ = await iterator.next()
+  }
+
+  @Test("tax invalidation emits when category ownership changes")
+  func taxInvalidationEmitsForCategoryOwnershipChange() async throws {
+    let (backend, _) = try TestBackend.create()
+    var category = try await backend.categories.create(
+      Category(name: "Taxable", isTaxReportable: true))
+    var iterator = backend.transactions.observeTaxRelevantChanges(
+      filter: TransactionFilter()
+    ).makeAsyncIterator()
+    _ = await iterator.next()
+
+    category.taxOwnerIds = [UUID()]
+    _ = try await backend.categories.update(category)
+
+    _ = await iterator.next()
+  }
+
   @Test("changing filter cancels prior subscription and starts a fresh stream")
   func changingFilterStartsFreshSubscription() async throws {
     let (backend, _) = try TestBackend.create()

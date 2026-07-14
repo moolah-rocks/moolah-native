@@ -330,6 +330,9 @@ extension TransactionStore {
     guard generation == snapshotGeneration else { return }
     recordPublishedGeneration(generation)
     setTransactions(result.rows)
+    if reason == .freshSnapshot {
+      recordTransactionContentPublish()
+    }
     if let conversionError = result.firstConversionError {
       logger.error(
         "Conversion failed while computing running balances: \(conversionError.localizedDescription)"

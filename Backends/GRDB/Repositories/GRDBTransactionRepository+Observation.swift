@@ -171,6 +171,36 @@ extension GRDBTransactionRepository {
     }
   }
 
+  /// Invalidation-only observation used by tax report drill-downs. It tracks
+  /// the complete persistence regions that can affect tax inclusion or owner
+  /// allocation and deliberately skips `removeDuplicates()`: changing an
+  /// account/category owner can change a partial tax value while the projected
+  /// `Transaction` itself remains equal. The filter is retained in the API so
+  /// alternative repositories can narrow their observation; GRDB's explicit
+  /// regions provide the correctness-first superset.
+  func observeTaxRelevantChanges(filter _: TransactionFilter) -> AsyncStream<Void> {
+    let observation = ValueObservation.tracking(
+      regions: [
+        TransactionRow.observableRegion,
+        TransactionLegRow.observableRegion,
+        AccountRow.observableRegion,
+        CategoryRow.observableRegion,
+      ],
+      fetch: { _ in () }
+    )
+    return makeRetryingAsyncStream(
+      makeAttempt: { [database] errorSink in
+        observation
+          .values(in: database)
+          .toAsyncStream(onError: errorSink)
+      },
+      policy: RetryingAsyncStreamPolicy(
+        errorChannel: errorChannel,
+        repoMethod: "GRDBTransactionRepository.observeTaxRelevantChanges",
+        maxFailures: 5,
+        backoffs: [.seconds(1), .seconds(5), .seconds(30)]))
+  }
+
   /// Companion error stream — see protocol doc on `observeErrors()` and
   /// the channel's docstring for the surface-then-finish contract.
   func observeErrors() -> AsyncStream<any Error> {

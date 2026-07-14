@@ -36,35 +36,36 @@ extension TaxReportView {
           .font(.subheadline.weight(.semibold))
           .foregroundStyle(.secondary)
       }
-      taxIncomeExpenseSummaryGrid(summary, unavailable: summary.hasUnavailableData)
+      taxIncomeExpenseSummaryGrid(summary)
     }
   }
 
   private func taxIncomeExpenseSummaryGrid(
-    _ summary: TaxIncomeExpenseSummary,
-    unavailable: Bool = false
+    _ summary: TaxIncomeExpenseSummary
   ) -> some View {
     LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), spacing: 12)], spacing: 12) {
       taxIncomeExpenseTileLink(
         kind: .income,
         title: "Taxable income",
         amount: summary.taxableIncome,
-        unavailable: unavailable,
-        caption: unavailable
-          ? "Open to inspect unavailable income rows" : "Reportable income categories")
+        unavailable: summary.incomeHasUnavailableData,
+        caption: summary.incomeHasUnavailableData
+          ? "Select to inspect transactions with unavailable amounts"
+          : "Reportable income categories")
       taxIncomeExpenseTileLink(
         kind: .deductions,
         title: "Deductions",
         amount: summary.deductibleExpenses,
-        unavailable: unavailable,
-        caption: unavailable
-          ? "Open to inspect unavailable deduction rows" : "Reportable expense categories")
+        unavailable: summary.deductionsHasUnavailableData,
+        caption: summary.deductionsHasUnavailableData
+          ? "Select to inspect transactions with unavailable amounts"
+          : "Reportable expense categories")
       TaxSummaryTile(
         title: "Net taxable income",
         amount: summary.netTaxableIncome,
-        caption: unavailable
+        caption: summary.netHasUnavailableData
           ? "Unavailable until missing prices resolve" : "Income less deductions",
-        unavailable: unavailable
+        unavailable: summary.netHasUnavailableData
       )
     }
   }
@@ -82,7 +83,7 @@ extension TaxReportView {
         TaxSummaryTile(title: title, amount: amount, caption: caption, unavailable: unavailable)
       }
       .buttonStyle(.plain)
-      .accessibilityHint("Shows the tax detail rows behind this total")
+      .accessibilityHint("Shows the transactions included in this total")
     } else {
       TaxSummaryTile(title: title, amount: amount, caption: caption, unavailable: unavailable)
     }
@@ -122,13 +123,13 @@ extension TaxReportView {
             .truncationMode(.middle)
           taxOwnerAmountLink(
             summary.taxableIncome,
-            unavailable: summary.hasUnavailableData,
+            unavailable: summary.incomeHasUnavailableData,
             drillDown: taxIncomeExpenseDrillDown(kind: .income, ownerId: summary.ownerId))
           taxOwnerAmountLink(
             summary.deductibleExpenses,
-            unavailable: summary.hasUnavailableData,
+            unavailable: summary.deductionsHasUnavailableData,
             drillDown: taxIncomeExpenseDrillDown(kind: .deductions, ownerId: summary.ownerId))
-          taxOwnerAmount(summary.netTaxableIncome, unavailable: summary.hasUnavailableData)
+          taxOwnerAmount(summary.netTaxableIncome, unavailable: summary.netHasUnavailableData)
         }
       }
     }
@@ -143,14 +144,14 @@ extension TaxReportView {
           taxOwnerCompactAmount(
             "Income",
             summary.taxableIncome,
-            summary.hasUnavailableData,
+            summary.incomeHasUnavailableData,
             taxIncomeExpenseDrillDown(kind: .income, ownerId: summary.ownerId))
           taxOwnerCompactAmount(
             "Deductions",
             summary.deductibleExpenses,
-            summary.hasUnavailableData,
+            summary.deductionsHasUnavailableData,
             taxIncomeExpenseDrillDown(kind: .deductions, ownerId: summary.ownerId))
-          taxOwnerCompactAmount("Net", summary.netTaxableIncome, summary.hasUnavailableData)
+          taxOwnerCompactAmount("Net", summary.netTaxableIncome, summary.netHasUnavailableData)
         }
       }
     }
@@ -191,7 +192,7 @@ extension TaxReportView {
         taxOwnerAmount(amount, unavailable: unavailable)
       }
       .buttonStyle(.plain)
-      .accessibilityHint("Shows the tax detail rows behind this total")
+      .accessibilityHint("Shows the transactions included in this total")
     } else {
       taxOwnerAmount(amount, unavailable: unavailable)
     }

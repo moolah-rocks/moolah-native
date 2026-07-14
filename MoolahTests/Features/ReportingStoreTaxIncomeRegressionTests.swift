@@ -7,6 +7,31 @@ import Testing
 struct ReportingStoreTaxIncomeRegressionTests {
   private let aud = Instrument.fiat(code: "AUD")
 
+  @Test("rollups preserve availability independently by tax metric")
+  @MainActor
+  func rollupPreservesAvailabilityByMetric() throws {
+    let summaries = [
+      TaxIncomeExpenseSummary(
+        ownerId: UUID(),
+        taxableIncome: InstrumentAmount(quantity: 100, instrument: aud),
+        deductibleExpenses: InstrumentAmount(quantity: 25, instrument: aud),
+        deductionsHasUnavailableData: true),
+      TaxIncomeExpenseSummary(
+        ownerId: UUID(),
+        taxableIncome: InstrumentAmount(quantity: 50, instrument: aud),
+        deductibleExpenses: InstrumentAmount(quantity: 10, instrument: aud)),
+    ]
+
+    let rollup = try #require(
+      ReportingStore.taxIncomeExpenseRollup(from: summaries, instrument: aud))
+
+    #expect(rollup.taxableIncome.quantity == 150)
+    #expect(rollup.deductibleExpenses.quantity == 35)
+    #expect(rollup.incomeHasUnavailableData == false)
+    #expect(rollup.deductionsHasUnavailableData)
+    #expect(rollup.netHasUnavailableData)
+  }
+
   @Test
   @MainActor
   func loadTaxReport_scopesTaxIncomeFailureAwayFromCapitalGains()

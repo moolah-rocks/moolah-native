@@ -8,14 +8,27 @@ import SwiftUI
 /// `ViewThatFits`.
 struct TransactionAmountFlow: View {
   let amounts: [InstrumentAmount]
+  var colorOverride: Color?
+  var positiveColorOverride: Color?
+  var negativeColorOverride: Color?
 
   var body: some View {
     WrappedHStack(spacing: 6) {
       ForEach(amounts, id: \.self) { amount in
-        InstrumentAmountView(amount: amount, font: .body)
+        InstrumentAmountView(
+          amount: amount,
+          font: .body,
+          colorOverride: colorOverride(for: amount))
       }
     }
     .multilineTextAlignment(.trailing)
+  }
+
+  private func colorOverride(for amount: InstrumentAmount) -> Color? {
+    if let colorOverride { return colorOverride }
+    if amount.isPositive { return positiveColorOverride }
+    if amount.isNegative { return negativeColorOverride }
+    return nil
   }
 }
 

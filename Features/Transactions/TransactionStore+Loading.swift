@@ -20,6 +20,29 @@ extension TransactionStore {
     await observe(filter: TransactionFilter(accountId: accountId))
   }
 
+  /// Drives the complete tax invalidation signal while a tax drill-down is
+  /// mounted. The repository stream is intentionally independent of the
+  /// paginated list projection so an edit to an unloaded transaction still
+  /// refreshes both derived tax amounts and the originating report.
+  func observeTaxRelevantChanges(filter: TransactionFilter) async {
+    let repository = repository
+    await withTaskGroup(of: Void.self) { group in
+      group.addTask { [self] in
+        for await _ in repository.observeTaxRelevantChanges(filter: filter) {
+          guard !Task.isCancelled else { return }
+          await self.recordTaxRelevantContentChange()
+        }
+      }
+      group.addTask { [self] in
+        for await error in repository.observeErrors() {
+          guard !Task.isCancelled else { return }
+          await self.surface(observationError: error)
+        }
+      }
+      await group.waitForAll()
+    }
+  }
+
   /// Compatibility entry point. Restarts the active subscription with the
   /// supplied filter and returns once the first emission settles. Used by
   /// toolbar Refresh / `.refreshable` and by tests that want a synchronous-

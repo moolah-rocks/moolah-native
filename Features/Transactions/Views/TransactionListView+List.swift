@@ -1,34 +1,6 @@
 import SwiftUI
 
 extension TransactionListView {
-  // MARK: - Selection Bridging
-
-  /// Bridges the `List`'s `Set<Transaction.ID>` selection to the
-  /// existing single-selection inspector. The getter projects the
-  /// single `selectedTransaction` (so an inspector-driven selection
-  /// highlights its row); the setter records the full multi-selection
-  /// and resolves a single pick to `selectedTransaction`, leaving it
-  /// `nil` for an empty or multi-row selection.
-  var listSelectionBinding: Binding<Set<Transaction.ID>> {
-    Binding(
-      get: {
-        if let id = selectedTransaction?.id { return [id] }
-        return multiSelectedTransactionIDs
-      },
-      set: { newSelection in
-        multiSelectedTransactionIDs = newSelection
-        if newSelection.count == 1, let id = newSelection.first {
-          selectedTransaction =
-            transactionStore.transactions.first {
-              $0.transaction.id == id
-            }?.transaction
-        } else {
-          selectedTransaction = nil
-        }
-      }
-    )
-  }
-
   /// The account universe offered to the filter dialog, derived from the
   /// immutable navigation context (`baseFilter`) — not `activeFilter` — so
   /// the group's full member set stays available even after the user
@@ -69,6 +41,7 @@ extension TransactionListView {
         accounts: accounts,
         categories: categories,
         earmarks: earmarks,
+        allowsScheduledFilter: allowsScheduledFilter,
         onApply: { newFilter in
           activeFilter = newFilter
           showFilterSheet = false
@@ -139,23 +112,27 @@ extension TransactionListView {
       .disabled(manualMergePair == nil)
     }
 
-    ToolbarItem(placement: .primaryAction) {
-      addToolbarButton
+    if allowsAddingTransactions {
+      ToolbarItem(placement: .primaryAction) {
+        addToolbarButton
+      }
     }
 
     #if os(iOS)
-      ToolbarItem(placement: .primaryAction) {
-        Button {
-          showSpamTransactions.toggle()
-        } label: {
-          Label(
-            showSpamTransactions ? "Hide Spam Transactions" : "Show Spam Transactions",
-            systemImage: showSpamTransactions ? "eye" : "eye.slash"
-          )
+      if allowsSpamFiltering {
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+            showSpamTransactions.toggle()
+          } label: {
+            Label(
+              showSpamTransactions ? "Hide Spam Transactions" : "Show Spam Transactions",
+              systemImage: showSpamTransactions ? "eye" : "eye.slash"
+            )
+          }
+          .accessibilityLabel("Spam Transactions")
+          .accessibilityValue(showSpamTransactions ? "shown" : "hidden")
+          .accessibilityIdentifier(UITestIdentifiers.TransactionList.spamToggleButton)
         }
-        .accessibilityLabel("Spam Transactions")
-        .accessibilityValue(showSpamTransactions ? "shown" : "hidden")
-        .accessibilityIdentifier(UITestIdentifiers.TransactionList.spamToggleButton)
       }
     #endif
   }
@@ -255,13 +232,17 @@ extension TransactionListView {
   @ViewBuilder
   private func transactionRow(for entry: TransactionWithBalance) -> some View {
     let scheduled = scheduledRowConfig(for: entry)
+    let presentedValues = presentedValues(for: entry)
     TransactionRowView(
       transaction: entry.transaction,
       accounts: accounts,
       categories: categories,
       earmarks: earmarks,
-      displayAmounts: entry.displayAmounts,
-      balance: entry.balance,
+      displayAmounts: presentedValues.displayAmounts,
+      balance: presentedValues.balance,
+      amountStyle: presentedValues.amountStyle,
+      showsOwnerShareIndicator: presentedValues.showsOwnerShareIndicator,
+      isSelected: listSelectionBinding.wrappedValue.contains(entry.id),
       scopeReferenceInstrument: scopeReferenceInstrument,
       hideEarmark: filter.earmarkId != nil,
       accountContext: accountContext(for: entry.transaction),
@@ -294,7 +275,7 @@ extension TransactionListView {
       }
     }
     .task {
-      if entry.id == transactionStore.transactions.last?.id {
+      if entry.id == displayedTransactions.last?.id {
         await transactionStore.loadMore()
       }
     }

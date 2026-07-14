@@ -7,6 +7,9 @@ struct TransactionRowView: View {
   let earmarks: Earmarks
   let displayAmounts: [InstrumentAmount]
   let balance: InstrumentAmount?
+  var amountStyle: TransactionListAmountStyle = .standard
+  var showsOwnerShareIndicator = false
+  var isSelected = false
   let scopeReferenceInstrument: Instrument
   var hideEarmark: Bool = false
   /// Perspective the row's description / metadata renders from. Derived
@@ -48,6 +51,12 @@ struct TransactionRowView: View {
   // `internal` so the leading-icon helpers in the `+Icon.swift` extension
   // can read the env-injected spam set when computing `rowIsSpam`.
   @Environment(\.spamInstruments) var spamInstruments
+  @Environment(\.backgroundProminence) private var backgroundProminence
+
+  /// Bright treatments documented by UI_GUIDE.md for text on the prominent
+  /// blue list selection background.
+  private static let selectedPositiveColor = Color(red: 0.55, green: 1.0, blue: 0.65)
+  private static let selectedNegativeColor = Color(red: 1.0, green: 0.6, blue: 0.6)
 
   // MARK: - Body & View Builders
 
@@ -196,6 +205,9 @@ struct TransactionRowView: View {
     }
     return period.recurrenceDescription(every: every)
   }
+}
+
+extension TransactionRowView {
 
   // MARK: - Amount Column
 
@@ -207,12 +219,47 @@ struct TransactionRowView: View {
           .foregroundStyle(.secondary)
           .monospacedDigit()
       } else {
-        TransactionAmountFlow(amounts: displayAmounts)
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+          TransactionAmountFlow(
+            amounts: displayAmounts,
+            colorOverride: deductionColorOverride,
+            positiveColorOverride: selectedPositiveColorOverride,
+            negativeColorOverride: selectedNegativeColorOverride)
+          if showsOwnerShareIndicator {
+            Image(systemName: "person.2")
+              .imageScale(.small)
+              .foregroundStyle(.secondary)
+              .help("Selected tax owner’s share, not the full transaction amount.")
+              .accessibilityHidden(true)
+          }
+        }
       }
       if let balance {
-        InstrumentAmountView(amount: balance, font: .caption)
+        InstrumentAmountView(amount: balance, font: .caption, colorOverride: .secondary)
       }
     }
+  }
+
+  private var deductionColorOverride: Color? {
+    guard amountStyle == .deduction else { return nil }
+    if isSelected, backgroundProminence == .increased {
+      return Self.selectedNegativeColor
+    }
+    return .red
+  }
+
+  private var selectedPositiveColorOverride: Color? {
+    guard amountStyle == .standard, isSelected, backgroundProminence == .increased else {
+      return nil
+    }
+    return Self.selectedPositiveColor
+  }
+
+  private var selectedNegativeColorOverride: Color? {
+    guard amountStyle == .standard, isSelected, backgroundProminence == .increased else {
+      return nil
+    }
+    return Self.selectedNegativeColor
   }
 
   // MARK: - Accessibility
@@ -240,6 +287,9 @@ struct TransactionRowView: View {
     parts.append(typeStr)
     parts.append(titleAccessibilityString)
     parts.append(amountStr)
+    if showsOwnerShareIndicator {
+      parts.append("tax owner share, not the full transaction amount")
+    }
     if isDueToday {
       parts.append("due today, \(dateStr)")
     } else {

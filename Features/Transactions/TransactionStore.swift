@@ -35,6 +35,16 @@ final class TransactionStore {
   private(set) var error: Error?
   private(set) var loadedCount = 0
   private(set) var totalCount: Int?
+  /// Bumped after an authoritative transaction snapshot successfully
+  /// publishes. Detail views use this signal to refresh derived data after
+  /// local, coordinated, and synced changes. Balance-only recomputes do not
+  /// advance it.
+  private(set) var transactionContentGeneration: UInt64 = 0
+  /// Bumped by the complete, non-deduplicating tax invalidation stream.
+  /// Unlike `transactionContentGeneration`, this also advances for writes
+  /// outside the loaded page and for owner metadata changes whose projected
+  /// transaction value is otherwise unchanged.
+  private(set) var taxRelevantContentGeneration: UInt64 = 0
   /// True while a `payScheduledTransaction` call is in flight. Views observe
   /// this to show a progress indicator on the Pay button.
   private(set) var isPayingScheduled = false
@@ -112,6 +122,10 @@ final class TransactionStore {
   /// The single increment path for `snapshotGeneration`. Internal so the
   /// `+Observation` extension can bump it past the property's `private(set)`.
   func bumpSnapshotGeneration() { snapshotGeneration &+= 1 }
+
+  func recordTransactionContentPublish() { transactionContentGeneration &+= 1 }
+
+  func recordTaxRelevantContentChange() { taxRelevantContentGeneration &+= 1 }
 
   /// The `snapshotGeneration` of the most recent recompute that actually
   /// published rows (passed its supersession guard). `runImperativeReload`

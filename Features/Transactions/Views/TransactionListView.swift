@@ -23,6 +23,11 @@ struct TransactionListView: View {
   let earmarks: Earmarks
   let transactionStore: TransactionStore
   let grouping: Grouping
+  let amountPresentation: TransactionListAmountPresentation?
+  let allowsScheduledFilter: Bool
+  let allowsAddingTransactions: Bool
+  let allowsSpamFiltering: Bool
+  let emptyState: TransactionListEmptyState?
   @Environment(ImportStore.self) private var importStore
   // Module-internal (not `private`) so the file-scope extension in
   // `TransactionListView+List.swift` can read it from the list code.
@@ -90,7 +95,12 @@ struct TransactionListView: View {
     categories: Categories,
     earmarks: Earmarks,
     transactionStore: TransactionStore,
-    grouping: Grouping = .flat
+    grouping: Grouping = .flat,
+    amountPresentation: TransactionListAmountPresentation? = nil,
+    allowsScheduledFilter: Bool = true,
+    allowsAddingTransactions: Bool = true,
+    allowsSpamFiltering: Bool = true,
+    emptyState: TransactionListEmptyState? = nil
   ) {
     self.title = title
     self.baseFilter = filter
@@ -99,6 +109,11 @@ struct TransactionListView: View {
     self.earmarks = earmarks
     self.transactionStore = transactionStore
     self.grouping = grouping
+    self.amountPresentation = amountPresentation
+    self.allowsScheduledFilter = allowsScheduledFilter
+    self.allowsAddingTransactions = allowsAddingTransactions
+    self.allowsSpamFiltering = allowsSpamFiltering
+    self.emptyState = emptyState
     self._externalSelection = nil
     self._activeFilter = State(initialValue: filter)
   }
@@ -114,6 +129,11 @@ struct TransactionListView: View {
     earmarks: Earmarks,
     transactionStore: TransactionStore,
     grouping: Grouping = .flat,
+    amountPresentation: TransactionListAmountPresentation? = nil,
+    allowsScheduledFilter: Bool = true,
+    allowsAddingTransactions: Bool = true,
+    allowsSpamFiltering: Bool = true,
+    emptyState: TransactionListEmptyState? = nil,
     selectedTransaction: Binding<Transaction?>
   ) {
     self.title = title
@@ -123,6 +143,11 @@ struct TransactionListView: View {
     self.earmarks = earmarks
     self.transactionStore = transactionStore
     self.grouping = grouping
+    self.amountPresentation = amountPresentation
+    self.allowsScheduledFilter = allowsScheduledFilter
+    self.allowsAddingTransactions = allowsAddingTransactions
+    self.allowsSpamFiltering = allowsSpamFiltering
+    self.emptyState = emptyState
     self._externalSelection = selectedTransaction
     self._activeFilter = State(initialValue: filter)
   }
@@ -136,6 +161,7 @@ struct TransactionListView: View {
   @Environment(\.spamInstruments) var spamInstruments
 
   @State private var showError = false
+  @State private var errorTitle = "Could not update transactions"
   @State private var errorMessage = ""
   @State var searchText = ""
   @FocusState private var searchFieldFocused: Bool
@@ -158,14 +184,21 @@ extension TransactionListView {
   private var spamFilteredList: some View {
     transactionsList
       .onAppear {
-        transactionStore.primeSpamFilter(
-          instruments: spamInstruments, showSpam: showSpamTransactions)
+        if allowsSpamFiltering {
+          transactionStore.primeSpamFilter(
+            instruments: spamInstruments,
+            showSpam: showSpamTransactions)
+        }
       }
       .onChange(of: showSpamTransactions) { _, newValue in
-        transactionStore.showSpam = newValue
+        if allowsSpamFiltering {
+          transactionStore.showSpam = newValue
+        }
       }
       .onChange(of: spamInstruments) { _, newValue in
-        transactionStore.setSpamInstruments(newValue)
+        if allowsSpamFiltering {
+          transactionStore.setSpamInstruments(newValue)
+        }
       }
   }
 
@@ -255,8 +288,8 @@ extension TransactionListView {
 
   var body: some View {
     listWithFocusedCommands
-      .alert("Error", isPresented: $showError) {
-        Button("OK", role: .cancel) {}
+      .alert(errorTitle, isPresented: $showError) {
+        Button("Dismiss", role: .cancel) {}
       } message: {
         Text(errorMessage)
       }
@@ -267,6 +300,7 @@ extension TransactionListView {
         // being cleared by the next `load()`, latching the alert on every
         // subsequent mount.
         if let error = transactionStore.error {
+          errorTitle = "Could not update transactions"
           errorMessage = error.userMessage
           showError = true
         } else {
@@ -301,7 +335,7 @@ extension TransactionListView {
       ) {
         Button("Split Back into Separate Transactions", role: .destructive) {
           if let id = transactionPendingUnmerge,
-            let transfer = transactionStore.transactions.first(where: {
+            let transfer = displayedTransactions.first(where: {
               $0.transaction.id == id
             })?.transaction
           {
@@ -319,7 +353,7 @@ extension TransactionListView {
         TransactionListCSVImportAddons(
           createRuleFromTransaction: $createRuleFromTransaction,
           corpusProvider: {
-            transactionStore.transactions.compactMap {
+            displayedTransactions.compactMap {
               $0.transaction.importOrigin?.singleOrigin?.rawDescription
             }
           },
@@ -347,19 +381,20 @@ extension TransactionListView {
       defer {
         if didStart { url.stopAccessingSecurityScopedResource() }
       }
-      guard let data = try? Data(contentsOf: url) else { continue }
+      let data: Data
+      do {
+        data = try Data(contentsOf: url)
+      } catch {
+        errorTitle = "Could not read file"
+        errorMessage =
+          "\(url.lastPathComponent) could not be opened. "
+          + "Check that the file is still available, then try again."
+        showError = true
+        continue
+      }
       _ = await importStore.ingest(
         data: data,
         source: .droppedFile(url: url, forcedAccountId: forcedAccountId))
-    }
-  }
-
-  var filteredTransactions: [TransactionWithBalance] {
-    if searchText.isEmpty {
-      return transactionStore.transactions
-    }
-    return transactionStore.transactions.filter {
-      $0.transaction.payee?.localizedCaseInsensitiveContains(searchText) ?? false
     }
   }
 }

@@ -1,118 +1,147 @@
-import Foundation
 import SwiftUI
-
-enum TaxIncomeExpenseDrillDownKind: Hashable {
-  case income
-  case deductions
-
-  var transactionType: TransactionType {
-    switch self {
-    case .income:
-      return .income
-    case .deductions:
-      return .expense
-    }
-  }
-
-  var title: String {
-    switch self {
-    case .income:
-      return "Taxable income"
-    case .deductions:
-      return "Deductions"
-    }
-  }
-}
-
-struct TaxIncomeExpenseDrillDown: Hashable {
-  let kind: TaxIncomeExpenseDrillDownKind
-  let ownerId: UUID?
-  let ownerName: String?
-  let dateInterval: Range<Date>
-  let defaultTaxOwnerId: UUID
-
-  var title: String {
-    guard let ownerName else { return kind.title }
-    return "\(ownerName) \(kind.title.lowercased())"
-  }
-}
-
-@MainActor
-@Observable
-final class TaxIncomeExpenseDetailStore {
-  private let categories: Categories
-  private let taxOwnerNames: [UUID: String]
-  private let loadRows: () async throws -> [TaxIncomeExpenseDetailRow]
-
-  private(set) var rows: [TaxIncomeExpenseDetailRow] = []
-  private(set) var isLoading = true
-  private(set) var errorMessage: String?
-
-  init(
-    categories: Categories,
-    taxOwnerNames: [UUID: String],
-    loadRows: @escaping () async throws -> [TaxIncomeExpenseDetailRow]
-  ) {
-    self.categories = categories
-    self.taxOwnerNames = taxOwnerNames
-    self.loadRows = loadRows
-  }
-
-  func load() async {
-    isLoading = true
-    errorMessage = nil
-    do {
-      rows = try await loadRows()
-    } catch {
-      errorMessage = TaxReportPresentation.errorMessage(error)
-      rows = []
-    }
-    isLoading = false
-  }
-
-  func categoryName(for row: TaxIncomeExpenseDetailRow) -> String {
-    categories.by(id: row.categoryId).map { categories.path(for: $0) } ?? "Unknown category"
-  }
-
-  func detailCaption(for row: TaxIncomeExpenseDetailRow) -> String {
-    let ownerName = taxOwnerNames[row.ownerId] ?? "Owner \(row.ownerId.uuidString.prefix(8))"
-    return "\(ownerName) • \(row.instrument.displayLabel) • \(row.dayLabel)"
-  }
-}
 
 struct TaxIncomeExpenseDetailView: View {
   let drillDown: TaxIncomeExpenseDrillDown
+  let accounts: Accounts
+  let categories: Categories
+  let earmarks: Earmarks
+  let transactionStore: TransactionStore
+
   @State private var store: TaxIncomeExpenseDetailStore
+  @State private var selectedTransaction: Transaction?
 
   init(
     drillDown: TaxIncomeExpenseDrillDown,
+    profileInstrument: Instrument,
+    accounts: Accounts,
     categories: Categories,
-    taxOwnerNames: [UUID: String],
+    earmarks: Earmarks,
+    transactionStore: TransactionStore,
     loadRows: @escaping () async throws -> [TaxIncomeExpenseDetailRow]
   ) {
     self.drillDown = drillDown
+    self.accounts = accounts
+    self.categories = categories
+    self.earmarks = earmarks
+    self.transactionStore = transactionStore
     self._store = State(
       initialValue: TaxIncomeExpenseDetailStore(
-        categories: categories,
-        taxOwnerNames: taxOwnerNames,
+        profileInstrument: profileInstrument,
+        showsOwnerShareIndicators: drillDown.ownerId != nil,
         loadRows: loadRows))
   }
 
   var body: some View {
-    content
-      .navigationTitle(drillDown.title)
-      .task(id: drillDown) {
+    transactionList
+      .safeAreaInset(edge: .top) { unavailableDataBanner }
+      .accessibilityHidden(isBlocking)
+      .allowsHitTesting(!isBlocking)
+      .overlay { statusOverlay }
+      .transactionInspector(
+        selectedTransaction: $selectedTransaction,
+        accounts: accounts,
+        categories: categories,
+        earmarks: earmarks,
+        transactionStore: transactionStore
+      )
+      .task(id: taxDetailLoadKey) {
+        guard transactionStore.taxRelevantContentGeneration > 0,
+          store.hasLoadedRows || hasPublishedInitialTransactionPage
+        else { return }
         await store.load()
       }
   }
+}
 
-  @ViewBuilder private var content: some View {
-    if store.isLoading {
-      ProgressView("Loading details...")
+extension TaxIncomeExpenseDetailView {
+  private var transactionList: some View {
+    TransactionListView(
+      title: drillDown.title,
+      filter: taxTransactionFilter,
+      accounts: accounts,
+      categories: categories,
+      earmarks: earmarks,
+      transactionStore: transactionStore,
+      amountPresentation: store.presentation(
+        for: transactionStore.unfilteredTransactions,
+        style: drillDown.kind.amountStyle),
+      allowsScheduledFilter: false,
+      allowsAddingTransactions: false,
+      allowsSpamFiltering: false,
+      emptyState: TransactionListEmptyState(
+        title: "No Matching Tax Transactions",
+        systemImage: "doc.text.magnifyingglass",
+        description: "No transactions contribute to this tax total."),
+      selectedTransaction: $selectedTransaction)
+  }
+
+  private var taxTransactionFilter: TransactionFilter {
+    TransactionFilter(
+      scheduled: .nonScheduledOnly,
+      dateInterval: drillDown.dateInterval,
+      taxReportableLegType: drillDown.kind.transactionType,
+      taxOwnerId: drillDown.ownerId,
+      taxDefaultOwnerId: drillDown.defaultTaxOwnerId)
+  }
+
+  private var hasPublishedInitialTransactionPage: Bool {
+    transactionStore.currentFilter == taxTransactionFilter
+      && transactionStore.lastSnapshotPage != nil
+  }
+
+  private var taxDetailLoadKey: TaxDetailLoadKey {
+    TaxDetailLoadKey(
+      hasPublishedInitialTransactionPage: hasPublishedInitialTransactionPage,
+      taxRelevantContentGeneration: transactionStore.taxRelevantContentGeneration)
+  }
+
+  private var isBlocking: Bool {
+    shouldShowTaxStatus && (store.isLoading || store.errorMessage != nil)
+  }
+
+  private var shouldShowTaxStatus: Bool {
+    store.hasLoadedRows || hasPublishedInitialTransactionPage
+  }
+
+  @ViewBuilder private var unavailableDataBanner: some View {
+    if let refreshErrorMessage = store.refreshErrorMessage {
+      HStack(spacing: 12) {
+        Label(refreshErrorMessage, systemImage: "exclamationmark.triangle")
+          .foregroundStyle(.secondary)
+        Spacer()
+        Button("Try again") {
+          Task { await store.load() }
+        }
+      }
+      .padding(.horizontal)
+      .padding(.vertical, 8)
+      .background(.bar)
+    } else if store.hasUnavailableData, !store.isLoading, store.errorMessage == nil {
+      HStack(spacing: 12) {
+        Label(
+          "Some tax amounts couldn’t be converted because rates or prices are unavailable.",
+          systemImage: "exclamationmark.triangle"
+        )
+        .foregroundStyle(.secondary)
+        Spacer()
+        Button("Try again") {
+          Task { await store.load() }
+        }
+      }
+      .padding(.horizontal)
+      .padding(.vertical, 8)
+      .background(.bar)
+    }
+  }
+
+  @ViewBuilder private var statusOverlay: some View {
+    if shouldShowTaxStatus, store.isLoading {
+      ProgressView("Loading transactions...")
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    } else if let errorMessage = store.errorMessage {
+        .background(.regularMaterial)
+    } else if shouldShowTaxStatus, let errorMessage = store.errorMessage {
       ContentUnavailableView {
-        Label("Could not load details", systemImage: "exclamationmark.triangle")
+        Label("Could not load tax amounts", systemImage: "exclamationmark.triangle")
       } description: {
         Text(errorMessage)
       } actions: {
@@ -120,116 +149,13 @@ struct TaxIncomeExpenseDetailView: View {
           Task { await store.load() }
         }
       }
-    } else if store.rows.isEmpty {
-      ContentUnavailableView("No matching tax rows", systemImage: "tray")
-    } else {
-      List(store.rows) { row in
-        taxDetailRow(row)
-      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(.regularMaterial)
     }
   }
 
-  private func taxDetailRow(_ row: TaxIncomeExpenseDetailRow) -> some View {
-    HStack(alignment: .firstTextBaseline) {
-      VStack(alignment: .leading, spacing: 3) {
-        Text(store.categoryName(for: row))
-          .font(.body.weight(.medium))
-        Text(store.detailCaption(for: row))
-          .font(.caption)
-          .foregroundStyle(.secondary)
-      }
-      Spacer(minLength: 12)
-      Text(amountText(for: row))
-        .monospacedDigit()
-        .foregroundStyle(row.hasUnavailableData ? .secondary : .primary)
-    }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel("\(store.categoryName(for: row)), \(store.detailCaption(for: row))")
-    .accessibilityValue(amountText(for: row))
+  private struct TaxDetailLoadKey: Hashable {
+    let hasPublishedInitialTransactionPage: Bool
+    let taxRelevantContentGeneration: UInt64
   }
-
-  private func amountText(for row: TaxIncomeExpenseDetailRow) -> String {
-    guard !row.hasUnavailableData, let amount = row.amount else { return "Unavailable" }
-    switch drillDown.kind {
-    case .income:
-      return amount.formatted
-    case .deductions:
-      return amount.formatted
-    }
-  }
-}
-
-#Preview("Tax income detail rows") {
-  let preview = TaxIncomeExpenseDetailPreviewData()
-
-  NavigationStack {
-    TaxIncomeExpenseDetailView(
-      drillDown: preview.drillDown,
-      categories: preview.categories,
-      taxOwnerNames: preview.taxOwnerNames
-    ) {
-      preview.rows
-    }
-  }
-}
-
-private struct TaxIncomeExpenseDetailPreviewData {
-  private let primaryOwnerId = taxIncomeExpenseDetailPreviewUUID(
-    "11111111-1111-1111-1111-111111111111")
-  private let partnerOwnerId = taxIncomeExpenseDetailPreviewUUID(
-    "22222222-2222-2222-2222-222222222222")
-  private let incomeId = taxIncomeExpenseDetailPreviewUUID(
-    "33333333-3333-3333-3333-333333333333")
-  private let dividendsId = taxIncomeExpenseDetailPreviewUUID(
-    "44444444-4444-4444-4444-444444444444")
-
-  var categories: Categories {
-    Categories(from: [
-      Category(id: incomeId, name: "Income"),
-      Category(id: dividendsId, name: "Dividends", parentId: incomeId, isTaxReportable: true),
-    ])
-  }
-
-  var taxOwnerNames: [UUID: String] {
-    [
-      primaryOwnerId: "Alex",
-      partnerOwnerId: "Sam",
-    ]
-  }
-
-  var drillDown: TaxIncomeExpenseDrillDown {
-    TaxIncomeExpenseDrillDown(
-      kind: .income,
-      ownerId: nil,
-      ownerName: nil,
-      dateInterval: Date()..<Date().addingTimeInterval(86_400),
-      defaultTaxOwnerId: primaryOwnerId)
-  }
-
-  var rows: [TaxIncomeExpenseDetailRow] {
-    [
-      TaxIncomeExpenseDetailRow(
-        ownerId: primaryOwnerId,
-        categoryId: dividendsId,
-        instrument: .AUD,
-        day: nil,
-        dayLabel: "5 Jan 2026",
-        amount: InstrumentAmount(quantity: 126.50, instrument: .AUD)),
-      TaxIncomeExpenseDetailRow(
-        ownerId: partnerOwnerId,
-        categoryId: dividendsId,
-        instrument: .USD,
-        day: nil,
-        dayLabel: "Date unavailable",
-        amount: nil,
-        hasUnavailableData: true),
-    ]
-  }
-}
-
-private func taxIncomeExpenseDetailPreviewUUID(_ literal: String) -> UUID {
-  guard let uuid = UUID(uuidString: literal) else {
-    fatalError("Invalid tax income expense detail preview UUID")
-  }
-  return uuid
 }

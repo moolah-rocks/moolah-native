@@ -40,7 +40,7 @@ extension TransactionListView {
   /// in projection order. Shared by both merge gates so the
   /// selection-to-transaction lookup is written once.
   private func resolvedSelection() -> [Transaction] {
-    transactionStore.transactions
+    displayedTransactions
       .map(\.transaction)
       .filter { multiSelectedTransactionIDs.contains($0.id) }
   }

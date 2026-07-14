@@ -49,7 +49,14 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
   // `applyConvertedRow`, `flattenIncomeAndExpenseBuckets`).
   //
   // `+IncomeAndExpenseAggregation.swift` — `fetchIncomeAndExpenseAggregation`,
-  // `mapAggregationRow`, file-private `incomeAndExpenseAggregationSQL`.
+  // `mapAggregationRow`, and file-private `incomeAndExpenseAggregationSQL`.
+  //
+  // `+TaxIncomeExpense.swift` — tax aggregation types, summary SQL, row
+  // mapping, conversion planning, and summary assembly.
+  //
+  // `+TaxIncomeExpenseDetail.swift` — owner/type-scoped tax-detail SQL fetch,
+  // row mapping, request construction, and assembly that preserves
+  // contributing transaction IDs.
   //
   // `+DailyBalances.swift` — types (`DailyBalanceAccountRow`,
   // `DailyBalanceEarmarkRow`, `DailyBalancesAggregation`,
@@ -331,11 +338,13 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
     type: TransactionType
   ) async throws -> [TaxIncomeExpenseDetailRow] {
     let instruments = try await instrumentResolver.instrumentMap()
-    let aggregation = try await Self.fetchTaxIncomeExpenseAggregation(
+    let selection = TaxIncomeExpenseDetailSelection(ownerId: ownerId, type: type)
+    let aggregation = try await Self.fetchTaxIncomeExpenseDetailAggregation(
       database: database,
       instruments: instruments,
       dateInterval: dateInterval,
-      defaultTaxOwnerId: defaultTaxOwnerId)
+      defaultTaxOwnerId: defaultTaxOwnerId,
+      selection: selection)
     let logger = self.logger
     let handlers = TaxIncomeExpenseHandlers(
       handleUnparseableDay: { day in
@@ -356,7 +365,7 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
       aggregation: aggregation,
       targetInstrument: targetInstrument,
       conversionService: conversionService,
-      selection: TaxIncomeExpenseDetailSelection(ownerId: ownerId, type: type),
+      selection: selection,
       handlers: handlers)
   }
 }
