@@ -44,11 +44,11 @@ struct TaxSummaryTile: View {
     TaxSummaryTile(
       title: "Taxable income",
       amount: InstrumentAmount(quantity: 8_420.75, instrument: .AUD),
-      caption: "Open to inspect income rows")
+      caption: "Reportable income categories")
     TaxSummaryTile(
       title: "Deductions",
       amount: .zero(instrument: .AUD),
-      caption: "Open to inspect unavailable deduction rows",
+      caption: "Select to inspect transactions with unavailable amounts",
       unavailable: true)
   }
   .padding()

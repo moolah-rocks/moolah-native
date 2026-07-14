@@ -6,7 +6,8 @@ extension TransactionListView {
   /// `createNewScheduledTransaction()` when grouping is `.scheduledStatus`
   /// (so ⌘N from the Upcoming view creates a recurring placeholder), and
   /// to the default `createNewTransaction()` otherwise.
-  var newTransactionAction: () -> Void {
+  var newTransactionAction: (() -> Void)? {
+    guard allowsAddingTransactions else { return nil }
     if case .scheduledStatus = grouping {
       return createNewScheduledTransaction
     }

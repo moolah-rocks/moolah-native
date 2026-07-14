@@ -6,8 +6,8 @@ import Testing
 
 @Suite("Tax income expense plan-pinning")
 struct TaxIncomeExpensePlanPinningTests {
-  @Test("fetchTaxIncomeExpense SQL avoids leg and transaction scans")
-  func fetchTaxIncomeExpenseAvoidsHotPathScans() throws {
+  @Test("tax income summary SQL avoids leg and transaction scans")
+  func taxIncomeSummaryAvoidsHotPathScans() throws {
     let database = try PlanPinningTestHelpers.makeDatabase()
     let detail = try PlanPinningTestHelpers.planDetail(
       database,
@@ -44,8 +44,60 @@ struct TaxIncomeExpensePlanPinningTests {
     #expect(detail.contains("USE TEMP B-TREE FOR GROUP BY"))
   }
 
-  @Test("tax income details group rows before display")
-  func taxIncomeDetailsGroupRowsBeforeDisplay() async throws {
+  @Test("tax income detail SQL avoids leg and transaction scans")
+  func taxIncomeDetailAvoidsHotPathScans() throws {
+    let database = try PlanPinningTestHelpers.makeDatabase()
+    let defaultOwnerId = UUID()
+    let selectedOwnerId = UUID()
+    let detail = try PlanPinningTestHelpers.planDetail(
+      database,
+      query: """
+        SELECT t.id AS transaction_id,
+               t.date AS transaction_date,
+               leg.category_id AS category_id,
+               leg.instrument_id AS instrument_id,
+               leg.type AS type,
+               COALESCE(
+                 NULLIF(c.tax_owner_ids_encoded, ''),
+                 NULLIF(a.tax_owner_ids_encoded, ''),
+                 ?
+               ) AS owner_ids,
+               SUM(leg.quantity) AS qty
+        FROM transaction_leg leg
+        JOIN "transaction" t ON leg.transaction_id = t.id
+        JOIN category c ON leg.category_id = c.id
+        LEFT JOIN account a ON leg.account_id = a.id
+        WHERE t.recur_period IS NULL
+          AND t.date >= ? AND t.date < ?
+          AND c.is_tax_reportable = 1
+          AND leg.type = ?
+          AND instr(
+            ',' || COALESCE(
+              NULLIF(c.tax_owner_ids_encoded, ''),
+              NULLIF(a.tax_owner_ids_encoded, ''),
+              ?
+            ) || ',',
+            ',' || ? || ','
+          ) > 0
+        GROUP BY t.id, t.date, leg.category_id, leg.instrument_id, leg.type, owner_ids
+        ORDER BY t.date ASC, t.id ASC, leg.category_id ASC, leg.type ASC
+        """,
+      arguments: [
+        defaultOwnerId.uuidString,
+        Date(),
+        Date().addingTimeInterval(86_400),
+        TransactionType.income.rawValue,
+        defaultOwnerId.uuidString,
+        selectedOwnerId.uuidString,
+      ])
+    #expect(detail.contains("leg_analysis_by_type_category"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "t"))
+    #expect(detail.contains("USE TEMP B-TREE FOR GROUP BY"))
+  }
+
+  @Test("tax income details preserve the contributing transactions")
+  func taxIncomeDetailsPreserveContributingTransactions() async throws {
     let fixture = try await makeTaxIncomeFixture()
     let owner = UUID()
     let category = try await fixture.categories.create(
@@ -68,10 +120,10 @@ struct TaxIncomeExpensePlanPinningTests {
       ownerId: owner,
       type: .income)
 
-    let row = try #require(rows.first)
-    #expect(rows.count == 1)
-    #expect(row.ownerId == owner)
-    #expect(row.categoryId == category.id)
-    #expect(row.amount?.quantity == 30)
+    #expect(rows.count == 2)
+    #expect(Set(rows.map(\.transactionId)).count == 2)
+    #expect(Set(rows.map(\.ownerId)) == [owner])
+    #expect(Set(rows.map(\.categoryId)) == [category.id])
+    #expect(Set(rows.compactMap { $0.amount?.quantity }) == [10, 20])
   }
 }

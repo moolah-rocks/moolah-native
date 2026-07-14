@@ -3,6 +3,7 @@ import GRDB
 
 extension GRDBAnalysisRepository {
   struct TaxIncomeExpenseRow: Sendable {
+    let transactionId: UUID?
     let day: String
     let categoryId: UUID
     let instrumentId: String
@@ -67,6 +68,7 @@ extension GRDBAnalysisRepository {
     }
     let mappedRows = buckets.map { key, qty in
       TaxIncomeExpenseRow(
+        transactionId: nil,
         day: key.day,
         categoryId: key.categoryId,
         instrumentId: key.instrumentId,
@@ -77,11 +79,14 @@ extension GRDBAnalysisRepository {
     return mappedRows.sorted(by: taxIncomeExpenseRowSort)
   }
 
-  private static func taxIncomeExpenseRowSort(
+  static func taxIncomeExpenseRowSort(
     _ lhs: TaxIncomeExpenseRow,
     _ rhs: TaxIncomeExpenseRow
   ) -> Bool {
     if lhs.day != rhs.day { return lhs.day < rhs.day }
+    if lhs.transactionId != rhs.transactionId {
+      return (lhs.transactionId?.uuidString ?? "") < (rhs.transactionId?.uuidString ?? "")
+    }
     if lhs.categoryId != rhs.categoryId {
       return lhs.categoryId.uuidString < rhs.categoryId.uuidString
     }
@@ -101,7 +106,7 @@ extension GRDBAnalysisRepository {
     let ownerIds: [UUID]
   }
 
-  private static func australianTaxDayString(for date: Date) -> String {
+  static func australianTaxDayString(for date: Date) -> String {
     let components = AustralianTaxCalendar.calendar.dateComponents(
       [.year, .month, .day],
       from: date)
@@ -166,8 +171,9 @@ extension GRDBAnalysisRepository {
     }
     let outcomes = try await conversionService.convertResultBatch(plan.requests)
 
-    var buckets: [UUID: (income: InstrumentAmount, deductions: InstrumentAmount)] = [:]
-    var unavailableOwnerIds: Set<UUID> = []
+    var buckets: [UUID: TaxIncomeExpenseBucket] = [:]
+    var unavailableIncomeOwnerIds: Set<UUID> = []
+    var unavailableDeductionOwnerIds: Set<UUID> = []
     for planned in plan.rows {
       do {
         let amount =
@@ -186,11 +192,37 @@ extension GRDBAnalysisRepository {
           instrumentId: planned.row.instrumentId,
           ownerIds: planned.row.ownerIds)
         handlers.handleConversionFailure(error, context)
-        unavailableOwnerIds.formUnion(planned.row.ownerIds)
+        recordUnavailableOwners(
+          for: planned.row,
+          incomeOwnerIds: &unavailableIncomeOwnerIds,
+          deductionOwnerIds: &unavailableDeductionOwnerIds)
       }
     }
-    unavailableOwnerIds.formUnion(
-      plan.unavailableRows.flatMap { $0.ownerIds })
+    for row in plan.unavailableRows {
+      recordUnavailableOwners(
+        for: row,
+        incomeOwnerIds: &unavailableIncomeOwnerIds,
+        deductionOwnerIds: &unavailableDeductionOwnerIds)
+    }
+    return taxIncomeExpenseSummaries(
+      buckets: buckets,
+      unavailableIncomeOwnerIds: unavailableIncomeOwnerIds,
+      unavailableDeductionOwnerIds: unavailableDeductionOwnerIds,
+      targetInstrument: targetInstrument)
+  }
+
+  private typealias TaxIncomeExpenseBucket = (
+    income: InstrumentAmount,
+    deductions: InstrumentAmount
+  )
+
+  private static func taxIncomeExpenseSummaries(
+    buckets: [UUID: TaxIncomeExpenseBucket],
+    unavailableIncomeOwnerIds: Set<UUID>,
+    unavailableDeductionOwnerIds: Set<UUID>,
+    targetInstrument: Instrument
+  ) -> [TaxIncomeExpenseSummary] {
+    let unavailableOwnerIds = unavailableIncomeOwnerIds.union(unavailableDeductionOwnerIds)
     return Set(buckets.keys).union(unavailableOwnerIds)
       .map { ownerId in
         let bucket =
@@ -202,9 +234,22 @@ extension GRDBAnalysisRepository {
           ownerId: ownerId,
           taxableIncome: bucket.income,
           deductibleExpenses: bucket.deductions,
-          hasUnavailableData: unavailableOwnerIds.contains(ownerId))
+          incomeHasUnavailableData: unavailableIncomeOwnerIds.contains(ownerId),
+          deductionsHasUnavailableData: unavailableDeductionOwnerIds.contains(ownerId))
       }
       .sorted { $0.ownerId.uuidString < $1.ownerId.uuidString }
+  }
+
+  private static func recordUnavailableOwners(
+    for row: TaxIncomeExpenseRow,
+    incomeOwnerIds: inout Set<UUID>,
+    deductionOwnerIds: inout Set<UUID>
+  ) {
+    if row.type == .income {
+      incomeOwnerIds.formUnion(row.ownerIds)
+    } else if row.type == .expense {
+      deductionOwnerIds.formUnion(row.ownerIds)
+    }
   }
 
   static func convertedTaxIncomeExpenseAmount(

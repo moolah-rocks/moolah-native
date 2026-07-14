@@ -30,6 +30,12 @@ protocol TransactionRepository: Sendable {
   /// `observe(filter:page:pageSize:)` so the observation cost scales
   /// with the page, not the dataset.
   func observeAll(filter: TransactionFilter) -> AsyncStream<[Transaction]>
+  /// Emits once initially and again whenever persisted transaction data or
+  /// tax-resolution metadata changes. Unlike the paginated and bulk value
+  /// projections, this is an invalidation stream: it intentionally does not
+  /// coalesce equal values, because category/account ownership changes can
+  /// alter tax allocations without changing a transaction's domain value.
+  func observeTaxRelevantChanges(filter: TransactionFilter) -> AsyncStream<Void>
   /// Companion error stream for `observe(...)` and `observeAll(...)`.
   /// A healthy observation stays quiet here for its lifetime; a
   /// programmer-bug or non-recoverable I/O error from the underlying

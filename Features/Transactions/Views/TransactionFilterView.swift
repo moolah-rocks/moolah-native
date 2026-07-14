@@ -10,6 +10,7 @@ struct TransactionFilterView: View {
   let accounts: Accounts
   let categories: Categories
   let earmarks: Earmarks
+  let allowsScheduledFilter: Bool
   let onApply: (TransactionFilter) -> Void
 
   @State private var selectedAccountIds: Set<UUID> = []
@@ -30,6 +31,7 @@ struct TransactionFilterView: View {
     accounts: Accounts,
     categories: Categories,
     earmarks: Earmarks,
+    allowsScheduledFilter: Bool = true,
     onApply: @escaping (TransactionFilter) -> Void
   ) {
     self.filter = filter
@@ -37,6 +39,7 @@ struct TransactionFilterView: View {
     self.accounts = accounts
     self.categories = categories
     self.earmarks = earmarks
+    self.allowsScheduledFilter = allowsScheduledFilter
     self.onApply = onApply
 
     // Seed the picker from the incoming filter. When the filter's account
@@ -91,7 +94,7 @@ struct TransactionFilterView: View {
   private var hasAnySelection: Bool {
     !selectedAccountIds.isEmpty
       || selectedEarmarkId != nil
-      || selectedScheduled != .all
+      || (allowsScheduledFilter && selectedScheduled != .all)
       || dateRangeLowerBound != nil
       || dateRangeUpperBound != nil
       || !selectedCategoryIds.isEmpty
@@ -135,10 +138,12 @@ struct TransactionFilterView: View {
         categoryPickerRow
       }
       TextField("Payee", text: $payeeText, prompt: Text("Contains…"))
-      Picker("Schedule", selection: $selectedScheduled) {
-        Text("All Transactions").tag(ScheduledFilter.all)
-        Text("Scheduled Only").tag(ScheduledFilter.scheduledOnly)
-        Text("Non-Scheduled Only").tag(ScheduledFilter.nonScheduledOnly)
+      if allowsScheduledFilter {
+        Picker("Schedule", selection: $selectedScheduled) {
+          Text("All Transactions").tag(ScheduledFilter.all)
+          Text("Scheduled Only").tag(ScheduledFilter.scheduledOnly)
+          Text("Non-Scheduled Only").tag(ScheduledFilter.nonScheduledOnly)
+        }
       }
     }
   }
@@ -205,7 +210,7 @@ struct TransactionFilterView: View {
       accountId: filter.accountId,
       accountIds: resolvedAccountIds,
       earmarkId: selectedEarmarkId,
-      scheduled: selectedScheduled,
+      scheduled: allowsScheduledFilter ? selectedScheduled : filter.scheduled,
       dateRange: dateRange,
       dateInterval: filter.dateInterval,
       categoryIds: selectedCategoryIds,
@@ -221,7 +226,7 @@ struct TransactionFilterView: View {
   private func clearAll() {
     selectedAccountIds = []
     selectedEarmarkId = nil
-    selectedScheduled = .all
+    selectedScheduled = allowsScheduledFilter ? .all : filter.scheduled
     dateRangeLowerBound = nil
     dateRangeUpperBound = nil
     selectedCategoryIds = []

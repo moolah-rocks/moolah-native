@@ -38,6 +38,7 @@
 
     { "slug": "reports-and-analysis", "title": "Reports and analysis", "parent": null },
     { "slug": "view-income-and-expense-by-category", "title": "View income and expense by category", "parent": "reports-and-analysis" },
+    { "slug": "review-transactions-in-a-tax-report", "title": "Review transactions in a tax report", "parent": "reports-and-analysis" },
     { "slug": "analyse-net-worth-and-forecast", "title": "Analyse net worth and forecast upcoming months", "parent": "reports-and-analysis" },
 
     { "slug": "investments-and-crypto", "title": "Investments and crypto", "parent": null },

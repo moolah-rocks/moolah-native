@@ -41,6 +41,7 @@ extension ReportingStore {
       ownerId: ownerId,
       taxableIncome: income,
       deductibleExpenses: deductions,
-      hasUnavailableData: summaries.contains { $0.hasUnavailableData })
+      incomeHasUnavailableData: summaries.contains { $0.incomeHasUnavailableData },
+      deductionsHasUnavailableData: summaries.contains { $0.deductionsHasUnavailableData })
   }
 }

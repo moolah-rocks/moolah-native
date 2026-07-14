@@ -46,7 +46,8 @@ enum TaxReportExportBuilder {
       ownerId: ownerId,
       taxableIncome: income,
       deductibleExpenses: deductions,
-      hasUnavailableData: summaries.contains { $0.hasUnavailableData })
+      incomeHasUnavailableData: summaries.contains { $0.incomeHasUnavailableData },
+      deductionsHasUnavailableData: summaries.contains { $0.deductionsHasUnavailableData })
   }
 
 }
@@ -130,15 +131,21 @@ extension TaxReportExportBuilder {
     to writer: inout CSVWriter
   ) {
     appendAmountRow(
-      metric: "Taxable income", amount: context.taxableIncome, context: context, to: &writer)
+      metric: "Taxable income",
+      amount: context.taxableIncome,
+      unavailable: context.incomeUnavailable,
+      context: context,
+      to: &writer)
     appendAmountRow(
       metric: "Deductible expenses",
       amount: context.deductibleExpenses,
+      unavailable: context.deductionsUnavailable,
       context: context,
       to: &writer)
     appendAmountRow(
       metric: "Net taxable income",
       amount: context.netTaxableIncome,
+      unavailable: context.netTaxableIncomeUnavailable,
       context: context,
       to: &writer)
     appendCapitalGainsRows(context: context, to: &writer)
@@ -177,13 +184,14 @@ extension TaxReportExportBuilder {
   private static func appendAmountRow(
     metric: String,
     amount: InstrumentAmount?,
+    unavailable: Bool,
     context: SummaryRowContext,
     to writer: inout CSVWriter
   ) {
     appendDecimalRow(
       metric: metric,
-      amount: context.incomeExpenseUnavailable ? nil : amount?.quantity,
-      context: context.amountContext(amount),
+      amount: unavailable ? nil : amount?.quantity,
+      context: context.amountContext(amount, unavailable: unavailable),
       to: &writer)
   }
 
@@ -422,7 +430,13 @@ private struct SummaryRowContext {
   var taxableIncome: InstrumentAmount? { incomeExpenseSummary?.taxableIncome }
   var deductibleExpenses: InstrumentAmount? { incomeExpenseSummary?.deductibleExpenses }
   var netTaxableIncome: InstrumentAmount? { incomeExpenseSummary?.netTaxableIncome }
-  var incomeExpenseUnavailable: Bool { incomeExpenseSummary?.hasUnavailableData ?? false }
+  var incomeUnavailable: Bool { incomeExpenseSummary?.incomeHasUnavailableData ?? false }
+  var deductionsUnavailable: Bool {
+    incomeExpenseSummary?.deductionsHasUnavailableData ?? false
+  }
+  var netTaxableIncomeUnavailable: Bool {
+    incomeExpenseSummary?.netHasUnavailableData ?? false
+  }
 
   var capitalGainsContext: AmountRowContext {
     AmountRowContext(
@@ -432,11 +446,14 @@ private struct SummaryRowContext {
       instrument: instrument)
   }
 
-  func amountContext(_ amount: InstrumentAmount?) -> AmountRowContext {
+  func amountContext(
+    _ amount: InstrumentAmount?,
+    unavailable: Bool
+  ) -> AmountRowContext {
     AmountRowContext(
       scope: scope,
       owner: owner,
-      unavailable: incomeExpenseUnavailable,
+      unavailable: unavailable,
       instrument: amount?.instrument ?? instrument)
   }
 }

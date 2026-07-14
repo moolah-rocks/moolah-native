@@ -35,7 +35,7 @@ extension TransactionListView {
     } else if isEmptyForCurrentGrouping {
       let hasSearch = !searchText.isEmpty
       let hasFilter = activeFilter != baseFilter
-      let hasAnyLoaded = !transactionStore.transactions.isEmpty
+      let hasAnyLoaded = !displayedTransactions.isEmpty
 
       if hasSearch && hasAnyLoaded {
         // Some transactions are loaded; the search is narrowing them to zero.
@@ -64,6 +64,11 @@ extension TransactionListView {
             )
           )
         )
+      } else if let emptyState {
+        ContentUnavailableView(
+          emptyState.title,
+          systemImage: emptyState.systemImage,
+          description: Text(emptyState.description))
       } else {
         ContentUnavailableView(
           "No Transactions",

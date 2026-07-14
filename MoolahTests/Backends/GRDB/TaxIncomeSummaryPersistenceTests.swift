@@ -131,12 +131,14 @@ struct TaxIncomeSummaryPersistenceTests {
     #expect(income.categoryId == category.id)
     #expect(income.instrument == usd)
     #expect(income.amount?.quantity == 90)
+    #expect(income.isSplitAcrossTaxOwners)
     #expect(Set(deductionRows.map(\.ownerId)) == [ownerA, ownerB])
     #expect(Set(deductionRows.compactMap { $0.amount?.quantity }) == [15])
+    #expect(deductionRows.allSatisfy { $0.isSplitAcrossTaxOwners })
   }
 
-  @Test("tax income details group rows by Australian tax day across Sydney DST")
-  func taxIncomeDetailsGroupByAustralianTaxDayAcrossDST() async throws {
+  @Test("tax income details preserve transactions and use Australian tax days across Sydney DST")
+  func taxIncomeDetailsUseAustralianTaxDaysAcrossDST() async throws {
     let fixture = try await makeTaxIncomeFixture()
     _ = try await fixture.accounts.create(fixture.account)
     let category = try await fixture.categories.create(
@@ -174,13 +176,13 @@ struct TaxIncomeSummaryPersistenceTests {
       ownerId: fixture.defaultOwner,
       type: .income)
 
-    #expect(rows.map(\.amount?.quantity) == [30, 30])
+    #expect(rows.compactMap { $0.amount?.quantity }.sorted() == [10, 20, 30])
     let days = rows.compactMap(\.day).map {
       AustralianTaxCalendar.calendar.dateComponents([.year, .month, .day], from: $0)
     }
-    #expect(days.map(\.year) == [2026, 2026])
-    #expect(days.map(\.month) == [1, 1])
-    #expect(days.map(\.day) == [5, 6])
+    #expect(days.map(\.year) == [2026, 2026, 2026])
+    #expect(days.map(\.month) == [1, 1, 1])
+    #expect(days.map(\.day) == [5, 5, 6])
   }
 
   @Test("tax income conversion uses Australian tax day at UTC boundary")

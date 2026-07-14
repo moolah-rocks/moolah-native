@@ -27,6 +27,20 @@ struct TaxReportExportBuilderTests {
   }
 
   @Test
+  func csvPreservesIncomeWhenOnlyDeductionsAreUnavailable() {
+    let csv = TaxReportExportBuilder.csv(
+      for: unavailableReportInput(
+        taxableIncome: 125,
+        incomeUnavailable: false,
+        deductionsUnavailable: true))
+
+    #expect(csv.contains("All owners,All owners,Taxable income,125,AUD,false"))
+    #expect(csv.contains("All owners,All owners,Deductible expenses,,AUD,true"))
+    #expect(csv.contains("All owners,All owners,Net taxable income,,AUD,true"))
+    #expect(csv.contains("Owner,Alex,Taxable income,125,AUD,false"))
+  }
+
+  @Test
   func csvIncludesCapitalGainOwnerWithoutIncomeExpenseRows() {
     let csv = TaxReportExportBuilder.csv(for: capitalGainOnlyReportInput())
 
@@ -188,8 +202,18 @@ extension TaxReportExportBuilderTests {
       defaultTaxOwnerId: defaultOwner)
   }
 
-  private func unavailableReportInput() -> TaxReportExportInput {
-    TaxReportExportInput(
+  private func unavailableReportInput(
+    taxableIncome: Decimal = 0,
+    incomeUnavailable: Bool = true,
+    deductionsUnavailable: Bool = true
+  ) -> TaxReportExportInput {
+    let incomeExpenseSummary = TaxIncomeExpenseSummary(
+      ownerId: ownerAlex,
+      taxableIncome: amount(taxableIncome),
+      deductibleExpenses: amount(0),
+      incomeHasUnavailableData: incomeUnavailable,
+      deductionsHasUnavailableData: deductionsUnavailable)
+    return TaxReportExportInput(
       financialYear: 2027,
       holdingsDate: date(year: 2027, month: 6, day: 30),
       profileInstrument: .AUD,
@@ -197,12 +221,8 @@ extension TaxReportExportBuilderTests {
       events: [],
       capitalGainsHasUnavailableData: true,
       capitalGainsUnavailableInstruments: [eth],
-      taxIncomeExpenseSummaries: [unavailableIncomeExpenseSummary],
-      taxIncomeExpenseRollup: TaxIncomeExpenseSummary(
-        ownerId: defaultOwner,
-        taxableIncome: amount(0),
-        deductibleExpenses: amount(0),
-        hasUnavailableData: true),
+      taxIncomeExpenseSummaries: [incomeExpenseSummary],
+      taxIncomeExpenseRollup: incomeExpenseSummary,
       taxOwnerNames: [ownerAlex: "Alex"],
       taxOwnerKinds: [ownerAlex: .individual],
       profitLoss: [holdingProfitLoss],
@@ -428,14 +448,6 @@ extension TaxReportExportBuilderTests {
         taxableIncome: amount(200),
         deductibleExpenses: amount(55)),
     ]
-  }
-
-  private var unavailableIncomeExpenseSummary: TaxIncomeExpenseSummary {
-    TaxIncomeExpenseSummary(
-      ownerId: ownerAlex,
-      taxableIncome: amount(0),
-      deductibleExpenses: amount(0),
-      hasUnavailableData: true)
   }
 
   private var holdingProfitLoss: InstrumentProfitLoss {
