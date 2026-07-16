@@ -16,7 +16,7 @@ jobs:
   # jobs instead of serially ahead of them.
   checks:
     name: Checks
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -63,7 +63,7 @@ jobs:
   # CPU and pushed the combined job up against the 30-minute timeout).
   test-mac:
     name: Test (macOS)
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -80,7 +80,7 @@ jobs:
   # iOS Simulator unit tests on their own runner.
   test-ios:
     name: Test (iOS)
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -120,7 +120,7 @@ jobs:
 
   ui-test:
     name: UI Test
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -150,7 +150,7 @@ jobs:
 
   schema-check:
     name: CloudKit schema additivity
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
