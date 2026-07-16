@@ -184,14 +184,13 @@ The iOS and macOS app icons live in `App/Assets.xcassets/AppIcon.appiconset/` an
 
 Contents:
 
-- **iOS:** all required sizes (20/29/40/60/76/83.5pt at @1x/@2x/@3x) plus the 1024px App Store marketing icon and iOS 18+ appearance variants (`Icon-1024-any/dark/light/tinted.png`).
+- **iOS:** all required sizes (20/29/40/60/76/83.5pt at @1x/@2x/@3x) plus the 1024px App Store marketing icon and iOS 18+ appearance variants (`Icon-1024-any/dark/tinted.png`).
 - **macOS:** 16–512 at @1x and @2x (`mac_16x16.png` … `mac_512x512@2x.png`).
 
 iOS 18+ appearance variants:
 
 - **Any (default):** dark crystalline peaks on navy
 - **Dark:** same as Any
-- **Light:** peaks on light gradient background
 - **Tinted:** grayscale version for system tinting
 
 ---
