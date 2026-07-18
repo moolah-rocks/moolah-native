@@ -16,9 +16,9 @@ struct ExpenseBreakdown: Sendable, Identifiable, Hashable {
   /// convention. Use `CategorySpendSeries` to derive positive spend magnitudes.
   let totalExpenses: InstrumentAmount
 
-  /// True when one or more rows in this month could not be priced due to a
-  /// transient conversion error (e.g. crypto prices not yet warmed). The
-  /// displayed totals may be understated; callers should surface this state.
+  /// True when one or more inputs to this `(month, category)` total could not
+  /// be converted. The failure may be transient or permanent; callers must
+  /// treat this logical total as unavailable rather than displaying its value.
   let hasUnavailableData: Bool
 
   // A memberwise init is retained (not redundant): `hasUnavailableData` has no

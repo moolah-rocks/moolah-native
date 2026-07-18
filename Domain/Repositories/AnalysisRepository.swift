@@ -138,20 +138,18 @@ struct CategoryBalances: Sendable {
   let byCategory: [UUID: InstrumentAmount]
   let uncategorised: InstrumentAmount?
 
-  /// True when one or more rows contributing to this result could not be priced due to a
-  /// transient conversion error (e.g. crypto prices not yet warmed — see
-  /// `ConversionFailureClassifier.isTransient` and `guides/INSTRUMENT_CONVERSION_GUIDE.md`
-  /// Rule 11). The skipped row's contribution is missing from both `byCategory` and
-  /// `uncategorised`, so `byCategory` / `uncategorised` totals may be understated; callers
-  /// should surface this state rather than presenting them as complete.
+  /// True when one or more rows contributing to this result could not be converted by a
+  /// recognised conversion failure (see
+  /// `ConversionFailureClassifier.canRepresentAsUnavailableData` and
+  /// `guides/INSTRUMENT_CONVERSION_GUIDE.md` Rule 11). The skipped row's contribution is
+  /// missing from `byCategory` or `uncategorised`, so callers must treat every displayed
+  /// amount and dependent total in this result as unavailable rather than presenting a
+  /// partial value.
   ///
-  /// This is a *whole-result* flag, not per-category: a transient skip on any one category
-  /// marks the entire result unavailable. That is coarser than Rule 11's "keep independently
-  /// computable sibling totals rendering" ideal (the sibling `ExpenseBreakdown` scopes its
-  /// flag per-month). Refining to per-category unavailability requires reshaping this return
-  /// type and the ReportingStore/view plumbing that consumes it, deferred to the later
-  /// Reports-surfacing step; this data-layer step establishes the honest "something here is
-  /// unavailable" signal first. `var` (not `let`) so
+  /// This is intentionally a *whole-result* flag because this model does not carry
+  /// per-category availability. The Reports presentation therefore renders all amounts in
+  /// the affected income/expense column as unavailable; it must never show the surviving
+  /// entries as complete values. `var` (not `let`) so
   /// the synthesized memberwise init keeps its default of `false` as a parameter default —
   /// a `let` with an inline default is fixed at that value and drops out of the
   /// memberwise init entirely, which would make every pre-existing call site un-updatable.
@@ -171,7 +169,7 @@ struct CategoryBalancesByType: Sendable {
   let expenseUncategorised: InstrumentAmount?
 
   /// Per-column mirrors of `CategoryBalances.hasUnavailableData` (Strict Rule 11, #1077) — set
-  /// from the `income` / `expense` `fetchCategoryBalances` call respectively, so a transient
+  /// from the `income` / `expense` `fetchCategoryBalances` call respectively, so a recognised
   /// conversion failure in one column doesn't mark the other unavailable. `var` (not `let`)
   /// for the same synthesized-memberwise-init reason as `CategoryBalances.hasUnavailableData`.
   var incomeHasUnavailableData: Bool = false

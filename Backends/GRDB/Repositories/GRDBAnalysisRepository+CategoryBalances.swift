@@ -245,25 +245,16 @@ extension GRDBAnalysisRepository {
   /// Mirrors `assembleExpenseBreakdown`'s per-row error contract:
   /// `handleUnparseableDay` and `handleConversionFailure` are invoked
   /// per failing row so each failure surfaces individually in
-  /// diagnostics. Strict Rule 11 (#1077): a *transient* failure
-  /// (`ConversionFailureClassifier.isTransient`) degrades per-row — the
-  /// row's contribution is skipped (added to neither `byCategory` nor
-  /// `uncategorised`) and `hasUnavailableData` is flagged on the result
-  /// — while a *structural* failure preserves the loud rethrow that
-  /// signals a genuinely incomplete result: the walk continues
-  /// processing remaining rows then re-throws the first structural
-  /// error after the walk. A `CancellationError` is rethrown immediately
-  /// (it propagates straight out of the batch call) and never folded
-  /// into the conversion-failure path. Categorised and uncategorised
-  /// rows share this one batch conversion, so a structural failure
-  /// still fails the whole call exactly as before this field existed —
-  /// there is no partial-failure surface between the two buckets for
-  /// structural errors; only transient errors degrade per-row.
+  /// diagnostics. Strict Rule 11 (#1077): recognised conversion failures
+  /// degrade per-row — the row's contribution is skipped (added to
+  /// neither `byCategory` nor `uncategorised`) and `hasUnavailableData`
+  /// is flagged on the result. Unknown errors rethrow after the walk. A
+  /// `CancellationError` propagates immediately from the batch call.
   ///
   /// All rows' `(qty, instrument, day)` conversions resolve in a single
   /// `convertResultBatch(_:)` — the row order of the request list is
   /// preserved in the outcomes, so the per-row failure callbacks still
-  /// fire in row order before the rethrow.
+  /// fire in row order.
   @concurrent
   static func assembleCategoryBalances(
     aggregation: CategoryBalancesAggregation,
@@ -282,7 +273,7 @@ extension GRDBAnalysisRepository {
 
     var byCategory: [UUID: InstrumentAmount] = [:]
     var uncategorised: InstrumentAmount?
-    var firstConversionError: Error?
+    var firstUnexpectedError: Error?
     var hasUnavailableData = false
     for (row, outcome) in zip(plan.parsedRows, outcomes) {
       let amount: InstrumentAmount
@@ -299,16 +290,13 @@ extension GRDBAnalysisRepository {
           categoryId: row.categoryId,
           instrumentId: row.instrumentId)
         handlers.handleConversionFailure(error, context)
-        // Transient price-availability failures (a throttled provider, a
-        // day not yet warmed — issue #1075) degrade per-row: skip this
-        // row's contribution and render the rest. Only a *structural*
-        // failure preserves the loud rethrow that signals a genuinely
-        // incomplete result. Strict Rule 11 (#1077): a transient skip
-        // flags the whole result unavailable.
-        if ConversionFailureClassifier.isTransient(error) {
+        // Known conversion failures degrade at the dependent result:
+        // transient prices can recover, while unsupported conversions
+        // remain unavailable. Unknown errors still rethrow loudly.
+        if ConversionFailureClassifier.canRepresentAsUnavailableData(error) {
           hasUnavailableData = true
-        } else if firstConversionError == nil {
-          firstConversionError = error
+        } else if firstUnexpectedError == nil {
+          firstUnexpectedError = error
         }
         continue
       }
@@ -320,11 +308,8 @@ extension GRDBAnalysisRepository {
         uncategorised = current + amount
       }
     }
-    if let firstConversionError {
-      // Preserve the existing observable behaviour (throws on a
-      // structural conversion error) while having logged every per-row
-      // failure.
-      throw firstConversionError
+    if let firstUnexpectedError {
+      throw firstUnexpectedError
     }
     return CategoryBalances(
       byCategory: byCategory, uncategorised: uncategorised, hasUnavailableData: hasUnavailableData)

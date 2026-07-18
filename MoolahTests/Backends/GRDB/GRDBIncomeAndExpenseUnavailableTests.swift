@@ -17,7 +17,7 @@ import Testing
 /// order). Failing on a chosen index therefore fails exactly that row.
 /// Transient failures use `WalletSyncError(.network)` (classified
 /// transient by `ConversionFailureClassifier`, mirroring the existing
-/// assemble suite); the structural case uses
+/// assemble suite); the permanent unavailable case uses
 /// `ConversionError.unsupportedConversion`.
 @Suite("GRDBAnalysisRepository.assembleIncomeAndExpense — unavailable months (#1077)")
 struct GRDBIncomeAndExpenseUnavailableTests {
@@ -126,8 +126,8 @@ struct GRDBIncomeAndExpenseUnavailableTests {
     #expect(month.hasUnavailableData == false)
   }
 
-  @Test("structural conversion failure still rethrows")
-  func structuralFailureRethrows() async throws {
+  @Test("unsupported conversion marks the month unavailable")
+  func unsupportedConversionMarksMonthUnavailable() async throws {
     let aggregation = aggregation([
       row(day: "2025-04-10", incomeQty: 100)
     ])
@@ -135,13 +135,14 @@ struct GRDBIncomeAndExpenseUnavailableTests {
       .failure(ConversionError.unsupportedConversion(from: "A", to: "B"))
     }
 
-    await #expect(throws: ConversionError.self) {
-      _ = try await GRDBAnalysisRepository.assembleIncomeAndExpense(
-        aggregation: aggregation,
-        profileInstrument: .defaultTestInstrument,
-        conversionService: conversionService,
-        monthEnd: 31,
-        handlers: noopHandlers)
-    }
+    let result = try await GRDBAnalysisRepository.assembleIncomeAndExpense(
+      aggregation: aggregation,
+      profileInstrument: .defaultTestInstrument,
+      conversionService: conversionService,
+      monthEnd: 31,
+      handlers: noopHandlers)
+
+    let month = try #require(result.first)
+    #expect(month.hasUnavailableData)
   }
 }

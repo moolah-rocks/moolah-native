@@ -162,8 +162,8 @@ struct GRDBCategoryBalancesAssembleTests {
     #expect(!failures.snapshot().isEmpty)
   }
 
-  @Test("structural conversion failures still rethrow")
-  func structuralFailuresRethrow() async throws {
+  @Test("unsupported conversions mark the result unavailable")
+  func unsupportedConversionsMarkResultUnavailable() async throws {
     let aggregation = makeAggregation()
     let conversionService = FakeConversionService.perCall { _ in
       .failure(ConversionError.unsupportedConversion(from: "A", to: "B"))
@@ -171,13 +171,13 @@ struct GRDBCategoryBalancesAssembleTests {
     let handlers = GRDBAnalysisRepository.CategoryBalancesHandlers(
       handleUnparseableDay: { _ in }, handleConversionFailure: { _, _ in })
 
-    await #expect(throws: ConversionError.self) {
-      _ = try await GRDBAnalysisRepository.assembleCategoryBalances(
-        aggregation: aggregation,
-        targetInstrument: .defaultTestInstrument,
-        conversionService: conversionService,
-        handlers: handlers)
-    }
+    let result = try await GRDBAnalysisRepository.assembleCategoryBalances(
+      aggregation: aggregation,
+      targetInstrument: .defaultTestInstrument,
+      conversionService: conversionService,
+      handlers: handlers)
+
+    #expect(result.hasUnavailableData)
   }
 
   @Test("one transient row is skipped while sibling categories still render")

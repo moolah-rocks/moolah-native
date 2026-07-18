@@ -135,14 +135,10 @@ extension GRDBAnalysisRepository {
   /// `day` strings to a logger without coupling this helper to a
   /// specific `Logger` instance. `handlers.handleConversionFailure` is
   /// invoked once per failing row so each failure surfaces individually
-  /// in diagnostics rather than being collapsed into the first failure
-  /// to escape — the walk continues processing remaining rows, then
-  /// re-throws the first failure after the walk so the function
-  /// preserves its existing "throws on conversion error" contract while
-  /// still delivering the per-row detail required by
-  /// `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11. A `CancellationError` is
-  /// rethrown immediately (it propagates straight out of the batch call)
-  /// and never folded into the conversion-failure path.
+  /// in diagnostics rather than being collapsed into one outer failure.
+  /// Recognised conversion failures mark the dependent financial month
+  /// unavailable; unknown errors rethrow after the walk. A
+  /// `CancellationError` propagates immediately from the batch call.
   ///
   /// All rows' `(qty, instrument, day)` conversions resolve in a single
   /// `convertResultBatch(_:)`; the outcomes stay index-aligned with the
@@ -165,14 +161,11 @@ extension GRDBAnalysisRepository {
     let outcomes = try await conversionService.convertResultBatch(plan.requests)
 
     var buckets: [String: [UUID?: InstrumentAmount]] = [:]
-    var firstConversionError: Error?
-    // Strict Rule 11 (#1077): a financial month with ANY transient
-    // (price-unavailable) skip is marked unavailable — even if other
-    // rows in the month converted — and a month whose rows ALL skipped
-    // still surfaces as a zeroed `categoryId: nil` placeholder. Unlike
-    // the income/expense aggregation, `ExpenseBreakdown` carries no
-    // start/end, so a plain month set suffices (no day-range tracking).
-    var incompleteMonths: Set<String> = []
+    var firstUnexpectedError: Error?
+    // Strict Rule 11 (#1077): unavailability belongs to the logical
+    // `(month, category)` total. A failed category must not blank an
+    // independently computable sibling category in the same month.
+    var unavailableKeys: Set<ExpenseBreakdownKey> = []
     for (planned, outcome) in zip(plan.parsedRows, outcomes) {
       let row = planned.row
       let day = planned.day
@@ -188,16 +181,16 @@ extension GRDBAnalysisRepository {
         let context = ConversionFailureContext(
           day: row.day, categoryId: row.categoryId, instrumentId: row.instrumentId)
         handlers.handleConversionFailure(error, context)
-        // Transient price-availability failures (a throttled provider, a
-        // day not yet warmed — issue #1075) degrade per-row: skip this
-        // row's contribution and render the rest. Only a *structural*
-        // failure preserves the loud rethrow that signals a genuinely
-        // incomplete bucket. Strict Rule 11 (#1077): a transient skip
-        // flags its month unavailable.
-        if ConversionFailureClassifier.isTransient(error) {
-          incompleteMonths.insert(Self.financialMonth(for: day, monthEnd: monthEnd))
-        } else if firstConversionError == nil {
-          firstConversionError = error
+        // Known conversion failures degrade at the dependent month:
+        // transient prices can recover, while unsupported conversions
+        // remain unavailable. Unknown errors still rethrow loudly.
+        if ConversionFailureClassifier.canRepresentAsUnavailableData(error) {
+          unavailableKeys.insert(
+            ExpenseBreakdownKey(
+              month: Self.financialMonth(for: day, monthEnd: monthEnd),
+              categoryId: row.categoryId))
+        } else if firstUnexpectedError == nil {
+          firstUnexpectedError = error
         }
         continue
       }
@@ -205,17 +198,12 @@ extension GRDBAnalysisRepository {
       let current = buckets[month]?[row.categoryId] ?? .zero(instrument: profileInstrument)
       buckets[month, default: [:]][row.categoryId] = current + amount
     }
-    if let firstConversionError {
-      // Preserve the existing observable behaviour (throws on the first
-      // conversion error) while having logged every per-row failure.
-      // Per-bucket `InstrumentAmount?` requires reshaping
-      // `ExpenseBreakdown` and every other analysis result type
-      // together — out of scope for this method's individual rewrite.
-      throw firstConversionError
+    if let firstUnexpectedError {
+      throw firstUnexpectedError
     }
     return flattenExpenseBreakdownBuckets(
       buckets,
-      incompleteMonths: incompleteMonths,
+      unavailableKeys: unavailableKeys,
       profileInstrument: profileInstrument)
   }
 
@@ -255,15 +243,18 @@ extension GRDBAnalysisRepository {
   /// and sorts months descending — the contract pinned by
   /// `AnalysisExpenseBreakdownTests.expenseBreakdownSortOrder`.
   ///
-  /// Strict Rule 11 (#1077): every emitted row whose month is in
-  /// `incompleteMonths` is flagged `hasUnavailableData`, and any
-  /// incomplete month with no surviving `(month, *)` bucket (all rows
-  /// transient-skipped) gets a single zeroed `categoryId: nil`
-  /// placeholder so the month still appears rather than vanishing as
-  /// "no activity".
+  /// Strict Rule 11 (#1077): each unavailable `(month, category)` total
+  /// is flagged without blanking sibling categories. A key with no
+  /// surviving converted row gets a zeroed placeholder retaining its
+  /// category identity so it cannot be mistaken for "no activity".
+  private struct ExpenseBreakdownKey: Hashable {
+    let month: String
+    let categoryId: UUID?
+  }
+
   private static func flattenExpenseBreakdownBuckets(
     _ buckets: [String: [UUID?: InstrumentAmount]],
-    incompleteMonths: Set<String>,
+    unavailableKeys: Set<ExpenseBreakdownKey>,
     profileInstrument: Instrument
   ) -> [ExpenseBreakdown] {
     var results: [ExpenseBreakdown] = []
@@ -274,14 +265,15 @@ extension GRDBAnalysisRepository {
             categoryId: categoryId,
             month: month,
             totalExpenses: total,
-            hasUnavailableData: incompleteMonths.contains(month)))
+            hasUnavailableData: unavailableKeys.contains(
+              ExpenseBreakdownKey(month: month, categoryId: categoryId))))
       }
     }
-    for month in incompleteMonths where (buckets[month]?.isEmpty ?? true) {
+    for key in unavailableKeys where buckets[key.month]?[key.categoryId] == nil {
       results.append(
         ExpenseBreakdown(
-          categoryId: nil,
-          month: month,
+          categoryId: key.categoryId,
+          month: key.month,
           totalExpenses: .zero(instrument: profileInstrument),
           hasUnavailableData: true))
     }

@@ -117,7 +117,7 @@ struct IncomeExpenseTableCard: View {
             .font(.body)
             .monospacedDigit()
           if item.hasUnavailableData {
-            // Visual hint that the row's prices are still loading. The row's
+            // Visual hint that one or more converted amounts are unavailable. The row's
             // combined a11y label already announces this, so hide it here.
             Image(systemName: "clock")
               .font(.caption)
@@ -232,7 +232,7 @@ struct IncomeExpenseTableCard: View {
   ) -> String {
     let month = Self.monthLabel(for: item)
     if item.hasUnavailableData {
-      return "\(month): data unavailable, prices still loading"
+      return "\(month): converted amounts unavailable"
     }
     let income = includeInvestments ? item.totalIncome : item.income
     let expense = includeInvestments ? item.totalExpense : item.expense

@@ -33,7 +33,7 @@ Follow `guides/AI_REVIEW_GATE_GUIDE.md`. Findings are fix requests: do not ignor
 
 - Historic reads (`fetchDailyBalances`, `computeExpenseBreakdown`, income/expense totals, transaction list display, tax summaries, capital-gains, historical charts) using `Date()` instead of the snapshot/transaction date.
 - Current-value reads (sidebar totals, `AccountStore` rollups, net worth, available funds, `InvestmentStore.valuatePositions`, account detail valuations, "balance now" displays) using a historic date instead of `Date()`.
-- Forecast / scheduled-transaction code converting on the scheduled future `date`. Frankfurter has no future rates — must use `Date()` (see `plans/2026-04-17-forecast-currency-conversion-plan.md`).
+- Forecast / scheduled-transaction code may pass the semantic future `date`; verify the conversion still routes through `InstrumentConversionService`, which clamps future lookups to today under Rule 7. Do not demand bespoke `Date()` plumbing.
 - Use of `createdAt` / `updatedAt` / record metadata timestamps in place of the semantic observation date (`transaction.date`, `dailyBalance.date`).
 - Date-keying and conversion-date normalization drift (`startOfDay` applied to one but not the other).
 - Conversion threaded through several hops where the caller's intent (historic vs current) is ambiguous — call it out and trace what the date actually represents.
@@ -49,6 +49,7 @@ Follow `guides/AI_REVIEW_GATE_GUIDE.md`. Findings are fix requests: do not ignor
 - Displaying the unconverted `InstrumentAmount` in its native instrument as a fallback for a total that was requested in another instrument. Mixing instruments in one figure confuses users.
 - Substituting `0` / `.zero(instrument:)` for a failed conversion in a running sum.
 - Aggregations wrapped in one outer `do { ... } catch { total = nil }` that blanks sibling totals too (the "sidebar spinner forever" pattern). The catch should be scoped to the individual failing total so other rows keep rendering.
+- Retryability used as the degradation boundary. A recognised permanent conversion failure (unsupported pair, missing provider mapping, missing price service) is not retryable, but its dependent value can still be represented as unavailable. Flag code that rethrows such a failure and blanks an entire analysis/reporting surface while independent siblings have an unavailable-data model. Unknown database/programming errors and cancellation should still propagate.
 - Partial or fallback totals cached / persisted as the authoritative value, so recovery never surfaces the real number.
 - Missing retry affordance / error state / `os.Logger` log when a conversion fails.
 
@@ -73,9 +74,10 @@ Produce a detailed report with:
 
 Categorize by severity:
 - **Critical (will crash):** Arithmetic on `InstrumentAmount`s that can have different instruments at runtime. Reduce seeds that cannot be guaranteed to match every element. Clamps applied across mixed instruments.
-- **Critical (wrong numbers):** Historic code using `Date()`. Forecast/scheduled code using a future date. Comparisons between mixed-instrument amounts driving business logic.
+- **Critical (wrong numbers):** Historic code using `Date()`. Forecast/scheduled code bypassing `InstrumentConversionService`'s Rule 7 future-date clamping. Comparisons between mixed-instrument amounts driving business logic.
 - **Critical (silently wrong):** Partial totals rendered as complete — convertible positions summed and displayed when one of the inputs failed to convert, failed conversions substituted with `0`, or unconverted amounts shown in their native instrument as a fallback. Violates Rule 11.
 - **Important:** Ambiguous date threading where caller intent is unclear. Missing single-instrument fast path on a hot path. Bypassing the `InstrumentConversionService` seam. Outer try/catch that blanks sibling totals when only one total actually failed.
+- **Important:** Treating permanent recognised conversion failures as page-wide fatal errors solely because they are not retryable, when the affected value/total has an unavailable-data representation.
 - **Minor:** Tests that only cover the happy path with `FixedConversionService` and cannot detect date regressions. Comments/docs that misstate the convention.
 
 For each issue include:

@@ -41,13 +41,13 @@ struct ExpenseBreakdownCard: View {
   }
 
   private var incompleteDataCaption: some View {
-    Text("Some prices are still loading; totals may be incomplete")
+    Text("Some converted amounts are unavailable")
       .font(.caption)
       .foregroundStyle(.secondary)
   }
 
   private var emptyState: some View {
-    Text("No expense data")
+    Text(hasUnavailableData ? "Expense data unavailable" : "No expense data")
       .foregroundStyle(.secondary)
       .frame(maxWidth: .infinity, alignment: .center)
       .padding(.vertical, 40)
@@ -175,7 +175,7 @@ struct ExpenseBreakdownCard: View {
       summary += ". Largest: \(largest.joined(separator: ", "))"
     }
     if hasUnavailableData {
-      summary += ". Some totals may be incomplete; prices still loading."
+      summary += ". Some converted amounts are unavailable."
     }
     return summary
   }

@@ -192,8 +192,8 @@ struct GRDBIncomeAndExpenseAssembleTests {
     #expect(!failures.snapshot().isEmpty)
   }
 
-  @Test("structural conversion failures still rethrow")
-  func structuralFailuresRethrow() async throws {
+  @Test("unsupported conversions mark the month unavailable")
+  func unsupportedConversionsMarkMonthUnavailable() async throws {
     let aggregation = makeAggregation()
     let conversionService = FakeConversionService.perCall { _ in
       .failure(ConversionError.unsupportedConversion(from: "A", to: "B"))
@@ -201,14 +201,15 @@ struct GRDBIncomeAndExpenseAssembleTests {
     let handlers = GRDBAnalysisRepository.IncomeAndExpenseHandlers(
       handleUnparseableDay: { _ in }, handleConversionFailure: { _, _ in })
 
-    await #expect(throws: ConversionError.self) {
-      _ = try await GRDBAnalysisRepository.assembleIncomeAndExpense(
-        aggregation: aggregation,
-        profileInstrument: .defaultTestInstrument,
-        conversionService: conversionService,
-        monthEnd: 25,
-        handlers: handlers)
-    }
+    let result = try await GRDBAnalysisRepository.assembleIncomeAndExpense(
+      aggregation: aggregation,
+      profileInstrument: .defaultTestInstrument,
+      conversionService: conversionService,
+      monthEnd: 25,
+      handlers: handlers)
+
+    let month = try #require(result.first)
+    #expect(month.hasUnavailableData)
   }
 
   @Test("convertRowSums converts each row at the row's own day, not Date()")

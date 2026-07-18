@@ -6,6 +6,7 @@ struct CategoryBalanceScrollContent: View {
   let transactionType: TransactionType
   let dateRange: ClosedRange<Date>
   let headerVerticalPadding: CGFloat
+  let hasUnavailableData: Bool
 
   var body: some View {
     LazyVStack(spacing: 0) {
@@ -42,7 +43,7 @@ struct CategoryBalanceScrollContent: View {
       HStack {
         Text("Uncategorised").font(.headline)
         Spacer()
-        InstrumentAmountView(amount: amount, font: .headline)
+        amountView(amount, font: .headline)
         disclosureIndicator
       }
       .padding(.horizontal)
@@ -50,7 +51,7 @@ struct CategoryBalanceScrollContent: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .accessibilityLabel("Uncategorised, \(amount.formatted)")
+    .accessibilityLabel("Uncategorised, \(amountAccessibilityLabel(amount))")
   }
 
   private func rootRow(_ group: CategoryGroup) -> some View {
@@ -61,7 +62,7 @@ struct CategoryBalanceScrollContent: View {
       HStack {
         Text(group.name).font(.headline)
         Spacer()
-        InstrumentAmountView(amount: group.totalAmount, font: .headline)
+        amountView(group.totalAmount, font: .headline)
         disclosureIndicator
       }
       .padding(.horizontal)
@@ -69,7 +70,7 @@ struct CategoryBalanceScrollContent: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .accessibilityLabel("\(group.name), \(group.totalAmount.formatted)")
+    .accessibilityLabel("\(group.name), \(amountAccessibilityLabel(group.totalAmount))")
     .accessibilityIdentifier(UITestIdentifiers.Reports.categoryHeader(group.categoryId))
   }
 
@@ -80,7 +81,7 @@ struct CategoryBalanceScrollContent: View {
       HStack {
         Text(child.name).font(.body)
         Spacer()
-        InstrumentAmountView(amount: child.amount)
+        amountView(child.amount)
         disclosureIndicator
       }
       .padding(.horizontal)
@@ -88,7 +89,7 @@ struct CategoryBalanceScrollContent: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .accessibilityLabel("\(child.name), \(child.amount.formatted)")
+    .accessibilityLabel("\(child.name), \(amountAccessibilityLabel(child.amount))")
   }
 
   private var disclosureIndicator: some View {
@@ -96,5 +97,20 @@ struct CategoryBalanceScrollContent: View {
       .font(.caption.weight(.semibold))
       .foregroundStyle(.secondary)
       .accessibilityHidden(true)
+  }
+
+  @ViewBuilder
+  private func amountView(_ amount: InstrumentAmount, font: Font? = nil) -> some View {
+    if let displayed = CategoryBalanceAvailabilityPresentation.displayedAmount(
+      amount, hasUnavailableData: hasUnavailableData)
+    {
+      InstrumentAmountView(amount: displayed, font: font)
+    } else {
+      Text("—").font(font)
+    }
+  }
+
+  private func amountAccessibilityLabel(_ amount: InstrumentAmount) -> String {
+    hasUnavailableData ? "amount unavailable" : amount.formatted
   }
 }

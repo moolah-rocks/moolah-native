@@ -6,11 +6,26 @@ import Foundation
 /// warmed) versus a *structural* failure (the conversion can never
 /// succeed — an unsupported pair, a permanently unmapped token).
 ///
-/// The Analysis expense/income aggregations degrade per-row on transient
-/// failures (skip the row, render the rest, self-heal once prices warm)
-/// but preserve the loud rethrow for structural failures. See
-/// `guides/INSTRUMENT_CONVERSION_GUIDE.md` Rule 11 and issue #1075.
+/// Retryability and displayability are separate decisions. Analysis retries
+/// transient failures, while any recognized conversion failure can degrade
+/// only its dependent result to unavailable data. Unknown errors still throw.
+/// See `guides/INSTRUMENT_CONVERSION_GUIDE.md` Rule 11 and issue #1075.
 enum ConversionFailureClassifier {
+  /// Returns whether a failed conversion has a valid Rule 11 unavailable-data
+  /// representation. This is deliberately broader than `isTransient`: a
+  /// permanently unsupported conversion cannot recover on retry, but its
+  /// dependent total can still render as unavailable without blanking
+  /// independent sibling values.
+  static func canRepresentAsUnavailableData(_ error: any Error) -> Bool {
+    if isTransient(error) { return true }
+    switch error {
+    case is ConversionError, is CryptoPriceError, is WalletSyncError:
+      return true
+    default:
+      return false
+    }
+  }
+
   static func isTransient(_ error: any Error) -> Bool {
     switch error {
     case is RateLimitGateError, is URLError:

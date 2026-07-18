@@ -15,7 +15,12 @@ enum CategoryMixShiftInsight {
   ) -> [Insight] {
     let currentBucket = FinancialMonth.key(
       for: context.now, monthEnd: context.financialMonthEnd)
-    let completeMonths = Set(breakdown.map(\.month)).filter { $0 < currentBucket }.sorted()
+    let completeMonths = Dictionary(grouping: breakdown, by: \.month)
+      .filter { month, rows in
+        month < currentBucket && !rows.contains(where: \.hasUnavailableData)
+      }
+      .keys
+      .sorted()
     guard completeMonths.count >= 2 else { return [] }
     let recentMonth = completeMonths[completeMonths.count - 1]
     let priorMonth = completeMonths[completeMonths.count - 2]
@@ -55,6 +60,9 @@ enum CategoryMixShiftInsight {
   }
 
   private static func shares(in breakdown: [ExpenseBreakdown], month: String) -> ShareBreakdown {
+    guard !breakdown.contains(where: { $0.month == month && $0.hasUnavailableData }) else {
+      return ShareBreakdown(total: 0, byCategory: [:])
+    }
     var magnitudes: [UUID: Double] = [:]
     var total = 0.0
     for row in breakdown where row.month == month {

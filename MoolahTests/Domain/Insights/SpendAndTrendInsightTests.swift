@@ -91,6 +91,26 @@ struct SpendAndTrendInsightTests {
   }
 
   @Test
+  func categoryMixShiftIgnoresUnavailableMonths() {
+    let dining = Category(name: "Dining")
+    let groceries = Category(name: "Groceries")
+    let breakdown = [
+      InsightTestSupport.breakdownRow(50, categoryId: dining.id, month: "202603"),
+      InsightTestSupport.breakdownRow(50, categoryId: groceries.id, month: "202603"),
+      InsightTestSupport.breakdownRow(90, categoryId: dining.id, month: "202604"),
+      InsightTestSupport.breakdownRow(
+        10, categoryId: groceries.id, month: "202604", hasUnavailableData: true),
+    ]
+
+    let insights = CategoryMixShiftInsight.detect(
+      breakdown: breakdown,
+      categories: Categories(from: [dining, groceries]),
+      context: context)
+
+    #expect(insights.isEmpty)
+  }
+
+  @Test
   func monthOverMonthSpendIncrease() throws {
     let monthly = [
       InsightTestSupport.monthly(month: "202604", income: 5000, expense: 100),

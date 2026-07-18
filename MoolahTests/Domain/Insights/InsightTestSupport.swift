@@ -213,10 +213,19 @@ enum InsightTestSupport {
   // MARK: - Monthly / breakdown builders
 
   /// A negative (expense-shaped) breakdown row.
-  static func breakdownRow(_ magnitude: Decimal, categoryId: UUID?, month: String)
+  static func breakdownRow(
+    _ magnitude: Decimal,
+    categoryId: UUID?,
+    month: String,
+    hasUnavailableData: Bool = false
+  )
     -> ExpenseBreakdown
   {
-    ExpenseBreakdown(categoryId: categoryId, month: month, totalExpenses: amount(-magnitude))
+    ExpenseBreakdown(
+      categoryId: categoryId,
+      month: month,
+      totalExpenses: amount(-magnitude),
+      hasUnavailableData: hasUnavailableData)
   }
 
   /// A monthly income/expense aggregate. `expense` is the positive

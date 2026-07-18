@@ -1,6 +1,6 @@
 # Instrument Conversion Guide
 
-**Version:** 1.2
+**Version:** 1.4
 **Platform targets:** macOS 26+ (primary), iOS 26+ (secondary)
 
 ---
@@ -156,6 +156,8 @@ Conversion can fail in production — no network, no cached fallback, unsupporte
 
 **Core principle — a total is not required when any of its inputs is unavailable.** A total is a function of its inputs; if any required input can't be computed, the total also can't be computed, and showing *no total* (or an explicit "unavailable" state) is the correct answer, not a problem to work around. Graceful degradation means displaying the unavailable individual value and its dependent totals as unavailable *together*, while independently-scoped sibling individual values keep rendering normally. Filling the gap with a partial sum, a native-instrument fallback, a substituted zero, or a silently-omitted input is strictly worse than showing no value at all.
 
+**Retryability and displayability are separate decisions.** A transient failure may recover on retry; a permanent unsupported conversion or missing mapping may not. Both are recognised conversion failures that can be represented by marking their dependent value and totals unavailable, so neither should abort an entire reporting or analysis surface when independent siblings can still render. Reserve a page-wide throw for unexpected errors that have no accurate unavailable-data representation (for example, a database or programming error), and preserve `CancellationError` as cancellation.
+
 **Required behaviour when a conversion fails:**
 - Mark the failing individual value — the row, position, leg, earmark, or cell whose conversion did not succeed — as *unavailable* (e.g. "—", a retry affordance, or an explicit error state). Never show a stale value, native-instrument fallback, or substituted zero in its place.
 - Mark every total that depended on that value as *unavailable* in the same way. Any total that included a failed input is incorrect and must not be rendered as a value. The failing individual value and the totals that consume it surface as unavailable together; never one without the other.
@@ -258,6 +260,7 @@ See Rule 8. Applies to both `convert(_:from:to:on:)` and `convertAmount(_:to:on:
 - [ ] Unconverted amounts are never displayed in their native instrument as a fallback for a total that was requested in another instrument.
 - [ ] Failed conversions are never substituted with `0` in a running sum.
 - [ ] Conversion errors are caught at the scope of the individual value, so independently-scoped sibling values and sibling totals (other rows, other accounts, other report lines) keep rendering normally.
+- [ ] Retry classification is not used as the degradation boundary: recognised permanent conversion failures mark their dependent values unavailable just like transient failures; only retry scheduling differs.
 - [ ] Failures are logged via `os.Logger` and surfaced to the user with a retry path.
 - [ ] Partial / fallback totals are not cached as authoritative values that would hide recovery.
 
@@ -265,8 +268,9 @@ See Rule 8. Applies to both `convert(_:from:to:on:)` and `convertAmount(_:to:on:
 
 ## Version History
 
-- **1.2** (2026-04-18): Rule 11 clarified — a total is not required when any of its inputs is unavailable. The failing individual value and every total that depends on it must be rendered as unavailable together; sibling individual values keep rendering. Codifies the symmetry between individual values and totals and rules out silently dropping a failing input from a total. Updates the anti-pattern table and review checklist accordingly. Flagged by issue #78 (`EarmarkStore.convertedTotalBalance` retry loop).
+- **1.4** (2026-07-18): Rule 11 separates retryability from displayability. Recognised permanent conversion failures must use the same scoped unavailable-data representation as transient failures instead of aborting an entire analysis/reporting surface; only retry scheduling differs.
 - **1.3** (2026-04-28): Rule 11a removed. The Remote (moolah-server) backend no longer exists; `CloudKitBackend` is the only production backend and is fully multi-instrument. The `supportsComplexTransactions` flag, `requireMatchesProfileInstrument` guard, and all single-instrument UI gating have been deleted.
+- **1.2** (2026-04-18): Rule 11 clarified — a total is not required when any of its inputs is unavailable. The failing individual value and every total that depends on it must be rendered as unavailable together; sibling individual values keep rendering. Codifies the symmetry between individual values and totals and rules out silently dropping a failing input from a total. Updates the anti-pattern table and review checklist accordingly. Flagged by issue #78 (`EarmarkStore.convertedTotalBalance` retry loop).
 - **1.1** (2026-04-17): Added Rule 11a — single-instrument backends (Remote, moolah) reject foreign-instrument writes. Superseded by v1.3: Rule 11a removed after Remote backend deletion.
+- **1.0.1** (2026-04-17): Rule 7 moved from a call-site obligation to a service-level guarantee — `FiatConversionService` and `FullConversionService` now clamp any future date to `Date()` before rate lookup, so forecast and scheduled call sites can pass `transaction.date` directly.
 - **1.0** (2026-04-17): Initial guide. Consolidates instrument-safe-arithmetic and conversion-date rules previously spread across `plans/ROADMAP.md`, `plans/2026-04-17-forecast-currency-conversion-plan.md`, and the `PositionBook` / `InstrumentAmount` source files. Adds Rule 11: on conversion failure, mark the affected total unavailable — never display the convertible portion as the total, never display the unconverted amount in its native instrument, and never substitute zero. Independently-scoped sibling totals must keep rendering.
-- **1.1** (2026-04-17): Rule 7 moved from a call-site obligation to a service-level guarantee — `FiatConversionService` and `FullConversionService` now clamp any future date to `Date()` before rate lookup, so forecast and scheduled call sites can pass `transaction.date` directly.

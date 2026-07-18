@@ -76,8 +76,8 @@ extension AnalysisStore {
     Self.clipBreakdown(expenseBreakdown, historyMonths: historyMonths, now: Date())
   }
 
-  /// True when any displayed-window expense breakdown row failed to price
-  /// (prices still loading), so the pie totals may be incomplete. See #1077.
+  /// True when any displayed-window expense breakdown row could not be
+  /// converted, so dependent percentage projections are unavailable. See #1077.
   var displayedExpenseHasUnavailableData: Bool {
     displayedExpenseBreakdown.contains { $0.hasUnavailableData }
   }
