@@ -51,11 +51,8 @@ struct ProfileIndexInstrumentLifecycleTests {
       pricingStatus: "spam",
       coingeckoId: "fff-fresh")
 
-    // Drive the merge directly. `FailedRecordSave` is not publicly
-    // constructible, so the full `handleSentRecordZoneChanges` round-
-    // trip can't be synthesised in unit tests; the dispatch in that
-    // method is a one-line type switch, while the substantive
-    // behaviour lives in `applyInstrumentServerRecordChangedMerge`.
+    // Drive the merge rule directly. Sent-event tests separately cover the
+    // atomic batch transaction that applies this rule with system fields.
     harness.handler.applyInstrumentServerRecordChangedMerge(
       serverRecord: serverRecord)
 
@@ -67,6 +64,52 @@ struct ProfileIndexInstrumentLifecycleTests {
     let stored = try #require(row)
     #expect(stored.pricingStatus == "spam")
     #expect(stored.coingeckoId == "fff-fresh")
+  }
+
+  @Test("instrument conflict tag and merge roll back together")
+  func instrumentConflictAcknowledgementRollsBackAtomically() async throws {
+    let harness = try Harness()
+    let id = "1:0xfff"
+    try await harness.registry.registerCrypto(
+      Instrument.crypto(
+        chainId: 1, contractAddress: "0xfff", symbol: "FFF", name: "Fff",
+        decimals: 18),
+      mapping: CryptoProviderMapping(
+        instrumentId: id, coingeckoId: "fff-old", binanceSymbol: nil))
+    let originalFields = Data([0x01])
+    try await harness.queue.write { database in
+      try database.execute(
+        sql: "UPDATE instrument SET encoded_system_fields = ? WHERE id = ?",
+        arguments: [originalFields, id])
+      try database.execute(
+        sql: """
+          CREATE TRIGGER force_instrument_merge_failure
+          BEFORE UPDATE OF pricing_status ON instrument
+          WHEN NEW.pricing_status = 'spam'
+          BEGIN SELECT RAISE(ABORT, 'forced rollback'); END
+          """)
+    }
+    let serverRecord = Self.makeInstrumentRecord(
+      in: harness.handler.zoneID,
+      id: id,
+      name: "Fff",
+      pricingStatus: "spam",
+      coingeckoId: "fff-fresh")
+    var conflictRow = try #require(InstrumentRow.fieldValues(from: serverRecord))
+    conflictRow.encodedSystemFields = serverRecord.encodedSystemFields
+
+    #expect(throws: (any Error).self) {
+      try harness.registry.persistSentAcknowledgementsSync(
+        systemFieldUpdates: [(id, Data([0x02]))],
+        conflictRows: [conflictRow])
+    }
+
+    let persisted = try await harness.queue.read { database in
+      try InstrumentRow.fetchOne(database, key: id)
+    }
+    #expect(persisted?.encodedSystemFields == originalFields)
+    #expect(persisted?.pricingStatus == "priced")
+    #expect(persisted?.coingeckoId == "fff-old")
   }
 
   // MARK: - Lifecycle wipes

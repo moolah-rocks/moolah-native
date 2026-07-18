@@ -254,16 +254,29 @@ extension ProfileDataSyncHandler {
       guard let uuid = ckRecord.recordID.uuid else { return nil }
       return (id: uuid, data: ckRecord.encodedSystemFields)
     }
-    guard !updates.isEmpty else { return }
+    _ = try applySystemFieldUpdatesInTransaction(
+      recordType: recordType, updates: updates, in: database)
+  }
+
+  /// Applies already-encoded system-field updates inside the caller's GRDB
+  /// transaction. Shared by fetched-change apply and sent acknowledgements so
+  /// each logical batch has one rollback boundary.
+  @discardableResult
+  nonisolated func applySystemFieldUpdatesInTransaction(
+    recordType: String,
+    updates: [(id: UUID, data: Data?)],
+    in database: Database
+  ) throws -> Int {
+    guard !updates.isEmpty else { return 0 }
     guard
       let setter = referenceInTransactionSystemFieldsSetter(for: recordType)
         ?? domainInTransactionSystemFieldsSetter(for: recordType)
     else {
       Self.batchLogger.warning(
         "applySystemFieldsInTransaction: unknown record type '\(recordType)' — skipping")
-      return
+      return 0
     }
-    _ = try setter(updates, database)
+    return try setter(updates, database)
   }
 
   /// Reference-data side of the in-transaction system-fields setter lookup.

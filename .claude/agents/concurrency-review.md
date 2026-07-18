@@ -28,9 +28,9 @@ Follow `guides/AI_REVIEW_GATE_GUIDE.md`. Findings are fix requests: do not ignor
 - Stores must be `@MainActor @Observable`
 - Domain models (in `Domain/Models/`) must be `Sendable` value types (`struct`)
 - Repository protocols (in `Domain/Repositories/`) must conform to `Sendable`
-- Remote repository implementations must be `final class` with explicit `Sendable` conformance
-- CloudKit repositories must be `final class` with `@unchecked Sendable` (shared `ModelContainer`)
-- No `@unchecked Sendable` in production code
+- Remote repository implementations must be a `final class` or `struct` with real `Sendable` conformance
+- Production `@unchecked Sendable` is allowed only for the seven explicit carve-outs in `guides/CONCURRENCY_GUIDE.md`; verify the documented invariant for the applicable carve-out
+- `CloudKitBackend`'s carve-out depends on immutable repository references plus a shared `any DatabaseWriter`, not ModelContainer actor isolation
 - No `nonisolated(unsafe)` in production code
 
 ### Task Hygiene
@@ -44,6 +44,15 @@ Follow `guides/AI_REVIEW_GATE_GUIDE.md`. Findings are fix requests: do not ignor
 - Independent parallel operations use `async let` (fixed count) or `TaskGroup` (dynamic count)
 - No callbacks, completion handlers, or Combine (`import Combine`)
 - No GCD (`DispatchQueue`, `DispatchGroup`, `DispatchSemaphore`)
+- Modified bulk or latency-sensitive async methods that perform synchronous
+  disk I/O (`database.read` / `database.write` called without `await`, or
+  repository `*Sync` calls) use an explicit `@concurrent` boundary. Under Swift 6.2's opt-in
+  `NonisolatedNonsendingByDefault` semantics, `nonisolated` alone inherits the
+  caller's actor; `@concurrent` is the explicit guarantee in either mode.
+- CKSyncEngine sent-acknowledgement routing does not wrap batch persistence in
+  blanket `MainActor.run`; it awaits off-main work and hops back only for
+  coordinator or observable state. Other event paths require independent
+  evidence before being reported under this regression check.
 
 ### Cancellation
 - `Task.isCancelled` checked after every suspension point in debounce/polling patterns
@@ -51,7 +60,7 @@ Follow `guides/AI_REVIEW_GATE_GUIDE.md`. Findings are fix requests: do not ignor
 - Stored tasks managed in stores, not views
 
 ### Network Layer
-- All requests go through `APIClient` -- no direct `URLSession` outside the API client
+- Requests use one of the guide's four sanctioned networking shapes; flag direct `URLSession` only when it bypasses that shape's required status handling, throttling, or retry policy
 - HTTP status codes validated (URLSession doesn't throw on 4xx/5xx)
 - No `URLSession` instances created in views or stores
 - No retry loops without exponential backoff
@@ -78,10 +87,13 @@ Follow `guides/AI_REVIEW_GATE_GUIDE.md`. Findings are fix requests: do not ignor
 
 ## False Positives to Avoid
 
-- **`@unchecked Sendable` on `CloudKitBackend`** is acceptable -- shared `ModelContainer` with `@MainActor`-isolated access in repositories.
+- **`@unchecked Sendable` on `CloudKitBackend`** is acceptable under Carve-out 1: stored repository references are immutable and its shared `any DatabaseWriter` is `Sendable`.
 - **`nonisolated(unsafe)` on `URLProtocolStub.requestHandler`** is acceptable -- test-only, sequential execution.
 - **Simple one-line `Task { await store.doThing() }` in button actions** is the correct view pattern -- do not flag.
 - **`.id()` on non-ForEach views** (e.g., detail panels) is fine -- the rule only applies to ForEach children.
+- **State-only delegate handling on `MainActor`** is correct. Flag it only when
+  the transitive path reaches synchronous disk I/O or another materially
+  blocking operation.
 
 ## Key References
 

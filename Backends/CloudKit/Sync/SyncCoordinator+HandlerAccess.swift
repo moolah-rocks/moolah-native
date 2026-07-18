@@ -100,6 +100,7 @@ extension SyncCoordinator {
   /// for the deleted profile would write through a stale queue against
   /// an unlinked file.
   func evictCachedState(for profileId: UUID) {
+    intentionallyUnavailableDataHandlerIds.insert(profileId)
     dataHandlers.removeValue(forKey: profileId)
     cachedGRDBRepositories.removeValue(forKey: profileId)
   }
@@ -145,6 +146,7 @@ extension SyncCoordinator {
   ///
   /// Idempotent; a no-op for an unknown profile id.
   func removeDataHandler(for profileId: UUID) {
+    intentionallyUnavailableDataHandlerIds.insert(profileId)
     dataHandlers.removeValue(forKey: profileId)
   }
 

@@ -76,10 +76,8 @@ struct NeedsPushSupersededEchoLossTests {
     // Step 5: ack of the V_update upload — current row matches the sent
     // V_update record, so the over-eager clear fires here.
     let sentVUpdate = vUpdateRow.toCKRecord(in: Self.zoneID)
-    await MainActor.run {
-      _ = harness.handler.handleSentRecordZoneChanges(
-        savedRecords: [sentVUpdate], failedSaves: [], failedDeletes: [])
-    }
+    _ = await harness.handler.handleSentRecordZoneChanges(
+      savedRecords: [sentVUpdate], failedSaves: [], failedDeletes: [])
 
     // Step 6: a stale fetched echo of V_create arrives late.
     let staleEcho = ProfileDataSyncHandlerTestSupport.accountRow(
@@ -131,10 +129,8 @@ struct NeedsPushSupersededEchoLossTests {
 
     // Step 5: ack of the V_update upload.
     let sentVUpdate = vUpdateRow.toCKRecord(in: Self.zoneID)
-    await MainActor.run {
-      _ = harness.handler.handleSentRecordZoneChanges(
-        savedRecords: [sentVUpdate], failedSaves: [], failedDeletes: [])
-    }
+    _ = await harness.handler.handleSentRecordZoneChanges(
+      savedRecords: [sentVUpdate], failedSaves: [], failedDeletes: [])
 
     // Step 6: stale V_create echo (quantity 100) arrives late.
     let staleEcho = ProfileDataSyncHandlerTestSupport.transactionLegRow(

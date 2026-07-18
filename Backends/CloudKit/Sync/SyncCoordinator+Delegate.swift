@@ -4,9 +4,9 @@ import OSLog
 import os
 
 // `CKSyncEngineDelegate` conformance for `SyncCoordinator`. The delegate runs
-// on CKSyncEngine's internal executor; both entry points hop to `@MainActor`
-// for all state access. The outbound batch-building helpers live in
-// `SyncCoordinator+BatchBuilder.swift`.
+// on CKSyncEngine's internal executor. I/O-heavy events run through explicit
+// off-main boundaries; coordinator and CKSyncEngine state access hops to
+// `MainActor`. Outbound batch helpers live in `SyncCoordinator+BatchBuilder.swift`.
 extension SyncCoordinator: CKSyncEngineDelegate {
 
   // MARK: - Inbound Events
@@ -14,6 +14,8 @@ extension SyncCoordinator: CKSyncEngineDelegate {
   nonisolated func handleEvent(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
     if case .fetchedRecordZoneChanges(let changes) = event {
       await handleFetchedRecordZoneChangesAsync(changes)
+    } else if case .sentRecordZoneChanges(let sentChanges) = event {
+      await handleSentRecordZoneChangesAsync(sentChanges)
     } else if case .accountChange(let accountChange) = event {
       // Account-change handling now performs an `await` (GRDB read of
       // every profile id) so it can't be hosted inside a synchronous
@@ -51,8 +53,10 @@ extension SyncCoordinator: CKSyncEngineDelegate {
       // Handled by handleFetchedRecordZoneChangesAsync
       break
 
-    case .sentRecordZoneChanges(let sentChanges):
-      handleSentRecordZoneChanges(sentChanges)
+    case .sentRecordZoneChanges:
+      // Routed through handleSentRecordZoneChangesAsync so synchronous
+      // acknowledgement persistence never blocks the main actor.
+      break
 
     case .willFetchChanges:
       beginFetchingChanges()

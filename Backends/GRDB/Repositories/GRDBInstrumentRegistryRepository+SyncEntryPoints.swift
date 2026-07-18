@@ -31,6 +31,22 @@ extension GRDBInstrumentRegistryRepository {
     return updated
   }
 
+  /// Writes a sent-event batch in one transaction and invalidates the derived
+  /// instrument map once after commit.
+  func setEncodedSystemFieldsBatchSync(
+    _ updates: [(id: String, data: Data?)]
+  ) throws {
+    try database.write { database in
+      for (id, data) in updates {
+        _ =
+          try InstrumentRow
+          .filter(InstrumentRow.Columns.id == id)
+          .updateAll(database, [InstrumentRow.Columns.encodedSystemFields.set(to: data)])
+      }
+    }
+    invalidateInstrumentMapCache()
+  }
+
   /// Clears `encoded_system_fields` on every row. Used after an
   /// `encryptedDataReset`.
   func clearAllSystemFieldsSync() throws {
@@ -106,83 +122,105 @@ extension GRDBInstrumentRegistryRepository {
   /// survives byte-equal, per `guides/DATABASE_CODE_GUIDE.md` §5.
   func applyRemoteChangesSync(saved rows: [InstrumentRow], deleted ids: [String]) throws {
     try database.write { database in
-      for var row in rows {
-        let existing =
+      try applyRemoteChangesSync(saved: rows, deleted: ids, in: database)
+    }
+    invalidateInstrumentMapCache()
+  }
+
+  /// Persists sent-event tags and conflict merges with one rollback boundary.
+  func persistSentAcknowledgementsSync(
+    systemFieldUpdates: [(id: String, data: Data?)],
+    conflictRows: [InstrumentRow]
+  ) throws {
+    try database.write { database in
+      for (id, data) in systemFieldUpdates {
+        _ =
           try InstrumentRow
-          .filter(InstrumentRow.Columns.id == row.id)
-          .fetchOne(database)
+          .filter(InstrumentRow.Columns.id == id)
+          .updateAll(database, [InstrumentRow.Columns.encodedSystemFields.set(to: data)])
+      }
+      try applyRemoteChangesSync(saved: conflictRows, deleted: [], in: database)
+    }
+    invalidateInstrumentMapCache()
+  }
 
-        // Apply the field-level merge rule for `pricingStatus` before
-        // upserting. CKSyncEngine's default "server wins" would let
-        // the daily auto-resolver on one device clobber a `.spam`
-        // classification a user made on another. The rule is
-        // centralised in `PricingStatusMerge.merge` and unit-tested
-        // against the full 3x3 truth table.
-        //
-        // Unrecognised raw values (only possible from a future-version
-        // device sending an enum case this build doesn't compile against,
-        // since legacy records that omit the field decode as `"priced"`
-        // in `InstrumentRow+CloudKit.swift`) decode as `.priced`. That
-        // matches the legacy fallback and keeps the merge defensive
-        // rather than throwing.
-        let mergedStatus = Self.mergedPricingStatus(local: existing, incoming: row)
+  private func applyRemoteChangesSync(
+    saved rows: [InstrumentRow],
+    deleted ids: [String],
+    in database: Database
+  ) throws {
+    for var row in rows {
+      let existing =
+        try InstrumentRow
+        .filter(InstrumentRow.Columns.id == row.id)
+        .fetchOne(database)
 
-        // Resolve the incoming id to its canonical id.
-        // `nil` when no resolver is wired (most construction sites) or
-        // when the id is already canonical — no alias write in either case.
-        let aliasTarget = canonicalAlias(for: row.id)
+      // Apply the field-level merge rule for `pricingStatus` before
+      // upserting. CKSyncEngine's default "server wins" would let
+      // the daily auto-resolver on one device clobber a `.spam`
+      // classification a user made on another. The rule is
+      // centralised in `PricingStatusMerge.merge` and unit-tested
+      // against the full 3x3 truth table.
+      //
+      // Unrecognised raw values (only possible from a future-version
+      // device sending an enum case this build doesn't compile against,
+      // since legacy records that omit the field decode as `"priced"`
+      // in `InstrumentRow+CloudKit.swift`) decode as `.priced`. That
+      // matches the legacy fallback and keeps the merge defensive
+      // rather than throwing.
+      let mergedStatus = Self.mergedPricingStatus(local: existing, incoming: row)
 
-        // Modification-date gate on identity / provider-mapping fields and
-        // the cached system-fields blob (issue #1085). Instruments have no
-        // `needs_push`; the date gate piggybacks on the `fetchOne` above.
-        // A stale echo (incoming date older-or-equal to the existing row's
-        // cached date) must NOT revert the identity/mapping fields — but
-        // `pricingStatus` is EXEMPT: it always flows through
-        // `PricingStatusMerge` regardless of date, because that merge is a
-        // deliberately recency-independent CRDT (sticky `.spam`) and gating
-        // it wholesale could leave two devices divergent. So a stale echo
-        // writes only the merged `pricingStatus` (and only when it changed,
-        // to skip a no-op write), leaving identity / mapping / blob put.
-        if let existing, Self.isStaleInstrumentEcho(existing: existing, incoming: row) {
-          if mergedStatus != existing.pricingStatus {
-            _ =
-              try InstrumentRow
-              .filter(InstrumentRow.Columns.id == row.id)
-              .updateAll(
-                database, [InstrumentRow.Columns.pricingStatus.set(to: mergedStatus)])
-          }
-          // Alias even on the stale-echo path: the row already exists but
-          // may have arrived before the alias feature shipped, leaving
-          // `alias_of` NULL. Write it here — BEFORE the `continue` — so a
-          // retired row is never left unaliased and visible. Idempotent.
-          if let aliasTarget {
-            try Self.setAliasOf(row.id, to: aliasTarget, in: database)
-          }
-          continue
+      // Resolve the incoming id to its canonical id.
+      // `nil` when no resolver is wired (most construction sites) or
+      // when the id is already canonical — no alias write in either case.
+      let aliasTarget = canonicalAlias(for: row.id)
+
+      // Modification-date gate on identity / provider-mapping fields and
+      // the cached system-fields blob (issue #1085). Instruments have no
+      // `needs_push`; the date gate piggybacks on the `fetchOne` above.
+      // A stale echo (incoming date older-or-equal to the existing row's
+      // cached date) must NOT revert the identity/mapping fields — but
+      // `pricingStatus` is EXEMPT: it always flows through
+      // `PricingStatusMerge` regardless of date, because that merge is a
+      // deliberately recency-independent CRDT (sticky `.spam`) and gating
+      // it wholesale could leave two devices divergent. So a stale echo
+      // writes only the merged `pricingStatus` (and only when it changed,
+      // to skip a no-op write), leaving identity / mapping / blob put.
+      if let existing, Self.isStaleInstrumentEcho(existing: existing, incoming: row) {
+        if mergedStatus != existing.pricingStatus {
+          _ =
+            try InstrumentRow
+            .filter(InstrumentRow.Columns.id == row.id)
+            .updateAll(
+              database, [InstrumentRow.Columns.pricingStatus.set(to: mergedStatus)])
         }
-
-        row.pricingStatus = mergedStatus
-        try row.upsert(database)
-        // D1-b (issue #1097): a peer re-creating this instrument clears our
-        // stale deletion intent too, so we don't re-delete a record the server
-        // now holds. Apply-path deletions below are NOT journaled —
-        // server-originated deletions are already propagated.
-        try Self.clearDeletionIntent(for: row.id, in: database)
-        // Alias AFTER the upsert so the row exists on a fresh insert.
-        // On the update path (existing row) ordering relative to upsert
-        // is immaterial — the row already exists and the UPDATE is idempotent.
+        // Alias even on the stale-echo path: the row already exists but
+        // may have arrived before the alias feature shipped, leaving
+        // `alias_of` NULL. Write it here — BEFORE the `continue` — so a
+        // retired row is never left unaliased and visible. Idempotent.
         if let aliasTarget {
           try Self.setAliasOf(row.id, to: aliasTarget, in: database)
         }
+        continue
       }
-      for id in ids {
-        _ = try InstrumentRow.deleteOne(database, key: id)
+
+      row.pricingStatus = mergedStatus
+      try row.upsert(database)
+      // D1-b (issue #1097): a peer re-creating this instrument clears our
+      // stale deletion intent too, so we don't re-delete a record the server
+      // now holds. Apply-path deletions below are NOT journaled —
+      // server-originated deletions are already propagated.
+      try Self.clearDeletionIntent(for: row.id, in: database)
+      // Alias AFTER the upsert so the row exists on a fresh insert.
+      // On the update path (existing row) ordering relative to upsert
+      // is immaterial — the row already exists and the UPDATE is idempotent.
+      if let aliasTarget {
+        try Self.setAliasOf(row.id, to: aliasTarget, in: database)
       }
     }
-    // Remote pulls mutate rows just like local writes; the memoised
-    // map must be rebuilt before the next reader (e.g. a price-cache
-    // resolution) observes it.
-    invalidateInstrumentMapCache()
+    for id in ids {
+      _ = try InstrumentRow.deleteOne(database, key: id)
+    }
   }
 
   /// Returns the canonical alias target for `id` when `canonicalResolver`

@@ -230,8 +230,9 @@ final class GRDBProfileIndexRepository {
   /// Atomic `max(local, remote)` merge for `data_format_version` —
   /// reads the row and conditionally writes the higher value back inside
   /// a single GRDB write transaction, closing the read-modify-write
-  /// window. Called from `ProfileIndexSyncHandler.handleSentRecordZoneChanges`
-  /// after `resolveSystemFields(for:)` and before re-queue.
+  /// window. Sent-event handling calls the in-transaction overload from
+  /// `ProfileIndexSyncHandler.persistSentProfileAcknowledgements`, keeping the
+  /// conflict merge atomic with adopted system fields before requeue.
   ///
   /// Does NOT trigger the `pending_change` queue (no `onRecordChanged`
   /// hook fires); CKSyncEngine's own retry covers the re-upload.
@@ -239,21 +240,27 @@ final class GRDBProfileIndexRepository {
   /// the conflict response and this call).
   func mergeDataFormatVersionSync(id: UUID, remoteValue: Int) throws {
     try database.write { database in
-      guard
-        let row =
-          try ProfileRow
-          .filter(ProfileRow.Columns.id == id)
-          .fetchOne(database)
-      else { return }
-      let merged = max(row.dataFormatVersion, remoteValue)
-      guard merged != row.dataFormatVersion else { return }
-      _ =
+      try mergeDataFormatVersionSync(id: id, remoteValue: remoteValue, in: database)
+    }
+  }
+
+  func mergeDataFormatVersionSync(
+    id: UUID, remoteValue: Int, in database: Database
+  ) throws {
+    guard
+      let row =
         try ProfileRow
         .filter(ProfileRow.Columns.id == id)
-        .updateAll(
-          database,
-          [ProfileRow.Columns.dataFormatVersion.set(to: merged)])
-    }
+        .fetchOne(database)
+    else { return }
+    let merged = max(row.dataFormatVersion, remoteValue)
+    guard merged != row.dataFormatVersion else { return }
+    _ =
+      try ProfileRow
+      .filter(ProfileRow.Columns.id == id)
+      .updateAll(
+        database,
+        [ProfileRow.Columns.dataFormatVersion.set(to: merged)])
   }
 
   /// Clears `encoded_system_fields` on every row. Used after an

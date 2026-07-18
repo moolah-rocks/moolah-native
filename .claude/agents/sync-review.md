@@ -10,13 +10,14 @@ You are an expert CloudKit and CKSyncEngine specialist. Your role is to review c
 
 ## Architecture Context
 
-This project uses CKSyncEngine (not NSPersistentCloudKitContainer) over a per-profile GRDB/SQLite store for iCloud sync. Two sync layers exist:
+This project uses CKSyncEngine (not NSPersistentCloudKitContainer) over a per-profile GRDB/SQLite store for iCloud sync. One coordinator routes work to two kinds of zone handler:
 
-1. **ProfileIndexSyncEngine** -- syncs `ProfileRecord` via the `profile-index` zone
-2. **ProfileSyncEngine** (one per active profile) -- syncs per-profile data via `profile-{profileId}` zones
-3. **CloudKit repositories** -- each mutation method calls `onRecordChanged`/`onRecordDeleted` closures wired to the sync engine
+1. **SyncCoordinator** -- owns the single CKSyncEngine and routes all delegate events
+2. **ProfileIndexSyncHandler** -- syncs `ProfileRecord` via the `profile-index` zone
+3. **ProfileDataSyncHandler** (one per resolved/cached profile-data zone, including background/un-sessionized profiles) -- syncs per-profile data via `profile-{profileId}` zones
+4. **GRDB repositories** -- mutation methods call `onRecordChanged`/`onRecordDeleted` closures wired to the coordinator
 
-Key files are in `Backends/CloudKit/Sync/` and `Backends/CloudKit/Repositories/`.
+Key files are in `Backends/CloudKit/Sync/` and `Backends/GRDB/Repositories/`.
 
 ## Findings Must Be Fixed
 
@@ -93,7 +94,7 @@ For each mutation method, verify:
 - Deleted on account sign-out/switch and zone purge
 
 ### Record Mapping
-- Record type strings use `CD_` prefix for consistency
+- Record type strings use the unprefixed `<Entity>Record` form; the legacy `CD_` prefix is forbidden
 - UUID fields stored as strings in CKRecords
 - Optional fields only set if non-nil
 - `fieldValues(from:)` provides defaults for missing fields
@@ -104,6 +105,15 @@ For each mutation method, verify:
 - `nextRecordZoneChangeBatch` filters by provided scope
 - No calls to `fetchChanges()` or `sendChanges()` inside delegate callbacks
 - No duplicate record IDs in batches (save removes from deletions, vice versa)
+- Trace `.sentRecordZoneChanges` transitively through both handlers. Its
+  batch-scaled synchronous GRDB work (`database.read` / `database.write` called
+  without `await`, or repository `*Sync`) must run through an awaited
+  `@concurrent` boundary, not blanket `MainActor.run`. With Swift 6.2's opt-in
+  `NonisolatedNonsendingByDefault`, `nonisolated` inherits the caller's actor;
+  require `@concurrent` as the explicit guarantee under either mode.
+- Ordering remains explicit: await acknowledgement persistence before
+  re-queueing failures or advancing delegate processing; hop to `MainActor`
+  only for coordinator-owned and CKSyncEngine state.
 
 ### Batch and Upload Patterns
 - `nextRecordZoneChangeBatch` limits to ≤400 records per call (Rule 13) -- CKSyncEngine does NOT chunk
@@ -115,7 +125,10 @@ For each mutation method, verify:
 ## False Positives to Avoid
 
 - **`nonisolated(unsafe)` on `RecordTypeRegistry.allTypes`** is acceptable -- it's a static constant dictionary initialized once.
-- **`nonisolated` on `CKSyncEngineDelegate` methods** with `await MainActor.run { }` is the correct pattern for bridging the nonisolated delegate protocol to `@MainActor` sync engines.
+- **`nonisolated` on other CKSyncEngine delegate methods** with
+  `await MainActor.run { }` is not itself a Rule 15 violation. This regression
+  rule is scoped to validated sent-acknowledgement persistence; flag other
+  event paths only with independent evidence that their work materially stalls.
 - **Creating fresh `ModelContext` per operation** in sync engines is correct -- `ModelContext` is not thread-safe and should not be reused across async boundaries.
 
 ## Output Format

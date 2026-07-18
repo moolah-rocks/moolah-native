@@ -200,7 +200,7 @@ struct RecordNameCollisionTests {
         zoneID: handler.zoneID))
     savedCK["name"] = "Test" as CKRecordValue
 
-    _ = handler.handleSentRecordZoneChanges(
+    _ = await handler.handleSentRecordZoneChanges(
       savedRecords: [savedCK], failedSaves: [], failedDeletes: [])
 
     let reloaded = try await harness.database.read { database in

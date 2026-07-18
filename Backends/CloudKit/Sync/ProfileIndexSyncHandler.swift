@@ -27,8 +27,10 @@ import OSLog
 /// **Concurrency.** Nonisolated and `Sendable`. Every synchronous method
 /// calls into the repository's `*Sync(...)` helpers which block the
 /// calling thread on the GRDB queue. Declaring this `@MainActor` would
-/// force every caller to block the UI thread; instead, callers that
-/// care can hop off-actor (`Task.detached { handler.deleteLocalData() }`).
+/// force every caller to block the UI thread. Callers must invoke these
+/// methods away from `MainActor`; actor-isolated call sites expose an awaited
+/// `@concurrent` async boundary and perform the synchronous handler work
+/// within it, as the sent-acknowledgement coordinator path does.
 /// All stored properties are themselves `Sendable` (`CKRecordZone.ID`,
 /// `GRDBProfileIndexRepository`, optional `GRDBInstrumentRegistryRepository`,
 /// `Logger`, `@Sendable` closure), so the conformance holds without
@@ -217,6 +219,21 @@ final class ProfileIndexSyncHandler: Sendable {
     writeSystemFields(for: recordID, to: nil)
   }
 
+  private func writeSystemFields(for recordID: CKRecord.ID, to data: Data?) {
+    do {
+      if let profileId = recordID.uuid {
+        try repository.setEncodedSystemFieldsBatchSync([(profileId, data)])
+      } else if let instrumentRepository {
+        try instrumentRepository.setEncodedSystemFieldsBatchSync(
+          [(recordID.recordName, data)])
+      }
+    } catch {
+      logger.error(
+        "Failed to update system fields for \(recordID.recordName, privacy: .public): \(error, privacy: .public)"
+      )
+    }
+  }
+
   // MARK: - Handle Sent Record Zone Changes
 
   /// Processes results from a successful CKSyncEngine send.
@@ -229,71 +246,90 @@ final class ProfileIndexSyncHandler: Sendable {
     failedSaves: [CKSyncEngine.Event.SentRecordZoneChanges.FailedRecordSave],
     failedDeletes: [(CKRecord.ID, CKError)]
   ) -> SyncErrorRecovery.ClassifiedFailures {
-    persistSystemFields(for: savedRecords)
-    clearNeedsPushForConfirmed(savedRecords)
-    let failures = SyncErrorRecovery.classify(
+    var failures = SyncErrorRecovery.classify(
       failedSaves: failedSaves,
       failedDeletes: failedDeletes,
       logger: logger)
-    resolveSystemFields(for: failures)
-    for (_, serverRecord) in failures.conflicts {
-      switch serverRecord.recordType {
-      case ProfileRow.recordType:
-        applyServerRecordChangedMerge(serverRecord: serverRecord)
-      case InstrumentRow.recordType:
-        applyInstrumentServerRecordChangedMerge(serverRecord: serverRecord)
-      default:
-        logger.error(
-          "handleSentRecordZoneChanges: unexpected recordType '\(serverRecord.recordType, privacy: .public)' on profile-index zone — ignoring"
-        )
-      }
+    let persistence = persistSystemFields(for: savedRecords, failures: failures)
+    if persistence.profileFailed {
+      failures.requeue.append(
+        contentsOf: savedRecords.compactMap { record in
+          record.recordID.uuid == nil ? nil : record.recordID
+        })
+    }
+    if persistence.instrumentFailed {
+      failures.requeue.append(
+        contentsOf: savedRecords.compactMap { record in
+          record.recordID.uuid == nil ? record.recordID : nil
+        })
     }
     return failures
   }
 
-  /// Persist updated CKRecord system fields onto matching rows after
-  /// a successful upload. Dispatches by record-name shape.
-  private func persistSystemFields(for savedRecords: [CKRecord]) {
-    guard !savedRecords.isEmpty else { return }
-    for saved in savedRecords {
-      writeSystemFields(for: saved.recordID, to: saved.encodedSystemFields)
+  /// Persists the complete sent-event system-field set in one transaction per
+  /// independent backing database.
+  private func persistSystemFields(
+    for savedRecords: [CKRecord],
+    failures: SyncErrorRecovery.ClassifiedFailures
+  ) -> (profileFailed: Bool, instrumentFailed: Bool) {
+    var updates: [(CKRecord.ID, Data?)] = savedRecords.map {
+      ($0.recordID, $0.encodedSystemFields)
     }
-  }
+    updates += failures.unknownItems.map { ($0.recordID, Optional<Data>.none) }
 
-  /// Apply server-side system fields from conflicts, and clear system
-  /// fields for records the server has already deleted.
-  private func resolveSystemFields(for failures: SyncErrorRecovery.ClassifiedFailures) {
-    guard !failures.conflicts.isEmpty || !failures.unknownItems.isEmpty else { return }
-    for (_, serverRecord) in failures.conflicts {
-      writeSystemFields(for: serverRecord.recordID, to: serverRecord.encodedSystemFields)
+    var profileUpdates = updates.compactMap { recordID, data -> (UUID, Data?)? in
+      guard let id = recordID.uuid else { return nil }
+      return (id, data)
     }
-    for (recordID, _) in failures.unknownItems {
-      writeSystemFields(for: recordID, to: nil)
+    profileUpdates += failures.conflicts.compactMap { _, serverRecord in
+      guard serverRecord.recordType == ProfileRow.recordType,
+        let id = serverRecord.recordID.uuid
+      else { return nil }
+      return (id, serverRecord.encodedSystemFields)
     }
-  }
+    let instrumentUpdates = updates.compactMap { recordID, data -> (String, Data?)? in
+      guard recordID.uuid == nil else { return nil }
+      return (recordID.recordName, data)
+    }
 
-  /// Look up a row by id and replace its cached system fields blob.
-  /// Dispatches by record-name shape: a UUID-decoding name goes to
-  /// the profile path; otherwise the name is the instrument id.
-  private func writeSystemFields(for recordID: CKRecord.ID, to data: Data?) {
-    if let profileId = recordID.uuid {
-      do {
-        _ = try repository.setEncodedSystemFieldsSync(id: profileId, data: data)
-      } catch {
-        logger.error(
-          "Failed to save profile system fields for \(recordID.recordName, privacy: .public): \(error, privacy: .public)"
-        )
-      }
-      return
-    }
-    guard let instrumentRepository else { return }
+    var profileFailed = false
     do {
-      _ = try instrumentRepository.setEncodedSystemFieldsSync(
-        id: recordID.recordName, data: data)
+      try persistSentProfileAcknowledgements(
+        updates: profileUpdates,
+        savedRecords: savedRecords,
+        conflicts: failures.conflicts)
     } catch {
-      logger.error(
-        "Failed to save instrument system fields for \(recordID.recordName, privacy: .public): \(error, privacy: .public)"
-      )
+      profileFailed = true
+      logger.error("Failed to batch profile system fields: \(error, privacy: .public)")
+    }
+    var instrumentFailed = false
+    if let instrumentRepository {
+      let conflictRows = instrumentConflictRows(from: failures.conflicts)
+      do {
+        try instrumentRepository.persistSentAcknowledgementsSync(
+          systemFieldUpdates: instrumentUpdates,
+          conflictRows: conflictRows)
+      } catch {
+        instrumentFailed = true
+        logger.error("Failed to batch instrument system fields: \(error, privacy: .public)")
+      }
+    }
+    return (profileFailed, instrumentFailed)
+  }
+
+  private func instrumentConflictRows(
+    from conflicts: [(recordID: CKRecord.ID, serverRecord: CKRecord)]
+  ) -> [InstrumentRow] {
+    conflicts.compactMap { _, serverRecord in
+      guard serverRecord.recordType == InstrumentRow.recordType else { return nil }
+      guard var row = InstrumentRow.fieldValues(from: serverRecord) else {
+        logger.error(
+          "Malformed instrument conflict '\(serverRecord.recordID.recordName)' — retaining old tag"
+        )
+        return nil
+      }
+      row.encodedSystemFields = serverRecord.encodedSystemFields
+      return row
     }
   }
 }
@@ -301,9 +337,9 @@ final class ProfileIndexSyncHandler: Sendable {
 extension ProfileIndexSyncHandler {
   /// Promotes the local row's `dataFormatVersion` to `max(local, server)`
   /// when CKSyncEngine reports `.serverRecordChanged` for the
-  /// profile-index zone. Called from `handleSentRecordZoneChanges` after
-  /// `resolveSystemFields(for: failures)` and before the method returns
-  /// (CKSyncEngine retries the upload from the now-promoted local row).
+  /// profile-index zone. The sent-event path applies the same merge inside
+  /// its acknowledgement batch transaction before CKSyncEngine retries the
+  /// upload from the now-promoted local row.
   /// Without this step the re-queued save would upload the local row's
   /// stale field values, silently downgrading a higher server-side value.
   ///

@@ -11,10 +11,12 @@ import Testing
 /// The conflict path never decodes the server record's field values into
 /// local storage. `SyncErrorRecovery.classifySaveFailure` routes a
 /// `.serverRecordChanged` failure into `ClassifiedFailures.conflicts`
-/// carrying only the `recordID`, and `requeueFailures` re-queues it as
-/// `.saveRecord(recordID)`. CKSyncEngine then rebuilds the upload CKRecord
-/// by calling back into `ProfileDataSyncHandler.recordToSave(for:)`, which
-/// reads the *current stored GRDB row* — not any cached server record.
+/// with the `recordID` and server record. Acknowledgement persistence adopts
+/// the server record's system fields but not its user fields, and the
+/// `recoveryPlan` applied by `processSentFailures` re-queues
+/// `.saveRecord(recordID)`. CKSyncEngine then rebuilds the upload CKRecord by
+/// calling back into `ProfileDataSyncHandler.recordToSave(for:)`, which reads
+/// the *current stored GRDB row* — not the server record's field values.
 ///
 /// Because fetch-path canonicalization already rewrites a
 /// non-canonical instrument id before the row is stored, the row

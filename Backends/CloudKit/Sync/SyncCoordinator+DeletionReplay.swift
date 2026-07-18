@@ -215,8 +215,8 @@ extension SyncCoordinator {
   /// safe — a zone-absent error on a *delete* means the whole zone is gone
   /// server-side, so the record cannot exist and there is nothing to resurrect on
   /// a future reset. Retryable failures, by contrast, are re-added to pending by
-  /// `SyncErrorRecovery.requeueFailures` (which runs inside the awaited send,
-  /// before this check), so they stay tracked and are NOT cleared.
+  /// the awaited `processSentFailures` recovery-plan path before this check, so
+  /// they stay tracked and are NOT cleared.
   nonisolated static func confirmedReplayedDeletions(
     _ inFlight: [CKRecord.ID: ReplayedDeletionRef],
     pending: [CKSyncEngine.PendingRecordZoneChange]

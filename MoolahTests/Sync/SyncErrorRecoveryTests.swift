@@ -116,4 +116,43 @@ struct SyncErrorRecoveryTests {
     #expect(failures.zoneNotFoundDeletes == [zoneMissing])
     #expect(Set(failures.requeueDeletes) == [conflict, unexpected])
   }
+
+  @Test("missing-handler recovery retains acknowledgements and every retry class")
+  func missingHandlerRecoveryPlanIsComplete() {
+    let acknowledged = Self.makeRecordID("acknowledged")
+    let conflict = Self.makeRecordID("conflict-save")
+    let unknown = Self.makeRecordID("unknown-save")
+    let ordinary = Self.makeRecordID("ordinary-save")
+    let quota = Self.makeRecordID("quota-save")
+    let failedDelete = Self.makeRecordID("failed-delete")
+    let missingSave = Self.makeRecordID("missing-zone-save")
+    let missingDelete = Self.makeRecordID("missing-zone-delete")
+    let serverRecord = CKRecord(
+      recordType: "AccountRecord", recordID: conflict)
+    var failures = SyncErrorRecovery.ClassifiedFailures()
+    failures.conflicts = [(conflict, serverRecord)]
+    failures.unknownItems = [(unknown, "AccountRecord")]
+    failures.requeue = [ordinary]
+    failures.quotaExceeded = [quota]
+    failures.requeueDeletes = [failedDelete]
+    failures.zoneNotFoundSaves = [missingSave]
+    failures.zoneNotFoundDeletes = [missingDelete]
+
+    let plan = SyncErrorRecovery.recoveryPlan(
+      failures, additionalSaves: [acknowledged])
+    var saves = Set<CKRecord.ID>()
+    var deletes = Set<CKRecord.ID>()
+    for change in plan.pendingChanges {
+      switch change {
+      case .saveRecord(let id): saves.insert(id)
+      case .deleteRecord(let id): deletes.insert(id)
+      @unknown default: break
+      }
+    }
+
+    #expect(saves == [acknowledged, conflict, unknown, ordinary, quota])
+    #expect(deletes == [failedDelete])
+    #expect(plan.zoneNotFoundSaves == [missingSave])
+    #expect(plan.zoneNotFoundDeletes == [missingDelete])
+  }
 }

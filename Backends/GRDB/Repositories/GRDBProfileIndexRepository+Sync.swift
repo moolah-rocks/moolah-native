@@ -52,6 +52,15 @@ extension GRDBProfileIndexRepository {
     }
   }
 
+  /// Writes a sent-event batch in one transaction.
+  func setEncodedSystemFieldsBatchSync(
+    _ updates: [(id: UUID, data: Data?)]
+  ) throws {
+    try database.write { database in
+      try setEncodedSystemFieldsBatchSync(updates, in: database)
+    }
+  }
+
   /// Subset of `ids` whose profile row currently has `needs_push = 1`,
   /// read inside the caller's transaction.
   func dirtyIdsSync(from ids: [UUID], in database: Database) throws -> Set<UUID> {

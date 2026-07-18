@@ -1,5 +1,7 @@
 @preconcurrency import CloudKit
 import Foundation
+import GRDB
+import os
 
 extension ProfileDataSyncHandler {
   // MARK: - System Fields Management
@@ -81,49 +83,97 @@ extension ProfileDataSyncHandler {
   /// Updates system fields on successfully saved records, classifies failures,
   /// and handles conflict/unknownItem system fields updates.
   /// Returns classified failures for the coordinator to re-queue.
-  func handleSentRecordZoneChanges(
+  /// Runs the complete acknowledgement persistence sequence away from the
+  /// caller's actor. `@concurrent` makes the off-actor executor guarantee
+  /// explicit across both Swift 6.2 concurrency modes.
+  @concurrent
+  nonisolated func handleSentRecordZoneChanges(
     savedRecords: [CKRecord],
     failedSaves: [CKSyncEngine.Event.SentRecordZoneChanges.FailedRecordSave],
     failedDeletes: [(CKRecord.ID, CKError)]
-  ) -> SyncErrorRecovery.ClassifiedFailures {
-    if !savedRecords.isEmpty {
-      // Capture each row's CURRENTLY-cached system fields *before*
-      // `updateSystemFieldsForSaved` overwrites them with this ack's
-      // newer blob. A `nil` pre-ack blob means the row has never
-      // round-tripped — this is its first confirmed upload, so no echo
-      // of an earlier server version can still be queued, and the flag
-      // is safe to clear. A non-`nil` pre-ack blob means the row was
-      // uploaded before at an earlier server version; a stale echo of
-      // that superseded version may still be in the fetch backlog, so
-      // the flag must NOT be cleared here (issue #1081 follow-up — the
-      // step-5→6 single-device loss window). The fetch/apply path clears
-      // it later when the confirming echo of the current version arrives.
-      let preAckCached = preAckCachedSystemFields(savedRecords)
-      updateSystemFieldsForSaved(savedRecords)
-      clearNeedsPushForConfirmed(savedRecords, preAckCached: preAckCached)
+  ) async -> SyncErrorRecovery.ClassifiedFailures {
+    precondition(
+      !Thread.isMainThread,
+      "Sent-record acknowledgement persistence must not run on the main thread")
+    let signpostID = OSSignpostID(log: Signposts.sync)
+    os_signpost(
+      .begin,
+      log: Signposts.sync,
+      name: "persistSentAcknowledgements",
+      signpostID: signpostID,
+      "%{public}d saved records",
+      savedRecords.count)
+    defer {
+      os_signpost(
+        .end,
+        log: Signposts.sync,
+        name: "persistSentAcknowledgements",
+        signpostID: signpostID)
     }
 
-    let failures = SyncErrorRecovery.classify(
+    var failures = SyncErrorRecovery.classify(
       failedSaves: failedSaves, failedDeletes: failedDeletes, logger: logger)
-
-    if !failures.conflicts.isEmpty || !failures.unknownItems.isEmpty {
-      updateSystemFieldsForFailures(
-        conflicts: failures.conflicts, unknownItems: failures.unknownItems)
+    do {
+      try persistSentAcknowledgementChanges(
+        savedRecords: savedRecords, failures: failures)
+    } catch {
+      logger.error(
+        "Sent acknowledgement transaction failed: \(error.localizedDescription, privacy: .public)"
+      )
+      // CKSyncEngine removes successful saves from its pending queue. If their
+      // local acknowledgement transaction rolls back, retry them so system
+      // fields and needs_push cannot diverge.
+      failures.requeue.append(contentsOf: savedRecords.map(\.recordID))
     }
 
     return failures
   }
 
-  /// Writes each successfully-sent record's latest system fields back
-  /// onto the matching local row, batching the writes by recordType so
-  /// that one CKSyncEngine batch produces one GRDB commit per
-  /// recordType (not one per record). Reduces the
-  /// `databaseDidCommit`-driven UI re-fetch cost during sync uploads.
-  /// See issue #865 for the follow-up that lifts the observation
-  /// region's dependency on the column itself.
-  private func updateSystemFieldsForSaved(_ savedRecords: [CKRecord]) {
-    applySystemFieldsBatched(savedRecords)
-    logger.info("Applied system fields for \(savedRecords.count) saved records")
+  /// Persists the complete sent-event acknowledgement in one GRDB write so a
+  /// setter failure rolls back system fields and needs_push together.
+  nonisolated private func persistSentAcknowledgementChanges(
+    savedRecords: [CKRecord],
+    failures: SyncErrorRecovery.ClassifiedFailures
+  ) throws {
+    try grdbRepositories.database.write { database in
+      var preAckCached: [String: Data?] = [:]
+      for saved in savedRecords {
+        guard let uuid = saved.recordID.uuid else { continue }
+        if let blob = try self.cachedSystemFields(
+          recordType: saved.recordType, id: uuid, in: database)
+        {
+          preAckCached[saved.recordID.systemFieldsKey] = blob
+        }
+      }
+
+      try self.applySystemFieldsInTransaction(
+        savedRecords, in: database)
+      try self.clearNeedsPushForConfirmed(
+        savedRecords, preAckCached: preAckCached, in: database)
+      try self.applySystemFieldsInTransaction(
+        failures.conflicts.map(\.serverRecord), in: database)
+
+      let unknownUpdates = Dictionary(grouping: failures.unknownItems, by: \.recordType)
+      for (recordType, items) in unknownUpdates {
+        let updates = items.compactMap { item -> (id: UUID, data: Data?)? in
+          guard let id = item.recordID.uuid else { return nil }
+          return (id: id, data: nil)
+        }
+        _ = try self.applySystemFieldUpdatesInTransaction(
+          recordType: recordType, updates: updates, in: database)
+      }
+    }
+    logger.info("Persisted sent acknowledgements for \(savedRecords.count) saved records")
+  }
+
+  nonisolated private func applySystemFieldsInTransaction(
+    _ records: [CKRecord], in database: Database
+  ) throws {
+    let recordsByType = Dictionary(grouping: records, by: \.recordType)
+    for (recordType, typedRecords) in recordsByType {
+      try applySystemFieldsInTransaction(
+        recordType: recordType, ckRecords: typedRecords, in: database)
+    }
   }
 
   /// Clears `needs_push` for each saved record whose current local row
@@ -139,9 +189,8 @@ extension ProfileDataSyncHandler {
   /// arrives afterwards cannot clobber the row: the modification-date gate
   /// on the clean apply path (`applyBatchSaves`, issue #1085) rejects any
   /// echo whose server `modificationDate` is not strictly newer than the
-  /// date the row caches. (CloudKit does **not** guarantee fetched changes
-  /// arrive in server-token order — an earlier version of this doc wrongly
-  /// relied on that; the date gate is the actual guarantee.) Clearing only
+  /// date the row caches. CloudKit does **not** guarantee fetched changes
+  /// arrive in server-token order; the date gate provides the guarantee. Clearing only
   /// on an exact user-field match remains the safe direction — an
   /// under-clear is a harmless extra deferral, while an over-clear could let
   /// a later echo clobber a pending newer edit (data loss).
@@ -151,63 +200,33 @@ extension ProfileDataSyncHandler {
   /// `grdbRepositories.database.write` transaction. Because that write
   /// holds the serial GRDB queue for its whole duration, no concurrent
   /// local edit can commit (and re-raise `needs_push`) between the compare
-  /// and the clear — the previous read-then-separate-write shape had a
-  /// TOCTOU window where exactly such an interleaving could clear the flag
-  /// over a newer edit, losing its protection.
+  /// and the clear. Splitting the read and write would create a TOCTOU window
+  /// where that interleaving could clear the flag over a newer edit.
   ///
-  /// - Precondition: call on `@MainActor` (matches `updateSystemFieldsForSaved`).
-  ///   The single `database.write` is the only transaction opened, so this
-  ///   must not be nested inside another write on the same queue.
-  private func clearNeedsPushForConfirmed(
-    _ savedRecords: [CKRecord], preAckCached: [String: Data?]
-  ) {
-    do {
-      try grdbRepositories.database.write { database in
-        var clearByType: [String: [UUID]] = [:]
-        for saved in savedRecords {
-          guard let uuid = saved.recordID.uuid else { continue }
-          // Only the first confirmed round-trip (pre-ack cache was nil)
-          // is safe to clear on the ack; a re-confirmation at a newer
-          // version leaves the flag for the fetch path (see doc above).
-          guard case .some(.none) = preAckCached[saved.recordID.systemFieldsKey]
-          else { continue }
-          // Re-fetch the CURRENT row inside this transaction and compare.
-          guard
-            let current = try self.currentCKRecord(
-              recordType: saved.recordType, id: uuid, in: database)
-          else { continue }
-          if current.hasSameUserFields(as: saved) {
-            clearByType[saved.recordType, default: []].append(uuid)
-          }
-        }
-        // Clear in the SAME transaction so no edit interleaves between the
-        // compare above and the clear below.
-        for (recordType, ids) in clearByType {
-          try self.clearNeedsPush(recordType: recordType, ids: ids, in: database)
-        }
+  /// - Precondition: call off the main thread through the acknowledgement
+  ///   handler's `@concurrent` boundary. The single `database.write` is the
+  ///   only transaction opened, so this must not be nested inside another
+  ///   write on the same queue.
+  nonisolated private func clearNeedsPushForConfirmed(
+    _ savedRecords: [CKRecord],
+    preAckCached: [String: Data?],
+    in database: Database
+  ) throws {
+    var clearByType: [String: [UUID]] = [:]
+    for saved in savedRecords {
+      guard let uuid = saved.recordID.uuid else { continue }
+      guard case .some(.none) = preAckCached[saved.recordID.systemFieldsKey]
+      else { continue }
+      guard
+        let current = try currentCKRecord(
+          recordType: saved.recordType, id: uuid, in: database)
+      else { continue }
+      if current.hasSameUserFields(as: saved) {
+        clearByType[saved.recordType, default: []].append(uuid)
       }
-    } catch {
-      logger.error(
-        """
-        clearNeedsPushForConfirmed failed: \
-        \(error.localizedDescription, privacy: .public)
-        """)
     }
-  }
-
-  /// Reconciles system fields after conflicts (adopt the server copy)
-  /// and unknownItem failures (clear the stale cache so the record
-  /// re-uploads as a fresh create). Both paths batch by recordType
-  /// for the same reason `updateSystemFieldsForSaved` does.
-  private func updateSystemFieldsForFailures(
-    conflicts: [(recordID: CKRecord.ID, serverRecord: CKRecord)],
-    unknownItems: [(recordID: CKRecord.ID, recordType: String)]
-  ) {
-    if !conflicts.isEmpty {
-      applySystemFieldsBatched(conflicts.map(\.serverRecord))
-    }
-    if !unknownItems.isEmpty {
-      clearSystemFieldsBatched(unknownItems)
+    for (recordType, ids) in clearByType {
+      try clearNeedsPush(recordType: recordType, ids: ids, in: database)
     }
   }
 
@@ -249,36 +268,6 @@ extension ProfileDataSyncHandler {
       }
       updatesByType[ckRecord.recordType, default: []]
         .append((id: uuid, data: ckRecord.encodedSystemFields))
-    }
-    for (recordType, updates) in updatesByType {
-      runBatchedSystemFieldsUpdate(recordType: recordType, updates: updates)
-    }
-  }
-
-  /// Same shape as `applySystemFieldsBatched` but for unknownItem
-  /// failures: groups by recordType and runs one batch clear (data
-  /// = `nil`) per type.
-  private func clearSystemFieldsBatched(
-    _ unknownItems: [(recordID: CKRecord.ID, recordType: String)]
-  ) {
-    var updatesByType: [String: [(id: UUID, data: Data?)]] = [:]
-    for (recordID, recordType) in unknownItems {
-      if recordType == InstrumentRow.recordType {
-        logger.warning(
-          """
-          Ignoring straggler InstrumentRecord system-fields clear for \
-          \(recordID.recordName, privacy: .public) on per-profile zone \
-          \(self.zoneID.zoneName, privacy: .public).
-          """)
-        continue
-      }
-      guard let uuid = recordID.uuid else {
-        logger.warning(
-          "clearSystemFields: recordName \(recordID.recordName) has no UUID component for \(recordType)"
-        )
-        continue
-      }
-      updatesByType[recordType, default: []].append((id: uuid, data: nil))
     }
     for (recordType, updates) in updatesByType {
       runBatchedSystemFieldsUpdate(recordType: recordType, updates: updates)
