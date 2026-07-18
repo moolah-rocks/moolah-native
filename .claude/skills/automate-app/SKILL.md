@@ -9,9 +9,26 @@ Drive the running Moolah macOS app via AppleScript (`osascript`). Data operation
 
 ## CRITICAL: Profile Safety
 
-**Before taking ANY automation action, you MUST confirm with the user which profile to use.** Never assume a profile. Never default to the first profile. Ask explicitly, every time, even if there's only one profile open. This is real financial data — testing operations must not be performed on important profiles.
+Resolve the target app bundle first, then inspect its
+`MoolahCloudKitEnvironment` Info.plist key before automating a profile:
 
-**Recommended first step for testing:** Suggest creating a dedicated test profile via the app's UI or AppleScript.
+```bash
+/usr/libexec/PlistBuddy -c 'Print :MoolahCloudKitEnvironment' \
+  .build/Build/Products/Debug/Moolah.app/Contents/Info.plist
+```
+
+- **Development:** Profiles in the Development CloudKit environment are safe
+  test data. You may automate them without asking permission. Resolve the
+  intended profile by name from the task; never silently default to the first
+  profile when the task does not identify one.
+- **Production:** Before any automation action, obtain explicit,
+  in-the-moment permission for the exact production profile and operation.
+  Prior permission does not carry forward. Never default to the first profile.
+- **Unknown or unreadable environment:** Treat it as Production and ask before
+  acting.
+
+For testing in Development, prefer a clearly named dedicated profile such as
+`Test Profile`.
 
 ## Prerequisites
 

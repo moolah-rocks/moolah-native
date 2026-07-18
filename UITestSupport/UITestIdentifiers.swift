@@ -80,6 +80,12 @@ public enum UITestIdentifiers {
     /// Payee text field on the transaction detail surface.
     public static let payee = "detail.payee"
 
+    /// Primary amount text field on the transaction detail surface.
+    public static let amount = "detail.amount"
+
+    /// Instrument picker adjacent to the primary amount field.
+    public static let amountInstrument = "detail.amount.instrument"
+
     /// Picker that sets the counterpart account for a transfer (the "To
     /// Account" or "From Account" picker depending on `showFromAccount`).
     /// Only rendered when `draft.type == .transfer`.
@@ -265,6 +271,16 @@ public enum UITestIdentifiers {
   }
 
   // MARK: - CryptoAccountCreation
+
+  public enum CreateAccount {
+    /// Name field used as the deterministic start of the standard account
+    /// form's keyboard-focus sequence.
+    public static let nameField = "createaccount.name"
+
+    /// Account type picker immediately before the currency picker in the
+    /// standard account form's keyboard-focus sequence.
+    public static let accountTypePicker = "createaccount.type"
+  }
 
   public enum CryptoAccountCreation {
     /// Chain picker (Ethereum / OP Mainnet / Base / Polygon) inside the

@@ -78,8 +78,8 @@ struct InstrumentPickerSheet: View {
 /// Self-contained variant. Owns its own `store`, `selection` placeholder,
 /// and `isPresented` flag; reports the picked instrument (or `nil` on
 /// cancel/dismiss) through `onCompletion`. The store is built from the
-/// ambient `ProfileSession` on first appearance — matches the construction
-/// pattern used by `InstrumentPickerField.openPicker()`.
+/// ambient `ProfileSession` on first appearance, after the environment is
+/// available to this callback-owned presentation.
 private struct CallbackSheet: View {
   let kinds: Set<Instrument.Kind>
   let onCompletion: (Instrument?) -> Void
@@ -120,9 +120,8 @@ private struct CallbackSheet: View {
       isPresented: $isPresented
     )
     .onAppear {
-      // Rebuild the store with the live session's services. Mirrors
-      // `InstrumentPickerField.openPicker()` so search and registration
-      // both have the right wiring.
+      // Rebuild the placeholder store once the live session's search and
+      // registration services are available from the environment.
       store = InstrumentPickerStore(
         searchService: session?.instrumentSearchService,
         registry: session?.instrumentRegistry,

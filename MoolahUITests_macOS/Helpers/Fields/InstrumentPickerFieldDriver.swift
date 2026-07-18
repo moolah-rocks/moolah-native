@@ -9,6 +9,7 @@ import XCTest
 ///
 /// Usage:
 ///   app.createAccount.currency.tap(currentId: "AUD")
+///   app.createAccount.currency.activateWithKeyboard(currentId: "AUD")
 ///   app.createAccount.currency.search("USD")
 ///   app.createAccount.currency.pickRow("USD")
 ///   app.createAccount.currency.expectFieldSelection("USD")
@@ -36,6 +37,57 @@ struct InstrumentPickerFieldDriver {
       Trace.recordFailure("instrumentPicker.sheet did not appear after tapping field")
       XCTFail("InstrumentPickerSheet did not appear within 10s of tapping the field button")
     }
+  }
+
+  /// Tabs to the picker field and activates it with Space. Returns once the
+  /// picker sheet is visible, proving keyboard activation reached the field.
+  func activateWithKeyboard(currentId: String) {
+    Trace.record(#function, detail: "currentId=\(currentId)")
+    let button = app.element(for: UITestIdentifiers.InstrumentPicker.field(currentId))
+    if !button.waitForExistence(timeout: 10) {
+      Trace.recordFailure("field button 'instrumentPicker.field.\(currentId)' did not appear")
+      XCTFail("InstrumentPickerField button for '\(currentId)' did not appear within 10s")
+      return
+    }
+
+    let nameField = app.element(for: UITestIdentifiers.CreateAccount.nameField)
+    let accountTypePicker = app.element(for: UITestIdentifiers.CreateAccount.accountTypePicker)
+    guard focus(nameField, description: "account name field") else { return }
+
+    app.pressKeyboardShortcut(XCUIKeyboardKey.tab.rawValue)
+    guard waitForFocus(accountTypePicker, description: "account type picker") else { return }
+
+    app.pressKeyboardShortcut(XCUIKeyboardKey.tab.rawValue)
+    guard waitForFocus(button, description: "instrument picker field") else { return }
+
+    app.pressSpaceKey(on: button)
+    let sheet = app.element(for: UITestIdentifiers.InstrumentPicker.sheet)
+    if !sheet.waitForExistence(timeout: 10) {
+      Trace.recordFailure("instrumentPicker.sheet did not appear after pressing Space")
+      XCTFail("InstrumentPickerSheet did not appear within 10s of pressing Space")
+    }
+  }
+
+  private func focus(_ element: XCUIElement, description: String) -> Bool {
+    Trace.record(#function, detail: description)
+    guard element.waitForExistence(timeout: 10) else {
+      Trace.recordFailure("\(description) did not appear")
+      XCTFail("The \(description) did not appear within 10s")
+      return false
+    }
+    element.click()
+    return waitForFocus(element, description: description)
+  }
+
+  private func waitForFocus(_ element: XCUIElement, description: String) -> Bool {
+    let deadline = Date().addingTimeInterval(10)
+    while Date() < deadline {
+      if (element.value(forKey: "hasKeyboardFocus") as? Bool) == true { return true }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    }
+    Trace.recordFailure("\(description) did not receive keyboard focus")
+    XCTFail("The \(description) did not receive keyboard focus within 10s")
+    return false
   }
 
   /// Types `query` into the picker's search field. Returns once the row for

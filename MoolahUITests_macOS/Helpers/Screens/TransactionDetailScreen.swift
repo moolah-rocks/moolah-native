@@ -43,6 +43,41 @@ struct TransactionDetailScreen {
     CounterpartAmountDriver(app: app)
   }
 
+  /// Moves keyboard focus from the Amount field to its adjacent instrument
+  /// picker, then activates the picker with Space. Returns once the picker
+  /// sheet appears.
+  func openInstrumentPickerWithKeyboard() {
+    Trace.record(#function)
+    let amountField = app.element(for: UITestIdentifiers.Detail.amount)
+    if !amountField.waitUntilHittable(timeout: 10) {
+      Trace.recordFailure("transaction amount field was not hittable")
+      XCTFail("Transaction amount field was not hittable within 10s")
+      return
+    }
+    amountField.click()
+    app.pressKeyboardShortcut(XCUIKeyboardKey.tab.rawValue)
+
+    let picker = app.element(for: UITestIdentifiers.Detail.amountInstrument)
+    let focusDeadline = Date().addingTimeInterval(10)
+    while Date() < focusDeadline {
+      if (picker.value(forKey: "hasKeyboardFocus") as? Bool) == true { break }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    }
+    guard (picker.value(forKey: "hasKeyboardFocus") as? Bool) == true else {
+      Trace.recordFailure("transaction instrument picker did not receive keyboard focus")
+      XCTFail("Transaction instrument picker did not receive keyboard focus within 10s")
+      return
+    }
+
+    app.pressSpaceKey(on: picker)
+
+    let sheet = app.element(for: UITestIdentifiers.InstrumentPicker.sheet)
+    if !sheet.waitForExistence(timeout: 10) {
+      Trace.recordFailure("instrument picker sheet did not appear after pressing Space")
+      XCTFail("Instrument picker sheet did not appear within 10s of pressing Space")
+    }
+  }
+
   /// Selects a new "To Account" (counterpart account) for a transfer via
   /// the transfer account picker. Clicks the picker to open its menu,
   /// clicks the menu item with the given display name, and returns once

@@ -42,10 +42,6 @@ struct InstrumentPickerSheetCore: View {
     /// container, since SwiftUI propagates container-level identifiers to
     /// all descendants and would override child identifiers.
     private var macOSContent: some View {
-      // No Cancel button on macOS — popovers auto-dismiss on outside click
-      // and Esc (handled below). Removing Cancel makes the search field
-      // the only focusable in the header area, so AppKit's first-responder
-      // walk lands on it naturally without focus gymnastics.
       VStack(spacing: 0) {
         macOSHeader
         Divider()
@@ -71,13 +67,9 @@ struct InstrumentPickerSheetCore: View {
       Text("Choose \(String(localized: label))")
         .font(.headline)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier(UITestIdentifiers.InstrumentPicker.sheet)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        // Drives present/dismissed detection in InstrumentPickerFieldDriver:
-        // the title text exists iff the popover is open. Replaces the
-        // previous Cancel-button-as-sentinel approach (Cancel removed in
-        // line with macOS popover convention — popovers auto-dismiss).
-        .accessibilityIdentifier(UITestIdentifiers.InstrumentPicker.sheet)
     }
 
     private var macOSSearchField: some View {
