@@ -15,6 +15,16 @@
 # inspect failures without re-running.
 set -euo pipefail
 
+# `AppleKeyboardUIMode` is a host-global preference. Re-exec under one
+# advisory lock so concurrent UI-test runs from sibling worktrees cannot
+# restore the preference while another run still needs it. `lockf` releases
+# the lock automatically if either process exits or is killed; `-k` keeps the
+# lock file so acquisition ordering remains deterministic.
+if [ "${MOOLAH_UI_TEST_KEYBOARD_LOCK_HELD:-0}" != 1 ]; then
+    export MOOLAH_UI_TEST_KEYBOARD_LOCK_HELD=1
+    exec /usr/bin/lockf -k -w /private/tmp/moolah-ui-test-keyboard-mode.lock "$0" "$@"
+fi
+
 # Disable nested sandboxing when running inside sandvault; xcodebuild creates
 # its own sandbox and fails when already running inside one.
 export SWIFTPM_DISABLE_SANDBOX=1
@@ -55,7 +65,32 @@ mkdir -p "$DERIVED_DATA_PATH"
 # `[MoolahUITestCase] ARTEFACT_DIR` lines on failure (the runner is
 # sandboxed and writes artefacts to /private/tmp/MoolahUITests/...).
 LOG_FILE="$(mktemp)"
-trap 'rm -f "$LOG_FILE"' EXIT
+
+# Button and pop-up controls only participate in the macOS Tab loop when
+# Keyboard Navigation (Full Keyboard Access) is enabled. CI runners use the
+# default text-fields-only mode, which makes keyboard UI tests fail before
+# their action is reached. Set the global preference for this test process and
+# restore the developer's exact prior state on every exit path.
+KEYBOARD_UI_MODE_WAS_SET=false
+KEYBOARD_UI_MODE_VALUE=""
+if KEYBOARD_UI_MODE_VALUE="$(defaults read -g AppleKeyboardUIMode 2>/dev/null)"; then
+    KEYBOARD_UI_MODE_WAS_SET=true
+fi
+
+cleanup() {
+    rm -f "$LOG_FILE"
+    if [ "$KEYBOARD_UI_MODE_WAS_SET" = true ]; then
+        defaults write -g AppleKeyboardUIMode -int "$KEYBOARD_UI_MODE_VALUE"
+    else
+        defaults delete -g AppleKeyboardUIMode >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+defaults write -g AppleKeyboardUIMode -int 2
 
 set +e
 xcodebuild test "${COMMON_ARGS[@]}" \
