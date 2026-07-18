@@ -5,6 +5,8 @@
 
   private let logger = Logger(subsystem: "com.moolah.app", category: "SetCommand")
 
+  // MARK: - Command Dispatch
+
   /// Handles AppleScript assignment for mutable Moolah properties.
   ///
   /// The standard Cocoa KVC setter path is synchronous, while Moolah writes are
@@ -17,14 +19,16 @@
     }
 
     override func performDefaultImplementation() -> Any? {
-      guard let propertySpecifier = keySpecifier as? NSPropertySpecifier else {
+      let propertySpecifier =
+        directParameter as? NSPropertySpecifier
+        ?? keySpecifier as? NSPropertySpecifier
+      guard let propertySpecifier else {
         return super.performDefaultImplementation()
       }
 
       do {
-        guard let target = try targetObject(from: propertySpecifier) else {
-          return super.performDefaultImplementation()
-        }
+        let target = try targetObject(
+          from: receiversSpecifier ?? propertySpecifier.container)
 
         switch target {
         case let account as ScriptableAccount:
@@ -45,22 +49,33 @@
       }
     }
 
-    private func targetObject(from propertySpecifier: NSPropertySpecifier) throws -> Any? {
-      guard let container = propertySpecifier.container else { return nil }
-      let evaluated = container.objectsByEvaluatingSpecifier
+    private func targetObject(from targetSpecifier: NSScriptObjectSpecifier?) throws -> Any {
+      guard let targetSpecifier else {
+        throw AutomationError.operationFailed("The set target is missing")
+      }
+      let evaluated = targetSpecifier.objectsByEvaluatingSpecifier
       if let array = evaluated as? NSArray {
         guard array.count <= 1 else {
           throw AutomationError.operationFailed(
             "Cannot set a property on multiple objects at once")
         }
-        return array.firstObject
+        guard let target = array.firstObject else {
+          throw AutomationError.operationFailed("The set target no longer exists")
+        }
+        return target
       }
       if let array = evaluated as? [Any] {
         guard array.count <= 1 else {
           throw AutomationError.operationFailed(
             "Cannot set a property on multiple objects at once")
         }
-        return array.first
+        guard let target = array.first else {
+          throw AutomationError.operationFailed("The set target no longer exists")
+        }
+        return target
+      }
+      guard let evaluated else {
+        throw AutomationError.operationFailed("The set target no longer exists")
       }
       return evaluated
     }
@@ -69,6 +84,8 @@
       evaluatedArguments?["Value"] ?? evaluatedArguments?["value"] ?? evaluatedArguments?["to"]
     }
   }
+
+  // MARK: - Entity Setters
 
   extension SetCommand {
     private func setAccount(
@@ -261,6 +278,8 @@
       return result
     }
   }
+
+  // MARK: - Conversion and Error Helpers
 
   extension SetCommand {
     @MainActor
