@@ -144,12 +144,14 @@ struct CreateAccountView: View {
         }
       }
       .accessibilityLabel("Account name")
+      .accessibilityIdentifier(UITestIdentifiers.CreateAccount.nameField)
 
     Picker("Account Type", selection: $type) {
       ForEach(AccountType.allCases, id: \.self) { type in
         Text(type.displayName).tag(type)
       }
     }
+    .accessibilityIdentifier(UITestIdentifiers.CreateAccount.accountTypePicker)
   }
 
   @ViewBuilder private var standardFields: some View {

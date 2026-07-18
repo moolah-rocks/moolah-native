@@ -8,20 +8,11 @@ struct CompactInstrumentPickerButton: View {
   @Binding var selection: Instrument
 
   @Environment(ProfileSession.self) private var session: ProfileSession?
-  @State private var isPresented = false
-  @State private var store = InstrumentPickerStore(
-    kinds: Set(Instrument.Kind.allCases))
+  @State private var presentation: InstrumentPickerPresentation?
 
   var body: some View {
     Button {
-      store = InstrumentPickerStore(
-        searchService: session?.instrumentSearchService,
-        registry: session?.instrumentRegistry,
-        resolutionClient: session?.tokenResolutionClient,
-        canonicalResolver: session?.canonicalResolver,
-        kinds: Set(Instrument.Kind.allCases)
-      )
-      isPresented = true
+      openPicker()
     } label: {
       HStack(spacing: 4) {
         Text(selection.shortCode)
@@ -37,34 +28,70 @@ struct CompactInstrumentPickerButton: View {
     }
     .layoutPriority(1)
     .buttonStyle(.plain)
+    #if os(macOS)
+      .onKeyPress(.space) {
+        openPicker()
+        return .handled
+      }
+    #endif
     .accessibilityLabel(Text("Asset: \(selection.shortCode)"))
     .accessibilityHint(Text("Activate to choose a different asset"))
-    #if os(macOS)
-      .popover(
-        isPresented: $isPresented,
-        arrowEdge: .leading,
-        content: {
-          InstrumentPickerSheet(
-            store: store,
-            label: "Asset",
-            selection: $selection,
-            isPresented: $isPresented
-          )
+    .sheet(
+      item: $presentation,
+      content: { presentation in
+        #if os(macOS)
+          NavigationStack {
+            InstrumentPickerSheet(
+              store: presentation.store,
+              label: "Asset",
+              selection: $selection,
+              isPresented: isPresented
+            )
+            .padding(24)
+            .toolbar {
+              ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel") { isPresented.wrappedValue = false }
+              }
+            }
+          }
           .frame(minWidth: 460, minHeight: 480)
-        }
-      )
-    #else
-      .sheet(
-        isPresented: $isPresented,
-        content: {
+        #else
           InstrumentPickerSheet(
-            store: store,
+            store: presentation.store,
             label: "Asset",
             selection: $selection,
-            isPresented: $isPresented
+            isPresented: isPresented
           )
-        }
-      )
-    #endif
+        #endif
+      }
+    )
   }
+
+}
+
+extension CompactInstrumentPickerButton {
+  private func openPicker() {
+    guard presentation == nil else { return }
+    presentation = InstrumentPickerPresentation(
+      session: session,
+      kinds: Set(Instrument.Kind.allCases)
+    )
+  }
+
+  private var isPresented: Binding<Bool> {
+    Binding(
+      get: { presentation != nil },
+      set: { presented in
+        if !presented {
+          presentation = nil
+        }
+      }
+    )
+  }
+
+}
+
+#Preview("Compact instrument picker") {
+  CompactInstrumentPickerButton(selection: .constant(.AUD))
+    .padding()
 }

@@ -47,6 +47,7 @@ struct TransactionDetailDetailsSection: View {
             text: amountBinding,
             focus: $focusedField,
             equals: .amount,
+            accessibilityIdentifier: UITestIdentifiers.Detail.amount,
             onSubmit: {
               if isCrossCurrency {
                 focusedField = .counterpartAmount
@@ -54,6 +55,7 @@ struct TransactionDetailDetailsSection: View {
             }
           )
           CompactInstrumentPickerButton(selection: relevantInstrumentBinding)
+            .accessibilityIdentifier(UITestIdentifiers.Detail.amountInstrument)
         }
       } label: {
         Text("Amount")

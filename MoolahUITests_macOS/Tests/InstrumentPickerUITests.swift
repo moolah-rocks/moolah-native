@@ -32,4 +32,13 @@ final class InstrumentPickerUITests: MoolahUITestCase {
     // The field button identifier must now be instrumentPicker.field.USD.
     app.createAccount.currency.expectFieldSelection("USD")
   }
+
+  /// Keyboard activation must create the picker and its store atomically;
+  /// replacing the store while presenting can crash AppKit's popover path.
+  func testSpaceOpensFocusedInstrumentPickerField() {
+    let app = launch(seed: .tradeBaseline)
+
+    app.createAccount.open(initialCurrencyId: "AUD")
+    app.createAccount.currency.activateWithKeyboard(currentId: "AUD")
+  }
 }

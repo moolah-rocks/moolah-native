@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 /// Driver entrypoint for UI tests. Owns the underlying `XCUIApplication`,
@@ -40,6 +41,9 @@ final class MoolahApp {
   /// agree on the same on-disk path. Seeds that never read the inbox
   /// simply inherit an empty directory and ignore it.
   static func launch(seed: UITestSeed) -> MoolahApp {
+    let runningProcessIDs = Set(
+      NSRunningApplication.runningApplications(withBundleIdentifier: "rocks.moolah.app")
+        .map(\.processIdentifier))
     let application = XCUIApplication()
     application.launchArguments = ["--ui-testing"]
     // Use the shared `/private/tmp` rather than `FileManager.default
@@ -71,13 +75,51 @@ final class MoolahApp {
     }
     application.launchEnvironment = launchEnv
     application.launch()
+    reopenRunningApplication(excluding: runningProcessIDs)
     let app = MoolahApp(
-      application: application, seed: seed, inboxDirectory: inboxDirectory)
+      application: application,
+      seed: seed,
+      inboxDirectory: inboxDirectory)
     app.expectMainWindowVisible()
     return app
   }
 
-  init(application: XCUIApplication, seed: UITestSeed, inboxDirectory: URL) {
+  /// XCUITest occasionally starts the app process without delivering the
+  /// reopen event that asks a windowless macOS app to create its initial
+  /// window. Opening the already-running bundle through Launch Services sends
+  /// that event without creating another process — the same path as clicking
+  /// the app's Dock icon. `createsNewApplicationInstance` defaults to `false`.
+  private static func reopenRunningApplication(
+    excluding previouslyRunningProcessIDs: Set<pid_t>
+  ) {
+    let runningApplications = NSRunningApplication.runningApplications(
+      withBundleIdentifier: "rocks.moolah.app")
+    let launchedApplications = runningApplications.filter {
+      !previouslyRunningProcessIDs.contains($0.processIdentifier)
+    }
+    let launchedApplication =
+      launchedApplications.count == 1
+      ? launchedApplications[0]
+      : runningApplications.count == 1 ? runningApplications[0] : nil
+
+    guard let launchedApplication, let bundleURL = launchedApplication.bundleURL else {
+      let processIDs = runningApplications.map(\.processIdentifier)
+      XCTFail(
+        "Could not uniquely resolve the launched Moolah process to send its initial "
+          + "reopen event (matching pids: \(processIDs))")
+      return
+    }
+
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.activates = true
+    NSWorkspace.shared.openApplication(at: bundleURL, configuration: configuration)
+  }
+
+  init(
+    application: XCUIApplication,
+    seed: UITestSeed,
+    inboxDirectory: URL
+  ) {
     self.application = application
     self.seed = seed
     self.inboxDirectory = inboxDirectory
@@ -285,6 +327,28 @@ final class MoolahApp {
   /// driver layer talks to (mirrors `element(for:)`).
   func pressKeyboardShortcut(_ key: String, modifiers: XCUIElement.KeyModifierFlags = []) {
     application.typeKey(key, modifierFlags: modifiers)
+  }
+
+  /// Sends one supported XCTest Space event after the target has continuously
+  /// owned keyboard focus for a short settling interval. On macOS the
+  /// accessibility focus flag can become true before key routing has settled;
+  /// requiring stable focus prevents a single synthesized event from racing it.
+  func pressSpaceKey(on element: XCUIElement) {
+    let deadline = Date().addingTimeInterval(10)
+    var focusedSince: Date?
+    while Date() < deadline {
+      if (element.value(forKey: "hasKeyboardFocus") as? Bool) == true {
+        focusedSince = focusedSince ?? Date()
+        if let focusedSince, Date().timeIntervalSince(focusedSince) >= 0.5 {
+          element.typeKey(XCUIKeyboardKey.space.rawValue, modifierFlags: [])
+          return
+        }
+      } else {
+        focusedSince = nil
+      }
+      RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+    }
+    XCTFail("Cannot press Space because the target did not retain keyboard focus")
   }
 
   // MARK: - Helpers used by drivers and `MoolahUITestCase`
