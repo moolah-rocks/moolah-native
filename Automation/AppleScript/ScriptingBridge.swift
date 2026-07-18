@@ -51,8 +51,11 @@
 
     /// Tells the scripting infrastructure which keys the application handles.
     /// Only `scriptableProfiles` is exposed — it is the sole top-level element
-    /// in Moolah's SDEF.
-    func application(_ sender: NSApplication, delegateHandlesKey key: String) -> Bool {
+    /// in Moolah's SDEF. AppKit calls this Objective-C delegate hook while
+    /// resolving object specifiers. It reads no actor-isolated state, so keeping
+    /// it explicitly nonisolated avoids a Swift executor check in the generated
+    /// Objective-C thunk.
+    nonisolated func application(_ sender: NSApplication, delegateHandlesKey key: String) -> Bool {
       key == "scriptableProfiles"
     }
 
