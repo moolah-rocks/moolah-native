@@ -6,8 +6,9 @@ import Foundation
 // (the contract) and then re-emits whenever a price-cache table changes
 // — including the background `CryptoPriceWarmer`'s writes. We skip the
 // initial tick so subscription doesn't double-load on top of the view's
-// own initial `.task { loadAll() }`; every subsequent tick forces a
-// coalesced reload. See issue #1075.
+// own initial `.task { loadAll() }`. Subsequent ticks force a coalesced
+// reload while Analysis is active, or invalidate its cache while offscreen.
+// See issue #1075.
 extension AnalysisStore {
 
   func observe() async {
@@ -40,20 +41,21 @@ extension AnalysisStore {
   /// `ProfileSession.cleanupSync(coordinator:)`.
   func stopObserving() {
     observationTask?.cancel()
+    cancelDeferredRateRefresh()
   }
 
-  /// Force a reload in response to a price-cache rate tick (a background
-  /// warm landed new crypto prices). Routes through `loadAll(force:)`,
-  /// which single-flights and coalesces: if a load is already running
-  /// (including the view's initial load), this becomes one trailing
-  /// reconcile pass rather than a concurrent recompute. See #1163, #1075.
+  /// Handles a price-cache tick from a background warm. Active views route
+  /// through the single-flight loader; offscreen views retain one deferred
+  /// invalidation, and reconciliation-time bursts receive one debounced
+  /// follow-up. See #1163, #1075.
   func reloadForRateTick() async {
+    guard prepareForRateTick() else { return }
     await loadAll(force: true)
   }
 
-  /// Test-only: yields a tick after every consumed rate-stream emission
-  /// (the initial on-subscribe tick and each subsequent reload). Invoked
-  /// from the `observe()` loop.
+  /// Test-only: yields after every consumed rate-stream emission, including
+  /// offscreen emissions that only mark a deferred refresh. Invoked from the
+  /// `observe()` loop.
   func signalObservationTickForTesting() {
     testObservationTickContinuation.yield(())
   }

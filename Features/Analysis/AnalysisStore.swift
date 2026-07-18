@@ -61,19 +61,34 @@ final class AnalysisStore {
 
   // MARK: - Load coalescing
 
-  /// True while a `loadAll(...)` pass is running. A single gate over ALL
-  /// loads — the view's initial load, filter-change reloads, and rate-tick
-  /// reloads alike — so a load requested while another is in flight never
-  /// runs concurrently; it coalesces into exactly one trailing reconcile
-  /// pass. This bounds the reload storm: the initial load's own price
-  /// fetches write the cache `observeRates()` watches, firing ticks
-  /// mid-load; without the gate each such tick spawns a fresh full
-  /// recompute (a populated profile cascades ~4–5 times). See #1163, #1075.
-  private var loadInFlight = false
+  /// A single phase gate over every load source. Requests during the initial
+  /// pass coalesce into one reconciliation pass; rate ticks generated during
+  /// reconciliation receive at most one debounced follow-up cycle. This caps
+  /// a rate-driven burst at four reads. See #1163, #1075.
+  private enum LoadPhase {
+    case idle
+    case initial
+    case reconciliation
+  }
+
+  private var loadPhase: LoadPhase = .idle
+  private var loadIdleContinuations: [CheckedContinuation<Void, Never>] = []
   private var pendingReload = false
   /// Whether the coalesced trailing pass must bypass the cache guard
   /// (a rate tick was among the coalesced requests). See `loadAll(force:)`.
   private var pendingReloadForce = false
+
+  /// Rate ticks are only useful while Analysis is visible. Offscreen ticks
+  /// mark the cache dirty; the next view-initiated load consumes the marker
+  /// and performs one forced refresh.
+  private var isViewActive = false
+  private var deferredRateRefresh = false
+  private let rateRefreshDebounce: Duration
+  private var isPerformingDeferredRateRefresh = false
+  private var deferredRateRefreshGeneration = 0
+  // Non-private so the observation extension can cancel it during profile
+  // teardown alongside `observationTask`.
+  var deferredRateRefreshTask: Task<Void, Never>?
 
   /// The single observation `Task` draining `conversionService.observeRates()`
   /// / `observeErrors()`. Spawned from `init`, torn down by `stopObserving()`
@@ -82,9 +97,9 @@ final class AnalysisStore {
   /// can cancel it.
   var observationTask: Task<Void, Never>?
 
-  /// Test-only emission tick stream. Yields `()` after every
-  /// rate-tick-driven reload completes (see `+Observation`). Tests await
-  /// it to deterministically observe the post-tick reload without sleeps.
+  /// Test-only emission tick stream. Yields `()` after every rate-stream
+  /// emission is handled (see `+Observation`), whether it reloads immediately
+  /// or records an offscreen invalidation.
   /// `internal` so `@testable import Moolah` exposes it; the production
   /// app never reads it.
   let testObservationTickStream: AsyncStream<Void>
@@ -98,12 +113,14 @@ final class AnalysisStore {
     repository: AnalysisRepository,
     conversionService: any InstrumentConversionService,
     defaults: UserDefaults = .moolahShared,
-    monthEnd: Int = Calendar.current.component(.day, from: Date())
+    monthEnd: Int = Calendar.current.component(.day, from: Date()),
+    rateRefreshDebounce: Duration = .milliseconds(500)
   ) {
     self.repository = repository
     self.conversionService = conversionService
     self.defaults = defaults
     self.monthEnd = monthEnd
+    self.rateRefreshDebounce = rateRefreshDebounce
     let pair = AsyncStream<Void>.makeStream()
     self.testObservationTickStream = pair.stream
     self.testObservationTickContinuation = pair.continuation
@@ -133,40 +150,171 @@ final class AnalysisStore {
     // (`ProfileSession`), so the assumption holds.
     MainActor.assumeIsolated {
       observationTask?.cancel()
+      deferredRateRefreshTask?.cancel()
       testObservationTickContinuation.finish()
     }
   }
 
   // MARK: - Data Loading
 
-  /// Single-flight entry point for every load. A load requested while
-  /// another is running does not start concurrently — it coalesces into
-  /// exactly one trailing reconcile pass that re-reads the current filters.
-  /// A rate tick (`force`) makes that pass bypass the cache guard. This is
-  /// what tames the reload storm; see the `loadInFlight` doc and #1163.
+  /// Single-flight entry point for every load. A request during the initial
+  /// pass coalesces into one reconciliation pass. A rate tick (`force`) makes
+  /// that pass bypass the cache guard, while self-generated ticks during the
+  /// reconciliation pass are suppressed.
   func loadAll(force: Bool = false) async {
-    if loadInFlight {
-      pendingReload = true
-      if force { pendingReloadForce = true }
+    let waitsForCurrentCycle = !force
+    var requestedForce = force
+    if isViewActive, deferredRateRefresh {
+      requestedForce = true
+      deferredRateRefresh = false
+    }
+
+    if await handleInFlightLoad(
+      requestedForce: requestedForce, waitsForCurrentCycle: waitsForCurrentCycle)
+    {
       return
     }
-    loadInFlight = true
-    defer { loadInFlight = false }
-    var passForce = force
+
+    defer { finishLoadCycle() }
     repeat {
-      // If the owning task (e.g. the view's `.task`) was cancelled while a
-      // pass ran, stop here rather than running the coalesced reconcile on
-      // a torn-down view — `performLoad` swallows `CancellationError`, so it
-      // would otherwise issue a wasted fetch and restamp `lastLoadedAt`.
-      guard !Task.isCancelled else { break }
+      guard !Task.isCancelled else {
+        if pendingReloadForce { deferredRateRefresh = true }
+        break
+      }
+
+      loadPhase = .initial
       pendingReload = false
       pendingReloadForce = false
-      await performLoad(force: passForce)
-      // Any load requested during `performLoad` above set `pendingReload`
-      // (and `pendingReloadForce` if it was a rate tick); carry that force
-      // into the single trailing reconcile pass.
-      passForce = pendingReloadForce
+      await performLoad(force: requestedForce)
+
+      if Task.isCancelled {
+        if pendingReloadForce { deferredRateRefresh = true }
+        break
+      }
+      guard pendingReload else { break }
+
+      let reconciliationForce = pendingReloadForce
+      pendingReload = false
+      pendingReloadForce = false
+      loadPhase = .reconciliation
+      await performLoad(force: reconciliationForce)
+
+      // Forced requests are ignored during reconciliation. A non-forced
+      // request can still arrive there when the user changes a filter; treat
+      // that as a new cycle so user intent is never dropped.
+      requestedForce = pendingReloadForce
     } while pendingReload
+  }
+
+  private func handleInFlightLoad(
+    requestedForce: Bool,
+    waitsForCurrentCycle: Bool
+  ) async -> Bool {
+    guard loadPhase != .idle else { return false }
+    if waitsForCurrentCycle {
+      pendingReload = true
+      if requestedForce { pendingReloadForce = true }
+      await waitUntilLoadIdle()
+      guard !Task.isCancelled else { return true }
+      await loadAll()
+      return true
+    }
+    // Most ticks here are writes made by the reconciliation itself, but
+    // the shared rate stream can also carry an unrelated warmer update.
+    // Preserve that signal as one debounced follow-up instead of either
+    // recursing immediately or dropping it.
+    if loadPhase == .reconciliation, requestedForce {
+      scheduleDeferredRateRefresh()
+      return true
+    }
+    pendingReload = true
+    if requestedForce { pendingReloadForce = true }
+    return true
+  }
+
+  /// Mirrors the Analysis view lifecycle. Rate observation itself remains
+  /// alive for the profile, but expensive recomputation is deferred while
+  /// the view is not mounted.
+  func setViewActive(_ active: Bool) {
+    isViewActive = active
+    if !active { cancelDeferredRateRefresh() }
+  }
+
+  /// Returns whether a rate tick should reload immediately, recording a
+  /// deferred refresh when Analysis is offscreen.
+  func prepareForRateTick() -> Bool {
+    guard isViewActive else {
+      deferredRateRefresh = true
+      return false
+    }
+    return true
+  }
+
+  /// Coalesces rate writes that arrive during reconciliation and reloads
+  /// after the burst has gone quiet. The delay prevents cache writes caused
+  /// by analysis itself from forming an immediate main-actor reload loop.
+  private func scheduleDeferredRateRefresh() {
+    deferredRateRefresh = true
+    // A deferred cycle is the one allowed follow-up for this burst. Ticks it
+    // produces stay as a dirty marker for the next view/scene-driven load;
+    // they never recursively schedule another autonomous cycle.
+    guard !isPerformingDeferredRateRefresh else { return }
+
+    deferredRateRefreshGeneration += 1
+    let generation = deferredRateRefreshGeneration
+    deferredRateRefreshTask?.cancel()
+    deferredRateRefreshTask = Task { [weak self] in
+      guard let self else { return }
+      defer {
+        if deferredRateRefreshGeneration == generation {
+          deferredRateRefreshTask = nil
+        }
+      }
+      do {
+        try await Task.sleep(for: rateRefreshDebounce)
+      } catch {
+        return
+      }
+      await waitUntilLoadIdle()
+      guard !Task.isCancelled else { return }
+      guard isViewActive else { return }
+      isPerformingDeferredRateRefresh = true
+      defer { isPerformingDeferredRateRefresh = false }
+      await loadAll(force: true)
+    }
+  }
+
+  /// Cancels the current debounced follow-up without losing its dirty marker.
+  /// Incrementing the generation prevents the cancelled task's cleanup from
+  /// clearing a replacement created after the view becomes active again.
+  func cancelDeferredRateRefresh() {
+    if deferredRateRefreshTask != nil { deferredRateRefresh = true }
+    deferredRateRefreshGeneration += 1
+    deferredRateRefreshTask?.cancel()
+    deferredRateRefreshTask = nil
+  }
+
+  /// Deterministic test seam for awaiting the bounded follow-up cycle.
+  func waitForDeferredRateRefreshForTesting() async {
+    await deferredRateRefreshTask?.value
+  }
+
+  private func waitUntilLoadIdle() async {
+    guard loadPhase != .idle else { return }
+    await withCheckedContinuation { continuation in
+      if loadPhase == .idle {
+        continuation.resume()
+      } else {
+        loadIdleContinuations.append(continuation)
+      }
+    }
+  }
+
+  private func finishLoadCycle() {
+    loadPhase = .idle
+    let continuations = loadIdleContinuations
+    loadIdleContinuations.removeAll()
+    for continuation in continuations { continuation.resume() }
   }
 
   private func performLoad(force: Bool) async {
@@ -215,6 +363,7 @@ final class AnalysisStore {
         forecastUntil: forecastUntil,
         monthEnd: monthEnd
       )
+      try Task.checkCancellation()
 
       dailyBalances = Self.extrapolateBalances(
         data.dailyBalances, today: Date(), forecastUntil: forecastUntil
@@ -244,77 +393,8 @@ final class AnalysisStore {
       "AnalysisStore rate observation error: \(error.localizedDescription, privacy: .public)")
   }
 
-  /// Reloads analysis data only if it has been at least `minimumInterval` seconds since
-  /// the last successful `loadAll()`. Called on scene phase transitions from background
-  /// to active — the app briefly going inactive (share sheet, Command-Tab, notification
-  /// banner) should not trigger a disruptive reload.
-  ///
-  /// Always loads if no data has been loaded yet.
-  func refreshIfStale(minimumInterval: TimeInterval) async {
-    if let last = lastLoadedAt,
-      Date().timeIntervalSince(last) < minimumInterval
-    {
-      return
-    }
-    await loadAll()
-  }
-
-  /// Test hook: allows tests to rewind `lastLoadedAt` to simulate staleness without
-  /// waiting real time. Not intended for production use.
+  /// Test hook for simulating staleness without waiting real time.
   func overrideLastLoadedAtForTesting(_ date: Date?) {
     lastLoadedAt = date
-  }
-
-  // MARK: - Aggregation
-
-  /// Extends balance data to fill gaps, matching the web app's extrapolateBalances logic:
-  /// 1. Extend actual balances forward to today (so the step chart reaches the present).
-  /// 2. Extend forecast balances back to today (so forecast connects to actual data).
-  /// 3. Extend forecast balances forward to the forecast end date.
-  nonisolated static func extrapolateBalances(
-    _ balances: [DailyBalance], today: Date, forecastUntil: Date?
-  ) -> [DailyBalance] {
-    let todayStart = Calendar.current.startOfDay(for: today)
-    var actual = balances.filter { !$0.isForecast }
-    var forecast = balances.filter { $0.isForecast }
-
-    // Extend actual balances to today
-    if let last = actual.last, Calendar.current.startOfDay(for: last.date) < todayStart {
-      actual.append(last.withDate(todayStart))
-    }
-
-    // Extend forecast back to today (so forecast line starts where actual ends)
-    if !forecast.isEmpty, let lastActual = actual.last {
-      let firstForecastDay = Calendar.current.startOfDay(for: forecast[0].date)
-      if firstForecastDay > todayStart {
-        forecast.insert(lastActual.withDate(todayStart, isForecast: true), at: 0)
-      }
-    }
-
-    // Extend forecast to the forecast end date
-    if let forecastUntil, let last = forecast.last {
-      let untilStart = Calendar.current.startOfDay(for: forecastUntil)
-      if Calendar.current.startOfDay(for: last.date) < untilStart {
-        forecast.append(last.withDate(untilStart))
-      }
-    }
-
-    return (actual + forecast).sorted { $0.date < $1.date }
-  }
-
-  // The category-rollup aggregation statics
-  // (`categoriesOverTime`/`buildCategoriesOverTime`/`buildExpenseBreakdown`
-  // and their helpers) live in `AnalysisStore+Aggregation.swift`.
-
-  // MARK: - Date Utilities
-
-  private func afterDate(monthsAgo: Int) -> Date? {
-    guard monthsAgo > 0 else { return nil }  // 0 = "All"
-    return Calendar.current.date(byAdding: .month, value: -monthsAgo, to: Date())
-  }
-
-  private func forecastDate(monthsAhead: Int) -> Date? {
-    guard monthsAhead > 0 else { return nil }  // 0 = "None"
-    return Calendar.current.date(byAdding: .month, value: monthsAhead, to: Date())
   }
 }

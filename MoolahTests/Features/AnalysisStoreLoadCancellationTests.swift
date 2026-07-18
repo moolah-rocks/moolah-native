@@ -51,6 +51,7 @@ struct AnalysisStoreLoadCancellationTests {
     let store = AnalysisStore(
       repository: repository, conversionService: FakeConversionService.passthrough,
       defaults: try makeDefaults())
+    store.setViewActive(true)
 
     let task = Task { @MainActor in await store.loadAll() }
     await repository.waitUntilFetchStarted()
