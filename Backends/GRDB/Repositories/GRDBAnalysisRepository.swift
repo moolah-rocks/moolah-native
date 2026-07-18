@@ -159,31 +159,18 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
       after: after,
       forecastUntil: forecastUntil)
     let logger = self.logger
+    let failures = AnalysisConversionFailureCollector()
+    defer { logConversionFailures(failures, operation: "fetchDailyBalances") }
     let handlers = DailyBalancesHandlers(
       handleUnparseableDay: { day in
         logger.error(
           "fetchDailyBalances: skipping row with unparseable day '\(day)'")
       },
       handleConversionFailure: { error, context in
-        // Per-day failures surface as warnings (not errors) — Rule 11
-        // scoping treats a single missing day as a recoverable
-        // condition: the chart still renders the surrounding days.
-        logger.warning(
-          """
-          fetchDailyBalances: skipping day=\(context.day, privacy: .public) — \
-          conversion failed: \
-          \(error.localizedDescription, privacy: .public). \
-          Sibling days continue to render.
-          """)
+        failures.record(error, context: "day=\(context.day)")
       },
       handlePositionValuationFailure: { error, date in
-        logger.warning(
-          """
-          fetchDailyBalances: investment-position conversion failed for \
-          date=\(date, privacy: .public): \
-          \(error.localizedDescription, privacy: .public). \
-          Sibling days continue to render.
-          """)
+        failures.record(error, context: "investment date=\(date)")
       })
     return try await Self.assembleDailyBalances(
       aggregation: aggregation,
@@ -202,19 +189,18 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
     let aggregation = try await Self.fetchExpenseBreakdownAggregation(
       database: database, instruments: instruments, after: after)
     let logger = self.logger
+    let failures = AnalysisConversionFailureCollector()
+    defer { logConversionFailures(failures, operation: "fetchExpenseBreakdown") }
     let handlers = ExpenseBreakdownHandlers(
       handleUnparseableDay: { day in
         logger.error(
           "fetchExpenseBreakdown: skipping row with unparseable day '\(day)'")
       },
       handleConversionFailure: { error, context in
-        logger.error(
-          """
-          fetchExpenseBreakdown: conversion failed for day=\(context.day, privacy: .public) \
-          category=\(context.categoryId?.uuidString ?? "nil", privacy: .public) \
-          instrument=\(context.instrumentId, privacy: .public): \
-          \(error.localizedDescription, privacy: .public)
-          """)
+        failures.record(
+          error,
+          instrumentId: context.instrumentId,
+          context: "day=\(context.day) category=\(context.categoryId?.uuidString ?? "nil")")
       })
     return try await Self.assembleExpenseBreakdown(
       aggregation: aggregation,
@@ -234,18 +220,16 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
     let aggregation = try await Self.fetchIncomeAndExpenseAggregation(
       database: database, instruments: instruments, after: after)
     let logger = self.logger
+    let failures = AnalysisConversionFailureCollector()
+    defer { logConversionFailures(failures, operation: "fetchIncomeAndExpense") }
     let handlers = IncomeAndExpenseHandlers(
       handleUnparseableDay: { day in
         logger.error(
           "fetchIncomeAndExpense: skipping row with unparseable day '\(day)'")
       },
       handleConversionFailure: { error, context in
-        logger.error(
-          """
-          fetchIncomeAndExpense: conversion failed for day=\(context.day, privacy: .public) \
-          instrument=\(context.instrumentId, privacy: .public): \
-          \(error.localizedDescription, privacy: .public)
-          """)
+        failures.record(
+          error, instrumentId: context.instrumentId, context: "day=\(context.day)")
       })
     return try await Self.assembleIncomeAndExpense(
       aggregation: aggregation,
@@ -275,19 +259,18 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
     let aggregation = try await Self.fetchCategoryBalancesAggregation(
       database: database, instruments: instruments, args: args)
     let logger = self.logger
+    let failures = AnalysisConversionFailureCollector()
+    defer { logConversionFailures(failures, operation: "fetchCategoryBalances") }
     let handlers = CategoryBalancesHandlers(
       handleUnparseableDay: { day in
         logger.error(
           "fetchCategoryBalances: skipping row with unparseable day '\(day)'")
       },
       handleConversionFailure: { error, context in
-        logger.error(
-          """
-          fetchCategoryBalances: conversion failed for day=\(context.day, privacy: .public) \
-          category=\(context.categoryId?.uuidString ?? "none", privacy: .public) \
-          instrument=\(context.instrumentId, privacy: .public): \
-          \(error.localizedDescription, privacy: .public)
-          """)
+        failures.record(
+          error,
+          instrumentId: context.instrumentId,
+          context: "day=\(context.day) category=\(context.categoryId?.uuidString ?? "none")")
       })
     return try await Self.assembleCategoryBalances(
       aggregation: aggregation,
@@ -308,20 +291,20 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
       dateInterval: dateInterval,
       defaultTaxOwnerId: defaultTaxOwnerId)
     let logger = self.logger
+    let failures = AnalysisConversionFailureCollector()
+    defer { logConversionFailures(failures, operation: "fetchTaxIncomeExpenseSummaries") }
     let handlers = TaxIncomeExpenseHandlers(
       handleUnparseableDay: { day in
         logger.error(
           "fetchTaxIncomeExpenseSummaries: skipping row with unparseable day '\(day)'")
       },
       handleConversionFailure: { error, context in
-        logger.error(
-          """
-          fetchTaxIncomeExpenseSummaries: conversion failed for \
-          day=\(context.day, privacy: .public) \
-          instrument=\(context.instrumentId, privacy: .public) \
-          owners=\(context.ownerIds.map(\.uuidString).joined(separator: ","), privacy: .public): \
-          \(error.localizedDescription, privacy: .public)
-          """)
+        failures.record(
+          error,
+          instrumentId: context.instrumentId,
+          context:
+            "day=\(context.day) owners=\(context.ownerIds.map(\.uuidString).joined(separator: ","))"
+        )
       })
     return try await Self.assembleTaxIncomeExpenseSummaries(
       aggregation: aggregation,
@@ -346,20 +329,20 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
       defaultTaxOwnerId: defaultTaxOwnerId,
       selection: selection)
     let logger = self.logger
+    let failures = AnalysisConversionFailureCollector()
+    defer { logConversionFailures(failures, operation: "fetchTaxIncomeExpenseDetails") }
     let handlers = TaxIncomeExpenseHandlers(
       handleUnparseableDay: { day in
         logger.error(
           "fetchTaxIncomeExpenseDetails: skipping row with unparseable day '\(day)'")
       },
       handleConversionFailure: { error, context in
-        logger.error(
-          """
-          fetchTaxIncomeExpenseDetails: conversion failed for \
-          day=\(context.day, privacy: .public) \
-          instrument=\(context.instrumentId, privacy: .public) \
-          owners=\(context.ownerIds.map(\.uuidString).joined(separator: ","), privacy: .public): \
-          \(error.localizedDescription, privacy: .public)
-          """)
+        failures.record(
+          error,
+          instrumentId: context.instrumentId,
+          context:
+            "day=\(context.day) owners=\(context.ownerIds.map(\.uuidString).joined(separator: ","))"
+        )
       })
     return try await Self.assembleTaxIncomeExpenseDetails(
       aggregation: aggregation,
@@ -367,5 +350,23 @@ final class GRDBAnalysisRepository: AnalysisRepository, @unchecked Sendable {
       conversionService: conversionService,
       selection: selection,
       handlers: handlers)
+  }
+}
+
+extension GRDBAnalysisRepository {
+  private func logConversionFailures(
+    _ collector: AnalysisConversionFailureCollector,
+    operation: String
+  ) {
+    for summary in collector.summaries() {
+      let instrument = summary.instrumentId ?? "unknown"
+      let message =
+        "\(operation): conversion failed \(summary.count) time(s) for instrument=\(instrument); sample \(summary.sampleContext): \(summary.message)"
+      if summary.isTransient {
+        logger.warning("\(message, privacy: .public)")
+      } else {
+        logger.error("\(message, privacy: .public)")
+      }
+    }
   }
 }

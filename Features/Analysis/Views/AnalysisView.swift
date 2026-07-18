@@ -86,6 +86,8 @@ struct AnalysisView: View {
         }
       }
     }
+    .onAppear { store.setViewActive(true) }
+    .onDisappear { store.setViewActive(false) }
     .task {
       // The upcoming card displays scheduled transactions. Wins the
       // SwiftData SQL connection race for the upcoming-card data before
