@@ -19,9 +19,9 @@ import Foundation
 /// legitimately: no cost-basis data exists yet, so 0/empty is honest — and it
 /// does so WITHOUT querying.
 ///
-/// **Invalidation is a full rebuild on every input seam.** Three streams drop
-/// the cache: transactions (manual edits), instruments (import/sync backstop),
-/// and accounts (tax-owner assignment changes now affect owner-aware rows).
+/// **Invalidation is a full rebuild on every input seam.** Two streams drop
+/// the cache: cost-basis-relevant database changes (including account-owner
+/// assignments) and instruments (the import/sync backstop).
 ///
 /// **Full rebuild, never incremental.** Any data change drops the whole
 /// cached ledger and the next `ledger()` re-runs the SQL query + FIFO pass
@@ -63,27 +63,23 @@ final class HoldingsCostLedgerStore {
     conversionService: any InstrumentConversionService,
     referenceCurrency: Instrument,
     isMigrating: @escaping () -> Bool = { false },
-    transactionChanges: AsyncStream<[Transaction]>? = nil,
-    instrumentChanges: AsyncStream<Void>? = nil,
-    accountChanges: AsyncStream<[Account]>? = nil
+    transactionInvalidations: AsyncStream<Void>? = nil,
+    instrumentChanges: AsyncStream<Void>? = nil
   ) {
     self.transactionRepository = transactionRepository
     self.conversionService = conversionService
     self.referenceCurrency = referenceCurrency
     self.isMigrating = isMigrating
-    guard transactionChanges != nil || instrumentChanges != nil || accountChanges != nil else {
+    guard transactionInvalidations != nil || instrumentChanges != nil else {
       return
     }
     self.observationTask = Task { [weak self] in
       await withTaskGroup(of: Void.self) { group in
-        if let transactionChanges {
-          group.addTask { for await _ in transactionChanges { await self?.invalidate() } }
+        if let transactionInvalidations {
+          group.addTask { for await _ in transactionInvalidations { await self?.invalidate() } }
         }
         if let instrumentChanges {
           group.addTask { for await _ in instrumentChanges { await self?.invalidate() } }
-        }
-        if let accountChanges {
-          group.addTask { for await _ in accountChanges { await self?.invalidate() } }
         }
       }
     }

@@ -206,15 +206,17 @@ struct MultiInstrumentPositionsSplitModifier: ViewModifier {
       txns = []
     }
     guard !Task.isCancelled else { return }
-    // The shared, profile-wide ledger — built once per data load and cached by
-    // the provider (never re-derived per view: a per-view build over the
-    // viewed subset cannot see a transfer's source-account lots). Fetched once
-    // and threaded to BOTH the performance tiles and the chart baseline so they
-    // read the same instance. A genuine provider failure degrades to `nil`
-    // (baseline unavailable → suppressed, performance unavailable, Rule 11) —
-    // NEVER to `.empty`, which would render a computed-looking `0` invested.
-    // The value line still renders regardless.
-    let ledger = await sharedLedger()
+    // Fiat-only accounts need the value history but no cost/invested baseline.
+    // Avoid waking the profile-wide ledger for those ordinary transaction
+    // edits; investment surfaces, non-host holdings, and historical trades
+    // still request the single shared instance.
+    let needsLedger = MultiInstrumentPositionsAssembler.requiresHoldingsLedger(
+      alwaysShowsFullSurface: alwaysShowsFullSurface,
+      valuedRows: rows,
+      transactions: txns,
+      accountIds: accountIdSet,
+      hostCurrency: hostCurrency)
+    let ledger = needsLedger ? await sharedLedger() : nil
     guard !Task.isCancelled else { return }
     let performance = await computePerformance(
       accountIds: accountIdSet,

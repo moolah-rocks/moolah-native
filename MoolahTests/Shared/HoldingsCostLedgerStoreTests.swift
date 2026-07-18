@@ -153,21 +153,21 @@ struct HoldingsCostLedgerStoreTests {
     #expect(recovered.remainingInvested(accountIds: [account], onOrBefore: day) == 4_000)
   }
 
-  /// (a) manual edit/create/delete — arrives on the `observeAll()` seam (the
-  /// app's own GRDB connection). The provider fully rebuilds.
+  /// (a) manual edit/create/delete — arrives on the invalidation-only seam
+  /// from the app's own GRDB connection. The provider fully rebuilds lazily.
   @Test
   func ledger_rebuilds_afterTransactionEdit() async throws {
-    let (changes, continuation) = AsyncStream<[Transaction]>.makeStream()
+    let (changes, continuation) = AsyncStream<Void>.makeStream()
     let repo = CountingTransactionRepository(legRows: [row()])
     let store = HoldingsCostLedgerStore(
       transactionRepository: repo,
       conversionService: FakeConversionService.fixedRates([eth.id: 4_000]),
-      referenceCurrency: aud, transactionChanges: changes)
+      referenceCurrency: aud, transactionInvalidations: changes)
     _ = try await store.ledger()
     #expect(await repo.fetchCount == 1)
 
     await repo.setLegRows([row(), row()])  // a transaction mutated
-    continuation.yield([])  // observeAll() fires
+    continuation.yield(())  // invalidation-only observation fires
     for _ in 0..<1_000 where store.hasCachedLedger { await Task.yield() }
     #expect(store.hasCachedLedger == false)  // invalidated (full rebuild pending)
 

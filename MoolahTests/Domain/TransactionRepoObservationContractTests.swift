@@ -190,6 +190,46 @@ struct TransactionRepoObservationContractTests {
     _ = await iterator.next()
   }
 
+  // MARK: - observeCostBasisRelevantChanges()
+
+  @Test("cost-basis invalidation emits when a transaction amount changes")
+  func costBasisInvalidationEmitsForAmountChange() async throws {
+    let (backend, _) = try TestBackend.create()
+    let account = try await makeAccount(backend: backend, name: "Investment")
+    var transaction = try await backend.transactions.create(
+      makeTransaction(amount: 10, accountId: account.id, payee: "Buy"))
+    var iterator = backend.transactions.observeCostBasisRelevantChanges().makeAsyncIterator()
+    _ = await iterator.next()
+
+    let leg = transaction.legs[0]
+    transaction.legs[0] = TransactionLeg(
+      id: leg.id,
+      accountId: leg.accountId,
+      instrument: leg.instrument,
+      quantity: 20,
+      externalId: leg.externalId,
+      counterpartyAddress: leg.counterpartyAddress,
+      type: leg.type,
+      categoryId: leg.categoryId,
+      earmarkId: leg.earmarkId)
+    _ = try await backend.transactions.update(transaction)
+
+    _ = await iterator.next()
+  }
+
+  @Test("cost-basis invalidation emits when account ownership changes")
+  func costBasisInvalidationEmitsForAccountOwnershipChange() async throws {
+    let (backend, _) = try TestBackend.create()
+    var account = try await makeAccount(backend: backend, name: "Investment")
+    var iterator = backend.transactions.observeCostBasisRelevantChanges().makeAsyncIterator()
+    _ = await iterator.next()
+
+    account.taxOwnerIds = [UUID()]
+    _ = try await backend.accounts.update(account)
+
+    _ = await iterator.next()
+  }
+
   @Test("changing filter cancels prior subscription and starts a fresh stream")
   func changingFilterStartsFreshSubscription() async throws {
     let (backend, _) = try TestBackend.create()

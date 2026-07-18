@@ -30,6 +30,11 @@ protocol TransactionRepository: Sendable {
   /// `observe(filter:page:pageSize:)` so the observation cost scales
   /// with the page, not the dataset.
   func observeAll(filter: TransactionFilter) -> AsyncStream<[Transaction]>
+  /// Emits once initially and again whenever a persisted field used by
+  /// `fetchCostBasisEventLegs()` changes. This is an invalidation signal, not
+  /// a value projection: consumers can drop cached derived state without
+  /// materialising every transaction in the profile.
+  func observeCostBasisRelevantChanges() -> AsyncStream<Void>
   /// Emits once initially and again whenever persisted transaction data or
   /// tax-resolution metadata changes. Unlike the paginated and bulk value
   /// projections, this is an invalidation stream: it intentionally does not

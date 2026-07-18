@@ -171,6 +171,50 @@ extension GRDBTransactionRepository {
     }
   }
 
+  /// Invalidation-only observation for the profile-wide holdings ledger.
+  /// The regions mirror `fetchCostBasisEventLegs()` exactly: transaction
+  /// ordering/scheduling, every leg field consumed by the FIFO pass, and the
+  /// denormalised account-owner ids joined into owner-aware rows. The fetch
+  /// returns `Void`, so a write never reconstructs the profile's transaction
+  /// history merely to drop a cache.
+  ///
+  /// This deliberately bypasses `toRetryingAsyncStream()`: that helper adds
+  /// `removeDuplicates()`, which would suppress every `Void` emission after
+  /// the initial value.
+  func observeCostBasisRelevantChanges() -> AsyncStream<Void> {
+    let observation = ValueObservation.tracking(
+      regions: [
+        TransactionRow.all().select(
+          TransactionRow.Columns.id,
+          TransactionRow.Columns.date,
+          TransactionRow.Columns.recurPeriod),
+        TransactionLegRow.all().select(
+          TransactionLegRow.Columns.id,
+          TransactionLegRow.Columns.transactionId,
+          TransactionLegRow.Columns.accountId,
+          TransactionLegRow.Columns.instrumentId,
+          TransactionLegRow.Columns.quantity,
+          TransactionLegRow.Columns.type,
+          TransactionLegRow.Columns.sortOrder),
+        AccountRow.all().select(
+          AccountRow.Columns.id,
+          AccountRow.Columns.taxOwnerIdsEncoded),
+      ],
+      fetch: { _ in () }
+    )
+    return makeRetryingAsyncStream(
+      makeAttempt: { [database] errorSink in
+        observation
+          .values(in: database)
+          .toAsyncStream(onError: errorSink)
+      },
+      policy: RetryingAsyncStreamPolicy(
+        errorChannel: errorChannel,
+        repoMethod: "GRDBTransactionRepository.observeCostBasisRelevantChanges",
+        maxFailures: 5,
+        backoffs: [.seconds(1), .seconds(5), .seconds(30)]))
+  }
+
   /// Invalidation-only observation used by tax report drill-downs. It tracks
   /// the complete persistence regions that can affect tax inclusion or owner
   /// allocation and deliberately skips `removeDuplicates()`: changing an

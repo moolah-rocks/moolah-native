@@ -158,4 +158,23 @@ struct MultiInstrumentPositionsAssembler: Sendable {
       }
     }
   }
+
+  /// Whether the account-detail surface needs the profile-wide holdings
+  /// ledger. Fiat-only accounts render a value history without cost-basis
+  /// work; investment surfaces, current non-host holdings, and historical
+  /// non-host trades require the ledger for cost, invested baselines, and
+  /// performance.
+  static func requiresHoldingsLedger(
+    alwaysShowsFullSurface: Bool,
+    valuedRows: [ValuedPosition],
+    transactions: [Transaction],
+    accountIds: Set<UUID>,
+    hostCurrency: Instrument
+  ) -> Bool {
+    alwaysShowsFullSurface
+      || AccountDetailLayout.showsPerformanceTiles(
+        valuedRows: valuedRows, hostCurrency: hostCurrency)
+      || hasAnyTradeLeg(
+        in: transactions, accountIds: accountIds, hostCurrency: hostCurrency)
+  }
 }
