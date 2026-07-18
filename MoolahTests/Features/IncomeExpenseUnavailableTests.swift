@@ -111,7 +111,7 @@ struct IncomeExpenseUnavailableTests {
       for: data[0], in: data, includeInvestments: false)
 
     let month = IncomeExpenseTableCard.monthLabel(for: data[0])
-    #expect(label == "\(month): data unavailable, prices still loading")
+    #expect(label == "\(month): converted amounts unavailable")
   }
 
   @Test("available row label is unchanged by the unavailable variant")

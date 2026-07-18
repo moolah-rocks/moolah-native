@@ -52,9 +52,9 @@ struct MonthlyIncomeExpense: Sendable, Identifiable, Hashable {
   /// sum). Added to `profit` for the toggle-on savings figure.
   let investmentProfit: InstrumentAmount
 
-  /// True when one or more rows in this month could not be priced due to a
-  /// transient conversion error (e.g. crypto prices not yet warmed). The
-  /// displayed totals may be understated; callers should surface this state.
+  /// True when one or more inputs to this month could not be converted. The
+  /// failure may be transient or permanent; callers must treat the month's
+  /// dependent totals as unavailable rather than displaying their values.
   let hasUnavailableData: Bool
 
   // A memberwise init is retained (not redundant): `hasUnavailableData` has no

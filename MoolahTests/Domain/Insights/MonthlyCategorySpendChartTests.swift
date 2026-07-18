@@ -56,4 +56,24 @@ struct MonthlyCategorySpendChartTests {
         expenseBreakdown: breakdown, categoryIds: [fees], reportingCurrency: currency,
         seriesLabel: "Fees") == nil)
   }
+
+  @Test
+  func unavailableMonthIsNotRenderedAsPartialOrZero() throws {
+    let fees = UUID()
+    let breakdown = [
+      InsightTestSupport.breakdownRow(20, categoryId: fees, month: "202603"),
+      InsightTestSupport.breakdownRow(
+        5, categoryId: fees, month: "202604", hasUnavailableData: true),
+      InsightTestSupport.breakdownRow(30, categoryId: fees, month: "202605"),
+    ]
+
+    let chart = try #require(
+      InsightChartBuilders.monthlyCategorySpend(
+        expenseBreakdown: breakdown, categoryIds: [fees], reportingCurrency: currency,
+        seriesLabel: "Fees"))
+
+    let dates = chart.series.first?.points.map(\.date)
+    let expectedDates = ["202603", "202605"].compactMap(FinancialMonth.date(forKey:))
+    #expect(dates == expectedDates)
+  }
 }

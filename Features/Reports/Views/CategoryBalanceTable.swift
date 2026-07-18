@@ -22,8 +22,7 @@ struct CategoryBalanceTable: View {
   /// "Uncategorised" row's drill-down.
   let transactionType: TransactionType
   /// Mirrors `ReportingStore`'s `income`/`expenseHasUnavailableData` — true
-  /// when a transient conversion failure means some rows were skipped, so
-  /// the total may be understated.
+  /// when a recognised conversion failure means some rows are unavailable.
   let hasUnavailableData: Bool
   var listBehavior: CategoryBalanceTableListBehavior = .ownsScroll
 
@@ -100,10 +99,17 @@ struct CategoryBalanceTable: View {
       header
       Divider()
       if reportData.isEmpty && uncategorised == nil {
-        ContentUnavailableView(
-          "No Transactions",
-          systemImage: "tray",
-          description: Text("No transactions found for this period"))
+        if hasUnavailableData {
+          ContentUnavailableView(
+            "Amounts Unavailable",
+            systemImage: "exclamationmark.triangle",
+            description: Text("One or more amounts could not be converted"))
+        } else {
+          ContentUnavailableView(
+            "No Transactions",
+            systemImage: "tray",
+            description: Text("No transactions found for this period"))
+        }
       } else {
         categoryRows
       }
@@ -126,7 +132,7 @@ struct CategoryBalanceTable: View {
   }
 
   private var incompleteDataCaption: some View {
-    Text("Some prices are still loading; totals may be incomplete")
+    Text("Some converted amounts are unavailable")
       .font(.caption)
       .foregroundStyle(.secondary)
   }
@@ -135,7 +141,7 @@ struct CategoryBalanceTable: View {
     HStack {
       Text("Total").font(.headline)
       Spacer()
-      InstrumentAmountView(amount: grandTotal, font: .headline)
+      amountView(grandTotal, font: .headline)
     }
     .padding()
   }
@@ -171,7 +177,8 @@ struct CategoryBalanceTable: View {
       uncategorised: uncategorised,
       transactionType: transactionType,
       dateRange: dateRange,
-      headerVerticalPadding: headerVerticalPadding)
+      headerVerticalPadding: headerVerticalPadding,
+      hasUnavailableData: hasUnavailableData)
   }
 
   /// Pinned after all category sections (bottom of the list) so it reads as
@@ -184,10 +191,10 @@ struct CategoryBalanceTable: View {
         HStack {
           Text("Uncategorised").font(.headline)
           Spacer()
-          InstrumentAmountView(amount: amount, font: .headline)
+          amountView(amount, font: .headline)
         }
       }
-      .accessibilityLabel("Uncategorised, \(amount.formatted)")
+      .accessibilityLabel("Uncategorised, \(amountAccessibilityLabel(amount))")
     }
   }
 
@@ -201,10 +208,10 @@ struct CategoryBalanceTable: View {
             HStack {
               Text(child.name).font(.body)
               Spacer()
-              InstrumentAmountView(amount: child.amount)
+              amountView(child.amount)
             }
           }
-          .accessibilityLabel("\(child.name), \(child.amount.formatted)")
+          .accessibilityLabel("\(child.name), \(amountAccessibilityLabel(child.amount))")
         }
       }
     } header: {
@@ -215,7 +222,7 @@ struct CategoryBalanceTable: View {
         HStack {
           Text(group.name).font(.headline)
           Spacer()
-          InstrumentAmountView(amount: group.totalAmount, font: .headline)
+          amountView(group.totalAmount, font: .headline)
           // Explicit disclosure cue: a bold `List` section header otherwise
           // reads as a static group title, giving no hint that the whole
           // header now drills into the category's transactions.
@@ -229,7 +236,7 @@ struct CategoryBalanceTable: View {
         .padding(.vertical, headerVerticalPadding)
         .contentShape(Rectangle())
       }
-      .accessibilityLabel("\(group.name), \(group.totalAmount.formatted)")
+      .accessibilityLabel("\(group.name), \(amountAccessibilityLabel(group.totalAmount))")
       .accessibilityIdentifier(UITestIdentifiers.Reports.categoryHeader(group.categoryId))
     }
   }
@@ -242,6 +249,21 @@ struct CategoryBalanceTable: View {
       current = parentId
     }
     return current
+  }
+
+  @ViewBuilder
+  private func amountView(_ amount: InstrumentAmount, font: Font? = nil) -> some View {
+    if let displayed = CategoryBalanceAvailabilityPresentation.displayedAmount(
+      amount, hasUnavailableData: hasUnavailableData)
+    {
+      InstrumentAmountView(amount: displayed, font: font)
+    } else {
+      Text("—").font(font)
+    }
+  }
+
+  private func amountAccessibilityLabel(_ amount: InstrumentAmount) -> String {
+    hasUnavailableData ? "amount unavailable" : amount.formatted
   }
 
 }

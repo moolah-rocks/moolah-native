@@ -6,6 +6,8 @@ import Testing
 @Suite("ConversionFailureClassifier")
 struct ConversionFailureClassifierTests {
 
+  private struct UnexpectedError: Error {}
+
   @Test("rate-limit cooldown is transient")
   func cooldownIsTransient() {
     let error = RateLimitGateError.cooldown(until: Date(timeIntervalSince1970: 1))
@@ -57,5 +59,25 @@ struct ConversionFailureClassifierTests {
     #expect(
       !ConversionFailureClassifier.isTransient(
         WalletSyncError(provider: .binance, kind: .invalidApiKey)))
+  }
+
+  @Test("known conversion errors can be represented as unavailable data")
+  func knownFailuresCanBeUnavailable() {
+    #expect(
+      ConversionFailureClassifier.canRepresentAsUnavailableData(
+        ConversionError.unsupportedConversion(from: "A", to: "B")))
+    #expect(
+      ConversionFailureClassifier.canRepresentAsUnavailableData(
+        CryptoPriceError.noProviderMapping(tokenId: "1:0xabc", provider: "Binance")))
+    #expect(
+      ConversionFailureClassifier.canRepresentAsUnavailableData(
+        WalletSyncError(provider: .binance, kind: .invalidApiKey)))
+    #expect(
+      ConversionFailureClassifier.canRepresentAsUnavailableData(URLError(.timedOut)))
+  }
+
+  @Test("unexpected errors cannot be represented as unavailable data")
+  func unexpectedFailuresCannotBeUnavailable() {
+    #expect(!ConversionFailureClassifier.canRepresentAsUnavailableData(UnexpectedError()))
   }
 }

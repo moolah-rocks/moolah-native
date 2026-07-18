@@ -100,13 +100,10 @@ extension GRDBAnalysisRepository {
   /// Mirrors `assembleExpenseBreakdown`'s per-row error contract:
   /// `handleUnparseableDay` and `handleConversionFailure` are invoked
   /// per failing row so each failure surfaces individually in
-  /// diagnostics; the loop continues processing remaining rows then
-  /// re-throws the first conversion error after the walk so the
-  /// function preserves its existing "throws on conversion error"
-  /// contract while still delivering the per-row detail required by
-  /// `INSTRUMENT_CONVERSION_GUIDE.md` Rule 11. A `CancellationError`
-  /// is rethrown immediately and never folded into the
-  /// conversion-failure path.
+  /// diagnostics. Recognised conversion failures mark the dependent
+  /// financial month unavailable; unknown errors rethrow after the
+  /// walk. A `CancellationError` propagates immediately from the batch
+  /// call.
   ///
   /// Each row carries four already-signed sums (base income/expense and
   /// the investment-layer income/expense); the fold simply accumulates
@@ -131,9 +128,9 @@ extension GRDBAnalysisRepository {
     let outcomes = try await conversionService.convertResultBatch(plan.requests)
 
     var buckets: [String: MonthBucket] = [:]
-    var firstConversionError: Error?
-    // Strict Rule 11 (#1077): a financial month with ANY transient
-    // (price-unavailable) skip is marked unavailable — even if other
+    var firstUnexpectedError: Error?
+    // Strict Rule 11 (#1077): a financial month with ANY unavailable
+    // conversion is marked unavailable — even if other
     // rows in the month converted — and a month whose rows ALL skipped
     // still emits a zeroed placeholder bucket spanning the failing days.
     var unavailable = UnavailableMonthTracker()
@@ -154,14 +151,14 @@ extension GRDBAnalysisRepository {
         let context = IncomeAndExpenseFailureContext(
           day: row.day, instrumentId: row.instrumentId)
         handlers.handleConversionFailure(error, context)
-        // Issue #1075: transient price failures degrade per-row; only a
-        // structural failure preserves the loud rethrow. Strict Rule 11
-        // (#1077): a transient skip flags its month unavailable.
-        if ConversionFailureClassifier.isTransient(error) {
+        // Known conversion failures degrade at the dependent month:
+        // transient prices can recover, while unsupported conversions
+        // remain unavailable. Unknown errors still rethrow loudly.
+        if ConversionFailureClassifier.canRepresentAsUnavailableData(error) {
           unavailable.record(
             month: Self.financialMonth(for: day, monthEnd: monthEnd), day: day)
-        } else if firstConversionError == nil {
-          firstConversionError = error
+        } else if firstUnexpectedError == nil {
+          firstUnexpectedError = error
         }
         continue
       }
@@ -172,11 +169,8 @@ extension GRDBAnalysisRepository {
       Self.applyConvertedRow(converted, into: &bucket)
       buckets[month] = bucket
     }
-    if let firstConversionError {
-      // Preserve the existing observable behaviour (throws on the
-      // first conversion error) while having logged every per-row
-      // failure.
-      throw firstConversionError
+    if let firstUnexpectedError {
+      throw firstUnexpectedError
     }
     Self.insertUnavailablePlaceholders(
       into: &buckets, tracker: unavailable, profileInstrument: profileInstrument)
@@ -185,7 +179,7 @@ extension GRDBAnalysisRepository {
   }
 
   /// Tracks, for strict Rule 11 (#1077), which financial months had ≥1
-  /// transient (price-unavailable) conversion skip and the span of the
+  /// unavailable conversion and the span of the
   /// failing-row days within each — so the assembler can mark every
   /// emitted bucket for those months unavailable and synthesise a
   /// placeholder bucket for any month whose rows ALL skipped.
@@ -204,7 +198,7 @@ extension GRDBAnalysisRepository {
   }
 
   /// Emit a zeroed placeholder bucket for any month whose rows ALL
-  /// transient-skipped (no converted row created a bucket) so the month
+  /// conversion-unavailable (no converted row created a bucket) so the month
   /// still appears in the result — flagged unavailable downstream and
   /// spanning its failing-row days. Months that already have a bucket
   /// (at least one row converted) keep their converted totals; the

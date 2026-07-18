@@ -55,13 +55,13 @@ struct CategoriesOverTimeCard: View {
   }
 
   private var incompleteDataCaption: some View {
-    Text("Some prices are still loading; totals may be incomplete")
+    Text("Some converted amounts are unavailable")
       .font(.caption)
       .foregroundStyle(.secondary)
   }
 
   private var emptyState: some View {
-    Text("No expense data available")
+    Text(hasUnavailableData ? "Expense data unavailable" : "No expense data available")
       .foregroundStyle(.secondary)
       .frame(maxWidth: .infinity, alignment: .center)
       .frame(height: 300)
@@ -134,7 +134,7 @@ struct CategoriesOverTimeCard: View {
     let base =
       "Stacked area chart showing expense categories over time in \(showActualValues ? "actual amounts" : "percentages")"
     guard hasUnavailableData else { return base }
-    return base + ". Some months may be incomplete; prices still loading."
+    return base + ". Some converted amounts are unavailable."
   }
 
   private func legend(colors: CategoryColorAssignment) -> some View {

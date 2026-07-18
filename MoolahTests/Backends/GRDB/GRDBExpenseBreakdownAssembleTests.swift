@@ -125,22 +125,23 @@ struct GRDBExpenseBreakdownAssembleTests {
       monthEnd: 25,
       handlers: handlers)
 
-    // Every row was transient → none threw. Strict Rule 11 (#1077): the
-    // month all of whose rows transient-skipped now surfaces as a single
-    // zeroed `categoryId: nil` placeholder flagged unavailable (rather
-    // than the pre-#1077 empty result, which was indistinguishable from
-    // "no activity"). Detailed placeholder shape is pinned by
-    // `GRDBExpenseBreakdownUnavailableTests`.
-    let placeholder = try #require(result.first)
-    #expect(placeholder.categoryId == nil)
-    #expect(placeholder.hasUnavailableData == true)
-    #expect(placeholder.totalExpenses == .zero(instrument: .defaultTestInstrument))
+    // Every row was transient → none threw. Strict Rule 11 (#1077): each
+    // unavailable `(month, category)` total retains its category identity
+    // so sibling scoping remains possible and the rows cannot vanish as
+    // "no activity".
+    #expect(result.count == 3)
+    #expect(result.allSatisfy { $0.categoryId != nil })
+    #expect(result.allSatisfy { $0.hasUnavailableData })
+    #expect(
+      result.allSatisfy {
+        $0.totalExpenses == .zero(instrument: .defaultTestInstrument)
+      })
     // Handler still fired for every failing row (diagnostics preserved).
     #expect(!failures.snapshot().isEmpty)
   }
 
-  @Test("structural conversion failures still rethrow")
-  func structuralFailuresRethrow() async throws {
+  @Test("unsupported conversions mark the month unavailable")
+  func unsupportedConversionsMarkMonthUnavailable() async throws {
     let aggregation = makeAggregation()
     let conversionService = FakeConversionService.perCall { _ in
       .failure(ConversionError.unsupportedConversion(from: "A", to: "B"))
@@ -148,14 +149,15 @@ struct GRDBExpenseBreakdownAssembleTests {
     let handlers = GRDBAnalysisRepository.ExpenseBreakdownHandlers(
       handleUnparseableDay: { _ in }, handleConversionFailure: { _, _ in })
 
-    await #expect(throws: ConversionError.self) {
-      _ = try await GRDBAnalysisRepository.assembleExpenseBreakdown(
-        aggregation: aggregation,
-        profileInstrument: .defaultTestInstrument,
-        conversionService: conversionService,
-        monthEnd: 25,
-        handlers: handlers)
-    }
+    let result = try await GRDBAnalysisRepository.assembleExpenseBreakdown(
+      aggregation: aggregation,
+      profileInstrument: .defaultTestInstrument,
+      conversionService: conversionService,
+      monthEnd: 25,
+      handlers: handlers)
+
+    let month = try #require(result.first)
+    #expect(month.hasUnavailableData)
   }
 
   @Test("assembleExpenseBreakdown converts each row at its own day, not Date()")

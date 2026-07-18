@@ -11,10 +11,10 @@ struct AnalysisStoreUnavailableProjectionTests {
     InstrumentAmount(quantity: quantity, instrument: .defaultTestInstrument)
   }
 
-  // MARK: - Over-time projection excludes flagged rows
+  // MARK: - Over-time projection suppresses dependent percentages
 
-  @Test("over-time projection drops a flagged month's contribution")
-  func overTimeExcludesUnavailableMonth() throws {
+  @Test("over-time projection is unavailable when one category total is unavailable")
+  func overTimeUnavailableWhenCategoryUnavailable() {
     let catId = UUID()
     let breakdown = [
       ExpenseBreakdown(
@@ -31,12 +31,7 @@ struct AnalysisStoreUnavailableProjectionTests {
     let result = AnalysisStore.buildCategoriesOverTime(
       from: breakdown, categories: categories)
 
-    let allPoints: [CategoryOverTimePoint] = result.reduce(into: []) { $0 += $1.points }
-    // Only the available month survives; the flagged month produces no point/total.
-    let months = Set(allPoints.map(\.month))
-    #expect(months == ["202502"])
-    let point202502 = try #require(allPoints.first { $0.month == "202502" })
-    #expect(point202502.actualAmount == Decimal(100))
+    #expect(result.isEmpty)
   }
 
   @Test("clean breakdown keeps every month in the projection")
@@ -59,10 +54,10 @@ struct AnalysisStoreUnavailableProjectionTests {
     #expect(Set(allPoints.map(\.month)) == ["202502", "202503"])
   }
 
-  // MARK: - Pie breakdown excludes flagged rows
+  // MARK: - Pie breakdown suppresses dependent totals
 
-  @Test("pie breakdown drops a flagged row's contribution")
-  func pieExcludesUnavailableRow() {
+  @Test("pie breakdown is unavailable when one category total is unavailable")
+  func pieUnavailableWhenCategoryUnavailable() {
     let cat1 = UUID()
     let cat2 = UUID()
     let breakdown = [
@@ -81,10 +76,7 @@ struct AnalysisStoreUnavailableProjectionTests {
     let result = AnalysisStore.buildExpenseBreakdown(
       from: breakdown, categories: categories, selectedCategoryId: nil)
 
-    // Only the available category survives; the flagged row contributes nothing.
-    #expect(result.count == 1)
-    #expect(result.first?.categoryId == cat2)
-    #expect(result.first?.totalExpenses.quantity == Decimal(50))
+    #expect(result.isEmpty)
   }
 
   // MARK: - Window-level signal

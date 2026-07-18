@@ -29,7 +29,17 @@ enum CategorySpendSeries {
     let byCategory = Dictionary(grouping: breakdown) { $0.categoryId ?? Self.uncategorizedKey }
     var result: [UUID: [MonthlySpendPoint]] = [:]
     for (categoryId, rows) in byCategory {
-      result[categoryId] = series(from: rows)
+      // Trend and anomaly detectors require an evenly spaced statistical
+      // series. Start after the most recent unavailable observation: removing
+      // an interior month would collapse time, while an older failure must not
+      // invalidate a later contiguous analysis window forever.
+      let latestUnavailableMonth = rows.filter(\.hasUnavailableData).map(\.month).max()
+      let contiguousRows = rows.filter { row in
+        guard !row.hasUnavailableData else { return false }
+        guard let latestUnavailableMonth else { return true }
+        return row.month > latestUnavailableMonth
+      }
+      result[categoryId] = series(from: contiguousRows)
     }
     return result
   }
@@ -47,8 +57,9 @@ enum CategorySpendSeries {
       uuidString: "00000000-0000-0000-0000-0000000000FF") ?? UUID()
 
   private static func series(from rows: [ExpenseBreakdown]) -> [MonthlySpendPoint] {
+    let unavailableMonths = Set(rows.filter(\.hasUnavailableData).map(\.month))
     var magnitudeByMonth: [String: Double] = [:]
-    for row in rows {
+    for row in rows where !row.hasUnavailableData {
       let signed = Double(truncating: row.totalExpenses.quantity as NSDecimalNumber)
       // Flip the negative expense sum to a positive spend magnitude; a
       // net-refund month (positive sum) clamps to zero rather than going
@@ -62,9 +73,13 @@ enum CategorySpendSeries {
     var points: [MonthlySpendPoint] = []
     var cursor = first
     while true {
-      let date = monthDate(cursor) ?? Date.distantPast
-      points.append(
-        MonthlySpendPoint(month: cursor, date: date, magnitude: magnitudeByMonth[cursor] ?? 0))
+      // A missing observation is not the same as a real zero. Preserve gaps
+      // caused by unavailable conversion data instead of synthesising a point.
+      if !unavailableMonths.contains(cursor) {
+        let date = monthDate(cursor) ?? Date.distantPast
+        points.append(
+          MonthlySpendPoint(month: cursor, date: date, magnitude: magnitudeByMonth[cursor] ?? 0))
+      }
       if cursor == last { break }
       guard let next = nextMonth(cursor) else { break }
       cursor = next
