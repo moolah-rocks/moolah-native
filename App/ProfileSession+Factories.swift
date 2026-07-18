@@ -271,9 +271,8 @@ extension ProfileSession {
       conversionService: backend.conversionService,
       referenceCurrency: profile.instrument,
       isMigrating: { !UnifiedInstrumentIdentityMigration.isComplete() },
-      transactionChanges: backend.transactions.observeAll(filter: TransactionFilter()),
-      instrumentChanges: instrumentChanges?.observeChanges(),
-      accountChanges: backend.accounts.observeAll())
+      transactionInvalidations: backend.transactions.observeCostBasisRelevantChanges(),
+      instrumentChanges: instrumentChanges?.observeChanges())
   }
 
   // MARK: - Insight narrator
