@@ -153,6 +153,41 @@ struct ProfileIndexSyncHandlerTests {
     #expect(dirty.isEmpty)  // unchanged → cleared
   }
 
+  @Test("profile conflict tag and version merge roll back together")
+  func profileConflictAcknowledgementRollsBackAtomically() throws {
+    let (handler, repository) = try makeHandler()
+    let profileId = UUID()
+    let originalFields = Data([0x01])
+    var row = ProfileRow(
+      domain: Profile(
+        id: profileId, label: "Local", currencyCode: "AUD",
+        financialYearStartMonth: 7))
+    row.encodedSystemFields = originalFields
+    row.dataFormatVersion = 1
+    try repository.applyRemoteChangesSync(saved: [row], deleted: [])
+    let serverRecord = handler.buildCKRecord(for: row)
+    serverRecord["dataFormatVersion"] = 2 as CKRecordValue
+    try repository.database.write { database in
+      try database.execute(
+        sql: """
+          CREATE TRIGGER force_profile_version_failure
+          BEFORE UPDATE OF data_format_version ON profile
+          BEGIN SELECT RAISE(ABORT, 'forced rollback'); END
+          """)
+    }
+
+    #expect(throws: (any Error).self) {
+      try handler.persistSentProfileAcknowledgements(
+        updates: [(profileId, serverRecord.encodedSystemFields)],
+        savedRecords: [],
+        conflicts: [(serverRecord.recordID, serverRecord)])
+    }
+
+    let persisted = try #require(try repository.fetchRowSync(id: profileId))
+    #expect(persisted.encodedSystemFields == originalFields)
+    #expect(persisted.dataFormatVersion == 1)
+  }
+
   @Test
   func applyRemoteChangesSkipsNonProfileRecordTypes() throws {
     let (handler, repository) = try makeHandler()

@@ -1,6 +1,6 @@
 # CKSyncEngine Sync Guide
 
-**Version:** 1.0
+**Version:** 1.4
 **Platform targets:** macOS 26+ (primary), iOS 26+ (secondary)
 
 ---
@@ -10,7 +10,7 @@
 A single `SyncCoordinator` owns one `CKSyncEngine` instance and routes events to zone-specific handlers:
 
 1. **ProfileIndexSyncHandler** -- handles `ProfileRecord` metadata for the `profile-index` zone
-2. **ProfileDataSyncHandler** (one per active profile) -- handles per-profile data for `profile-{profileId}` zones
+2. **ProfileDataSyncHandler** (one per resolved profile-data zone, including background/un-sessionized profiles) -- handles per-profile data for `profile-{profileId}` zones
 
 The coordinator receives all `CKSyncEngine` delegate events and dispatches them to the appropriate handler based on zone ID. Repository mutation methods explicitly call sync closures (`onRecordChanged`/`onRecordDeleted`) to queue changes for upload, ensuring only user-initiated mutations trigger sync — not derived-data updates like cached balance recomputation.
 
@@ -232,7 +232,8 @@ extension CKRecord {
 for failure in sentChanges.failedRecordSaves {
     switch failure.error.code {
     case .serverRecordChanged:
-        // Server-wins strategy: accept server version, re-apply local fields if needed
+        // Adopt the server change tag, apply this record type's merge rule,
+        // then retry from the resulting local row.
         if let serverRecord = failure.error.serverRecord {
             persistSystemFields(serverRecord.encodedSystemFields, for: serverRecord.recordID)
             // Re-queue the save with updated system fields
@@ -251,7 +252,19 @@ for failure in sentChanges.failedRecordSaves {
 | **Last writer wins** | Simple multi-device, acceptable to lose concurrent edits | Low |
 | **Field-level merge** | Multi-device, preserving all concurrent edits matters | Medium |
 
-For this project, **server wins** is appropriate -- single-user, multi-device sync where concurrent edits to the same record are rare.
+This project does **not** use one project-wide winner. Match the owning
+handler's established rule:
+
+- Profile-data records preserve the current local fields, adopt the server
+  record's system fields/change tag, and retry the local row.
+- Profile-index conflicts preserve local profile fields but promote
+  `dataFormatVersion` to `max(local, server)` before retrying.
+- Shared-instrument conflicts use the normal instrument merge: spam wins for
+  `pricingStatus`, while the other incoming server fields are applied.
+
+Do not replace these rules with a blanket server-wins write: that can discard
+the edit which triggered the conflict. Persist the adopted system fields and
+the record-specific merge atomically with sent-event acknowledgement changes.
 
 ### Rule 7: Handle Zone Deletion Events Correctly
 
@@ -444,6 +457,28 @@ let batch = Array(pendingChanges.prefix(batchLimit))
 **Rationale:** When a receiving device processes incoming records, foreign key references (e.g., a transaction's `accountId`) should point to records that already exist locally. If transactions arrive before accounts, the UI may show orphaned data until the referenced records arrive.
 
 **Rule:** In `queueAllExistingRecords()`, queue records in dependency order: independent records first (categories, accounts, earmarks), then dependent records (budget items, investment values), and transactions last.
+
+### Rule 15: Sent Acknowledgement Persistence Must Not Run on MainActor
+
+**Bug found:** `sentRecordZoneChanges` was forwarded through a blanket
+`MainActor.run`, then synchronously persisted CloudKit system fields through
+GRDB. A measured acknowledgement batch spent about 177 ms synchronously on the
+main thread, making transaction-editing input vulnerable during that interval.
+
+**Rule:** The `.sentRecordZoneChanges` path's batch-scaled synchronous GRDB work
+(`database.read` / `database.write` called without `await`, or repository
+`*Sync` methods) must run behind an explicit `@concurrent` async boundary.
+With Swift 6.2's opt-in `NonisolatedNonsendingByDefault` feature,
+`nonisolated` alone inherits the caller's executor; `@concurrent` gives the
+required off-actor guarantee under either compiler mode. Await
+each event/zone operation so CloudKit ordering and system-field consistency are
+unchanged; hop to `MainActor` only to resolve or mutate coordinator-owned state
+and CKSyncEngine pending changes.
+
+This applies symmetrically to profile-index and profile-data acknowledgements.
+State-only delegate events may still use `MainActor.run`. This rule records the
+validated sent-acknowledgement regression; do not generalize it into an
+unmeasured claim that every small delegate-side disk operation causes UI stalls.
 
 ---
 
@@ -667,6 +702,7 @@ Use the [CloudKit Dashboard](https://icloud.developer.apple.com/) to:
 | Storing enums as integers in CKRecords | Adding new cases breaks older app versions | Store as strings (Rule 11) |
 | `try?` on CloudKit operations without logging | Silent failures make debugging impossible | Log errors with `os.Logger` before discarding |
 | Deleting state file on every launch "just in case" | Forces full re-fetch every time, wasting bandwidth | Only delete on account change or corruption |
+| Forwarding an I/O-heavy delegate event through blanket `MainActor.run` | Synchronous GRDB calls block UI input during bulk sync | Route through an awaited `@concurrent` method; hop back only for coordinator state (Rule 15) |
 
 ---
 
@@ -825,6 +861,7 @@ the **test** container (`CLOUDKIT_CONTAINER_ID_TEST`).
 - [ ] Deduplicate pending changes in `nextRecordZoneChangeBatch` (Rule 12)
 - [ ] Limit batch size to ≤400 records in `nextRecordZoneChangeBatch` (Rule 13)
 - [ ] Queue records in dependency order in `queueAllExistingRecords` (Rule 14)
+- [ ] Keep sent-acknowledgement GRDB persistence behind an awaited `@concurrent` boundary; use `MainActor` only for coordinator state (Rule 15)
 
 ### Before Shipping to Production
 
@@ -840,6 +877,7 @@ the **test** container (`CLOUDKIT_CONTAINER_ID_TEST`).
 
 ## Version History
 
+- **1.4** (2026-07-18): Added Rule 15 requiring sent-acknowledgement persistence to cross an awaited `@concurrent` boundary, including accurate checks for Swift 6.2's opt-in caller-executor semantics.
 - **1.3** (2026-04-15): Updated for unified SyncCoordinator architecture. Replaced dual-engine model with SyncCoordinator + ProfileDataSyncHandler + ProfileIndexSyncHandler. Updated all references, logging categories, checklists, and anti-patterns accordingly.
 - **1.2** (2026-04-13): Added proactive zone creation (Rule 3 rewritten), batch size limits (Rule 13), dependency ordering (Rule 14), default error re-queuing (Rule 9 updated). Updated anti-patterns, symptoms, and checklists with lessons from production debugging.
 - **1.1** (2026-04-13): Replaced ChangeTracker with explicit repository-driven sync queueing. Removed shadow pending-changes sets. Updated rules 2, 4, 4b, 12 and all checklists.

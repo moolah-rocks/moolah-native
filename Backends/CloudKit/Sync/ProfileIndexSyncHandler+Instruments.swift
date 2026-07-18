@@ -152,9 +152,11 @@ extension ProfileIndexSyncHandler {
   /// `pricingStatus` to spam if either side has it; other fields
   /// follow plain newest-wins via the upsert.
   ///
-  /// The retry upload (driven by the coordinator's existing
-  /// `SyncErrorRecovery.requeueFailures` path) re-queues the local
-  /// row, which now carries the merged `pricingStatus`.
+  /// The retry upload (driven by the coordinator's `processSentFailures`
+  /// recovery-plan path) re-queues the local
+  /// row, which now carries the merged `pricingStatus`. The sent-event
+  /// path performs this same merge inside its acknowledgement batch
+  /// transaction; this single-record entry point supports focused tests.
   func applyInstrumentServerRecordChangedMerge(serverRecord: CKRecord) {
     guard let instrumentRepository else { return }
     guard var values = InstrumentRow.fieldValues(from: serverRecord) else {

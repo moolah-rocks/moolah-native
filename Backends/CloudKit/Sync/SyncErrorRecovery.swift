@@ -28,6 +28,32 @@ enum SyncErrorRecovery {
     var requeueDeletes: [CKRecord.ID] = []
   }
 
+  struct RecoveryPlan {
+    let pendingChanges: [CKSyncEngine.PendingRecordZoneChange]
+    let zoneNotFoundSaves: [CKRecord.ID]
+    let zoneNotFoundDeletes: [CKRecord.ID]
+  }
+
+  /// Converts classified failures plus any successfully-sent records whose
+  /// acknowledgement could not be persisted into a complete retry plan.
+  static func recoveryPlan(
+    _ failures: ClassifiedFailures,
+    additionalSaves: [CKRecord.ID] = []
+  ) -> RecoveryPlan {
+    var pendingChanges = additionalSaves.map {
+      CKSyncEngine.PendingRecordZoneChange.saveRecord($0)
+    }
+    pendingChanges += failures.conflicts.map { .saveRecord($0.recordID) }
+    pendingChanges += failures.unknownItems.map { .saveRecord($0.recordID) }
+    pendingChanges += failures.requeue.map { .saveRecord($0) }
+    pendingChanges += failures.quotaExceeded.map { .saveRecord($0) }
+    pendingChanges += failures.requeueDeletes.map { .deleteRecord($0) }
+    return RecoveryPlan(
+      pendingChanges: pendingChanges,
+      zoneNotFoundSaves: failures.zoneNotFoundSaves,
+      zoneNotFoundDeletes: failures.zoneNotFoundDeletes)
+  }
+
   /// Classifies all failed saves and deletes from a sent-changes event.
   static func classify(
     failedSaves: [CKSyncEngine.Event.SentRecordZoneChanges.FailedRecordSave],
@@ -129,37 +155,6 @@ enum SyncErrorRecovery {
       )
       result.requeueDeletes.append(recordID)
     }
-  }
-
-  /// Re-queues all classified failures except zone-not-found records.
-  /// Returns zone-not-found save and delete IDs for the caller to handle zone creation.
-  static func requeueFailures(
-    _ failures: ClassifiedFailures,
-    syncEngine: CKSyncEngine?,
-    logger: Logger
-  ) -> (zoneNotFoundSaves: [CKRecord.ID], zoneNotFoundDeletes: [CKRecord.ID]) {
-    // Re-queue conflicts, unknownItems, and other failures (same logic as current recover())
-    var pendingChanges: [CKSyncEngine.PendingRecordZoneChange] = []
-    for (recordID, _) in failures.conflicts {
-      pendingChanges.append(.saveRecord(recordID))
-    }
-    for (recordID, _) in failures.unknownItems {
-      pendingChanges.append(.saveRecord(recordID))
-    }
-    for recordID in failures.requeue {
-      pendingChanges.append(.saveRecord(recordID))
-    }
-    for recordID in failures.quotaExceeded {
-      pendingChanges.append(.saveRecord(recordID))
-    }
-    for recordID in failures.requeueDeletes {
-      pendingChanges.append(.deleteRecord(recordID))
-    }
-    if !pendingChanges.isEmpty {
-      syncEngine?.state.add(pendingRecordZoneChanges: pendingChanges)
-    }
-
-    return (failures.zoneNotFoundSaves, failures.zoneNotFoundDeletes)
   }
 
 }

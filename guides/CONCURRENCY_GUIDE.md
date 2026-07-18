@@ -160,6 +160,38 @@ func load() async {
 }
 ```
 
+### Blocking I/O Requires an Explicit `@concurrent` Boundary
+
+When Swift 6.2's opt-in `NonisolatedNonsendingByDefault` feature (Approachable
+Concurrency) is enabled, `nonisolated` async execution inherits the caller's
+actor. This repository does not currently enable that feature, but
+`nonisolated` still does not express a durable off-actor guarantee. An async
+entry point intended to isolate bulk or latency-sensitive synchronous disk I/O—such as the non-`await`
+GRDB `database.read` / `database.write` overloads or a repository `*Sync`
+method—must declare `@concurrent` so its executor is explicit under both modes.
+Hop back to `MainActor` only for observable state or UI-owned framework state.
+
+```swift
+// Correct: blocking GRDB work runs on the cooperative pool.
+@concurrent
+func persistAcknowledgements(_ records: [Acknowledgement]) async {
+    repository.persistAcknowledgementsSync(records)
+}
+
+// Non-durable: executor behavior changes with NonisolatedNonsendingByDefault,
+// so this does not guarantee where the blocking call runs.
+nonisolated func persistAcknowledgements(_ records: [Acknowledgement]) async {
+    repository.persistAcknowledgementsSync(records)
+}
+```
+
+For delegate methods, do not wrap an entire event in `MainActor.run` before
+inspecting the path it calls. Route I/O-heavy events to an `@concurrent` async
+method, await them to preserve event ordering, and use small `MainActor.run`
+sections for coordinator state mutations. A synchronous handler that blocks on
+GRDB is never safe merely because the GRDB queue itself is serial and thread-safe:
+the caller still waits synchronously for that queue.
+
 ### Parallel Fetching: `async let`
 
 When multiple independent async operations can run concurrently, use `async let`:

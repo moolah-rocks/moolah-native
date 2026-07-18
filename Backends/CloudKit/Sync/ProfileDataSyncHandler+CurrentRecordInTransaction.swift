@@ -96,39 +96,6 @@ extension ProfileDataSyncHandler {
     buildCKRecord(from: row, encodedSystemFields: row.encodedSystemFields)
   }
 
-  /// Reads each saved record's currently-cached `encodedSystemFields` keyed by
-  /// `<recordType>|<uuid>`, so `handleSentRecordZoneChanges` can snapshot the
-  /// pre-ack cache before `updateSystemFieldsForSaved` overwrites it. Records
-  /// each id whose `cachedSystemFields` lookup resolves, storing its nullable
-  /// cached blob; the ack-clear then treats a nil blob conservatively (no
-  /// clear), so an id whose row is absent or never round-tripped is handled
-  /// the same safe way. A read error is logged and the whole batch is omitted
-  /// (issue #1081 follow-up).
-  nonisolated func preAckCachedSystemFields(
-    _ savedRecords: [CKRecord]
-  ) -> [String: Data?] {
-    var result: [String: Data?] = [:]
-    do {
-      try grdbRepositories.database.read { database in
-        for saved in savedRecords {
-          guard let uuid = saved.recordID.uuid else { continue }
-          if let blob = try self.cachedSystemFields(
-            recordType: saved.recordType, id: uuid, in: database)
-          {
-            result[saved.recordID.systemFieldsKey] = blob
-          }
-        }
-      }
-    } catch {
-      logger.error(
-        """
-        preAckCachedSystemFields read failed: \
-        \(error.localizedDescription, privacy: .public)
-        """)
-    }
-    return result
-  }
-
   /// Reads the cached server `modificationDate` for each of `ids` of
   /// `recordType`, decoded from the row's stored `encoded_system_fields`
   /// blob **inside** the active apply write `database` (issue #1085). The
@@ -164,10 +131,10 @@ extension ProfileDataSyncHandler {
   /// (`fetchRowSync(...)?.encodedSystemFields`), which flattens a missing row
   /// and a present row with a nil blob to the same `.some(.none)`, so the
   /// outer `.some` cannot tell them apart. Callers that only need "is there a
-  /// decodable blob" (a `.some(.some)`) — `cachedModificationDates`,
-  /// `preAckCachedSystemFields` — are unaffected; a caller that must
-  /// distinguish a genuinely missing row should use `currentCKRecord`
-  /// (issue #1090).
+  /// decodable blob" (a `.some(.some)`) is unaffected. The acknowledgement
+  /// transaction treats nil as first-upload-or-absent, then uses
+  /// `currentCKRecord` before clearing so an absent row safely no-ops
+  /// (issues #1081 and #1090).
   nonisolated func cachedSystemFields(
     recordType: String, id: UUID, in database: Database
   ) throws -> Data?? {

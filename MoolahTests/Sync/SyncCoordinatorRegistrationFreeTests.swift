@@ -45,6 +45,20 @@ struct SyncCoordinatorRegistrationFreeTests {
     #expect(first === second)
   }
 
+  @Test("missing sent handler recovers unless teardown was intentional")
+  func missingSentHandlerRecoveryDistinguishesIntentionalTeardown() throws {
+    let manager = try ProfileContainerManager.forTesting()
+    let coordinator = SyncCoordinator(containerManager: manager)
+    let transientId = UUID()
+    let tornDownId = UUID()
+
+    #expect(coordinator.missingSentHandlerAction(for: transientId) == .recover)
+    coordinator.evictCachedState(for: tornDownId)
+    #expect(
+      coordinator.missingSentHandlerAction(for: tornDownId)
+        == .ignoreIntentionalTeardown)
+  }
+
   @Test("remote profile default owner update refreshes cached data handler")
   func remoteProfileDefaultOwnerUpdateRefreshesCachedDataHandler() async throws {
     let manager = try ProfileContainerManager.forTesting()

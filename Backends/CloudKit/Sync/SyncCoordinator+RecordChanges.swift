@@ -7,9 +7,8 @@ import Foundation
 import OSLog
 import os
 
-// Fetched-change application (off-main, hops to `@MainActor` for observer
-// notifications) and sent-change handling (on-main, per-zone failure dispatch
-// + quota tracking) for `SyncCoordinator`.
+// Fetched-change application and sent-acknowledgement persistence run off-main,
+// hopping to `@MainActor` only for coordinator state and CKSyncEngine mutation.
 extension SyncCoordinator {
 
   // MARK: - Fetched Record Zone Changes
@@ -239,127 +238,6 @@ extension SyncCoordinator {
       )
       await scheduleRefetch()
     }
-  }
-
-  // MARK: - Sent Record Zone Changes
-
-  @MainActor
-  func handleSentRecordZoneChanges(
-    _ sentChanges: CKSyncEngine.Event.SentRecordZoneChanges
-  ) {
-    let signpostID = OSSignpostID(log: Signposts.sync)
-    os_signpost(
-      .begin, log: Signposts.sync, name: "handleSentChanges", signpostID: signpostID,
-      "%{public}d saved %{public}d failedSaves %{public}d failedDeletes",
-      sentChanges.savedRecords.count, sentChanges.failedRecordSaves.count,
-      sentChanges.failedRecordDeletes.count)
-    defer {
-      os_signpost(.end, log: Signposts.sync, name: "handleSentChanges", signpostID: signpostID)
-    }
-    logger.info(
-      "sentRecordZoneChanges: saved=\(sentChanges.savedRecords.count) failedSaves=\(sentChanges.failedRecordSaves.count) failedDeletes=\(sentChanges.failedRecordDeletes.count)"
-    )
-
-    // Group saved records by zone
-    var savedByZone: [CKRecordZone.ID: [CKRecord]] = [:]
-    for record in sentChanges.savedRecords {
-      savedByZone[record.recordID.zoneID, default: []].append(record)
-    }
-
-    // Group failed saves by zone
-    var failedSavesByZone:
-      [CKRecordZone.ID: [CKSyncEngine.Event.SentRecordZoneChanges
-        .FailedRecordSave]] = [:]
-    for failure in sentChanges.failedRecordSaves {
-      failedSavesByZone[failure.record.recordID.zoneID, default: []].append(failure)
-    }
-
-    // Group failed deletes by zone
-    var failedDeletesByZone: [CKRecordZone.ID: [(CKRecord.ID, CKError)]] = [:]
-    for (recordID, error) in sentChanges.failedRecordDeletes {
-      failedDeletesByZone[recordID.zoneID, default: []].append((recordID, error))
-    }
-
-    // Process each zone's results through the appropriate handler
-    let allZones = Set(savedByZone.keys)
-      .union(failedSavesByZone.keys)
-      .union(failedDeletesByZone.keys)
-
-    for zoneID in allZones {
-      processSentZone(
-        zoneID: zoneID,
-        savedByZone: savedByZone,
-        failedSavesByZone: failedSavesByZone,
-        failedDeletesByZone: failedDeletesByZone)
-    }
-
-    updateQuotaExceededState(from: sentChanges)
-  }
-
-  /// Runs one zone's sent-change results through the appropriate handler and
-  /// handles any zone-not-found failures by creating the zone and re-queuing.
-  @MainActor
-  private func processSentZone(
-    zoneID: CKRecordZone.ID,
-    savedByZone: [CKRecordZone.ID: [CKRecord]],
-    failedSavesByZone: [CKRecordZone.ID: [CKSyncEngine.Event.SentRecordZoneChanges
-      .FailedRecordSave]],
-    failedDeletesByZone: [CKRecordZone.ID: [(CKRecord.ID, CKError)]]
-  ) {
-    let zoneType = Self.parseZone(zoneID)
-    let failures: SyncErrorRecovery.ClassifiedFailures
-
-    switch zoneType {
-    case .profileIndex:
-      failures = profileIndexHandler.handleSentRecordZoneChanges(
-        savedRecords: savedByZone[zoneID] ?? [],
-        failedSaves: failedSavesByZone[zoneID] ?? [],
-        failedDeletes: failedDeletesByZone[zoneID] ?? [])
-
-    case .profileData(let profileId):
-      guard let handler = try? handlerForProfileZone(profileId: profileId, zoneID: zoneID)
-      else {
-        logger.error("Failed to get handler for sent changes, profile \(profileId)")
-        return
-      }
-      failures = handler.handleSentRecordZoneChanges(
-        savedRecords: savedByZone[zoneID] ?? [],
-        failedSaves: failedSavesByZone[zoneID] ?? [],
-        failedDeletes: failedDeletesByZone[zoneID] ?? [])
-
-    case .unknown:
-      logger.warning("Sent changes for unknown zone: \(zoneID.zoneName)")
-      return
-    }
-
-    // Re-queue failures (except zone-not-found which needs zone creation)
-    let (zoneNotFoundSaves, zoneNotFoundDeletes) = SyncErrorRecovery.requeueFailures(
-      failures, syncEngine: syncEngine, logger: logger)
-
-    // Handle zone-not-found: store records and create zone
-    if !zoneNotFoundSaves.isEmpty || !zoneNotFoundDeletes.isEmpty {
-      var pendingChanges: [CKSyncEngine.PendingRecordZoneChange] = []
-      pendingChanges += zoneNotFoundSaves.map { .saveRecord($0) }
-      pendingChanges += zoneNotFoundDeletes.map { .deleteRecord($0) }
-      ensureProfileZone(zoneID, pendingChanges: pendingChanges)
-    }
-  }
-
-  /// Tracks whether the user's iCloud quota is exceeded across all zones in the
-  /// current send cycle. Empty events (no saves, no failed saves) are ignored
-  /// so the flag doesn't bounce to `false` on heartbeat send cycles.
-  @MainActor
-  private func updateQuotaExceededState(
-    from sentChanges: CKSyncEngine.Event.SentRecordZoneChanges
-  ) {
-    let hasQuotaErrors = sentChanges.failedRecordSaves.contains { $0.error.code == .quotaExceeded }
-    if hasQuotaErrors {
-      applyQuotaState(true)
-    } else if !sentChanges.failedRecordSaves.isEmpty || !sentChanges.savedRecords.isEmpty {
-      // Only clear if we actually processed records (not an empty event)
-      applyQuotaState(false)
-    }
-    refreshPendingUploadsMirror()
   }
 
   /// Routes batch totals into `progress`. Internal so unit tests can drive

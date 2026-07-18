@@ -6,7 +6,8 @@ import os
 /// Unified sync coordinator that owns a single `CKSyncEngine` for the entire app.
 ///
 /// Routes events by zone ID to `ProfileDataSyncHandler` or `ProfileIndexSyncHandler`.
-/// Everything runs on `@MainActor` — no concurrency races by construction.
+/// Coordinator state is `@MainActor`; blocking GRDB sync work uses explicit
+/// off-main boundaries before returning to mutate coordinator state.
 ///
 /// Zone routing:
 /// - `profile-index` → `ProfileIndexSyncHandler`
@@ -231,6 +232,9 @@ final class SyncCoordinator {
 
   /// Cached profile data handlers, keyed by profile UUID.
   var dataHandlers: [UUID: ProfileDataSyncHandler] = [:]
+  /// Profiles whose handlers were deliberately removed during deletion or a
+  /// data-format gate. Delayed sent acknowledgements must not resurrect them.
+  var intentionallyUnavailableDataHandlerIds: Set<UUID> = []
 
   /// Per-profile cache of auto-constructed GRDB repository bundles, keyed by
   /// profile UUID. Populated on first access in
@@ -386,15 +390,4 @@ final class SyncCoordinator {
     }
   }
 
-  // MARK: - Fetch-Session Book-keeping
-  // (Begin/end live on `+Lifecycle`; the isFetchingChanges flag is mutated there
-  // and by `+Zones` on sign-out.)
-
-  // MARK: - Handler Access
-  // (Lazy `ProfileDataSyncHandler` creation and the per-profile
-  // instrument-change callback registry live on `+HandlerAccess`.)
-
-  // MARK: - State Persistence
-  // (Load happens off-actor in `prepareEngine` on `+Lifecycle`; the
-  // write / delete paths live on `+StatePersistence`.)
 }

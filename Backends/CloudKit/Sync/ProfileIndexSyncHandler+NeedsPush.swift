@@ -10,6 +10,34 @@ import GRDB
 // `ProfileDataSyncHandler+SystemFields.swift`.
 
 extension ProfileIndexSyncHandler {
+  /// Persists all profile-row system fields from one sent event and performs
+  /// the matching needs_push compare-and-clear in the same transaction.
+  func persistSentProfileAcknowledgements(
+    updates: [(id: UUID, data: Data?)],
+    savedRecords: [CKRecord],
+    conflicts: [(recordID: CKRecord.ID, serverRecord: CKRecord)]
+  ) throws {
+    try repository.database.write { database in
+      try repository.setEncodedSystemFieldsBatchSync(updates, in: database)
+      for (_, serverRecord) in conflicts where serverRecord.recordType == ProfileRow.recordType {
+        guard let id = serverRecord.recordID.uuid else { continue }
+        let remote = (serverRecord["dataFormatVersion"] as? Int64).map(Int.init) ?? 0
+        try repository.mergeDataFormatVersionSync(
+          id: id, remoteValue: remote, in: database)
+      }
+      var confirmed: [UUID] = []
+      for saved in savedRecords where saved.recordType == ProfileRow.recordType {
+        guard let profileId = saved.recordID.uuid else { continue }
+        guard let current = try repository.fetchRowSync(id: profileId, in: database)
+        else { continue }
+        if buildCKRecord(for: current).hasSameUserFields(as: saved) {
+          confirmed.append(profileId)
+        }
+      }
+      _ = try repository.clearNeedsPushBatchSync(confirmed, in: database)
+    }
+  }
+
   /// Applies the profile leg of a fetched batch in ONE transaction: the
   /// dirty check, the clean-row upsert, and the dirty-row system-fields
   /// write all share a single `repository.database.write` so an in-flight
@@ -96,13 +124,15 @@ extension ProfileIndexSyncHandler {
   /// server-token fetch ordering, so the date gate, not delivery order, is
   /// the load-bearing guarantee.
   ///
-  /// **Atomicity (issue #1081).** The current-row read, the user-field
+  /// **Atomicity (issue #1081).** This focused single-operation helper keeps
+  /// the current-row read, the user-field
   /// compare, and the conditional clear all share ONE
   /// `repository.database.write` transaction, so no concurrent profile
   /// rename can commit (and re-raise `needs_push`) between the compare and
   /// the clear — the prior read-then-separate-write shape had a TOCTOU
   /// window where such an interleaving could clear the flag over a newer
-  /// rename, losing its protection.
+  /// rename, losing its protection. Sent-event handling performs the same
+  /// compare-and-clear inside the larger acknowledgement batch transaction.
   func clearNeedsPushForConfirmed(_ savedRecords: [CKRecord]) {
     do {
       try repository.database.write { database in

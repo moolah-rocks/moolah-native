@@ -14,6 +14,7 @@ final class SyncUploadBenchmarks: XCTestCase {
   nonisolated(unsafe) private static var _database: DatabaseQueue?
   nonisolated(unsafe) private static var _handler: ProfileDataSyncHandler?
   nonisolated(unsafe) private static var _transactionUUIDs400: Set<UUID> = []
+  nonisolated(unsafe) private static var _acknowledgedRecords400: [CKRecord] = []
 
   // `XCTestCase.setUp` is nonisolated, so this override cannot carry
   // `@MainActor`. `ProfileDataSyncHandler.init` is the only call here
@@ -36,21 +37,22 @@ final class SyncUploadBenchmarks: XCTestCase {
       transferSuggestions: result.backend.grdbTransferSuggestions,
       instruments: result.backend.grdbInstruments,
       categories: result.backend.grdbCategories,
+      taxOwners: result.backend.grdbTaxOwners,
       accounts: result.backend.grdbAccounts,
       accountGroups: result.backend.grdbAccountGroups,
       insightDismissals: result.backend.grdbInsightDismissals,
       walletSyncCheckpoints: result.backend.grdbWalletSyncCheckpoints,
       earmarks: result.backend.grdbEarmarks,
       earmarkBudgetItems: result.backend.grdbEarmarkBudgetItems,
-      investmentValues: GRDBInvestmentRepository(database: result.database),
       transactions: result.backend.grdbTransactions,
       transactionLegs: result.backend.grdbTransactionLegs,
       database: result.database)
-    _handler = MainActor.assumeIsolated {
+    let handler = MainActor.assumeIsolated {
       ProfileDataSyncHandler(
         profileId: profileId, zoneID: zoneID,
         grdbRepositories: bundle)
     }
+    _handler = handler
     let ids = expecting("benchmark fetch existing ids failed") {
       try result.database.read { database in
         try TransactionRow
@@ -60,12 +62,33 @@ final class SyncUploadBenchmarks: XCTestCase {
       }
     }
     _transactionUUIDs400 = Set(ids)
+    _acknowledgedRecords400 = expecting("benchmark fetch acknowledged records failed") {
+      try result.database.read { database in
+        try TransactionRow
+          .filter(ids.contains(TransactionRow.Columns.id))
+          .fetchAll(database)
+          .map { $0.toCKRecord(in: zoneID) }
+      }
+    }
+    // Warm the one-time first-ack state transition before measurement so all
+    // measured iterations exercise identical persisted state.
+    warmAcknowledgementState(handler: handler, records: _acknowledgedRecords400)
+  }
+
+  private static func warmAcknowledgementState(
+    handler: ProfileDataSyncHandler, records: [CKRecord]
+  ) {
+    _ = awaitSyncExpecting {
+      await handler.handleSentRecordZoneChanges(
+        savedRecords: records, failedSaves: [], failedDeletes: [])
+    }
   }
 
   override static func tearDown() {
     _handler = nil
     _database = nil
     _transactionUUIDs400 = []
+    _acknowledgedRecords400 = []
     super.tearDown()
   }
 
@@ -76,6 +99,7 @@ final class SyncUploadBenchmarks: XCTestCase {
     return handler
   }
   private var transactionUUIDs400: Set<UUID> { Self._transactionUUIDs400 }
+  private var acknowledgedRecords400: [CKRecord] { Self._acknowledgedRecords400 }
 
   private var metrics: [XCTMetric] { [XCTClockMetric(), XCTMemoryMetric()] }
   private var options: XCTMeasureOptions {
@@ -98,6 +122,21 @@ final class SyncUploadBenchmarks: XCTestCase {
     measure(metrics: metrics, options: options) {
       _ = awaitSyncExpecting { @MainActor in
         handler.buildBatchRecordLookup(byRecordType: groups)
+      }
+    }
+  }
+
+  /// Measures the full acknowledgement persistence path for a realistic
+  /// CKSyncEngine batch. The production entry point is `@concurrent`; its
+  /// off-main precondition turns an accidental MainActor regression into an
+  /// immediate benchmark failure instead of a latent UI stall.
+  func testHandleSentAcknowledgements_400transactions() {
+    let handler = handler
+    let records = acknowledgedRecords400
+    measure(metrics: metrics, options: options) {
+      _ = awaitSyncExpecting {
+        await handler.handleSentRecordZoneChanges(
+          savedRecords: records, failedSaves: [], failedDeletes: [])
       }
     }
   }
