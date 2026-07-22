@@ -6,18 +6,19 @@
   /// `NSScrollView`; the scroll view fills the controller's view via
   /// auto-layout so the sidebar gets a single, full-bleed scrollbar.
   ///
-  /// `apply(tree:expandedGroupIds:selection:)` replaces the current
-  /// snapshot, reloads the outline, and reconciles expand + selection
-  /// state — invoked by `SidebarOutline.updateNSViewController` on
-  /// every SwiftUI update. Expansion-callback echo is suppressed during
-  /// the reconcile so persisted state is the source of truth, never the
-  /// reload-induced collapse/expand events.
+  /// `apply(tree:expandedGroupIds:selection:reloadData:)` reconciles the
+  /// current snapshot, expansion, and selection state. Content changes
+  /// reload the outline, while selection-only changes refresh just the
+  /// affected rows so the scroll position and all other row views survive.
+  /// Expansion-callback echo is suppressed during the reconcile so
+  /// persisted state remains the source of truth.
   @MainActor
   final class SidebarOutlineController: NSViewController {
     let outlineView = SidebarKeyHandlingOutlineView()
     private let scrollView = NSScrollView()
     let dataSource = SidebarOutlineDataSource()
     let delegate = SidebarOutlineDelegate()
+    private var currentSelection: SidebarSelection?
 
     override func loadView() {
       view = NSView()
@@ -98,18 +99,20 @@
       ])
     }
 
-    /// Replaces the current tree, reloads, and reconciles expansion +
-    /// selection. Called by `SidebarOutline.updateNSViewController` on
-    /// every SwiftUI update — the snapshot includes the freshly built
-    /// `SidebarRowTree.Result`, the persisted set of expanded group ids,
-    /// and the current selection.
+    /// Reconciles the current tree, expansion, and selection. The caller
+    /// requests a full data reload only when row content changed; a
+    /// selection-only update refreshes the two affected cells in place.
     func apply(
       tree: SidebarRowTree.Result,
       expandedGroupIds: Set<UUID>,
-      selection: SidebarSelection?
+      selection: SidebarSelection?,
+      reloadData: Bool
     ) {
+      let previousSelection = currentSelection
       dataSource.tree = tree
-      outlineView.reloadData()
+      if reloadData {
+        outlineView.reloadData()
+      }
 
       delegate.suppressExpansionCallbacks = true
       defer { delegate.suppressExpansionCallbacks = false }
@@ -134,6 +137,10 @@
       }
 
       reconcileSelection(selection)
+      if !reloadData, previousSelection != selection {
+        reloadSelectionRows(previousSelection, selection)
+      }
+      currentSelection = selection
     }
 
     private func reconcileSelection(_ selection: SidebarSelection?) {
@@ -147,6 +154,21 @@
       } else {
         outlineView.deselectAll(nil)
       }
+    }
+
+    private func reloadSelectionRows(
+      _ previousSelection: SidebarSelection?,
+      _ selection: SidebarSelection?
+    ) {
+      let indexes = [previousSelection, selection]
+        .compactMap { $0 }
+        .compactMap(SidebarRow.init(selection:))
+        .map(outlineView.row(forItem:))
+        .filter { $0 >= 0 }
+      guard !indexes.isEmpty else { return }
+      outlineView.reloadData(
+        forRowIndexes: IndexSet(indexes),
+        columnIndexes: IndexSet(integer: 0))
     }
   }
 #endif
