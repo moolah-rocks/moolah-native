@@ -31,6 +31,10 @@
     let onAddEarmark: () -> Void
     let showHidden: Bool
 
+    func makeCoordinator() -> SidebarOutlineUpdateTracker {
+      SidebarOutlineUpdateTracker()
+    }
+
     func makeNSViewController(context: Context) -> SidebarOutlineController {
       let controller = SidebarOutlineController()
       controller.delegate.selectionChanged = { row in
@@ -72,12 +76,15 @@
     func updateNSViewController(
       _ controller: SidebarOutlineController, context: Context
     ) {
-      let tree = SidebarRowTree.build(from: makeSnapshot())
+      let snapshot = makeSnapshot()
+      let tree = SidebarRowTree.build(from: snapshot)
+      let content = SidebarOutlineContent(snapshot: snapshot, editingRowId: editingRowId)
       controller.delegate.cellBuilder = makeCellBuilder()
       controller.apply(
         tree: tree,
         expandedGroupIds: groupUIStateStore.expandedGroupIds,
-        selection: selection)
+        selection: selection,
+        reloadData: context.coordinator.requiresDataReload(for: content))
     }
 
     private func makeSnapshot() -> SidebarRowTree.Snapshot {
