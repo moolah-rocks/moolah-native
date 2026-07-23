@@ -22,6 +22,11 @@
     /// tree. The AppKit-level `setAccessibilityIdentifier` on the cell
     /// still fires, so the row stays findable via the cell element. Use
     /// this for rows that contain a discoverable editable control.
+    ///
+    /// The hosted root explicitly fills the cell width. AppKit may ask for
+    /// a replacement view at its intrinsic width during a partial row
+    /// reload; without the flexible frame, an `HStack`'s spacer collapses
+    /// and trailing balances remain beside their labels after selection.
     static func hosting<Content: View>(
       accessibilityIdentifier: String? = nil,
       exposeChildAccessibility: Bool = false,
@@ -52,16 +57,20 @@
       cell.menu = menu
       return cell
     }
+  }
 
+  extension NSTableCellView {
     @ViewBuilder
     private static func cellRootView<Content: View>(
       content: Content,
       accessibilityIdentifier: String?
     ) -> some View {
       if let accessibilityIdentifier {
-        content.accessibilityIdentifier(accessibilityIdentifier)
-      } else {
         content
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .accessibilityIdentifier(accessibilityIdentifier)
+      } else {
+        content.frame(maxWidth: .infinity, alignment: .leading)
       }
     }
   }
