@@ -80,6 +80,7 @@ struct LargeTransactionInsightTests {
       categories: emptyCategories, context: context)
 
     let anomaly = try #require(insights.first { $0.kind == .largeTransactionAnomaly })
+    #expect(anomaly.presentationKey == anomaly.id)
     let typical = try #require(anomaly.facts.first { $0.label == "Typical for category" })
     // Dining median is 20 (expenses are negative), not anything near the
     // 2,000-skewed global figure.

@@ -29,6 +29,7 @@ enum LiquidityInsights {
     return [
       Insight(
         id: "\(InsightKind.runwayEstimate.rawValue):\(monthKey(context))",
+        presentationKey: "\(InsightKind.runwayEstimate.rawValue):\(short ? "short" : "healthy")",
         kind: .runwayEstimate,
         title: short
           ? "Only \(monthsText(months)) of runway left" : "\(monthsText(months)) of runway",
@@ -73,6 +74,7 @@ enum LiquidityInsights {
     return [
       Insight(
         id: "\(InsightKind.idleCashAlert.rawValue):\(monthKey(context))",
+        presentationKey: InsightKind.idleCashAlert.rawValue,
         kind: .idleCashAlert,
         title: "More cash than usual in liquid accounts",
         date: context.now,

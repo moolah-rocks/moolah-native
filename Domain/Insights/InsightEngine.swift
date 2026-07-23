@@ -43,6 +43,7 @@ struct InsightEngine: Sendable {
   func generate(
     _ input: InsightInput,
     dismissals: [InsightKind: Int] = [:],
+    displayHistory: [String: Date] = [:],
     interests: InsightRanker.DeclaredInterests = InsightRanker.DeclaredInterests(),
     displayCap: Int = 5,
     guaranteePositive: Bool = true
@@ -51,6 +52,7 @@ struct InsightEngine: Sendable {
       detectAll(input),
       now: input.context.now,
       dismissals: dismissals,
+      displayHistory: displayHistory,
       interests: interests,
       displayCap: displayCap,
       guaranteePositive: guaranteePositive)

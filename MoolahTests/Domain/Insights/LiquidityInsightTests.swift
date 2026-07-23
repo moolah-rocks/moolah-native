@@ -19,6 +19,7 @@ struct LiquidityInsightTests {
       dailyBalances: balances, monthly: monthly, context: context)
     let idle = try #require(insights.first)
     #expect(idle.kind == .idleCashAlert)
+    #expect(idle.presentationKey == InsightKind.idleCashAlert.rawValue)
     #expect(idle.actionability == .act)
   }
 

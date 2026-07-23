@@ -84,6 +84,8 @@ struct ProfileSchemaV10DropLegacyTests {
     "tax_owner",
     "account_tax_owner",
     "category_tax_owner",
+    // v27 semantic insight display history (local-only; 90-day retention)
+    "insight_display_history",
     "grdb_migrations",
   ]
 

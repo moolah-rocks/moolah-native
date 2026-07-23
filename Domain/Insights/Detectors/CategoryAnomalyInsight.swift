@@ -97,9 +97,7 @@ enum CategoryAnomalyInsight {
         tolerance: gates.recurrenceTolerance)
     else { return nil }
 
-    let resolved =
-      categoryId == CategorySpendSeries.uncategorizedKey
-      ? nil : categories.by(id: categoryId)
+    let resolved = resolvedCategory(categoryId, categories: categories)
     let categoryName = resolved.map { categories.path(for: $0) } ?? "Uncategorized"
     // The anomaly fires on the latest available financial month, which may be
     // the in-progress current month; naming it (e.g. "in June") avoids the
@@ -110,6 +108,8 @@ enum CategoryAnomalyInsight {
     return Insight(
       id:
         "\(InsightKind.categorySpendingAnomaly.rawValue):\(categoryId.uuidString):\(latest.month)",
+      presentationKey:
+        "\(InsightKind.categorySpendingAnomaly.rawValue):\(categoryId.uuidString)",
       kind: .categorySpendingAnomaly,
       title: "\(categoryName) up \(percent(overspendFraction)) in \(monthName)",
       date: latest.date,
@@ -135,6 +135,11 @@ enum CategoryAnomalyInsight {
 
   private static func percent(_ fraction: Double) -> String {
     fraction.formatted(.percent.precision(.fractionLength(0)))
+  }
+
+  private static func resolvedCategory(_ id: UUID, categories: Categories) -> Category? {
+    guard id != CategorySpendSeries.uncategorizedKey else { return nil }
+    return categories.by(id: id)
   }
 
   /// True when the latest month's spike has a comparable spike (>= `tolerance`

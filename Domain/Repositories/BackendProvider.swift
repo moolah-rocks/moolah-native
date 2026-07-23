@@ -9,6 +9,8 @@ protocol BackendProvider: Sendable {
   /// Per-`InsightKind` dismissal tallies driving `InsightRanker`'s fatigue
   /// penalty. Synced via CKSyncEngine so a dismissal propagates across devices.
   var insightDismissals: any InsightDismissalRepository { get }
+  /// Per-device semantic display history that rotates the For You batch.
+  var insightDisplayHistory: any InsightDisplayHistoryRepository { get }
   var transactions: any TransactionRepository { get }
   var categories: any CategoryRepository { get }
   var taxOwners: any TaxOwnerRepository { get }

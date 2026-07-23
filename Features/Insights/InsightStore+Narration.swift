@@ -31,7 +31,8 @@ extension InsightStore {
   /// narrator's stream off-main (per `InsightNarrating`), and return
   /// `(id, headline)`; there is no `@MainActor` state in the children and so no
   /// data race. Cache-hit insights skip the group entirely.
-  func publishBatch(_ ranked: [ScoredInsight]) async {
+  @discardableResult
+  func publishBatch(_ ranked: [ScoredInsight]) async -> Set<String> {
     let batch = Array(ranked.prefix(maxVisible))
     generation += 1
     let token = generation
@@ -84,13 +85,14 @@ extension InsightStore {
     }
 
     // A newer refresh superseded this batch — discard, the newer run publishes.
-    guard token == generation else { return }
+    guard token == generation else { return [] }
     // Hold-until-ready: the whole batch publishes together, using the resolved
     // headline, then the (uncached) fallback title, then the title as a guard.
     items = batch.map { scored in
       let headline = resolved[scored.id] ?? fellBackTitles[scored.id] ?? scored.insight.title
       return ForYouItem(scored: scored, headline: headline)
     }
+    return Set(batch.map(\.insight.presentationKey))
   }
 
   /// Drives the narrator stream to completion and returns its final snapshot,

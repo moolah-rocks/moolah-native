@@ -68,6 +68,10 @@ final class InsightStore {
   /// Persisted per-`InsightKind` dismissal tallies. Observed to seed the
   /// in-memory fatigue table and written through on each `dismiss(_:)`.
   private let dismissalRepository: any InsightDismissalRepository
+  /// Local semantic display history used to rotate yesterday's batch without
+  /// conflating separate events of the same kind. Module-internal so the
+  /// persistence extension can use it across the file boundary.
+  let displayHistoryRepository: any InsightDisplayHistoryRepository
   /// The reporting currency every monetary input is reduced to.
   let reportingInstrument: Instrument
 
@@ -167,6 +171,7 @@ final class InsightStore {
     self.builder = InsightInputBuilder(backend: backend)
     self.engine = InsightEngine()
     self.dismissalRepository = backend.insightDismissals
+    self.displayHistoryRepository = backend.insightDisplayHistory
     self.reportingInstrument = profile.instrument
     self.instrumentChanges = instrumentChanges
     // Default to ineligible when no provider is injected so no narration
@@ -233,8 +238,10 @@ final class InsightStore {
       defer { isLoading = false }
       let ranked = visible(fixtureInsights.insights)
       insights = ranked
-      await publishBatch(ranked)
-      lastLoadedAt = Date()
+      let shownAt = Date()
+      let shownKeys = await publishBatch(ranked)
+      await recordShown(shownKeys, at: shownAt)
+      lastLoadedAt = shownAt
       return
     }
     let snapshot = makeSnapshot()
@@ -244,13 +251,18 @@ final class InsightStore {
     error = nil
 
     do {
+      let displayHistory = await loadDisplayHistory()
       let (input, scored) = try await compute(
-        snapshot: snapshot, context: context, dismissals: dismissals)
+        snapshot: snapshot,
+        context: context,
+        dismissals: dismissals,
+        displayHistory: displayHistory)
       lastInput = input
       let ranked = visible(scored)
       insights = ranked
-      await publishBatch(ranked)
-      lastLoadedAt = Date()
+      let shownKeys = await publishBatch(ranked)
+      await recordShown(shownKeys, at: context.now)
+      lastLoadedAt = context.now
     } catch is CancellationError {
       // Surface refresh superseded / view torn down — never surface; a
       // re-mount issues its own `refresh()`. Mirrors `AnalysisStore`.
@@ -341,10 +353,12 @@ final class InsightStore {
   nonisolated private func compute(
     snapshot: InsightInputSnapshot,
     context: InsightContext,
-    dismissals: [InsightKind: Int]
+    dismissals: [InsightKind: Int],
+    displayHistory: [String: Date]
   ) async throws -> (InsightInput, [ScoredInsight]) {
     let input = try await builder.build(snapshot: snapshot, context: context)
-    let scored = engine.generate(input, dismissals: dismissals)
+    let scored = engine.generate(
+      input, dismissals: dismissals, displayHistory: displayHistory)
     return (input, scored)
   }
 
@@ -373,10 +387,10 @@ final class InsightStore {
     dismissals = dismissals.filter { dbKinds.contains($0.key) }
   }
 
-  /// Logs and surfaces an error from the dismissal observation stream.
-  /// internal (not `private`) so the `+Observation` extension can call it.
+  /// Logs and surfaces an asynchronous repository error. Internal so the
+  /// observation and display-history extensions can call it across files.
   func surface(error: any Error) {
-    logger.error("Insight dismissal observation error: \(error)")
+    logger.error("Insight repository error: \(error)")
     self.error = error
   }
 

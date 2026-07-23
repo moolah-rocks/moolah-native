@@ -59,6 +59,8 @@ enum PeriodComparisonInsights {
     let monthDate = CategorySpendSeries.monthDate(latest.month) ?? latest.end
     return Insight(
       id: "\(InsightKind.monthOverMonthDelta.rawValue):\(latest.month)",
+      presentationKey:
+        "\(InsightKind.monthOverMonthDelta.rawValue):\(increased ? "increased" : "decreased")",
       kind: .monthOverMonthDelta,
       title: increased
         ? "Spending up \(percent(changeMagnitude)) vs \(label)"

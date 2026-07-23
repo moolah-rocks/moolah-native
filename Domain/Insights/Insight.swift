@@ -18,6 +18,12 @@ import Foundation
 /// backend. Detectors build it; the wiring layer renders it.
 struct Insight: Sendable, Identifiable, Hashable {
   let id: String
+
+  /// Semantic identity used for display-fatigue history. Unlike `id`, this
+  /// deliberately ignores volatile periods and figures when the underlying
+  /// observation is unchanged. Event insights keep event-specific keys (for
+  /// example, one key per unusually large transaction).
+  let presentationKey: String
   let kind: InsightKind
   let title: String
   let date: Date
@@ -48,6 +54,7 @@ struct Insight: Sendable, Identifiable, Hashable {
 
   init(
     id: String,
+    presentationKey: String? = nil,
     kind: InsightKind,
     title: String,
     date: Date,
@@ -60,6 +67,7 @@ struct Insight: Sendable, Identifiable, Hashable {
     chart: InsightChart? = nil
   ) {
     self.id = id
+    self.presentationKey = presentationKey ?? id
     self.kind = kind
     self.title = title
     self.date = date

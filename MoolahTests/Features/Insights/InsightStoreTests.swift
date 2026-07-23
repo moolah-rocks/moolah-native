@@ -114,6 +114,24 @@ struct InsightStoreTests {
     #expect(store.items.map(\.id) == ["b"])
   }
 
+  @Test("refresh records only the visible insights as displayed")
+  func refreshRecordsVisiblePresentationKeys() async throws {
+    let backend = try CloudKitAnalysisTestBackend()
+    let fixtures = [
+      makeScoredInsight(id: "a", score: 4),
+      makeScoredInsight(id: "b", score: 3),
+      makeScoredInsight(id: "c", score: 2),
+      makeScoredInsight(id: "d", score: 1),
+    ]
+    let store = makeStore(backend, fixtures: fixtures)
+    store.maxVisible = 3
+
+    await store.refresh()
+
+    let history = try await backend.insightDisplayHistory.fetchLastShown()
+    #expect(Set(history.keys) == ["a", "b", "c"])
+  }
+
   // MARK: - dismiss
 
   @Test
