@@ -30,9 +30,7 @@ struct InsightContext: Sendable {
   /// A UTC Gregorian calendar — matches how balances and aggregates are
   /// bucketed in the backend (`DATE(...)` is UTC midnight).
   static var defaultCalendar: Calendar {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "UTC") ?? calendar.timeZone
-    return calendar
+    Calendar.utc
   }
 
   /// Zero amount in the reporting currency — a convenience for detectors
@@ -66,5 +64,90 @@ struct InsightContext: Sendable {
   /// `InstrumentAmount.formattedApproximate`.
   func formattedApproximate(_ quantity: Decimal) -> String {
     InstrumentAmount(quantity: quantity, instrument: reportingCurrency).formattedApproximate
+  }
+
+  /// Month and year rendered in the same calendar and time zone used to
+  /// bucket insight data.
+  func formattedMonth(_ date: Date) -> String {
+    date.formatted(
+      Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+        .locale(Locale(identifier: "en_US_POSIX"))
+        .month(.wide)
+        .year())
+  }
+
+  /// A recent day rendered with enough context to distinguish it from every
+  /// other occurrence of the same weekday.
+  func formattedDay(_ date: Date) -> String {
+    date.formatted(
+      Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+        .locale(Locale(identifier: "en_US_POSIX"))
+        .weekday(.wide)
+        .month(.abbreviated)
+        .day())
+  }
+
+  func formattedDate(_ date: Date) -> String {
+    date.formatted(
+      Date.FormatStyle(calendar: calendar, timeZone: calendar.timeZone)
+        .locale(Locale(identifier: "en_US_POSIX"))
+        .month(.abbreviated)
+        .day()
+        .year())
+  }
+
+  /// A user-entered date-only value, rendered in the device calendar that
+  /// supplied it. Earmark target dates come directly from a SwiftUI
+  /// `DatePicker`, rather than the UTC day tokens used by analysis data.
+  func formattedLocalDay(_ date: Date) -> String {
+    date.formatted(
+      Date.FormatStyle(calendar: .current, timeZone: .current)
+        .locale(Locale(identifier: "en_US_POSIX"))
+        .month(.abbreviated)
+        .day()
+        .year())
+  }
+
+  func formattedFinancialMonth(_ key: String) -> String? {
+    guard let endMonth = FinancialMonth.date(forKey: key) else { return nil }
+    if financialMonthEnd == 31 {
+      return formattedMonth(endMonth)
+    }
+    let calendar = Calendar.utc
+    guard
+      let previousMonth = calendar.date(byAdding: .month, value: -1, to: endMonth),
+      let previousRange = calendar.range(of: .day, in: .month, for: previousMonth),
+      let endRange = calendar.range(of: .day, in: .month, for: endMonth),
+      let previousCutoff = calendar.date(
+        bySetting: .day,
+        value: min(financialMonthEnd, previousRange.count),
+        of: previousMonth),
+      let start = calendar.date(byAdding: .day, value: 1, to: previousCutoff),
+      let end = calendar.date(
+        bySetting: .day,
+        value: min(financialMonthEnd, endRange.count),
+        of: endMonth)
+    else { return nil }
+    return Self.formattedRange(start: start, end: end)
+  }
+
+  private static func formattedRange(start: Date, end: Date) -> String {
+    let calendar = Calendar.utc
+    let startYear = calendar.component(.year, from: start)
+    let endYear = calendar.component(.year, from: end)
+    let startText = start.formatted(
+      Date.FormatStyle(calendar: calendar, timeZone: .gmt)
+        .locale(Locale(identifier: "en_US_POSIX"))
+        .month(.abbreviated)
+        .day())
+    let endText = end.formatted(
+      Date.FormatStyle(calendar: calendar, timeZone: .gmt)
+        .locale(Locale(identifier: "en_US_POSIX"))
+        .month(.abbreviated)
+        .day())
+    if startYear == endYear {
+      return "\(startText) – \(endText), \(endYear)"
+    }
+    return "\(startText), \(startYear) – \(endText), \(endYear)"
   }
 }

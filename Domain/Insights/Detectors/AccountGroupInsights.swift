@@ -58,6 +58,7 @@ enum AccountGroupInsights {
           InsightFact("Group", group.name),
           InsightFact("Share of spend", percent(share)),
           InsightFact("Spent", context.formatted(Decimal(-top.value))),
+          InsightFact("Window", "\(input.dataWindow.accountSpendDays) days"),
         ],
         references: InsightReferences(
           groupIds: [group.id], instrumentIds: [context.reportingCurrency.id]))

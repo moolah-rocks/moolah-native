@@ -22,13 +22,6 @@ enum UnusualDayInsight {
     }
     guard !dailyTotals.isEmpty else { return [] }
 
-    // Group day totals by weekday.
-    var byWeekday: [Int: [Double]] = [:]
-    for (day, total) in dailyTotals {
-      let weekday = context.calendar.component(.weekday, from: day)
-      byWeekday[weekday, default: []].append(total)
-    }
-
     // Examine the most recent day(s) in the window.
     let recentDays = dailyTotals.keys
       .filter { context.daysSince($0) >= 0 && context.daysSince($0) <= windowDays }
@@ -37,7 +30,14 @@ enum UnusualDayInsight {
     // Surface only the single most recent unusual day.
     for day in recentDays {
       let weekday = context.calendar.component(.weekday, from: day)
-      guard let population = byWeekday[weekday], population.count >= 4 else { continue }
+      let population: [Double] = dailyTotals.compactMap { entry -> Double? in
+        let (candidateDay, total) = entry
+        guard candidateDay != day,
+          context.calendar.component(.weekday, from: candidateDay) == weekday
+        else { return nil }
+        return total
+      }
+      guard population.count >= 4 else { continue }
       let total = dailyTotals[day] ?? 0
       let typical = DescriptiveStatistics.median(population)
       guard typical > 0 else { continue }
@@ -45,7 +45,12 @@ enum UnusualDayInsight {
       let ratio = total / typical
       guard zScore >= threshold, ratio >= minimumRatio else { continue }
       let spike = DaySpike(
-        day: day, weekday: weekday, total: total, typical: typical, zScore: zScore)
+        day: day,
+        weekday: weekday,
+        total: total,
+        typical: typical,
+        zScore: zScore,
+        comparableDays: population.count)
       return [makeInsight(spike, context: context)]
     }
     return []
@@ -58,6 +63,7 @@ enum UnusualDayInsight {
     let total: Double
     let typical: Double
     let zScore: Double
+    let comparableDays: Int
   }
 
   private static func makeInsight(_ spike: DaySpike, context: InsightContext) -> Insight {
@@ -81,9 +87,11 @@ enum UnusualDayInsight {
         quantity: Decimal(-total), instrument: context.reportingCurrency),
       facts: [
         InsightFact("Day", weekdayName),
+        InsightFact("Date", context.formattedDay(day)),
         InsightFact("Spent", context.formatted(Decimal(-total))),
         InsightFact("Typical \(weekdayName)", context.formatted(Decimal(-typical))),
         InsightFact("Multiple", "\(multiple)×"),
+        InsightFact("Comparable days", "\(spike.comparableDays)"),
       ],
       references: InsightReferences(instrumentIds: [context.reportingCurrency.id]))
   }

@@ -21,7 +21,7 @@ enum InsightAggregates {
     _ monthly: [MonthlyIncomeExpense], context: InsightContext, months: Int = 6
   ) -> Decimal? {
     let recent = completeMonths(monthly, context: context).suffix(months)
-    guard !recent.isEmpty else { return nil }
+    guard !recent.isEmpty, !recent.contains(where: \.hasUnavailableData) else { return nil }
     return typicalDecimal(recent.map { spendMagnitude($0.totalExpense) })
   }
 
@@ -32,7 +32,7 @@ enum InsightAggregates {
     _ monthly: [MonthlyIncomeExpense], context: InsightContext, months: Int = 6
   ) -> Decimal? {
     let recent = completeMonths(monthly, context: context).suffix(months)
-    guard !recent.isEmpty else { return nil }
+    guard !recent.isEmpty, !recent.contains(where: \.hasUnavailableData) else { return nil }
     return typicalDecimal(recent.map { incomeMagnitude($0.totalIncome) })
   }
 
@@ -44,7 +44,7 @@ enum InsightAggregates {
     _ monthly: [MonthlyIncomeExpense], context: InsightContext, months: Int = 6
   ) -> Decimal? {
     let recent = completeMonths(monthly, context: context).suffix(months)
-    guard !recent.isEmpty else { return nil }
+    guard !recent.isEmpty, !recent.contains(where: \.hasUnavailableData) else { return nil }
     return typicalDecimal(recent.map { $0.totalProfit.quantity })
   }
 

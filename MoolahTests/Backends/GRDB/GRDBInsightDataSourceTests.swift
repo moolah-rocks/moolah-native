@@ -327,6 +327,14 @@ struct GRDBInsightDataSourceTests {
     // is dropped rather than guessed, and surfaces in the drop count.
     #expect(candidates.count == 1)
     #expect(candidates.first?.amount == -20)
-    #expect(summary.droppedLegCount > 0)
+    expectAffectedSummariesUnavailable(summary.availability)
   }
+}
+
+private func expectAffectedSummariesUnavailable(
+  _ availability: InsightDataSummary.Availability
+) {
+  #expect(!availability.dailyTotals)
+  #expect(!availability.payees)
+  #expect(!availability.recentCandidates)
 }

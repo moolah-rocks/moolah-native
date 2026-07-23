@@ -132,6 +132,18 @@ struct FinanceInsightTests {
   }
 
   @Test
+  func savingsRateSuppressesPartialMonthlyTotals() {
+    let months = ["202601", "202602", "202603", "202604", "202605"].map {
+      InsightTestSupport.monthly(
+        month: $0,
+        income: 5000,
+        expense: 1000,
+        hasUnavailableData: $0 == "202603")
+    }
+    #expect(SavingsRateInsight.detect(monthly: months, context: context).isEmpty)
+  }
+
+  @Test
   func feeSpendSumsAnnualFees() throws {
     // Per-category 365-day spend rows (negative for spend); only the two
     // fee-category rows should be summed, the rent row ignored.

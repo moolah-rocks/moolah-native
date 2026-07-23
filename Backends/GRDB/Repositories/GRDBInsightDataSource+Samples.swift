@@ -24,6 +24,16 @@ extension GRDBInsightDataSource {
     maxPerCategory: Int,
     context: InsightContext
   ) async throws -> [CategorySpendSamples] {
+    try await categorySamplesWithDrops(
+      windowDays: windowDays, maxPerCategory: maxPerCategory, context: context
+    ).items
+  }
+
+  func categorySamplesWithDrops(
+    windowDays: Int,
+    maxPerCategory: Int,
+    context: InsightContext
+  ) async throws -> (items: [CategorySpendSamples], dropped: Int) {
     let after = cutoff(windowDays: windowDays, context: context)
     let instruments = try await resolveInstruments()
     let cap = max(1, maxPerCategory)
@@ -64,6 +74,16 @@ extension GRDBInsightDataSource {
     maxCount: Int,
     context: InsightContext
   ) async throws -> [IncomeSourceSamples] {
+    try await incomeSourceSamplesWithDrops(
+      windowDays: windowDays, maxCount: maxCount, context: context
+    ).items
+  }
+
+  func incomeSourceSamplesWithDrops(
+    windowDays: Int,
+    maxCount: Int,
+    context: InsightContext
+  ) async throws -> (items: [IncomeSourceSamples], dropped: Int) {
     let after = cutoff(windowDays: windowDays, context: context)
     let instruments = try await resolveInstruments()
     let cap = max(1, maxCount)
@@ -122,9 +142,11 @@ extension GRDBInsightDataSource {
     _ rows: [SampleRow],
     instruments: [String: Instrument],
     context: InsightContext
-  ) async throws -> [IncomeSourceSamples] {
+  ) async throws -> (items: [IncomeSourceSamples], dropped: Int) {
     var magnitudes: [String: [Decimal]] = [:]
     var order: [String] = []
+    var unavailable: Set<String> = []
+    var dropped = 0
     for row in rows {
       guard let day = GRDBAnalysisRepository.parseDayString(row.day) else {
         log.error("incomeSourceSamples: unparseable day '\(row.day, privacy: .public)'")
@@ -145,6 +167,10 @@ extension GRDBInsightDataSource {
       } catch let cancel as CancellationError {
         throw cancel
       } catch {
+        dropped += 1
+        let key = PayeeNormalizer.normalize(row.payee)
+        if magnitudes[key] == nil { order.append(key) }
+        unavailable.insert(key)
         log.warning(
           """
           incomeSourceSamples: dropping sample day=\(row.day, privacy: .public) \
@@ -153,7 +179,15 @@ extension GRDBInsightDataSource {
           """)
       }
     }
-    return order.map { IncomeSourceSamples(normalizedPayee: $0, magnitudes: magnitudes[$0] ?? []) }
+    return (
+      order.map {
+        IncomeSourceSamples(
+          normalizedPayee: $0,
+          magnitudes: magnitudes[$0] ?? [],
+          hasUnavailableData: unavailable.contains($0))
+      },
+      dropped
+    )
   }
 
   private static func decodeSampleRow(_ row: Row) -> SampleRow? {
@@ -176,9 +210,11 @@ extension GRDBInsightDataSource {
     _ rows: [SampleRow],
     instruments: [String: Instrument],
     context: InsightContext
-  ) async throws -> [CategorySpendSamples] {
+  ) async throws -> (items: [CategorySpendSamples], dropped: Int) {
     var magnitudes: [UUID?: [Decimal]] = [:]
     var order: [UUID?] = []
+    var unavailable: Set<UUID?> = []
+    var dropped = 0
     for row in rows {
       guard let day = GRDBAnalysisRepository.parseDayString(row.day) else {
         log.error("categorySamples: unparseable day '\(row.day, privacy: .public)'")
@@ -198,6 +234,9 @@ extension GRDBInsightDataSource {
       } catch let cancel as CancellationError {
         throw cancel
       } catch {
+        dropped += 1
+        if magnitudes[row.categoryId] == nil { order.append(row.categoryId) }
+        unavailable.insert(row.categoryId)
         log.warning(
           """
           categorySamples: dropping sample day=\(row.day, privacy: .public) \
@@ -206,6 +245,14 @@ extension GRDBInsightDataSource {
           """)
       }
     }
-    return order.map { CategorySpendSamples(categoryId: $0, magnitudes: magnitudes[$0] ?? []) }
+    return (
+      order.map {
+        CategorySpendSamples(
+          categoryId: $0,
+          magnitudes: magnitudes[$0] ?? [],
+          hasUnavailableData: unavailable.contains($0))
+      },
+      dropped
+    )
   }
 }

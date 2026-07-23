@@ -21,6 +21,17 @@ extension GRDBInsightDataSource {
     let type: String
   }
 
+  struct PayeeAvailabilityKey: Sendable, Hashable {
+    let normalizedPayee: String
+    let isExpense: Bool
+  }
+
+  struct CandidateProjection: Sendable {
+    let items: [InsightTransaction]
+    let dropped: Int
+    let unavailablePayees: Set<PayeeAvailabilityKey>
+  }
+
   func recentCandidates(
     windowDays: Int,
     categories: Categories,
@@ -38,7 +49,7 @@ extension GRDBInsightDataSource {
     windowDays: Int,
     categories: Categories,
     context: InsightContext
-  ) async throws -> (items: [InsightTransaction], dropped: Int) {
+  ) async throws -> CandidateProjection {
     let after = cutoff(windowDays: windowDays, context: context)
     let instruments = try await resolveInstruments()
     let rows = try await profileDatabase.read { database -> [CandidateRow] in
@@ -92,9 +103,10 @@ extension GRDBInsightDataSource {
     _ rows: [CandidateRow],
     instruments: [String: Instrument],
     categories: Categories
-  ) async throws -> (items: [InsightTransaction], dropped: Int) {
+  ) async throws -> CandidateProjection {
     var items: [InsightTransaction] = []
     var dropped = 0
+    var unavailablePayees: Set<PayeeAvailabilityKey> = []
     for row in rows {
       guard let day = GRDBAnalysisRepository.parseDayString(row.day),
         let type = TransactionType(rawValue: row.type)
@@ -115,6 +127,7 @@ extension GRDBInsightDataSource {
         throw cancel
       } catch {
         dropped += 1
+        Self.recordUnavailablePayee(for: row, type: type, in: &unavailablePayees)
         log.warning(
           """
           recentCandidates: dropping leg txn=\(row.transactionId, privacy: .public) \
@@ -138,7 +151,21 @@ extension GRDBInsightDataSource {
           type: type,
           accountId: row.accountId))
     }
-    return (items, dropped)
+    return CandidateProjection(
+      items: items, dropped: dropped, unavailablePayees: unavailablePayees)
+  }
+
+  private static func recordUnavailablePayee(
+    for row: CandidateRow,
+    type: TransactionType,
+    in unavailablePayees: inout Set<PayeeAvailabilityKey>
+  ) {
+    let normalizedPayee = PayeeNormalizer.normalize(row.payee)
+    guard !normalizedPayee.isEmpty else { return }
+    unavailablePayees.insert(
+      PayeeAvailabilityKey(
+        normalizedPayee: normalizedPayee,
+        isExpense: type == .expense))
   }
 
   // MARK: - assemble
@@ -148,26 +175,50 @@ extension GRDBInsightDataSource {
     categories: Categories,
     context: InsightContext
   ) async throws -> InsightDataSummary {
-    let daily = try await dailyTotals(context: context)
-    let categorySpendSummaries = try await categorySpend(
+    async let dailyResult = dailyTotalsWithDrops(context: context)
+    async let categorySpendResult = categorySpendWithDrops(
       windowDays: window.categorySpendDays, categories: categories, context: context)
-    let accountSpendSummaries = try await accountSpend(
+    async let unbudgetedSpendResult = categorySpendWithDrops(
+      windowDays: window.unbudgetedSpendDays, categories: categories, context: context)
+    async let accountSpendResult = accountSpendWithDrops(
       windowDays: window.accountSpendDays, context: context)
-    let payeeResult = try await payeeSummariesWithDrops(
+    async let payeesResult = payeeSummariesWithDrops(
       windowDays: window.payeeCadenceDays, context: context)
-    let samples = try await categorySamples(
+    async let samplesResult = categorySamplesWithDrops(
       windowDays: window.sampleDays,
       maxPerCategory: window.maxSamplesPerCategory,
       context: context)
-    let candidates = try await recentCandidatesWithDrops(
+    async let incomeSamplesResult = incomeSourceSamplesWithDrops(
+      windowDays: window.sampleDays,
+      maxCount: window.maxIncomeSamples,
+      context: context)
+    async let candidatesResult = recentCandidatesWithDrops(
       windowDays: window.recentCandidateDays, categories: categories, context: context)
+    let daily = try await dailyResult
+    let categorySpendSummaries = try await categorySpendResult
+    let unbudgetedSpendSummaries = try await unbudgetedSpendResult
+    let accountSpendSummaries = try await accountSpendResult
+    let payeeResult = try await payeesResult
+    let samples = try await samplesResult
+    let incomeSamples = try await incomeSamplesResult
+    let candidates = try await candidatesResult
     return InsightDataSummary(
-      dailyTotals: daily,
-      categorySpend: categorySpendSummaries,
-      accountSpend: accountSpendSummaries,
+      dailyTotals: daily.items,
+      categorySpend: categorySpendSummaries.items,
+      unbudgetedCategorySpend: unbudgetedSpendSummaries.items,
+      accountSpend: accountSpendSummaries.items,
       payees: payeeResult.payees,
-      categorySamples: samples,
+      categorySamples: samples.items,
+      incomeSourceSamples: incomeSamples.items,
       recentCandidates: candidates.items,
-      droppedLegCount: payeeResult.dropped + candidates.dropped)
+      availability: InsightDataSummary.Availability(
+        dailyTotals: daily.dropped == 0,
+        categorySpend: categorySpendSummaries.dropped == 0,
+        unbudgetedCategorySpend: unbudgetedSpendSummaries.dropped == 0,
+        accountSpend: accountSpendSummaries.dropped == 0,
+        payees: payeeResult.dropped == 0,
+        categorySamples: samples.dropped == 0,
+        incomeSourceSamples: incomeSamples.dropped == 0,
+        recentCandidates: candidates.dropped == 0))
   }
 }

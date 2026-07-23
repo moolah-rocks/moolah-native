@@ -12,10 +12,12 @@ enum CashFlowForecastInsights {
   static func upcomingBillWarning(
     dailyBalances: [DailyBalance],
     scheduledBills: [ScheduledBill],
+    unavailableScheduledBills: [UnavailableScheduledBill] = [],
     context: InsightContext,
     horizonDays: Int = 35,
     buffer: InstrumentAmount? = nil
   ) -> [Insight] {
+    guard buffer == nil || buffer?.instrument == context.reportingCurrency else { return [] }
     let bufferQuantity = buffer?.quantity ?? 0
     let forecast =
       dailyBalances
@@ -29,14 +31,13 @@ enum CashFlowForecastInsights {
     }
     guard trough.balance.quantity < bufferQuantity else { return [] }
 
-    let culprit =
-      scheduledBills
-      .filter {
-        context.daysUntil($0.date) >= 0 && $0.date <= trough.date && $0.amount.quantity < 0
-      }
-      .min { $0.amount.quantity < $1.amount.quantity }
+    let culprit = culprit(
+      scheduledBills,
+      through: trough.date,
+      unavailableScheduledBills: unavailableScheduledBills,
+      context: context)
     let shortfall = bufferQuantity - trough.balance.quantity
-    let dateText = trough.date.formatted(.dateTime.month(.abbreviated).day())
+    let dateText = context.formattedDate(trough.date)
 
     var facts: [InsightFact] = [
       InsightFact("Lowest projected", context.formatted(trough.balance)),
@@ -70,6 +71,24 @@ enum CashFlowForecastInsights {
     ]
   }
 
+  private static func culprit(
+    _ bills: [ScheduledBill],
+    through date: Date,
+    unavailableScheduledBills: [UnavailableScheduledBill],
+    context: InsightContext
+  ) -> ScheduledBill? {
+    let hasUnavailableCulprit = unavailableScheduledBills.contains {
+      $0.isOutflow && context.daysUntil($0.date) >= 0 && $0.date <= date
+    }
+    guard !hasUnavailableCulprit else { return nil }
+    return
+      bills
+      .filter {
+        context.daysUntil($0.date) >= 0 && $0.date <= date && $0.amount.quantity < 0
+      }
+      .min { $0.amount.quantity < $1.amount.quantity }
+  }
+
   /// Projected end-of-current-financial-month balance with a confidence
   /// band from recent daily-change volatility (design §D-15). Informational
   /// and positive-leaning — a forward-looking "here's where you'll land".
@@ -84,7 +103,7 @@ enum CashFlowForecastInsights {
     let withinMonth = forecast.filter {
       FinancialMonth.key(for: $0.date, monthEnd: context.financialMonthEnd) == currentBucket
     }
-    guard let monthEndDay = withinMonth.last ?? forecast.first else { return [] }
+    guard let monthEndDay = withinMonth.last else { return [] }
 
     let band = confidenceBand(dailyBalances: dailyBalances)
     let projected = monthEndDay.balance.quantity
@@ -100,6 +119,10 @@ enum CashFlowForecastInsights {
 
     let rounded = context.formattedApproximate(projected)
     let outlook = projected >= 0 ? "surplus" : "shortfall"
+    let month =
+      context.formattedFinancialMonth(currentBucket)
+      ?? context.formattedMonth(
+        monthEndDay.date)
     return [
       Insight(
         id: "\(InsightKind.projectedMonthEndBalance.rawValue):\(currentBucket)",
@@ -114,7 +137,8 @@ enum CashFlowForecastInsights {
         // ("around $225,000"). An exact `$225,460.22` impact badge would
         // contradict the deliberately-rounded headline, so it is omitted.
         facts: [
-          InsightFact("Projected balance", rounded)
+          InsightFact("Projected balance", rounded),
+          InsightFact("Month", month),
         ],
         references: InsightReferences(instrumentIds: [context.reportingCurrency.id]),
         chart: InsightChartBuilders.balanceForecast(

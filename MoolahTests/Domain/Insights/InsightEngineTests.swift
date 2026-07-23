@@ -67,4 +67,29 @@ struct InsightEngineTests {
     let input = InsightInput(context: context)
     #expect(InsightEngine().detectAll(input).isEmpty)
   }
+
+  @Test
+  func unavailablePayeePreservesCompleteSiblingInsights() {
+    let base = sampleInput()
+    let payees = base.payees.map { payee in
+      PayeeSummary(
+        normalizedPayee: payee.normalizedPayee,
+        displayPayee: payee.displayPayee,
+        isExpense: payee.isExpense,
+        occurrenceCount: payee.occurrenceCount,
+        firstSeen: payee.firstSeen,
+        lastSeen: payee.lastSeen,
+        windowedTotal: payee.windowedTotal,
+        occurrences: payee.occurrences,
+        hasUnavailableData: !payee.isExpense)
+    }
+    let input = InsightInput(
+      context: context,
+      dataAvailability: .init(payees: false),
+      payees: payees,
+      monthly: base.monthly)
+
+    let kinds = Set(InsightEngine().detectAll(input).map(\.kind))
+    #expect(kinds.contains(.subscriptionPriceHike))
+  }
 }

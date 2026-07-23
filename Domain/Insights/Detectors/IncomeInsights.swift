@@ -11,7 +11,8 @@ enum IncomeInsights {
   static func detect(
     incomeStreams: [DetectedSubscription],
     context: InsightContext,
-    missedGraceDays: Int = 3
+    missedGraceDays: Int = 3,
+    historyWindowDays: Int = 395
   ) -> [Insight] {
     guard let primary = incomeStreams.max(by: { $0.monthlyCostMagnitude < $1.monthlyCostMagnitude })
     else { return [] }
@@ -22,7 +23,9 @@ enum IncomeInsights {
     } else if let timing = paycheckTiming(primary, context: context) {
       insights.append(timing)
     }
-    if let stability = stabilityScore(primary, context: context) {
+    if let stability = stabilityScore(
+      primary, context: context, historyWindowDays: historyWindowDays)
+    {
       insights.append(stability)
     }
     return insights
@@ -59,7 +62,9 @@ enum IncomeInsights {
 
   /// Income stability score (29): lower amount variation → higher score.
   private static func stabilityScore(
-    _ stream: DetectedSubscription, context: InsightContext
+    _ stream: DetectedSubscription,
+    context: InsightContext,
+    historyWindowDays: Int
   ) -> Insight? {
     guard stream.amounts.count >= 3 else { return nil }
     let magnitudes = stream.amounts.map {
@@ -89,6 +94,9 @@ enum IncomeInsights {
         InsightFact(
           "Stability", "\((score * 100).formatted(.number.precision(.fractionLength(0))))/100"),
         InsightFact("Variation", percent(variation)),
+        InsightFact("Payments analysed", "\(stream.amounts.count)"),
+        InsightFact("History window", "\(historyWindowDays) days"),
+        InsightFact("Cadence", stream.period.displayName),
       ],
       references: InsightReferences(
         accountIds: stream.accountId.map { [$0] } ?? []),

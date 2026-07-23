@@ -11,10 +11,11 @@ struct InsightDescriptionComposerBudgetsTests {
       facts: [
         InsightFact("Budget", "$800.00"), InsightFact("Spent so far", "$600.00"),
         InsightFact("Projected", "$950.00"), InsightFact("Window elapsed", "50%"),
+        InsightFact("Budget ends", "Jun 30, 2026"),
       ])
     #expect(
       text
-        == "Holiday fund heading over budget — you've spent $600.00 of your $800.00 budget and you're on pace for $950.00."
+        == "Holiday fund heading over budget — you've spent $600.00 of $800.00 and are on pace for $950.00 by Jun 30, 2026."
     )
   }
 
@@ -25,10 +26,11 @@ struct InsightDescriptionComposerBudgetsTests {
       facts: [
         InsightFact("Budget", "$500.00"), InsightFact("Spent so far", "$200.00"),
         InsightFact("Projected", "$300.00"), InsightFact("Window elapsed", "60%"),
+        InsightFact("Budget ends", "Jun 30, 2026"),
       ])
     #expect(
       text
-        == "Room to spare in Groceries — you've spent $200.00 of $500.00, on pace for just $300.00."
+        == "Room to spare in Groceries — you've spent $200.00 of $500.00 and are on pace for $300.00 by Jun 30, 2026."
     )
   }
 

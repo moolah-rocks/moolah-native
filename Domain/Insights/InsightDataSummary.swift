@@ -13,9 +13,25 @@ import Foundation
 /// Every monetary value is already reduced to `context.reportingCurrency`
 /// via a per-`(day, instrument)` conversion (mirroring
 /// `GRDBAnalysisRepository`); a leg whose conversion fails is dropped and
-/// counted in `droppedLegCount` rather than guessed
+/// marked unavailable rather than guessed
 /// (`guides/INSTRUMENT_CONVERSION_GUIDE.md` Rule 11).
 struct InsightDataSummary: Sendable {
+  struct Availability: Sendable {
+    var dailyTotals = true
+    var categorySpend = true
+    var unbudgetedCategorySpend = true
+    var accountSpend = true
+    var payees = true
+    var categorySamples = true
+    var incomeSourceSamples = true
+    var recentCandidates = true
+
+    var isComplete: Bool {
+      dailyTotals && categorySpend && unbudgetedCategorySpend && accountSpend && payees
+        && categorySamples && incomeSourceSamples && recentCandidates
+    }
+  }
+
   /// Per-UTC-calendar-day income / expense totals over all history. Drives
   /// the unusual-day and weekend-skew detectors. `O(active days)`.
   let dailyTotals: [DailySpendSummary]
@@ -23,6 +39,7 @@ struct InsightDataSummary: Sendable {
   /// Per-category expense totals over a trailing window. Drives fee-spend
   /// and unbudgeted-category. `O(categories)`.
   let categorySpend: [CategorySpendSummary]
+  let unbudgetedCategorySpend: [CategorySpendSummary]
 
   /// Per-account expense totals over a trailing window. Drives
   /// group-spend-concentration once mapped through the membership map.
@@ -37,32 +54,35 @@ struct InsightDataSummary: Sendable {
   /// Per-category recent expense-magnitude samples for the
   /// large-transaction MAD baseline. `O(categories × cap)`.
   let categorySamples: [CategorySpendSamples]
+  let incomeSourceSamples: [IncomeSourceSamples]
 
   /// Bounded recent-candidate window of projected legs, for detectors that
   /// must cite a specific `transactionId` (large-tx, windfall,
   /// new-merchant). `O(recent window)`.
   let recentCandidates: [InsightTransaction]
 
-  /// Count of legs dropped because their currency conversion failed
-  /// (Rule 11). A future "data incomplete" signal — never silently guessed.
-  let droppedLegCount: Int
+  let availability: Availability
 
   init(
     dailyTotals: [DailySpendSummary] = [],
     categorySpend: [CategorySpendSummary] = [],
+    unbudgetedCategorySpend: [CategorySpendSummary] = [],
     accountSpend: [AccountSpendSummary] = [],
     payees: [PayeeSummary] = [],
     categorySamples: [CategorySpendSamples] = [],
+    incomeSourceSamples: [IncomeSourceSamples] = [],
     recentCandidates: [InsightTransaction] = [],
-    droppedLegCount: Int = 0
+    availability: Availability = Availability()
   ) {
     self.dailyTotals = dailyTotals
     self.categorySpend = categorySpend
+    self.unbudgetedCategorySpend = unbudgetedCategorySpend
     self.accountSpend = accountSpend
     self.payees = payees
     self.categorySamples = categorySamples
+    self.incomeSourceSamples = incomeSourceSamples
     self.recentCandidates = recentCandidates
-    self.droppedLegCount = droppedLegCount
+    self.availability = availability
   }
 }
 
@@ -97,6 +117,21 @@ struct CategorySpendSummary: Sendable, Hashable {
   let total: InstrumentAmount
   /// Number of expense legs contributing to `total`.
   let legCount: Int
+  let hasUnavailableData: Bool
+
+  init(
+    categoryId: UUID?,
+    categoryPath: String?,
+    total: InstrumentAmount,
+    legCount: Int,
+    hasUnavailableData: Bool = false
+  ) {
+    self.categoryId = categoryId
+    self.categoryPath = categoryPath
+    self.total = total
+    self.legCount = legCount
+    self.hasUnavailableData = hasUnavailableData
+  }
 }
 
 /// Trailing-window expense total for one account, reporting currency.
@@ -114,6 +149,17 @@ struct CategorySpendSamples: Sendable, Hashable {
   /// Positive spend magnitudes in the reporting currency, most-recent
   /// first, capped per category.
   let magnitudes: [Decimal]
+  let hasUnavailableData: Bool
+
+  init(
+    categoryId: UUID?,
+    magnitudes: [Decimal],
+    hasUnavailableData: Bool = false
+  ) {
+    self.categoryId = categoryId
+    self.magnitudes = magnitudes
+    self.hasUnavailableData = hasUnavailableData
+  }
 }
 
 /// A bounded sample of recent income magnitudes for one source (normalized
@@ -127,6 +173,17 @@ struct IncomeSourceSamples: Sendable, Hashable {
   let normalizedPayee: String
   /// Positive income magnitudes in the reporting currency, most-recent first.
   let magnitudes: [Decimal]
+  let hasUnavailableData: Bool
+
+  init(
+    normalizedPayee: String,
+    magnitudes: [Decimal],
+    hasUnavailableData: Bool = false
+  ) {
+    self.normalizedPayee = normalizedPayee
+    self.magnitudes = magnitudes
+    self.hasUnavailableData = hasUnavailableData
+  }
 }
 
 /// Cadence and totals for one normalized payee within the bounded cadence
@@ -149,6 +206,31 @@ struct PayeeSummary: Sendable, Hashable {
   /// Projected occurrences within the cadence window, ascending by date —
   /// the per-occurrence detail cadence and amount-variability analysis read.
   let occurrences: [PayeeOccurrence]
+  /// At least one occurrence for this payee and direction could not be
+  /// converted. Detectors may still use unrelated complete payee summaries.
+  let hasUnavailableData: Bool
+
+  init(
+    normalizedPayee: String,
+    displayPayee: String,
+    isExpense: Bool,
+    occurrenceCount: Int,
+    firstSeen: Date,
+    lastSeen: Date,
+    windowedTotal: InstrumentAmount,
+    occurrences: [PayeeOccurrence],
+    hasUnavailableData: Bool = false
+  ) {
+    self.normalizedPayee = normalizedPayee
+    self.displayPayee = displayPayee
+    self.isExpense = isExpense
+    self.occurrenceCount = occurrenceCount
+    self.firstSeen = firstSeen
+    self.lastSeen = lastSeen
+    self.windowedTotal = windowedTotal
+    self.occurrences = occurrences
+    self.hasUnavailableData = hasUnavailableData
+  }
 }
 
 /// One projected occurrence of a payee, reporting currency.

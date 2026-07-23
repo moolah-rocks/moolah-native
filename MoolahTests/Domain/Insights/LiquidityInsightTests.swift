@@ -41,6 +41,23 @@ struct LiquidityInsightTests {
   }
 
   @Test
+  func liquiditySuppressesPartialMonthlyTotals() {
+    let balances = [
+      DailyBalance(date: InsightTestSupport.now, balance: InsightTestSupport.amount(20000))
+    ]
+    let monthly = [
+      InsightTestSupport.monthly(month: "202604", income: 1000, expense: 3000),
+      InsightTestSupport.monthly(
+        month: "202605", income: 1000, expense: 3000, hasUnavailableData: true),
+    ]
+    #expect(
+      LiquidityInsights.runway(dailyBalances: balances, monthly: monthly, context: context).isEmpty)
+    #expect(
+      LiquidityInsights.idleCash(dailyBalances: balances, monthly: monthly, context: context)
+        .isEmpty)
+  }
+
+  @Test
   func runwaySingularMonthReadsGrammatically() throws {
     let balances = [
       DailyBalance(date: InsightTestSupport.now, balance: InsightTestSupport.amount(2000))

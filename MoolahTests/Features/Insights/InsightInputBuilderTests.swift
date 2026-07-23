@@ -156,12 +156,22 @@ struct InsightInputBuilderTests {
     let backend = try CloudKitAnalysisTestBackend(conversionService: alwaysFail)
     let now = Date()
     let future = try AnalysisTestHelpers.addingDaysCurrentCalendar(14, to: now)
+    let refundDate = try AnalysisTestHelpers.addingDaysCurrentCalendar(15, to: now)
+    let adjustmentDate = try AnalysisTestHelpers.addingDaysCurrentCalendar(16, to: now)
     let usd = Instrument.fiat(code: "USD")
     // Foreign-instrument scheduled bill — conversion fails, must be dropped.
     _ = try await backend.transactions.create(
       Transaction(
         date: future, payee: "Foreign Sub", recurPeriod: .month, recurEvery: 1,
         legs: [leg(-30, type: .expense, instrument: usd)]))
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: refundDate, payee: "Foreign Refund", recurPeriod: .month, recurEvery: 1,
+        legs: [leg(10, type: .expense, instrument: usd)]))
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: adjustmentDate, payee: "Foreign Adjustment", recurPeriod: .month, recurEvery: 1,
+        legs: [leg(-10, type: .income, instrument: usd)]))
     // Same-currency bill — converts trivially, must appear.
     let localBill = try await backend.transactions.create(
       Transaction(
@@ -174,6 +184,14 @@ struct InsightInputBuilderTests {
     #expect(input.scheduledBills.count == 1)
     #expect(input.scheduledBills.first?.id == localBill.id)
     #expect(input.scheduledBills.first?.amount.quantity == -20)
+    #expect(input.scheduledBillsHaveUnavailableData)
+    #expect(input.unavailableScheduledBills.count == 3)
+    #expect(
+      input.unavailableScheduledBills.contains {
+        abs($0.date.timeIntervalSince(future)) < 0.01
+      }
+    )
+    #expect(input.unavailableScheduledBills.filter(\.isOutflow).count == 2)
   }
 
   // MARK: - repository aggregates

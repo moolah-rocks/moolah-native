@@ -26,7 +26,13 @@ extension GRDBInsightDataSource {
     // empty lookup (the projected `categoryPath` goes unused here).
     let projected = try await recentCandidatesWithDrops(
       windowDays: windowDays, categories: Categories(from: []), context: context)
-    return (foldPayees(projected.items, context: context), projected.dropped)
+    return (
+      foldPayees(
+        projected.items,
+        unavailablePayees: projected.unavailablePayees,
+        context: context),
+      projected.dropped
+    )
   }
 
   /// Group projected legs by `(normalizedPayee, isExpense)` into cadence
@@ -34,6 +40,7 @@ extension GRDBInsightDataSource {
   /// skipped.
   private func foldPayees(
     _ transactions: [InsightTransaction],
+    unavailablePayees: Set<PayeeAvailabilityKey>,
     context: InsightContext
   ) -> [PayeeSummary] {
     struct Key: Hashable {
@@ -48,7 +55,13 @@ extension GRDBInsightDataSource {
     return
       groups
       .map { key, legs in
-        payeeSummary(payee: key.payee, isExpense: key.isExpense, legs: legs, context: context)
+        payeeSummary(
+          payee: key.payee,
+          isExpense: key.isExpense,
+          legs: legs,
+          hasUnavailableData: unavailablePayees.contains(
+            PayeeAvailabilityKey(normalizedPayee: key.payee, isExpense: key.isExpense)),
+          context: context)
       }
       .sorted { $0.normalizedPayee < $1.normalizedPayee }
   }
@@ -58,6 +71,7 @@ extension GRDBInsightDataSource {
     payee: String,
     isExpense: Bool,
     legs: [InsightTransaction],
+    hasUnavailableData: Bool,
     context: InsightContext
   ) -> PayeeSummary {
     let ascending = legs.sorted { $0.date < $1.date }
@@ -83,7 +97,8 @@ extension GRDBInsightDataSource {
       firstSeen: ascending.first?.date ?? context.now,
       lastSeen: ascending.last?.date ?? context.now,
       windowedTotal: total,
-      occurrences: occurrences)
+      occurrences: occurrences,
+      hasUnavailableData: hasUnavailableData)
   }
 
   /// The most frequent raw payee spelling in the group, for narration;

@@ -21,13 +21,17 @@ struct InsightEngine: Sendable {
   func detectAll(_ input: InsightInput) -> [Insight] {
     let context = input.context
     let calendar = context.calendar
+    let completePayees = input.payees.filter { !$0.hasUnavailableData }
     let expenseSubscriptions = SubscriptionDetector.detect(
-      payees: input.payees, incomeStreams: false, calendar: calendar)
+      payees: completePayees, incomeStreams: false, calendar: calendar)
     let incomeStreams = SubscriptionDetector.detect(
-      payees: input.payees, incomeStreams: true, calendar: calendar)
+      payees: completePayees, incomeStreams: true, calendar: calendar)
 
     var insights: [Insight] = []
-    insights += subscriptionInsights(input, subscriptions: expenseSubscriptions)
+    insights += subscriptionInsights(
+      input,
+      subscriptions: expenseSubscriptions,
+      totalsAreComplete: input.dataAvailability.payees)
     insights += anomalyInsights(input)
     insights += trendInsights(input)
     insights += cashFlowInsights(input)
@@ -61,7 +65,9 @@ struct InsightEngine: Sendable {
   // MARK: - Detector groups
 
   private func subscriptionInsights(
-    _ input: InsightInput, subscriptions: [DetectedSubscription]
+    _ input: InsightInput,
+    subscriptions: [DetectedSubscription],
+    totalsAreComplete: Bool
   ) -> [Insight] {
     let context = input.context
     let income = InsightAggregates.typicalMonthlyIncome(input.monthly, context: context)
@@ -71,8 +77,10 @@ struct InsightEngine: Sendable {
     insights += SubscriptionInsights.duplicates(
       subscriptions, categories: input.categories, context: context)
     insights += SubscriptionInsights.cancellationCandidates(subscriptions, context: context)
-    insights += SavingsOpportunityInsights.subscriptionOverspend(
-      subscriptions: subscriptions, typicalMonthlyIncome: income, context: context)
+    if totalsAreComplete {
+      insights += SavingsOpportunityInsights.subscriptionOverspend(
+        subscriptions: subscriptions, typicalMonthlyIncome: income, context: context)
+    }
     return insights
   }
 
@@ -83,19 +91,26 @@ struct InsightEngine: Sendable {
       recentCandidates: input.recentCandidates,
       categorySamples: input.categorySamples,
       categories: input.categories,
-      context: context)
-    insights += NewMerchantInsight.detect(
-      recentCandidates: input.recentCandidates,
-      payees: input.payees,
-      categorySamples: input.categorySamples,
-      context: context)
-    insights += UnusualDayInsight.detect(dailyTotals: input.dailyTotals, context: context)
+      context: context,
+      baselineWindowDays: input.dataWindow.sampleDays)
+    if input.dataAvailability.categorySamples {
+      insights += NewMerchantInsight.detect(
+        recentCandidates: input.recentCandidates,
+        payees: input.payees,
+        categorySamples: input.categorySamples,
+        context: context,
+        historyWindowDays: input.dataWindow.payeeCadenceDays)
+    }
+    if input.dataAvailability.dailyTotals {
+      insights += UnusualDayInsight.detect(dailyTotals: input.dailyTotals, context: context)
+    }
     insights += CategoryAnomalyInsight.detect(
       breakdown: input.expenseBreakdown, categories: input.categories, context: context)
     insights += SavingsOpportunityInsights.feeSpend(
       feeCategorySpend: input.feeCategorySpend,
       expenseBreakdown: input.expenseBreakdown,
-      context: context)
+      context: context,
+      windowDays: input.dataWindow.categorySpendDays)
     return insights
   }
 
@@ -114,7 +129,10 @@ struct InsightEngine: Sendable {
     let context = input.context
     var insights: [Insight] = []
     insights += CashFlowForecastInsights.upcomingBillWarning(
-      dailyBalances: input.dailyBalances, scheduledBills: input.scheduledBills, context: context)
+      dailyBalances: input.dailyBalances,
+      scheduledBills: input.scheduledBills,
+      unavailableScheduledBills: input.unavailableScheduledBills,
+      context: context)
     insights += CashFlowForecastInsights.projectedMonthEnd(
       dailyBalances: input.dailyBalances, context: context)
     insights += LiquidityInsights.runway(
@@ -146,28 +164,39 @@ struct InsightEngine: Sendable {
   ) -> [Insight] {
     let context = input.context
     var insights: [Insight] = []
-    insights += IncomeInsights.detect(incomeStreams: incomeStreams, context: context)
+    insights += IncomeInsights.detect(
+      incomeStreams: incomeStreams,
+      context: context,
+      historyWindowDays: input.dataWindow.payeeCadenceDays)
+    insights += IncomeExtraInsights.payRateChange(incomeStreams: incomeStreams, context: context)
     insights += IncomeExtraInsights.windfall(
       recentCandidates: input.recentCandidates,
       incomeSourceSamples: input.incomeSourceSamples,
-      context: context)
-    insights += IncomeExtraInsights.payRateChange(incomeStreams: incomeStreams, context: context)
+      context: context,
+      baselineWindowDays: input.dataWindow.sampleDays)
     return insights
   }
 
   private func habitInsights(_ input: InsightInput) -> [Insight] {
     let context = input.context
     var insights: [Insight] = []
-    insights += SpendHabitInsights.lapsedMerchant(payees: input.payees, context: context)
-    insights += SpendHabitInsights.weekendSkew(dailyTotals: input.dailyTotals, context: context)
+    insights += SpendHabitInsights.lapsedMerchant(
+      payees: input.payees.filter { !$0.hasUnavailableData }, context: context)
+    if input.dataAvailability.dailyTotals {
+      insights += SpendHabitInsights.weekendSkew(dailyTotals: input.dailyTotals, context: context)
+    }
     return insights
   }
 
   /// Account-structure and data-quality insights (post-design-doc features).
   private func structuralInsights(_ input: InsightInput) -> [Insight] {
     var insights: [Insight] = []
-    insights += AccountGroupInsights.groupSpendConcentration(input)
-    insights += BudgetCoverageInsights.unbudgetedCategory(input)
+    if input.dataAvailability.accountSpend {
+      insights += AccountGroupInsights.groupSpendConcentration(input)
+    }
+    if input.dataAvailability.unbudgetedCategorySpend {
+      insights += BudgetCoverageInsights.unbudgetedCategory(input)
+    }
     insights += DataQualityInsights.uncategorizedBacklog(input)
     insights += DataQualityInsights.unreconciledTransfers(input)
     return insights

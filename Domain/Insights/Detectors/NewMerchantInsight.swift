@@ -18,6 +18,7 @@ enum NewMerchantInsight {
     categorySamples: [CategorySpendSamples],
     context: InsightContext,
     windowDays: Int = 7,
+    historyWindowDays: Int = 395,
     magnitudePercentile: Double = 0.9
   ) -> [Insight] {
     let union = categorySamples.flatMap(\.magnitudes).map {
@@ -30,6 +31,7 @@ enum NewMerchantInsight {
     // Only expense payees suppress a new-merchant alert — an income payee
     // with the same normalized name must not hide a first-time expense charge.
     var established: Set<String> = []
+    let unavailable = unavailableExpensePayees(payees)
     for payee in payees
     where payee.isExpense
       && !payee.normalizedPayee.isEmpty
@@ -40,11 +42,11 @@ enum NewMerchantInsight {
 
     var seenThisWindow: Set<String> = []
     var insights: [Insight] = []
-    for transaction in recentCandidates.filter(\.isExpense).sorted(by: { $0.date > $1.date }) {
+    for transaction in recentCandidates.filter(\.isExpense).sorted(by: { $0.date < $1.date }) {
       let age = context.daysSince(transaction.date)
       guard age >= 0, age <= windowDays else { continue }
       let key = transaction.normalizedPayee
-      guard !key.isEmpty, !established.contains(key),
+      guard !key.isEmpty, !unavailable.contains(key), !established.contains(key),
         !seenThisWindow.contains(key)
       else { continue }
       seenThisWindow.insert(key)
@@ -65,6 +67,7 @@ enum NewMerchantInsight {
           facts: [
             InsightFact("Merchant", payeeName(transaction)),
             InsightFact("Amount", context.formatted(transaction.amount)),
+            InsightFact("Merchant history", "\(historyWindowDays) days"),
             InsightFact("Top-decile threshold", context.formatted(Decimal(-topDecile))),
           ],
           references: InsightReferences(
@@ -73,6 +76,13 @@ enum NewMerchantInsight {
             transactionIds: [transaction.id])))
     }
     return insights
+  }
+
+  private static func unavailableExpensePayees(_ payees: [PayeeSummary]) -> Set<String> {
+    Set(
+      payees.lazy
+        .filter { $0.isExpense && $0.hasUnavailableData }
+        .map(\.normalizedPayee))
   }
 
   private static func payeeName(_ transaction: InsightTransaction) -> String {

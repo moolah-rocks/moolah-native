@@ -4,10 +4,7 @@ import Foundation
 /// categories but a large spend category has no budget line. Bridges spend
 /// analysis and the earmark-budgeting feature with an actionable nudge.
 enum BudgetCoverageInsights {
-  static func unbudgetedCategory(
-    _ input: InsightInput,
-    windowDays: Int = 90
-  ) -> [Insight] {
+  static func unbudgetedCategory(_ input: InsightInput) -> [Insight] {
     // Only relevant once the user actually budgets something.
     guard !input.budgetedCategoryIds.isEmpty else { return [] }
     let context = input.context
@@ -40,7 +37,8 @@ enum BudgetCoverageInsights {
           quantity: Decimal(-top.value), instrument: context.reportingCurrency),
         facts: [
           InsightFact("Category", categoryName),
-          InsightFact("Spent (\(windowDays)d)", context.formatted(Decimal(-top.value))),
+          InsightFact("Spent", context.formatted(Decimal(-top.value))),
+          InsightFact("Window", "\(input.dataWindow.unbudgetedSpendDays) days"),
         ],
         references: InsightReferences(
           categoryIds: [top.key], instrumentIds: [context.reportingCurrency.id]))

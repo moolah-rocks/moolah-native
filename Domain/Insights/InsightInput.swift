@@ -57,6 +57,9 @@ struct EarmarkSnapshot: Sendable, Identifiable, Hashable {
 /// existing stores once per surface refresh.
 struct InsightInput: Sendable {
   let context: InsightContext
+  /// Aggregation settings that produced the bounded summaries below.
+  let dataWindow: InsightDataWindow
+  let dataAvailability: InsightDataSummary.Availability
 
   /// Bounded recent-candidate window (≤30 days) of projected income/expense
   /// legs, reporting currency. The only raw rows detectors that must cite a
@@ -106,6 +109,8 @@ struct InsightInput: Sendable {
   /// Future-dated scheduled transactions (bills, recurring income), already
   /// in the reporting currency. Drives the upcoming-bill warning.
   let scheduledBills: [ScheduledBill]
+  let scheduledBillsHaveUnavailableData: Bool
+  let unavailableScheduledBills: [UnavailableScheduledBill]
 
   /// Converted earmark snapshots (`EarmarkStore`).
   let earmarks: [EarmarkSnapshot]
@@ -141,6 +146,8 @@ struct InsightInput: Sendable {
 
   init(
     context: InsightContext,
+    dataWindow: InsightDataWindow = InsightDataWindow(),
+    dataAvailability: InsightDataSummary.Availability = .init(),
     recentCandidates: [InsightTransaction] = [],
     dailyTotals: [DailySpendSummary] = [],
     payees: [PayeeSummary] = [],
@@ -153,6 +160,8 @@ struct InsightInput: Sendable {
     expenseBreakdown: [ExpenseBreakdown] = [],
     dailyBalances: [DailyBalance] = [],
     scheduledBills: [ScheduledBill] = [],
+    scheduledBillsHaveUnavailableData: Bool = false,
+    unavailableScheduledBills: [UnavailableScheduledBill] = [],
     earmarks: [EarmarkSnapshot] = [],
     profitLoss: [InstrumentProfitLoss] = [],
     capitalGains: [CapitalGainEvent] = [],
@@ -165,6 +174,8 @@ struct InsightInput: Sendable {
     oldestPendingTransferDate: Date? = nil
   ) {
     self.context = context
+    self.dataWindow = dataWindow
+    self.dataAvailability = dataAvailability
     self.recentCandidates = recentCandidates
     self.dailyTotals = dailyTotals
     self.payees = payees
@@ -177,6 +188,8 @@ struct InsightInput: Sendable {
     self.expenseBreakdown = expenseBreakdown
     self.dailyBalances = dailyBalances
     self.scheduledBills = scheduledBills
+    self.scheduledBillsHaveUnavailableData = scheduledBillsHaveUnavailableData
+    self.unavailableScheduledBills = unavailableScheduledBills
     self.earmarks = earmarks
     self.profitLoss = profitLoss
     self.capitalGains = capitalGains
@@ -199,6 +212,14 @@ struct ScheduledBill: Sendable, Identifiable, Hashable {
   /// Signed reporting-currency amount — negative for a bill (outflow).
   let amount: InstrumentAmount
   let accountId: UUID?
+}
+
+/// Date and direction retained for a scheduled leg whose value could not be
+/// converted. This is enough to decide whether it could invalidate forecast
+/// culprit attribution without inventing a reporting-currency amount.
+struct UnavailableScheduledBill: Sendable, Hashable {
+  let date: Date
+  let isOutflow: Bool
 }
 
 /// Minimal projection of an `AccountGroup` for insight narration —

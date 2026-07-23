@@ -115,10 +115,11 @@ struct InsightDescriptionComposerTests {
       facts: [
         InsightFact("Merchant", "Steakhouse"), InsightFact("Amount", "$450.00"),
         InsightFact("Category", "Dining"), InsightFact("Typical for category", "$200.00"),
+        InsightFact("Baseline charges", "18"), InsightFact("Baseline window", "365 days"),
       ])
     #expect(
       text
-        == "A $450.00 charge from Steakhouse stands out for Dining, where you usually spend around $200.00."
+        == "A $450.00 charge from Steakhouse stands out against 18 Dining charges from the last 365 days, whose median was $200.00."
     )
   }
 
@@ -126,8 +127,11 @@ struct InsightDescriptionComposerTests {
   func newMerchantAlertReadsClearly() {
     let text = InsightDescriptionComposer.compose(
       kind: .newMerchantAlert, title: "First charge from Acme",
-      facts: [InsightFact("Merchant", "Acme"), InsightFact("Amount", "$80.00")])
-    #expect(text == "Your first charge from Acme came in at $80.00.")
+      facts: [
+        InsightFact("Merchant", "Acme"), InsightFact("Amount", "$80.00"),
+        InsightFact("Merchant history", "395 days"),
+      ])
+    #expect(text == "Your first charge from Acme in the last 395 days came in at $80.00.")
   }
 
   @Test
@@ -135,10 +139,15 @@ struct InsightDescriptionComposerTests {
     let text = InsightDescriptionComposer.compose(
       kind: .unusualDaySpend, title: "Big spending Monday",
       facts: [
-        InsightFact("Day", "Monday"), InsightFact("Spent", "$300.00"),
+        InsightFact("Day", "Monday"), InsightFact("Date", "Monday, Jun 22"),
+        InsightFact("Spent", "$300.00"),
         InsightFact("Typical Monday", "$95.00"), InsightFact("Multiple", "3.2×"),
+        InsightFact("Comparable days", "12"),
       ])
-    #expect(text == "You spent $300.00 on Monday — around 3.2× your usual $95.00.")
+    #expect(
+      text
+        == "You spent $300.00 on Monday, Jun 22 — around 3.2× the $95.00 median across 12 other Mondays in your recorded history."
+    )
   }
 
   @Test
@@ -146,11 +155,15 @@ struct InsightDescriptionComposerTests {
     let text = InsightDescriptionComposer.compose(
       kind: .categorySpendingAnomaly, title: "Dining up 56% in June",
       facts: [
-        InsightFact("Category", "Dining"), InsightFact("This month", "$640.00"),
+        InsightFact("Category", "Dining"), InsightFact("Month", "June 2026"),
+        InsightFact("Spent", "$640.00"),
         InsightFact("Expected", "$410.00"), InsightFact("Over by", "56%"),
+        InsightFact("Series months", "6"),
       ])
     #expect(
-      text == "Your Dining spending hit $640.00 this month — about 56% above your usual $410.00.")
+      text
+        == "Dining spending reached $640.00 in June 2026 — 56% above the $410.00 estimate based on 6 financial-month observations through June 2026."
+    )
   }
 
   @Test
@@ -159,9 +172,13 @@ struct InsightDescriptionComposerTests {
       kind: .categoryTrendRising, title: "Groceries spend rising",
       facts: [
         InsightFact("Category", "Groceries"), InsightFact("Direction", "Rising"),
-        InsightFact("Per month", "$45.00"),
+        InsightFact("Per month", "$45.00"), InsightFact("Months analysed", "6"),
+        InsightFact("Through month", "June 2026"),
       ])
-    #expect(text == "Your Groceries spending is trending up, by about $45.00 a month.")
+    #expect(
+      text
+        == "Over the 6 months through June 2026, Groceries spending rose by about $45.00 a month."
+    )
   }
 
   @Test
@@ -170,9 +187,12 @@ struct InsightDescriptionComposerTests {
       kind: .categoryTrendFalling, title: "Transport spend is trending down",
       facts: [
         InsightFact("Category", "Transport"), InsightFact("Direction", "Falling"),
-        InsightFact("Per month", "$30.00"),
+        InsightFact("Per month", "$30.00"), InsightFact("Months analysed", "6"),
+        InsightFact("Through month", "June 2026"),
       ])
-    #expect(text == "Your Transport spending is easing off — down about $30.00 a month.")
+    #expect(
+      text
+        == "Over the 6 months through June 2026, Transport spending fell by about $30.00 a month.")
   }
 
   @Test
@@ -180,10 +200,11 @@ struct InsightDescriptionComposerTests {
     let text = InsightDescriptionComposer.compose(
       kind: .monthOverMonthDelta, title: "Spending up 30% vs last month",
       facts: [
-        InsightFact("This period", "$2,600.00"), InsightFact("Comparison", "$2,000.00"),
+        InsightFact("Latest month", "June 2026"), InsightFact("Latest spend", "$2,600.00"),
+        InsightFact("Previous month", "May 2026"), InsightFact("Previous spend", "$2,000.00"),
         InsightFact("Change", "+30%"),
       ])
-    #expect(text == "You spent $2,600.00 this period, up 30% from $2,000.00 before.")
+    #expect(text == "You spent $2,600.00 in June 2026, up 30% from $2,000.00 in May 2026.")
   }
 
   @Test
@@ -191,10 +212,11 @@ struct InsightDescriptionComposerTests {
     let text = InsightDescriptionComposer.compose(
       kind: .monthOverMonthDelta, title: "Spending down 30% vs last month",
       facts: [
-        InsightFact("This period", "$1,400.00"), InsightFact("Comparison", "$2,000.00"),
+        InsightFact("Latest month", "June 2026"), InsightFact("Latest spend", "$1,400.00"),
+        InsightFact("Previous month", "May 2026"), InsightFact("Previous spend", "$2,000.00"),
         InsightFact("Change", "−30%"),
       ])
-    #expect(text == "You spent $1,400.00 this period, down 30% from $2,000.00 before.")
+    #expect(text == "You spent $1,400.00 in June 2026, down 30% from $2,000.00 in May 2026.")
   }
 
   @Test
@@ -203,9 +225,13 @@ struct InsightDescriptionComposerTests {
       kind: .categoryMixShift, title: "Dining is now 35% of your spending",
       facts: [
         InsightFact("Category", "Dining"), InsightFact("Current share", "35%"),
-        InsightFact("Change", "+8 pts"),
+        InsightFact("Change", "+8 percentage points"), InsightFact("Month", "June 2026"),
+        InsightFact("Previous month", "May 2026"),
       ])
-    #expect(text == "Dining now makes up 35% of your spending, up 8 pts.")
+    #expect(
+      text
+        == "Dining made up 35% of your spending in June 2026, up 8 percentage points from May 2026."
+    )
   }
 
   @Test
@@ -231,24 +257,10 @@ struct InsightDescriptionComposerTests {
   func projectedMonthEndBalanceReadsClearly() {
     let text = InsightDescriptionComposer.compose(
       kind: .projectedMonthEndBalance, title: "On track to end the month around $3,200",
-      facts: [InsightFact("Projected balance", "$3,200")])
-    #expect(text == "You're on track to finish the month with about $3,200.")
-  }
-
-  @Test
-  func savingsRateTrendRisingReadsClearly() {
-    let text = InsightDescriptionComposer.compose(
-      kind: .savingsRateTrend, title: "Your savings rate is climbing",
-      facts: [InsightFact("Current savings rate", "18%"), InsightFact("Direction", "Rising")])
-    #expect(text == "Your savings rate is climbing — you're now saving 18% of your income.")
-  }
-
-  @Test
-  func savingsRateTrendFallingReadsClearly() {
-    let text = InsightDescriptionComposer.compose(
-      kind: .savingsRateTrend, title: "Your savings rate is slipping",
-      facts: [InsightFact("Current savings rate", "9%"), InsightFact("Direction", "Falling")])
-    #expect(text == "Your savings rate has slipped to 9% of your income.")
+      facts: [
+        InsightFact("Projected balance", "$3,200"), InsightFact("Month", "June 2026"),
+      ])
+    #expect(text == "You're on track to finish June 2026 with about $3,200.")
   }
 
   @Test
@@ -257,8 +269,11 @@ struct InsightDescriptionComposerTests {
       kind: .runwayEstimate, title: "4 months of runway",
       facts: [
         InsightFact("Available funds", "$8,000.00"), InsightFact("Monthly burn", "$2,000.00"),
-        InsightFact("Runway", "4 months"),
+        InsightFact("Runway", "4 months"), InsightFact("Baseline months", "6"),
       ])
-    #expect(text == "At about $2,000.00 a month, your $8,000.00 would cover roughly 4 months.")
+    #expect(
+      text
+        == "Based on your last 6 complete financial months, a $2,000.00 monthly burn means your $8,000.00 would cover roughly 4 months."
+    )
   }
 }

@@ -179,11 +179,8 @@ struct AnalysisView: View {
   @ViewBuilder
   private func contentView(store: AnalysisStore) -> some View {
     VStack(spacing: 20) {
-      if let insightStore = session.insightStore, !insightStore.items.isEmpty {
-        ForYouCard(
-          items: insightStore.items,
-          onDismiss: { item in Task { await insightStore.dismiss(item.scored) } },
-          onNavigate: onNavigate)
+      if let insightStore = session.insightStore {
+        insightContent(insightStore)
       }
       NetWorthGraphCard(balances: store.displayedDailyBalances)
       upcomingAndIncomeExpense(store: store)
@@ -201,6 +198,21 @@ struct AnalysisView: View {
         showActualValues: $store.showActualValues,
         hasUnavailableData: store.displayedExpenseHasUnavailableData
       )
+    }
+  }
+
+  @ViewBuilder
+  private func insightContent(_ store: InsightStore) -> some View {
+    if !store.items.isEmpty {
+      ForYouCard(
+        items: store.items,
+        onDismiss: { item in Task { await store.dismiss(item.scored) } },
+        onNavigate: onNavigate)
+    }
+    if store.hasIncompleteData {
+      IncompleteInsightsBanner(isLoading: store.isLoading) {
+        Task { await store.refresh() }
+      }
     }
   }
 
@@ -229,6 +241,34 @@ struct AnalysisView: View {
       )
       IncomeExpenseTableCard(data: store.displayedIncomeAndExpense)
     #endif
+  }
+}
+
+private struct IncompleteInsightsBanner: View {
+  let isLoading: Bool
+  let onRetry: () -> Void
+
+  var body: some View {
+    HStack {
+      Label("Some insights couldn't be updated.", systemImage: "exclamationmark.triangle")
+        .foregroundStyle(.secondary)
+      Spacer()
+      Button(action: onRetry) {
+        if isLoading {
+          ProgressView()
+            .controlSize(.small)
+            .frame(minWidth: 36)
+        } else {
+          Text("Retry")
+        }
+      }
+      .buttonStyle(.bordered)
+      .frame(minHeight: 44)
+      .disabled(isLoading)
+      .accessibilityLabel(isLoading ? "Retrying insights" : "Retry")
+      .accessibilityValue(isLoading ? "In progress" : "")
+    }
+    .font(.callout)
   }
 }
 
@@ -319,4 +359,16 @@ private func seedAnalysisPreview(
       }
   }
   .previewProfileEnvironment()
+}
+
+#Preview("Incomplete insights — narrow") {
+  IncompleteInsightsBanner(isLoading: false) {}
+    .padding()
+    .frame(width: 320)
+}
+
+#Preview("Incomplete insights — loading") {
+  IncompleteInsightsBanner(isLoading: true) {}
+    .padding()
+    .frame(width: 600)
 }

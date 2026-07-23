@@ -25,8 +25,14 @@ struct InsightDescriptionComposerIncomeTests {
         InsightFact("Source", "Acme Corp"),
         InsightFact("Stability", "94 /100"),
         InsightFact("Variation", "6%"),
+        InsightFact("Payments analysed", "12"),
+        InsightFact("History window", "395 days"),
+        InsightFact("Cadence", "Monthly"),
       ])
-    #expect(text == "Your income is very steady — it varies by about 6% month to month.")
+    #expect(
+      text
+        == "Across 12 monthly payments from Acme Corp in the last 395 days, amounts varied by about 6%."
+    )
   }
 
   @Test
@@ -63,8 +69,13 @@ struct InsightDescriptionComposerIncomeTests {
         InsightFact("Source", "Acme Corp"),
         InsightFact("Amount", "$5,000.00"),
         InsightFact("Typical income", "$3,500.00"),
+        InsightFact("Baseline deposits", "8"),
+        InsightFact("Baseline window", "365 days"),
       ])
-    #expect(text == "You received $5,000.00 from Acme Corp — well above your typical $3,500.00.")
+    #expect(
+      text
+        == "You received $5,000.00 from Acme Corp — well above the $3,500.00 median across 8 deposits from the last 365 days."
+    )
   }
 
   @Test

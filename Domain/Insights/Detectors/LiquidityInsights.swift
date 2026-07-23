@@ -25,6 +25,7 @@ enum LiquidityInsights {
     guard burnDouble > 0 else { return [] }
     let months = Double(truncating: liquid.quantity as NSDecimalNumber) / burnDouble
     let short = months <= warnBelowMonths
+    let baselineMonths = min(InsightAggregates.completeMonths(monthly, context: context).count, 6)
 
     return [
       Insight(
@@ -42,6 +43,7 @@ enum LiquidityInsights {
           InsightFact("Available funds", context.formatted(liquid)),
           InsightFact("Monthly burn", context.formatted(burn)),
           InsightFact("Runway", monthsText(months)),
+          InsightFact("Baseline months", "\(baselineMonths)"),
         ],
         references: InsightReferences(instrumentIds: [context.reportingCurrency.id]),
         chart: balanceChart(dailyBalances, context: context))
@@ -66,6 +68,7 @@ enum LiquidityInsights {
     let cushion = spend * multiple
     guard liquid.quantity > cushion else { return [] }
     let excess = liquid.quantity - cushion
+    let baselineMonths = min(InsightAggregates.completeMonths(monthly, context: context).count, 6)
     // Surface the buffer's basis — `multiple` months of typical spending — so
     // the fact (and the narration built from it) explains the dollar figure
     // rather than asserting it bare.
@@ -85,6 +88,8 @@ enum LiquidityInsights {
         facts: [
           InsightFact("Available funds", context.formatted(liquid)),
           InsightFact("Typical monthly spend", context.formatted(spend)),
+          InsightFact("Baseline months", "\(baselineMonths)"),
+          InsightFact("Buffer months", "\(multiple)"),
           InsightFact(bufferLabel, context.formatted(cushion)),
           InsightFact("Idle excess", context.formatted(excess)),
         ],

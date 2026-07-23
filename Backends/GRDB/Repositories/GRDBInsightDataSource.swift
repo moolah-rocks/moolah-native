@@ -98,6 +98,12 @@ final class GRDBInsightDataSource: InsightDataSource, @unchecked Sendable {
   }
 
   func dailyTotals(context: InsightContext) async throws -> [DailySpendSummary] {
+    try await dailyTotalsWithDrops(context: context).items
+  }
+
+  func dailyTotalsWithDrops(
+    context: InsightContext
+  ) async throws -> (items: [DailySpendSummary], dropped: Int) {
     let instruments = try await resolveInstruments()
     let rows = try await profileDatabase.read { database -> [DailyTotalsRow] in
       let sql = """
@@ -133,10 +139,11 @@ final class GRDBInsightDataSource: InsightDataSource, @unchecked Sendable {
     _ rows: [DailyTotalsRow],
     instruments: [String: Instrument],
     context: InsightContext
-  ) async throws -> [DailySpendSummary] {
+  ) async throws -> (items: [DailySpendSummary], dropped: Int) {
     var income: [Date: InstrumentAmount] = [:]
     var expense: [Date: InstrumentAmount] = [:]
     let zero = context.zero
+    var dropped = 0
     for row in rows {
       guard let day = GRDBAnalysisRepository.parseDayString(row.day) else {
         logger.error("dailyTotals: unparseable day '\(row.day, privacy: .public)'")
@@ -161,6 +168,7 @@ final class GRDBInsightDataSource: InsightDataSource, @unchecked Sendable {
       } catch let cancel as CancellationError {
         throw cancel
       } catch {
+        dropped += 1
         logger.warning(
           """
           dailyTotals: skipping day=\(row.day, privacy: .public) \
@@ -170,7 +178,7 @@ final class GRDBInsightDataSource: InsightDataSource, @unchecked Sendable {
       }
     }
     let days = Set(income.keys).union(expense.keys)
-    return
+    let items =
       days
       .map { day in
         DailySpendSummary(
@@ -179,5 +187,6 @@ final class GRDBInsightDataSource: InsightDataSource, @unchecked Sendable {
           income: income[day] ?? zero)
       }
       .sorted { $0.day < $1.day }
+    return (items, dropped)
   }
 }

@@ -39,53 +39,69 @@ extension InsightDescriptionComposer {
   }
   static func largeTransactionAnomaly(title: String, facts: FactLookup) -> String {
     guard let amount = facts.value("Amount"), let merchant = facts.value("Merchant"),
-      let category = facts.value("Category"), let typical = facts.value("Typical for category")
+      let category = facts.value("Category"), let typical = facts.value("Typical for category"),
+      let charges = facts.value("Baseline charges"), let window = facts.value("Baseline window")
     else { return title }
     return
-      "A \(amount) charge from \(merchant) stands out for \(category), where you usually spend around \(typical)."
+      "A \(amount) charge from \(merchant) stands out against \(charges) \(category) charges from the last \(window), whose median was \(typical)."
   }
   static func newMerchantAlert(title: String, facts: FactLookup) -> String {
-    guard let merchant = facts.value("Merchant"), let amount = facts.value("Amount")
+    guard let merchant = facts.value("Merchant"), let amount = facts.value("Amount"),
+      let history = facts.value("Merchant history")
     else { return title }
-    return "Your first charge from \(merchant) came in at \(amount)."
+    return "Your first charge from \(merchant) in the last \(history) came in at \(amount)."
   }
   static func unusualDaySpend(title: String, facts: FactLookup) -> String {
-    guard let day = facts.value("Day"), let spent = facts.value("Spent"),
-      let multiple = facts.value("Multiple"), let typical = facts.value("Typical \(day)")
-    else { return title }
-    return "You spent \(spent) on \(day) — around \(multiple) your usual \(typical)."
-  }
-  static func categorySpendingAnomaly(title: String, facts: FactLookup) -> String {
-    guard let category = facts.value("Category"), let thisMonth = facts.value("This month"),
-      let over = facts.value("Over by"), let expected = facts.value("Expected")
+    guard let day = facts.value("Day"), let date = facts.value("Date"),
+      let spent = facts.value("Spent"),
+      let multiple = facts.value("Multiple"), let typical = facts.value("Typical \(day)"),
+      let comparableDays = facts.value("Comparable days")
     else { return title }
     return
-      "Your \(category) spending hit \(thisMonth) this month — about \(over) above your usual \(expected)."
+      "You spent \(spent) on \(date) — around \(multiple) the \(typical) median across \(comparableDays) other \(plural(comparableDays, day)) in your recorded history."
+  }
+  static func categorySpendingAnomaly(title: String, facts: FactLookup) -> String {
+    guard let category = facts.value("Category"), let month = facts.value("Month"),
+      let spent = facts.value("Spent"),
+      let over = facts.value("Over by"), let expected = facts.value("Expected"),
+      let seriesMonths = facts.value("Series months")
+    else { return title }
+    return
+      "\(category) spending reached \(spent) in \(month) — \(over) above the \(expected) estimate based on \(seriesMonths) financial-month observations through \(month)."
   }
   static func categoryTrendRising(title: String, facts: FactLookup) -> String {
-    guard let category = facts.value("Category"), let perMonth = facts.value("Per month")
+    guard let category = facts.value("Category"), let perMonth = facts.value("Per month"),
+      let months = facts.value("Months analysed"), let through = facts.value("Through month")
     else { return title }
-    return "Your \(category) spending is trending up, by about \(perMonth) a month."
+    return
+      "Over the \(months) months through \(through), \(category) spending rose by about \(perMonth) a month."
   }
   static func categoryTrendFalling(title: String, facts: FactLookup) -> String {
-    guard let category = facts.value("Category"), let perMonth = facts.value("Per month")
+    guard let category = facts.value("Category"), let perMonth = facts.value("Per month"),
+      let months = facts.value("Months analysed"), let through = facts.value("Through month")
     else { return title }
-    return "Your \(category) spending is easing off — down about \(perMonth) a month."
+    return
+      "Over the \(months) months through \(through), \(category) spending fell by about \(perMonth) a month."
   }
   static func monthOverMonthDelta(title: String, facts: FactLookup) -> String {
-    guard let thisPeriod = facts.value("This period"), let comparison = facts.value("Comparison"),
+    guard let latestMonth = facts.value("Latest month"),
+      let latestSpend = facts.value("Latest spend"),
+      let previousMonth = facts.value("Previous month"),
+      let previousSpend = facts.value("Previous spend"),
       let change = facts.value("Change")
     else { return title }
     let dir = changeIsIncrease(change) ? "up" : "down"
     return
-      "You spent \(thisPeriod) this period, \(dir) \(unsigned(change)) from \(comparison) before."
+      "You spent \(latestSpend) in \(latestMonth), \(dir) \(unsigned(change)) from \(previousSpend) in \(previousMonth)."
   }
   static func categoryMixShift(title: String, facts: FactLookup) -> String {
     guard let category = facts.value("Category"), let share = facts.value("Current share"),
-      let change = facts.value("Change")
+      let change = facts.value("Change"), let month = facts.value("Month"),
+      let previousMonth = facts.value("Previous month")
     else { return title }
     let dir = changeIsIncrease(change) ? "up" : "down"
-    return "\(category) now makes up \(share) of your spending, \(dir) \(unsigned(change))."
+    return
+      "\(category) made up \(share) of your spending in \(month), \(dir) \(unsigned(change)) from \(previousMonth)."
   }
   static func upcomingBillWarning(title: String, facts: FactLookup) -> String {
     guard let lowest = facts.value("Lowest projected"), let date = facts.value("On")
@@ -96,36 +112,39 @@ extension InsightDescriptionComposer {
     return "Your balance is set to dip to \(lowest) around \(date)."
   }
   static func projectedMonthEndBalance(title: String, facts: FactLookup) -> String {
-    guard let balance = facts.value("Projected balance") else { return title }
-    return "You're on track to finish the month with about \(balance)."
+    guard let balance = facts.value("Projected balance"), let month = facts.value("Month")
+    else { return title }
+    return "You're on track to finish \(month) with about \(balance)."
   }
   static func savingsRateTrend(title: String, facts: FactLookup) -> String {
-    guard let rate = facts.value("Current savings rate"), let direction = facts.value("Direction")
+    guard let rate = facts.value("Current savings rate"), let direction = facts.value("Direction"),
+      let months = facts.value("Months analysed"), let through = facts.value("Through month")
     else { return title }
-    if direction == "Rising" {
-      return "Your savings rate is climbing — you're now saving \(rate) of your income."
-    }
-    return "Your savings rate has slipped to \(rate) of your income."
+    let verb = direction == "Rising" ? "climbed" : "fell"
+    return
+      "Across \(months) complete months through \(through), your savings rate \(verb) to \(rate)."
   }
   static func runwayEstimate(title: String, facts: FactLookup) -> String {
     guard let burn = facts.value("Monthly burn"), let funds = facts.value("Available funds"),
-      let runway = facts.value("Runway")
+      let runway = facts.value("Runway"), let baselineMonths = facts.value("Baseline months")
     else { return title }
-    return "At about \(burn) a month, your \(funds) would cover roughly \(runway)."
+    return
+      "Based on your last \(baselineMonths) complete financial \(plural(baselineMonths, "month")), a \(burn) monthly burn means your \(funds) would cover roughly \(runway)."
   }
   static func earmarkBurndownProjection(title: String, facts: FactLookup) -> String {
     guard let spent = facts.value("Spent so far"), let budget = facts.value("Budget"),
-      let projected = facts.value("Projected")
+      let projected = facts.value("Projected"), let end = facts.value("Budget ends")
     else { return title }
     return
-      "\(title) — you've spent \(spent) of your \(budget) budget and you're on pace for \(projected)."
+      "\(title) — you've spent \(spent) of \(budget) and are on pace for \(projected) by \(end)."
   }
 
   static func earmarkUnderspend(title: String, facts: FactLookup) -> String {
     guard let spent = facts.value("Spent so far"), let budget = facts.value("Budget"),
-      let projected = facts.value("Projected")
+      let projected = facts.value("Projected"), let end = facts.value("Budget ends")
     else { return title }
-    return "\(title) — you've spent \(spent) of \(budget), on pace for just \(projected)."
+    return
+      "\(title) — you've spent \(spent) of \(budget) and are on pace for \(projected) by \(end)."
   }
 
   static func savingsGoalETA(title: String, facts: FactLookup) -> String {
@@ -139,15 +158,19 @@ extension InsightDescriptionComposer {
     return "\(title) — \(saved) saved toward \(goal)."
   }
   static func idleCashAlert(title: String, facts: FactLookup) -> String {
-    guard let funds = facts.value("Available funds"), let excess = facts.value("Idle excess")
+    guard let funds = facts.value("Available funds"), let excess = facts.value("Idle excess"),
+      let baselineMonths = facts.value("Baseline months"),
+      let bufferMonths = facts.value("Buffer months")
     else { return title }
     return
-      "You've got \(funds) sitting in cash — about \(excess) more than you'd typically need on hand."
+      "You've got \(funds) sitting in cash — \(excess) above a \(bufferMonths)-month buffer based on your last \(baselineMonths) complete financial \(plural(baselineMonths, "month"))."
   }
 
   static func feeSpend(title: String, facts: FactLookup) -> String {
-    guard let transactions = facts.value("Transactions") else { return title }
-    return "\(title) over the past year, across \(transactions) \(plural(transactions, "charge"))."
+    guard let transactions = facts.value("Transactions"), let window = facts.value("Window")
+    else { return title }
+    return
+      "\(title) over the last \(window), across \(transactions) \(plural(transactions, "charge"))."
   }
 
   static func netWorthMilestone(title: String, facts: FactLookup) -> String {
@@ -191,8 +214,12 @@ extension InsightDescriptionComposer {
     return "Your next \(source) paycheck of about \(amount) should land around \(next)."
   }
   static func incomeStabilityScore(title: String, facts: FactLookup) -> String {
-    guard let variation = facts.value("Variation") else { return title }
-    return "\(title) — it varies by about \(variation) month to month."
+    guard let source = facts.value("Source"), let variation = facts.value("Variation"),
+      let payments = facts.value("Payments analysed"),
+      let history = facts.value("History window"), let cadence = facts.value("Cadence")
+    else { return title }
+    return
+      "Across \(payments) \(cadence.lowercased()) payments from \(source) in the last \(history), amounts varied by about \(variation)."
   }
   static func missingPaycheckAlert(title: String, facts: FactLookup) -> String {
     guard let source = facts.value("Source"), let amount = facts.value("Typical amount"),
@@ -203,9 +230,11 @@ extension InsightDescriptionComposer {
   }
   static func windfallIncome(title: String, facts: FactLookup) -> String {
     guard let amount = facts.value("Amount"), let source = facts.value("Source"),
-      let typical = facts.value("Typical income")
+      let typical = facts.value("Typical income"), let deposits = facts.value("Baseline deposits"),
+      let window = facts.value("Baseline window")
     else { return title }
-    return "You received \(amount) from \(source) — well above your typical \(typical)."
+    return
+      "You received \(amount) from \(source) — well above the \(typical) median across \(deposits) deposits from the last \(window)."
   }
   static func payRateChange(title: String, facts: FactLookup) -> String {
     guard let source = facts.value("Source"), let newAmount = facts.value("New amount"),
@@ -216,9 +245,10 @@ extension InsightDescriptionComposer {
   }
   static func groupSpendConcentration(title: String, facts: FactLookup) -> String {
     guard let share = facts.value("Share of spend"), let spent = facts.value("Spent"),
-      let group = facts.value("Group")
+      let group = facts.value("Group"), let window = facts.value("Window")
     else { return title }
-    return "\(share) of your spending — \(spent) — runs through \(group)."
+    return
+      "Over the last \(window), \(share) of your spending — \(spent) — ran through \(group)."
   }
   static func uncategorizedBacklog(title: String, facts: FactLookup) -> String {
     guard let count = facts.value("Uncategorized") else { return title }
@@ -236,14 +266,17 @@ extension InsightDescriptionComposer {
   }
   static func weekendSpendSkew(title: String, facts: FactLookup) -> String {
     guard let weekend = facts.value("Typical weekend day"),
-      let weekday = facts.value("Typical weekday")
+      let weekday = facts.value("Typical weekday"),
+      let weekendDays = facts.value("Weekend days analysed"),
+      let weekdays = facts.value("Weekdays analysed")
     else { return title }
     return
-      "You spend more on weekends — about \(weekend) a weekend day versus \(weekday) on weekdays."
+      "Across your recorded history, a typical weekend spending day was \(weekend), compared with \(weekday) on a weekday (\(weekendDays) weekend days and \(weekdays) weekdays)."
   }
   static func unbudgetedCategory(title: String, facts: FactLookup) -> String {
-    guard let category = facts.value("Category"), let spent = facts.value(prefix: "Spent")
+    guard let category = facts.value("Category"), let spent = facts.value("Spent"),
+      let window = facts.value("Window")
     else { return title }
-    return "\(category) has no budget yet — you've spent \(spent) there recently."
+    return "\(category) has no budget, despite \(spent) of spending in the last \(window)."
   }
 }

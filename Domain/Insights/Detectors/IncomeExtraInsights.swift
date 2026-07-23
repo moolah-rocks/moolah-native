@@ -25,6 +25,7 @@ enum IncomeExtraInsights {
     incomeSourceSamples: [IncomeSourceSamples],
     context: InsightContext,
     windowDays: Int = 30,
+    baselineWindowDays: Int = 365,
     threshold: Double = 3.5,
     minimumSourceSamples: Int = 6
   ) -> [Insight] {
@@ -36,11 +37,14 @@ enum IncomeExtraInsights {
         )
       },
       uniquingKeysWith: { first, _ in first })
+    let unavailableSources = Set(
+      incomeSourceSamples.filter(\.hasUnavailableData).map(\.normalizedPayee))
 
     var best: InsightTransaction?
     var bestScore = threshold
     var bestPopulation: [Double] = []
     for transaction in recentCandidates.filter(\.isIncome) {
+      guard !unavailableSources.contains(transaction.normalizedPayee) else { continue }
       let age = context.daysSince(transaction.date)
       guard age >= 0, age <= windowDays else { continue }
       // Only fire when the source itself has enough history to establish a
@@ -73,6 +77,8 @@ enum IncomeExtraInsights {
           InsightFact("Source", payee(windfall)),
           InsightFact("Amount", context.formatted(windfall.amount)),
           InsightFact("Typical income", context.formatted(Decimal(typical))),
+          InsightFact("Baseline deposits", "\(bestPopulation.count)"),
+          InsightFact("Baseline window", "\(baselineWindowDays) days"),
         ],
         references: InsightReferences(
           accountIds: windfall.accountId.map { [$0] } ?? [],

@@ -58,6 +58,22 @@ enum CategoryAnomalyInsight {
     let recurrenceTolerance: Double
   }
 
+  private struct FactValues {
+    let categoryName: String
+    let period: String
+    let latest: MonthlySpendPoint
+    let seriesMonths: Int
+    let expected: Double
+    let overspendFraction: Double
+  }
+
+  private struct Metrics {
+    let latestRemainder: Double
+    let expected: Double
+    let overspendFraction: Double
+    let zScore: Double
+  }
+
   private static func evaluate(
     categoryId: UUID,
     points: [MonthlySpendPoint],
@@ -71,66 +87,89 @@ enum CategoryAnomalyInsight {
     // (house purchase) or a rare periodic payment (annual bill) — has no "usual"
     // to overspend against, so it is never flagged.
     guard DescriptiveStatistics.median(magnitudes) > 0 else { return nil }
-    let decomposition = SeasonalDecomposition.decompose(magnitudes, period: 12)
-    let remainder = decomposition.remainder
-    guard let latest = points.last, remainder.count == points.count else { return nil }
-
-    let latestRemainder = remainder[remainder.count - 1]
-    let priorRemainders = Array(remainder.dropLast())
-    let zScore = DescriptiveStatistics.robustZScore(of: latestRemainder, in: priorRemainders)
-    guard zScore >= gates.zScore, latestRemainder > 0 else { return nil }
-
-    let expected =
-      decomposition.trend[remainder.count - 1]
-      + decomposition.seasonal[remainder.count - 1]
-    guard expected > 0 else { return nil }
-    let overspendFraction = latestRemainder / expected
-    guard overspendFraction >= gates.overspendFraction else { return nil }
-
-    // Gate B — recurrence. Suppress a spike that recurs at a fixed cadence
-    // (annual/semi-annual/quarterly), tolerating +/-1 month of date drift, so a
-    // predictable periodic bill does not nag every cycle.
-    guard
-      !isRecurringSpike(
-        magnitudes: magnitudes,
-        lags: gates.recurrenceLags,
-        tolerance: gates.recurrenceTolerance)
+    guard let latest = points.last,
+      let metrics = metrics(magnitudes: magnitudes, pointCount: points.count, gates: gates)
     else { return nil }
 
     let resolved = resolvedCategory(categoryId, categories: categories)
     let categoryName = resolved.map { categories.path(for: $0) } ?? "Uncategorized"
+    guard let period = context.formattedFinancialMonth(latest.month) else { return nil }
     // The anomaly fires on the latest available financial month, which may be
     // the in-progress current month; naming it (e.g. "in June") avoids the
     // date-rot of "this month". `latest.date` is the first-of-month UTC date
     // from `CategorySpendSeries`, so format it against the same UTC calendar.
-    let monthName = latest.date.formatted(monthStyle(context))
-
     return Insight(
       id:
         "\(InsightKind.categorySpendingAnomaly.rawValue):\(categoryId.uuidString):\(latest.month)",
       presentationKey:
         "\(InsightKind.categorySpendingAnomaly.rawValue):\(categoryId.uuidString)",
       kind: .categorySpendingAnomaly,
-      title: "\(categoryName) up \(percent(overspendFraction)) in \(monthName)",
+      title:
+        "\(categoryName) up \(percent(metrics.overspendFraction)) in \(period)",
       date: latest.date,
       framing: .negative,
       actionability: .review,
-      surprise: NormalDistribution.surprise(fromZScore: zScore),
+      surprise: NormalDistribution.surprise(fromZScore: metrics.zScore),
       monetaryImpact: InstrumentAmount(
-        quantity: Decimal(-latestRemainder), instrument: context.reportingCurrency),
-      facts: [
-        InsightFact("Category", categoryName),
-        InsightFact("This month", context.formatted(Decimal(-latest.magnitude))),
-        InsightFact("Expected", context.formatted(Decimal(-expected))),
-        InsightFact("Over by", percent(overspendFraction)),
-      ],
-      references: InsightReferences(
-        categoryIds: resolved.map { [$0.id] } ?? [],
-        instrumentIds: [context.reportingCurrency.id]),
+        quantity: Decimal(-metrics.latestRemainder), instrument: context.reportingCurrency),
+      facts: facts(
+        FactValues(
+          categoryName: categoryName,
+          period: period,
+          latest: latest,
+          seriesMonths: points.count,
+          expected: metrics.expected,
+          overspendFraction: metrics.overspendFraction),
+        context: context),
+      references: references(for: resolved, context: context),
       chart: InsightChartBuilders.categorySpend(
         points: points,
         reportingCurrency: context.reportingCurrency,
         highlightMonth: latest.month))
+  }
+
+  private static func metrics(
+    magnitudes: [Double],
+    pointCount: Int,
+    gates: Gates
+  ) -> Metrics? {
+    let decomposition = SeasonalDecomposition.decompose(magnitudes, period: 12)
+    let remainder = decomposition.remainder
+    guard remainder.count == pointCount else { return nil }
+    let latestRemainder = remainder[remainder.count - 1]
+    let zScore = DescriptiveStatistics.robustZScore(
+      of: latestRemainder, in: Array(remainder.dropLast()))
+    guard zScore >= gates.zScore, latestRemainder > 0 else { return nil }
+    let expected =
+      decomposition.trend[remainder.count - 1]
+      + decomposition.seasonal[remainder.count - 1]
+    guard expected > 0 else { return nil }
+    let overspendFraction = latestRemainder / expected
+    guard overspendFraction >= gates.overspendFraction,
+      !isRecurringSpike(
+        magnitudes: magnitudes,
+        lags: gates.recurrenceLags,
+        tolerance: gates.recurrenceTolerance)
+    else { return nil }
+    return Metrics(
+      latestRemainder: latestRemainder,
+      expected: expected,
+      overspendFraction: overspendFraction,
+      zScore: zScore)
+  }
+
+  private static func facts(
+    _ values: FactValues,
+    context: InsightContext
+  ) -> [InsightFact] {
+    [
+      InsightFact("Category", values.categoryName),
+      InsightFact("Month", values.period),
+      InsightFact("Spent", context.formatted(Decimal(-values.latest.magnitude))),
+      InsightFact("Expected", context.formatted(Decimal(-values.expected))),
+      InsightFact("Series months", "\(max(values.seriesMonths, 1))"),
+      InsightFact("Over by", percent(values.overspendFraction)),
+    ]
   }
 
   private static func percent(_ fraction: Double) -> String {
@@ -140,6 +179,14 @@ enum CategoryAnomalyInsight {
   private static func resolvedCategory(_ id: UUID, categories: Categories) -> Category? {
     guard id != CategorySpendSeries.uncategorizedKey else { return nil }
     return categories.by(id: id)
+  }
+
+  private static func references(
+    for category: Category?, context: InsightContext
+  ) -> InsightReferences {
+    InsightReferences(
+      categoryIds: category.map { [$0.id] } ?? [],
+      instrumentIds: [context.reportingCurrency.id])
   }
 
   /// True when the latest month's spike has a comparable spike (>= `tolerance`
@@ -159,12 +206,5 @@ enum CategoryAnomalyInsight {
       }
     }
     return false
-  }
-
-  /// Wide month name pinned to the context calendar's time zone so a
-  /// first-of-month UTC date doesn't roll back a month when rendered.
-  private static func monthStyle(_ context: InsightContext) -> Date.FormatStyle {
-    Date.FormatStyle(calendar: context.calendar, timeZone: context.calendar.timeZone)
-      .month(.wide)
   }
 }
