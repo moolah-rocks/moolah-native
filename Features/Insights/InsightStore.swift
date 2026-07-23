@@ -2,16 +2,6 @@ import Foundation
 import OSLog
 import Observation
 
-/// Default availability provider used when no provider is injected — always
-/// returns `.unavailable(.deviceNotEligible)` so no narration surface lights
-/// up in previews, legacy tests, or any path that doesn't explicitly wire a
-/// real provider. Distinct from `FixedModelAvailability` (which is DEBUG-only)
-/// so this struct compiles in release builds where `#if DEBUG` is stripped.
-private struct NeverAvailableModelAvailability: ModelAvailabilityProviding, Sendable {
-  @MainActor
-  func current() -> ModelAvailability { .unavailable(.deviceNotEligible) }
-}
-
 /// Owns the "For You" insight surface state: builds the `InsightInput` off the
 /// main actor, runs the pure `InsightEngine`, and publishes the ranked result.
 ///
@@ -53,7 +43,10 @@ final class InsightStore {
   var maxVisible = 3
 
   private(set) var isLoading = false
-  private(set) var error: Error?
+  // Module-internal setters allow the data-availability extension to publish
+  // recoverable partial-fetch state alongside otherwise valid insights.
+  var error: Error?
+  var hasIncompleteData = false
 
   /// Timestamp of the last successful `refresh()`. Used by `refreshIfStale`
   /// to skip a rebuild when data was fetched recently (mirrors
@@ -249,6 +242,7 @@ final class InsightStore {
     isLoading = true
     defer { isLoading = false }
     error = nil
+    hasIncompleteData = false
 
     do {
       let displayHistory = await loadDisplayHistory()
@@ -263,6 +257,7 @@ final class InsightStore {
       let shownKeys = await publishBatch(ranked)
       await recordShown(shownKeys, at: context.now)
       lastLoadedAt = context.now
+      surfaceIncompleteDataIfNeeded(input)
     } catch is CancellationError {
       // Surface refresh superseded / view torn down — never surface; a
       // re-mount issues its own `refresh()`. Mirrors `AnalysisStore`.

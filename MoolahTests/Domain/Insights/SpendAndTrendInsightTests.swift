@@ -22,15 +22,23 @@ struct SpendAndTrendInsightTests {
     let outlier = InsightTestSupport.expense(
       200, payee: "Steakhouse", daysAgo: 2, categoryId: dining, categoryPath: "Dining")
 
+    var samples = InsightTestSupport.categorySamples(from: baseline + [outlier])
+    samples.append(
+      CategorySpendSamples(
+        categoryId: UUID(),
+        magnitudes: [],
+        hasUnavailableData: true))
     let insights = LargeTransactionInsight.detect(
       recentCandidates: [outlier],
-      categorySamples: InsightTestSupport.categorySamples(from: baseline + [outlier]),
+      categorySamples: samples,
       categories: emptyCategories, context: context)
     let anomaly = try #require(insights.first { $0.kind == .largeTransactionAnomaly })
     #expect(anomaly.references.transactionIds.count == 1)
     #expect(anomaly.surprise > 0.9)
   }
+}
 
+extension SpendAndTrendInsightTests {
   @Test
   func newMerchantAlertFiresForLargeFirstCharge() {
     // Categorised history establishes the top-decile magnitude baseline and
@@ -56,6 +64,40 @@ struct SpendAndTrendInsightTests {
   }
 
   @Test
+  func newMerchantSurvivesUnrelatedUnavailablePayee() {
+    let category = UUID()
+    let history = (0..<12).map { index in
+      InsightTestSupport.expense(
+        Decimal(20 + index),
+        payee: "Groceries",
+        daysAgo: 20 + index,
+        categoryId: category)
+    }
+    let newCharge = InsightTestSupport.expense(
+      300, payee: "Fancy Restaurant", daysAgo: 2, categoryId: category)
+    let payees = InsightTestSupport.payees(from: history).map { payee in
+      PayeeSummary(
+        normalizedPayee: payee.normalizedPayee,
+        displayPayee: payee.displayPayee,
+        isExpense: payee.isExpense,
+        occurrenceCount: payee.occurrenceCount,
+        firstSeen: payee.firstSeen,
+        lastSeen: payee.lastSeen,
+        windowedTotal: payee.windowedTotal,
+        occurrences: payee.occurrences,
+        hasUnavailableData: true)
+    }
+    let input = InsightInput(
+      context: context,
+      dataAvailability: .init(payees: false),
+      recentCandidates: [newCharge],
+      payees: payees,
+      categorySamples: InsightTestSupport.categorySamples(from: history + [newCharge]))
+
+    #expect(InsightEngine().detectAll(input).contains { $0.kind == .newMerchantAlert })
+  }
+
+  @Test
   func newMerchantQuietForKnownPayee() {
     let groceriesCategory = UUID()
     var history: [InsightTransaction] = []
@@ -75,7 +117,9 @@ struct SpendAndTrendInsightTests {
       context: context)
     #expect(insights.isEmpty)
   }
+}
 
+extension SpendAndTrendInsightTests {
   @Test
   func categoryTrendDetectsRisingCategory() throws {
     let dining = Category(name: "Dining")

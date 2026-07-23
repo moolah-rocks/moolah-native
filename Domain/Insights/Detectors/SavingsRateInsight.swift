@@ -10,19 +10,28 @@ enum SavingsRateInsight {
     minimumMonths: Int = 4
   ) -> [Insight] {
     let complete = InsightAggregates.completeMonths(monthly, context: context)
-    let points: [InsightChart.Point] = complete.compactMap { month in
+    guard !complete.contains(where: \.hasUnavailableData) else { return [] }
+    let ratedMonths: [(month: MonthlyIncomeExpense, rate: Double)] = complete.compactMap { month in
       let income = Double(
         truncating: InsightAggregates.incomeMagnitude(month.totalIncome) as NSDecimalNumber)
       guard income > 0 else { return nil }
       let net = Double(truncating: month.totalProfit.quantity as NSDecimalNumber)
-      return InsightChart.Point(date: month.end, value: net / income)
+      return (month, net / income)
     }
-    let rates = points.map(\.value)
+    let points = ratedMonths.compactMap { item in
+      FinancialMonth.date(forKey: item.month.month).map {
+        InsightChart.Point(date: $0, value: item.rate)
+      }
+    }
+    let rates = ratedMonths.map(\.rate)
     guard rates.count >= minimumMonths, let result = MannKendall.test(rates),
       result.statistic != 0
     else { return [] }
 
     let latest = rates[rates.count - 1]
+    guard let latestMonth = ratedMonths.last,
+      let throughMonth = context.formattedFinancialMonth(latestMonth.month.month)
+    else { return [] }
     let rising = result.isIncreasing
     // Surface only statistically credible trends (loose threshold — single
     // series, no multiple-comparison family here).
@@ -44,6 +53,7 @@ enum SavingsRateInsight {
           InsightFact("Current savings rate", percent(latest)),
           InsightFact("Direction", rising ? "Rising" : "Falling"),
           InsightFact("Months analysed", "\(rates.count)"),
+          InsightFact("Through month", throughMonth),
           InsightFact(
             "Trend p-value", result.pValue.formatted(.number.precision(.fractionLength(3)))),
         ],

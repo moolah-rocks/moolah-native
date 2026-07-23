@@ -71,12 +71,14 @@ struct AdditionalInsightTests {
       InsightTestSupport.expense(50, payee: "Utility", daysAgo: 2, accountId: accountB))
     let input = InsightInput(
       context: context,
+      dataWindow: InsightDataWindow(accountSpendDays: 14),
       accountSpend: InsightTestSupport.accountSpend(from: legs),
       accountGroups: [groupA, groupB],
       accountGroupMembership: [accountA: groupA.id, accountB: groupB.id])
     let insight = try #require(AccountGroupInsights.groupSpendConcentration(input).first)
     #expect(insight.kind == .groupSpendConcentration)
     #expect(insight.references.groupIds == [groupA.id])
+    #expect(insight.facts.contains(InsightFact("Window", "14 days")))
   }
 
   @Test
@@ -133,7 +135,11 @@ struct AdditionalInsightTests {
     // part of its own source's sample set (as it is in production).
     let samples = [
       IncomeSourceSamples(
-        normalizedPayee: "client", magnitudes: [12000, 500, 480, 520, 510, 490, 505])
+        normalizedPayee: "client", magnitudes: [12000, 500, 480, 520, 510, 490, 505]),
+      IncomeSourceSamples(
+        normalizedPayee: "unrelated",
+        magnitudes: [],
+        hasUnavailableData: true),
     ]
     let spike = InsightTestSupport.income(12000, payee: "Client", daysAgo: 3)
     let insight = try #require(
@@ -265,6 +271,9 @@ struct AdditionalInsightTests {
       ).isEmpty)
   }
 
+}
+
+extension AdditionalInsightTests {
   // MARK: - Budget coverage
 
   @Test
@@ -280,11 +289,13 @@ struct AdditionalInsightTests {
     }
     let input = InsightInput(
       context: context,
+      dataWindow: InsightDataWindow(unbudgetedSpendDays: 45),
       unbudgetedCategorySpend: InsightTestSupport.categorySpend(from: legs),
       budgetedCategoryIds: [budgeted])
     let insight = try #require(BudgetCoverageInsights.unbudgetedCategory(input).first)
     #expect(insight.kind == .unbudgetedCategory)
     #expect(insight.references.categoryIds == [unbudgeted])
+    #expect(insight.facts.contains(InsightFact("Window", "45 days")))
   }
 
   @Test

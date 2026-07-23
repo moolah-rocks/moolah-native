@@ -231,7 +231,10 @@ enum InsightTestSupport {
   /// A monthly income/expense aggregate. `expense` is the positive
   /// magnitude; stored negative to match the backend's sign.
   static func monthly(
-    month: String, income incomeMagnitude: Decimal, expense expenseMagnitude: Decimal
+    month: String,
+    income incomeMagnitude: Decimal,
+    expense expenseMagnitude: Decimal,
+    hasUnavailableData: Bool = false
   ) -> MonthlyIncomeExpense {
     let income = amount(incomeMagnitude)
     let expense = amount(-expenseMagnitude)
@@ -245,6 +248,7 @@ enum InsightTestSupport {
       profit: income + expense,
       investmentIncome: zero,
       investmentExpense: zero,
-      investmentProfit: zero)
+      investmentProfit: zero,
+      hasUnavailableData: hasUnavailableData)
   }
 }

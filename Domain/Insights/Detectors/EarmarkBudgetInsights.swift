@@ -29,12 +29,21 @@ enum EarmarkBudgetInsights {
 
       if projection.fraction > 1 + overspendTolerance {
         insights.append(
-          overspend(earmark, budget: budget, projection: projection, context: context, chart: chart)
+          overspend(
+            earmark,
+            budget: budget,
+            projection: projection,
+            context: context,
+            chart: chart)
         )
       } else if projection.fraction < 1 - underspendTolerance, projection.elapsedFraction >= 0.5 {
         insights.append(
           underspend(
-            earmark, budget: budget, projection: projection, context: context, chart: chart))
+            earmark,
+            budget: budget,
+            projection: projection,
+            context: context,
+            chart: chart))
       }
     }
     return insights
@@ -45,6 +54,7 @@ enum EarmarkBudgetInsights {
   private struct Window {
     let start: Date
     let end: Date
+    let endLabel: String
   }
 
   /// Linear burndown projection of a budget window.
@@ -54,6 +64,7 @@ enum EarmarkBudgetInsights {
     let budgetMagnitude: Double
     let fraction: Double
     let elapsedFraction: Double
+    let endLabel: String
   }
 
   private static func project(
@@ -78,7 +89,8 @@ enum EarmarkBudgetInsights {
       projected: projected,
       budgetMagnitude: budgetMagnitude,
       fraction: projected / budgetMagnitude,
-      elapsedFraction: elapsedFraction)
+      elapsedFraction: elapsedFraction,
+      endLabel: window.endLabel)
   }
 
   // MARK: - Insight construction
@@ -129,7 +141,9 @@ enum EarmarkBudgetInsights {
   }
 
   private static func projectionFacts(
-    budget: InstrumentAmount, projection: Projection, context: InsightContext
+    budget: InstrumentAmount,
+    projection: Projection,
+    context: InsightContext
   ) -> [InsightFact] {
     [
       InsightFact("Budget", context.formatted(budget)),
@@ -138,6 +152,9 @@ enum EarmarkBudgetInsights {
       InsightFact(
         "Window elapsed",
         projection.elapsedFraction.formatted(.percent.precision(.fractionLength(0)))),
+      InsightFact(
+        "Budget ends",
+        projection.endLabel),
     ]
   }
 
@@ -146,7 +163,7 @@ enum EarmarkBudgetInsights {
   /// don't carry an explicit window — documented simplification).
   private static func window(for earmark: EarmarkSnapshot, context: InsightContext) -> Window? {
     if let start = earmark.savingsStartDate, let end = earmark.savingsEndDate, start < end {
-      return Window(start: start, end: end)
+      return Window(start: start, end: end, endLabel: context.formattedLocalDay(end))
     }
     let calendar = context.calendar
     let components = calendar.dateComponents([.year, .month], from: context.now)
@@ -154,7 +171,8 @@ enum EarmarkBudgetInsights {
       let range = calendar.range(of: .day, in: .month, for: context.now),
       let end = calendar.date(byAdding: .day, value: range.count, to: start)
     else { return nil }
-    return Window(start: start, end: end)
+    guard let finalDay = calendar.date(byAdding: .day, value: -1, to: end) else { return nil }
+    return Window(start: start, end: end, endLabel: context.formattedDate(finalDay))
   }
 
   private static func toDouble(_ value: Decimal) -> Double {

@@ -57,7 +57,9 @@ enum CategoryTrendInsight {
     categories: Categories,
     context: InsightContext
   ) -> Insight? {
-    guard result.statistic != 0, let latest = points.last else { return nil }
+    guard result.statistic != 0, let latest = points.last,
+      let through = context.formattedFinancialMonth(latest.month)
+    else { return nil }
     let months = points.count
     let totalChange = result.sensSlope * Double(months - 1)
     let resolved =
@@ -86,6 +88,8 @@ enum CategoryTrendInsight {
         InsightFact("Category", categoryName),
         InsightFact("Direction", rising ? "Rising" : "Falling"),
         InsightFact("Per month", perMonth),
+        InsightFact("Months analysed", "\(months)"),
+        InsightFact("Through month", through),
         InsightFact("Over \(months) months", context.formatted(Decimal(-abs(totalChange)))),
         InsightFact(
           "Trend p-value", result.pValue.formatted(.number.precision(.fractionLength(3)))),

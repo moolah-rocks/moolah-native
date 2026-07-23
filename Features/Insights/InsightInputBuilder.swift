@@ -3,6 +3,13 @@ import os
 
 private let logger = Logger(subsystem: "com.moolah.app", category: "InsightInputBuilder")
 
+private struct ScheduledBillProjection: Sendable {
+  let items: [ScheduledBill]
+  let unavailable: [UnavailableScheduledBill]
+
+  var hasUnavailableData: Bool { !unavailable.isEmpty }
+}
+
 /// Assembles a fully-populated `InsightInput` off the main actor.
 ///
 /// The `@MainActor` store-derived half arrives pre-gathered as an
@@ -29,44 +36,35 @@ struct InsightInputBuilder: Sendable {
     let source = backend.insightDataSource
     let categories = snapshot.categories
 
-    async let recentCandidates = source.recentCandidates(
-      windowDays: window.recentCandidateDays, categories: categories, context: context)
-    async let dailyTotals = source.dailyTotals(context: context)
-    async let payees = source.payeeSummaries(
-      windowDays: window.payeeCadenceDays, context: context)
-    async let categorySamples = source.categorySamples(
-      windowDays: window.sampleDays,
-      maxPerCategory: window.maxSamplesPerCategory,
-      context: context)
-    async let incomeSourceSamples = source.incomeSourceSamples(
-      windowDays: window.sampleDays, maxCount: window.maxIncomeSamples, context: context)
-    async let feeCategorySpend = source.categorySpend(
-      windowDays: window.categorySpendDays, categories: categories, context: context)
-    async let unbudgetedCategorySpend = source.categorySpend(
-      windowDays: window.unbudgetedSpendDays, categories: categories, context: context)
-    async let accountSpend = source.accountSpend(
-      windowDays: window.accountSpendDays, context: context)
+    async let summary = source.assemble(
+      window: window, categories: categories, context: context)
 
-    async let scheduledBills = scheduledBills(context: context)
+    async let scheduledBillsResult = scheduledBills(context: context)
     async let budgetedCategoryIds = budgetedCategoryIds()
     async let uncategorizedTransactionCount = backend.transactions.countNeedsReview()
     async let pendingTransfers = backend.transferSuggestions.fetchAll()
 
     let pendingTransfersList = try await pendingTransfers
+    let bills = try await scheduledBillsResult
+    let insightSummary = try await summary
     return InsightInput(
       context: context,
-      recentCandidates: try await recentCandidates,
-      dailyTotals: try await dailyTotals,
-      payees: try await payees,
-      categorySamples: try await categorySamples,
-      incomeSourceSamples: try await incomeSourceSamples,
-      feeCategorySpend: try await feeCategorySpend,
-      unbudgetedCategorySpend: try await unbudgetedCategorySpend,
-      accountSpend: try await accountSpend,
+      dataWindow: window,
+      dataAvailability: insightSummary.availability,
+      recentCandidates: insightSummary.recentCandidates,
+      dailyTotals: insightSummary.dailyTotals,
+      payees: insightSummary.payees,
+      categorySamples: insightSummary.categorySamples,
+      incomeSourceSamples: insightSummary.incomeSourceSamples,
+      feeCategorySpend: insightSummary.categorySpend,
+      unbudgetedCategorySpend: insightSummary.unbudgetedCategorySpend,
+      accountSpend: insightSummary.accountSpend,
       monthly: snapshot.monthly,
       expenseBreakdown: snapshot.expenseBreakdown,
       dailyBalances: snapshot.dailyBalances,
-      scheduledBills: try await scheduledBills,
+      scheduledBills: bills.items,
+      scheduledBillsHaveUnavailableData: bills.hasUnavailableData,
+      unavailableScheduledBills: bills.unavailable,
       earmarks: snapshot.earmarks,
       profitLoss: snapshot.profitLoss,
       capitalGains: snapshot.capitalGains,
@@ -94,7 +92,9 @@ struct InsightInputBuilder: Sendable {
   /// value, so surfacing a "$0" future bill would mislead. Cancellation
   /// surfaces as a throw from `convertResultBatch` and propagates to the
   /// caller.
-  private func scheduledBills(context: InsightContext) async throws -> [ScheduledBill] {
+  private func scheduledBills(
+    context: InsightContext
+  ) async throws -> ScheduledBillProjection {
     let filter = TransactionFilter(scheduled: .scheduledOnly)
     let scheduled = try await backend.transactions.fetchAll(filter: filter)
     let reportingCurrency = context.reportingCurrency
@@ -123,6 +123,7 @@ struct InsightInputBuilder: Sendable {
     // Phase 3 — build a bill per candidate from its outcome, dropping the
     // ones whose conversion failed (Rule 11).
     var bills: [ScheduledBill] = []
+    var unavailable: [UnavailableScheduledBill] = []
     bills.reserveCapacity(candidates.count)
     for (candidate, outcome) in zip(candidates, outcomes) {
       let amount: InstrumentAmount
@@ -130,16 +131,15 @@ struct InsightInputBuilder: Sendable {
       case .value(let converted):
         amount = converted
       case .knownZero:
-        // Rule 11: an unpriced/spam token has no meaningful reporting-currency
-        // value — drop the bill rather than surface a misleading "$0".
-        logger.error(
-          "Dropping scheduled bill \(candidate.transaction.id, privacy: .public): conversion resolved to a known zero"
-        )
+        unavailable.append(
+          unavailableBill(candidate, reason: "conversion resolved to a known zero"))
         continue
       case .failure(let error):
-        // Rule 11: a leg whose conversion fails is dropped, never guessed.
-        logger.error(
-          "Dropping scheduled bill \(candidate.transaction.id, privacy: .public): conversion failed: \(error)"
+        unavailable.append(
+          unavailableBill(
+            candidate,
+            reason: "conversion failed: \(error)"
+          )
         )
         continue
       }
@@ -151,7 +151,19 @@ struct InsightInputBuilder: Sendable {
           amount: amount,
           accountId: candidate.leg.accountId))
     }
-    return bills
+    return ScheduledBillProjection(items: bills, unavailable: unavailable)
+  }
+
+  private func unavailableBill(
+    _ candidate: (transaction: Transaction, leg: TransactionLeg),
+    reason: String
+  ) -> UnavailableScheduledBill {
+    logger.error(
+      "Dropping scheduled bill \(candidate.transaction.id, privacy: .public): \(reason)"
+    )
+    return UnavailableScheduledBill(
+      date: candidate.transaction.date,
+      isOutflow: candidate.leg.amount.quantity < 0)
   }
 
   /// The set of category ids that carry a budget line item in some earmark.

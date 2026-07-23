@@ -82,6 +82,8 @@ enum SpendHabitInsights {
           InsightFact("Typical weekend day", context.formatted(Decimal(-weekendTypical))),
           InsightFact("Typical weekday", context.formatted(Decimal(-weekdayTypical))),
           InsightFact("Ratio", "\(multiple(ratio))×"),
+          InsightFact("Weekend days analysed", "\(weekendTotals.count)"),
+          InsightFact("Weekdays analysed", "\(weekdayTotals.count)"),
         ],
         references: InsightReferences(instrumentIds: [context.reportingCurrency.id]))
     ]

@@ -17,10 +17,11 @@ enum SavingsOpportunityInsights {
   static func feeSpend(
     feeCategorySpend: [CategorySpendSummary],
     expenseBreakdown: [ExpenseBreakdown],
-    context: InsightContext
+    context: InsightContext,
+    windowDays: Int = 365
   ) -> [Insight] {
     let fees = feeCategorySpend.filter { isFeeCategory($0.categoryPath) }
-    guard !fees.isEmpty else { return [] }
+    guard !fees.isEmpty, !fees.contains(where: \.hasUnavailableData) else { return [] }
     let total = fees.reduce(context.zero) { $0 + $1.total }
     guard total.quantity < 0 else { return [] }
     let legCount = fees.reduce(0) { $0 + $1.legCount }
@@ -45,6 +46,7 @@ enum SavingsOpportunityInsights {
         facts: [
           InsightFact("Annual fees", context.formatted(total)),
           InsightFact("Transactions", "\(legCount)"),
+          InsightFact("Window", "\(windowDays) days"),
         ],
         references: InsightReferences(
           categoryIds: Array(feeCategoryIds), instrumentIds: [context.reportingCurrency.id]),

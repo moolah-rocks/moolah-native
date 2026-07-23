@@ -47,6 +47,7 @@ enum PeriodComparisonInsights {
     guard completeMonths.count >= 2 else { return nil }
     let latest = completeMonths[completeMonths.count - 1]
     let baseline = completeMonths[completeMonths.count - 2]
+    guard !latest.hasUnavailableData, !baseline.hasUnavailableData else { return nil }
     let latestSpend = magnitude(latest.totalExpense)
     let baselineSpend = magnitude(baseline.totalExpense)
     guard baselineSpend > 0 else { return nil }
@@ -57,6 +58,9 @@ enum PeriodComparisonInsights {
     let increased = fraction > 0
     let deltaAmount = Decimal(-(latestSpend - baselineSpend))
     let monthDate = CategorySpendSeries.monthDate(latest.month) ?? latest.end
+    guard let latestMonth = context.formattedFinancialMonth(latest.month),
+      let previousMonth = context.formattedFinancialMonth(baseline.month)
+    else { return nil }
     return Insight(
       id: "\(InsightKind.monthOverMonthDelta.rawValue):\(latest.month)",
       presentationKey:
@@ -72,15 +76,20 @@ enum PeriodComparisonInsights {
       monetaryImpact: InstrumentAmount(
         quantity: deltaAmount, instrument: context.reportingCurrency),
       facts: [
-        InsightFact("This period", context.formatted(Decimal(-latestSpend))),
-        InsightFact("Comparison", context.formatted(Decimal(-baselineSpend))),
+        InsightFact("Latest month", latestMonth),
+        InsightFact("Latest spend", context.formatted(Decimal(-latestSpend))),
+        InsightFact("Previous month", previousMonth),
+        InsightFact("Previous spend", context.formatted(Decimal(-baselineSpend))),
         InsightFact("Change", "\(increased ? "+" : "−")\(percent(changeMagnitude))"),
       ],
       references: InsightReferences(instrumentIds: [context.reportingCurrency.id]),
-      chart: InsightChartBuilders.monthlySpend(
-        monthly: completeMonths,
-        reportingCurrency: context.reportingCurrency,
-        highlightMonth: latest.month))
+      chart:
+        completeMonths.contains(where: \.hasUnavailableData)
+        ? nil
+        : InsightChartBuilders.monthlySpend(
+          monthly: completeMonths,
+          reportingCurrency: context.reportingCurrency,
+          highlightMonth: latest.month))
   }
 
   private static func magnitude(_ amount: InstrumentAmount) -> Double {

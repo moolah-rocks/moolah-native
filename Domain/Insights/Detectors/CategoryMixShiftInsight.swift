@@ -44,7 +44,14 @@ enum CategoryMixShiftInsight {
       shifts
       .sorted { abs($0.shift) > abs($1.shift) }
       .prefix(maximumResults)
-      .map { makeInsight($0, recentMonth: recentMonth, categories: categories, context: context) }
+      .map {
+        makeInsight(
+          $0,
+          recentMonth: recentMonth,
+          priorMonth: priorMonth,
+          categories: categories,
+          context: context)
+      }
   }
 
   /// One category's share movement between the two compared months.
@@ -80,6 +87,7 @@ enum CategoryMixShiftInsight {
   private static func makeInsight(
     _ shift: Shift,
     recentMonth: String,
+    priorMonth: String,
     categories: Categories,
     context: InsightContext
   ) -> Insight {
@@ -89,6 +97,9 @@ enum CategoryMixShiftInsight {
     let categoryName = resolved.map { categories.path(for: $0) } ?? "Uncategorized"
     let grew = shift.shift > 0
     let monthDate = CategorySpendSeries.monthDate(recentMonth) ?? context.now
+    let month = context.formattedFinancialMonth(recentMonth) ?? "the latest financial month"
+    let previousMonth =
+      context.formattedFinancialMonth(priorMonth) ?? "the previous financial month"
     return Insight(
       id: "\(InsightKind.categoryMixShift.rawValue):\(shift.categoryId.uuidString):\(recentMonth)",
       presentationKey:
@@ -104,6 +115,8 @@ enum CategoryMixShiftInsight {
         InsightFact("Category", categoryName),
         InsightFact("Current share", percent(shift.recentShare)),
         InsightFact("Change", "\(grew ? "+" : "−")\(points(abs(shift.shift)))"),
+        InsightFact("Month", month),
+        InsightFact("Previous month", previousMonth),
       ],
       references: InsightReferences(
         categoryIds: resolved.map { [$0.id] } ?? []))
@@ -114,6 +127,6 @@ enum CategoryMixShiftInsight {
   }
 
   private static func points(_ fraction: Double) -> String {
-    "\((fraction * 100).formatted(.number.precision(.fractionLength(0)))) pts"
+    "\((fraction * 100).formatted(.number.precision(.fractionLength(0)))) percentage points"
   }
 }

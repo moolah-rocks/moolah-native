@@ -17,11 +17,27 @@ extension GRDBInsightDataSource {
     let legCount: Int
   }
 
+  struct FoldedSpendBuckets: Sendable {
+    let values: [UUID?: (total: InstrumentAmount, count: Int)]
+    let dropped: Int
+    let unavailableKeys: Set<UUID?>
+  }
+
   func categorySpend(
     windowDays: Int,
     categories: Categories,
     context: InsightContext
   ) async throws -> [CategorySpendSummary] {
+    try await categorySpendWithDrops(
+      windowDays: windowDays, categories: categories, context: context
+    ).items
+  }
+
+  func categorySpendWithDrops(
+    windowDays: Int,
+    categories: Categories,
+    context: InsightContext
+  ) async throws -> (items: [CategorySpendSummary], dropped: Int) {
     let after = cutoff(windowDays: windowDays, context: context)
     let instruments = try await resolveInstruments()
     let rows = try await profileDatabase.read { database in
@@ -49,20 +65,32 @@ extension GRDBInsightDataSource {
       return sqlRows.compactMap(Self.decodeSpendBucket(_:))
     }
     let folded = try await foldSpendBuckets(rows, instruments: instruments, context: context)
-    return
-      folded
+    let items =
+      folded.values
       .map { key, value in
         let path = key.flatMap { categories.by(id: $0) }.map { categories.path(for: $0) }
         return CategorySpendSummary(
-          categoryId: key, categoryPath: path, total: value.total, legCount: value.count)
+          categoryId: key,
+          categoryPath: path,
+          total: value.total,
+          legCount: value.count,
+          hasUnavailableData: folded.unavailableKeys.contains(key))
       }
       .sorted { lhs, rhs in lhs.total.quantity < rhs.total.quantity }
+    return (items, folded.dropped)
   }
 
   func accountSpend(
     windowDays: Int,
     context: InsightContext
   ) async throws -> [AccountSpendSummary] {
+    try await accountSpendWithDrops(windowDays: windowDays, context: context).items
+  }
+
+  func accountSpendWithDrops(
+    windowDays: Int,
+    context: InsightContext
+  ) async throws -> (items: [AccountSpendSummary], dropped: Int) {
     let after = cutoff(windowDays: windowDays, context: context)
     let instruments = try await resolveInstruments()
     let rows = try await profileDatabase.read { database in
@@ -87,12 +115,13 @@ extension GRDBInsightDataSource {
       return sqlRows.compactMap(Self.decodeSpendBucket(_:))
     }
     let folded = try await foldSpendBuckets(rows, instruments: instruments, context: context)
-    return
-      folded
+    let items =
+      folded.values
       .map { key, value in
         AccountSpendSummary(accountId: key, total: value.total, legCount: value.count)
       }
       .sorted { lhs, rhs in lhs.total.quantity < rhs.total.quantity }
+    return (items, folded.dropped)
   }
 
   /// Decode one `(day, dim, instrument, qty, n)` aggregation row shared by
@@ -119,10 +148,12 @@ extension GRDBInsightDataSource {
     _ rows: [SpendBucketRow],
     instruments: [String: Instrument],
     context: InsightContext
-  ) async throws -> [UUID?: (total: InstrumentAmount, count: Int)] {
+  ) async throws -> FoldedSpendBuckets {
     var totals: [UUID?: InstrumentAmount] = [:]
     var counts: [UUID?: Int] = [:]
     let zero = context.zero
+    var dropped = 0
+    var unavailableKeys: Set<UUID?> = []
     for row in rows {
       guard let day = GRDBAnalysisRepository.parseDayString(row.day) else {
         log.error("spendBuckets: unparseable day '\(row.day, privacy: .public)'")
@@ -141,6 +172,9 @@ extension GRDBInsightDataSource {
       } catch let cancel as CancellationError {
         throw cancel
       } catch {
+        dropped += 1
+        totals[row.key] = totals[row.key] ?? zero
+        unavailableKeys.insert(row.key)
         log.warning(
           """
           spendBuckets: skipping day=\(row.day, privacy: .public) \
@@ -149,8 +183,10 @@ extension GRDBInsightDataSource {
           """)
       }
     }
-    return totals.reduce(into: [:]) { result, entry in
+    let values = totals.reduce(into: [:]) { result, entry in
       result[entry.key] = (entry.value, counts[entry.key] ?? 0)
     }
+    return FoldedSpendBuckets(
+      values: values, dropped: dropped, unavailableKeys: unavailableKeys)
   }
 }

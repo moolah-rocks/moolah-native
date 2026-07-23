@@ -66,4 +66,81 @@ struct CashFlowForecastInsightsTests {
     #expect(insight.chart?.series.contains { $0.role == .projected } == true)
     #expect(insight.chart?.series.contains { $0.role == .primary } == true)
   }
+
+  @Test
+  func suppressesProjectionWithoutCurrentMonthForecast() {
+    let history = [
+      actual(9_998, daysAgo: 3),
+      actual(9_999, daysAgo: 2),
+      actual(10_000, daysAgo: 1),
+    ]
+    let julyForecast = [
+      actual(10_100, daysAgo: 0)
+        .withDate(InsightTestSupport.date(2026, 7, 1), isForecast: true)
+    ]
+
+    #expect(
+      CashFlowForecastInsights.projectedMonthEnd(
+        dailyBalances: history + julyForecast, context: context
+      ).isEmpty)
+  }
+
+  @Test
+  func unavailableBillPreventsFalseCulpritAttribution() throws {
+    let balances = [InsightTestSupport.balance(offsetDays: -5, total: -100, forecast: true)]
+    let bill = ScheduledBill(
+      id: UUID(),
+      date: InsightTestSupport.daysAgo(-3),
+      payee: "Small bill",
+      amount: InsightTestSupport.amount(-20),
+      accountId: nil)
+    let insight = try #require(
+      CashFlowForecastInsights.upcomingBillWarning(
+        dailyBalances: balances,
+        scheduledBills: [bill],
+        unavailableScheduledBills: [
+          UnavailableScheduledBill(
+            date: InsightTestSupport.daysAgo(-4),
+            isOutflow: true)
+        ],
+        context: context
+      ).first)
+    #expect(!insight.facts.contains { $0.label == "Upcoming bill" })
+  }
+
+  @Test
+  func irrelevantUnavailableBillsPreserveKnownCulprit() throws {
+    let balances = [InsightTestSupport.balance(offsetDays: -5, total: -100, forecast: true)]
+    let bill = ScheduledBill(
+      id: UUID(),
+      date: InsightTestSupport.daysAgo(-3),
+      payee: "Known bill",
+      amount: InsightTestSupport.amount(-20),
+      accountId: nil)
+    let unavailable = [
+      UnavailableScheduledBill(date: InsightTestSupport.daysAgo(-4), isOutflow: false),
+      UnavailableScheduledBill(date: InsightTestSupport.daysAgo(-10), isOutflow: true),
+    ]
+    let insight = try #require(
+      CashFlowForecastInsights.upcomingBillWarning(
+        dailyBalances: balances,
+        scheduledBills: [bill],
+        unavailableScheduledBills: unavailable,
+        context: context
+      ).first)
+    #expect(insight.facts.contains { $0.label == "Upcoming bill" })
+  }
+
+  @Test
+  func mismatchedBufferInstrumentIsRejected() {
+    let balances = [InsightTestSupport.balance(offsetDays: -5, total: -100, forecast: true)]
+    let audBuffer = InstrumentAmount(quantity: 500, instrument: .fiat(code: "AUD"))
+    #expect(
+      CashFlowForecastInsights.upcomingBillWarning(
+        dailyBalances: balances,
+        scheduledBills: [],
+        context: context,
+        buffer: audBuffer
+      ).isEmpty)
+  }
 }

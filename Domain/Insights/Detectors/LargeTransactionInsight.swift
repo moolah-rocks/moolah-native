@@ -25,15 +25,19 @@ enum LargeTransactionInsight {
     categories: Categories,
     context: InsightContext,
     windowDays: Int = 30,
+    baselineWindowDays: Int = 365,
     threshold: Double = 3.5,
     minimumCategorySamples: Int = 6
   ) -> [Insight] {
     let samplesByCategory = Dictionary(
       categorySamples.map { ($0.categoryId, $0.magnitudes.map(toDouble)) },
       uniquingKeysWith: { first, _ in first })
+    let unavailableCategories = Set(
+      categorySamples.filter(\.hasUnavailableData).map(\.categoryId))
 
     var insights: [Insight] = []
     for transaction in recentCandidates.filter(\.isExpense) {
+      guard !unavailableCategories.contains(transaction.categoryId) else { continue }
       let age = context.daysSince(transaction.date)
       guard age >= 0, age <= windowDays else { continue }
 
@@ -64,6 +68,8 @@ enum LargeTransactionInsight {
             InsightFact("Amount", context.formatted(transaction.amount)),
             InsightFact("Category", categoryName),
             InsightFact("Typical for category", context.formatted(Decimal(-typical))),
+            InsightFact("Baseline charges", "\(population.count)"),
+            InsightFact("Baseline window", "\(baselineWindowDays) days"),
           ],
           references: InsightReferences(
             accountIds: transaction.accountId.map { [$0] } ?? [],

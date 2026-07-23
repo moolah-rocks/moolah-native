@@ -10,9 +10,12 @@ struct InsightDescriptionComposerCoverageTests {
       kind: .groupSpendConcentration, title: "Most spending runs through Daily Spending",
       facts: [
         InsightFact("Group", "Daily Spending"), InsightFact("Share of spend", "65%"),
-        InsightFact("Spent", "$3,250.00"),
+        InsightFact("Spent", "$3,250.00"), InsightFact("Window", "30 days"),
       ])
-    #expect(text == "65% of your spending — $3,250.00 — runs through Daily Spending.")
+    #expect(
+      text
+        == "Over the last 30 days, 65% of your spending — $3,250.00 — ran through Daily Spending."
+    )
   }
 
   @Test
@@ -70,16 +73,46 @@ struct InsightDescriptionComposerCoverageTests {
       facts: [
         InsightFact("Typical weekend day", "$150.00"), InsightFact("Typical weekday", "$60.00"),
         InsightFact("Ratio", "2.5×"),
+        InsightFact("Weekend days analysed", "16"), InsightFact("Weekdays analysed", "42"),
       ])
     #expect(
-      text == "You spend more on weekends — about $150.00 a weekend day versus $60.00 on weekdays.")
+      text
+        == "Across your recorded history, a typical weekend spending day was $150.00, compared with $60.00 on a weekday (16 weekend days and 42 weekdays)."
+    )
   }
 
   @Test
   func unbudgetedCategoryReadsClearly() {
     let text = InsightDescriptionComposer.compose(
       kind: .unbudgetedCategory, title: "Dining has no budget",
-      facts: [InsightFact("Category", "Dining"), InsightFact("Spent (90d)", "$540.00")])
-    #expect(text == "Dining has no budget yet — you've spent $540.00 there recently.")
+      facts: [
+        InsightFact("Category", "Dining"), InsightFact("Spent", "$540.00"),
+        InsightFact("Window", "90 days"),
+      ])
+    #expect(text == "Dining has no budget, despite $540.00 of spending in the last 90 days.")
+  }
+
+  @Test
+  func savingsRateTrendRisingReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .savingsRateTrend, title: "Your savings rate is climbing",
+      facts: [
+        InsightFact("Current savings rate", "18%"), InsightFact("Direction", "Rising"),
+        InsightFact("Months analysed", "6"), InsightFact("Through month", "June 2026"),
+      ])
+    #expect(
+      text == "Across 6 complete months through June 2026, your savings rate climbed to 18%.")
+  }
+
+  @Test
+  func savingsRateTrendFallingReadsClearly() {
+    let text = InsightDescriptionComposer.compose(
+      kind: .savingsRateTrend, title: "Your savings rate is slipping",
+      facts: [
+        InsightFact("Current savings rate", "9%"), InsightFact("Direction", "Falling"),
+        InsightFact("Months analysed", "6"), InsightFact("Through month", "June 2026"),
+      ])
+    #expect(
+      text == "Across 6 complete months through June 2026, your savings rate fell to 9%.")
   }
 }

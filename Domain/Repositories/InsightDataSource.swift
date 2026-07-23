@@ -56,7 +56,7 @@ struct InsightDataWindow: Sendable {
 ///
 /// A leg whose conversion fails is dropped, never guessed
 /// (`guides/INSTRUMENT_CONVERSION_GUIDE.md` Rule 11); the projection
-/// methods surface the count through `InsightDataSummary.droppedLegCount`.
+/// methods surface scoped availability through `InsightDataSummary.availability`.
 protocol InsightDataSource: Sendable {
   /// Per-UTC-day income / expense totals over all history. `O(active days)`.
   func dailyTotals(context: InsightContext) async throws -> [DailySpendSummary]
