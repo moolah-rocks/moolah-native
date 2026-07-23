@@ -121,6 +121,7 @@ enum InvestmentInsights {
     return Insight(
       id:
         "\(InsightKind.capitalGainsHarvest.rawValue):\(context.calendar.component(.year, from: context.now))",
+      presentationKey: InsightKind.capitalGainsHarvest.rawValue,
       kind: .capitalGainsHarvest,
       title: "Possible tax-loss offset",
       date: context.now,

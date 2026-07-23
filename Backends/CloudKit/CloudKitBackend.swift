@@ -6,6 +6,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let accounts: any AccountRepository
   let accountGroups: any AccountGroupRepository
   let insightDismissals: any InsightDismissalRepository
+  let insightDisplayHistory: any InsightDisplayHistoryRepository
   let transactions: any TransactionRepository
   let categories: any CategoryRepository
   let taxOwners: any TaxOwnerRepository
@@ -170,6 +171,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     self.accounts = repos.accounts
     self.accountGroups = repos.accountGroups
     self.insightDismissals = repos.insightDismissals
+    self.insightDisplayHistory = GRDBInsightDisplayHistoryRepository(database: database)
     self.transactions = repos.transactions
     self.categories = repos.categories
     self.taxOwners = repos.taxOwners

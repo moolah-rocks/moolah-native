@@ -91,6 +91,8 @@ enum CategoryMixShiftInsight {
     let monthDate = CategorySpendSeries.monthDate(recentMonth) ?? context.now
     return Insight(
       id: "\(InsightKind.categoryMixShift.rawValue):\(shift.categoryId.uuidString):\(recentMonth)",
+      presentationKey:
+        "\(InsightKind.categoryMixShift.rawValue):\(shift.categoryId.uuidString):\(grew ? "grew" : "shrunk")",
       kind: .categoryMixShift,
       title: "\(categoryName) is now \(percent(shift.recentShare)) of your spending",
       date: monthDate,

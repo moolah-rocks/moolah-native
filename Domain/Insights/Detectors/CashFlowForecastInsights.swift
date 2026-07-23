@@ -52,6 +52,7 @@ enum CashFlowForecastInsights {
     return [
       Insight(
         id: "\(InsightKind.upcomingBillWarning.rawValue):\(trough.date.timeIntervalSince1970)",
+        presentationKey: upcomingBillPresentationKey(culprit),
         kind: .upcomingBillWarning,
         title: "Low balance coming up",
         date: context.now,
@@ -98,9 +99,11 @@ enum CashFlowForecastInsights {
     }
 
     let rounded = context.formattedApproximate(projected)
+    let outlook = projected >= 0 ? "surplus" : "shortfall"
     return [
       Insight(
         id: "\(InsightKind.projectedMonthEndBalance.rawValue):\(currentBucket)",
+        presentationKey: "\(InsightKind.projectedMonthEndBalance.rawValue):\(outlook)",
         kind: .projectedMonthEndBalance,
         title: "On track to end the month around \(rounded)",
         date: monthEndDay.date,
@@ -122,6 +125,11 @@ enum CashFlowForecastInsights {
   /// A projection whose noise band reaches this fraction of its own magnitude
   /// is treated as signalless and suppressed.
   private static let maxBandFraction = 0.5
+
+  private static func upcomingBillPresentationKey(_ bill: ScheduledBill?) -> String {
+    bill.map { "\(InsightKind.upcomingBillWarning.rawValue):\($0.id.uuidString)" }
+      ?? InsightKind.upcomingBillWarning.rawValue
+  }
 
   /// Standard deviation of day-over-day balance changes in the historical
   /// tail, used as a ± band. Falls back to zero when too little history.

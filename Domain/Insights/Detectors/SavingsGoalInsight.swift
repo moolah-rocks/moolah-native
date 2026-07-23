@@ -62,6 +62,8 @@ enum SavingsGoalInsight {
   ) -> Insight {
     Insight(
       id: "\(InsightKind.savingsGoalETA.rawValue):reached:\(earmark.id.uuidString)",
+      presentationKey:
+        "\(InsightKind.savingsGoalETA.rawValue):\(earmark.id.uuidString):reached",
       kind: .savingsGoalETA,
       title: "\(earmark.name) goal reached",
       date: context.now,
@@ -87,6 +89,8 @@ enum SavingsGoalInsight {
     let etaText = date.formatted(.dateTime.month(.abbreviated).year())
     return Insight(
       id: "\(InsightKind.savingsGoalETA.rawValue):eta:\(earmark.id.uuidString)",
+      presentationKey:
+        "\(InsightKind.savingsGoalETA.rawValue):\(earmark.id.uuidString):in-progress",
       kind: .savingsGoalETA,
       title: "\(earmark.name): on track for \(etaText)",
       date: context.now,
@@ -114,6 +118,8 @@ enum SavingsGoalInsight {
     guard progress >= 0.5 else { return nil }
     return Insight(
       id: "\(InsightKind.savingsGoalETA.rawValue):progress:\(earmark.id.uuidString)",
+      presentationKey:
+        "\(InsightKind.savingsGoalETA.rawValue):\(earmark.id.uuidString):in-progress",
       kind: .savingsGoalETA,
       title: "\(earmark.name) is \(percent(progress)) of the way there",
       date: context.now,

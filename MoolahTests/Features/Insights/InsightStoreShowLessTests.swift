@@ -143,6 +143,7 @@ private struct FailingDismissalBackend: BackendProvider, @unchecked Sendable {
   var auth: any AuthProvider { inner.auth }
   var accounts: any AccountRepository { inner.accounts }
   var accountGroups: any AccountGroupRepository { inner.accountGroups }
+  var insightDisplayHistory: any InsightDisplayHistoryRepository { inner.insightDisplayHistory }
   var transactions: any TransactionRepository { inner.transactions }
   var categories: any CategoryRepository { inner.categories }
   var taxOwners: any TaxOwnerRepository { inner.taxOwners }

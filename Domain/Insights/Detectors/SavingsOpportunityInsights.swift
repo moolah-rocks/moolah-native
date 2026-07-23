@@ -30,6 +30,7 @@ enum SavingsOpportunityInsights {
       Insight(
         id:
           "\(InsightKind.feeSpend.rawValue):\(FinancialMonth.key(for: context.now, monthEnd: context.financialMonthEnd))",
+        presentationKey: InsightKind.feeSpend.rawValue,
         kind: .feeSpend,
         // `total` is a known-negative expense; present its magnitude as a
         // positive figure here for the headline only (sign is preserved
@@ -73,6 +74,7 @@ enum SavingsOpportunityInsights {
       Insight(
         id:
           "\(InsightKind.subscriptionOverspend.rawValue):\(FinancialMonth.key(for: context.now, monthEnd: context.financialMonthEnd))",
+        presentationKey: InsightKind.subscriptionOverspend.rawValue,
         kind: .subscriptionOverspend,
         title: "Subscriptions are \(percent(share)) of income",
         date: context.now,

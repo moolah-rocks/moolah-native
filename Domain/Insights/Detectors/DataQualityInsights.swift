@@ -16,6 +16,7 @@ enum DataQualityInsights {
     return [
       Insight(
         id: "\(InsightKind.uncategorizedBacklog.rawValue):\(monthKey(context))",
+        presentationKey: InsightKind.uncategorizedBacklog.rawValue,
         kind: .uncategorizedBacklog,
         title: count == 1
           ? "1 transaction needs a category" : "\(count) transactions need a category",
@@ -39,6 +40,7 @@ enum DataQualityInsights {
     return [
       Insight(
         id: "\(InsightKind.unreconciledTransfers.rawValue):\(monthKey(context))",
+        presentationKey: InsightKind.unreconciledTransfers.rawValue,
         kind: .unreconciledTransfers,
         title: count == 1
           ? "1 transfer to review and merge" : "\(count) transfers to review and merge",

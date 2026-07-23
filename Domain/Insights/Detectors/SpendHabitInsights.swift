@@ -70,6 +70,7 @@ enum SpendHabitInsights {
     return [
       Insight(
         id: "\(InsightKind.weekendSpendSkew.rawValue):\(monthKey(context))",
+        presentationKey: InsightKind.weekendSpendSkew.rawValue,
         kind: .weekendSpendSkew,
         title: "Weekends are your big spend days",
         date: context.now,

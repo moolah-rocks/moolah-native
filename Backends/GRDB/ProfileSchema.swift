@@ -120,6 +120,9 @@ import GRDB
 /// `v25_retire_investment_value_persistence` — journals one durable CloudKit
 /// deletion per legacy snapshot, drops the snapshot table, and drops account's
 /// retired valuation-mode column.
+/// `v26_tax_owner_placeholder` — marks placeholder tax-owner rows explicitly.
+/// `v27_insight_display_history` — adds local-only semantic display history
+/// used to rotate the For You insight batch after a day.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -140,7 +143,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 26
+  static let version = 27
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -194,6 +197,8 @@ enum ProfileSchema {
       "v25_retire_investment_value_persistence", migrate: retireInvestmentValuePersistence)
     migrator.registerMigration(
       "v26_tax_owner_placeholder", migrate: addTaxOwnerPlaceholderMarker)
+    migrator.registerMigration(
+      "v27_insight_display_history", migrate: addInsightDisplayHistory)
 
     return migrator
   }

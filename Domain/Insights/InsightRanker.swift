@@ -14,7 +14,7 @@ struct ScoredInsight: Sendable, Identifiable, Hashable {
 ///
 /// `score = w_surprise·surprise + w_action·actionability +
 /// w_magnitude·log(|$|+1) + w_recency·decay + w_interest·interest −
-/// w_fatigue·recentDismissals`.
+/// w_fatigue·recentDismissals − w_displayFatigue·recentDisplayDecay`.
 struct InsightRanker: Sendable {
   /// Tunable term weights. Defaults are the design's hand-tuned starting
   /// point — "revisit once we have dismissal telemetry".
@@ -25,6 +25,7 @@ struct InsightRanker: Sendable {
     var recency: Double = 0.8
     var interest: Double = 0.7
     var fatigue: Double = 1.5
+    var displayFatigue: Double = 5.0
   }
 
   /// Categories / earmarks the user has pinned — boosts their insights.
@@ -41,16 +42,26 @@ struct InsightRanker: Sendable {
   var weights: Weights
   /// Recency decay time-constant τ (days). Design suggests ≈7.
   var recencyHalfLife: Double
+  /// Days for a post-day-one display penalty to halve. A recently displayed
+  /// insight gets room to breathe, then naturally returns to contention.
+  var displayFatigueHalfLife: Double
   var calendar: Calendar
+  /// User-local calendar for the UI meaning of “shown today”. This is
+  /// deliberately separate from the UTC financial-bucketing calendar above.
+  var displayCalendar: Calendar
 
   init(
     weights: Weights = Weights(),
     recencyHalfLife: Double = 7,
-    calendar: Calendar = InsightContext.defaultCalendar
+    displayFatigueHalfLife: Double = 3,
+    calendar: Calendar = InsightContext.defaultCalendar,
+    displayCalendar: Calendar = .autoupdatingCurrent
   ) {
     self.weights = weights
     self.recencyHalfLife = recencyHalfLife
+    self.displayFatigueHalfLife = displayFatigueHalfLife
     self.calendar = calendar
+    self.displayCalendar = displayCalendar
   }
 
   /// Score one insight. `dismissals` is the count of recent dismissals for
@@ -59,6 +70,7 @@ struct InsightRanker: Sendable {
     _ insight: Insight,
     now: Date,
     dismissals: [InsightKind: Int] = [:],
+    displayHistory: [String: Date] = [:],
     interests: DeclaredInterests = DeclaredInterests()
   ) -> Double {
     let magnitude =
@@ -72,6 +84,8 @@ struct InsightRanker: Sendable {
 
     let interestTerm = matchesInterest(insight, interests: interests) ? 1.0 : 0.0
     let fatiguePenalty = Double(dismissals[insight.kind] ?? 0)
+    let displayPenalty = displayFatiguePenalty(
+      for: insight, now: now, displayHistory: displayHistory)
 
     return weights.surprise * clamp(insight.surprise)
       + weights.action * insight.actionability.weight
@@ -79,6 +93,7 @@ struct InsightRanker: Sendable {
       + weights.recency * recencyTerm
       + weights.interest * interestTerm
       - weights.fatigue * fatiguePenalty
+      - weights.displayFatigue * displayPenalty
   }
 
   /// Rank candidates: de-duplicate by id, score, sort descending, then apply
@@ -90,6 +105,7 @@ struct InsightRanker: Sendable {
     _ insights: [Insight],
     now: Date,
     dismissals: [InsightKind: Int] = [:],
+    displayHistory: [String: Date] = [:],
     interests: DeclaredInterests = DeclaredInterests(),
     displayCap: Int = 5,
     guaranteePositive: Bool = true
@@ -99,7 +115,13 @@ struct InsightRanker: Sendable {
       deduped
       .map {
         ScoredInsight(
-          insight: $0, score: score($0, now: now, dismissals: dismissals, interests: interests))
+          insight: $0,
+          score: score(
+            $0,
+            now: now,
+            dismissals: dismissals,
+            displayHistory: displayHistory,
+            interests: interests))
       }
       .sorted { $0.score > $1.score }
 
@@ -143,6 +165,24 @@ struct InsightRanker: Sendable {
       return true
     }
     return insight.references.earmarkIds.contains(where: interests.earmarkIds.contains)
+  }
+
+  /// No penalty on the calendar day an insight is first shown, keeping the
+  /// day's recommendations steady. Starting the next day, apply the full
+  /// penalty and decay it by recency so the insight can return later.
+  private func displayFatiguePenalty(
+    for insight: Insight,
+    now: Date,
+    displayHistory: [String: Date]
+  ) -> Double {
+    guard let lastShown = displayHistory[insight.presentationKey] else { return 0 }
+    let shownDay = displayCalendar.startOfDay(for: lastShown)
+    let currentDay = displayCalendar.startOfDay(for: now)
+    let elapsedDays = max(
+      0, displayCalendar.dateComponents([.day], from: shownDay, to: currentDay).day ?? 0)
+    guard elapsedDays > 0 else { return 0 }
+    let decayDays = Double(elapsedDays - 1)
+    return exp(-log(2) * decayDays / displayFatigueHalfLife)
   }
 
   private func clamp(_ value: Double) -> Double {

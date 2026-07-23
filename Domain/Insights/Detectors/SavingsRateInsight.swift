@@ -31,6 +31,8 @@ enum SavingsRateInsight {
     return [
       Insight(
         id: "\(InsightKind.savingsRateTrend.rawValue):\(monthKey(context))",
+        presentationKey:
+          "\(InsightKind.savingsRateTrend.rawValue):\(rising ? "rising" : "falling")",
         kind: .savingsRateTrend,
         title: rising ? "Your savings rate is climbing" : "Your savings rate is slipping",
         date: context.now,
