@@ -22,6 +22,27 @@ struct PositionsValuator: Sendable {
   private let logger = Logger(
     subsystem: "com.moolah.app", category: "PositionsValuator")
 
+  private struct CrossInstrumentRowInput {
+    let position: Position
+    let cost: InstrumentAmount?
+    let outcome: BatchConversionOutcome
+    let accountChainId: Int?
+    let oldestPriceDate: Date?
+  }
+
+  private struct RowBuildContext {
+    let hostCurrency: Instrument
+    let costBasis: [String: Decimal]
+    let outcomes: [BatchConversionOutcome]
+    let oldestPriceDates: [Date?]
+    let accountChainId: Int?
+  }
+
+  private struct IndexedPriceDate: Sendable {
+    let index: Int
+    let date: Date?
+  }
+
   /// Build one `ValuedPosition` per input position whose conversion did
   /// not resolve to `.knownZero`.
   ///
@@ -50,28 +71,108 @@ struct PositionsValuator: Sendable {
     // same-instrument positions resolve inline (Rule 8 fast path) and never
     // contribute a request. Phase 2 — one batched conversion. Phase 3 —
     // assemble each position's row from its outcome slot (Rule 11 / #790).
-    var requests: [BatchConversionRequest] = []
-    requests.reserveCapacity(positions.count)
-    for position in positions where position.instrument != hostCurrency {
-      requests.append(
-        BatchConversionRequest(
-          amount: InstrumentAmount(
-            quantity: position.quantity, instrument: position.instrument),
-          target: hostCurrency,
-          date: date))
-    }
+    let requests = conversionRequests(
+      for: positions, hostCurrency: hostCurrency, on: date)
 
     // Cooperative cancellation now surfaces as a thrown `CancellationError`
     // from the batch; the consuming `.task(id:)` is torn down (filter change
     // / unmount) so we return what we have (nothing) and let the caller
     // re-check `Task.isCancelled` before publishing.
-    let outcomes: [BatchConversionOutcome]
-    do {
-      outcomes = try await conversionService.convertResultBatch(requests)
-    } catch {
+    guard case .success(let outcomes) = await conversionOutcomes(for: requests) else {
+      return []
+    }
+    guard
+      case .success(let oldestPriceDates) =
+        await priceDates(for: requests, outcomes: outcomes)
+    else {
       return []
     }
 
+    let context = RowBuildContext(
+      hostCurrency: hostCurrency,
+      costBasis: costBasis,
+      outcomes: outcomes,
+      oldestPriceDates: oldestPriceDates,
+      accountChainId: accountChainId)
+    return buildRows(from: positions, context: context)
+  }
+
+  private func conversionRequests(
+    for positions: [Position],
+    hostCurrency: Instrument,
+    on date: Date
+  ) -> [BatchConversionRequest] {
+    positions.compactMap { position in
+      guard position.instrument != hostCurrency else { return nil }
+      return BatchConversionRequest(
+        amount: InstrumentAmount(
+          quantity: position.quantity, instrument: position.instrument),
+        target: hostCurrency,
+        date: date)
+    }
+  }
+
+  private func conversionOutcomes(
+    for requests: [BatchConversionRequest]
+  ) async -> Result<[BatchConversionOutcome], CancellationError> {
+    do {
+      return .success(try await conversionService.convertResultBatch(requests))
+    } catch {
+      return .failure(CancellationError())
+    }
+  }
+
+  private func priceDates(
+    for requests: [BatchConversionRequest],
+    outcomes: [BatchConversionOutcome]
+  ) async -> Result<[Date?], CancellationError> {
+    let conversionService = conversionService
+    let logger = logger
+    do {
+      let dates = try await withThrowingTaskGroup(
+        of: IndexedPriceDate.self,
+        returning: [Date?].self
+      ) { group in
+        for (index, pair) in zip(requests, outcomes).enumerated() {
+          let (request, outcome) = pair
+          guard case .value = outcome else { continue }
+          group.addTask {
+            do {
+              try Task.checkCancellation()
+              let date = try await conversionService.oldestPriceDate(
+                for: request.amount, to: request.target, on: request.date)
+              try Task.checkCancellation()
+              return IndexedPriceDate(index: index, date: date)
+            } catch is CancellationError {
+              throw CancellationError()
+            } catch {
+              // Provenance is supplementary. A successfully converted value remains
+              // usable if its date metadata cannot be recovered.
+              logger.warning(
+                "Failed to resolve price provenance for \(request.amount.instrument.id, privacy: .public) → \(request.target.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
+              )
+              return IndexedPriceDate(index: index, date: nil)
+            }
+          }
+        }
+
+        var dates = [Date?](repeating: nil, count: requests.count)
+        for try await result in group {
+          dates[result.index] = result.date
+        }
+        try Task.checkCancellation()
+        return dates
+      }
+      return .success(dates)
+    } catch {
+      return .failure(CancellationError())
+    }
+  }
+
+  private func buildRows(
+    from positions: [Position],
+    context: RowBuildContext
+  ) -> [ValuedPosition] {
     var rows: [ValuedPosition] = []
     rows.reserveCapacity(positions.count)
     // Advances only for cross-instrument positions, so it indexes `outcomes`
@@ -79,28 +180,29 @@ struct PositionsValuator: Sendable {
     // positions take the fast path below and never consume an outcome.
     var cursor = 0
     for position in positions {
-      let cost: InstrumentAmount? = costBasis[position.instrument.id].map {
-        InstrumentAmount(quantity: $0, instrument: hostCurrency)
+      let cost: InstrumentAmount? = context.costBasis[position.instrument.id].map {
+        InstrumentAmount(quantity: $0, instrument: context.hostCurrency)
       }
-      if position.instrument == hostCurrency {
+      if position.instrument == context.hostCurrency {
         rows.append(
           ValuedPosition(
             instrument: position.instrument,
             quantity: position.quantity,
             unitPrice: nil,
             costBasis: cost,
-            value: InstrumentAmount(quantity: position.quantity, instrument: hostCurrency),
-            accountChainId: accountChainId))
+            value: InstrumentAmount(
+              quantity: position.quantity, instrument: context.hostCurrency),
+            accountChainId: context.accountChainId))
         continue
       }
       defer { cursor += 1 }
-      if let entry = row(
-        for: position,
-        hostCurrency: hostCurrency,
+      let input = CrossInstrumentRowInput(
+        position: position,
         cost: cost,
-        outcome: outcomes[cursor],
-        accountChainId: accountChainId)
-      {
+        outcome: context.outcomes[cursor],
+        accountChainId: context.accountChainId,
+        oldestPriceDate: context.oldestPriceDates[cursor])
+      if let entry = row(from: input, hostCurrency: context.hostCurrency) {
         rows.append(entry)
       }
     }
@@ -111,13 +213,10 @@ struct PositionsValuator: Sendable {
   /// `.knownZero` drops the row (returns `nil`, #790); `.value` builds the
   /// valued row; `.failure` logs and emits a `value == nil` row (Rule 11).
   private func row(
-    for position: Position,
-    hostCurrency: Instrument,
-    cost: InstrumentAmount?,
-    outcome: BatchConversionOutcome,
-    accountChainId: Int?
+    from input: CrossInstrumentRowInput,
+    hostCurrency: Instrument
   ) -> ValuedPosition? {
-    switch outcome {
+    switch input.outcome {
     case .knownZero:
       // `.unpriced` / `.spam` crypto source — drop the row entirely
       // so it stops appearing in the account's positions table.
@@ -132,28 +231,29 @@ struct PositionsValuator: Sendable {
       // that a service returning total == 0 yields unitPrice == 0 (which is rare
       // and visually obvious as "free", which is correct for the data we have).
       let unit: InstrumentAmount? =
-        position.quantity == 0
+        input.position.quantity == 0
         ? nil
-        : InstrumentAmount(quantity: total / position.quantity, instrument: hostCurrency)
+        : InstrumentAmount(quantity: total / input.position.quantity, instrument: hostCurrency)
       return ValuedPosition(
-        instrument: position.instrument,
-        quantity: position.quantity,
+        instrument: input.position.instrument,
+        quantity: input.position.quantity,
         unitPrice: unit,
-        costBasis: cost,
+        costBasis: input.cost,
         value: converted,
-        accountChainId: accountChainId
+        accountChainId: input.accountChainId,
+        oldestPriceDate: input.oldestPriceDate
       )
     case .failure(let error):
       logger.warning(
-        "Failed to valuate position \(position.instrument.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
+        "Failed to valuate position \(input.position.instrument.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
       )
       return ValuedPosition(
-        instrument: position.instrument,
-        quantity: position.quantity,
+        instrument: input.position.instrument,
+        quantity: input.position.quantity,
         unitPrice: nil,
-        costBasis: cost,
+        costBasis: input.cost,
         value: nil,
-        accountChainId: accountChainId
+        accountChainId: input.accountChainId
       )
     }
   }

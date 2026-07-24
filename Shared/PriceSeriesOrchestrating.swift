@@ -75,6 +75,22 @@ extension PriceSeriesOrchestrating {
     return try await extendAndResolve(key: key, date: capped, dateString: dateString)
   }
 
+  /// Effective daily source date used by `price(instrumentKey:on:)`.
+  /// Resolves the price first so the relevant cache window is hydrated, then
+  /// returns the exact or prior-market-day key that supplied the value.
+  func effectivePriceDate(instrumentKey key: String, on date: Date) async throws -> Date {
+    _ = try await price(instrumentKey: key, on: date)
+    let capped = cappedToYesterday(date, now: now, timeZone: timeZone)
+    let dateString = dateFormatter.string(from: capped)
+    guard let requestedKey = DateKey.from(isoString: dateString),
+      let effectiveKey = caches[key]?.prices.floorKey(requestedKey),
+      let effectiveDate = dateFormatter.date(from: DateKey.isoString(effectiveKey))
+    else {
+      throw noPriceError(instrumentKey: key, date: dateString)
+    }
+    return effectiveDate
+  }
+
   /// Range: hydrate-once → cap upper → cover forward+backward → carry-forward
   /// series over the caller's range using `Calendar.utc` day stepping.
   func prices(

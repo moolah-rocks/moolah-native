@@ -139,12 +139,14 @@ struct MultiInstrumentPositionsAssemblerTests {
     )
   }
 
-  // assemble preserves accountChainId stamped on a ValuedPosition by the upstream
-  // valuator. The cost-basis overlay rebuilds each row; this test guards against
-  // the overlay accidentally dropping chain identity.
+  // assemble preserves metadata stamped on a ValuedPosition by the upstream
+  // valuator. The cost-basis overlay rebuilds each row; this test guards
+  // against the overlay accidentally dropping chain identity or price
+  // provenance.
   @Test
-  func assemblePreservesAccountChainId() async throws {
+  func assemblePreservesUpstreamMetadata() async throws {
     let chainId = 10
+    let oldestPriceDate = date(daysAfterEpoch: 3)
     let txns = [
       buyTransaction(
         instrument: btc, qty: 1, fiat: 50_000, accountId: accountA, daysAfterEpoch: 1)
@@ -157,7 +159,8 @@ struct MultiInstrumentPositionsAssemblerTests {
       unitPrice: InstrumentAmount(quantity: 60_000, instrument: aud),
       costBasis: nil,
       value: InstrumentAmount(quantity: 60_000, instrument: aud),
-      accountChainId: chainId)
+      accountChainId: chainId,
+      oldestPriceDate: oldestPriceDate)
 
     let context = PositionsAssemblyContext(
       title: "Chain Wallet",
@@ -175,6 +178,9 @@ struct MultiInstrumentPositionsAssemblerTests {
     #expect(
       row.accountChainId == chainId,
       "accountChainId \(chainId) must survive the cost-basis overlay rebuild")
+    #expect(
+      row.oldestPriceDate == oldestPriceDate,
+      "oldestPriceDate must survive the cost-basis overlay rebuild")
   }
 
   // costBasisSnapshot (now a pure query over the shared HoldingsCostLedger)

@@ -26,6 +26,7 @@ struct ExchangeRateServiceFallbackTests {
   private func date(_ string: String) -> Date {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]
+    formatter.timeZone = .utc
     guard let result = formatter.date(from: string) else {
       preconditionFailure("Invalid ISO date literal: \(string)")
     }
@@ -93,6 +94,10 @@ struct ExchangeRateServiceFallbackTests {
 
     #expect(gapRate == dec("1.50"))
     #expect(client.fetchCount == primedFetches)
+    #expect(
+      try await service.effectiveRateDate(
+        from: usd, to: aud, on: date("2024-01-16"))
+        == date("2024-01-15"))
   }
 
   @Test("identity rate is 1 and pre-history throws")

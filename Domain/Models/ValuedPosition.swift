@@ -16,6 +16,9 @@ struct ValuedPosition {
   let unitPrice: InstrumentAmount?
   let costBasis: InstrumentAmount?
   let value: InstrumentAmount?
+  /// Oldest effective market-price or exchange-rate date contributing to
+  /// `value`. `nil` for same-instrument values and unavailable valuations.
+  let oldestPriceDate: Date?
   /// The chain ID of the account that owns this position, when the position
   /// originates from a chain-scoped (crypto) account. `nil` for fiat and
   /// stock positions, and for crypto positions where chain context is not
@@ -28,7 +31,8 @@ struct ValuedPosition {
     unitPrice: InstrumentAmount?,
     costBasis: InstrumentAmount?,
     value: InstrumentAmount?,
-    accountChainId: Int? = nil
+    accountChainId: Int? = nil,
+    oldestPriceDate: Date? = nil
   ) {
     self.instrument = instrument
     self.quantity = quantity
@@ -36,6 +40,7 @@ struct ValuedPosition {
     self.costBasis = costBasis
     self.value = value
     self.accountChainId = accountChainId
+    self.oldestPriceDate = oldestPriceDate
   }
 
   /// The position quantity wrapped as an `InstrumentAmount` in the

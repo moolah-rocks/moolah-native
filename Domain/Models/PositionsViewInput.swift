@@ -113,6 +113,17 @@ struct PositionsViewInput: Sendable, Hashable {
     return positions.contains(where: { $0.hasCostBasis })
   }
 
+  /// Range of oldest effective source dates attached to successfully valued
+  /// cross-instrument rows. Same-instrument rows carry no price provenance
+  /// and therefore do not affect the range.
+  var priceDateRange: ClosedRange<Date>? {
+    let dates = positions.compactMap { row in
+      row.value == nil ? nil : row.oldestPriceDate
+    }
+    guard let oldest = dates.min(), let newest = dates.max() else { return nil }
+    return oldest...newest
+  }
+
   /// `true` iff the chart container is rendered at all. A non-empty
   /// aggregate historical series is sufficient — the chart shows at minimum
   /// a value line (the cost/gain-loss overlay is separately gated by the

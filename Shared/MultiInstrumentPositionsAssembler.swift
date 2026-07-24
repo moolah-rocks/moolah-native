@@ -124,7 +124,11 @@ struct MultiInstrumentPositionsAssembler: Sendable {
         value: row.value,
         // Preserve the owning chain the upstream valuator stamped; this
         // overlay only adds cost basis and must not drop chain identity.
-        accountChainId: row.accountChainId)
+        accountChainId: row.accountChainId,
+        // Price provenance is also produced upstream by the valuator. The
+        // cost-basis overlay must keep it so the aggregate header can disclose
+        // the oldest effective daily input used by the visible rows.
+        oldestPriceDate: row.oldestPriceDate)
     }
     return PositionsViewInput(
       title: context.title,

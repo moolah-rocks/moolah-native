@@ -22,7 +22,9 @@ struct PositionsChartPane: View {
   var body: some View {
     VStack(spacing: 0) {
       if let performance = input.performance {
-        AccountPerformanceTiles(title: input.title, performance: performance)
+        AccountPerformanceTiles(
+          performance: performance,
+          oldestPriceDate: input.priceDateRange?.lowerBound)
       } else {
         PositionsHeader(input: input)
       }

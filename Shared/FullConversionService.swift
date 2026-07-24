@@ -7,9 +7,13 @@ import OSLog
 /// if the listing currency differs from the target fiat.
 /// Crypto routes through CryptoPriceService (USD prices) then ExchangeRateService for non-USD fiat.
 actor FullConversionService: InstrumentConversionService {
-  private let exchangeRates: ExchangeRateService
-  private let stockPrices: StockPriceService
-  private let cryptoPrices: CryptoPriceService?
+  // Internal so the price-provenance extension can resolve the effective
+  // source dates through the same services used by conversion.
+  let exchangeRates: ExchangeRateService
+  let stockPrices: StockPriceService
+  let cryptoPrices: CryptoPriceService?
+  /// Shared clock for conversion and provenance date clamping.
+  let now: @Sendable () -> Date
   /// Per-instrument pricing resolver. Dispatches on `Instrument.kind` to a
   /// `PriceSource` that knows the instrument's unit price, its native quote
   /// currency, and its pricing status — the single surface the generic
@@ -64,11 +68,7 @@ actor FullConversionService: InstrumentConversionService {
   /// still "the same day" in the user's local timezone.
   ///
   /// internal (not private) so FullConversionService+Batch.swift can reach it.
-  let calendar: Calendar = {
-    var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
-    return calendar
-  }()
+  let calendar = Calendar.utc
 
   /// Number of distinct `(source, target, day)` triples currently
   /// memoised. Test-only accessor — kept with the `ForTesting` suffix
@@ -85,11 +85,13 @@ actor FullConversionService: InstrumentConversionService {
     exchangeRates: ExchangeRateService,
     stockPrices: StockPriceService,
     cryptoPrices: CryptoPriceService? = nil,
-    database: (any DatabaseWriter)? = nil
+    database: (any DatabaseWriter)? = nil,
+    now: @Sendable @escaping () -> Date = { Date() }
   ) {
     self.exchangeRates = exchangeRates
     self.stockPrices = stockPrices
     self.cryptoPrices = cryptoPrices
+    self.now = now
     self.priceSources = PriceSourceResolver(
       stockPrices: stockPrices, cryptoPrices: cryptoPrices)
     self.database = database
@@ -109,7 +111,7 @@ actor FullConversionService: InstrumentConversionService {
     // `transaction.date` which can be in the future — clamp to today so
     // we resolve against the latest available rate instead of throwing.
     // See guides/INSTRUMENT_CONVERSION_GUIDE.md Rule 7.
-    let effectiveDate = min(date, Date())
+    let effectiveDate = min(date, now())
     let factor = try await unitFactor(from: source, to: target, on: effectiveDate)
     return (quantity * factor.multiplier) / factor.divisor
   }

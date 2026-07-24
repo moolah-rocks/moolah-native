@@ -11,6 +11,7 @@ struct PositionsValuatorTests {
 
   @Test("converts each position to host currency on the given date")
   func convertsAll() async throws {
+    let valuationDate = Date(timeIntervalSince1970: 1_753_228_800)
     let positions = [
       Position(instrument: bhp, quantity: 250),
       Position(instrument: cba, quantity: 80),
@@ -24,7 +25,7 @@ struct PositionsValuatorTests {
       positions: positions,
       hostCurrency: aud,
       costBasis: [:],
-      on: Date()
+      on: valuationDate
     )
 
     let bhpRow = try #require(rows.first(where: { $0.instrument == bhp }))
@@ -32,6 +33,8 @@ struct PositionsValuatorTests {
     #expect(bhpRow.value == InstrumentAmount(quantity: 250 * Decimal(45.30), instrument: aud))
     #expect(bhpRow.unitPrice == InstrumentAmount(quantity: Decimal(45.30), instrument: aud))
     #expect(cbaRow.value == InstrumentAmount(quantity: 80 * Decimal(120), instrument: aud))
+    #expect(bhpRow.oldestPriceDate == valuationDate)
+    #expect(cbaRow.oldestPriceDate == valuationDate)
   }
 
   @Test("single-instrument fast path skips the conversion service")
@@ -49,6 +52,7 @@ struct PositionsValuatorTests {
     // unitPrice is nil for the fast-path fiat row; meaningless to display
     // 1 AUD = $1.
     #expect(rows[0].unitPrice == nil)
+    #expect(rows[0].oldestPriceDate == nil)
   }
 
   @Test("per-row conversion failure leaves value nil; siblings still render")

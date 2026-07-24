@@ -1,17 +1,31 @@
 import SwiftUI
 
-/// Title + total + optional P&L pill. Visibility rules live in
-/// `PositionsViewInput.showsPLPill` and `totalValue`.
+/// Total + optional P&L pill, with price provenance right-aligned on the
+/// same row. The account/group name lives in the enclosing navigation title,
+/// so repeating it here would add noise.
 struct PositionsHeader: View {
   let input: PositionsViewInput
 
   var body: some View {
+    ViewThatFits(in: .horizontal) {
+      headerRow(priceStyle: .full)
+      headerRow(priceStyle: .compact)
+      VStack(spacing: 4) {
+        headerRow(priceStyle: nil)
+        if input.totalValue != nil, let oldestDate = input.priceDateRange?.lowerBound {
+          PriceDateDisclosure(oldestDate: oldestDate)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+      }
+    }
+    .padding(.horizontal)
+    .padding(.vertical, 12)
+  }
+
+  private func headerRow(
+    priceStyle: PriceDateDisclosureStyle?
+  ) -> some View {
     HStack(alignment: .firstTextBaseline) {
-      Text(input.title)
-        .font(.headline)
-        .lineLimit(1)
-        .truncationMode(.tail)
-      Spacer()
       if let total = input.totalValue {
         Text(total.formatted)
           .font(.headline)
@@ -26,9 +40,14 @@ struct PositionsHeader: View {
       if input.showsPLPill, let gain = input.totalGainLoss, let total = input.totalValue {
         plPill(gain: gain, total: total)
       }
+      Spacer()
+      if input.totalValue != nil,
+        let oldestDate = input.priceDateRange?.lowerBound,
+        let priceStyle
+      {
+        PriceDateDisclosure(oldestDate: oldestDate, style: priceStyle)
+      }
     }
-    .padding(.horizontal)
-    .padding(.vertical, 12)
   }
 
   private func plPill(gain: InstrumentAmount, total: InstrumentAmount) -> some View {
@@ -91,7 +110,9 @@ struct PositionsHeader: View {
           quantity: 250,
           unitPrice: nil,
           costBasis: InstrumentAmount(quantity: 10_125, instrument: .AUD),
-          value: InstrumentAmount(quantity: 11_325, instrument: .AUD)
+          value: InstrumentAmount(quantity: 11_325, instrument: .AUD),
+          oldestPriceDate: Calendar.utc.date(
+            from: DateComponents(year: 2026, month: 7, day: 23))
         )
       ],
       historicalValue: nil
