@@ -116,6 +116,7 @@ actor CryptoPriceService {
     self.timeZone = timeZone
     self.dateFormatter = ISO8601DateFormatter()
     self.dateFormatter.formatOptions = [.withFullDate]
+    self.dateFormatter.timeZone = .utc
   }
 
   // MARK: - PendingFetchContext ref-counting
@@ -283,6 +284,18 @@ actor CryptoPriceService {
   func price(for instrument: Instrument, on date: Date) async throws -> Decimal {
     let reg = try await registration(for: instrument)
     return try await price(for: reg.instrument, mapping: reg.mapping, on: date)
+  }
+
+  func effectivePriceDate(for instrument: Instrument, on date: Date) async throws -> Date {
+    let registration = try await registration(for: instrument)
+    retainPendingFetchContext(
+      for: registration.instrument.id,
+      instrument: registration.instrument,
+      mapping: registration.mapping)
+    defer { releasePendingFetchContext(for: registration.instrument.id) }
+    await applyExplicitFirstTradeFloorIfAvailable(tokenId: registration.instrument.id)
+    return try await effectivePriceDate(
+      instrumentKey: registration.instrument.id, on: date)
   }
 
   /// Thin call-through: stashes the in-flight `(instrument, mapping)` so the

@@ -146,6 +146,35 @@ struct PositionsViewInputTests {
     #expect(mixed.showsGroupSubtotals)
   }
 
+  @Test("price date range spans only converted rows with successful values")
+  func priceDateRangeUsesSuccessfulConvertedRows() throws {
+    let older = try #require(
+      ISO8601DateFormatter().date(from: "2026-07-22T00:00:00Z"))
+    let newer = try #require(
+      ISO8601DateFormatter().date(from: "2026-07-23T00:00:00Z"))
+    let input = PositionsViewInput(
+      title: "x", hostCurrency: aud,
+      positions: [
+        ValuedPosition(
+          instrument: bhp, quantity: 1, unitPrice: nil,
+          costBasis: nil, value: amount(60), oldestPriceDate: newer),
+        ValuedPosition(
+          instrument: bhp, quantity: 1, unitPrice: nil,
+          costBasis: nil, value: amount(60), oldestPriceDate: older),
+        ValuedPosition(
+          instrument: aud, quantity: 10, unitPrice: nil,
+          costBasis: nil, value: amount(10)),
+        ValuedPosition(
+          instrument: bhp, quantity: 1, unitPrice: nil,
+          costBasis: nil, value: nil, oldestPriceDate: older),
+      ],
+      historicalValue: nil
+    )
+
+    #expect(input.priceDateRange?.lowerBound == older)
+    #expect(input.priceDateRange?.upperBound == newer)
+  }
+
   @Test("assetHoldings merges crypto positions that share an asset key")
   func assetHoldingsFoldCryptoUsingAssetKeyMap() {
     let eth1 = Instrument.crypto(

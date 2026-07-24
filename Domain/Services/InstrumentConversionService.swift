@@ -80,6 +80,20 @@ protocol InstrumentConversionService: Sendable {
     _ requests: [BatchConversionRequest]
   ) async throws -> [BatchConversionOutcome]
 
+  /// Oldest effective daily price or exchange-rate date used to convert
+  /// `amount` into `instrument`. Returns `nil` for a same-instrument fast
+  /// path because no external price data contributes to that value.
+  ///
+  /// The default returns `nil` because a conformer that does not retain
+  /// source provenance cannot safely infer the effective day from the
+  /// requested day. Production conversion services override this with
+  /// cache-backed effective dates, including prior-market-day fallback.
+  func oldestPriceDate(
+    for amount: InstrumentAmount,
+    to instrument: Instrument,
+    on date: Date
+  ) async throws -> Date?
+
   /// Invalidate any cached state held about `instrument` (and any rate
   /// derived from it). Called when a user mutation changes
   /// `pricingStatus` for a crypto registration so the next aggregation
@@ -120,6 +134,14 @@ protocol InstrumentConversionService: Sendable {
 }
 
 extension InstrumentConversionService {
+  func oldestPriceDate(
+    for amount: InstrumentAmount,
+    to instrument: Instrument,
+    on date: Date
+  ) async throws -> Date? {
+    nil
+  }
+
   /// Default `convertResultBatch`: loops `convertResult` per request,
   /// folding each into `.value` / `.knownZero` / `.failure`. Checks for
   /// cancellation between elements and rethrows `CancellationError` so a

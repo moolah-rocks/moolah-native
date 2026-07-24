@@ -9,6 +9,7 @@ struct InstrumentConversionServiceTests {
   private func date(_ string: String) throws -> Date {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]
+    formatter.timeZone = .utc
     return try #require(formatter.date(from: string))
   }
 
@@ -87,6 +88,20 @@ struct InstrumentConversionServiceTests {
     #expect(result == amount)
   }
 
+  @Test("fiat provenance reports the prior day that supplied a fallback rate")
+  func fiatProvenanceReportsFallbackDay() async throws {
+    let service = try makeService(rates: [
+      "2025-06-13": ["USD": dec("0.6500")]
+    ])
+    let amount = InstrumentAmount(quantity: dec("1000.00"), instrument: .AUD)
+
+    let effectiveDate = try await service.oldestPriceDate(
+      for: amount, to: .USD, on: try date("2025-06-15"))
+    let expectedDate = try date("2025-06-13")
+
+    #expect(effectiveDate == expectedDate)
+  }
+
   /// Scheduled transactions and forecast days carry future dates. Frankfurter
   /// has no future rates, so before the clamp, a cold cache + future date
   /// threw `noRateAvailable`. The service now clamps `on: date` to today, so
@@ -95,6 +110,7 @@ struct InstrumentConversionServiceTests {
   func convertClampsFutureDatesToToday() async throws {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]
+    formatter.timeZone = .utc
     let calendar = Calendar(identifier: .gregorian)
     let today = calendar.startOfDay(for: Date())
     let pastDate = try #require(calendar.date(byAdding: .day, value: -15, to: today))
@@ -116,6 +132,7 @@ struct InstrumentConversionServiceTests {
   func convertAmountClampsFutureDatesToToday() async throws {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]
+    formatter.timeZone = .utc
     let calendar = Calendar(identifier: .gregorian)
     let today = calendar.startOfDay(for: Date())
     let pastKey = formatter.string(

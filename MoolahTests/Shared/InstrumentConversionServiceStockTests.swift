@@ -34,7 +34,15 @@ struct InstrumentConversionServiceStockTests {
   private func dateString(_ date: Date) -> String {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withFullDate]
+    formatter.timeZone = .utc
     return formatter.string(from: date)
+  }
+
+  private func date(_ string: String) throws -> Date {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withFullDate]
+    formatter.timeZone = .utc
+    return try #require(formatter.date(from: string))
   }
 
   @Test
@@ -77,6 +85,27 @@ struct InstrumentConversionServiceStockTests {
     let result = try await service.convert(Decimal(10), from: aapl, to: aud, on: today)
     // 10 shares * $185.50 USD * 1.55 AUD/USD = $2875.25 AUD
     #expect(result == dec("2875.25"))
+  }
+
+  @Test("stock provenance reports the oldest contributing price or FX day")
+  func stockProvenanceReportsOldestContributingDay() async throws {
+    let service = try makeService(
+      stockPrices: [
+        "AAPL": StockPriceResponse(
+          instrument: .USD,
+          prices: ["2025-06-13": dec("185.50")])
+      ],
+      exchangeRates: [
+        "2025-06-12": ["AUD": dec("1.55")]
+      ]
+    )
+    let amount = InstrumentAmount(quantity: Decimal(10), instrument: aapl)
+
+    let effectiveDate = try await service.oldestPriceDate(
+      for: amount, to: aud, on: try date("2025-06-15"))
+    let expectedDate = try date("2025-06-12")
+
+    #expect(effectiveDate == expectedDate)
   }
 
   @Test

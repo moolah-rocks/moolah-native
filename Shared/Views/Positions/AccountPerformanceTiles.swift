@@ -14,20 +14,21 @@ import SwiftUI
 /// source field is `nil` — see Rule 11 in
 /// `guides/INSTRUMENT_CONVERSION_GUIDE.md`.
 struct AccountPerformanceTiles: View {
-  let title: String
   let performance: AccountPerformance
+  var oldestPriceDate: Date?
 
   var body: some View {
     VStack(spacing: 8) {
-      Text(title)
-        .font(.headline)
-        .frame(maxWidth: .infinity, alignment: .leading)
       HStack(spacing: 0) {
         currentValueTile
         Divider().frame(height: tileDividerHeight)
         profitLossTile
         Divider().frame(height: tileDividerHeight)
         annualisedReturnTile
+      }
+      if let oldestPriceDate {
+        PriceDateDisclosure(oldestDate: oldestPriceDate)
+          .frame(maxWidth: .infinity, alignment: .trailing)
       }
     }
     .padding(.horizontal)
@@ -282,7 +283,6 @@ private struct Tile<Content: View, Subtitle: View>: View {
 
 #Preview("Gain") {
   AccountPerformanceTiles(
-    title: "Brokerage",
     performance: AccountPerformance(
       instrument: .AUD,
       currentValue: InstrumentAmount(quantity: 23_405, instrument: .AUD),
@@ -290,7 +290,9 @@ private struct Tile<Content: View, Subtitle: View>: View {
       profitLoss: InstrumentAmount(quantity: 1_800, instrument: .AUD),
       profitLossPercent: Decimal(string: "0.083"),
       annualisedReturn: Decimal(string: "0.083"),
-      firstFlowDate: Calendar.current.date(byAdding: .year, value: -3, to: Date()))
+      firstFlowDate: Calendar.current.date(byAdding: .year, value: -3, to: Date())),
+    oldestPriceDate: Calendar.utc.date(
+      from: DateComponents(year: 2026, month: 7, day: 23))
   )
   .frame(width: 720)
   .padding()
@@ -298,7 +300,6 @@ private struct Tile<Content: View, Subtitle: View>: View {
 
 #Preview("Loss") {
   AccountPerformanceTiles(
-    title: "Brokerage",
     performance: AccountPerformance(
       instrument: .AUD,
       currentValue: InstrumentAmount(quantity: 9_500, instrument: .AUD),
@@ -314,7 +315,6 @@ private struct Tile<Content: View, Subtitle: View>: View {
 
 #Preview("Unavailable") {
   AccountPerformanceTiles(
-    title: "Brokerage",
     performance: .unavailable(in: .AUD)
   )
   .frame(width: 720)
@@ -323,7 +323,6 @@ private struct Tile<Content: View, Subtitle: View>: View {
 
 #Preview("No flows yet") {
   AccountPerformanceTiles(
-    title: "Brokerage",
     performance: AccountPerformance(
       instrument: .AUD,
       currentValue: InstrumentAmount(quantity: 0, instrument: .AUD),

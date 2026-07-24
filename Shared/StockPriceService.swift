@@ -54,6 +54,7 @@ actor StockPriceService {
     self.timeZone = timeZone
     self.dateFormatter = ISO8601DateFormatter()
     self.dateFormatter.formatOptions = [.withFullDate]
+    self.dateFormatter.timeZone = .utc
   }
 
   // MARK: - Public API
@@ -61,6 +62,10 @@ actor StockPriceService {
   /// Thin call-through to the shared `PriceSeriesOrchestrating` default.
   func price(ticker: String, on date: Date) async throws -> Decimal {
     try await price(instrumentKey: ticker, on: date)
+  }
+
+  func effectivePriceDate(ticker: String, on date: Date) async throws -> Date {
+    try await effectivePriceDate(instrumentKey: ticker, on: date)
   }
 
   /// Thin call-through to the shared `PriceSeriesOrchestrating` default.

@@ -58,6 +58,10 @@ struct AccountDetailView: View {
         accountChainId: accountChainId,
         alwaysShowsFullSurface: alwaysShowsFullSurface)
     }
+    // The title belongs to the stable account-detail shell. Attaching it
+    // only to TransactionListView makes it disappear when the tab container
+    // swaps in Positions or Chart, exposing the default app title on macOS.
+    .profileNavigationTitle(title)
   }
 
   /// The type-specific synced-account header slot. Renders

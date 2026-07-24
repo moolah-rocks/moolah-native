@@ -1,5 +1,3 @@
-// Shared/ExchangeRateService.swift
-
 import Foundation
 import GRDB
 import OSLog
@@ -62,6 +60,7 @@ actor ExchangeRateService {
     self.timeZone = timeZone
     self.dateFormatter = ISO8601DateFormatter()
     self.dateFormatter.formatOptions = [.withFullDate]
+    self.dateFormatter.timeZone = .utc
   }
 
   func rate(from: Instrument, to: Instrument, on date: Date) async throws -> Decimal {
@@ -257,6 +256,12 @@ actor ExchangeRateService {
   }
 
   private func fallbackRate(base: String, quote: String, dateString: String) -> Decimal? {
+    fallbackRateEntry(base: base, quote: quote, dateString: dateString)?.value
+  }
+
+  func fallbackRateEntry(
+    base: String, quote: String, dateString: String
+  ) -> (key: Int32, value: Decimal)? {
     guard let key = DateKey.from(isoString: dateString),
       let cache = caches[base]
     else { return nil }
@@ -265,7 +270,9 @@ actor ExchangeRateService {
     // probing older days. `floorKey` makes each hop O(log n).
     var probe = key
     while let dayKey = cache.rates.floorKey(probe) {
-      if let rate = cache.rates.exact(dayKey)?[quote] { return rate }
+      if let rate = cache.rates.exact(dayKey)?[quote] {
+        return (key: dayKey, value: rate)
+      }
       probe = dayKey - 1
     }
     return nil

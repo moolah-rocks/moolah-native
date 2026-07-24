@@ -293,6 +293,14 @@ final class FakeConversionService: InstrumentConversionService, Sendable {
     return outcomes
   }
 
+  func oldestPriceDate(
+    for amount: InstrumentAmount,
+    to instrument: Instrument,
+    on date: Date
+  ) async throws -> Date? {
+    amount.instrument == instrument ? nil : date
+  }
+
   func invalidateCache(for instrument: Instrument) async {
     state.withLock { $0.invalidatedInstruments.append(instrument) }
   }
