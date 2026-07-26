@@ -23,10 +23,8 @@
     /// still fires, so the row stays findable via the cell element. Use
     /// this for rows that contain a discoverable editable control.
     ///
-    /// The hosted root explicitly fills the cell width. AppKit may ask for
-    /// a replacement view at its intrinsic width during a partial row
-    /// reload; without the flexible frame, an `HStack`'s spacer collapses
-    /// and trailing balances remain beside their labels after selection.
+    /// The hosted root explicitly fills the cell width so row content keeps
+    /// its leading/trailing alignment whenever AppKit creates a cell.
     static func hosting<Content: View>(
       accessibilityIdentifier: String? = nil,
       exposeChildAccessibility: Bool = false,

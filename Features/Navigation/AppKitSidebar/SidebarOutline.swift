@@ -79,7 +79,8 @@
       let snapshot = makeSnapshot()
       let tree = SidebarRowTree.build(from: snapshot)
       let content = SidebarOutlineContent(snapshot: snapshot, editingRowId: editingRowId)
-      controller.delegate.cellBuilder = makeCellBuilder()
+      controller.delegate.cellBuilder = makeCellBuilder(
+        selectionState: controller.selectionState)
       controller.apply(
         tree: tree,
         expandedGroupIds: groupUIStateStore.expandedGroupIds,
@@ -100,12 +101,13 @@
         unreviewedBadgeCount: importStore.unreviewedBadgeCount)
     }
 
-    private func makeCellBuilder() -> SidebarCellBuilder {
+    private func makeCellBuilder(selectionState: SidebarSelectionState) -> SidebarCellBuilder {
       SidebarCellBuilder(
         accountStore: accountStore,
         accountGroupStore: accountGroupStore,
         earmarkStore: earmarkStore,
         importStore: importStore,
+        selectionState: selectionState,
         availableFunds: {
           guard let current = accountStore.convertedCurrentTotal,
             let earmarked = earmarkStore.convertedTotalBalance

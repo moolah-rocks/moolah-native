@@ -2,8 +2,8 @@
   import Foundation
 
   /// Values that affect the rows rendered by the macOS sidebar. Selection
-  /// is intentionally absent: changing it only requires refreshing the old
-  /// and new selected rows, not reloading the entire outline.
+  /// is intentionally absent: `SidebarSelectionState` updates the installed
+  /// hosted rows without reloading the outline.
   struct SidebarOutlineContent: Equatable {
     let accounts: [Account]
     let groups: [AccountGroup]
