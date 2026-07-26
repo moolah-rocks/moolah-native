@@ -8,17 +8,17 @@
   ///
   /// `apply(tree:expandedGroupIds:selection:reloadData:)` reconciles the
   /// current snapshot, expansion, and selection state. Content changes
-  /// reload the outline, while selection-only changes refresh just the
-  /// affected rows so the scroll position and all other row views survive.
-  /// Expansion-callback echo is suppressed during the reconcile so
-  /// persisted state remains the source of truth.
+  /// reload the outline, while selection-only changes update the observable
+  /// state read by installed hosted rows. Expansion-callback echo is
+  /// suppressed during the reconcile so persisted state remains the source
+  /// of truth.
   @MainActor
   final class SidebarOutlineController: NSViewController {
     let outlineView = SidebarKeyHandlingOutlineView()
+    let selectionState = SidebarSelectionState()
     private let scrollView = NSScrollView()
     let dataSource = SidebarOutlineDataSource()
     let delegate = SidebarOutlineDelegate()
-    private var currentSelection: SidebarSelection?
 
     override func loadView() {
       view = NSView()
@@ -100,15 +100,15 @@
     }
 
     /// Reconciles the current tree, expansion, and selection. The caller
-    /// requests a full data reload only when row content changed; a
-    /// selection-only update refreshes the two affected cells in place.
+    /// requests a full data reload only when row content changed. Selection
+    /// changes flow through `selectionState`, allowing hosted rows to update
+    /// in place without replacing their full-width AppKit cells.
     func apply(
       tree: SidebarRowTree.Result,
       expandedGroupIds: Set<UUID>,
       selection: SidebarSelection?,
       reloadData: Bool
     ) {
-      let previousSelection = currentSelection
       dataSource.tree = tree
       if reloadData {
         outlineView.reloadData()
@@ -136,11 +136,8 @@
         }
       }
 
+      selectionState.selection = selection
       reconcileSelection(selection)
-      if !reloadData, previousSelection != selection {
-        reloadSelectionRows(previousSelection, selection)
-      }
-      currentSelection = selection
     }
 
     private func reconcileSelection(_ selection: SidebarSelection?) {
@@ -154,21 +151,6 @@
       } else {
         outlineView.deselectAll(nil)
       }
-    }
-
-    private func reloadSelectionRows(
-      _ previousSelection: SidebarSelection?,
-      _ selection: SidebarSelection?
-    ) {
-      let indexes = [previousSelection, selection]
-        .compactMap { $0 }
-        .compactMap(SidebarRow.init(selection:))
-        .map(outlineView.row(forItem:))
-        .filter { $0 >= 0 }
-      guard !indexes.isEmpty else { return }
-      outlineView.reloadData(
-        forRowIndexes: IndexSet(indexes),
-        columnIndexes: IndexSet(integer: 0))
     }
   }
 #endif

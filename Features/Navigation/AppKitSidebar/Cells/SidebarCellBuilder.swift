@@ -22,6 +22,7 @@
     let accountGroupStore: AccountGroupStore
     let earmarkStore: EarmarkStore
     let importStore: ImportStore
+    let selectionState: SidebarSelectionState
     let availableFunds: () -> InstrumentAmount?
     let selectionBinding: Binding<SidebarSelection?>
     let accountToEditBinding: Binding<Account?>
@@ -85,14 +86,19 @@
         exposeChildAccessibility: isEditing,
         menu: menu
       ) {
-        AccountSidebarRow(
-          account: account,
-          isSelected: selectionBinding.wrappedValue == .account(id),
-          isMember: account.groupId != nil,
-          isEditing: renameBinding(for: id),
-          onRename: onRenameAccount(account)
-        )
-        .environment(accountStore)
+        SelectionAwareSidebarRow(
+          selectionState: selectionState,
+          rowSelection: .account(id)
+        ) { isSelected in
+          AccountSidebarRow(
+            account: account,
+            isSelected: isSelected,
+            isMember: account.groupId != nil,
+            isEditing: renameBinding(for: id),
+            onRename: onRenameAccount(account)
+          )
+          .environment(accountStore)
+        }
       }
     }
 
@@ -105,7 +111,6 @@
         .filter { $0.groupId == id }
         .sorted { $0.position < $1.position }
         .map(\.id)
-      let isSelected = selectionBinding.wrappedValue == .group(id)
       let editingBinding = editingRowIdBinding
       let isEditing = editingBinding.wrappedValue == id
       let menu = SidebarContextMenuBuilder.groupMenu(
@@ -116,20 +121,25 @@
         exposeChildAccessibility: isEditing,
         menu: menu
       ) {
-        GroupAggregateBalanceLoader(
-          memberIds: memberIds,
-          targetInstrument: group.instrument
-        ) { balance in
-          AccountGroupSidebarRow(
-            group: group,
-            isSelected: isSelected,
-            isExpanded: .constant(false),
-            aggregateBalance: balance,
-            isEditing: renameBinding(for: id),
-            onRename: onRenameGroup(group),
-            showChevron: false)
+        SelectionAwareSidebarRow(
+          selectionState: selectionState,
+          rowSelection: .group(id)
+        ) { isSelected in
+          GroupAggregateBalanceLoader(
+            memberIds: memberIds,
+            targetInstrument: group.instrument
+          ) { balance in
+            AccountGroupSidebarRow(
+              group: group,
+              isSelected: isSelected,
+              isExpanded: .constant(false),
+              aggregateBalance: balance,
+              isEditing: renameBinding(for: id),
+              onRename: onRenameGroup(group),
+              showChevron: false)
+          }
+          .environment(accountStore)
         }
-        .environment(accountStore)
       }
     }
 
@@ -137,7 +147,6 @@
       guard let earmark = earmarkStore.earmarks.by(id: id) else {
         return NSTableCellView()
       }
-      let isSelected = selectionBinding.wrappedValue == .earmark(id)
       let editingBinding = editingRowIdBinding
       let isEditing = editingBinding.wrappedValue == id
       let menu = SidebarContextMenuBuilder.earmarkMenu(
@@ -148,13 +157,18 @@
         exposeChildAccessibility: isEditing,
         menu: menu
       ) {
-        EarmarkRowView(
-          earmark: earmark,
-          isSelected: isSelected,
-          isEditing: renameBinding(for: id),
-          onRename: onRenameEarmark(earmark)
-        )
-        .environment(earmarkStore)
+        SelectionAwareSidebarRow(
+          selectionState: selectionState,
+          rowSelection: .earmark(id)
+        ) { isSelected in
+          EarmarkRowView(
+            earmark: earmark,
+            isSelected: isSelected,
+            isEditing: renameBinding(for: id),
+            onRename: onRenameEarmark(earmark)
+          )
+          .environment(earmarkStore)
+        }
       }
     }
 
