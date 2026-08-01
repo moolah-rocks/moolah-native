@@ -274,10 +274,10 @@ import UniformTypeIdentifiers
 
 // MARK: - Transferable wrapper
 
-/// Payload carrying the kind (account vs group) + the dragged entity's
+/// Payload carrying the sidebar entity kind + the dragged entity's
 /// UUID across SwiftUI's drag-and-drop boundary.
 struct DraggableSidebarItem: Codable, Sendable, Equatable {
-  enum Kind: String, Codable, Sendable, Equatable { case account, group }
+  enum Kind: String, Codable, Sendable, Equatable { case account, earmark, group }
 
   let kind: Kind
   let id: UUID

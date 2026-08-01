@@ -8,14 +8,13 @@
   ///
   /// `pasteboardWriter(forItem:)` returns the dragged
   /// `DraggableSidebarItem`'s JSON-encoded pasteboard item for
-  /// account / group rows; everything else is non-draggable.
+  /// account, group, and earmark rows; everything else is non-draggable.
   ///
   /// `validateDrop` decodes the dragged item, asks the coordinator
   /// for an outcome, calls `setDropItem(_:dropChildIndex:)` for
-  /// `.retargetRoot` / `.retargetGroup` outcomes (the visual hint
-  /// that converts a near-the-bottom-of-account hover into a real
-  /// insertion slot), and returns `.move` for any non-`.deny`
-  /// outcome.
+  /// `.retargetRoot`, `.retargetGroup`, and `.retargetEarmarks` outcomes
+  /// to produce an insertion-line hint, and returns `.move` for any
+  /// non-`.deny` outcome.
   ///
   /// `acceptDrop` re-resolves the outcome (the policy may yield a
   /// different result after the retarget) and dispatches via
@@ -33,7 +32,9 @@
         return DraggableSidebarItem(kind: .account, id: id).pasteboardItem()
       case .group(let id):
         return DraggableSidebarItem(kind: .group, id: id).pasteboardItem()
-      case .section, .earmark, .total, .navigation:
+      case .earmark(let id):
+        return DraggableSidebarItem(kind: .earmark, id: id).pasteboardItem()
+      case .section, .total, .navigation:
         return nil
       }
     }
@@ -62,7 +63,11 @@
       case let .retargetGroup(gId, idx):
         outlineView.setDropItem(SidebarRow.group(gId), dropChildIndex: idx)
         return .move
-      case .addToGroup, .dropOntoAccount, .reorderRoot, .reorderMembers:
+      case .retargetEarmarks(let idx):
+        outlineView.setDropItem(SidebarRow.section(.earmarks), dropChildIndex: idx)
+        return .move
+      case .addToGroup, .dropOntoAccount, .reorderRoot, .reorderMembers,
+        .reorderEarmark:
         return .move
       }
     }
@@ -80,12 +85,12 @@
       let proposedRow = item as? SidebarRow
       let outcome = coordinator.outcome(
         forProposedItem: proposedRow, childIndex: index, dragged: dragged)
-      guard let bucket = coordinator.bucket(forProposedItem: proposedRow)
-      else { return false }
       switch outcome {
-      case .deny, .retargetRoot, .retargetGroup:
+      case .deny, .retargetRoot, .retargetGroup, .retargetEarmarks:
         return false
-      case .addToGroup, .dropOntoAccount, .reorderRoot, .reorderMembers:
+      case .addToGroup, .dropOntoAccount, .reorderRoot, .reorderMembers,
+        .reorderEarmark:
+        let bucket = coordinator.bucket(forProposedItem: proposedRow)
         Task { await coordinator.commit(outcome, bucket: bucket) }
         return true
       }

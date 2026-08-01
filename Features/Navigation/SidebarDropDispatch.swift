@@ -137,6 +137,16 @@ enum SidebarDropDispatch {
     accountStore: AccountStore,
     accountGroupStore: AccountGroupStore
   ) async throws {
+    let sourceStartedAtRoot: Bool
+    switch dragged.kind {
+    case .account:
+      sourceStartedAtRoot = accountStore.accounts.by(id: dragged.id)?.groupId == nil
+    case .group:
+      sourceStartedAtRoot = true
+    case .earmark:
+      sourceStartedAtRoot = false
+    }
+
     // If the dragged source is a group member, remove it from its group
     // first. `removeAccount` clears `Account.groupId`, parks the source at
     // end-of-standalone, and auto-deletes the now-empty old group. The
@@ -159,7 +169,11 @@ enum SidebarDropDispatch {
     else { return }
     var reordered = entries
     let entry = reordered.remove(at: removalIndex)
-    let clampedIndex = min(max(insertionIndex, 0), reordered.count)
+    let normalizedIndex =
+      sourceStartedAtRoot && removalIndex < insertionIndex
+      ? insertionIndex - 1
+      : insertionIndex
+    let clampedIndex = min(max(normalizedIndex, 0), reordered.count)
     reordered.insert(entry, at: clampedIndex)
 
     // Walk the reordered list and assign every entry its walk-order
@@ -201,6 +215,7 @@ enum SidebarDropDispatch {
     accountGroupStore: AccountGroupStore
   ) async throws {
     guard let source = accountStore.accounts.by(id: sourceAccountId) else { return }
+    let sourceStartedInTargetGroup = source.groupId == groupId
 
     // Cross-group: remove from the old group first so it auto-deletes
     // when empty. `removeAccount` clears `groupId` on the source as a
@@ -227,7 +242,11 @@ enum SidebarDropDispatch {
     guard let removalIndex = members.firstIndex(where: { $0.id == sourceAccountId })
     else { return }
     let dragged = members.remove(at: removalIndex)
-    let clampedIndex = min(max(insertionIndex, 0), members.count)
+    let normalizedIndex =
+      sourceStartedInTargetGroup && removalIndex < insertionIndex
+      ? insertionIndex - 1
+      : insertionIndex
+    let clampedIndex = min(max(normalizedIndex, 0), members.count)
     members.insert(dragged, at: clampedIndex)
     await accountStore.reorderAccounts(members)
   }

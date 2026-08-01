@@ -34,6 +34,16 @@
     }
 
     @Test
+    func roundTripsEarmarkThroughPasteboardItem() throws {
+      let id = UUID()
+      let original = DraggableSidebarItem(kind: .earmark, id: id)
+      let pbItem = try #require(original.pasteboardItem())
+      let decoded = try #require(DraggableSidebarItem.read(from: pbItem))
+      #expect(decoded.kind == .earmark)
+      #expect(decoded.id == id)
+    }
+
+    @Test
     func readReturnsNilForUnrelatedPasteboardType() {
       let pbItem = NSPasteboardItem()
       pbItem.setString("hello", forType: .string)

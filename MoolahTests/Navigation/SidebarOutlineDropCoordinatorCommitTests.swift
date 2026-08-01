@@ -106,13 +106,11 @@
         accountGroupStore: stores.accountGroupStore,
         groupUIStateStore: stores.groupUIStateStore)
 
-      // Move 'A' (position 0) to insertion slot 2 — after removal,
-      // the working list is [B, C] and inserting at clamped index 2
-      // produces [B, C, A].
+      // Move 'A' (position 0) to the pre-removal insertion slot after C.
       let result = await coordinator.commit(
         .reorderRoot(
           item: DraggableSidebarItem(kind: .account, id: accA.id),
-          insertionIndex: 2),
+          insertionIndex: 3),
         bucket: .current)
 
       #expect(result == true)
@@ -150,12 +148,10 @@
         accountGroupStore: stores.accountGroupStore,
         groupUIStateStore: stores.groupUIStateStore)
 
-      // Move 'A' to insertion slot 2 within group — after removal,
-      // the working members are [B, C] and inserting at clamped
-      // index 2 produces [B, C, A].
+      // Move 'A' to the pre-removal insertion slot after C.
       let result = await coordinator.commit(
         .reorderMembers(
-          groupId: group.id, sourceAccountId: accA.id, insertionIndex: 2),
+          groupId: group.id, sourceAccountId: accA.id, insertionIndex: 3),
         bucket: .current)
 
       #expect(result == true)
@@ -236,6 +232,57 @@
       try await stores.accountGroupStore.waitForNextEmission(
         matching: { $0.by(id: groupA.id) == nil },
         description: "group A auto-deleted via coordinator commit")
+    }
+
+    @Test("commit .reorderEarmark handles upward, adjacent, and downward drops")
+    func commitReorderEarmark() async throws {
+      let first = Earmark(
+        name: "First", instrument: .defaultTestInstrument, position: 0)
+      let second = Earmark(
+        name: "Second", instrument: .defaultTestInstrument, position: 1)
+      let third = Earmark(
+        name: "Third", instrument: .defaultTestInstrument, position: 2)
+      let (backend, database) = try TestBackend.create()
+      TestBackend.seed(earmarks: [first, second, third], in: database)
+      let stores = try await DispatchSupport.makeStores(
+        seedAccounts: [], in: database, backend: backend)
+      let earmarkStore = EarmarkStore(
+        repository: backend.earmarks,
+        conversionService: FakeConversionService.fixedRates([:]),
+        targetInstrument: .defaultTestInstrument)
+      try await earmarkStore.waitForNextEmission(
+        matching: { $0.earmarks.count == 3 },
+        description: "seeded earmarks observed")
+      let coordinator = SidebarOutlineDropCoordinator(
+        accountStore: stores.accountStore,
+        accountGroupStore: stores.accountGroupStore,
+        earmarkStore: earmarkStore,
+        groupUIStateStore: stores.groupUIStateStore)
+
+      let result = await coordinator.commit(
+        .reorderEarmark(sourceId: third.id, insertionIndex: 0),
+        bucket: nil)
+
+      #expect(result == true)
+      await expectEventually("earmark reorder applied") {
+        earmarkStore.visibleEarmarks.map(\.id) == [third.id, first.id, second.id]
+      }
+
+      let adjacentResult = await coordinator.commit(
+        .reorderEarmark(sourceId: third.id, insertionIndex: 1),
+        bucket: nil)
+
+      #expect(adjacentResult == true)
+      #expect(earmarkStore.visibleEarmarks.map(\.id) == [third.id, first.id, second.id])
+
+      let downwardResult = await coordinator.commit(
+        .reorderEarmark(sourceId: third.id, insertionIndex: 2),
+        bucket: nil)
+
+      #expect(downwardResult == true)
+      await expectEventually("downward earmark reorder applied") {
+        earmarkStore.visibleEarmarks.map(\.id) == [first.id, third.id, second.id]
+      }
     }
   }
 #endif

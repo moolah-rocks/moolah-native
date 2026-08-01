@@ -2,6 +2,8 @@
   import AppKit
   import Foundation
 
+  // MARK: - State and lifecycle
+
   /// Mediates `NSOutlineView` drag-and-drop for the unified macOS
   /// sidebar. Owned by `SidebarOutline.makeNSViewController` and
   /// attached weakly to `SidebarOutlineDataSource` via its
@@ -13,19 +15,20 @@
   ///    and `target(forProposedItem:...)` map `NSOutlineView`'s
   ///    `(proposedItem, childIndex)` plus the dragged
   ///    `DraggableSidebarItem` into the policy-shaped inputs. They
-  ///    take account / group snapshots as parameters so they are
+  ///    take store snapshots as parameters so they are
   ///    unit-testable without standing up a backend.
   ///
   /// 2. **Instance methods** — `outcome(forProposedItem:childIndex:dragged:)`
   ///    and `commit(_:bucket:)` read the live store snapshots,
-  ///    call `SidebarDropPolicy.outcome(...)`, and dispatch via
-  ///    `SidebarDropDispatch`. `commit` invokes `onCreatedGroup`
+  ///    call the matching account or earmark policy, and dispatch via
+  ///    the owning store. `commit` invokes `onCreatedGroup`
   ///    when `dropOntoAccount` creates a new group so the host
   ///    binding can enter inline-rename mode.
   @MainActor
   final class SidebarOutlineDropCoordinator {
     private let accountStore: AccountStore
     private let accountGroupStore: AccountGroupStore
+    private let earmarkStore: EarmarkStore?
     private let groupUIStateStore: GroupUIStateStore
 
     /// Fired after `commit` lands a `dropOntoAccount` outcome that
@@ -37,12 +40,16 @@
     init(
       accountStore: AccountStore,
       accountGroupStore: AccountGroupStore,
+      earmarkStore: EarmarkStore? = nil,
       groupUIStateStore: GroupUIStateStore
     ) {
       self.accountStore = accountStore
       self.accountGroupStore = accountGroupStore
+      self.earmarkStore = earmarkStore
       self.groupUIStateStore = groupUIStateStore
     }
+
+    // MARK: - Pure translation
 
     /// Infers the `AccountBucket` implied by an `NSOutlineView`
     /// drop's proposed item. Section headers carry the bucket
@@ -73,7 +80,40 @@
     }
   }
 
+  // MARK: - Earmark translation
+
   extension SidebarOutlineDropCoordinator {
+    /// Resolves an earmark drag independently from the account/group
+    /// decision table. Earmarks can only move between insertion slots in
+    /// their own section; dropping onto a row or crossing section types is
+    /// denied.
+    nonisolated static func earmarkOutcome(
+      forProposedItem item: SidebarRow?,
+      childIndex: Int,
+      dragged: DraggableSidebarItem,
+      earmarks: [Earmark]
+    ) -> SidebarDropPolicy.DropOutcome {
+      guard dragged.kind == .earmark,
+        earmarks.contains(where: { $0.id == dragged.id }),
+        let item
+      else { return .deny }
+
+      switch item {
+      case .section(.earmarks):
+        guard childIndex != NSOutlineViewDropOnItemIndex else { return .deny }
+        return .reorderEarmark(
+          sourceId: dragged.id,
+          insertionIndex: min(max(childIndex, 0), earmarks.count))
+      case .earmark(let id):
+        guard childIndex != NSOutlineViewDropOnItemIndex,
+          let targetIndex = earmarks.firstIndex(where: { $0.id == id })
+        else { return .deny }
+        return .retargetEarmarks(insertionIndex: targetIndex + 1)
+      case .section, .account, .group, .total, .navigation:
+        return .deny
+      }
+    }
+
     /// Translates `NSOutlineView`'s `(proposedItem, childIndex)` plus
     /// the dragged item into a `SidebarDropTarget` ready for
     /// `SidebarDropPolicy.outcome(...)`. Returns `nil` only when the
@@ -122,6 +162,8 @@
     }
   }
 
+  // MARK: - Account translation
+
   extension SidebarOutlineDropCoordinator {
     /// Reads the coordinator's live `accountStore` and
     /// `accountGroupStore` snapshots and forwards to the static
@@ -137,21 +179,33 @@
     }
   }
 
+  // MARK: - Live resolution
+
   extension SidebarOutlineDropCoordinator {
     /// Reads current store snapshots and resolves the policy outcome
     /// for an `NSOutlineView` drop's `(proposedItem, childIndex)` plus
     /// the dragged `DraggableSidebarItem`. Returns `.deny` when the
-    /// proposed item is not a valid drop surface or when the inferred
-    /// bucket is `nil` (earmark / total / navigation sections).
+    /// proposed item is not a valid drop surface. Account and group
+    /// drags also require a matching `AccountBucket`.
     ///
     /// Instance method (not `nonisolated static`) because it reads
-    /// `@MainActor`-isolated store state. Tests call it from a
-    /// `@MainActor` suite.
+    /// `@MainActor`-isolated store state. Earmark drags are resolved
+    /// first because they do not belong to an `AccountBucket`. Tests
+    /// call it from a `@MainActor` suite.
     func outcome(
       forProposedItem item: SidebarRow?,
       childIndex: Int,
       dragged: DraggableSidebarItem
     ) -> SidebarDropPolicy.DropOutcome {
+      if dragged.kind == .earmark {
+        guard let earmarkStore else { return .deny }
+        return Self.earmarkOutcome(
+          forProposedItem: item,
+          childIndex: childIndex,
+          dragged: dragged,
+          earmarks: earmarkStore.visibleEarmarks)
+      }
+
       let accounts = accountStore.accounts
       let groups = accountGroupStore.groups
       guard
@@ -168,6 +222,8 @@
         for: target, bucket: bucket, accounts: accounts, groups: groups)
     }
 
+    // MARK: - Commit dispatch
+
     /// Dispatches a `DropOutcome` to the matching `SidebarDropDispatch`
     /// entry point. Fires `onCreatedGroup` when `dropOntoAccount`
     /// creates a new group so the host binding can flip
@@ -177,15 +233,33 @@
     /// call threw — store errors are surfaced reactively on
     /// `accountStore.error` / `accountGroupStore.error`, so the caller
     /// shouldn't gate the drop animation on the throw). `false` for
-    /// `.deny` and the two `.retarget*` outcomes; retargets are
+    /// `.deny` and the `.retarget*` outcomes; retargets are
     /// visual-hint-only and never survive into accept.
     @discardableResult
     func commit(
       _ outcome: SidebarDropPolicy.DropOutcome,
+      bucket: AccountBucket?
+    ) async -> Bool {
+      switch outcome {
+      case let .reorderEarmark(sourceId, insertionIndex):
+        guard let earmarkStore else { return false }
+        await earmarkStore.reorderEarmark(id: sourceId, to: insertionIndex)
+        return true
+      case .retargetEarmarks:
+        return false
+      default:
+        guard let bucket else { return false }
+        return await commitAccountOutcome(outcome, bucket: bucket)
+      }
+    }
+
+    private func commitAccountOutcome(
+      _ outcome: SidebarDropPolicy.DropOutcome,
       bucket: AccountBucket
     ) async -> Bool {
       switch outcome {
-      case .deny, .retargetRoot, .retargetGroup:
+      case .deny, .retargetRoot, .retargetGroup, .retargetEarmarks,
+        .reorderEarmark:
         return false
       case let .addToGroup(sourceId, groupId):
         do {
@@ -214,17 +288,7 @@
         if let created { onCreatedGroup?(created) }
         return true
       case let .reorderRoot(item, idx):
-        do {
-          try await SidebarDropDispatch.reorderRoot(
-            dragged: item,
-            insertionIndex: idx,
-            bucket: bucket,
-            accountStore: accountStore,
-            accountGroupStore: accountGroupStore)
-        } catch {
-          // Error already surfaced reactively on accountGroupStore.error.
-        }
-        return true
+        return await commitRootReorder(item, insertionIndex: idx, bucket: bucket)
       case let .reorderMembers(groupId, sourceId, idx):
         do {
           try await SidebarDropDispatch.reorderMembers(
@@ -239,6 +303,24 @@
         }
         return true
       }
+    }
+
+    private func commitRootReorder(
+      _ item: DraggableSidebarItem,
+      insertionIndex: Int,
+      bucket: AccountBucket
+    ) async -> Bool {
+      do {
+        try await SidebarDropDispatch.reorderRoot(
+          dragged: item,
+          insertionIndex: insertionIndex,
+          bucket: bucket,
+          accountStore: accountStore,
+          accountGroupStore: accountGroupStore)
+      } catch {
+        // Error already surfaced reactively on accountGroupStore.error.
+      }
+      return true
     }
   }
 #endif

@@ -74,10 +74,28 @@ extension EarmarkStore {
   /// writes commit, so no optimistic mutation is performed here.
   /// Hidden earmarks keep their existing positions.
   func reorderEarmarks(from source: IndexSet, to destination: Int) async {
-    setError(nil)
-
     var visible = visibleEarmarks
     visible.move(fromOffsets: source, toOffset: destination)
+    await persistOrder(visible)
+  }
+
+  /// Moves one visible earmark to an `NSOutlineView` insertion slot. AppKit
+  /// reports the slot before removing the source, so downward moves subtract
+  /// one before insertion.
+  func reorderEarmark(id: UUID, to insertionIndex: Int) async {
+    var visible = visibleEarmarks
+    guard let sourceIndex = visible.firstIndex(where: { $0.id == id }) else { return }
+    let earmark = visible.remove(at: sourceIndex)
+    let normalizedIndex = sourceIndex < insertionIndex ? insertionIndex - 1 : insertionIndex
+    let clampedIndex = min(max(normalizedIndex, 0), visible.count)
+    visible.insert(earmark, at: clampedIndex)
+    await persistOrder(visible)
+  }
+
+  private func persistOrder(_ reordered: [Earmark]) async {
+    setError(nil)
+
+    var visible = reordered
     for index in visible.indices {
       visible[index].position = index
     }

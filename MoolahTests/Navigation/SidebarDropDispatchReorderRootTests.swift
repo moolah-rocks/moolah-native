@@ -49,6 +49,31 @@ struct SidebarDropDispatchReorderRootTests {
     }
   }
 
+  @Test("reorderRoot normalizes a downward AppKit insertion slot")
+  func reorderRootMovesAccountDownOneSlot() async throws {
+    let (backend, database) = try TestBackend.create()
+    let first = SidebarDropDispatchTestSupport.bankAccount(name: "First", position: 0)
+    let second = SidebarDropDispatchTestSupport.bankAccount(name: "Second", position: 1)
+    let third = SidebarDropDispatchTestSupport.bankAccount(name: "Third", position: 2)
+    let stores = try await SidebarDropDispatchTestSupport.makeStores(
+      seedAccounts: [first, second, third], in: database, backend: backend)
+
+    try await SidebarDropDispatch.reorderRoot(
+      dragged: DraggableSidebarItem(kind: .account, id: first.id),
+      insertionIndex: 2,
+      bucket: .current,
+      accountStore: stores.accountStore,
+      accountGroupStore: stores.accountGroupStore)
+
+    await expectEventually("first moved between second and third") {
+      let order = stores.accountStore.accounts.ordered
+        .filter { $0.bucket == .current && $0.groupId == nil }
+        .sorted { $0.position < $1.position }
+        .map(\.id)
+      return order == [second.id, first.id, third.id]
+    }
+  }
+
   @Test("reorderRoot moves a group ahead of a standalone account")
   func reorderRootMovesGroup() async throws {
     let (backend, database) = try TestBackend.create()
@@ -130,12 +155,11 @@ struct SidebarDropDispatchReorderRootTests {
         && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
     }
 
-    // Drag the group to the bottom of the bucket (insertionIndex 2 in
-    // the 3-entry root: [standaloneA, group, standaloneB] → after the
-    // group moves to index 2: [standaloneA, standaloneB, group]).
+    // Drag the group to the bottom of the 3-entry bucket. AppKit reports
+    // the pre-removal insertion slot after the final row as index 3.
     try await SidebarDropDispatch.reorderRoot(
       dragged: DraggableSidebarItem(kind: .group, id: group.id),
-      insertionIndex: 2,
+      insertionIndex: 3,
       bucket: .current,
       accountStore: stores.accountStore,
       accountGroupStore: stores.accountGroupStore)

@@ -44,8 +44,10 @@
       case reorderRoot(item: DraggableSidebarItem, insertionIndex: Int)
       case reorderMembers(
         groupId: UUID, sourceAccountId: UUID, insertionIndex: Int)
+      case reorderEarmark(sourceId: UUID, insertionIndex: Int)
       case retargetRoot(insertionIndex: Int)
       case retargetGroup(groupId: UUID, insertionIndex: Int)
+      case retargetEarmarks(insertionIndex: Int)
     }
 
     /// Bundles the (bucket, accounts, groups) trio every decision-table
@@ -123,6 +125,8 @@
         guard sourceGroup.bucket == context.bucket else { return .deny }
         // row 4.
         return .reorderRoot(item: dragged, insertionIndex: idx)
+      case .earmark:
+        return .deny
       }
     }
 
