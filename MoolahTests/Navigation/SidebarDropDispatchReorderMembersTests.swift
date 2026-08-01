@@ -61,6 +61,44 @@ struct SidebarDropDispatchReorderMembersTests {
     }
   }
 
+  @Test("reorderMembers normalizes a downward AppKit insertion slot")
+  func reorderMembersMovesDownOneSlot() async throws {
+    let (backend, database) = try TestBackend.create()
+    let memberA = SidebarDropDispatchTestSupport.bankAccount(name: "A", position: 0)
+    let memberB = SidebarDropDispatchTestSupport.bankAccount(name: "B", position: 1)
+    let memberC = SidebarDropDispatchTestSupport.bankAccount(name: "C", position: 2)
+    let stores = try await SidebarDropDispatchTestSupport.makeStores(
+      seedAccounts: [memberA, memberB, memberC], in: database, backend: backend)
+    let group = try await stores.accountGroupStore.createGroup(
+      joining: memberA, and: memberB, name: "G",
+      accountStore: stores.accountStore)
+    await expectEventually("A,B joined") {
+      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+        && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
+    }
+    let postC = try #require(stores.accountStore.accounts.by(id: memberC.id))
+    try await stores.accountGroupStore.addAccount(
+      postC, to: group, accountStore: stores.accountStore)
+    await expectEventually("C joined") {
+      stores.accountStore.accounts.by(id: memberC.id)?.groupId == group.id
+    }
+
+    try await SidebarDropDispatch.reorderMembers(
+      groupId: group.id,
+      sourceAccountId: memberA.id,
+      insertionIndex: 2,
+      accountStore: stores.accountStore,
+      accountGroupStore: stores.accountGroupStore)
+
+    await expectEventually("A moved between B and C") {
+      let members = stores.accountStore.accounts.ordered
+        .filter { $0.groupId == group.id }
+        .sorted { $0.position < $1.position }
+        .map(\.id)
+      return members == [memberB.id, memberA.id, memberC.id]
+    }
+  }
+
   @Test("reorderMembers clamps insertion index past the end")
   func reorderMembersClampsEnd() async throws {
     let (backend, database) = try TestBackend.create()

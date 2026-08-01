@@ -60,6 +60,7 @@
       let coordinator = SidebarOutlineDropCoordinator(
         accountStore: accountStore,
         accountGroupStore: accountGroupStore,
+        earmarkStore: earmarkStore,
         groupUIStateStore: groupUIStateStore)
       coordinator.onCreatedGroup = { created in
         editingRowId = created.id
