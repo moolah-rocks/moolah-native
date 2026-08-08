@@ -52,10 +52,18 @@ enum BlockExplorerLink {
   /// unchanged for non-importer call sites. An empty hash portion
   /// returns `nil`. See issue #848.
   static func transactionURL(chainId: Int, externalId: String) -> URL? {
+    guard let hash = transactionHash(externalId) else { return nil }
+    return transactionURL(chainId: chainId, hash: hash)
+  }
+
+  /// Bare on-chain transaction hash extracted from a persisted leg external
+  /// id. Wallet imports suffix hashes with event identity (`:erc20:0`,
+  /// `:gas`); exports and explorer links both present the underlying hash.
+  static func transactionHash(_ externalId: String) -> String? {
     let parts = externalId.split(
       separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
     guard let first = parts.first, !first.isEmpty else { return nil }
-    return transactionURL(chainId: chainId, hash: String(first))
+    return String(first)
   }
 
   /// Distinct block-explorer transaction URLs for the supplied legs in

@@ -53,6 +53,8 @@ final class TransactionStore {
   // extension files can reach the repository for the apply pipeline and
   // pass-through writes.
   let repository: TransactionRepository
+  /// Owns the complete-snapshot CSV export flow and its presentation state.
+  let csvExportStore: TransactionCSVExportStore
   /// Owns the payee-autocomplete debounce/fetch state and the autofill
   /// lookup. Exposed directly so views bind through the dedicated type
   /// rather than a mirrored surface on `TransactionStore`.
@@ -253,6 +255,7 @@ final class TransactionStore {
     transferSuggestions: (any TransferSuggestionRepository)? = nil
   ) {
     self.repository = repository
+    self.csvExportStore = TransactionCSVExportStore(repository: repository)
     self.payeeSuggestionSource = PayeeSuggestionSource(repository: repository)
     self.transferSuggestions = transferSuggestions
     if let transferSuggestions {

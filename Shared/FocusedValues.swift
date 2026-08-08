@@ -133,8 +133,8 @@ struct GoForwardActionKey: FocusedValueKey {
   typealias Value = () -> Void
 }
 
-/// Trigger action for File > Import CSV… (⇧⌘I). Opens the file picker in
-/// the focused window.
+/// Trigger action for File > Import CSV… Opens the file picker in the focused
+/// window. Intentionally shortcut-free because ⇧⌘I belongs to Import Profile.
 struct ImportCSVActionKey: FocusedValueKey {
   typealias Value = () -> Void
 }
@@ -142,6 +142,12 @@ struct ImportCSVActionKey: FocusedValueKey {
 /// Trigger action for Edit > Paste CSV (⌥⇧⌘V). Reads tabular text from
 /// the pasteboard and runs it through the ImportStore pipeline.
 struct PasteCSVActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+/// Trigger action for File > Export Transactions… The focused transaction
+/// list publishes its current scope, filter, search, and spam visibility.
+struct ExportTransactionsActionKey: FocusedValueKey {
   typealias Value = () -> Void
 }
 
@@ -268,6 +274,10 @@ extension FocusedValues {
   var pasteCSVAction: PasteCSVActionKey.Value? {
     get { self[PasteCSVActionKey.self] }
     set { self[PasteCSVActionKey.self] = newValue }
+  }
+  var exportTransactionsAction: ExportTransactionsActionKey.Value? {
+    get { self[ExportTransactionsActionKey.self] }
+    set { self[ExportTransactionsActionKey.self] = newValue }
   }
   var setTransactionTypeAction: SetTransactionTypeActionKey.Value? {
     get { self[SetTransactionTypeActionKey.self] }
