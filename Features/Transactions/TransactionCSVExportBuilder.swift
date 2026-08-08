@@ -1,28 +1,25 @@
 import Foundation
 
-/// Builds a lossless, leg-level CSV projection of filtered transactions.
+/// Builds a human-readable, leg-level CSV projection of filtered transactions.
 /// Transaction fields repeat for each leg so transfers and custom split
-/// transactions retain every amount and owner association.
+/// transactions retain every leg's amount and labels.
 enum TransactionCSVExportBuilder {
   static let headers = [
     "Date",
     "Payee",
-    "Notes",
-    "Transaction ID",
-    "Leg ID",
     "Scheduled",
     "Account",
-    "Account ID",
-    "Account Type",
     "Amount",
     "Instrument",
+    "Chain ID",
+    "ERC20 Contract Address",
     "Transaction Type",
     "Category",
     "Earmark",
-    "Recurrence",
     "On-chain Counterparty",
     "On-chain Transaction ID",
     "Block Explorer Link",
+    "Notes",
   ]
 
   @concurrent
@@ -66,25 +63,23 @@ extension TransactionCSVExportBuilder {
     let earmark = leg.earmarkId.flatMap { context.earmarks.by(id: $0) }
     let onChainId = leg.externalId.flatMap(BlockExplorerLink.transactionHash) ?? ""
     let explorerURL = explorerURL(for: leg, account: account)?.absoluteString ?? ""
+    let chainId = account?.chainId ?? leg.instrument.chainId
     return [
       dateString(for: transaction.date, timeZone: context.timeZone),
       transaction.payee ?? "",
-      transaction.notes ?? "",
-      transaction.id.uuidString.lowercased(),
-      leg.id.uuidString.lowercased(),
       transaction.isScheduled ? "true" : "false",
       account?.name ?? "",
-      leg.accountId?.uuidString.lowercased() ?? "",
-      account?.type.rawValue ?? "",
       NSDecimalNumber(decimal: leg.quantity).stringValue,
-      leg.instrument.id,
+      leg.instrument.pickerLabel,
+      chainId.map(String.init) ?? "",
+      leg.instrument.contractAddress ?? "",
       leg.type.rawValue,
-      category.map(context.categories.path(for:)) ?? "",
+      category?.name ?? "",
       earmark?.name ?? "",
-      recurrenceDescription(for: transaction),
       leg.counterpartyAddress ?? "",
       onChainId,
       explorerURL,
+      transaction.notes ?? "",
     ]
   }
 
@@ -93,11 +88,6 @@ extension TransactionCSVExportBuilder {
       let chainId = account?.chainId ?? leg.instrument.chainId
     else { return nil }
     return BlockExplorerLink.transactionURL(chainId: chainId, externalId: externalId)
-  }
-
-  private static func recurrenceDescription(for transaction: Transaction) -> String {
-    guard let period = transaction.recurPeriod else { return "" }
-    return period.recurrenceDescription(every: transaction.recurEvery ?? 1)
   }
 
   private static func dateString(for date: Date, timeZone: TimeZone) -> String {
