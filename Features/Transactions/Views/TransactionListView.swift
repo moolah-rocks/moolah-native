@@ -182,7 +182,7 @@ extension TransactionListView {
   /// complexity budget. Keeping these in a separate sub-expression lets the
   /// compiler resolve the view type in two passes rather than one giant chain.
   private var spamFilteredList: some View {
-    transactionsList
+    exportableTransactionsList
       .onAppear {
         if allowsSpamFiltering {
           transactionStore.primeSpamFilter(

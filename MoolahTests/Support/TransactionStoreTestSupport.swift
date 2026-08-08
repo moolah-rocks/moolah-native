@@ -31,8 +31,10 @@ enum TransactionStoreTestSupport {
 
   static func makeDate(_ string: String) throws -> Date {
     let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.calendar = .utc
     formatter.dateFormat = "yyyy-MM-dd"
-    formatter.timeZone = TimeZone(identifier: "UTC")
+    formatter.timeZone = .utc
     return try #require(formatter.date(from: string))
   }
 
@@ -145,15 +147,26 @@ extension TransactionStore {
   }
 }
 
-/// In-memory `TransactionRepository` whose every method throws, used by
-/// createDefault tests that exercise the failure path. Lives in support so it
-/// can be shared across split suites.
+/// In-memory `TransactionRepository` whose methods throw by default, used by
+/// tests that exercise failure paths. `fetchAll` can be configured for tests
+/// that need a repository to recover on a later attempt.
 struct FailingTransactionRepository: TransactionRepository {
+  let fetchAllHandler: (@Sendable (TransactionFilter) async throws -> [Transaction])?
+
+  init(
+    fetchAllHandler: (@Sendable (TransactionFilter) async throws -> [Transaction])? = nil
+  ) {
+    self.fetchAllHandler = fetchAllHandler
+  }
+
   func fetch(filter: TransactionFilter, page: Int, pageSize: Int) async throws -> TransactionPage {
     throw BackendError.networkUnavailable
   }
 
   func fetchAll(filter: TransactionFilter) async throws -> [Transaction] {
+    if let fetchAllHandler {
+      return try await fetchAllHandler(filter)
+    }
     throw BackendError.networkUnavailable
   }
 
