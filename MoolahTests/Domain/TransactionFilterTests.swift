@@ -31,6 +31,18 @@ struct TransactionFilterTests {
     #expect(filter.hasActiveFilters == true)
   }
 
+  @Test("Filter with transaction types is active")
+  func testFilterWithTransactionTypesIsActive() {
+    let filter = TransactionFilter(transactionTypes: [.income, .expense])
+    #expect(filter.hasActiveFilters == true)
+  }
+
+  @Test("Filter with no transaction types includes every type")
+  func testFilterWithNoTransactionTypesIsInactive() {
+    let filter = TransactionFilter(transactionTypes: [])
+    #expect(filter.hasActiveFilters == false)
+  }
+
   @Test("Filter with payee is active")
   func testFilterWithPayeeIsActive() {
     let filter = TransactionFilter(payee: "Coffee Shop")

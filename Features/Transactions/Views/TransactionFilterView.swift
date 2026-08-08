@@ -20,6 +20,7 @@ struct TransactionFilterView: View {
   @State private var dateRangeLowerBound: Date?
   @State private var dateRangeUpperBound: Date?
   @State private var selectedCategoryIds: Set<UUID> = []
+  @State private var selectedTransactionTypes: Set<TransactionType> = []
   @State private var payeeText: String = ""
   @State private var showCategoryPicker = false
 
@@ -53,6 +54,7 @@ struct TransactionFilterView: View {
     _dateRangeLowerBound = State(initialValue: filter.dateRange?.lowerBound)
     _dateRangeUpperBound = State(initialValue: filter.dateRange?.upperBound)
     _selectedCategoryIds = State(initialValue: filter.categoryIds)
+    _selectedTransactionTypes = State(initialValue: filter.transactionTypes)
     _payeeText = State(initialValue: filter.payee ?? "")
   }
 
@@ -98,6 +100,7 @@ struct TransactionFilterView: View {
       || dateRangeLowerBound != nil
       || dateRangeUpperBound != nil
       || !selectedCategoryIds.isEmpty
+      || !selectedTransactionTypes.isEmpty
       || !payeeText.isEmpty
   }
 
@@ -130,6 +133,7 @@ struct TransactionFilterView: View {
 
   private var matchSection: some View {
     Section("Match") {
+      TransactionTypeMultiSelectPicker(selectedTypes: $selectedTransactionTypes)
       if categories.roots.isEmpty {
         LabeledContent("Categories") {
           Text("No categories available").foregroundStyle(.secondary)
@@ -137,7 +141,11 @@ struct TransactionFilterView: View {
       } else {
         categoryPickerRow
       }
-      TextField("Payee", text: $payeeText, prompt: Text("Contains…"))
+      LabeledContent("Payee") {
+        TextField("Payee", text: $payeeText, prompt: Text("Contains…"))
+          .labelsHidden()
+          .accessibilityLabel("Payee")
+      }
       if allowsScheduledFilter {
         Picker("Schedule", selection: $selectedScheduled) {
           Text("All Transactions").tag(ScheduledFilter.all)
@@ -214,7 +222,10 @@ struct TransactionFilterView: View {
       dateRange: dateRange,
       dateInterval: filter.dateInterval,
       categoryIds: selectedCategoryIds,
+      transactionTypes: selectedTransactionTypes,
       payee: payeeText.isEmpty ? nil : payeeText,
+      uncategorisedLegType: filter.uncategorisedLegType,
+      excludesAccountlessUncategorised: filter.excludesAccountlessUncategorised,
       taxReportableLegType: filter.taxReportableLegType,
       taxOwnerId: filter.taxOwnerId,
       taxDefaultOwnerId: filter.taxDefaultOwnerId
@@ -230,6 +241,7 @@ struct TransactionFilterView: View {
     dateRangeLowerBound = nil
     dateRangeUpperBound = nil
     selectedCategoryIds = []
+    selectedTransactionTypes = []
     payeeText = ""
   }
 }

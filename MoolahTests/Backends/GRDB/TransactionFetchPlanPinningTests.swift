@@ -305,4 +305,78 @@ struct TransactionFetchPlanPinningTests {
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction"))
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction_leg"))
   }
+
+}
+
+// MARK: - Transaction type filter plans
+
+extension TransactionFetchPlanPinningTests {
+  @Test("page query with a type filter avoids full scans via the leg analysis index")
+  func pageQueryWithTypeFilterAvoidsFullScan() throws {
+    let database = try makeDatabase()
+    let detail = try planDetail(
+      database,
+      query: """
+        SELECT * FROM "transaction"
+        WHERE recur_period IS NULL
+          AND id IN (
+            SELECT transaction_id FROM transaction_leg
+            WHERE type IN (?, ?))
+        ORDER BY date DESC, id ASC
+        LIMIT ? OFFSET ?
+        """,
+      arguments: [TransactionType.income.rawValue, TransactionType.transfer.rawValue, 50, 0])
+    #expect(
+      detail.contains("leg_analysis_by_type_account")
+        || detail.contains("leg_analysis_by_type_category"))
+    // The selective leg membership list drives primary-key transaction
+    // probes, so the final date/id ordering intentionally needs a temp sort.
+    #expect(detail.contains("USE TEMP B-TREE FOR ORDER BY"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction_leg"))
+  }
+
+  @Test("count query with a type filter avoids full scans via the leg analysis index")
+  func countQueryWithTypeFilterAvoidsFullScan() throws {
+    let database = try makeDatabase()
+    let detail = try planDetail(
+      database,
+      query: """
+        SELECT COUNT(*) FROM "transaction"
+        WHERE recur_period IS NULL
+          AND id IN (
+            SELECT transaction_id FROM transaction_leg
+            WHERE type IN (?, ?))
+        """,
+      arguments: [TransactionType.income.rawValue, TransactionType.transfer.rawValue])
+    #expect(
+      detail.contains("leg_analysis_by_type_account")
+        || detail.contains("leg_analysis_by_type_category"))
+    #expect(!detail.contains("USE TEMP B-TREE"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction_leg"))
+  }
+
+  @Test("after-page type-filtered window avoids full scans via the leg analysis index")
+  func afterPageIdWindowWithTypeFilterAvoidsFullScan() throws {
+    let database = try makeDatabase()
+    let detail = try planDetail(
+      database,
+      query: """
+        SELECT id FROM "transaction"
+        WHERE recur_period IS NULL
+          AND id IN (
+            SELECT transaction_id FROM transaction_leg
+            WHERE type IN (?, ?))
+        ORDER BY date DESC, id ASC
+        LIMIT -1 OFFSET ?
+        """,
+      arguments: [TransactionType.income.rawValue, TransactionType.transfer.rawValue, 50])
+    #expect(
+      detail.contains("leg_analysis_by_type_account")
+        || detail.contains("leg_analysis_by_type_category"))
+    #expect(detail.contains("USE TEMP B-TREE FOR ORDER BY"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction_leg"))
+  }
 }

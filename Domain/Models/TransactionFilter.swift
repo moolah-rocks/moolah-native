@@ -18,6 +18,9 @@ struct TransactionFilter: Sendable, Equatable {
   /// `< upperBound`; intersected with `dateRange` when both are present.
   var dateInterval: Range<Date>?
   var categoryIds: Set<UUID>
+  /// Transaction leg types to include. Empty means all types. A transaction
+  /// matches when at least one of its legs has a selected type.
+  var transactionTypes: Set<TransactionType>
   var payee: String?
   /// Type-scoped drill-down filter for the Reports "Uncategorised" row:
   /// when set, restricts the result to transactions having a leg with
@@ -46,6 +49,7 @@ struct TransactionFilter: Sendable, Equatable {
     dateRange: ClosedRange<Date>? = nil,
     dateInterval: Range<Date>? = nil,
     categoryIds: Set<UUID> = [],
+    transactionTypes: Set<TransactionType> = [],
     payee: String? = nil,
     uncategorisedLegType: TransactionType? = nil,
     excludesAccountlessUncategorised: Bool = false,
@@ -60,6 +64,7 @@ struct TransactionFilter: Sendable, Equatable {
     self.dateRange = dateRange
     self.dateInterval = dateInterval
     self.categoryIds = categoryIds
+    self.transactionTypes = transactionTypes
     self.payee = payee
     self.uncategorisedLegType = uncategorisedLegType
     self.excludesAccountlessUncategorised = excludesAccountlessUncategorised
@@ -73,7 +78,8 @@ extension TransactionFilter {
   var hasActiveFilters: Bool {
     accountId != nil || !accountIds.isEmpty || earmarkId != nil
       || scheduled != .all
-      || dateRange != nil || dateInterval != nil || !categoryIds.isEmpty || payee != nil
+      || dateRange != nil || dateInterval != nil || !categoryIds.isEmpty
+      || !transactionTypes.isEmpty || payee != nil
       || uncategorisedLegType != nil || excludesAccountlessUncategorised
       || taxReportableLegType != nil || taxOwnerId != nil || taxDefaultOwnerId != nil
   }
