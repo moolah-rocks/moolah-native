@@ -49,6 +49,41 @@ struct TransactionRepositoryFilterTests {
     }
   }
 
+  @Test("filters by multiple transaction types")
+  func testFiltersByMultipleTransactionTypes() async throws {
+    let transactions =
+      try makeContractTestTransactions() + makeTransferContractTestTransactions()
+    let repository = try makeContractCloudKitTransactionRepository(
+      initialTransactions: transactions)
+
+    let page = try await repository.fetch(
+      filter: TransactionFilter(transactionTypes: [.income, .transfer]),
+      page: 0,
+      pageSize: 50
+    )
+
+    #expect(page.transactions.map(\.payee) == ["Transfer", "Employer Pty Ltd"])
+    #expect(
+      page.transactions.allSatisfy { transaction in
+        transaction.legs.contains { [.income, .transfer].contains($0.type) }
+      })
+  }
+
+  @Test("empty transaction type selection includes every type")
+  func testEmptyTransactionTypesIncludeAll() async throws {
+    let transactions = try makeContractTestTransactions()
+    let repository = try makeContractCloudKitTransactionRepository(
+      initialTransactions: transactions)
+
+    let page = try await repository.fetch(
+      filter: TransactionFilter(transactionTypes: []),
+      page: 0,
+      pageSize: 50
+    )
+
+    #expect(page.transactions.count == transactions.count)
+  }
+
   @Test("filters by payee (case-insensitive contains)")
   func testFiltersByPayee() async throws {
     let repository = try makeContractCloudKitTransactionRepository(

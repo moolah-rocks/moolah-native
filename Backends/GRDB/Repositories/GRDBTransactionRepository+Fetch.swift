@@ -121,7 +121,7 @@ extension GRDBTransactionRepository {
   /// `"transaction"`-table filters directly (`scheduled`, `dateRange`,
   /// case-insensitive `payee` substring) and the leg-driven filters
   /// (`accountId` ∪ `accountIds`, `earmarkId`, `categoryIds`,
-  /// `uncategorisedLegType`) as
+  /// `transactionTypes`, `uncategorisedLegType`) as
   /// intersecting `id IN (SELECT transaction_id FROM transaction_leg …)`
   /// subqueries, so every predicate constrains the paginated query in SQL
   /// instead of being re-applied to a fully materialised table. All UUIDs
@@ -157,6 +157,14 @@ extension GRDBTransactionRepository {
       request = request.filter(
         legTransactionIds(
           where: filter.categoryIds.contains(TransactionLegRow.Columns.categoryId)
+        ).contains(TransactionRow.Columns.id))
+    }
+
+    if !filter.transactionTypes.isEmpty {
+      let rawTypes = Set(filter.transactionTypes.map(\.rawValue))
+      request = request.filter(
+        legTransactionIds(
+          where: rawTypes.contains(TransactionLegRow.Columns.type)
         ).contains(TransactionRow.Columns.id))
     }
 

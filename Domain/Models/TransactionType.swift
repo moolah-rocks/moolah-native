@@ -1,7 +1,7 @@
 import Foundation
 
 // SyncBoundary — adding a case requires bumping DataFormatVersion.current.
-enum TransactionType: String, Codable, Sendable, CaseIterable {
+enum TransactionType: String, Codable, Sendable, CaseIterable, Hashable {
   case income
   case expense
   case transfer
