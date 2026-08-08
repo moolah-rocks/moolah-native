@@ -107,9 +107,9 @@ struct TransactionCSVExportBuilderTests {
     for testCase in cases {
       let row = try await syncedNativeAssetRow(accountChainId: testCase.accountChainId)
 
-      try #require(row.count > 13)
-      #expect(row[6] == testCase.expectedChain)
-      #expect(row[13] == testCase.expectedURL)
+      try #require(row.count > 12)
+      #expect(row[5] == testCase.expectedChain)
+      #expect(row[12] == testCase.expectedURL)
     }
   }
 }
@@ -120,7 +120,7 @@ extension TransactionCSVExportBuilderTests {
   private func assertHeaders(_ row: [String]) {
     #expect(
       row == [
-        "Date", "Payee", "Scheduled", "Account", "Amount", "Instrument", "Chain ID",
+        "Date", "Payee", "Account", "Amount", "Instrument", "Chain ID",
         "ERC20 Contract Address", "Transaction Type", "Category", "Earmark",
         "On-chain Counterparty", "On-chain Transaction ID", "Block Explorer Link", "Notes",
       ])
@@ -135,7 +135,7 @@ extension TransactionCSVExportBuilderTests {
   private func assertFirstLeg(_ row: [String]) {
     #expect(
       row == [
-        "2026-08-01", "Merchant, Inc.", "false", "Ethereum Wallet", "-12.5",
+        "2026-08-01", "Merchant, Inc.", "Ethereum Wallet", "-12.5",
         "USD Coin (USDC)", "1", "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "expense",
         "Groceries", "Holiday", "0xcounterparty", "0xabc",
         "https://etherscan.io/tx/0xabc", "First line\nSecond line",
@@ -145,7 +145,7 @@ extension TransactionCSVExportBuilderTests {
   private func assertSecondLeg(_ row: [String]) {
     #expect(
       row == [
-        "2026-08-01", "Merchant, Inc.", "false", "Ethereum Wallet", "-0.01",
+        "2026-08-01", "Merchant, Inc.", "Ethereum Wallet", "-0.01",
         "Ethereum (ETH)", "1", "", "expense", "", "", "", "0xabc",
         "https://etherscan.io/tx/0xabc", "First line\nSecond line",
       ])

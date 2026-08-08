@@ -7,7 +7,6 @@ enum TransactionCSVExportBuilder {
   static let headers = [
     "Date",
     "Payee",
-    "Scheduled",
     "Account",
     "Amount",
     "Instrument",
@@ -67,7 +66,6 @@ extension TransactionCSVExportBuilder {
     return [
       dateString(for: transaction.date, timeZone: context.timeZone),
       transaction.payee ?? "",
-      transaction.isScheduled ? "true" : "false",
       account?.name ?? "",
       NSDecimalNumber(decimal: leg.quantity).stringValue,
       leg.instrument.pickerLabel,
