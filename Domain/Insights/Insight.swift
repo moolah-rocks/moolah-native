@@ -138,6 +138,12 @@ struct InsightReferences: Sendable, Hashable {
   var groupIds: [UUID]
   var instrumentIds: [String]
   var transactionIds: [UUID]
+  /// Preferred transaction-list drill-down when this insight was computed
+  /// from a reproducible filtered set (for example, fee categories over the
+  /// trailing year). Entity references remain available as context, but the
+  /// UI opens this filter first so "View" shows the evidence behind the
+  /// observation.
+  var transactionFilter: TransactionFilter?
 
   init(
     accountIds: [UUID] = [],
@@ -145,7 +151,8 @@ struct InsightReferences: Sendable, Hashable {
     earmarkIds: [UUID] = [],
     groupIds: [UUID] = [],
     instrumentIds: [String] = [],
-    transactionIds: [UUID] = []
+    transactionIds: [UUID] = [],
+    transactionFilter: TransactionFilter? = nil
   ) {
     self.accountIds = accountIds
     self.categoryIds = categoryIds
@@ -153,5 +160,6 @@ struct InsightReferences: Sendable, Hashable {
     self.groupIds = groupIds
     self.instrumentIds = instrumentIds
     self.transactionIds = transactionIds
+    self.transactionFilter = transactionFilter
   }
 }

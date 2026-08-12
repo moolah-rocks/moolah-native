@@ -38,7 +38,7 @@ extension GRDBInsightDataSource {
     categories: Categories,
     context: InsightContext
   ) async throws -> (items: [CategorySpendSummary], dropped: Int) {
-    let after = cutoff(windowDays: windowDays, context: context)
+    let window = trailingWindow(windowDays: windowDays, context: context)
     let instruments = try await resolveInstruments()
     let rows = try await profileDatabase.read { database in
       // The two spend aggregations differ only in their grouping column;
@@ -58,10 +58,11 @@ extension GRDBInsightDataSource {
             AND leg.type = 'expense'
             AND leg.category_id IS NOT NULL
             AND (:after IS NULL OR t.date >= :after)
+            AND (:through IS NULL OR t.date <= :through)
           GROUP BY day, dim, instrument_id
           ORDER BY day ASC
           """,
-        arguments: ["after": after])
+        arguments: ["after": window?.lowerBound, "through": window?.upperBound])
       return sqlRows.compactMap(Self.decodeSpendBucket(_:))
     }
     let folded = try await foldSpendBuckets(rows, instruments: instruments, context: context)
@@ -91,7 +92,7 @@ extension GRDBInsightDataSource {
     windowDays: Int,
     context: InsightContext
   ) async throws -> (items: [AccountSpendSummary], dropped: Int) {
-    let after = cutoff(windowDays: windowDays, context: context)
+    let window = trailingWindow(windowDays: windowDays, context: context)
     let instruments = try await resolveInstruments()
     let rows = try await profileDatabase.read { database in
       let sqlRows = try Row.fetchAll(
@@ -108,10 +109,11 @@ extension GRDBInsightDataSource {
             AND leg.type = 'expense'
             AND leg.account_id IS NOT NULL
             AND (:after IS NULL OR t.date >= :after)
+            AND (:through IS NULL OR t.date <= :through)
           GROUP BY day, dim, instrument_id
           ORDER BY day ASC
           """,
-        arguments: ["after": after])
+        arguments: ["after": window?.lowerBound, "through": window?.upperBound])
       return sqlRows.compactMap(Self.decodeSpendBucket(_:))
     }
     let folded = try await foldSpendBuckets(rows, instruments: instruments, context: context)

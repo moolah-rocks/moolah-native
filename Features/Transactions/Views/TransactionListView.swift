@@ -2,7 +2,6 @@ import SwiftUI
 
 struct TransactionListView: View {
   // MARK: - Properties
-
   /// Grouping for the rendered list. Default `.flat` keeps existing
   /// callers unchanged. `.scheduledStatus` bundles a `pendingPayId`
   /// binding that the row's Pay action writes into; the binding is
@@ -91,6 +90,7 @@ struct TransactionListView: View {
   init(
     title: String,
     filter: TransactionFilter,
+    initialFilter: TransactionFilter? = nil,
     accounts: Accounts,
     categories: Categories,
     earmarks: Earmarks,
@@ -115,7 +115,7 @@ struct TransactionListView: View {
     self.allowsSpamFiltering = allowsSpamFiltering
     self.emptyState = emptyState
     self._externalSelection = nil
-    self._activeFilter = State(initialValue: filter)
+    self._activeFilter = State(initialValue: initialFilter ?? filter)
   }
 
   /// Embedded init — parent provides selection binding and handles the

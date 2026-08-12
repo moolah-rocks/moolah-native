@@ -1,29 +1,36 @@
 import Foundation
 
-/// Maps an insight's deep-link references onto a `SidebarSelection`, so the
-/// "For You" panel can navigate to the entity an insight is about. Pure and
-/// unit-tested; lives in the Features layer because `SidebarSelection` is a
-/// navigation type the Domain layer (where `InsightReferences` lives) must
-/// not depend on.
+/// Destination for opening the evidence behind a "For You" observation.
+/// Transaction-backed insights open All Transactions with a preset filter;
+/// entity-backed insights open the relevant detail screen.
 ///
-/// Priority — account → earmark → group → categories — picks the most
-/// specific destination when an insight references several. Insights that
-/// reference only an instrument or a transaction have no sidebar destination
-/// (there is no per-instrument or per-transaction sidebar row), so they
-/// return `nil` and the row shows no navigation affordance.
-enum InsightNavigationTarget {
-  static func sidebarSelection(for references: InsightReferences) -> SidebarSelection? {
-    if let accountId = references.accountIds.first {
-      return .account(accountId)
+/// Priority — explicit transaction filter → earmark → group → category
+/// transactions → account — preserves purpose-built budget/group screens
+/// while ensuring observations backed by categorized activity open the
+/// relevant transactions rather than a broad entity or category editor.
+enum InsightNavigationTarget: Equatable {
+  case sidebar(SidebarSelection)
+  case transactions(TransactionFilter)
+
+  static func target(for insight: Insight) -> Self? {
+    let references = insight.references
+    if let filter = references.transactionFilter {
+      return .transactions(filter)
     }
     if let earmarkId = references.earmarkIds.first {
-      return .earmark(earmarkId)
+      return .sidebar(.earmark(earmarkId))
     }
     if let groupId = references.groupIds.first {
-      return .group(groupId)
+      return .sidebar(.group(groupId))
     }
     if !references.categoryIds.isEmpty {
-      return .categories
+      return .transactions(
+        TransactionFilter(
+          scheduled: .nonScheduledOnly,
+          categoryIds: Set(references.categoryIds)))
+    }
+    if let accountId = references.accountIds.first {
+      return .sidebar(.account(accountId))
     }
     return nil
   }

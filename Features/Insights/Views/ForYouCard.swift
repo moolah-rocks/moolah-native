@@ -10,7 +10,7 @@ import SwiftUI
 struct ForYouCard: View {
   let items: [ForYouItem]
   let onDismiss: (ForYouItem) -> Void
-  let onNavigate: (SidebarSelection) -> Void
+  let onNavigate: (InsightNavigationTarget) -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -39,15 +39,15 @@ struct ForYouCard: View {
 private struct InsightRow: View {
   let item: ForYouItem
   let onDismiss: () -> Void
-  let onNavigate: (SidebarSelection) -> Void
+  let onNavigate: (InsightNavigationTarget) -> Void
 
   @Environment(\.dynamicTypeSize) private var dynamicTypeSize
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
   @State private var isZoomed = false
 
   private var insight: Insight { item.scored.insight }
-  private var target: SidebarSelection? {
-    InsightNavigationTarget.sidebarSelection(for: insight.references)
+  private var target: InsightNavigationTarget? {
+    InsightNavigationTarget.target(for: insight)
   }
 
   var body: some View {

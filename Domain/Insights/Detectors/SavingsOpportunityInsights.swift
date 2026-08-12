@@ -27,6 +27,17 @@ enum SavingsOpportunityInsights {
     let legCount = fees.reduce(0) { $0 + $1.legCount }
 
     let feeCategoryIds = Set(fees.compactMap(\.categoryId))
+    guard
+      let windowStart = context.calendar.date(
+        byAdding: .day,
+        value: -windowDays,
+        to: context.now)
+    else { return [] }
+    let transactionFilter = TransactionFilter(
+      scheduled: .nonScheduledOnly,
+      dateRange: windowStart...context.now,
+      dateRangeCalendar: context.calendar,
+      categoryIds: feeCategoryIds)
     return [
       Insight(
         id:
@@ -49,7 +60,9 @@ enum SavingsOpportunityInsights {
           InsightFact("Window", "\(windowDays) days"),
         ],
         references: InsightReferences(
-          categoryIds: Array(feeCategoryIds), instrumentIds: [context.reportingCurrency.id]),
+          categoryIds: Array(feeCategoryIds),
+          instrumentIds: [context.reportingCurrency.id],
+          transactionFilter: transactionFilter),
         chart: InsightChartBuilders.monthlyCategorySpend(
           expenseBreakdown: expenseBreakdown,
           categoryIds: feeCategoryIds,

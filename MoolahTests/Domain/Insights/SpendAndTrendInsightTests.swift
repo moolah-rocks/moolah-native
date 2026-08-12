@@ -34,13 +34,49 @@ struct SpendAndTrendInsightTests {
       categories: emptyCategories, context: context)
     let anomaly = try #require(insights.first { $0.kind == .largeTransactionAnomaly })
     #expect(anomaly.references.transactionIds.count == 1)
+    let filter = try #require(anomaly.references.transactionFilter)
+    #expect(filter.scheduled == .nonScheduledOnly)
+    #expect(filter.categoryIds == [dining])
+    #expect(filter.transactionTypes == [.expense])
+    #expect(filter.payee == "Steakhouse")
+    #expect(filter.dateRange?.contains(outlier.date) == true)
     #expect(anomaly.surprise > 0.9)
+  }
+
+  @Test(
+    "Evidence day preserves injected timezone and DST boundaries",
+    arguments: [
+      ("UTC", 0, 0),
+      ("America/Los_Angeles", 2026, 3),
+      ("Australia/Brisbane", 2026, 6),
+      ("Pacific/Kiritimati", 2026, 6),
+    ])
+  func evidenceDayCalendar(timeZoneId: String, year: Int, month: Int) throws {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = try #require(TimeZone(identifier: timeZoneId))
+    let components =
+      year == 0
+      ? DateComponents(year: 2026, month: 6, day: 15, hour: 12)
+      : DateComponents(year: year, month: month, day: month == 3 ? 8 : 15, hour: 12)
+    let date = try #require(calendar.date(from: components))
+    let transaction = InsightTransaction(
+      id: UUID(), date: date, rawPayee: "Evidence", normalizedPayee: "evidence",
+      amount: -10, categoryId: nil, categoryPath: nil, type: .expense, accountId: nil)
+
+    let filter = try #require(transaction.evidenceFilter(calendar: calendar))
+    let range = try #require(filter.dateRange)
+    let nextDay = try #require(calendar.date(byAdding: .day, value: 1, to: range.lowerBound))
+    #expect(filter.dateRangeCalendar == calendar)
+    #expect(range.contains(range.lowerBound))
+    #expect(!range.contains(nextDay))
+    #expect(calendar.component(.day, from: range.lowerBound) == components.day)
+    #expect(calendar.component(.day, from: range.upperBound) == components.day)
   }
 }
 
 extension SpendAndTrendInsightTests {
   @Test
-  func newMerchantAlertFiresForLargeFirstCharge() {
+  func newMerchantAlertFiresForLargeFirstCharge() throws {
     // Categorised history establishes the top-decile magnitude baseline and
     // the "Groceries" payee; the new "Fancy Restaurant" charge is novel.
     let groceriesCategory = UUID()
@@ -60,7 +96,12 @@ extension SpendAndTrendInsightTests {
       payees: InsightTestSupport.payees(from: history),
       categorySamples: InsightTestSupport.categorySamples(from: history + [newCharge]),
       context: context)
-    #expect(insights.contains { $0.kind == .newMerchantAlert })
+    let insight = try #require(insights.first { $0.kind == .newMerchantAlert })
+    let filter = try #require(insight.references.transactionFilter)
+    #expect(filter.categoryIds == [groceriesCategory])
+    #expect(filter.transactionTypes == [.expense])
+    #expect(filter.payee == "Fancy Restaurant")
+    #expect(filter.dateRange?.contains(newCharge.date) == true)
   }
 
   @Test

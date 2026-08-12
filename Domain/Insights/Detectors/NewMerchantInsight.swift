@@ -73,7 +73,8 @@ enum NewMerchantInsight {
           references: InsightReferences(
             accountIds: transaction.accountId.map { [$0] } ?? [],
             categoryIds: transaction.categoryId.map { [$0] } ?? [],
-            transactionIds: [transaction.id])))
+            transactionIds: [transaction.id],
+            transactionFilter: transaction.evidenceFilter(calendar: context.calendar))))
     }
     return insights
   }

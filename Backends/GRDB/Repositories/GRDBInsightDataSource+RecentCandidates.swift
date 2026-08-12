@@ -50,29 +50,35 @@ extension GRDBInsightDataSource {
     categories: Categories,
     context: InsightContext
   ) async throws -> CandidateProjection {
-    let after = cutoff(windowDays: windowDays, context: context)
+    let window = trailingWindow(windowDays: windowDays, context: context)
     let instruments = try await resolveInstruments()
     let rows = try await profileDatabase.read { database -> [CandidateRow] in
-      let sql = """
-        SELECT t.id              AS txn_id,
-               t.date            AS txn_date,
-               DATE(t.date)      AS day,
-               t.payee           AS payee,
-               leg.quantity      AS quantity,
-               leg.category_id   AS category_id,
-               leg.account_id    AS account_id,
-               leg.instrument_id AS instrument_id,
-               leg.type          AS type
-        FROM transaction_leg leg
-        JOIN "transaction"    t ON leg.transaction_id = t.id
-        WHERE t.recur_period IS NULL
-          AND leg.type IN ('income', 'expense')
-          AND (:after IS NULL OR t.date >= :after)
-        ORDER BY t.date DESC
-        """
-      let arguments: StatementArguments = ["after": after]
-      return try Row.fetchAll(database, sql: sql, arguments: arguments)
-        .compactMap(Self.decodeCandidateRow(_:))
+      let arguments: StatementArguments = [
+        "after": window?.lowerBound, "through": window?.upperBound,
+      ]
+      return try Row.fetchAll(
+        database,
+        sql: """
+          SELECT t.id              AS txn_id,
+                 t.date            AS txn_date,
+                 DATE(t.date)      AS day,
+                 t.payee           AS payee,
+                 leg.quantity      AS quantity,
+                 leg.category_id   AS category_id,
+                 leg.account_id    AS account_id,
+                 leg.instrument_id AS instrument_id,
+                 leg.type          AS type
+          FROM transaction_leg leg
+          JOIN "transaction"    t ON leg.transaction_id = t.id
+          WHERE t.recur_period IS NULL
+            AND leg.type IN ('income', 'expense')
+            AND (:after IS NULL OR t.date >= :after)
+            AND (:through IS NULL OR t.date <= :through)
+          ORDER BY t.date DESC
+          """,
+        arguments: arguments
+      )
+      .compactMap(Self.decodeCandidateRow(_:))
     }
     return try await projectCandidates(rows, instruments: instruments, categories: categories)
   }

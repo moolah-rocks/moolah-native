@@ -37,10 +37,14 @@ struct InsightInputBuilderTests {
     let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
     let recent = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 10)
     let stale = try AnalysisTestHelpers.utcDate(year: 2026, month: 1, day: 1)
+    let future = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 16)
     _ = try await backend.transactions.create(
       Transaction(date: recent, payee: "Cafe", legs: [leg(-12, type: .expense, instrument: aud)]))
     _ = try await backend.transactions.create(
       Transaction(date: stale, payee: "Old", legs: [leg(-99, type: .expense, instrument: aud)]))
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: future, payee: "Future", legs: [leg(-88, type: .expense, instrument: aud)]))
 
     let input = try await InsightInputBuilder(backend: backend).build(
       snapshot: InsightInputSnapshot(), context: context(now: now))
@@ -55,18 +59,26 @@ struct InsightInputBuilderTests {
     let now = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 15)
     let dining = Category(name: "Dining")
     let day = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 10)
+    let future = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 16)
     _ = try await backend.transactions.create(
       Transaction(
         date: day, payee: "Cafe",
         legs: [leg(-40, type: .expense, instrument: aud, categoryId: dining.id)]))
     _ = try await backend.transactions.create(
       Transaction(date: day, payee: "Salary", legs: [leg(2000, type: .income, instrument: aud)]))
+    _ = try await backend.transactions.create(
+      Transaction(date: now, payee: "Today", legs: [leg(-7, type: .expense, instrument: aud)]))
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: future, payee: "Future", legs: [leg(-99, type: .expense, instrument: aud)]))
 
     let input = try await InsightInputBuilder(backend: backend).build(
       snapshot: InsightInputSnapshot(categories: Categories(from: [dining])),
       context: context(now: now))
 
     #expect(!input.dailyTotals.isEmpty)
+    #expect(input.dailyTotals.contains { $0.expense.quantity == -7 })
+    #expect(!input.dailyTotals.contains { $0.expense.quantity == -99 })
     #expect(input.payees.contains { $0.normalizedPayee.contains("cafe") })
     #expect(input.categorySamples.contains { $0.categoryId == dining.id })
     #expect(input.incomeSourceSamples.map(\.normalizedPayee) == ["salary"])
@@ -80,6 +92,8 @@ struct InsightInputBuilderTests {
     let fees = Category(name: "Fees")
     let withinBoth = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 1)
     let only365 = try AnalysisTestHelpers.utcDate(year: 2025, month: 9, day: 1)
+    let exactly365 = try AnalysisTestHelpers.utcDate(year: 2025, month: 6, day: 15)
+    let future = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 16)
     _ = try await backend.transactions.create(
       Transaction(
         date: withinBoth, payee: "Bank",
@@ -88,15 +102,27 @@ struct InsightInputBuilderTests {
       Transaction(
         date: only365, payee: "Bank",
         legs: [leg(-5, type: .expense, instrument: aud, categoryId: fees.id)]))
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: exactly365, payee: "Bank",
+        legs: [leg(-20, type: .expense, instrument: aud, categoryId: fees.id)]))
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: now, payee: "Bank",
+        legs: [leg(-40, type: .expense, instrument: aud, categoryId: fees.id)]))
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: future, payee: "Bank",
+        legs: [leg(-80, type: .expense, instrument: aud, categoryId: fees.id)]))
 
     let input = try await InsightInputBuilder(backend: backend).build(
       snapshot: InsightInputSnapshot(categories: Categories(from: [fees])),
       context: context(now: now))
 
     let fee365 = try #require(input.feeCategorySpend.first { $0.categoryId == fees.id })
-    #expect(fee365.total.quantity == -15)
+    #expect(fee365.total.quantity == -75)
     let fee90 = try #require(input.unbudgetedCategorySpend.first { $0.categoryId == fees.id })
-    #expect(fee90.total.quantity == -10)
+    #expect(fee90.total.quantity == -50)
   }
 
   @Test("accountSpend reflects 30d per-account spend")
@@ -106,10 +132,15 @@ struct InsightInputBuilderTests {
     let account = Account(id: UUID(), name: "Checking", type: .bank, instrument: aud)
     _ = try await backend.accounts.create(account)
     let day = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 2)
+    let future = try AnalysisTestHelpers.utcDate(year: 2026, month: 6, day: 16)
     _ = try await backend.transactions.create(
       Transaction(
         date: day, payee: "Shop",
         legs: [leg(-25, type: .expense, instrument: aud, accountId: account.id)]))
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: future, payee: "Future shop",
+        legs: [leg(-50, type: .expense, instrument: aud, accountId: account.id)]))
 
     let input = try await InsightInputBuilder(backend: backend).build(
       snapshot: InsightInputSnapshot(), context: context(now: now))

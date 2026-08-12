@@ -148,6 +148,10 @@ struct AdditionalInsightTests {
       ).first)
     #expect(insight.kind == .windfallIncome)
     #expect(insight.framing == .positive)
+    let filter = try #require(insight.references.transactionFilter)
+    #expect(filter.transactionTypes == [.income])
+    #expect(filter.payee == "Client")
+    #expect(filter.dateRange?.contains(spike.date) == true)
     // "Typical" is this source's own median (~$500), never a global pool.
     let typical = try #require(insight.facts.first { $0.label == "Typical income" }?.value)
     #expect(typical.contains("505"))

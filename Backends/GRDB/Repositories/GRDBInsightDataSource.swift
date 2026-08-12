@@ -71,11 +71,15 @@ final class GRDBInsightDataSource: InsightDataSource, @unchecked Sendable {
   /// read snapshot without reaching into `private` storage.
   var profileDatabase: any DatabaseWriter { database }
 
-  /// The inclusive lower bound for a trailing window of `windowDays`,
-  /// computed from the injected `context.now` so summaries stay
-  /// deterministic in tests.
-  func cutoff(windowDays: Int, context: InsightContext) -> Date? {
-    context.calendar.date(byAdding: .day, value: -windowDays, to: context.now)
+  /// The inclusive bounds for a trailing window of `windowDays`, computed
+  /// from the injected `context.now` so summaries stay deterministic and
+  /// never admit future-dated posted transactions.
+  func trailingWindow(windowDays: Int, context: InsightContext) -> ClosedRange<Date>? {
+    guard
+      let start = context.calendar.date(
+        byAdding: .day, value: -windowDays, to: context.now)
+    else { return nil }
+    return start...context.now
   }
 
   /// Resolve a SQL `instrument_id` to an `Instrument`, falling back to a
@@ -106,19 +110,23 @@ final class GRDBInsightDataSource: InsightDataSource, @unchecked Sendable {
   ) async throws -> (items: [DailySpendSummary], dropped: Int) {
     let instruments = try await resolveInstruments()
     let rows = try await profileDatabase.read { database -> [DailyTotalsRow] in
-      let sql = """
-        SELECT DATE(t.date)      AS day,
-               leg.instrument_id AS instrument_id,
-               SUM(CASE WHEN leg.type = 'income'  THEN leg.quantity ELSE 0 END) AS income_qty,
-               SUM(CASE WHEN leg.type = 'expense' THEN leg.quantity ELSE 0 END) AS expense_qty
-        FROM transaction_leg leg
-        JOIN "transaction"    t ON leg.transaction_id = t.id
-        WHERE t.recur_period IS NULL
-          AND leg.type IN ('income', 'expense')
-        GROUP BY day, leg.instrument_id
-        ORDER BY day ASC
-        """
-      return try Row.fetchAll(database, sql: sql).compactMap { row in
+      try Row.fetchAll(
+        database,
+        sql: """
+          SELECT DATE(t.date)      AS day,
+                 leg.instrument_id AS instrument_id,
+                 SUM(CASE WHEN leg.type = 'income'  THEN leg.quantity ELSE 0 END) AS income_qty,
+                 SUM(CASE WHEN leg.type = 'expense' THEN leg.quantity ELSE 0 END) AS expense_qty
+          FROM transaction_leg leg
+          JOIN "transaction"    t ON leg.transaction_id = t.id
+          WHERE t.recur_period IS NULL
+            AND leg.type IN ('income', 'expense')
+            AND t.date <= :through
+          GROUP BY day, leg.instrument_id
+          ORDER BY day ASC
+          """,
+        arguments: ["through": context.now]
+      ).compactMap { row in
         guard let day: String = row["day"],
           let instrumentId: String = row["instrument_id"]
         else { return nil }

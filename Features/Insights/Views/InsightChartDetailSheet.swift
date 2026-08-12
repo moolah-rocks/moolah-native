@@ -6,13 +6,13 @@ import SwiftUI
 struct InsightChartDetailSheet: View {
   let insight: Insight
   let headline: String
-  let onNavigate: (SidebarSelection) -> Void
+  let onNavigate: (InsightNavigationTarget) -> Void
   let onDismiss: () -> Void
 
   @Environment(\.dismiss) private var dismiss
 
-  private var target: SidebarSelection? {
-    InsightNavigationTarget.sidebarSelection(for: insight.references)
+  private var target: InsightNavigationTarget? {
+    InsightNavigationTarget.target(for: insight)
   }
 
   var body: some View {
@@ -167,7 +167,7 @@ struct InsightChartDetailSheet: View {
           InsightFact("This month", "$742"),
           InsightFact("Expected", "$458"),
         ],
-        // A category-spending insight deep-links to the categories view, so the
+        // A category-spending insight opens filtered transactions, so the
         // footer shows both "Show less" and "View".
         references: InsightReferences(categoryIds: [UUID()]),
         chart: chart)
