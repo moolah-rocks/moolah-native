@@ -36,6 +36,7 @@ struct AccountDetailView: View {
   let transactionStore: TransactionStore
 
   @Environment(ProfileSession.self) private var session: ProfileSession?
+  @State private var selectedTransaction: Transaction?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -46,7 +47,8 @@ struct AccountDetailView: View {
         accounts: accounts,
         categories: categories,
         earmarks: earmarks,
-        transactionStore: transactionStore
+        transactionStore: transactionStore,
+        selectedTransaction: $selectedTransaction
       )
       .multiInstrumentPositionsSplit(
         positions: positions,
@@ -62,6 +64,17 @@ struct AccountDetailView: View {
     // only to TransactionListView makes it disappear when the tab container
     // swaps in Positions or Chart, exposing the default app title on macOS.
     .profileNavigationTitle(title)
+    // The inspector must span the NavigationSplitView detail column. Letting
+    // TransactionListView attach it below the Transactions / Chart control
+    // creates a nested AppKit split whose titlebar scroll pocket overlays the
+    // first row.
+    .transactionInspector(
+      selectedTransaction: $selectedTransaction,
+      accounts: accounts,
+      categories: categories,
+      earmarks: earmarks,
+      transactionStore: transactionStore,
+      viewingAccountId: transactionFilter.accountId)
   }
 
   /// The type-specific synced-account header slot. Renders

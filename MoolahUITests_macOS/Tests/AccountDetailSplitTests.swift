@@ -46,4 +46,14 @@ final class AccountDetailSplitTests: MoolahUITestCase {
     app.accountDetail.expectNoPositionsPane()
     app.accountDetail.expectTransactionsDefault()
   }
+
+  /// The first row starts directly below the account-detail toggle and stays
+  /// clickable instead of sitting underneath an inspector scroll pocket.
+  func testFirstTransactionIsNotCovered() throws {
+    let app = launch(seed: .accountDetailLayout)
+    app.sidebar.switchToAccount(.everydayFiat)
+
+    app.transactionList.openTransactionNearTopEdge(
+      UITestFixtures.AccountDetailLayout.everydayTxn3Id)
+  }
 }
