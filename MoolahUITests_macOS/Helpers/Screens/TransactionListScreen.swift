@@ -117,6 +117,27 @@ struct TransactionListScreen {
     }
   }
 
+  /// Opens the transaction through a point near the row's top edge. This
+  /// catches layout regressions where a nested inspector leaves a scroll
+  /// pocket over an embedded list: the row still exists and can be generically
+  /// "hittable" through its lower edge, but this point is intercepted.
+  func openTransactionNearTopEdge(_ transactionId: UUID) {
+    Trace.record(#function, detail: "transactionId=\(transactionId)")
+    let identifier = UITestIdentifiers.TransactionList.transaction(transactionId)
+    let row = app.element(for: identifier)
+    guard row.waitForExistence(timeout: 10) else {
+      Trace.recordFailure("transaction row '\(identifier)' did not appear")
+      XCTFail("Transaction row \(transactionId) did not appear within 10s")
+      return
+    }
+    row.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.1)).click()
+    let payee = app.element(for: UITestIdentifiers.Detail.payee)
+    if !payee.waitForExistence(timeout: 10) {
+      Trace.recordFailure("top edge of transaction row '\(identifier)' did not open detail")
+      XCTFail("Top edge of transaction row \(transactionId) is covered by another view")
+    }
+  }
+
   /// Asserts the given transaction's row is (and stays) absent after a
   /// filter is applied.
   ///
