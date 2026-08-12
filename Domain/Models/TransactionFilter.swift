@@ -1,6 +1,6 @@
 import Foundation
 
-struct TransactionFilter: Sendable, Equatable {
+struct TransactionFilter: Sendable, Hashable {
   var accountId: UUID?
   /// Multi-account filter for composite views (e.g. an `AccountGroup`
   /// detail view rendering merged transactions across its members).
@@ -14,6 +14,9 @@ struct TransactionFilter: Sendable, Equatable {
   var earmarkId: UUID?
   var scheduled: ScheduledFilter
   var dateRange: ClosedRange<Date>?
+  /// Calendar used to interpret and display `dateRange` when it represents
+  /// a civil-day range. Nil uses the viewer's current calendar and timezone.
+  var dateRangeCalendar: Calendar?
   /// Half-open date interval for report drill-downs whose source query uses
   /// `< upperBound`; intersected with `dateRange` when both are present.
   var dateInterval: Range<Date>?
@@ -47,6 +50,7 @@ struct TransactionFilter: Sendable, Equatable {
     earmarkId: UUID? = nil,
     scheduled: ScheduledFilter = .all,
     dateRange: ClosedRange<Date>? = nil,
+    dateRangeCalendar: Calendar? = nil,
     dateInterval: Range<Date>? = nil,
     categoryIds: Set<UUID> = [],
     transactionTypes: Set<TransactionType> = [],
@@ -62,6 +66,7 @@ struct TransactionFilter: Sendable, Equatable {
     self.earmarkId = earmarkId
     self.scheduled = scheduled
     self.dateRange = dateRange
+    self.dateRangeCalendar = dateRangeCalendar
     self.dateInterval = dateInterval
     self.categoryIds = categoryIds
     self.transactionTypes = transactionTypes

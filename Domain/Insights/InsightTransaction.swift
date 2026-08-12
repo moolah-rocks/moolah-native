@@ -67,4 +67,21 @@ struct InsightTransaction: Sendable, Identifiable, Hashable {
 
   var isExpense: Bool { type == .expense }
   var isIncome: Bool { type == .income }
+
+  /// Best supported transaction-list approximation for observations about
+  /// one concrete transaction. Transaction ids are semantic references, not
+  /// filter predicates, so combine the known day and leg/header attributes.
+  func evidenceFilter(calendar: Calendar) -> TransactionFilter? {
+    guard let day = calendar.dateInterval(of: .day, for: date) else { return nil }
+    let inclusiveEnd = Date(
+      timeIntervalSinceReferenceDate: day.end.timeIntervalSinceReferenceDate.nextDown)
+    return TransactionFilter(
+      accountId: accountId,
+      scheduled: .nonScheduledOnly,
+      dateRange: day.start...inclusiveEnd,
+      dateRangeCalendar: calendar,
+      categoryIds: categoryId.map { [$0] } ?? [],
+      transactionTypes: [type],
+      payee: rawPayee)
+  }
 }

@@ -34,37 +34,43 @@ extension GRDBInsightDataSource {
     maxPerCategory: Int,
     context: InsightContext
   ) async throws -> (items: [CategorySpendSamples], dropped: Int) {
-    let after = cutoff(windowDays: windowDays, context: context)
+    let window = trailingWindow(windowDays: windowDays, context: context)
     let instruments = try await resolveInstruments()
     let cap = max(1, maxPerCategory)
     let rows = try await profileDatabase.read { database -> [SampleRow] in
       // `:after` / `:cap` are bound parameters; the SQL is a compile-time
       // string literal — safe per `guides/DATABASE_CODE_GUIDE.md` §4. The
       // `ROW_NUMBER()` window caps each category's sample set in SQL.
-      let sql = """
-        SELECT category_id, day, instrument_id, quantity
-        FROM (
-          SELECT leg.category_id    AS category_id,
-                 DATE(t.date)       AS day,
-                 leg.instrument_id  AS instrument_id,
-                 leg.quantity       AS quantity,
-                 ROW_NUMBER() OVER (
-                   PARTITION BY leg.category_id
-                   ORDER BY t.date DESC, leg.transaction_id DESC
-                 ) AS rn
-          FROM transaction_leg leg
-          JOIN "transaction"    t ON leg.transaction_id = t.id
-          WHERE t.recur_period IS NULL
-            AND leg.type = 'expense'
-            AND leg.category_id IS NOT NULL
-            AND (:after IS NULL OR t.date >= :after)
-        )
-        WHERE rn <= :cap
-        ORDER BY category_id ASC, rn ASC
-        """
-      let arguments: StatementArguments = ["after": after, "cap": cap]
-      return try Row.fetchAll(database, sql: sql, arguments: arguments)
-        .compactMap(Self.decodeSampleRow(_:))
+      let arguments: StatementArguments = [
+        "after": window?.lowerBound, "through": window?.upperBound, "cap": cap,
+      ]
+      return try Row.fetchAll(
+        database,
+        sql: """
+          SELECT category_id, day, instrument_id, quantity
+          FROM (
+            SELECT leg.category_id    AS category_id,
+                   DATE(t.date)       AS day,
+                   leg.instrument_id  AS instrument_id,
+                   leg.quantity       AS quantity,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY leg.category_id
+                     ORDER BY t.date DESC, leg.transaction_id DESC
+                   ) AS rn
+            FROM transaction_leg leg
+            JOIN "transaction"    t ON leg.transaction_id = t.id
+            WHERE t.recur_period IS NULL
+              AND leg.type = 'expense'
+              AND leg.category_id IS NOT NULL
+              AND (:after IS NULL OR t.date >= :after)
+              AND (:through IS NULL OR t.date <= :through)
+          )
+          WHERE rn <= :cap
+          ORDER BY category_id ASC, rn ASC
+          """,
+        arguments: arguments
+      )
+      .compactMap(Self.decodeSampleRow(_:))
     }
     return try await foldSamples(rows, instruments: instruments, context: context)
   }
@@ -84,7 +90,7 @@ extension GRDBInsightDataSource {
     maxCount: Int,
     context: InsightContext
   ) async throws -> (items: [IncomeSourceSamples], dropped: Int) {
-    let after = cutoff(windowDays: windowDays, context: context)
+    let window = trailingWindow(windowDays: windowDays, context: context)
     let instruments = try await resolveInstruments()
     let cap = max(1, maxCount)
     let rows = try await profileDatabase.read { database -> [SampleRow] in
@@ -94,28 +100,34 @@ extension GRDBInsightDataSource {
       // per-source split happens in Swift (`foldIncomeSamples`) so the pinned
       // leg-index plan is preserved (partitioning by the transaction's payee
       // would force a sort the leg indexes can't satisfy).
-      let sql = """
-        SELECT day, instrument_id, quantity, payee
-        FROM (
-          SELECT DATE(t.date)       AS day,
-                 leg.instrument_id  AS instrument_id,
-                 leg.quantity       AS quantity,
-                 t.payee            AS payee,
-                 ROW_NUMBER() OVER (
-                   ORDER BY t.date DESC, leg.transaction_id DESC
-                 ) AS rn
-          FROM transaction_leg leg
-          JOIN "transaction"    t ON leg.transaction_id = t.id
-          WHERE t.recur_period IS NULL
-            AND leg.type = 'income'
-            AND (:after IS NULL OR t.date >= :after)
-        )
-        WHERE rn <= :cap
-        ORDER BY rn ASC
-        """
-      let arguments: StatementArguments = ["after": after, "cap": cap]
-      return try Row.fetchAll(database, sql: sql, arguments: arguments)
-        .compactMap(Self.decodeIncomeSampleRow(_:))
+      let arguments: StatementArguments = [
+        "after": window?.lowerBound, "through": window?.upperBound, "cap": cap,
+      ]
+      return try Row.fetchAll(
+        database,
+        sql: """
+          SELECT day, instrument_id, quantity, payee
+          FROM (
+            SELECT DATE(t.date)       AS day,
+                   leg.instrument_id  AS instrument_id,
+                   leg.quantity       AS quantity,
+                   t.payee            AS payee,
+                   ROW_NUMBER() OVER (
+                     ORDER BY t.date DESC, leg.transaction_id DESC
+                   ) AS rn
+            FROM transaction_leg leg
+            JOIN "transaction"    t ON leg.transaction_id = t.id
+            WHERE t.recur_period IS NULL
+              AND leg.type = 'income'
+              AND (:after IS NULL OR t.date >= :after)
+              AND (:through IS NULL OR t.date <= :through)
+          )
+          WHERE rn <= :cap
+          ORDER BY rn ASC
+          """,
+        arguments: arguments
+      )
+      .compactMap(Self.decodeIncomeSampleRow(_:))
     }
     return try await foldIncomeSamples(rows, instruments: instruments, context: context)
   }

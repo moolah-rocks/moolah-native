@@ -19,6 +19,7 @@ struct TransactionFilterView: View {
   @State private var selectedScheduled: ScheduledFilter = .all
   @State private var dateRangeLowerBound: Date?
   @State private var dateRangeUpperBound: Date?
+  @State private var dateRangeCalendar: Calendar?
   @State private var selectedCategoryIds: Set<UUID> = []
   @State private var selectedTransactionTypes: Set<TransactionType> = []
   @State private var payeeText: String = ""
@@ -53,6 +54,7 @@ struct TransactionFilterView: View {
     _selectedScheduled = State(initialValue: filter.scheduled)
     _dateRangeLowerBound = State(initialValue: filter.dateRange?.lowerBound)
     _dateRangeUpperBound = State(initialValue: filter.dateRange?.upperBound)
+    _dateRangeCalendar = State(initialValue: filter.dateRangeCalendar)
     _selectedCategoryIds = State(initialValue: filter.categoryIds)
     _selectedTransactionTypes = State(initialValue: filter.transactionTypes)
     _payeeText = State(initialValue: filter.payee ?? "")
@@ -165,12 +167,20 @@ struct TransactionFilterView: View {
           "Start Date", selection: lowerBoundBinding, displayedComponents: .date
         )
         .monospacedDigit()
+        .environment(\.calendar, displayCalendar)
+        .environment(\.timeZone, displayCalendar.timeZone)
         DatePicker(
           "End Date", selection: upperBoundBinding, displayedComponents: .date
         )
         .monospacedDigit()
+        .environment(\.calendar, displayCalendar)
+        .environment(\.timeZone, displayCalendar.timeZone)
       }
     }
+  }
+
+  private var displayCalendar: Calendar {
+    dateRangeCalendar ?? .current
   }
 
   private var dateRangeEnabledBinding: Binding<Bool> {
@@ -180,10 +190,13 @@ struct TransactionFilterView: View {
         guard enabled else {
           dateRangeLowerBound = nil
           dateRangeUpperBound = nil
+          dateRangeCalendar = nil
           return
         }
         let now = Date()
-        dateRangeLowerBound = Calendar.current.date(byAdding: .month, value: -1, to: now)
+        let calendar = Calendar.current
+        dateRangeCalendar = calendar
+        dateRangeLowerBound = calendar.date(byAdding: .month, value: -1, to: now)
         dateRangeUpperBound = now
       }
     )
@@ -192,14 +205,24 @@ struct TransactionFilterView: View {
   private var lowerBoundBinding: Binding<Date> {
     Binding(
       get: { dateRangeLowerBound ?? Date() },
-      set: { dateRangeLowerBound = $0 }
+      set: { newValue in
+        dateRangeLowerBound = newValue
+        if let upper = dateRangeUpperBound, upper < newValue {
+          dateRangeUpperBound = newValue
+        }
+      }
     )
   }
 
   private var upperBoundBinding: Binding<Date> {
     Binding(
       get: { dateRangeUpperBound ?? Date() },
-      set: { dateRangeUpperBound = $0 }
+      set: { newValue in
+        dateRangeUpperBound = newValue
+        if let lower = dateRangeLowerBound, lower > newValue {
+          dateRangeLowerBound = newValue
+        }
+      }
     )
   }
 
@@ -220,6 +243,7 @@ struct TransactionFilterView: View {
       earmarkId: selectedEarmarkId,
       scheduled: allowsScheduledFilter ? selectedScheduled : filter.scheduled,
       dateRange: dateRange,
+      dateRangeCalendar: dateRange == nil ? nil : dateRangeCalendar,
       dateInterval: filter.dateInterval,
       categoryIds: selectedCategoryIds,
       transactionTypes: selectedTransactionTypes,
@@ -240,6 +264,7 @@ struct TransactionFilterView: View {
     selectedScheduled = allowsScheduledFilter ? .all : filter.scheduled
     dateRangeLowerBound = nil
     dateRangeUpperBound = nil
+    dateRangeCalendar = nil
     selectedCategoryIds = []
     selectedTransactionTypes = []
     payeeText = ""
@@ -340,39 +365,4 @@ extension TransactionFilterView {
       .accessibilityHint("Opens the category picker")
     #endif
   }
-}
-
-#Preview {
-  let accounts = Accounts(from: [
-    Account(
-      id: UUID(),
-      name: "Checking",
-      type: .bank,
-      instrument: .AUD,
-      positions: [Position(instrument: .AUD, quantity: 2449.77)]
-    ),
-    Account(
-      id: UUID(),
-      name: "Savings",
-      type: .bank,
-      instrument: .AUD,
-      positions: [Position(instrument: .AUD, quantity: 8150.00)]
-    ),
-  ])
-
-  let categories = Categories(from: [
-    Category(id: UUID(), name: "Groceries", parentId: nil),
-    Category(id: UUID(), name: "Transport", parentId: nil),
-  ])
-
-  let earmarks = Earmarks(from: [Earmark(id: UUID(), name: "Emergency Fund", instrument: .AUD)])
-
-  TransactionFilterView(
-    filter: TransactionFilter(),
-    scopeAccountIds: [],
-    accounts: accounts,
-    categories: categories,
-    earmarks: earmarks,
-    onApply: { _ in }
-  )
 }

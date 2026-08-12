@@ -36,9 +36,11 @@ struct InsightDataSourcePlanPinningTests {
         JOIN "transaction"    t ON leg.transaction_id = t.id
         WHERE t.recur_period IS NULL
           AND leg.type IN ('income', 'expense')
+          AND t.date <= ?
         GROUP BY day, leg.instrument_id
         ORDER BY day ASC
-        """)
+        """,
+      arguments: [Date()])
     // dailyTotals is an all-history aggregation with no selective leg-side
     // equality, so the planner may legitimately drive from either side; the
     // perf-critical signal (per `PlanPinningTestHelpers`) is that the leg
@@ -63,10 +65,11 @@ struct InsightDataSourcePlanPinningTests {
           AND leg.type = 'expense'
           AND leg.category_id IS NOT NULL
           AND (? IS NULL OR t.date >= ?)
+          AND (? IS NULL OR t.date <= ?)
         GROUP BY day, dim, instrument_id
         ORDER BY day ASC
         """,
-      arguments: [Date?.none, Date?.none])
+      arguments: [Date?.none, Date?.none, Date?.none, Date?.none])
     #expect(detail.contains("leg_analysis_by_type_category"))
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
   }
@@ -88,10 +91,11 @@ struct InsightDataSourcePlanPinningTests {
           AND leg.type = 'expense'
           AND leg.account_id IS NOT NULL
           AND (? IS NULL OR t.date >= ?)
+          AND (? IS NULL OR t.date <= ?)
         GROUP BY day, dim, instrument_id
         ORDER BY day ASC
         """,
-      arguments: [Date?.none, Date?.none])
+      arguments: [Date?.none, Date?.none, Date?.none, Date?.none])
     let usesLegIndex =
       detail.contains("leg_analysis_by_type_account")
       || detail.contains("leg_by_account")
@@ -121,11 +125,12 @@ struct InsightDataSourcePlanPinningTests {
             AND leg.type = 'expense'
             AND leg.category_id IS NOT NULL
             AND (? IS NULL OR t.date >= ?)
+            AND (? IS NULL OR t.date <= ?)
         )
         WHERE rn <= ?
         ORDER BY category_id ASC, rn ASC
         """,
-      arguments: [Date?.none, Date?.none, 200])
+      arguments: [Date?.none, Date?.none, Date?.none, Date?.none, 200])
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
   }
 
@@ -149,11 +154,12 @@ struct InsightDataSourcePlanPinningTests {
           WHERE t.recur_period IS NULL
             AND leg.type = 'income'
             AND (? IS NULL OR t.date >= ?)
+            AND (? IS NULL OR t.date <= ?)
         )
         WHERE rn <= ?
         ORDER BY rn ASC
         """,
-      arguments: [Date?.none, Date?.none, 200])
+      arguments: [Date?.none, Date?.none, Date?.none, Date?.none, 200])
     let usesLegIndex =
       detail.contains("leg_analysis_by_type_account")
       || detail.contains("leg_analysis_by_type_category")
@@ -181,9 +187,13 @@ struct InsightDataSourcePlanPinningTests {
         WHERE t.recur_period IS NULL
           AND leg.type IN ('income', 'expense')
           AND (? IS NULL OR t.date >= ?)
+          AND (? IS NULL OR t.date <= ?)
         ORDER BY t.date DESC
         """,
-      arguments: [Date?.none, Date?.none])
+      arguments: [Date?.none, Date?.none, Date?.none, Date?.none])
+    // Ordering projected candidates newest-first may require a temporary
+    // B-tree; the bounded window keeps that sort finite. The pinned concern
+    // here is avoiding an unbounded bare scan of transaction legs.
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
   }
 }

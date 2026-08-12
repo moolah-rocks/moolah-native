@@ -80,9 +80,7 @@ enum IncomeExtraInsights {
           InsightFact("Baseline deposits", "\(bestPopulation.count)"),
           InsightFact("Baseline window", "\(baselineWindowDays) days"),
         ],
-        references: InsightReferences(
-          accountIds: windfall.accountId.map { [$0] } ?? [],
-          transactionIds: [windfall.id]))
+        references: references(for: windfall, context: context))
     ]
   }
 
@@ -126,7 +124,9 @@ enum IncomeExtraInsights {
         chart: stream.chargeChart(reportingCurrency: context.reportingCurrency))
     ]
   }
+}
 
+extension IncomeExtraInsights {
   private static func magnitude(_ value: Decimal) -> Double {
     Double(truncating: (value < 0 ? -value : value) as NSDecimalNumber)
   }
@@ -137,5 +137,14 @@ enum IncomeExtraInsights {
 
   private static func percent(_ fraction: Double) -> String {
     fraction.formatted(.percent.precision(.fractionLength(0)))
+  }
+
+  private static func references(
+    for transaction: InsightTransaction, context: InsightContext
+  ) -> InsightReferences {
+    InsightReferences(
+      accountIds: transaction.accountId.map { [$0] } ?? [],
+      transactionIds: [transaction.id],
+      transactionFilter: transaction.evidenceFilter(calendar: context.calendar))
   }
 }

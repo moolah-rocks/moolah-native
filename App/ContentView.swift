@@ -26,9 +26,9 @@ struct ContentView: View {
   @Environment(ReportingStore.self) private var reportingStore
 
   #if os(macOS)
-    @State private var selection: SidebarSelection? = .analysis
+    @State var selection: SidebarSelection? = .analysis
   #else
-    @State private var selection: SidebarSelection?
+    @State var selection: SidebarSelection?
   #endif
 
   @Environment(\.pendingNavigation) private var pendingNavigationBinding
@@ -41,18 +41,21 @@ struct ContentView: View {
 
   // Browser-style back/forward history for the sidebar selection.
   // Helpers live in the history extension below.
-  @State private var backStack: [SidebarSelection] = []
-  @State private var forwardStack: [SidebarSelection] = []
+  @State var backStack: [ContentNavigationState] = []
+  @State var forwardStack: [ContentNavigationState] = []
   // Token set just before goBack/goForward mutates `selection`. Compared
   // against the new value inside `recordHistory(previous:new:)` to skip
   // recording history-driven navigations. Using a value token rather than
   // a Bool flag avoids any dependence on whether SwiftUI delivers
   // `onChange` synchronously or on the next render cycle.
-  @State private var historyDrivenSelection: SidebarSelection?
+  @State var historyDrivenSelection: ContentNavigationState?
+  /// Preset supplied by a "For You" observation. Ordinary sidebar navigation
+  /// clears this back to the unfiltered All Transactions surface.
+  @State var allTransactionsFilter = TransactionFilter()
 
   var body: some View {
     NavigationSplitView {
-      SidebarView(selection: $selection)
+      SidebarView(selection: sidebarSelection)
         .navigationSplitViewColumnWidth(min: 200, ideal: 280)
         .task { await loadSidebarData() }
         .onChange(of: scenePhase) { _, newPhase in
@@ -214,6 +217,7 @@ struct ContentView: View {
       RecentlyAddedView(backend: session.backend)
     case .allTransactions:
       AllTransactionsView(
+        filter: allTransactionsFilter,
         accounts: accountStore.accounts,
         categories: categoryStore.categories,
         earmarks: earmarkStore.earmarks,
@@ -234,7 +238,7 @@ struct ContentView: View {
         earmarks: earmarkStore.earmarks,
         transactionStore: transactionStore)
     case .analysis:
-      AnalysisView(store: analysisStore, onNavigate: { selection = $0 })
+      AnalysisView(store: analysisStore, onNavigate: navigateToInsight)
     case nil:
       ContentUnavailableView(
         "Select an Account", systemImage: "sidebar.left",
@@ -311,49 +315,6 @@ struct ContentView: View {
     if case let .analysis(history, forecast) = destination {
       if let history { analysisStore.historyMonths = history }
       if let forecast { analysisStore.forecastMonths = forecast }
-    }
-  }
-}
-
-// MARK: - Navigation History
-
-extension ContentView {
-  private static let historyLimit = 50
-
-  private func recordHistory(previous: SidebarSelection?, new: SidebarSelection?) {
-    if let token = historyDrivenSelection, token == new {
-      historyDrivenSelection = nil
-      return
-    }
-    guard let previous else { return }
-    backStack.append(previous)
-    Self.trimToHistoryLimit(&backStack)
-    forwardStack.removeAll()
-  }
-
-  private func goBack() {
-    guard let previous = backStack.popLast() else { return }
-    if let current = selection {
-      forwardStack.append(current)
-      Self.trimToHistoryLimit(&forwardStack)
-    }
-    historyDrivenSelection = previous
-    selection = previous
-  }
-
-  private func goForward() {
-    guard let next = forwardStack.popLast() else { return }
-    if let current = selection {
-      backStack.append(current)
-      Self.trimToHistoryLimit(&backStack)
-    }
-    historyDrivenSelection = next
-    selection = next
-  }
-
-  private static func trimToHistoryLimit(_ stack: inout [SidebarSelection]) {
-    if stack.count > historyLimit {
-      stack.removeFirst(stack.count - historyLimit)
     }
   }
 }

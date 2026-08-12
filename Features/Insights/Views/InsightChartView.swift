@@ -124,7 +124,9 @@ struct InsightChartView: View {
       AxisGridLine()
       AxisValueLabel {
         if let raw = value.as(Double.self) {
-          Text(formattedY(raw)).monospacedDigit()
+          Text(formattedY(raw))
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
         }
       }
     }

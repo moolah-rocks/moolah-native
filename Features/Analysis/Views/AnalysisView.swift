@@ -14,7 +14,7 @@ struct AnalysisView: View {
   /// `@FocusedValue(\.sidebarSelection)`: this view also *writes* focused scene
   /// values, and a focused-value reader here drove an infinite SwiftUI update
   /// cycle (focus write → focus-dependent body invalidation → rewrite → …).
-  var onNavigate: (SidebarSelection) -> Void = { _ in }
+  var onNavigate: (InsightNavigationTarget) -> Void = { _ in }
   @State private var selectedUpcomingTransaction: Transaction?
   /// The month whose transactions are being drilled into from the
   /// Monthly Income & Expense table. Non-nil pushes the month's

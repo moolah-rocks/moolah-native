@@ -162,6 +162,14 @@ struct FinanceInsightTests {
       feeCategorySpend: feeCategorySpend, expenseBreakdown: [], context: context)
     let fees = try #require(insights.first)
     #expect(fees.kind == .feeSpend)
+    let filter = try #require(fees.references.transactionFilter)
+    #expect(filter.scheduled == .nonScheduledOnly)
+    #expect(filter.categoryIds == Set(feeCategorySpend.prefix(2).compactMap(\.categoryId)))
+    #expect(filter.dateRange?.upperBound == context.now)
+    #expect(filter.dateRangeCalendar == context.calendar)
+    #expect(
+      filter.dateRange?.lowerBound
+        == context.calendar.date(byAdding: .day, value: -365, to: context.now))
     // No breakdown rows supplied, so the companion chart falls back to nil.
     #expect(fees.chart == nil)
   }
