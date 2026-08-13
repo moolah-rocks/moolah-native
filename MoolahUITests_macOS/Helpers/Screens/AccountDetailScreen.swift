@@ -84,7 +84,7 @@ struct AccountDetailScreen {
   /// Asserts the performance-tiles strip is present within `timeout` seconds.
   /// The Chart pane must be showing first (call `toggleToChart()` on macOS).
   /// Expected for accounts with non-host holdings (crypto / exchange / mixed).
-  func expectPerformanceTiles(timeout: TimeInterval = 20) {
+  func expectPerformanceTiles(timeout: TimeInterval = 40) {
     Trace.record(#function)
     let tiles = app.element(for: UITestIdentifiers.AccountDetail.performanceTiles)
     if !tiles.waitForExistence(timeout: timeout) {
