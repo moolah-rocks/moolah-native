@@ -176,6 +176,11 @@
             Label("Moolah Help", systemImage: "questionmark.circle")
           }
         }
+        if let url = URL(string: "https://moolah.rocks/privacy") {
+          Link(destination: url) {
+            Label("Privacy Policy", systemImage: "hand.raised")
+          }
+        }
       }
     }
   }
@@ -191,5 +196,25 @@
     func updateUIViewController(
       _ uiViewController: UIActivityViewController, context: Context
     ) {}
+  }
+
+  @MainActor
+  private func settingsPreviewDependencies() -> (
+    manager: ProfileContainerManager, coordinator: SyncCoordinator
+  ) {
+    // In-memory setup cannot fail in practice. A trap is acceptable in #Preview.
+    // swiftlint:disable:next force_try
+    let manager = try! ProfileContainerManager.forTesting()
+    return (manager, SyncCoordinator(containerManager: manager))
+  }
+
+  #Preview {
+    let dependencies = settingsPreviewDependencies()
+    NavigationStack {
+      SettingsView()
+    }
+    .environment(ProfileStore.preview())
+    .environment(dependencies.manager)
+    .environment(dependencies.coordinator)
   }
 #endif
