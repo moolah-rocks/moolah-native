@@ -300,12 +300,61 @@ a:focus-visible,
 
 .site-footer p {
   font-size: 0.85rem;
-  color: #6a7388;
+  color: #aab4c8;
   margin: 0;
 }
 
 .site-footer a {
   color: #aab4c8;
+}
+
+/* ---- Policy pages ---- */
+.policy-page {
+  min-height: calc(100vh - 158px);
+  padding: 5rem 1.5rem 6rem;
+  background: linear-gradient(180deg, #07102e 0%, #02050f 100%);
+}
+
+.policy-article {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.policy-article h1 {
+  margin: 0 0 1rem;
+  color: #f8fafd;
+  font-size: clamp(2.2rem, 6vw, 3.8rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.policy-intro {
+  margin: 0 0 3rem;
+  color: #aab4c8;
+  font-size: clamp(1.05rem, 2vw, 1.2rem);
+  line-height: 1.7;
+}
+
+.policy-article h2 {
+  margin: 2.5rem 0 0.75rem;
+  color: #f8fafd;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.policy-article p {
+  margin: 0 0 1rem;
+  color: #c7d0df;
+  font-size: 1rem;
+  line-height: 1.75;
+}
+
+.policy-date {
+  margin-top: 3rem;
+  color: #aab4c8;
+  font-size: 0.9rem;
 }
 
 /* ---- Responsive ---- */
@@ -317,6 +366,9 @@ a:focus-visible,
     width: 100px;
     height: 100px;
     border-radius: 22px;
+  }
+  .policy-page {
+    padding: 3.5rem 1.2rem 4rem;
   }
 }
 
