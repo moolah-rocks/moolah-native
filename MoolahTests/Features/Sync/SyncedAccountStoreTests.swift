@@ -100,12 +100,14 @@ struct SyncedAccountStoreTests {
   private func seedCryptoAccount(
     in database: DatabaseQueue,
     walletAddress: String = "0x" + String(UUID().uuidString.prefix(40)),
-    chain: ChainConfig = .ethereum
+    chain: ChainConfig = .ethereum,
+    isAutomaticSyncEnabled: Bool = true
   ) -> Account {
     let account = Account(
       name: "Wallet \(walletAddress.suffix(4))",
       type: .crypto,
       instrument: chain.nativeInstrument,
+      isAutomaticSyncEnabled: isAutomaticSyncEnabled,
       walletAddress: walletAddress.lowercased(),
       chainId: chain.chainId)
     _ = TestBackend.seed(accounts: [account], in: database)
@@ -211,6 +213,30 @@ struct SyncedAccountStoreTests {
   }
 
   // MARK: - Manual sync regardless of staleness
+
+  @Test("Automatic sync skips a disabled stale account")
+  func automaticSyncSkipsDisabledAccount() async throws {
+    let fixture = try makeStore()
+    _ = seedCryptoAccount(
+      in: fixture.database,
+      isAutomaticSyncEnabled: false)
+
+    await fixture.store.syncStaleAccounts()
+
+    #expect(fixture.alchemy.recordedCalls.isEmpty)
+  }
+
+  @Test("Sync Now still syncs an account with automatic sync disabled")
+  func manualSyncIncludesDisabledAccount() async throws {
+    let fixture = try makeStore()
+    let account = seedCryptoAccount(
+      in: fixture.database,
+      isAutomaticSyncEnabled: false)
+
+    await fixture.store.syncAccount(account)
+
+    #expect(fixture.alchemy.recordedCalls.count == 1)
+  }
 
   @Test("syncAccount dispatches even when lastSyncedAt is recent")
   func manualSyncIgnoresStalenessGate() async throws {

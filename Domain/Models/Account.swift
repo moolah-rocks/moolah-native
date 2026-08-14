@@ -67,6 +67,9 @@ struct Account {
   var positions: [Position]
   var position: Int
   var isHidden: Bool
+  /// Whether background and stale-account sync triggers may refresh this
+  /// account. Explicit user-initiated sync remains available when false.
+  var isAutomaticSyncEnabled: Bool
   /// `0x…` lowercased wallet address. Required when `type == .crypto`.
   var walletAddress: String?
   /// EVM chain ID (1 = Ethereum, 10 = OP, 8453 = Base, 137 = Polygon).
@@ -94,6 +97,7 @@ struct Account {
     positions: [Position] = [],
     position: Int = 0,
     isHidden: Bool = false,
+    isAutomaticSyncEnabled: Bool = true,
     walletAddress: String? = nil,
     chainId: Int? = nil,
     exchangeProvider: ExchangeProvider? = nil,
@@ -107,6 +111,7 @@ struct Account {
     self.positions = positions
     self.position = position
     self.isHidden = isHidden
+    self.isAutomaticSyncEnabled = isAutomaticSyncEnabled
     self.walletAddress = walletAddress
     self.chainId = chainId
     self.exchangeProvider = exchangeProvider
@@ -127,6 +132,7 @@ extension Account: Codable {
     case instrument
     case position
     case isHidden = "hidden"
+    case isAutomaticSyncEnabled
     case walletAddress
     case chainId
     case exchangeProvider
@@ -156,6 +162,8 @@ extension Account: Codable {
     positions = []
     position = try container.decode(Int.self, forKey: .position)
     isHidden = try container.decode(Bool.self, forKey: .isHidden)
+    isAutomaticSyncEnabled =
+      try container.decodeIfPresent(Bool.self, forKey: .isAutomaticSyncEnabled) ?? true
     walletAddress = try container.decodeIfPresent(String.self, forKey: .walletAddress)
     chainId = try container.decodeIfPresent(Int.self, forKey: .chainId)
     exchangeProvider = try container.decodeIfPresent(
@@ -172,6 +180,7 @@ extension Account: Codable {
     try container.encode(instrument, forKey: .instrument)
     try container.encode(position, forKey: .position)
     try container.encode(isHidden, forKey: .isHidden)
+    try container.encode(isAutomaticSyncEnabled, forKey: .isAutomaticSyncEnabled)
     try container.encodeIfPresent(walletAddress, forKey: .walletAddress)
     try container.encodeIfPresent(chainId, forKey: .chainId)
     try container.encodeIfPresent(exchangeProvider, forKey: .exchangeProvider)
@@ -185,6 +194,7 @@ extension Account: Hashable {
     lhs.id == rhs.id && lhs.name == rhs.name && lhs.type == rhs.type
       && lhs.instrument == rhs.instrument
       && lhs.position == rhs.position && lhs.isHidden == rhs.isHidden
+      && lhs.isAutomaticSyncEnabled == rhs.isAutomaticSyncEnabled
       && lhs.walletAddress == rhs.walletAddress && lhs.chainId == rhs.chainId
       && lhs.exchangeProvider == rhs.exchangeProvider
       && lhs.groupId == rhs.groupId
@@ -199,6 +209,7 @@ extension Account: Hashable {
     hasher.combine(instrument)
     hasher.combine(position)
     hasher.combine(isHidden)
+    hasher.combine(isAutomaticSyncEnabled)
     hasher.combine(walletAddress)
     hasher.combine(chainId)
     hasher.combine(exchangeProvider)

@@ -30,6 +30,7 @@ struct RecordMappingTests {
       instrumentId: "USD",
       position: 2,
       isHidden: true,
+      isAutomaticSyncEnabled: false,
       encodedSystemFields: nil
     )
 
@@ -44,6 +45,7 @@ struct RecordMappingTests {
     #expect(ckRecord["instrumentId"] as? String == "USD")
     #expect(ckRecord["position"] as? Int == 2)
     #expect(ckRecord["isHidden"] as? Int == 1)
+    #expect(ckRecord["isAutomaticSyncEnabled"] as? Int == 0)
     #expect(ckRecord["valuationMode"] == nil)
 
     let restored = try #require(AccountRow.fieldValues(from: ckRecord))
@@ -53,6 +55,7 @@ struct RecordMappingTests {
     #expect(restored.instrumentId == "USD")
     #expect(restored.position == 2)
     #expect(restored.isHidden == true)
+    #expect(restored.isAutomaticSyncEnabled == false)
   }
 
   @Test
@@ -67,6 +70,17 @@ struct RecordMappingTests {
 
     let restored = try #require(AccountRow.fieldValues(from: ckRecord))
     #expect(restored.instrumentId == "AUD")
+  }
+
+  @Test("Account records from older builds keep automatic sync enabled")
+  func accountRowDefaultsAutomaticSyncToEnabled() throws {
+    let recordID = CKRecord.ID(
+      recordType: AccountRow.recordType, uuid: UUID(), zoneID: zoneID)
+    let ckRecord = CKRecord(recordType: "AccountRecord", recordID: recordID)
+
+    let restored = try #require(AccountRow.fieldValues(from: ckRecord))
+
+    #expect(restored.isAutomaticSyncEnabled)
   }
 
   // MARK: - TransactionRow

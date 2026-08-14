@@ -16,6 +16,7 @@ struct AccountTests {
       positions: [],
       position: 7,
       isHidden: false,
+      isAutomaticSyncEnabled: false,
       walletAddress: "0x" + String(repeating: "a", count: 40),
       chainId: 1
     )
@@ -24,6 +25,19 @@ struct AccountTests {
     #expect(decoded.walletAddress == account.walletAddress)
     #expect(decoded.chainId == account.chainId)
     #expect(decoded.type == .crypto)
+    #expect(decoded.isAutomaticSyncEnabled == false)
+  }
+
+  @Test("Legacy accounts keep automatic sync enabled")
+  func legacyAccountDefaultsToAutomaticSync() throws {
+    let json = Data(
+      """
+      {"id":"\(UUID().uuidString)","name":"Old","type":"crypto","position":0,"hidden":false}
+      """.utf8)
+
+    let decoded = try JSONDecoder().decode(Account.self, from: json)
+
+    #expect(decoded.isAutomaticSyncEnabled)
   }
 
   @Test

@@ -107,7 +107,8 @@ struct CoreFinancialGraphSyncRoundTripTests {
     let id = UUID()
     let source = AccountRow(
       domain: Account(
-        id: id, name: "Savings", type: .bank, instrument: .USD, position: 3))
+        id: id, name: "Coinstash", type: .exchange, instrument: .USD, position: 3,
+        isAutomaticSyncEnabled: false, exchangeProvider: .coinstash))
     let ckRecord = source.toCKRecord(in: Self.zoneID)
 
     let result = harness.handler.applyRemoteChanges(saved: [ckRecord], deleted: [])
@@ -120,9 +121,10 @@ struct CoreFinancialGraphSyncRoundTripTests {
     }
     let resolved = try #require(row)
     #expect(resolved.id == id)
-    #expect(resolved.name == "Savings")
+    #expect(resolved.name == "Coinstash")
     #expect(resolved.instrumentId == "USD")
     #expect(resolved.position == 3)
+    #expect(resolved.isAutomaticSyncEnabled == false)
     #expect(resolved.encodedSystemFields == ckRecord.encodedSystemFields)
   }
 

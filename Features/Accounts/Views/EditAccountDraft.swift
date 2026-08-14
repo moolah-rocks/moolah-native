@@ -5,6 +5,7 @@ struct EditAccountDraft: Equatable, Sendable {
   var type: AccountType
   var instrument: Instrument
   var isHidden: Bool
+  var isAutomaticSyncEnabled: Bool = true
   var taxOwnerIds: [UUID]
 
   func applied(to account: Account) -> Account {
@@ -13,6 +14,7 @@ struct EditAccountDraft: Equatable, Sendable {
     updated.type = type
     updated.instrument = instrument
     updated.isHidden = isHidden
+    updated.isAutomaticSyncEnabled = isAutomaticSyncEnabled
     updated.taxOwnerIds = taxOwnerIds
     return updated
   }

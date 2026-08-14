@@ -133,7 +133,7 @@ extension SyncedAccountStore {
 
   // MARK: - Stale filter
 
-  /// Filters `accounts.fetchAll()` down to syncable accounts (any
+  /// Filters `accounts.fetchAll()` down to automatically syncable accounts (any
   /// account some registered `AccountSyncSource` claims) that are
   /// either stale (older than `staleThreshold`) or — when
   /// `includeNonStale == true` — every syncable account regardless.
@@ -150,6 +150,7 @@ extension SyncedAccountStore {
     }
     let now = clock()
     return allAccounts.filter { account in
+      guard account.isAutomaticSyncEnabled else { return false }
       // `WalletSyncSource.handles` already enforces walletAddress +
       // chainId for crypto; exchange accounts have neither but are
       // claimed by `CoinstashSyncSource`. Asking the sources keeps the
