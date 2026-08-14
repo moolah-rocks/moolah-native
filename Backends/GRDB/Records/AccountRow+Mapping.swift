@@ -25,6 +25,7 @@ extension AccountRow {
     self.instrumentId = domain.instrument.id
     self.position = domain.position
     self.isHidden = domain.isHidden
+    self.isAutomaticSyncEnabled = domain.isAutomaticSyncEnabled
     self.encodedSystemFields = nil
     self.walletAddress = domain.walletAddress
     self.chainId = domain.chainId
@@ -56,6 +57,7 @@ extension AccountRow {
       positions: positions,
       position: position,
       isHidden: isHidden,
+      isAutomaticSyncEnabled: isAutomaticSyncEnabled,
       walletAddress: walletAddress,
       chainId: chainId,
       exchangeProvider: resolvedExchangeProvider,

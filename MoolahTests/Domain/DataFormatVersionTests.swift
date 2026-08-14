@@ -15,6 +15,11 @@ struct DataFormatVersionTests {
     #expect(DataFormatVersion.current >= 9)
   }
 
+  @Test("current fences automatic sync preferences")
+  func currentFencesAutomaticSyncPreferences() {
+    #expect(DataFormatVersion.current >= 11)
+  }
+
   @Test("Profile gets a default dataFormatVersion of 0 — pre-gate baseline")
   func profileDefaultsToZero() {
     let profile = Profile(label: "Test")

@@ -21,6 +21,7 @@ struct AccountRow {
     case instrumentId = "instrument_id"
     case position
     case isHidden = "is_hidden"
+    case isAutomaticSyncEnabled = "is_automatic_sync_enabled"
     case encodedSystemFields = "encoded_system_fields"
     case walletAddress = "wallet_address"
     case chainId = "chain_id"
@@ -43,6 +44,7 @@ struct AccountRow {
     case instrumentId = "instrument_id"
     case position
     case isHidden = "is_hidden"
+    case isAutomaticSyncEnabled = "is_automatic_sync_enabled"
     case encodedSystemFields = "encoded_system_fields"
     case walletAddress = "wallet_address"
     case chainId = "chain_id"
@@ -60,6 +62,7 @@ struct AccountRow {
   var instrumentId: String
   var position: Int
   var isHidden: Bool
+  var isAutomaticSyncEnabled: Bool = true
   var encodedSystemFields: Data?
   /// `0x…` lowercased wallet address, populated when `type == "crypto"`.
   /// Defaulted to `nil` so existing memberwise-init call sites continue

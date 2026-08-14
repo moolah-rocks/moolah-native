@@ -5,10 +5,12 @@ struct EditAccountView: View {
 
   @Environment(\.dismiss) private var dismiss
   @Environment(ProfileSession.self) private var session
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var name: String
   @State private var type: AccountType
   @State private var currency: Instrument
   @State private var isHidden: Bool
+  @State private var isAutomaticSyncEnabled: Bool
   @State private var taxOwnerAssignmentStore: AccountTaxOwnerAssignmentStore
   @State private var isSubmitting = false
   @State private var errorMessage: String?
@@ -34,6 +36,7 @@ struct EditAccountView: View {
     _type = State(initialValue: account.type)
     _currency = State(initialValue: account.instrument)
     _isHidden = State(initialValue: account.isHidden)
+    _isAutomaticSyncEnabled = State(initialValue: account.isAutomaticSyncEnabled)
     _taxOwnerAssignmentStore = State(
       initialValue: AccountTaxOwnerAssignmentStore(selectedOwnerIds: account.taxOwnerIds))
   }
@@ -59,6 +62,8 @@ struct EditAccountView: View {
   private var form: some View {
     Form {
       detailsSection
+        .disabled(isSubmitting)
+      automaticSyncSection
         .disabled(isSubmitting)
       exchangeSection
         .disabled(isSubmitting)
@@ -93,12 +98,26 @@ struct EditAccountView: View {
       }
     }
     .interactiveDismissDisabled(isSubmitting)
-    .animation(.easeInOut(duration: 0.2), value: type)
+    .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: type)
     .task {
       await taxOwnerAssignmentStore.observeOwners(from: session.backend.taxOwners)
     }
     .task {
       await taxOwnerAssignmentStore.observeErrors(from: session.backend.taxOwners)
+    }
+  }
+
+  @ViewBuilder private var automaticSyncSection: some View {
+    if type.isSynced {
+      Section {
+        Toggle("Automatic Sync", isOn: $isAutomaticSyncEnabled)
+          .accessibilityHint(
+            "When off, this account only syncs when you choose Sync Now")
+      } footer: {
+        Text(
+          "Turn this off to stop automatic sync. You can still sync the account "
+            + "with Sync Now.")
+      }
     }
   }
 
@@ -181,6 +200,7 @@ struct EditAccountView: View {
       type: type,
       instrument: currency,
       isHidden: isHidden,
+      isAutomaticSyncEnabled: isAutomaticSyncEnabled,
       taxOwnerIds: taxOwnerAssignmentStore.selectedOwnerIds)
     let updated = Self.updatedAccount(
       from: account, draft: draft, validOwners: taxOwnerAssignmentStore.owners)
@@ -204,6 +224,21 @@ struct EditAccountView: View {
     }
   }
 
+}
+
+#Preview("Synced Account — Automatic Sync Off") {
+  // In-memory preview sessions cannot fail in practice.
+  // swiftlint:disable:next force_try
+  let session = try! ProfileSession.preview()
+  let account = Account(
+    name: "Mainnet Wallet",
+    type: .crypto,
+    instrument: .AUD,
+    isAutomaticSyncEnabled: false,
+    walletAddress: "0x0000000000000000000000000000000000000000",
+    chainId: 1)
+  EditAccountView(account: account, accountStore: session.accountStore)
+    .previewProfileEnvironment(session: session)
 }
 
 extension EditAccountView {

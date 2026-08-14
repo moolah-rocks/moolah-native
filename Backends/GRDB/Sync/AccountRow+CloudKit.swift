@@ -25,6 +25,7 @@ extension AccountRow: CloudKitRecordConvertible {
       groupId: groupId?.uuidString,
       instrumentId: instrumentId,
       isHidden: isHidden ? 1 : 0,
+      isAutomaticSyncEnabled: isAutomaticSyncEnabled ? 1 : 0,
       name: name,
       position: Int64(position),
       taxOwnerIdsEncoded: taxOwnerIdsEncoded,
@@ -45,6 +46,7 @@ extension AccountRow: CloudKitRecordConvertible {
       instrumentId: fields.instrumentId ?? "AUD",
       position: Int(fields.position ?? 0),
       isHidden: (fields.isHidden ?? 0) != 0,
+      isAutomaticSyncEnabled: (fields.isAutomaticSyncEnabled ?? 1) != 0,
       // Stamped by applyGRDBBatchSave after upsert; never read from the
       // CKRecord itself.
       encodedSystemFields: nil,

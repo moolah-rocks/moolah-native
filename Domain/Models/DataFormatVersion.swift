@@ -22,6 +22,10 @@
 ///      the "deprecated field is suddenly invisible" race.
 ///
 /// History (newest first):
+/// - 11: per-account automatic sync preference. Adds
+///       `AccountRecord.isAutomaticSyncEnabled`; older builds would omit a
+///       disabled value when round-tripping the account and silently re-enable
+///       background imports, so the version fence prevents that downgrade.
 /// - 10: snapshot valuation retirement. Deprecates `AccountRecord.valuationMode`
 ///       and removes local support for `InvestmentValueRecord`. Older builds
 ///       would continue writing both retired representations, so the version
@@ -99,5 +103,5 @@
 /// cloud without a `dataFormatVersion` field reads as `0` and is
 /// trivially compatible with any v1+ build.
 enum DataFormatVersion {
-  static let current: Int = 10
+  static let current: Int = 11
 }
