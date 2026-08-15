@@ -54,7 +54,7 @@ struct Transaction: Codable, Sendable, Identifiable, Hashable {
   /// two legs forming a basic transfer (amounts negate, same type, second leg
   /// has no category/earmark, and legs reference different accounts).
   var isSimple: Bool {
-    if legs.count <= 1 { return true }
+    if legs.count == 1 { return true }
     guard legs.count == 2 else { return false }
     let first = legs[0]
     let second = legs[1]

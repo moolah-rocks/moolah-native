@@ -283,6 +283,12 @@ struct TransactionDraftMutationTests {
     #expect(draft.canSwitchToSimple == true)
   }
 
+  @Test func cannotSwitchToSimpleWithoutLegs() {
+    let transaction = Transaction(date: Date(), legs: [])
+    let draft = TransactionDraft(from: transaction)
+    #expect(draft.canSwitchToSimple == false)
+  }
+
   @Test func cannotSwitchToSimpleWithThreeLegs() {
     var draft = support.makeExpenseDraft()
     draft.isCustom = true
