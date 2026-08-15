@@ -26,6 +26,10 @@ enum SyncErrorRecovery {
     /// CKSyncEngine drops failed deletes from its queue; re-queuing prevents permanent
     /// server-side orphans.
     var requeueDeletes: [CKRecord.ID] = []
+    /// Exact client records for failures whose recovery mutates cached server
+    /// metadata. The mutation token and change tag let persistence reject a
+    /// delayed callback for an older local edit or older server base.
+    var failedClientRecords: [CKRecord.ID: CKRecord] = [:]
   }
 
   struct RecoveryPlan {
@@ -86,6 +90,7 @@ enum SyncErrorRecovery {
 
     case .serverRecordChanged:
       if let serverRecord = failure.error.serverRecord {
+        result.failedClientRecords[recordID] = failure.record
         logger.info(
           "Save conflict (code=\(failure.error.code.rawValue, privacy: .public) serverRecordChanged) for \(failure.record.recordType, privacy: .public) \(recordID.recordName) — resolving"
         )
@@ -99,6 +104,7 @@ enum SyncErrorRecovery {
       }
 
     case .unknownItem:
+      result.failedClientRecords[recordID] = failure.record
       logger.info(
         "Save failed (code=\(failure.error.code.rawValue, privacy: .public) unknownItem) for \(failure.record.recordType, privacy: .public) \(recordID.recordName) — clearing system fields and re-queuing as insert"
       )

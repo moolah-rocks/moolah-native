@@ -206,11 +206,10 @@ struct SyncRoundTripCSVImportTests {
   }
 
   /// Sibling of `csvImportProfileUplinkRoundTrip` for `ImportRuleRow`.
-  /// Exercises `recordToSave(for:)` → `fetchImportRuleRow` →
-  /// `mapBuiltRows` → `applyRemoteChanges` to ensure the upload-side
-  /// path doesn't silently regress (e.g. a future refactor that
-  /// returns `nil` from `fetchImportRuleRow`, or a missing
-  /// `ImportRuleRow.recordType` case in `mapBuiltRows`).
+  /// Exercises `recordToSave(for:)` → transactional `currentCKRecord` →
+  /// `applyRemoteChanges` to ensure the single-record upload path doesn't
+  /// silently regress. Batch uploads use the same row/token snapshot through
+  /// `batchBuiltRows`.
   @Test
   func importRuleUplinkRoundTrip() async throws {
     let harnessA = try ProfileDataSyncHandlerTestSupport.makeHandlerWithDatabase()

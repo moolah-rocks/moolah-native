@@ -18,19 +18,23 @@ extension ProfileDataSyncHandler {
   nonisolated func currentCKRecord(
     recordType: String, id: UUID, in database: Database
   ) throws -> CKRecord? {
+    let record: CKRecord?
     if let referenceResult = try fetchAndBuildReference(
       recordType: recordType, uuid: id, in: database)
     {
-      return referenceResult
-    }
-    if let domainResult = try fetchAndBuildDomain(
+      record = referenceResult
+    } else if let domainResult = try fetchAndBuildDomain(
       recordType: recordType, uuid: id, in: database)
     {
-      return domainResult
+      record = domainResult
+    } else {
+      logger.warning(
+        "currentCKRecord: unknown recordType '\(recordType, privacy: .public)' — skipping")
+      return nil
     }
-    logger.warning(
-      "currentCKRecord: unknown recordType '\(recordType, privacy: .public)' — skipping")
-    return nil
+    guard let record else { return nil }
+    let token = try Self.mutationToken(recordType: recordType, id: id, in: database)
+    return SyncMutationToken.attach(token, to: record)
   }
 
   /// Reference-data side of the in-transaction `currentCKRecord` dispatch.

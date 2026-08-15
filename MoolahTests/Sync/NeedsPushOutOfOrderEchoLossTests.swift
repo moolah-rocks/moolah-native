@@ -79,10 +79,13 @@ struct NeedsPushOutOfOrderEchoLossTests {
       ).insert(database)
       try repo.markNeedsPushSync(id: id, in: database)
     }
-    let vCreateRow = try #require(try repo.fetchRowSync(id: id))
+    let recordID = CKRecord.ID(
+      recordType: TransactionLegRow.recordType, uuid: id, zoneID: harness.handler.zoneID)
     // ack of V_create caches its (non-nil) server system fields; this is
     // the version that will echo back stale, stamped with the OLDER date.
-    let vCreateEcho = vCreateRow.toCKRecord(in: Self.zoneID).withModificationDate(Self.tCreate)
+    let vCreateEcho = try #require(
+      await MainActor.run { harness.handler.recordToSave(for: recordID).foundRecord }
+    ).withModificationDate(Self.tCreate)
     _ = try repo.setEncodedSystemFieldsSync(id: id, data: vCreateEcho.encodedSystemFields)
 
     // update → V_update: real token quantity 200, dirty again.
@@ -93,8 +96,9 @@ struct NeedsPushOutOfOrderEchoLossTests {
         .updateAll(database, [TransactionLegRow.Columns.quantity.set(to: 200)])
       try repo.markNeedsPushSync(id: id, in: database)
     }
-    let vUpdateRow = try #require(try repo.fetchRowSync(id: id))
-    let vUpdateEcho = vUpdateRow.toCKRecord(in: Self.zoneID).withModificationDate(Self.tUpdate)
+    let vUpdateEcho = try #require(
+      await MainActor.run { harness.handler.recordToSave(for: recordID).foundRecord }
+    ).withModificationDate(Self.tUpdate)
 
     // --- Heavy-backlog OUT-OF-ORDER delivery ---
     // (3) The confirming echo of V_update arrives FIRST and clears the flag,
@@ -132,8 +136,11 @@ struct NeedsPushOutOfOrderEchoLossTests {
       ).insert(database)
       try repo.markNeedsPushSync(id: id, in: database)
     }
-    let vCreateRow = try #require(try repo.fetchRowSync(id: id))
-    let vCreateEcho = vCreateRow.toCKRecord(in: Self.zoneID).withModificationDate(Self.tCreate)
+    let recordID = CKRecord.ID(
+      recordType: TransactionLegRow.recordType, uuid: id, zoneID: harness.handler.zoneID)
+    let vCreateEcho = try #require(
+      await MainActor.run { harness.handler.recordToSave(for: recordID).foundRecord }
+    ).withModificationDate(Self.tCreate)
     _ = try repo.setEncodedSystemFieldsSync(id: id, data: vCreateEcho.encodedSystemFields)
 
     try await ProfileDataSyncHandlerTestSupport.seed(into: harness.database) { database in
@@ -143,8 +150,9 @@ struct NeedsPushOutOfOrderEchoLossTests {
         .updateAll(database, [TransactionLegRow.Columns.quantity.set(to: 200)])
       try repo.markNeedsPushSync(id: id, in: database)
     }
-    let vUpdateRow = try #require(try repo.fetchRowSync(id: id))
-    let vUpdateEcho = vUpdateRow.toCKRecord(in: Self.zoneID).withModificationDate(Self.tUpdate)
+    let vUpdateEcho = try #require(
+      await MainActor.run { harness.handler.recordToSave(for: recordID).foundRecord }
+    ).withModificationDate(Self.tUpdate)
 
     // A large batch of unrelated incoming legs (the import backlog echoing).
     let backlog: [CKRecord] = (0..<200).map { index in

@@ -124,6 +124,9 @@ import GRDB
 /// `v27_insight_display_history` — adds local-only semantic display history
 /// used to rotate the For You insight batch after a day.
 /// `v28_account_automatic_sync` — adds the per-account automatic sync toggle.
+/// `v29_sync_mutation_token` — adds a local mutation identity to every
+/// per-profile CloudKit table so acknowledgements and fetched echoes can
+/// distinguish repeated values and delete/recreate sequences.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -144,7 +147,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 28
+  static let version = 29
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -202,6 +205,8 @@ enum ProfileSchema {
       "v27_insight_display_history", migrate: addInsightDisplayHistory)
     migrator.registerMigration(
       "v28_account_automatic_sync", migrate: addAccountAutomaticSync)
+    migrator.registerMigration(
+      "v29_sync_mutation_token", migrate: addSyncMutationToken)
 
     return migrator
   }

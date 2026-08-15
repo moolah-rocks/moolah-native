@@ -52,7 +52,7 @@ extension WalletSyncCheckpointRow: IdentifiableRecord {}
 /// fields back through the repository's
 /// `setEncodedSystemFieldsSync(id:data:)` SQL UPDATE rather than mutating
 /// the in-memory row, so this protocol is read-only. It lets the
-/// upload-side `mapBuiltRows(_:)` path read the blob through a single
+/// upload-side `batchBuiltRows` path read the blob through a single
 /// typed constraint instead of a dynamic-type cast chain.
 protocol ValueTypeSystemFieldsReadable {
   var encodedSystemFields: Data? { get }

@@ -60,4 +60,27 @@ struct NeedsPushApplyGuardTests {
     }
     #expect(try #require(row).name == "REMOTE")
   }
+
+  @Test("a fetched deletion cannot remove a row with a pending local edit")
+  func dirtyRowSurvivesRemoteDeletion() async throws {
+    let harness = try await MainActor.run {
+      try ProfileDataSyncHandlerTestSupport.makeHandlerWithDatabase()
+    }
+    let id = UUID()
+    try await ProfileDataSyncHandlerTestSupport.seed(into: harness.database) { database in
+      try ProfileDataSyncHandlerTestSupport.accountRow(id: id, name: "LOCAL EDIT")
+        .insert(database)
+      try harness.handler.grdbRepositories.accounts.markNeedsPushSync(id: id, in: database)
+    }
+    let recordID = CKRecord.ID(
+      recordType: AccountRow.recordType, uuid: id, zoneID: harness.handler.zoneID)
+
+    _ = harness.handler.applyRemoteChanges(
+      saved: [], deleted: [(recordID, AccountRow.recordType)])
+
+    let row = try await harness.database.read { database in
+      try AccountRow.fetchOne(database, key: id)
+    }
+    #expect(try #require(row).name == "LOCAL EDIT")
+  }
 }

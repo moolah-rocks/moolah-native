@@ -63,4 +63,19 @@ struct RoundTripTests {
     let restored = try #require(WalletSyncCheckpointRow.fieldValues(from: ckRecord))
     #expect(restored.lastSyncedBlockNumber == 0)
   }
+
+  @Test("sync mutation token survives the generated CloudKit wire layer")
+  func mutationTokenWireRoundTrips() {
+    let recordID = CKRecord.ID(
+      recordType: WalletSyncCheckpointRow.recordType, uuid: UUID(), zoneID: Self.zoneID)
+    let record = CKRecord(
+      recordType: WalletSyncCheckpointRow.recordType, recordID: recordID)
+    WalletSyncCheckpointRecordCloudKitFields(
+      lastSyncedBlockNumber: 42,
+      mutationToken: "causal-token"
+    ).write(to: record)
+
+    let restored = WalletSyncCheckpointRecordCloudKitFields(from: record)
+    #expect(restored.mutationToken == "causal-token")
+  }
 }

@@ -219,10 +219,12 @@ extension ProfileDataSyncHandler {
       let (clean, echoed) = Self.splitByDirtiness(ckRecords, dirty: dirty)
 
       if !echoed.isEmpty {
+        let metadataEchoes = try applicableDirtyMetadataSaves(
+          recordType: recordType, dirty: echoed, in: database)
         try applySystemFieldsInTransaction(
-          recordType: recordType, ckRecords: echoed, in: database)
+          recordType: recordType, ckRecords: metadataEchoes, in: database)
         try clearNeedsPushForConfirmingEchoes(
-          recordType: recordType, ckRecords: echoed, in: database)
+          recordType: recordType, ckRecords: metadataEchoes, in: database)
       }
 
       // Modification-date gate on the clean path (issue #1085). A clean
@@ -293,12 +295,17 @@ extension ProfileDataSyncHandler {
     }
 
     for (recordType, ids) in uuidGrouped {
+      let dirty = try dirtyIds(recordType: recordType, ids: ids, in: database)
+      let applicableIds = ids.filter { !dirty.contains($0) }
+      guard !applicableIds.isEmpty else { continue }
       if recordType == TaxOwnerRow.recordType {
-        let references = try applyBatchDeleteTaxOwner(ids: ids, in: database)
+        let references = try applyBatchDeleteTaxOwner(ids: applicableIds, in: database)
         postCommitHooks.merge(references)
         continue
       }
-      if try applyGRDBBatchDeletion(recordType: recordType, ids: ids, in: database) {
+      if try applyGRDBBatchDeletion(
+        recordType: recordType, ids: applicableIds, in: database)
+      {
         continue
       }
       if recordType != ProfileRow.recordType {

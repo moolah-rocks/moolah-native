@@ -188,17 +188,14 @@ struct RecordNameCollisionTests {
       instrument: .defaultTestInstrument, position: 0, isHidden: false)
     try await harness.database.write { database in
       try AccountRow(domain: stub).insert(database)
+      try handler.grdbRepositories.accounts.markNeedsPushSync(id: accountId, in: database)
     }
 
-    // Simulate a CK round-trip where the server returns a prefixed
-    // CKRecord as "saved".
-    let savedCK = CKRecord(
-      recordType: "AccountRecord",
-      recordID: CKRecord.ID(
-        recordType: "AccountRecord",
-        uuid: accountId,
-        zoneID: handler.zoneID))
-    savedCK["name"] = "Test" as CKRecordValue
+    // Simulate the server acknowledging the exact prefixed record sent by
+    // the production upload builder, including its causal mutation token.
+    let recordID = CKRecord.ID(
+      recordType: AccountRow.recordType, uuid: accountId, zoneID: handler.zoneID)
+    let savedCK = try #require(handler.recordToSave(for: recordID).foundRecord)
 
     _ = await handler.handleSentRecordZoneChanges(
       savedRecords: [savedCK], failedSaves: [], failedDeletes: [])

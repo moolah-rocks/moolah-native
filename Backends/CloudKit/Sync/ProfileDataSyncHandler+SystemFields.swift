@@ -114,8 +114,9 @@ extension ProfileDataSyncHandler {
     var failures = SyncErrorRecovery.classify(
       failedSaves: failedSaves, failedDeletes: failedDeletes, logger: logger)
     do {
-      try persistSentAcknowledgementChanges(
+      let superseded = try persistSentAcknowledgementChanges(
         savedRecords: savedRecords, failures: failures)
+      failures.requeue.append(contentsOf: superseded)
     } catch {
       logger.error(
         "Sent acknowledgement transaction failed: \(error.localizedDescription, privacy: .public)"
@@ -134,26 +135,20 @@ extension ProfileDataSyncHandler {
   nonisolated private func persistSentAcknowledgementChanges(
     savedRecords: [CKRecord],
     failures: SyncErrorRecovery.ClassifiedFailures
-  ) throws {
-    try grdbRepositories.database.write { database in
-      var preAckCached: [String: Data?] = [:]
-      for saved in savedRecords {
-        guard let uuid = saved.recordID.uuid else { continue }
-        if let blob = try self.cachedSystemFields(
-          recordType: saved.recordType, id: uuid, in: database)
-        {
-          preAckCached[saved.recordID.systemFieldsKey] = blob
-        }
-      }
-
-      try self.applySystemFieldsInTransaction(
+  ) throws -> [CKRecord.ID] {
+    let superseded = try grdbRepositories.database.write { database in
+      let (confirmed, superseded) = try self.confirmedAcknowledgements(
         savedRecords, in: database)
-      try self.clearNeedsPushForConfirmed(
-        savedRecords, preAckCached: preAckCached, in: database)
-      try self.applySystemFieldsInTransaction(
-        failures.conflicts.map(\.serverRecord), in: database)
+      try self.applySystemFieldsInTransaction(confirmed, in: database)
+      try self.clearNeedsPush(
+        groupedRecordIDs: confirmed, in: database)
+      let conflictRecords = try self.applicableConflictMetadata(
+        failures, in: database)
+      try self.applySystemFieldsInTransaction(conflictRecords, in: database)
 
-      let unknownUpdates = Dictionary(grouping: failures.unknownItems, by: \.recordType)
+      let applicableUnknownItems = try self.applicableUnknownItemClears(
+        failures, in: database)
+      let unknownUpdates = Dictionary(grouping: applicableUnknownItems, by: \.recordType)
       for (recordType, items) in unknownUpdates {
         let updates = items.compactMap { item -> (id: UUID, data: Data?)? in
           guard let id = item.recordID.uuid else { return nil }
@@ -162,8 +157,10 @@ extension ProfileDataSyncHandler {
         _ = try self.applySystemFieldUpdatesInTransaction(
           recordType: recordType, updates: updates, in: database)
       }
+      return superseded
     }
     logger.info("Persisted sent acknowledgements for \(savedRecords.count) saved records")
+    return superseded
   }
 
   nonisolated private func applySystemFieldsInTransaction(
@@ -176,24 +173,11 @@ extension ProfileDataSyncHandler {
     }
   }
 
-  /// Clears `needs_push` for each saved record whose current local row
-  /// still matches the uploaded version AND that has never round-tripped
-  /// before (its pre-ack cached system fields were `nil`). A row with a
-  /// non-`nil` pre-ack blob was uploaded at an earlier server version; a
-  /// stale echo of that superseded version may still be queued in the
-  /// fetch backlog, and clearing the flag here would let that echo clobber
-  /// this newer edit on the clean apply path (the step-5→6 single-device
-  /// loss window). For those rows the flag stays set and is cleared later
-  /// by the fetch/apply path when the *confirming* echo of the current
-  /// version arrives. Even once cleared, a superseded stale echo that
-  /// arrives afterwards cannot clobber the row: the modification-date gate
-  /// on the clean apply path (`applyBatchSaves`, issue #1085) rejects any
-  /// echo whose server `modificationDate` is not strictly newer than the
-  /// date the row caches. CloudKit does **not** guarantee fetched changes
-  /// arrive in server-token order; the date gate provides the guarantee. Clearing only
-  /// on an exact user-field match remains the safe direction — an
-  /// under-clear is a harmless extra deferral, while an over-clear could let
-  /// a later echo clobber a pending newer edit (data loss).
+  /// Clears `needs_push` after every successful upload, including edits to a
+  /// previously-synced row. The random mutation token is refreshed by the
+  /// `needs_push` trigger for every local edit and survives value-level A-B-A
+  /// ambiguity. The token and current user fields are checked inside the same write transaction as the
+  /// clear, so an older acknowledgement can only under-clear and requeue.
   ///
   /// **Atomicity (issue #1081).** The current-row read, the user-field
   /// compare, and the conditional clear all run inside ONE
@@ -207,25 +191,38 @@ extension ProfileDataSyncHandler {
   ///   handler's `@concurrent` boundary. The single `database.write` is the
   ///   only transaction opened, so this must not be nested inside another
   ///   write on the same queue.
-  nonisolated private func clearNeedsPushForConfirmed(
+  nonisolated private func confirmedAcknowledgements(
     _ savedRecords: [CKRecord],
-    preAckCached: [String: Data?],
     in database: Database
-  ) throws {
-    var clearByType: [String: [UUID]] = [:]
+  ) throws -> (confirmed: [CKRecord], superseded: [CKRecord.ID]) {
+    var confirmed: [CKRecord] = []
+    var superseded: [CKRecord.ID] = []
     for saved in savedRecords {
       guard let uuid = saved.recordID.uuid else { continue }
-      guard case .some(.none) = preAckCached[saved.recordID.systemFieldsKey]
-      else { continue }
       guard
         let current = try currentCKRecord(
           recordType: saved.recordType, id: uuid, in: database)
-      else { continue }
-      if current.hasSameUserFields(as: saved) {
-        clearByType[saved.recordType, default: []].append(uuid)
+      else {
+        superseded.append(saved.recordID)
+        continue
+      }
+      if current.hasSameUserFields(as: saved),
+        Self.serverMetadataIsCurrentOrNewer(saved, than: current)
+      {
+        confirmed.append(saved)
+      } else {
+        superseded.append(saved.recordID)
       }
     }
-    for (recordType, ids) in clearByType {
+    return (confirmed, superseded)
+  }
+
+  nonisolated private func clearNeedsPush(
+    groupedRecordIDs records: [CKRecord], in database: Database
+  ) throws {
+    let recordsByType = Dictionary(grouping: records, by: \.recordType)
+    for (recordType, typedRecords) in recordsByType {
+      let ids = typedRecords.compactMap { $0.recordID.uuid }
       try clearNeedsPush(recordType: recordType, ids: ids, in: database)
     }
   }

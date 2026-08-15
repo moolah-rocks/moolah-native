@@ -73,6 +73,20 @@ extension ProfileDataSyncHandler {
     return Self.applicableAfterDateGate(deduped, cachedDates: cachedDates)
   }
 
+  /// Dirty rows keep their local values, but may adopt a newer server change
+  /// tag for conflict retry. Never regress that metadata when an older echo
+  /// arrives late. Dateless first-sync records still fail open.
+  nonisolated func applicableDirtyMetadataSaves(
+    recordType: String, dirty: [CKRecord], in database: Database
+  ) throws -> [CKRecord] {
+    let deduped = dedupToMaxModificationDate(
+      dirty, id: { $0.recordID.uuid }, date: { $0.modificationDate })
+    let ids = deduped.compactMap { $0.recordID.uuid }
+    let cachedDates = try cachedModificationDates(
+      recordType: recordType, ids: ids, in: database)
+    return Self.applicableAfterDateGate(deduped, cachedDates: cachedDates)
+  }
+
   /// Regression tripwire (issue #1090). Logs loudly when a CLEAN incoming
   /// record's local row EXISTS but caches no `modificationDate` — i.e. some
   /// write nulled the row's `encoded_system_fields`. That is the exact state
