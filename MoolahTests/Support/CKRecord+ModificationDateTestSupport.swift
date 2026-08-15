@@ -19,6 +19,10 @@ import Foundation
 // round-trip the gate relies on.
 extension CKRecord {
   func withModificationDate(_ date: Date) -> CKRecord {
+    withServerMetadata(modificationDate: date, changeTag: nil)
+  }
+
+  func withServerMetadata(modificationDate date: Date, changeTag: String?) -> CKRecord {
     let coder = NSKeyedArchiver(requiringSecureCoding: true)
     encodeSystemFields(with: coder)
     // `RecordMtime` is CKRecord's internal archive key for the server
@@ -27,6 +31,9 @@ extension CKRecord {
     // the key the helper fails loudly rather than silently fabricating a
     // dateless record that would make a loss test pass for the wrong reason.
     coder.encode(date as NSDate, forKey: "RecordMtime")
+    if let changeTag {
+      coder.encode(changeTag as NSString, forKey: "ETag")
+    }
     coder.finishEncoding()
 
     let unarchiver: NSKeyedUnarchiver
@@ -43,6 +50,9 @@ extension CKRecord {
       fatalError(
         "withModificationDate: RecordMtime did not survive the round-trip — "
           + "Apple may have renamed the archive key")
+    }
+    if let changeTag, stamped.recordChangeTag != changeTag {
+      fatalError("withServerMetadata: ETag did not survive the round-trip")
     }
     // `encodeSystemFields` drops user fields, so re-apply them.
     for key in allKeys() {

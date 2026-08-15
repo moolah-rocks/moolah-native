@@ -2,12 +2,9 @@
 import Foundation
 import GRDB
 
-/// Thrown by the record-lookup dispatch when a prefixed recordID names a
-/// record type this build does not handle. Surfaced (not swallowed) so the
-/// send path classifies it as `failed` and keeps the change pending rather
-/// than deleting a record of a type a newer build introduced.
-private struct UnknownRecordTypeError: Error {
-  let recordType: String
+private enum BatchFetchDispatch {
+  case rows([UUID: CKRecord])
+  case unhandled
 }
 
 extension ProfileDataSyncHandler {
@@ -18,15 +15,30 @@ extension ProfileDataSyncHandler {
   /// types that happen to share a UUID don't collide in the result.
   /// Returns a per-type `BatchLookupOutcome` so the caller can tell a
   /// genuinely-absent id (query succeeded) from a failed query (issue #1087).
-  func buildBatchRecordLookup(
+  nonisolated func buildBatchRecordLookup(
     byRecordType groups: [String: Set<UUID>]
   ) -> [String: BatchLookupOutcome] {
-    var result: [String: BatchLookupOutcome] = [:]
-    for (recordType, uuids) in groups {
-      guard !uuids.isEmpty else { continue }
-      result[recordType] = batchFetchByType(recordType: recordType, uuids: uuids)
+    do {
+      return try grdbRepositories.database.read { database in
+        var result: [String: BatchLookupOutcome] = [:]
+        for (recordType, uuids) in groups {
+          guard !uuids.isEmpty else { continue }
+          do {
+            result[recordType] = try batchFetchByType(
+              recordType: recordType, uuids: uuids, in: database)
+          } catch {
+            logger.error(
+              "GRDB batch lookup failed for \(recordType, privacy: .public): \(error, privacy: .public)"
+            )
+            result[recordType] = .failed
+          }
+        }
+        return result
+      }
+    } catch {
+      logger.error("GRDB batch lookup failed: \(error, privacy: .public)")
+      return Dictionary(uniqueKeysWithValues: groups.keys.map { ($0, .failed) })
     }
-    return result
   }
 
   // MARK: - Record Lookup for Upload
@@ -48,15 +60,22 @@ extension ProfileDataSyncHandler {
   /// String-keyed recordIDs (the bare `recordName` form used for
   /// `InstrumentRecord`) are also caught here: they have no legitimate
   /// per-profile path, so the same trap applies symmetrically.
-  func recordToSave(for recordID: CKRecord.ID) -> RecordLookupOutcome {
+  nonisolated func recordToSave(for recordID: CKRecord.ID) -> RecordLookupOutcome {
     if let recordType = recordID.prefixedRecordType, let uuid = recordID.uuid {
       if recordType == InstrumentRow.recordType {
         return trapInstrumentOnPerProfileZone(detail: "prefixed UUID upload")
       }
+      guard Self.syncTableByRecordType[recordType] != nil else {
+        logger.warning(
+          "Unknown recordType '\(recordType, privacy: .public)' in prefixed recordID — keeping pending"
+        )
+        return .failed
+      }
       do {
-        if let record = try fetchAndBuild(recordType: recordType, uuid: uuid) {
-          return .found(record)
+        let record = try grdbRepositories.database.read { database in
+          try currentCKRecord(recordType: recordType, id: uuid, in: database)
         }
+        if let record { return .found(record) }
         return .absent
       } catch {
         logger.error(
@@ -77,7 +96,9 @@ extension ProfileDataSyncHandler {
   /// the regression can't land; release keeps the change pending (`failed`)
   /// rather than queueing a spurious server deletion — the startup
   /// `purgeLegacyInstrumentPendingChanges` clears any residual entry.
-  private func trapInstrumentOnPerProfileZone(detail: String) -> RecordLookupOutcome {
+  nonisolated private func trapInstrumentOnPerProfileZone(
+    detail: String
+  ) -> RecordLookupOutcome {
     let message =
       """
       InstrumentRecord upload routed to per-profile zone \
@@ -93,108 +114,26 @@ extension ProfileDataSyncHandler {
     #endif
   }
 
-  // MARK: - Current Record for Ack Comparison
-
-  /// Builds the `CKRecord` for the current local row of `recordType` /
-  /// `id`, or `nil` if no such row exists or the type is unknown. Used by
-  /// the upload-ack path to compare the current row's user fields against
-  /// the version that was just confirmed saved: if they match, the local
-  /// edit is confirmed and `needs_push` can be cleared; if they differ, a
-  /// newer edit is pending and the flag stays set (issue #1081). Reuses
-  /// the same per-type `fetchAndBuild` dispatch as the upload path.
-  func currentCKRecord(recordType: String, id: UUID) -> CKRecord? {
-    // Ack comparison treats both "absent" and "lookup error" as "no current
-    // record" (→ leave `needs_push` set), so swallowing the throw to `nil`
-    // is correct here — unlike the upload path, which must distinguish them.
-    try? fetchAndBuild(recordType: recordType, uuid: id)
-  }
-
-  // The in-transaction counterpart `currentCKRecord(recordType:id:in:)`
-  // lives in `ProfileDataSyncHandler+CurrentRecordInTransaction.swift`.
-
-  // MARK: - Per-Type Dispatch
-
-  /// Single-record dispatcher. Returns `nil` for a handled type whose row is
-  /// absent, and THROWS `UnknownRecordTypeError` for a record type this build
-  /// does not handle (so the caller keeps the change pending rather than
-  /// deleting it). The lookup is split between a reference-data half and a
-  /// financial-graph half (each returns a double-optional: outer `.none` =
-  /// "not this half's record type", `.some(inner)` = "handled", inner `nil` =
-  /// "no such row") so neither switch breaches the cyclomatic-complexity
-  /// ceiling — same shape as `saveHandler` in `+GRDBDispatch`.
-  private func fetchAndBuild(recordType: String, uuid: UUID) throws -> CKRecord? {
-    if let referenceResult = try fetchAndBuildReference(recordType: recordType, uuid: uuid) {
-      return referenceResult
-    }
-    if let domainResult = try fetchAndBuildDomain(recordType: recordType, uuid: uuid) {
-      return domainResult
-    }
-    logger.warning(
-      "Unknown recordType '\(recordType, privacy: .public)' in prefixed recordID — keeping pending"
-    )
-    throw UnknownRecordTypeError(recordType: recordType)
-  }
-
-  /// Wraps a fetched row in the dispatch's `CKRecord??` "handled" shape:
-  /// `.some(record)` for a present row, `.some(nil)` for an absent one. The
-  /// explicit `.some` is load-bearing — returning a bare `CKRecord?` would
-  /// flatten an absent row to the outer `.none` ("not handled"), which the
-  /// caller would then misread as an unknown type.
-  private func built<Row>(_ row: Row?) -> CKRecord??
-  where Row: CloudKitRecordConvertible & ValueTypeSystemFieldsReadable {
-    .some(row.map { buildCKRecord(from: $0, encodedSystemFields: $0.encodedSystemFields) })
-  }
-
-  /// Reference-data side of the `fetchAndBuild` dispatch. A thrown GRDB error
-  /// propagates to `recordToSave` (→ `.failed`); a `.some(nil)` is a
-  /// genuinely-absent row (→ `.absent`); the `default` `.none` means "not my
-  /// half".
-  private func fetchAndBuildReference(
-    recordType: String, uuid: UUID
-  ) throws -> CKRecord?? {
-    switch recordType {
-    case CategoryRow.recordType: return built(try fetchCategoryRow(id: uuid))
-    case TaxOwnerRow.recordType: return built(try fetchTaxOwnerRow(id: uuid))
-    case TransferSuggestionRow.recordType: return built(try fetchTransferSuggestionRow(id: uuid))
-    case AccountGroupRow.recordType: return built(try fetchAccountGroupRow(id: uuid))
-    case InsightDismissalRow.recordType: return built(try fetchInsightDismissalRow(id: uuid))
-    case WalletSyncCheckpointRow.recordType:
-      return built(try fetchWalletSyncCheckpointRow(id: uuid))
-    case CSVImportProfileRow.recordType: return built(try fetchCSVImportProfileRow(id: uuid))
-    case ImportRuleRow.recordType: return built(try fetchImportRuleRow(id: uuid))
-    default: return nil
-    }
-  }
-
-  /// Financial-graph side of the `fetchAndBuild` dispatch.
-  private func fetchAndBuildDomain(
-    recordType: String, uuid: UUID
-  ) throws -> CKRecord?? {
-    switch recordType {
-    case AccountRow.recordType: return built(try fetchAccountRow(id: uuid))
-    case TransactionRow.recordType: return built(try fetchTransactionRow(id: uuid))
-    case TransactionLegRow.recordType: return built(try fetchTransactionLegRow(id: uuid))
-    case EarmarkRow.recordType: return built(try fetchEarmarkRow(id: uuid))
-    case EarmarkBudgetItemRow.recordType: return built(try fetchEarmarkBudgetItemRow(id: uuid))
-    default: return nil
-    }
-  }
-
   /// Batch-fetch dispatcher. One batch fetch per type, mapped into
   /// `[UUID: CKRecord]` via `buildCKRecord`. Split into a reference-data
-  /// half and a financial-graph half (each returning `nil` for "not this
-  /// half's record type") so neither switch breaches the
+  /// half and a financial-graph half (each returning `.unhandled` for a type
+  /// owned by the other half) so neither switch breaches the
   /// cyclomatic-complexity ceiling — same shape as `saveHandler` in
   /// `+GRDBDispatch`.
-  private func batchFetchByType(
-    recordType: String, uuids: Set<UUID>
-  ) -> BatchLookupOutcome {
+  nonisolated private func batchFetchByType(
+    recordType: String, uuids: Set<UUID>, in database: Database
+  ) throws -> BatchLookupOutcome {
     let ids = Array(uuids)
-    guard
-      let fetch =
-        batchFetchReference(for: recordType, ids: ids)
-        ?? batchFetchDomain(for: recordType, ids: ids)
-    else {
+    switch try batchFetchReference(for: recordType, ids: ids, in: database) {
+    case .rows(let rows):
+      return .succeeded(rows)
+    case .unhandled:
+      break
+    }
+    switch try batchFetchDomain(for: recordType, ids: ids, in: database) {
+    case .rows(let rows):
+      return .succeeded(rows)
+    case .unhandled:
       // Unhandled type (unreachable in practice): keep every id pending
       // rather than deleting a record of a type a newer build introduced.
       logger.warning(
@@ -202,154 +141,92 @@ extension ProfileDataSyncHandler {
       )
       return .failed
     }
-    do {
-      return .succeeded(try fetch())
-    } catch {
-      logger.error(
-        """
-        GRDB batch fetch failed for \(recordType, privacy: .public): \
-        \(error.localizedDescription, privacy: .public) — keeping all \
-        \(ids.count, privacy: .public) pending
-        """)
-      return .failed
-    }
   }
 
-  /// Reference-data side of the `batchFetchByType` dispatch. Returns the
-  /// throwing batch-fetch thunk, or `nil` when `recordType` is not reference
-  /// data. A thrown GRDB error propagates so the caller classifies the whole
-  /// group as `failed` (issue #1087).
-  private func batchFetchReference(
-    for recordType: String, ids: [UUID]
-  ) -> (() throws -> [UUID: CKRecord])? {
+  /// Reference-data side of the `batchFetchByType` dispatch. A thrown GRDB
+  /// error propagates so the caller classifies the whole group as `failed`;
+  /// `.unhandled` routes the type to the financial-graph dispatcher.
+  nonisolated private func batchFetchReference(
+    for recordType: String, ids: [UUID], in database: Database
+  ) throws -> BatchFetchDispatch {
     switch recordType {
     case CategoryRow.recordType:
-      return { self.mapBuiltRows(try self.grdbRepositories.categories.fetchRowsSync(ids: ids)) }
+      return .rows(
+        try batchBuiltRows(CategoryRow.self, recordType: recordType, ids: ids, in: database))
     case TaxOwnerRow.recordType:
-      return { self.mapBuiltRows(try self.grdbRepositories.taxOwners.fetchRowsSync(ids: ids)) }
+      return .rows(
+        try batchBuiltRows(TaxOwnerRow.self, recordType: recordType, ids: ids, in: database))
     case TransferSuggestionRow.recordType:
-      return {
-        self.mapBuiltRows(try self.grdbRepositories.transferSuggestions.fetchRowsSync(ids: ids))
-      }
+      return .rows(
+        try batchBuiltRows(
+          TransferSuggestionRow.self, recordType: recordType, ids: ids, in: database))
     case AccountGroupRow.recordType:
-      return {
-        self.mapBuiltRows(try self.grdbRepositories.accountGroups.fetchRowsSync(ids: ids))
-      }
+      return .rows(
+        try batchBuiltRows(
+          AccountGroupRow.self, recordType: recordType, ids: ids, in: database))
     case InsightDismissalRow.recordType:
-      return {
-        self.mapBuiltRows(try self.grdbRepositories.insightDismissals.fetchRowsSync(ids: ids))
-      }
+      return .rows(
+        try batchBuiltRows(
+          InsightDismissalRow.self, recordType: recordType, ids: ids, in: database))
     case WalletSyncCheckpointRow.recordType:
-      return {
-        self.mapBuiltRows(
-          try self.grdbRepositories.walletSyncCheckpoints.fetchRowsSync(ids: ids))
-      }
+      return .rows(
+        try batchBuiltRows(
+          WalletSyncCheckpointRow.self, recordType: recordType, ids: ids, in: database))
     case CSVImportProfileRow.recordType:
-      return {
-        self.mapBuiltRows(try self.grdbRepositories.csvImportProfiles.fetchRowsSync(ids: ids))
-      }
+      return .rows(
+        try batchBuiltRows(
+          CSVImportProfileRow.self, recordType: recordType, ids: ids, in: database))
     case ImportRuleRow.recordType:
-      return { self.mapBuiltRows(try self.grdbRepositories.importRules.fetchRowsSync(ids: ids)) }
+      return .rows(
+        try batchBuiltRows(
+          ImportRuleRow.self, recordType: recordType, ids: ids, in: database))
     default:
-      return nil
+      return .unhandled
     }
   }
 
   /// Financial-graph side of the `batchFetchByType` dispatch. Returns
-  /// the throwing batch-fetch thunk, or `nil` when `recordType` is not a
-  /// financial-graph row.
-  private func batchFetchDomain(
-    for recordType: String, ids: [UUID]
-  ) -> (() throws -> [UUID: CKRecord])? {
+  /// `.unhandled` when `recordType` is not a financial-graph row.
+  nonisolated private func batchFetchDomain(
+    for recordType: String, ids: [UUID], in database: Database
+  ) throws -> BatchFetchDispatch {
     switch recordType {
     case AccountRow.recordType:
-      return { self.mapBuiltRows(try self.grdbRepositories.accounts.fetchRowsSync(ids: ids)) }
+      return .rows(
+        try batchBuiltRows(AccountRow.self, recordType: recordType, ids: ids, in: database))
     case TransactionRow.recordType:
-      return { self.mapBuiltRows(try self.grdbRepositories.transactions.fetchRowsSync(ids: ids)) }
+      return .rows(
+        try batchBuiltRows(
+          TransactionRow.self, recordType: recordType, ids: ids, in: database))
     case TransactionLegRow.recordType:
-      return {
-        self.mapBuiltRows(try self.grdbRepositories.transactionLegs.fetchRowsSync(ids: ids))
-      }
+      return .rows(
+        try batchBuiltRows(
+          TransactionLegRow.self, recordType: recordType, ids: ids, in: database))
     case EarmarkRow.recordType:
-      return { self.mapBuiltRows(try self.grdbRepositories.earmarks.fetchRowsSync(ids: ids)) }
+      return .rows(
+        try batchBuiltRows(EarmarkRow.self, recordType: recordType, ids: ids, in: database))
     case EarmarkBudgetItemRow.recordType:
-      return {
-        self.mapBuiltRows(try self.grdbRepositories.earmarkBudgetItems.fetchRowsSync(ids: ids))
-      }
+      return .rows(
+        try batchBuiltRows(
+          EarmarkBudgetItemRow.self, recordType: recordType, ids: ids, in: database))
     default:
-      return nil
+      return .unhandled
     }
   }
 
-  /// Reduces a fetched batch of GRDB rows into `[UUID: CKRecord]` keyed
-  /// by the row's own `id`, with each value built via
-  /// `buildCKRecord(from:encodedSystemFields:)`.
-  private func mapBuiltRows<T>(_ rows: [T]) -> [UUID: CKRecord]
-  where T: IdentifiableRecord & CloudKitRecordConvertible & ValueTypeSystemFieldsReadable {
-    var built: [UUID: CKRecord] = [:]
-    built.reserveCapacity(rows.count)
-    for row in rows {
-      built[row.id] = buildCKRecord(
-        from: row, encodedSystemFields: row.encodedSystemFields)
-    }
-    return built
-  }
-
-  // MARK: - Per-Row Lookups
-  //
-  // These propagate a GRDB error (rather than swallowing it to `nil`) so the
-  // upload path can tell a genuinely-absent row from a failed read (issue
-  // #1087). `nil` means "row absent"; a throw means "lookup failed".
-
-  private func fetchAccountRow(id: UUID) throws -> AccountRow? {
-    try grdbRepositories.accounts.fetchRowSync(id: id)
-  }
-
-  private func fetchTransactionRow(id: UUID) throws -> TransactionRow? {
-    try grdbRepositories.transactions.fetchRowSync(id: id)
-  }
-
-  private func fetchTransactionLegRow(id: UUID) throws -> TransactionLegRow? {
-    try grdbRepositories.transactionLegs.fetchRowSync(id: id)
-  }
-
-  private func fetchCategoryRow(id: UUID) throws -> CategoryRow? {
-    try grdbRepositories.categories.fetchRowSync(id: id)
-  }
-
-  private func fetchTaxOwnerRow(id: UUID) throws -> TaxOwnerRow? {
-    try grdbRepositories.taxOwners.fetchRowSync(id: id)
-  }
-
-  private func fetchTransferSuggestionRow(id: UUID) throws -> TransferSuggestionRow? {
-    try grdbRepositories.transferSuggestions.fetchRowSync(id: id)
-  }
-
-  private func fetchAccountGroupRow(id: UUID) throws -> AccountGroupRow? {
-    try grdbRepositories.accountGroups.fetchRowSync(id: id)
-  }
-
-  private func fetchInsightDismissalRow(id: UUID) throws -> InsightDismissalRow? {
-    try grdbRepositories.insightDismissals.fetchRowSync(id: id)
-  }
-
-  private func fetchWalletSyncCheckpointRow(id: UUID) throws -> WalletSyncCheckpointRow? {
-    try grdbRepositories.walletSyncCheckpoints.fetchRowSync(id: id)
-  }
-
-  private func fetchEarmarkRow(id: UUID) throws -> EarmarkRow? {
-    try grdbRepositories.earmarks.fetchRowSync(id: id)
-  }
-
-  private func fetchEarmarkBudgetItemRow(id: UUID) throws -> EarmarkBudgetItemRow? {
-    try grdbRepositories.earmarkBudgetItems.fetchRowSync(id: id)
-  }
-
-  private func fetchCSVImportProfileRow(id: UUID) throws -> CSVImportProfileRow? {
-    try grdbRepositories.csvImportProfiles.fetchRowSync(id: id)
-  }
-
-  private func fetchImportRuleRow(id: UUID) throws -> ImportRuleRow? {
-    try grdbRepositories.importRules.fetchRowSync(id: id)
+  nonisolated private func batchBuiltRows<T>(
+    _ type: T.Type, recordType: String, ids: [UUID], in database: Database
+  ) throws -> [UUID: CKRecord]
+  where
+    T: FetchableRecord & TableRecord & IdentifiableRecord & CloudKitRecordConvertible
+      & ValueTypeSystemFieldsReadable
+  {
+    let rows = try T.fetchAll(database, keys: ids)
+    let tokens = try Self.mutationTokens(recordType: recordType, ids: ids, in: database)
+    return Dictionary(
+      uniqueKeysWithValues: rows.map { row in
+        let record = buildCKRecord(from: row, encodedSystemFields: row.encodedSystemFields)
+        return (row.id, SyncMutationToken.attach(tokens[row.id], to: record))
+      })
   }
 }

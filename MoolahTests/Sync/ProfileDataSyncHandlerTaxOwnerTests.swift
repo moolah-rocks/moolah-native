@@ -90,6 +90,35 @@ struct ProfileDataSyncHandlerTaxOwnerTests {
     #expect(capture.categoryChanges.first?.id == harness.seed.categoryId)
   }
 
+  @Test("a tax-owner deletion preserves a pending local edit and its references")
+  func dirtyTaxOwnerSurvivesRemoteDeletion() async throws {
+    let capture = ProfileDataSyncHookCapture()
+    let harness = try await makeReferenceCleanupHarness(capture: capture)
+    try await harness.database.write { database in
+      try harness.handler.grdbRepositories.taxOwners.markNeedsPushSync(
+        id: harness.seed.ownerId, in: database)
+    }
+
+    _ = harness.handler.applyRemoteChanges(
+      saved: [],
+      deleted: [
+        deletedTaxOwnerRecordID(harness.seed.ownerId, zoneID: harness.handler.zoneID)
+      ])
+
+    let counts = try await harness.database.read { database in
+      (
+        try TaxOwnerRow.fetchOne(database, key: harness.seed.ownerId),
+        try AccountTaxOwnerRow.fetchCount(database),
+        try CategoryTaxOwnerRow.fetchCount(database)
+      )
+    }
+    #expect(counts.0 != nil)
+    #expect(counts.1 == 1)
+    #expect(counts.2 == 1)
+    #expect(capture.accountChanges.isEmpty)
+    #expect(capture.categoryChanges.isEmpty)
+  }
+
   private func makeReferenceCleanupHarness(
     capture: ProfileDataSyncHookCapture
   ) async throws -> TaxOwnerReferenceCleanupHarness {

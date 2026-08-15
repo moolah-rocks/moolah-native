@@ -21,39 +21,15 @@ import Testing
 ///      delivered late under upload/echo backlog — is applied. The row
 ///      is now clean, so the clean-path upsert clobbers V_update. LOST.
 ///
-/// The fix must keep `needs_push` set through the step-5→6 window: a row
-/// that has already round-tripped at least once (non-nil cached system
-/// fields) and is being re-confirmed at a *newer* version must NOT have
-/// its flag cleared by the ack, because an earlier version's echo can
-/// still arrive. The flag is instead cleared by the fetch/apply path
-/// when the *confirming* echo of the current version arrives — safe
-/// because CKSyncEngine delivers fetched changes in server-token order,
-/// so every earlier-token stale echo has already been processed by then.
+/// The acknowledgement may now clear `needs_push` immediately when its
+/// causal mutation token still matches. Its newly cached server timestamp
+/// must then reject any older echo through the clean-path date gate.
 @Suite("needs_push survives a superseded-version echo (single-device loss)")
 struct NeedsPushSupersededEchoLossTests {
   private static let zoneID = CKRecordZone.ID(
     zoneName: "TestZone", ownerName: CKCurrentUserDefaultName)
-
-  /// Encodes a non-nil cached system-fields blob for `id` of an account,
-  /// standing in for the server system fields cached after the V_create
-  /// round-trip (step 2). Locally-built records carry no server change
-  /// tag, but the encoded blob is still non-nil Data — which is the
-  /// signal "this row has round-tripped before".
-  private static func cachedSystemFields(forAccount id: UUID) -> Data {
-    ProfileDataSyncHandlerTestSupport.accountRow(id: id, name: "V_create")
-      .toCKRecord(in: zoneID)
-      .encodedSystemFields
-  }
-
-  private static func cachedSystemFields(
-    forLeg id: UUID, transactionId: UUID
-  ) -> Data {
-    ProfileDataSyncHandlerTestSupport.transactionLegRow(
-      id: id, transactionId: transactionId, accountId: nil, quantity: 100
-    )
-    .toCKRecord(in: zoneID)
-    .encodedSystemFields
-  }
+  private static let tCreate = Date(timeIntervalSince1970: 1_700_000_000)
+  private static let tUpdate = Date(timeIntervalSince1970: 1_700_000_060)
 
   @Test("AccountRow: V_update survives a stale V_create echo after the ack")
   func accountUpdateSurvivesSupersededEcho() async throws {
@@ -64,25 +40,31 @@ struct NeedsPushSupersededEchoLossTests {
 
     // Row is at V_update, dirty, and has already round-tripped once
     // (non-nil cached system fields from the V_create ack at step 2).
+    let cachedFields = ProfileDataSyncHandlerTestSupport.accountRow(id: id, name: "V_create")
+      .toCKRecord(in: Self.zoneID).withModificationDate(Self.tCreate).encodedSystemFields
     let vUpdateRow = ProfileDataSyncHandlerTestSupport.accountRow(
-      id: id, name: "V_update",
-      encodedSystemFields: Self.cachedSystemFields(forAccount: id))
+      id: id, name: "V_update", encodedSystemFields: cachedFields)
     try await ProfileDataSyncHandlerTestSupport.seed(into: harness.database) { database in
       try vUpdateRow.insert(database)
       try AccountRow.filter(AccountRow.Columns.id == id)
         .updateAll(database, [AccountRow.Columns.needsPush.set(to: true)])
     }
 
-    // Step 5: ack of the V_update upload — current row matches the sent
-    // V_update record, so the over-eager clear fires here.
-    let sentVUpdate = vUpdateRow.toCKRecord(in: Self.zoneID)
+    // Step 5: ack of the V_update upload clears the matching mutation and
+    // advances the cached server timestamp.
+    let recordID = CKRecord.ID(
+      recordType: AccountRow.recordType, uuid: id, zoneID: harness.handler.zoneID)
+    let sentVUpdate = try #require(
+      await MainActor.run { harness.handler.recordToSave(for: recordID).foundRecord }
+    )
+    .withModificationDate(Self.tUpdate)
     _ = await harness.handler.handleSentRecordZoneChanges(
       savedRecords: [sentVUpdate], failedSaves: [], failedDeletes: [])
 
     // Step 6: a stale fetched echo of V_create arrives late.
     let staleEcho = ProfileDataSyncHandlerTestSupport.accountRow(
       id: id, name: "V_create"
-    ).toCKRecord(in: Self.zoneID)
+    ).toCKRecord(in: Self.zoneID).withModificationDate(Self.tCreate)
     let result = harness.handler.applyRemoteChanges(saved: [staleEcho], deleted: [])
     if case .saveFailed(let message) = result { Issue.record("save failed: \(message)") }
 
@@ -115,7 +97,10 @@ struct NeedsPushSupersededEchoLossTests {
     }
     // ack of V_create caches its (non-nil) server system fields.
     _ = try repo.setEncodedSystemFieldsSync(
-      id: id, data: Self.cachedSystemFields(forLeg: id, transactionId: transactionId))
+      id: id,
+      data: ProfileDataSyncHandlerTestSupport.transactionLegRow(
+        id: id, transactionId: transactionId, accountId: nil, quantity: 100
+      ).toCKRecord(in: Self.zoneID).withModificationDate(Self.tCreate).encodedSystemFields)
     // update → V_update (quantity 200), dirty again.
     try await ProfileDataSyncHandlerTestSupport.seed(into: harness.database) { database in
       _ =
@@ -125,17 +110,20 @@ struct NeedsPushSupersededEchoLossTests {
       try repo.markNeedsPushSync(id: id, in: database)
     }
 
-    let vUpdateRow = try #require(try repo.fetchRowSync(id: id))
-
     // Step 5: ack of the V_update upload.
-    let sentVUpdate = vUpdateRow.toCKRecord(in: Self.zoneID)
+    let recordID = CKRecord.ID(
+      recordType: TransactionLegRow.recordType, uuid: id, zoneID: harness.handler.zoneID)
+    let sentVUpdate = try #require(
+      await MainActor.run { harness.handler.recordToSave(for: recordID).foundRecord }
+    )
+    .withModificationDate(Self.tUpdate)
     _ = await harness.handler.handleSentRecordZoneChanges(
       savedRecords: [sentVUpdate], failedSaves: [], failedDeletes: [])
 
     // Step 6: stale V_create echo (quantity 100) arrives late.
     let staleEcho = ProfileDataSyncHandlerTestSupport.transactionLegRow(
       id: id, transactionId: transactionId, accountId: nil, quantity: 100
-    ).toCKRecord(in: Self.zoneID)
+    ).toCKRecord(in: Self.zoneID).withModificationDate(Self.tCreate)
     let result = harness.handler.applyRemoteChanges(saved: [staleEcho], deleted: [])
     if case .saveFailed(let message) = result { Issue.record("save failed: \(message)") }
 

@@ -17,10 +17,10 @@ import Testing
 struct ProfileSchemaV20DropCryptoCompareTests {
   @Test("schema version reflects the latest migration")
   func versionIsLatest() {
-    // Bumped alongside `v28_account_automatic_sync` — see
+    // Bumped alongside `v29_sync_mutation_token` — see
     // `ProfileSchema.version`'s doc comment ("bumped each time a
     // migration is added").
-    #expect(ProfileSchema.version == 28)
+    #expect(ProfileSchema.version == 29)
   }
 
   @Test("v20 migration runs cleanly (per-profile instrument table was already dropped by v10)")
