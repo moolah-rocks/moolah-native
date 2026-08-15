@@ -5,8 +5,9 @@ import SwiftUI
 /// Renders one of three forms depending on the underlying transaction:
 /// - Read-only "Opening balance" label when any leg is an opening balance
 ///   (the user can't change the type of the seed transaction).
-/// - Read-only "Custom" label when the transaction has multi-leg structure
-///   that can't be re-expressed as a simple income/expense/transfer/trade.
+/// - Read-only "Custom" label when the transaction has no sub-transactions or
+///   has multi-leg structure that can't be re-expressed as a simple
+///   income/expense/transfer/trade.
 /// - The interactive `Picker` of income / expense / transfer / trade / custom.
 ///
 /// While the interactive picker is visible, the section publishes a
@@ -68,6 +69,7 @@ struct TransactionDetailModeSection: View {
     if wasTrade && draft.isCustom {
       draft.isCustom = false
     } else if !wasTrade {
+      guard draft.canSwitchToTrade(accounts: accounts) else { return }
       draft.switchToTrade(accounts: accounts)
     }
   }
@@ -76,6 +78,7 @@ struct TransactionDetailModeSection: View {
     if wasTrade {
       draft.switchFromTrade(to: type, accounts: accounts)
     } else if draft.isCustom {
+      guard draft.canSwitchToSimple else { return }
       draft.switchToSimple()
       draft.setType(type, accounts: accounts)
     } else {
@@ -87,6 +90,7 @@ struct TransactionDetailModeSection: View {
   /// changed. Drives both the body's branching (picker vs read-only label)
   /// and the publication of `setTransactionTypeAction` to the menu.
   private var pickerInteractive: Bool {
+    guard !draft.legDrafts.isEmpty else { return false }
     let hasOpeningBalance = transaction.legs.contains(where: { $0.type == .openingBalance })
     let irreducibleCustom =
       !transaction.isSimple && !transaction.isTrade && !draft.isCustom
@@ -95,6 +99,13 @@ struct TransactionDetailModeSection: View {
 
   private var hasOpeningBalance: Bool {
     transaction.legs.contains { $0.type == .openingBalance }
+  }
+
+  private var readOnlyCustomAccessibilityHint: String {
+    if draft.legDrafts.isEmpty {
+      return "Add a sub-transaction before changing the transaction type."
+    }
+    return "This transaction has custom sub-transactions and cannot be changed to a simpler type."
   }
 
   var body: some View {
@@ -108,8 +119,7 @@ struct TransactionDetailModeSection: View {
         LabeledContent("Type") {
           Text("Custom").foregroundStyle(.secondary)
         }
-        .accessibilityHint(
-          "This transaction has custom sub-transactions and cannot be changed to a simpler type.")
+        .accessibilityHint(readOnlyCustomAccessibilityHint)
       } else {
         Picker("Type", selection: modeBinding) {
           ForEach(Self.modes, id: \.self) { mode in

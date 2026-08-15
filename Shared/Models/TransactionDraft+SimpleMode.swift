@@ -259,7 +259,7 @@ extension TransactionDraft {
   /// Whether the current legs satisfy simple-mode rules, allowing a switch to simple mode.
   /// Cross-currency transfers are allowed (amounts need not negate).
   var canSwitchToSimple: Bool {
-    if legDrafts.count <= 1 { return true }
+    if legDrafts.count == 1 { return true }
     guard legDrafts.count == 2 else { return false }
     let primary = legDrafts[0]
     let counterpart = legDrafts[1]

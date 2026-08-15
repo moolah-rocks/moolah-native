@@ -36,12 +36,6 @@ struct TransactionIsSimpleTests {
     #expect(transaction.isSimple == true)
   }
 
-  @Test("Empty legs is simple")
-  func emptyLegsIsSimple() {
-    let transaction = makeTransaction(legs: [])
-    #expect(transaction.isSimple == true)
-  }
-
   @Test("Two-leg transfer with negated amounts and nil optional fields is simple")
   func twoLegTransferNilFieldsIsSimple() {
     let transaction = makeTransaction(legs: [
@@ -70,6 +64,12 @@ struct TransactionIsSimpleTests {
   }
 
   // MARK: - Non-simple cases
+
+  @Test("Empty legs is not simple")
+  func emptyLegsIsNotSimple() {
+    let transaction = makeTransaction(legs: [])
+    #expect(transaction.isSimple == false)
+  }
 
   @Test("Category on second leg is NOT simple")
   func isSimpleRejectsCategoryOnSecondLeg() {
