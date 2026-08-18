@@ -7,10 +7,6 @@
 
   /// Handles: `find txns of profile "X" account "Checking" from date ...`
   final class FindTransactionsCommand: AppLevelScriptCommand {
-    private struct Result: Sendable {
-      let transactions: [ScriptableTransaction]
-    }
-
     override func performDefaultImplementation() -> Any? {
       guard let profileIdentifier = resolveProfileIdentifier() else {
         scriptErrorNumber = -10000
@@ -37,8 +33,8 @@
         } ?? .nonScheduledOnly
       let profileID = profileIdentifier
 
-      let result: Result? = runBlockingWithError {
-        @MainActor () async throws -> Result in
+      return runBlockingWithError {
+        @MainActor () async throws -> [ScriptableTransaction] in
         guard let service = ScriptingContext.automationService else {
           throw AutomationError.operationFailed("Scripting not configured")
         }
@@ -53,11 +49,9 @@
           toDate: toDate,
           scheduled: scheduled
         )
-        return Result(
-          transactions: try Self.scriptableTransactions(
-            transactions, profileIdentifier: profileID, service: service))
+        return try Self.scriptableTransactions(
+          transactions, profileIdentifier: profileID, service: service)
       }
-      return result?.transactions
     }
 
     private func parsedUUIDArgument(_ value: Any?, label: String) throws -> UUID? {

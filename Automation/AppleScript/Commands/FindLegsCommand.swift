@@ -4,10 +4,6 @@
 
   /// Handles: `find legs of profile "X" account id "..." from date ...`
   final class FindLegsCommand: AppLevelScriptCommand {
-    private struct Result: Sendable {
-      let legs: [ScriptableLeg]
-    }
-
     override func performDefaultImplementation() -> Any? {
       guard let profileIdentifier = resolveProfileIdentifier() else {
         return fail("Missing profile specifier")
@@ -31,8 +27,8 @@
           isScheduled ? ScheduledFilter.scheduledOnly : .nonScheduledOnly
         } ?? .nonScheduledOnly
 
-      let result: Result? = runBlockingWithError {
-        @MainActor () async throws -> Result in
+      return runBlockingWithError {
+        @MainActor () async throws -> [ScriptableLeg] in
         guard let service = ScriptingContext.automationService else {
           throw AutomationError.operationFailed("Scripting not configured")
         }
@@ -55,9 +51,8 @@
             transaction: entry.transaction,
             snapshot: snapshot)
         }
-        return Result(legs: legs)
+        return legs
       }
-      return result?.legs
     }
 
     private func parsedUUIDArgument(_ value: Any?, label: String) throws -> UUID? {
