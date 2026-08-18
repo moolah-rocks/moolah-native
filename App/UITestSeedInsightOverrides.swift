@@ -112,7 +112,10 @@ enum UITestSeedInsightOverrides {
           surprise: 0.8,
           monetaryImpact: InstrumentAmount(quantity: -2499, instrument: .AUD),
           references: InsightReferences(
-            accountIds: [UITestFixtures.TradeBaseline.checkingAccountId]),
+            accountIds: [UITestFixtures.TradeBaseline.checkingAccountId],
+            transactionIds: [UITestFixtures.TradeBaseline.bhpPurchaseId],
+            transactionFilter: TransactionFilter(
+              payee: UITestFixtures.TradeBaseline.bhpPurchasePayee)),
           chart: largeTxnChart(anchoredAt: now)),
         score: 4.2),
       ScoredInsight(

@@ -5,8 +5,8 @@ extension UITestFixtures {
   /// between the app target (which constructs the `ScoredInsight` values) and
   /// the UI-test drivers (which assert on the rendered titles and identifiers),
   /// so a rename can't desync the two sides. `largeTxnId` references
-  /// `UITestFixtures.TradeBaseline.checkingAccountId`, so tapping its "View"
-  /// deep-link navigates to that account's detail.
+  /// `UITestFixtures.TradeBaseline.bhpPurchaseId`, so tapping its "View"
+  /// deep-link opens only that insight's evidence in All Transactions.
   public enum InsightsForYou {
     public static let largeTxnId = "for-you-large-txn"
     public static let largeTxnTitle = "Large purchase at the Apple Store"

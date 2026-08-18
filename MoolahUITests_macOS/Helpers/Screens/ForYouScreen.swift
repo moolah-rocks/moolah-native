@@ -121,7 +121,7 @@ struct ForYouScreen {
     // away from the Analysis/For You card — so the For You row unmounts. Wait
     // on that disappearance as the post-condition (actions must not return
     // before a known signal). Scenario-specific landing assertions
-    // (e.g. `expectTransactionListVisible()`) remain the caller's job.
+    // (e.g. `expectTransactionVisible(_:)`) remain the caller's job.
     let row = app.element(for: UITestIdentifiers.ForYou.row(id))
     if !row.waitForNonExistence(timeout: 10) {
       Trace.recordFailure(
@@ -182,18 +182,4 @@ struct ForYouScreen {
     }
   }
 
-  // MARK: - Navigation outcome
-
-  /// Confirms navigation landed on a transaction-list detail leaf by waiting
-  /// for the transaction-list container — the same signal
-  /// `DetailColumnNavigationSweepTests` uses. The Analysis view never renders
-  /// this container, so its appearance proves the "View" deep-link navigated
-  /// away from the For You panel to the referenced account's detail.
-  func expectTransactionListVisible() {
-    let container = app.element(for: UITestIdentifiers.TransactionList.container)
-    if !container.waitForExistence(timeout: 10) {
-      Trace.recordFailure("transaction list did not appear after navigation")
-      XCTFail("Transaction list container did not appear after tapping View")
-    }
-  }
 }

@@ -6,9 +6,9 @@
   /// totals are non-selectable), and emits expand / collapse / selection
   /// notifications back to the controller through callback closures.
   ///
-  /// `suppressExpansionCallbacks` lets the controller reconcile expansion
-  /// state during a tree refresh without echoing the changes back to the
-  /// `GroupUIStateStore` (which would race the data we just applied).
+  /// Callback suppression lets the controller reconcile selection and
+  /// expansion state without echoing those programmatic changes back through
+  /// SwiftUI bindings.
   @MainActor
   final class SidebarOutlineDelegate: NSObject, NSOutlineViewDelegate {
     var cellBuilder: SidebarCellBuilder?
@@ -26,6 +26,7 @@
     /// for the entire controller lifetime and never changes identity
     /// across SwiftUI updates (`cellBuilder` is the only field that does).
     var retainedDropCoordinator: SidebarOutlineDropCoordinator?
+    var suppressSelectionCallbacks = false
     var suppressExpansionCallbacks = false
 
     func outlineView(
@@ -52,6 +53,7 @@
     }
 
     func outlineViewSelectionDidChange(_ notification: Notification) {
+      guard !suppressSelectionCallbacks else { return }
       guard let outlineView = notification.object as? NSOutlineView else { return }
       let row = outlineView.item(atRow: outlineView.selectedRow) as? SidebarRow
       selectionChanged?(row)
