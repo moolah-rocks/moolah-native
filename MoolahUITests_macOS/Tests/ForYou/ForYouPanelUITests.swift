@@ -5,8 +5,8 @@ import XCTest
 /// boots into the Analysis view with three deterministic fixture insights
 /// injected into the `InsightStore`:
 ///
-///   - `largeTxnId`   — references the Checking account → has a "View"
-///     deep-link that navigates to that account's detail.
+///   - `largeTxnId`   — references one transaction → has a "View"
+///     deep-link that opens only that evidence in All Transactions.
 ///   - `priceHikeId`  — no navigation target (no "View" button).
 ///   - `milestoneId`  — no navigation target.
 ///
@@ -41,7 +41,7 @@ final class ForYouPanelUITests: MoolahUITestCase {
     forYou.expectRowVisible(UITestFixtures.InsightsForYou.milestoneId)
   }
 
-  func testNavigateOpensReferencedAccount() {
+  func testNavigateShowsOnlyInsightTransactions() {
     let app = launch(seed: .insightsForYouBaseline)
     let forYou = app.forYou
 
@@ -49,6 +49,7 @@ final class ForYouPanelUITests: MoolahUITestCase {
     // The "View" deep-link is always visible (no expansion step).
     forYou.tapView(UITestFixtures.InsightsForYou.largeTxnId)
 
-    forYou.expectTransactionListVisible()
+    app.transactionList.expectTransactionVisible(UITestFixtures.TradeBaseline.bhpPurchaseId)
+    app.transactionList.expectTransactionAbsent(UITestFixtures.TradeBaseline.splitShopId)
   }
 }

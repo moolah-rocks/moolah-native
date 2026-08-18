@@ -140,7 +140,8 @@ public enum UITestSeed: String, CaseIterable, Sendable {
   /// `ScoredInsight`s via `UITestSeedInsightOverrides`, bypassing the
   /// statistical detectors. Drives `ForYouPanelUITests`: the For You card
   /// renders the fixtures, dismiss removes one, and the navigable row deep-links
-  /// to the checking account. See `UITestFixtures.InsightsForYou`.
+  /// to a transaction list filtered to its evidence. See
+  /// `UITestFixtures.InsightsForYou`.
   case insightsForYouBaseline = "insights-for-you-baseline"
 
   /// An AUD profile with an account group ("Filter Group") holding two

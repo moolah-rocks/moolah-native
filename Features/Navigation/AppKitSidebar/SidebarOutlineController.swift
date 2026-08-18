@@ -9,9 +9,9 @@
   /// `apply(tree:expandedGroupIds:selection:reloadData:)` reconciles the
   /// current snapshot, expansion, and selection state. Content changes
   /// reload the outline, while selection-only changes update the observable
-  /// state read by installed hosted rows. Expansion-callback echo is
-  /// suppressed during the reconcile so persisted state remains the source
-  /// of truth.
+  /// state read by installed hosted rows. Selection- and expansion-callback
+  /// echoes are suppressed during the reconcile so SwiftUI and persisted
+  /// state remain the sources of truth.
   @MainActor
   final class SidebarOutlineController: NSViewController {
     let outlineView = SidebarKeyHandlingOutlineView()
@@ -109,13 +109,17 @@
       selection: SidebarSelection?,
       reloadData: Bool
     ) {
+      delegate.suppressSelectionCallbacks = true
+      delegate.suppressExpansionCallbacks = true
+      defer {
+        delegate.suppressSelectionCallbacks = false
+        delegate.suppressExpansionCallbacks = false
+      }
+
       dataSource.tree = tree
       if reloadData {
         outlineView.reloadData()
       }
-
-      delegate.suppressExpansionCallbacks = true
-      defer { delegate.suppressExpansionCallbacks = false }
 
       // Section headers are always expanded — we never give the user a
       // way to collapse them. expand them after every reload so children

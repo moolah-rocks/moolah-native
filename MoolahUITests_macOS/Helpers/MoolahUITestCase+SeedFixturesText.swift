@@ -174,9 +174,9 @@ extension MoolahUITestCase {
     lines.append("priceHike.id/title   = \(fixtures.priceHikeId) / \(fixtures.priceHikeTitle)")
     lines.append("milestone.id/title   = \(fixtures.milestoneId) / \(fixtures.milestoneTitle)")
     lines.append(
-      "largeTxn references checking account "
-        + "\(UITestFixtures.TradeBaseline.checkingAccountId) "
-        + "(\(UITestFixtures.TradeBaseline.checkingAccountName)) → has 'View'")
+      "largeTxn filters to transaction "
+        + "\(UITestFixtures.TradeBaseline.bhpPurchaseId) "
+        + "with payee '\(UITestFixtures.TradeBaseline.bhpPurchasePayee)' → has 'View'")
     lines.append("scripted.narration = \(UITestFixtures.InsightsForYou.scriptedNarration)")
     lines.append(
       "largeTxn carries a 6-month bar chart (anomaly spike in the final month) "
