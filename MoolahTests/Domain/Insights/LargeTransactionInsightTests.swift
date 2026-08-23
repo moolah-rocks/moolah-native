@@ -6,7 +6,6 @@ import Testing
 @Suite("Large-transaction anomaly")
 struct LargeTransactionInsightTests {
   private let context = InsightTestSupport.context()
-  private let emptyCategories = Categories(from: [])
 
   /// A one-off charge in a category with almost no history must not fire. The
   /// detector used to fall back to the global spend distribution for sparse
@@ -39,9 +38,10 @@ struct LargeTransactionInsightTests {
 
     let insights = LargeTransactionInsight.detect(
       recentCandidates: [bigPurchase],
+      payees: InsightTestSupport.payees(from: samples + [priorDeposit, bigPurchase]),
       categorySamples: InsightTestSupport.categorySamples(
         from: samples + [priorDeposit, bigPurchase]),
-      categories: emptyCategories, context: context)
+      context: context)
 
     #expect(!insights.contains { $0.kind == .largeTransactionAnomaly })
   }
@@ -76,8 +76,9 @@ struct LargeTransactionInsightTests {
 
     let insights = LargeTransactionInsight.detect(
       recentCandidates: [outlier],
+      payees: InsightTestSupport.payees(from: samples + [outlier]),
       categorySamples: InsightTestSupport.categorySamples(from: samples + [outlier]),
-      categories: emptyCategories, context: context)
+      context: context)
 
     let anomaly = try #require(insights.first { $0.kind == .largeTransactionAnomaly })
     #expect(anomaly.presentationKey == anomaly.id)
@@ -85,5 +86,164 @@ struct LargeTransactionInsightTests {
     // Dining median is 20 (expenses are negative), not anything near the
     // 2,000-skewed global figure.
     #expect(typical.value == context.formatted(Decimal(-20)))
+  }
+
+  @Test
+  func quietForEstablishedSameMerchantAmount() {
+    let fixture = donationFixture(latestAmount: 1_500)
+
+    let insights = LargeTransactionInsight.detect(
+      recentCandidates: [fixture.candidate],
+      payees: InsightTestSupport.payees(from: fixture.history + [fixture.candidate]),
+      categorySamples: InsightTestSupport.categorySamples(
+        from: fixture.history + [fixture.candidate]),
+      context: context)
+
+    #expect(!insights.contains { $0.kind == .largeTransactionAnomaly })
+  }
+
+  @Test
+  func flagsMaterialIncreaseFromEstablishedMerchant() {
+    let fixture = donationFixture(latestAmount: 2_000)
+
+    let insights = LargeTransactionInsight.detect(
+      recentCandidates: [fixture.candidate],
+      payees: InsightTestSupport.payees(from: fixture.history + [fixture.candidate]),
+      categorySamples: InsightTestSupport.categorySamples(
+        from: fixture.history + [fixture.candidate]),
+      context: context)
+
+    #expect(insights.contains { $0.kind == .largeTransactionAnomaly })
+  }
+
+  @Test
+  func heterogeneousMerchantHistoryDoesNotEstablishAmount() {
+    let fixture = donationFixture(
+      latestAmount: 1_500,
+      merchantHistoryAmounts: [100, 1_500, 2_900])
+
+    let insights = LargeTransactionInsight.detect(
+      recentCandidates: [fixture.candidate],
+      payees: InsightTestSupport.payees(from: fixture.history + [fixture.candidate]),
+      categorySamples: InsightTestSupport.categorySamples(
+        from: fixture.history + [fixture.candidate]),
+      context: context)
+
+    #expect(insights.contains { $0.kind == .largeTransactionAnomaly })
+  }
+
+  @Test
+  func quietWhenMatchingMerchantHistoryIsUnavailable() {
+    let fixture = donationFixture(
+      latestAmount: 1_500,
+      merchantHistoryAmounts: [100, 1_500, 2_900])
+    let availablePayees = InsightTestSupport.payees(
+      from: fixture.history + [fixture.candidate])
+    let payees = availablePayees.map { payee in
+      PayeeSummary(
+        normalizedPayee: payee.normalizedPayee,
+        displayPayee: payee.displayPayee,
+        isExpense: payee.isExpense,
+        occurrenceCount: payee.occurrenceCount,
+        firstSeen: payee.firstSeen,
+        lastSeen: payee.lastSeen,
+        windowedTotal: payee.windowedTotal,
+        occurrences: payee.occurrences,
+        hasUnavailableData: payee.normalizedPayee == fixture.candidate.normalizedPayee)
+    }
+
+    let insights = LargeTransactionInsight.detect(
+      recentCandidates: [fixture.candidate],
+      payees: payees,
+      categorySamples: InsightTestSupport.categorySamples(
+        from: fixture.history + [fixture.candidate]),
+      context: context)
+
+    #expect(!insights.contains { $0.kind == .largeTransactionAnomaly })
+  }
+
+  @Test
+  func unrelatedUnavailableMerchantDoesNotSuppressAnomaly() {
+    let fixture = donationFixture(
+      latestAmount: 1_500,
+      merchantHistoryAmounts: [100, 1_500, 2_900])
+    let unrelatedHistory = (1...3).map { occurrence in
+      InsightTestSupport.expense(
+        50,
+        payee: "Other Merchant",
+        daysAgo: occurrence * 20)
+    }
+    let unavailablePayee = InsightTestSupport.payees(from: unrelatedHistory).map { payee in
+      PayeeSummary(
+        normalizedPayee: payee.normalizedPayee,
+        displayPayee: payee.displayPayee,
+        isExpense: payee.isExpense,
+        occurrenceCount: payee.occurrenceCount,
+        firstSeen: payee.firstSeen,
+        lastSeen: payee.lastSeen,
+        windowedTotal: payee.windowedTotal,
+        occurrences: payee.occurrences,
+        hasUnavailableData: true)
+    }
+    let payees =
+      InsightTestSupport.payees(from: fixture.history + [fixture.candidate])
+      + unavailablePayee
+
+    let insights = LargeTransactionInsight.detect(
+      recentCandidates: [fixture.candidate],
+      payees: payees,
+      categorySamples: InsightTestSupport.categorySamples(
+        from: fixture.history + [fixture.candidate]),
+      context: context)
+
+    #expect(insights.contains { $0.kind == .largeTransactionAnomaly })
+  }
+
+  @Test
+  func quietForThreeNearMerchantAmounts() {
+    let fixture = donationFixture(
+      latestAmount: 1_500,
+      merchantHistoryAmounts: [100, 1_400, 1_500, 1_600, 2_900])
+
+    let insights = LargeTransactionInsight.detect(
+      recentCandidates: [fixture.candidate],
+      payees: InsightTestSupport.payees(from: fixture.history + [fixture.candidate]),
+      categorySamples: InsightTestSupport.categorySamples(
+        from: fixture.history + [fixture.candidate]),
+      context: context)
+
+    #expect(!insights.contains { $0.kind == .largeTransactionAnomaly })
+  }
+}
+
+extension LargeTransactionInsightTests {
+  private func donationFixture(
+    latestAmount: Decimal,
+    merchantHistoryAmounts: [Decimal] = Array(repeating: 1_500, count: 11)
+  ) -> (candidate: InsightTransaction, history: [InsightTransaction]) {
+    let donations = UUID()
+    let merchantHistory = merchantHistoryAmounts.enumerated().map { index, amount in
+      InsightTestSupport.expense(
+        amount,
+        payee: "Family Radio",
+        daysAgo: (index + 1) * 30 + 2,
+        categoryId: donations,
+        categoryPath: "Donations")
+    }
+    let smallerDonations = (1...40).map { occurrence in
+      InsightTestSupport.expense(
+        Decimal(25 + occurrence % 5),
+        payee: "Local Charity",
+        daysAgo: occurrence * 8,
+        categoryId: donations,
+        categoryPath: "Donations")
+    }
+    let candidate = InsightTestSupport.expense(
+      latestAmount,
+      payee: "Family Radio",
+      daysAgo: 2,
+      categoryId: donations,
+      categoryPath: "Donations")
+    return (candidate, merchantHistory + smallerDonations)
   }
 }
