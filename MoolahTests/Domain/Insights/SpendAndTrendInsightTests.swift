@@ -30,8 +30,9 @@ struct SpendAndTrendInsightTests {
         hasUnavailableData: true))
     let insights = LargeTransactionInsight.detect(
       recentCandidates: [outlier],
+      payees: InsightTestSupport.payees(from: baseline + [outlier]),
       categorySamples: samples,
-      categories: emptyCategories, context: context)
+      context: context)
     let anomaly = try #require(insights.first { $0.kind == .largeTransactionAnomaly })
     #expect(anomaly.references.transactionIds.count == 1)
     let filter = try #require(anomaly.references.transactionFilter)

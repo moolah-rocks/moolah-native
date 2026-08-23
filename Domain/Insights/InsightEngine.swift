@@ -89,8 +89,8 @@ struct InsightEngine: Sendable {
     var insights: [Insight] = []
     insights += LargeTransactionInsight.detect(
       recentCandidates: input.recentCandidates,
+      payees: input.payees,
       categorySamples: input.categorySamples,
-      categories: input.categories,
       context: context,
       baselineWindowDays: input.dataWindow.sampleDays)
     if input.dataAvailability.categorySamples {
