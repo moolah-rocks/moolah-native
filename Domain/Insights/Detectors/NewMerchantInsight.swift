@@ -1,9 +1,9 @@
 import Foundation
 
 /// New-merchant alert (design §B-8): a payee seen for the first time in the
-/// recent window whose charge lands in the top decile of all historical
-/// spend. Novelty × magnitude — a first-time small charge isn't worth a
-/// notification, a first-time large one is.
+/// recent window, has appeared again, and whose first charge lands in the top
+/// decile of all historical spend. Novelty × recurrence × magnitude — a
+/// one-off payment or a first-time small charge isn't worth a notification.
 ///
 /// The magnitude baseline (`categorySamples`) only covers categorised
 /// expense legs (the SQL filters `category_id IS NOT NULL`), so uncategorised
@@ -32,6 +32,8 @@ enum NewMerchantInsight {
     // with the same normalized name must not hide a first-time expense charge.
     var established: Set<String> = []
     let unavailable = unavailableExpensePayees(payees)
+    let repeated = repeatedExpensePayees(
+      recentCandidates, context: context, windowDays: windowDays)
     for payee in payees
     where payee.isExpense
       && !payee.normalizedPayee.isEmpty
@@ -46,8 +48,8 @@ enum NewMerchantInsight {
       let age = context.daysSince(transaction.date)
       guard age >= 0, age <= windowDays else { continue }
       let key = transaction.normalizedPayee
-      guard !key.isEmpty, !unavailable.contains(key), !established.contains(key),
-        !seenThisWindow.contains(key)
+      guard !key.isEmpty, repeated.contains(key), !unavailable.contains(key),
+        !established.contains(key), !seenThisWindow.contains(key)
       else { continue }
       seenThisWindow.insert(key)
 
@@ -55,26 +57,12 @@ enum NewMerchantInsight {
       guard value >= topDecile, value > 0 else { continue }
 
       insights.append(
-        Insight(
-          id: "\(InsightKind.newMerchantAlert.rawValue):\(key)",
-          kind: .newMerchantAlert,
-          title: "First charge from \(payeeName(transaction))",
-          date: transaction.date,
-          framing: .neutral,
-          actionability: .review,
-          surprise: 0.5,
-          monetaryImpact: transaction.amountInReportingCurrency(context),
-          facts: [
-            InsightFact("Merchant", payeeName(transaction)),
-            InsightFact("Amount", context.formatted(transaction.amount)),
-            InsightFact("Merchant history", "\(historyWindowDays) days"),
-            InsightFact("Top-decile threshold", context.formatted(Decimal(-topDecile))),
-          ],
-          references: InsightReferences(
-            accountIds: transaction.accountId.map { [$0] } ?? [],
-            categoryIds: transaction.categoryId.map { [$0] } ?? [],
-            transactionIds: [transaction.id],
-            transactionFilter: transaction.evidenceFilter(calendar: context.calendar))))
+        insight(
+          for: transaction,
+          normalizedPayee: key,
+          topDecile: topDecile,
+          historyWindowDays: historyWindowDays,
+          context: context))
     }
     return insights
   }
@@ -84,6 +72,52 @@ enum NewMerchantInsight {
       payees.lazy
         .filter { $0.isExpense && $0.hasUnavailableData }
         .map(\.normalizedPayee))
+  }
+
+  private static func repeatedExpensePayees(
+    _ candidates: [InsightTransaction],
+    context: InsightContext,
+    windowDays: Int
+  ) -> Set<String> {
+    var transactionIdsByPayee: [String: Set<UUID>] = [:]
+    for transaction in candidates where transaction.isExpense {
+      let age = context.daysSince(transaction.date)
+      guard age >= 0, age <= windowDays, !transaction.normalizedPayee.isEmpty else { continue }
+      transactionIdsByPayee[transaction.normalizedPayee, default: []].insert(transaction.id)
+    }
+    return Set(
+      transactionIdsByPayee.lazy
+        .filter { $0.value.count > 1 }
+        .map(\.key))
+  }
+
+  private static func insight(
+    for transaction: InsightTransaction,
+    normalizedPayee: String,
+    topDecile: Double,
+    historyWindowDays: Int,
+    context: InsightContext
+  ) -> Insight {
+    Insight(
+      id: "\(InsightKind.newMerchantAlert.rawValue):\(normalizedPayee)",
+      kind: .newMerchantAlert,
+      title: "First charge from \(payeeName(transaction))",
+      date: transaction.date,
+      framing: .neutral,
+      actionability: .review,
+      surprise: 0.5,
+      monetaryImpact: transaction.amountInReportingCurrency(context),
+      facts: [
+        InsightFact("Merchant", payeeName(transaction)),
+        InsightFact("Amount", context.formatted(transaction.amount)),
+        InsightFact("Merchant history", "\(historyWindowDays) days"),
+        InsightFact("Top-decile threshold", context.formatted(Decimal(-topDecile))),
+      ],
+      references: InsightReferences(
+        accountIds: transaction.accountId.map { [$0] } ?? [],
+        categoryIds: transaction.categoryId.map { [$0] } ?? [],
+        transactionIds: [transaction.id],
+        transactionFilter: transaction.evidenceFilter(calendar: context.calendar)))
   }
 
   private static func payeeName(_ transaction: InsightTransaction) -> String {
