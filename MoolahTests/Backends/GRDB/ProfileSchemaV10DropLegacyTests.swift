@@ -116,6 +116,8 @@ struct ProfileSchemaV10DropLegacyTests {
     "transaction_by_payee",
     // v19 (date DESC, id ASC) list-pagination index
     "transaction_by_date_id",
+    // v30 recently imported transaction lookup
+    "transaction_by_import_origin",
     // v3 transaction_leg (rebuilt v5) + v8 dedup index
     "leg_by_transaction",
     "leg_by_account",

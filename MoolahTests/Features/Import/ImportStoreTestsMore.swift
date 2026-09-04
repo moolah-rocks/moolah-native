@@ -79,7 +79,7 @@ struct ImportStoreTestsMore {
     if case .failed = result {
       #expect(store.failedFiles.count == 1)
       #expect(store.failedFiles[0].originalFilename == "bad.csv")
-      #expect(store.failedFiles[0].error.contains("Headers"))
+      #expect(store.failedFiles[0].error.contains("match the file’s columns"))
     } else {
       Issue.record("expected .failed; got \(result)")
     }
