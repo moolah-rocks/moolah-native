@@ -188,10 +188,16 @@
       return NSTableCellView.hosting(
         accessibilityIdentifier: UITestIdentifiers.Sidebar.view(descriptor.idSuffix)
       ) {
-        SidebarNavigationRowView(
-          title: descriptor.title,
-          systemImage: descriptor.icon,
-          badgeCount: descriptor.badge)
+        SelectionAwareSidebarRow(
+          selectionState: selectionState,
+          rowSelection: kind.asSelection
+        ) { isSelected in
+          SidebarNavigationRowView(
+            title: descriptor.title,
+            systemImage: descriptor.icon,
+            badgeCount: descriptor.badge,
+            isSelected: isSelected)
+        }
       }
     }
 
