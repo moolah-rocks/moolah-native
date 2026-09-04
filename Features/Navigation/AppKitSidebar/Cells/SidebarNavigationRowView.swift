@@ -9,6 +9,7 @@ struct SidebarNavigationRowView: View {
   let title: String
   let systemImage: String
   var badgeCount: Int = 0
+  var isSelected = false
 
   var body: some View {
     HStack {
@@ -26,6 +27,7 @@ struct SidebarNavigationRowView: View {
     }
     .accessibilityElement(children: .combine)
     .accessibilityLabel(accessibilityLabel)
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
 
   private var accessibilityLabel: String {

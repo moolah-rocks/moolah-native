@@ -103,7 +103,7 @@ struct SidebarScreen {
   /// leaf's canonical container as a post-condition for the two named
   /// items that expose one: `allTransactions` renders a
   /// `TransactionListView` (via `AllTransactionsView`) and waits on
-  /// `UITestIdentifiers.TransactionList.container`; `recentlyAdded` now
+  /// `UITestIdentifiers.TransactionList.container`; `recentlyAdded`
   /// renders the same standard list. For the remaining
   /// items (`upcoming`, `analysis`, `reports`, `categories`) the leaf is
   /// its own custom surface with no shared identifier, so the next
@@ -120,11 +120,9 @@ struct SidebarScreen {
     }
     row.click()
 
-    let selected = NSPredicate { object, _ in
-      guard let element = object as? XCUIElement else { return false }
-      return (element.value(forKey: "isSelected") as? Bool) == true
-    }
-    let selectionExpectation = XCTNSPredicateExpectation(predicate: selected, object: row)
+    let selectionExpectation = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "isSelected == true"),
+      object: row)
     if XCTWaiter.wait(for: [selectionExpectation], timeout: 10) != .completed {
       Trace.recordFailure("sidebar row '\(identifier)' did not become selected")
       XCTFail("Sidebar row for \(item.rawValue) did not become selected within 10s")
