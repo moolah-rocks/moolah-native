@@ -79,8 +79,9 @@ extension UITestSeedHydrator {
 
   /// One imported single-account side of a detected transfer pair. The
   /// transaction has a single value leg and a `.single` import origin
-  /// (so it shows in Recently Added). The passive pill is driven by a
-  /// separate synced `TransferSuggestion` record seeded once per pair
+  /// (so it shows in Recently Added). The standard transaction inspector's
+  /// possible-transfer action is driven by a separate synced
+  /// `TransferSuggestion` record seeded once per pair
   /// (via `upsertSuggestedTransferRecord`) over `id` and
   /// `counterpartId` — no detection-timing dependency.
   struct SuggestedTransferSpec {
@@ -305,8 +306,9 @@ extension UITestSeedHydrator {
 
   /// Inserts one imported single-account side of a detected transfer
   /// pair: a single value leg and a `.single` import origin (so the row
-  /// surfaces in Recently Added's window). The "possible transfer" pill
-  /// is driven by a separate synced `TransferSuggestion` record seeded
+  /// surfaces in Recently Added's window). The standard transaction inspector's
+  /// possible-transfer action is driven by a separate synced
+  /// `TransferSuggestion` record seeded
   /// once per pair via `upsertSuggestedTransferRecord`, not a
   /// denormalised field on the transaction. Idempotent via the
   /// parent-existence guard, matching the other transaction upserts.
@@ -341,8 +343,8 @@ extension UITestSeedHydrator {
   }
 
   /// Seeds the synced `TransferSuggestion` record over a detected pair
-  /// so the passive "possible transfer" pill renders for both rows at
-  /// first launch with no detection-timing dependency. The record id is
+  /// so the standard inspector offers the transfer action at first launch
+  /// with no detection-timing dependency. The record id is
   /// content-addressed from the unordered transaction-id pair, so a
   /// later detection pass on any device upserts the same row.
   /// Idempotent via the row-existence guard.

@@ -102,8 +102,8 @@ struct ReplaceFailingTransactionRepository: TransactionRepository {
     try await wrapped.distinctLegInstrumentIds()
   }
 
-  func countNeedsReview() async throws -> Int {
-    try await wrapped.countNeedsReview()
+  func countNeedsReview(excludingInstrumentIds instrumentIds: Set<String>) async throws -> Int {
+    try await wrapped.countNeedsReview(excludingInstrumentIds: instrumentIds)
   }
 
   func fetchCostBasisEventLegs() async throws -> [CostBasisEventLegRow] {
@@ -182,8 +182,10 @@ actor GatedReplaceTransactionRepository: TransactionRepository {
     try await wrapped.distinctLegInstrumentIds()
   }
 
-  nonisolated func countNeedsReview() async throws -> Int {
-    try await wrapped.countNeedsReview()
+  nonisolated func countNeedsReview(
+    excludingInstrumentIds instrumentIds: Set<String>
+  ) async throws -> Int {
+    try await wrapped.countNeedsReview(excludingInstrumentIds: instrumentIds)
   }
 
   nonisolated func fetchCostBasisEventLegs() async throws -> [CostBasisEventLegRow] {
@@ -264,8 +266,10 @@ actor GatedFetchAllTransactionRepository: TransactionRepository {
     try await wrapped.distinctLegInstrumentIds()
   }
 
-  nonisolated func countNeedsReview() async throws -> Int {
-    try await wrapped.countNeedsReview()
+  nonisolated func countNeedsReview(
+    excludingInstrumentIds instrumentIds: Set<String>
+  ) async throws -> Int {
+    try await wrapped.countNeedsReview(excludingInstrumentIds: instrumentIds)
   }
 
   nonisolated func fetchCostBasisEventLegs() async throws -> [CostBasisEventLegRow] {

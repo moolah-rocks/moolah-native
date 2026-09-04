@@ -95,8 +95,8 @@ actor RecordingTransactionRepository: TransactionRepository {
     try await wrapped.distinctLegInstrumentIds()
   }
 
-  func countNeedsReview() async throws -> Int {
-    try await wrapped.countNeedsReview()
+  func countNeedsReview(excludingInstrumentIds instrumentIds: Set<String>) async throws -> Int {
+    try await wrapped.countNeedsReview(excludingInstrumentIds: instrumentIds)
   }
 
   func fetchCostBasisEventLegs() async throws -> [CostBasisEventLegRow] {

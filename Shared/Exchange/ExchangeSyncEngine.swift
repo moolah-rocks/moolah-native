@@ -89,8 +89,7 @@ struct ExchangeSyncEngine: Sendable {
     // each).
     let groups = Dictionary(grouping: imported) { $0.orderId ?? $0.externalId }
     // One origin per account-sync: every candidate this pass produces
-    // shares the same `importSessionId`, so `RecentlyAddedViewModel`
-    // groups them as one session. Built once, before the per-group
+    // shares the same `importSessionId` for import provenance. Built once, before the per-group
     // loop, mirroring `WalletSyncEngine.run(account:)`.
     let importOrigin = importOriginFactory(account.id)
     var candidates: [BuiltTransaction] = []

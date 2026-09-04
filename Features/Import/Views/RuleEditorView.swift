@@ -205,7 +205,11 @@ struct RuleEditorView: View {
   /// editor doesn't hammer the backend.
   private func schedulePreview() async {
     affectedCount = nil
-    try? await Task.sleep(nanoseconds: 500_000_000)
+    do {
+      try await Task.sleep(nanoseconds: 500_000_000)
+    } catch {
+      return
+    }
     if Task.isCancelled { return }
     let count = await ruleStore.countAffected(
       conditions: identifiedConditions.map(\.condition),

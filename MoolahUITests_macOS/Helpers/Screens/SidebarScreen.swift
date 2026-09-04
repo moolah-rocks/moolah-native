@@ -103,9 +103,8 @@ struct SidebarScreen {
   /// leaf's canonical container as a post-condition for the two named
   /// items that expose one: `allTransactions` renders a
   /// `TransactionListView` (via `AllTransactionsView`) and waits on
-  /// `UITestIdentifiers.TransactionList.container`; `recentlyAdded`
-  /// renders `RecentlyAddedView` and waits on
-  /// `UITestIdentifiers.RecentlyAdded.container`. For the remaining
+  /// `UITestIdentifiers.TransactionList.container`; `recentlyAdded` now
+  /// renders the same standard list. For the remaining
   /// items (`upcoming`, `analysis`, `reports`, `categories`) the leaf is
   /// its own custom surface with no shared identifier, so the next
   /// driver call's `waitForExistence` provides natural quiescence — per
@@ -121,25 +120,27 @@ struct SidebarScreen {
     }
     row.click()
 
-    // Post-condition for `allTransactions`, the only named leaf that
-    // renders a `TransactionListView`: wait on the canonical list
+    let selected = NSPredicate { object, _ in
+      guard let element = object as? XCUIElement else { return false }
+      return (element.value(forKey: "isSelected") as? Bool) == true
+    }
+    let selectionExpectation = XCTNSPredicateExpectation(predicate: selected, object: row)
+    if XCTWaiter.wait(for: [selectionExpectation], timeout: 10) != .completed {
+      Trace.recordFailure("sidebar row '\(identifier)' did not become selected")
+      XCTFail("Sidebar row for \(item.rawValue) did not become selected within 10s")
+      return
+    }
+
+    // Post-condition for leaves that render `TransactionListView`: wait on the canonical list
     // container so the test exits this driver call only after the leaf
     // has rendered.
     switch item {
-    case .allTransactions:
+    case .allTransactions, .recentlyAdded:
       let listContainer = app.element(for: UITestIdentifiers.TransactionList.container)
       if !listContainer.waitForExistence(timeout: 10) {
         Trace.recordFailure(
           "transaction list container did not appear after switching to \(item.rawValue)")
         XCTFail("Transaction list did not render within 10s after \(item.rawValue)")
-      }
-    case .recentlyAdded:
-      let recentlyAddedContainer = app.element(
-        for: UITestIdentifiers.RecentlyAdded.container)
-      if !recentlyAddedContainer.waitForExistence(timeout: 10) {
-        Trace.recordFailure(
-          "recently added container did not appear after switching to \(item.rawValue)")
-        XCTFail("Recently Added did not render within 10s after \(item.rawValue)")
       }
     case .upcoming, .analysis, .reports, .categories:
       // No shared identifier — see docstring.

@@ -85,7 +85,7 @@ private actor CountingTransactionRepository: TransactionRepository {
   }
   func legExists(accountId: UUID, externalId: String) async throws -> Bool { false }
   func distinctLegInstrumentIds() async throws -> Set<String> { [] }
-  func countNeedsReview() async throws -> Int { 0 }
+  func countNeedsReview(excludingInstrumentIds: Set<String>) async throws -> Int { 0 }
 }
 
 @Suite("HoldingsCostLedgerStore")

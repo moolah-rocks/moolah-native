@@ -121,26 +121,18 @@ extension MoolahUITestCase {
     lines.append("savings.id       = \(fixtures.savingsAccountId)")
     lines.append("savings.name     = \(fixtures.savingsAccountName)")
     lines.append(
-      "merge.outgoing.id/payee/cents/date = "
-        + "\(fixtures.mergeOutgoingId) / \(fixtures.mergeOutgoingPayee) "
-        + "/ \(fixtures.mergeOutgoingCents) / \(fixtures.mergeOutgoingDate)")
+      "primary.outgoing.id/payee/cents/date = "
+        + "\(fixtures.primaryOutgoingId) / \(fixtures.primaryOutgoingPayee) "
+        + "/ \(fixtures.primaryOutgoingCents) / \(fixtures.primaryOutgoingDate)")
     lines.append(
-      "merge.incoming.id/payee/cents/date = "
-        + "\(fixtures.mergeIncomingId) / \(fixtures.mergeIncomingPayee) "
-        + "/ \(fixtures.mergeIncomingCents) / \(fixtures.mergeIncomingDate)")
-    lines.append(
-      "dismiss.outgoing.id/payee/cents/date = "
-        + "\(fixtures.dismissOutgoingId) / \(fixtures.dismissOutgoingPayee) "
-        + "/ \(fixtures.dismissOutgoingCents) / \(fixtures.dismissOutgoingDate)")
-    lines.append(
-      "dismiss.incoming.id/payee/cents/date = "
-        + "\(fixtures.dismissIncomingId) / \(fixtures.dismissIncomingPayee) "
-        + "/ \(fixtures.dismissIncomingCents) / \(fixtures.dismissIncomingDate)")
+      "primary.incoming.id/payee/cents/date = "
+        + "\(fixtures.primaryIncomingId) / \(fixtures.primaryIncomingPayee) "
+        + "/ \(fixtures.primaryIncomingCents) / \(fixtures.primaryIncomingDate)")
     lines.append("suggestion.suggestedAt = \(fixtures.suggestedAt)")
     lines.append(
       "importedAt    = launch time − 1h (inside the 24h Recently Added "
         + "window; wall-clock-relative by design — one shared value "
-        + "across all four transactions)")
+        + "across both transactions)")
     lines.append("# import origin: .single")
   }
 

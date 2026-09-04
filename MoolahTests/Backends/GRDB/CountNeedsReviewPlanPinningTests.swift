@@ -23,14 +23,42 @@ struct CountNeedsReviewPlanPinningTests {
     SELECT COUNT(*)
     FROM "transaction" t
     WHERE t.recur_period IS NULL
+      AND EXISTS (
+        SELECT 1 FROM transaction_leg leg
+        WHERE leg.transaction_id = t.id
+          AND leg.type IN ('income', 'expense')
+      )
       AND NOT EXISTS (
         SELECT 1 FROM transaction_leg leg
         WHERE leg.transaction_id = t.id
+          AND leg.type IN ('income', 'expense')
           AND leg.category_id IS NOT NULL
       )
     """
 
-  @Test("correlated NOT EXISTS probe uses leg_by_transaction — no bare leg scan")
+  private let spamAwareQuery = """
+    SELECT COUNT(*)
+    FROM "transaction" t
+    WHERE t.recur_period IS NULL
+      AND EXISTS (
+        SELECT 1 FROM transaction_leg leg
+        WHERE leg.transaction_id = t.id
+          AND leg.type IN ('income', 'expense')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM transaction_leg leg
+        WHERE leg.transaction_id = t.id
+          AND leg.type IN ('income', 'expense')
+          AND leg.category_id IS NOT NULL
+      )
+      AND EXISTS (
+        SELECT 1 FROM transaction_leg leg
+        WHERE leg.transaction_id = t.id
+          AND leg.instrument_id NOT IN ('spam-token')
+      )
+    """
+
+  @Test("both category probes use leg_by_transaction — no bare leg scan")
   func legSideUsesIndex() throws {
     let database = try PlanPinningTestHelpers.makeDatabase()
     let detail = try PlanPinningTestHelpers.planDetail(database, query: query)
@@ -38,5 +66,17 @@ struct CountNeedsReviewPlanPinningTests {
     // SQLite resolves this through leg_by_transaction(transaction_id),
     // so a bare SCAN of the leg alias must not appear.
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
+    let indexProbeCount = detail.components(separatedBy: "leg_by_transaction").count - 1
+    #expect(indexProbeCount >= 2)
+  }
+
+  @Test("spam-aware probes use leg_by_transaction — no bare leg scan")
+  func spamAwareLegSideUsesIndex() throws {
+    let database = try PlanPinningTestHelpers.makeDatabase()
+    let detail = try PlanPinningTestHelpers.planDetail(database, query: spamAwareQuery)
+
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
+    let indexProbeCount = detail.components(separatedBy: "leg_by_transaction").count - 1
+    #expect(indexProbeCount >= 3)
   }
 }

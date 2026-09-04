@@ -7,9 +7,8 @@ import Foundation
 /// unmodified values from the CSV row — rules operate on these fields so
 /// import rules stay stable even after payee cleanup.
 ///
-/// `importSessionId` groups every transaction imported in a single ingest
-/// event (one file drop, one scan pass, or one paste). `Recently Added`
-/// groups rows by this id.
+/// `importSessionId` identifies every transaction imported in a single ingest
+/// event (one file drop, one scan pass, or one paste) for provenance.
 struct ImportOrigin: Codable, Sendable, Hashable {
   let rawDescription: String
   let bankReference: String?

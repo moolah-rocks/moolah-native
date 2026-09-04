@@ -332,7 +332,6 @@ extension TransactionListView {
       Button("Merge as Transfer", systemImage: "arrow.left.arrow.right") {
         Task { await transactionStore.manualMerge(pair.0, pair.1) }
       }
-      .accessibilityIdentifier(UITestIdentifiers.TransferDetection.merge(transaction.id))
     }
     let mergeCandidates = mergeSelection
     if mergeCandidates.contains(where: { $0.id == transaction.id }) {
@@ -349,7 +348,6 @@ extension TransactionListView {
       ) {
         transactionPendingUnmerge = transaction.id
       }
-      .accessibilityIdentifier(UITestIdentifiers.TransferDetection.unmerge(transaction.id))
     }
     Divider()
     Button("Delete Transaction\u{2026}", systemImage: "trash", role: .destructive) {

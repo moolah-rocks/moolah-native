@@ -78,16 +78,12 @@ struct TransactionDetailTransferSuggestion: View {
       #if os(iOS)
         .buttonStyle(.borderedProminent)
       #endif
-      .accessibilityIdentifier(
-        UITestIdentifiers.TransferDetection.merge(transaction.id))
     }
 
     Section {
       Button("Not a Transfer", role: .destructive) {
         showDismissConfirmation = true
       }
-      .accessibilityIdentifier(
-        UITestIdentifiers.TransferDetection.dismiss(transaction.id))
     }
   }
 }
@@ -117,10 +113,14 @@ private struct TransferSuggestionPreviewHost: View {
     .task {
       let backend = PreviewBackend.create()
       if seedSuggestion {
-        _ = try? await backend.transferSuggestions.create(
-          TransferSuggestion(
-            transactionIds: [transaction.id, UUID()],
-            suggestedAt: Date()))
+        do {
+          _ = try await backend.transferSuggestions.create(
+            TransferSuggestion(
+              transactionIds: [transaction.id, UUID()],
+              suggestedAt: Date()))
+        } catch {
+          assertionFailure("Could not seed transfer-suggestion preview: \(error)")
+        }
       }
       store = TransactionStore(
         repository: backend.transactions,

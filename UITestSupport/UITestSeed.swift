@@ -114,25 +114,18 @@ public enum UITestSeed: String, CaseIterable, Sendable {
   case pendingWebImportOneChaseInbox = "pending-web-import-one-chase-inbox"
 
   /// A CloudKit-backed AUD profile with two bank accounts ("Everyday",
-  /// "Savings") and four imported single-account transactions forming
-  /// two transfer pairs:
-  ///   - Merge pair: −500c Everyday / +500c Savings, one day apart.
-  ///   - Dismiss pair: −800c Everyday / +800c Savings, one day apart.
+  /// "Savings") and two imported single-account transactions forming
+  /// one transfer-suggestion pair: −500c Everyday / +500c Savings,
+  /// one day apart.
   ///
-  /// The hydrator writes a `TransferSuggestion` directly onto both
-  /// transactions of each pair (each side points at its counterpart),
-  /// so the Recently Added pill is deterministic at first launch with
-  /// no detection-timing dependency. Each transaction also carries a
+  /// The hydrator writes one `TransferSuggestion` record for the pair,
+  /// indexed by both transaction IDs, so the standard inspector's section is
+  /// deterministic at first launch with no detection-timing dependency.
+  /// Each transaction also carries a
   /// `.single` import origin whose `importedAt` is set relative to
   /// hydration time so the rows fall inside the default
   /// `RecentlyAddedView` 24-hour window regardless of when the suite
-  /// runs. The "not re-suggested after relaunch" guarantees are
-  /// structural: a merged transaction is `.merged` (filtered from
-  /// Recently Added and structurally ineligible) and dismiss deletes
-  /// the `TransferSuggestion` record so no pair record survives to
-  /// re-surface — no startup re-detection runs in the seeded app, so
-  /// a relaunch simply re-reads persisted state. See
-  /// `UITestFixtures.TransferDetection` for the full fixture table.
+  /// runs. See `UITestFixtures.TransferDetection` for the full fixture table.
   case transferDetectionBaseline
 
   /// Reuses the `tradeBaseline` profile (so the app boots into the sidebar +

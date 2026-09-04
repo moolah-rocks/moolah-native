@@ -150,6 +150,18 @@ extension ImportStore {
     try JSONEncoder.importPayload.encode(payload)
   }
 
+  /// Encodes a recoverable staging copy without allowing an encoding failure
+  /// to create an empty, impossible-to-retry Failed File.
+  func recoverablePayloadStagingBytes(_ payload: ImportPayload) -> Data? {
+    do {
+      return try Self.payloadStagingBytes(payload)
+    } catch {
+      logger.error(
+        "Could not encode web payload for staging: \(error.localizedDescription, privacy: .public)")
+      return nil
+    }
+  }
+
   /// `[date, description, amount, balance, reference]` — gives diagnostics
   /// and the Failed Files panel something to render when a row trips the
   /// parser, mirroring the CSV path's `offendingRow`.

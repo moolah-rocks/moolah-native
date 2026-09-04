@@ -64,6 +64,16 @@ struct TransactionDescriptionTests {
       ])
   }
 
+  private func syncedOrigin(source: BackgroundSyncSource) -> TransactionImportOrigin {
+    .single(
+      ImportOrigin(
+        rawDescription: "wallet:\(UUID().uuidString)",
+        rawAmount: 0,
+        importedAt: Date(),
+        importSessionId: UUID(),
+        parserIdentifier: source.parserIdentifier))
+  }
+
   // MARK: - Single-leg expenses
 
   @Test
@@ -82,6 +92,92 @@ struct TransactionDescriptionTests {
       accountContext: nil,
       accounts: fixture.accounts, earmarks: fixture.earmarks)
     #expect(noContext == "Coffee Shop")
+  }
+
+  @Test
+  func syncedWalletTransactionWithoutPayeeRendersAccountName() {
+    let fixture = Fixture()
+    let transaction = Transaction(
+      date: Date(),
+      legs: [
+        TransactionLeg(
+          accountId: fixture.accountC.id,
+          instrument: fixture.accountC.instrument,
+          quantity: 1,
+          externalId: "0x123",
+          type: .income)
+      ],
+      importOrigin: syncedOrigin(source: .wallet))
+
+    let description = transaction.displayPayee(
+      accountContext: nil,
+      accounts: fixture.accounts,
+      earmarks: fixture.earmarks)
+
+    #expect(description == "Crypto Wallet")
+  }
+
+  @Test
+  func syncedWalletTradeWithoutPayeeRendersAccountName() {
+    let fixture = Fixture()
+    let transaction = Transaction(
+      date: Date(),
+      legs: [
+        TransactionLeg(
+          accountId: fixture.accountC.id,
+          instrument: .AUD,
+          quantity: -100,
+          externalId: "0x123",
+          type: .trade),
+        TransactionLeg(
+          accountId: fixture.accountC.id,
+          instrument: .crypto(
+            chainId: 1,
+            contractAddress: nil,
+            symbol: "ETH",
+            name: "Ethereum",
+            decimals: 8),
+          quantity: 0.05,
+          externalId: "0x123",
+          type: .trade),
+      ],
+      importOrigin: syncedOrigin(source: .wallet))
+
+    let description = transaction.displayPayee(
+      accountContext: nil,
+      accounts: fixture.accounts,
+      earmarks: fixture.earmarks)
+
+    #expect(description == "Crypto Wallet")
+  }
+
+  @Test
+  func syncedWalletMultiLegTransactionWithoutPayeeRendersAccountName() {
+    let fixture = Fixture()
+    let transaction = Transaction(
+      date: Date(),
+      legs: [
+        TransactionLeg(
+          accountId: fixture.accountC.id,
+          instrument: fixture.accountC.instrument,
+          quantity: 1,
+          externalId: "0x123",
+          type: .income),
+        TransactionLeg(
+          accountId: fixture.accountC.id,
+          instrument: fixture.accountC.instrument,
+          quantity: -0.01,
+          externalId: "0x123-fee",
+          type: .expense),
+      ],
+      importOrigin: syncedOrigin(source: .wallet))
+
+    let description = transaction.displayPayee(
+      accountContext: nil,
+      accounts: fixture.accounts,
+      earmarks: fixture.earmarks)
+
+    #expect(description == "Crypto Wallet (2 sub-transactions)")
   }
 
   // MARK: - Two-leg transfers (perspective set)

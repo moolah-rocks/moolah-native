@@ -74,9 +74,14 @@ final class ImportPreferences {
         bookmarkDataIsStale: &isStale)
       if isStale {
         // Re-make the bookmark so subsequent resolves are fast.
-        if let refreshed = try? url.bookmarkData(options: Self.bookmarkCreateOptions) {
+        do {
+          let refreshed = try url.bookmarkData(options: Self.bookmarkCreateOptions)
           record.watchedFolderBookmark = refreshed
           save()
+        } catch {
+          logger.warning(
+            "Could not refresh watched-folder bookmark: \(error.localizedDescription, privacy: .public)"
+          )
         }
       }
       let started = url.startAccessingSecurityScopedResource()

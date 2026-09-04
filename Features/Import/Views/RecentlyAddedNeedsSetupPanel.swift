@@ -4,8 +4,8 @@ import SwiftUI
 // two row types. These types are file-visible to this feature and
 // referenced only from `RecentlyAddedView`.
 
-/// Needs Setup / Failed Files panel. Shown above the session list when either
-/// list is non-empty; fully hidden when both are empty.
+/// Needs Setup / Failed Files panel shown from Recently Added's import-issues
+/// popover; fully hidden when both staging lists are empty.
 struct RecentlyAddedNeedsSetupPanel: View {
   let backend: any BackendProvider
   let staging: ImportStagingStore
@@ -51,7 +51,7 @@ struct RecentlyAddedPendingRow: View {
         .accessibilityHidden(true)
       VStack(alignment: .leading) {
         Text(file.originalFilename).font(.subheadline)
-        Text(file.detectedParserIdentifier ?? "Unknown parser")
+        Text("Choose an account and check the columns.")
           .font(.caption).foregroundStyle(.secondary)
       }
       .accessibilityElement(children: .combine)
@@ -68,10 +68,12 @@ struct RecentlyAddedPendingRow: View {
           staging: staging)
       }
       .buttonStyle(.borderless)
+      .accessibilityLabel("Set up \(file.originalFilename)")
       Button("Dismiss") {
         Task { await importStore.dismissPending(id: file.id) }
       }
       .buttonStyle(.borderless)
+      .accessibilityLabel("Dismiss \(file.originalFilename)")
     }
     .sheet(
       isPresented: Binding(
@@ -111,10 +113,12 @@ struct RecentlyAddedFailedRow: View {
         Task { await importStore.retryFailed(id: file.id) }
       }
       .buttonStyle(.borderless)
+      .accessibilityLabel("Retry \(file.originalFilename)")
       Button("Dismiss") {
         Task { await importStore.dismissFailed(id: file.id) }
       }
       .buttonStyle(.borderless)
+      .accessibilityLabel("Dismiss \(file.originalFilename)")
     }
   }
 }

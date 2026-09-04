@@ -47,6 +47,7 @@ struct SidebarView: View {
 
   #if os(iOS)
     @State private var editMode: EditMode = .inactive
+    @State var droppedImportError: String?
   #endif
 
   private var selectedAccountBinding: Binding<Account?> {
@@ -112,6 +113,16 @@ struct SidebarView: View {
       .listStyle(.sidebar)
       .onKeyPress(.return, action: handleReturnKey)
       .environment(\.editMode, $editMode)
+      .alert(
+        "Couldn’t import all files",
+        isPresented: Binding(
+          get: { droppedImportError != nil },
+          set: { if !$0 { droppedImportError = nil } })
+      ) {
+        Button("Dismiss") { droppedImportError = nil }
+      } message: {
+        Text(droppedImportError ?? "")
+      }
       .modifier(sharedBodyModifiers)
     }
 
@@ -190,9 +201,15 @@ struct SidebarView: View {
             .background(.tint, in: Capsule())
             .foregroundStyle(.white)
             .accessibilityLabel(
-              "\(importStore.unreviewedBadgeCount) recently imported need review")
+              reviewBadgeAccessibilityLabel(count: importStore.unreviewedBadgeCount))
         }
       }
+    }
+
+    private func reviewBadgeAccessibilityLabel(count: Int) -> String {
+      count == 1
+        ? "1 recently imported transaction needs a category"
+        : "\(count) recently imported transactions need categories"
     }
 
     func totalRow(label: String, value: InstrumentAmount?) -> some View {

@@ -264,10 +264,9 @@ extension ProfileSession {
     let coinstashClient = CoinstashClient()
     let txRepo = backend.transactions
     // Per-account-pass origin. Mirrors the wallet factory in
-    // `makeWalletSyncEngine` so Coinstash imports show up in
-    // `RecentlyAddedView` (which short-circuits on a nil `singleOrigin`)
-    // and group as one import session. Explicitly `@Sendable` for parity
-    // with the wallet site — keeps the Sendable constraint visible at
+    // `makeWalletSyncEngine` so Coinstash imports carry the timestamp and
+    // provenance used by the Recently Added filter. Explicitly `@Sendable`
+    // for parity with the wallet site — keeps the Sendable constraint visible at
     // the binding so a future captured variable trips the compiler
     // rather than silently losing the guarantee.
     let importOriginFactory: @Sendable (UUID) -> ImportOrigin = { accountId in

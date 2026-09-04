@@ -51,7 +51,6 @@ extension TransactionDetailView {
           Text("Split Back into Separate Transactions\u{2026}")
             .frame(maxWidth: .infinity)
         }
-        .accessibilityIdentifier(UITestIdentifiers.TransferDetection.unmerge(transaction.id))
       }
     }
   }

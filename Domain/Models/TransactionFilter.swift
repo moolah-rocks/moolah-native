@@ -20,6 +20,10 @@ struct TransactionFilter: Sendable, Hashable {
   /// Half-open date interval for report drill-downs whose source query uses
   /// `< upperBound`; intersected with `dateRange` when both are present.
   var dateInterval: Range<Date>?
+  /// Import timestamp range used by Recently Added. When present, only
+  /// transactions with a single import origin inside this range match;
+  /// transaction date is intentionally irrelevant.
+  var importedAtRange: ClosedRange<Date>?
   var categoryIds: Set<UUID>
   /// Transaction leg types to include. Empty means all types. A transaction
   /// matches when at least one of its legs has a selected type.
@@ -52,6 +56,7 @@ struct TransactionFilter: Sendable, Hashable {
     dateRange: ClosedRange<Date>? = nil,
     dateRangeCalendar: Calendar? = nil,
     dateInterval: Range<Date>? = nil,
+    importedAtRange: ClosedRange<Date>? = nil,
     categoryIds: Set<UUID> = [],
     transactionTypes: Set<TransactionType> = [],
     payee: String? = nil,
@@ -68,6 +73,7 @@ struct TransactionFilter: Sendable, Hashable {
     self.dateRange = dateRange
     self.dateRangeCalendar = dateRangeCalendar
     self.dateInterval = dateInterval
+    self.importedAtRange = importedAtRange
     self.categoryIds = categoryIds
     self.transactionTypes = transactionTypes
     self.payee = payee
@@ -83,7 +89,8 @@ extension TransactionFilter {
   var hasActiveFilters: Bool {
     accountId != nil || !accountIds.isEmpty || earmarkId != nil
       || scheduled != .all
-      || dateRange != nil || dateInterval != nil || !categoryIds.isEmpty
+      || dateRange != nil || dateInterval != nil || importedAtRange != nil
+      || !categoryIds.isEmpty
       || !transactionTypes.isEmpty || payee != nil
       || uncategorisedLegType != nil || excludesAccountlessUncategorised
       || taxReportableLegType != nil || taxOwnerId != nil || taxDefaultOwnerId != nil

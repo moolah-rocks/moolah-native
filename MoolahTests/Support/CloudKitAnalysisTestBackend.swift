@@ -39,7 +39,11 @@ struct CloudKitAnalysisTestBackend: BackendProvider, @unchecked Sendable {
   /// Exposed so
   /// `fetchAggregationForTesting` resolves the exact instrument map the
   /// repositories built during seeding.
-  let instrumentRegistry: GRDBInstrumentRegistryRepository
+  let instrumentRegistryRepository: GRDBInstrumentRegistryRepository
+
+  var instrumentRegistry: (any InstrumentRegistryRepository)? {
+    instrumentRegistryRepository
+  }
 
   /// Creates a backend wired to an in-memory GRDB queue.
   ///
@@ -53,7 +57,7 @@ struct CloudKitAnalysisTestBackend: BackendProvider, @unchecked Sendable {
     self.database = database
     let currency = Instrument.defaultTestInstrument
     let registry = try SharedRegistryTestSupport.makeSharedRegistry()
-    self.instrumentRegistry = registry
+    self.instrumentRegistryRepository = registry
     let conversion: any InstrumentConversionService
     if let customConversion {
       conversion = customConversion
@@ -111,7 +115,7 @@ extension CloudKitAnalysisTestBackend {
     // the repositories registered into during seeding — the same
     // resolver the production aggregation path consults, never the
     // per-profile `instrument` table.
-    let instruments = try await instrumentRegistry.instrumentMap()
+    let instruments = try await instrumentRegistryRepository.instrumentMap()
     return try await GRDBAnalysisRepository.fetchDailyBalancesAggregation(
       database: self.database,
       instruments: instruments,

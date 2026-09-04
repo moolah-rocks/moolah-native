@@ -127,6 +127,8 @@ import GRDB
 /// `v29_sync_mutation_token` — adds a local mutation identity to every
 /// per-profile CloudKit table so acknowledgements and fetched echoes can
 /// distinguish repeated values and delete/recreate sequences.
+/// `v30_transaction_import_origin_index` — indexes the import-origin kind
+/// and timestamp used by the Recently Added transaction filter.
 ///
 /// **Retention policy for the cache tables.** The six rate-cache
 /// tables are kept forever — needed for historic-conversion
@@ -147,7 +149,7 @@ enum ProfileSchema {
   /// Bumped each time a migration is added. Surfaced for open-time
   /// integrity checks; not used by `DatabaseMigrator` (which keys on
   /// the stable string IDs of registered migrations).
-  static let version = 29
+  static let version = 30
 
   static var migrator: DatabaseMigrator {
     var migrator = DatabaseMigrator()
@@ -207,6 +209,8 @@ enum ProfileSchema {
       "v28_account_automatic_sync", migrate: addAccountAutomaticSync)
     migrator.registerMigration(
       "v29_sync_mutation_token", migrate: addSyncMutationToken)
+    migrator.registerMigration(
+      "v30_transaction_import_origin_index", migrate: addTransactionImportOriginIndex)
 
     return migrator
   }

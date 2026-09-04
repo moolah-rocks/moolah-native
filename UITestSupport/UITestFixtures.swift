@@ -241,20 +241,16 @@ public enum UITestFixtures {
   ///     `ImportStore`, which is only built for CloudKit profiles).
   ///   - Account `everyday` — "Everyday", bank, AUD.
   ///   - Account `savings` — "Savings", bank, AUD.
-  ///   - Merge pair:
-  ///     - `mergeOutgoingId` — Everyday, −500c, 2026-04-01, `.expense`.
-  ///     - `mergeIncomingId` — Savings, +500c, 2026-04-02, `.income`.
+  ///   - Primary suggestion pair:
+  ///     - `primaryOutgoingId` — Everyday, −500c, 2026-04-01, `.expense`.
+  ///     - `primaryIncomingId` — Savings, +500c, 2026-04-02, `.income`.
   ///       One day apart, well inside the auto-detection window.
-  ///   - Dismiss pair:
-  ///     - `dismissOutgoingId` — Everyday, −800c, 2026-04-05, `.expense`.
-  ///     - `dismissIncomingId` — Savings, +800c, 2026-04-06, `.income`.
   ///
-  /// All four transactions share the profile instrument and carry a
-  /// `.single` import origin so they appear in Recently Added. Both
-  /// members of each pair carry a `TransferSuggestion` pointing at the
-  /// other (counterpart id + `suggestedAt`), so the passive "possible
-  /// transfer" pill renders for all four rows at first launch with no
-  /// detection-timing dependency.
+  /// Both transactions share the profile instrument and carry a
+  /// `.single` import origin so they appear in Recently Added.
+  /// The pair has a `TransferSuggestion` record indexed by both transaction
+  /// IDs, so the standard transaction inspector renders its transfer-
+  /// suggestion section at first launch with no detection-timing dependency.
   public enum TransferDetection {
     public static let profileId = uuidLiteral("C1000000-0000-0000-0000-000000000001")
     public static let profileLabel = "Personal"
@@ -265,42 +261,28 @@ public enum UITestFixtures {
     public static let savingsAccountId = uuidLiteral("C1000000-0000-0000-0000-0000000000A2")
     public static let savingsAccountName = "Savings"
 
-    /// Merge pair — collapsed by the merge test. −500c Everyday paired
-    /// with +500c Savings, one day apart.
-    public static let mergeOutgoingId = uuidLiteral("C1000000-0000-0000-0000-0000000000B1")
-    public static let mergeOutgoingCents = 500  // 5.00 AUD outflow
+    /// Primary suggestion pair exercised by the standard-inspector test:
+    /// −500c Everyday paired with +500c Savings, one day apart.
+    public static let primaryOutgoingId = uuidLiteral("C1000000-0000-0000-0000-0000000000B1")
+    public static let primaryOutgoingCents = 500  // 5.00 AUD outflow
     /// 2026-04-01 00:00:00 UTC.
-    public static let mergeOutgoingDate = Date(timeIntervalSince1970: 1_775_001_600)
-    public static let mergeOutgoingPayee = "Transfer to Savings"
+    public static let primaryOutgoingDate = Date(timeIntervalSince1970: 1_775_001_600)
+    public static let primaryOutgoingPayee = "Transfer to Savings"
 
-    public static let mergeIncomingId = uuidLiteral("C1000000-0000-0000-0000-0000000000B2")
-    public static let mergeIncomingCents = 500  // 5.00 AUD inflow
+    public static let primaryIncomingId = uuidLiteral("C1000000-0000-0000-0000-0000000000B2")
+    public static let primaryIncomingCents = 500  // 5.00 AUD inflow
     /// 2026-04-02 00:00:00 UTC.
-    public static let mergeIncomingDate = Date(timeIntervalSince1970: 1_775_088_000)
-    public static let mergeIncomingPayee = "Transfer from Everyday"
+    public static let primaryIncomingDate = Date(timeIntervalSince1970: 1_775_088_000)
+    public static let primaryIncomingPayee = "Transfer from Everyday"
 
-    /// Dismiss pair — marked "not a transfer" by the dismiss test.
-    /// −800c Everyday paired with +800c Savings, one day apart.
-    public static let dismissOutgoingId = uuidLiteral("C1000000-0000-0000-0000-0000000000B3")
-    public static let dismissOutgoingCents = 800  // 8.00 AUD outflow
-    /// 2026-04-05 00:00:00 UTC.
-    public static let dismissOutgoingDate = Date(timeIntervalSince1970: 1_775_347_200)
-    public static let dismissOutgoingPayee = "Transfer to Savings"
-
-    public static let dismissIncomingId = uuidLiteral("C1000000-0000-0000-0000-0000000000B4")
-    public static let dismissIncomingCents = 800  // 8.00 AUD inflow
-    /// 2026-04-06 00:00:00 UTC.
-    public static let dismissIncomingDate = Date(timeIntervalSince1970: 1_775_433_600)
-    public static let dismissIncomingPayee = "Transfer from Everyday"
-
-    /// Deterministic `TransferSuggestion.suggestedAt` written onto every
-    /// pair member. The exact value is irrelevant to the UI (the pill is
-    /// driven by the suggestion's presence) but kept fixed so the
-    /// `seed.txt` failure artefact is diffable. 2026-04-10 00:00:00 UTC.
+    /// Deterministic `TransferSuggestion.suggestedAt` written to the pair's
+    /// suggestion record. The exact value is irrelevant to the UI (the
+    /// inspector section is driven by the record's presence) but kept fixed
+    /// so the `seed.txt` failure artefact is diffable. 2026-04-10 00:00:00 UTC.
     public static let suggestedAt = Date(timeIntervalSince1970: 1_775_779_200)
 
     /// Parser identifier stamped on every seeded import origin. A stable
-    /// non-empty string is all `RecentlyAddedViewModel` requires.
+    /// non-empty string is sufficient for the imported-transaction fixture.
     public static let parserIdentifier = "ui-test-seed"
     public static let sourceFilename = "transfer-detection-seed.csv"
   }

@@ -85,7 +85,7 @@ struct PreListingDailyBalanceTests {
   private func seedScenarioBackend(
     _ backend: CloudKitAnalysisTestBackend
   ) async throws -> (preFloor: Date, onFloor: Date) {
-    try await backend.instrumentRegistry.registerResolvable(airdropInstrument)
+    try await backend.instrumentRegistryRepository.registerResolvable(airdropInstrument)
 
     let usdAccount = Account(
       id: UUID(), name: "USD Cash", type: .bank, instrument: .defaultTestInstrument)

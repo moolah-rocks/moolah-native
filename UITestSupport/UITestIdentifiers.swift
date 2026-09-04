@@ -27,28 +27,6 @@ public enum UITestIdentifiers {
     }
   }
 
-  // MARK: - RecentlyAdded
-
-  public enum RecentlyAdded {
-    /// Root container of the Recently Added view. Stable post-condition
-    /// sentinel after navigating to the import landing page — individual
-    /// rows are data-dependent, but the container renders whenever the
-    /// view does. Mirrors `TransactionList.container`.
-    public static let container = "recentlyadded.container"
-
-    /// Stable per-row handle on an imported-transaction row, keyed by
-    /// the transaction's UUID (lowercased). The row's visible content
-    /// is wrapped in `.accessibilityElement(children: .combine)` for
-    /// VoiceOver, which flattens descendant identifiers (the passive
-    /// transfer pill among them) into the combined element; a
-    /// row-level identifier is therefore the stable handle a driver
-    /// uses to wait on a specific row and to open its macOS context
-    /// menu (right-click) for the merge / dismiss actions.
-    public static func row(_ id: UUID) -> String {
-      "recentlyadded.row.\(id.uuidString.lowercased())"
-    }
-  }
-
   // The `TransferDetection` namespace lives in
   // `UITestIdentifiers+TransferDetection.swift`.
 

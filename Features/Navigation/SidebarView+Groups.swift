@@ -106,8 +106,9 @@ import UniformTypeIdentifiers
         )
       }
       .dropDestination(for: URL.self) { urls, _ in
+        guard urls.contains(where: ImportStore.supportsImportFile) else { return false }
         Task { await ingestDroppedURLs(urls, forcedAccountId: account.id) }
-        return !urls.isEmpty
+        return true
       }
       .draggable(DraggableSidebarItem(kind: .account, id: account.id))
       .dropDestination(for: DraggableSidebarItem.self) { items, _ in

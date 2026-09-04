@@ -63,13 +63,17 @@ private func seedSidebarPreview(backend: any BackendProvider) async {
   // Both `accountStore` and `earmarkStore` are reactive — they load
   // themselves from `init` via `observeAll()`. Seeded rows propagate
   // through the observation streams without an explicit reload here.
-  _ = try? await backend.accounts.create(
-    Account(name: "Bank", type: .bank, instrument: .AUD),
-    openingBalance: InstrumentAmount(quantity: 1000, instrument: .AUD))
-  _ = try? await backend.accounts.create(
-    Account(name: "Asset", type: .asset, instrument: .AUD),
-    openingBalance: InstrumentAmount(quantity: 5000, instrument: .AUD))
-  _ = try? await backend.earmarks.create(Earmark(name: "Holiday Fund", instrument: .AUD))
+  do {
+    _ = try await backend.accounts.create(
+      Account(name: "Bank", type: .bank, instrument: .AUD),
+      openingBalance: InstrumentAmount(quantity: 1000, instrument: .AUD))
+    _ = try await backend.accounts.create(
+      Account(name: "Asset", type: .asset, instrument: .AUD),
+      openingBalance: InstrumentAmount(quantity: 5000, instrument: .AUD))
+    _ = try await backend.earmarks.create(Earmark(name: "Holiday Fund", instrument: .AUD))
+  } catch {
+    assertionFailure("Could not seed sidebar preview: \(error)")
+  }
 }
 
 #Preview {
@@ -106,37 +110,47 @@ private func seedSidebarGroupPreview(
   // isn't empty in the preview), then two crypto wallets joined into a
   // group. The preview renders the group as a single row with the two
   // members tucked underneath when the user expands it.
-  _ = try? await backend.accounts.create(
-    Account(name: "Bank", type: .bank, instrument: .AUD),
-    openingBalance: InstrumentAmount(quantity: 1000, instrument: .AUD))
-  _ = try? await backend.earmarks.create(
-    Earmark(name: "Holiday Fund", instrument: .AUD))
-  let walletAAccount = Account(
-    name: "ETH/OP wallet",
-    type: .crypto,
-    instrument: .AUD,
-    walletAddress: "0x7a3f1b5c9d2e8f4a1b6c3d5e7f9a0b2c4d6e8f0a",
-    chainId: 1)
-  let walletBAccount = Account(
-    name: "Polygon wallet",
-    type: .crypto,
-    instrument: .AUD,
-    walletAddress: "0x7a3f1b5c9d2e8f4a1b6c3d5e7f9a0b2c4d6e8f0a",
-    chainId: 137)
-  guard
-    let walletA = try? await backend.accounts.create(
-      walletAAccount,
-      openingBalance: InstrumentAmount(quantity: 5210, instrument: .AUD)),
-    let walletB = try? await backend.accounts.create(
-      walletBAccount,
+  do {
+    _ = try await backend.accounts.create(
+      Account(name: "Bank", type: .bank, instrument: .AUD),
+      openingBalance: InstrumentAmount(quantity: 1000, instrument: .AUD))
+    _ = try await backend.earmarks.create(
+      Earmark(name: "Holiday Fund", instrument: .AUD))
+    let walletA = try await backend.accounts.create(
+      Account(
+        name: "ETH/OP wallet",
+        type: .crypto,
+        instrument: .AUD,
+        walletAddress: "0x7a3f1b5c9d2e8f4a1b6c3d5e7f9a0b2c4d6e8f0a",
+        chainId: 1),
+      openingBalance: InstrumentAmount(quantity: 5210, instrument: .AUD))
+    let walletB = try await backend.accounts.create(
+      Account(
+        name: "Polygon wallet",
+        type: .crypto,
+        instrument: .AUD,
+        walletAddress: "0x7a3f1b5c9d2e8f4a1b6c3d5e7f9a0b2c4d6e8f0a",
+        chainId: 137),
       openingBalance: InstrumentAmount(quantity: 410, instrument: .AUD))
-  else { return }
-  _ = try? await accountGroupStore.createGroup(
-    joining: walletA,
-    and: walletB,
-    name: "Trust Fund Crypto",
-    accountStore: accountStore
-  )
+    _ = try await accountGroupStore.createGroup(
+      joining: walletA,
+      and: walletB,
+      name: "Trust Fund Crypto",
+      accountStore: accountStore)
+  } catch {
+    assertionFailure("Could not seed grouped sidebar preview: \(error)")
+  }
+}
+
+@MainActor
+private func seedEmptyEarmarksPreview(backend: any BackendProvider) async {
+  do {
+    _ = try await backend.accounts.create(
+      Account(name: "Bank", type: .bank, instrument: .AUD),
+      openingBalance: InstrumentAmount(quantity: 1000, instrument: .AUD))
+  } catch {
+    assertionFailure("Could not seed empty-earmarks sidebar preview: \(error)")
+  }
 }
 
 #Preview("With a group") {
@@ -183,12 +197,7 @@ private func seedSidebarGroupPreview(
       accountGroupStore: accountGroupStore
     ) {
       SidebarView(selection: .constant(nil))
-        .task {
-          // Seed only an account — no earmarks.
-          _ = try? await backend.accounts.create(
-            Account(name: "Bank", type: .bank, instrument: .AUD),
-            openingBalance: InstrumentAmount(quantity: 1000, instrument: .AUD))
-        }
+        .task { await seedEmptyEarmarksPreview(backend: backend) }
     }
   } detail: {
     Text("Detail")
