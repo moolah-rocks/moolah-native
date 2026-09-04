@@ -63,26 +63,46 @@ final class FolderScanService {
 
     var newestSeen = lastSeen
     for url in urls where url.pathExtension.lowercased() == "csv" {
-      guard
-        let values = try? url.resourceValues(forKeys: [
-          .contentModificationDateKey, .isRegularFileKey,
-        ]),
-        values.isRegularFile == true,
-        let modified = values.contentModificationDate
-      else { continue }
+      guard let candidate = importCandidate(at: url) else { continue }
+      let modified = candidate.modified
       if modified <= lastSeen { continue }
-      guard let data = try? Data(contentsOf: url) else { continue }
       // Read the security-scoped bookmark from preferences rather than
       // re-bookmarking each file; the parent folder's scope covers this.
       let bookmark = preferences.watchedFolderBookmark
-      _ = await importStore.ingest(
-        data: data,
+      let result = await importStore.ingest(
+        data: candidate.data,
         source: .folderWatch(url: url, bookmark: bookmark))
+      if case .cancelled = result { return }
       if modified > newestSeen { newestSeen = modified }
     }
 
     if newestSeen > lastSeen {
       setLastSeenDate(newestSeen)
+    }
+  }
+
+  private func importCandidate(at url: URL) -> (modified: Date, data: Data)? {
+    let values: URLResourceValues
+    do {
+      values = try url.resourceValues(forKeys: [
+        .contentModificationDateKey, .isRegularFileKey,
+      ])
+    } catch {
+      logger.error(
+        "Could not read metadata for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)"
+      )
+      return nil
+    }
+    guard values.isRegularFile == true, let modified = values.contentModificationDate else {
+      return nil
+    }
+    do {
+      return (modified, try Data(contentsOf: url))
+    } catch {
+      logger.error(
+        "Could not read \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)"
+      )
+      return nil
     }
   }
 

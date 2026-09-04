@@ -57,12 +57,15 @@ extension Transaction {
       // `titleTextValue` joins in parentheses after the payee. Return just the
       // payee here (or empty), never the "(N sub-transactions)" custom label.
       if let payee, !payee.isEmpty { return payee }
-      return ""
+      return syncedAccountName(accounts: accounts) ?? ""
     }
 
     if !isSimple {
-      if let payee, !payee.isEmpty {
-        return "\(payee) (\(legs.count) sub-transactions)"
+      let baseLabel =
+        payee.flatMap { $0.isEmpty ? nil : $0 }
+        ?? syncedAccountName(accounts: accounts)
+      if let baseLabel {
+        return "\(baseLabel) (\(legs.count) sub-transactions)"
       }
       return "\(legs.count) sub-transactions"
     }
@@ -77,7 +80,7 @@ extension Transaction {
       return "Earmark funds for \(earmarkNames.joined(separator: ", "))"
     }
 
-    return ""
+    return syncedAccountName(accounts: accounts) ?? ""
   }
 }
 
@@ -122,6 +125,20 @@ extension Transaction {
       .literal(" for "),
       magnitudeSegment(for: received, spamInstruments: spamInstruments),
     ]
+  }
+
+}
+
+extension Transaction {
+  /// Background sync deliberately leaves payee empty when an on-chain or
+  /// exchange event has no reliable counterparty name. In that case the
+  /// account is the useful human-facing source; the import origin's raw
+  /// `wallet:<UUID>` / `exchange:<UUID>` token is internal bookkeeping.
+  private func syncedAccountName(accounts: Accounts) -> String? {
+    guard !backgroundSyncedLegSources().isEmpty else { return nil }
+    let accountIds = Set(legs.compactMap(\.accountId))
+    guard accountIds.count == 1, let accountId = accountIds.first else { return nil }
+    return accounts.by(id: accountId)?.name
   }
 
   private func magnitudeSegment(

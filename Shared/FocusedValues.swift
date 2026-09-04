@@ -145,6 +145,12 @@ struct PasteCSVActionKey: FocusedValueKey {
   typealias Value = () -> Void
 }
 
+/// Trigger action for File > Show Import Issues. Published only while the
+/// Recently Added view has staged files needing user attention.
+struct ShowImportIssuesActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
 /// Trigger action for File > Export Transactions… The focused transaction
 /// list publishes its current scope, filter, search, and spam visibility.
 struct ExportTransactionsActionKey: FocusedValueKey {
@@ -274,6 +280,10 @@ extension FocusedValues {
   var pasteCSVAction: PasteCSVActionKey.Value? {
     get { self[PasteCSVActionKey.self] }
     set { self[PasteCSVActionKey.self] = newValue }
+  }
+  var showImportIssuesAction: ShowImportIssuesActionKey.Value? {
+    get { self[ShowImportIssuesActionKey.self] }
+    set { self[ShowImportIssuesActionKey.self] = newValue }
   }
   var exportTransactionsAction: ExportTransactionsActionKey.Value? {
     get { self[ExportTransactionsActionKey.self] }

@@ -29,7 +29,12 @@ struct SidebarNavigationRowView: View {
   }
 
   private var accessibilityLabel: String {
-    badgeCount > 0 ? "\(title), \(badgeCount) need review" : title
+    guard badgeCount > 0 else { return title }
+    let reviewDescription =
+      badgeCount == 1
+      ? "1 recently imported transaction needs a category"
+      : "\(badgeCount) recently imported transactions need categories"
+    return "\(title), \(reviewDescription)"
   }
 }
 

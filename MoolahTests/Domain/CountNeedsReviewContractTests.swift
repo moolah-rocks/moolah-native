@@ -5,8 +5,8 @@ import Testing
 
 /// Contract tests for `TransactionRepository.countNeedsReview()`.
 ///
-/// "Needs review" = a posted (`recur_period IS NULL`) transaction whose
-/// every leg has `categoryId == nil`. This mirrors `Transaction.needsReview`.
+/// "Needs review" = a posted (`recur_period IS NULL`) transaction with at
+/// least one income/expense leg and no categorised income/expense leg.
 @Suite("TransactionRepository — countNeedsReview")
 struct CountNeedsReviewContractTests {
   private let accountId = UUID()
@@ -62,6 +62,23 @@ struct CountNeedsReviewContractTests {
     #expect(count == 0)
   }
 
+  @Test("posted transfer without a category action does not count")
+  func testTransferDoesNotCount() async throws {
+    let transfer = Transaction(
+      date: Date(timeIntervalSinceReferenceDate: 0),
+      legs: [
+        TransactionLeg(
+          accountId: accountId,
+          instrument: .defaultTestInstrument,
+          quantity: Decimal(-10),
+          type: .transfer)
+      ])
+    let repository = try makeContractCloudKitTransactionRepository(
+      initialTransactions: [transfer])
+
+    #expect(try await repository.countNeedsReview() == 0)
+  }
+
   @Test("count equals number of posted all-uncategorised transactions across a mixed set")
   func testCountEqualsExpectedAcrossMixedSet() async throws {
     let categoryId = UUID()
@@ -88,6 +105,65 @@ struct CountNeedsReviewContractTests {
     let count = try await repository.countNeedsReview()
 
     #expect(count == 0)
+  }
+
+  @Test("spam-only transaction does not count")
+  func testSpamOnlyDoesNotCount() async throws {
+    let spam = Instrument.crypto(
+      chainId: 1,
+      contractAddress: "0x0000000000000000000000000000000000000001",
+      symbol: "SPAM",
+      name: "Spam",
+      decimals: 18)
+    let (backend, _) = try TestBackend.create()
+    try await TestBackend.register(spam, in: backend)
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: Date(timeIntervalSinceReferenceDate: 0),
+        legs: [
+          TransactionLeg(
+            accountId: accountId,
+            instrument: spam,
+            quantity: -10,
+            type: .expense)
+        ]))
+
+    let count = try await backend.transactions.countNeedsReview(
+      excludingInstrumentIds: [spam.id])
+
+    #expect(count == 0)
+  }
+
+  @Test("mixed spam and non-spam transaction still counts")
+  func testMixedSpamStillCounts() async throws {
+    let spam = Instrument.crypto(
+      chainId: 1,
+      contractAddress: "0x0000000000000000000000000000000000000002",
+      symbol: "SPAM",
+      name: "Spam",
+      decimals: 18)
+    let (backend, _) = try TestBackend.create()
+    try await TestBackend.register(spam, in: backend)
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: Date(timeIntervalSinceReferenceDate: 0),
+        legs: [
+          TransactionLeg(
+            accountId: accountId,
+            instrument: spam,
+            quantity: -10,
+            type: .expense),
+          TransactionLeg(
+            accountId: accountId,
+            instrument: .AUD,
+            quantity: -1,
+            type: .expense),
+        ]))
+
+    let count = try await backend.transactions.countNeedsReview(
+      excludingInstrumentIds: [spam.id])
+
+    #expect(count == 1)
   }
 
   // MARK: - Fixtures

@@ -4,6 +4,7 @@ import SwiftUI
 struct TransactionFileCommands: Commands {
   @FocusedValue(\.importCSVAction) private var importCSVAction
   @FocusedValue(\.pasteCSVAction) private var pasteCSVAction
+  @FocusedValue(\.showImportIssuesAction) private var showImportIssuesAction
   @FocusedValue(\.exportTransactionsAction) private var exportTransactionsAction
 
   var body: some Commands {
@@ -18,6 +19,11 @@ struct TransactionFileCommands: Commands {
       }
       .keyboardShortcut("v", modifiers: [.command, .shift, .option])
       .disabled(pasteCSVAction == nil)
+
+      Button("Show Import Issues") {
+        showImportIssuesAction?()
+      }
+      .disabled(showImportIssuesAction == nil)
 
       Button("Export Transactions\u{2026}") {
         exportTransactionsAction?()

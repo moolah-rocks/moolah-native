@@ -245,6 +245,7 @@ struct TransactionFilterView: View {
       dateRange: dateRange,
       dateRangeCalendar: dateRange == nil ? nil : dateRangeCalendar,
       dateInterval: filter.dateInterval,
+      importedAtRange: filter.importedAtRange,
       categoryIds: selectedCategoryIds,
       transactionTypes: selectedTransactionTypes,
       payee: payeeText.isEmpty ? nil : payeeText,

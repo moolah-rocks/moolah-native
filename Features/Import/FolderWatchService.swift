@@ -166,7 +166,15 @@
         let url = URL(fileURLWithPath: path)
         guard url.pathExtension.lowercased() == "csv" else { continue }
         guard fileManager.fileExists(atPath: url.path) else { continue }
-        guard let data = try? Data(contentsOf: url) else { continue }
+        let data: Data
+        do {
+          data = try Data(contentsOf: url)
+        } catch {
+          logger.error(
+            "Could not read \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)"
+          )
+          continue
+        }
         _ = await importStore.ingest(
           data: data,
           source: .folderWatch(url: url, bookmark: preferences.watchedFolderBookmark))

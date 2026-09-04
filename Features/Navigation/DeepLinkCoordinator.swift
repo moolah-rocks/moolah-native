@@ -88,7 +88,9 @@ final class DeepLinkCoordinator {
       // decode failure; nothing to clean up here.
       return
     }
-    _ = await store.startWebReview(payload: payload)
+    let result = await store.startWebReview(payload: payload)
+    if case .cancelled = result { return }
+    if case .retryLater = result { return }
     do {
       try inbox.delete(id: id)
     } catch {

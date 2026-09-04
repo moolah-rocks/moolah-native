@@ -41,7 +41,7 @@ struct InsightInputBuilder: Sendable {
 
     async let scheduledBillsResult = scheduledBills(context: context)
     async let budgetedCategoryIds = budgetedCategoryIds()
-    async let uncategorizedTransactionCount = backend.transactions.countNeedsReview()
+    async let uncategorizedTransactionCount = uncategorizedTransactionCount()
     async let pendingTransfers = backend.transferSuggestions.fetchAll()
 
     let pendingTransfersList = try await pendingTransfers
@@ -76,6 +76,20 @@ struct InsightInputBuilder: Sendable {
       pendingTransferCount: pendingTransfersList.count,
       oldestPendingTransferDate: pendingTransfersList.map(\.suggestedAt).min())
   }
+}
+
+extension InsightInputBuilder {
+  /// Counts the actionable category backlog while excluding transactions
+  /// made entirely of instruments the user has classified as spam.
+  private func uncategorizedTransactionCount() async throws -> Int {
+    let registrations = try await backend.instrumentRegistry?.allCryptoRegistrations() ?? []
+    let spamInstrumentIds = Set(
+      registrations.lazy
+        .filter { $0.pricingStatus == .spam }
+        .map(\.instrument.id))
+    return try await backend.transactions.countNeedsReview(
+      excludingInstrumentIds: spamInstrumentIds)
+  }
 
   /// Future-dated scheduled transactions reduced to the reporting currency.
   ///
@@ -98,8 +112,10 @@ struct InsightInputBuilder: Sendable {
     let filter = TransactionFilter(scheduled: .scheduledOnly)
     let scheduled = try await backend.transactions.fetchAll(filter: filter)
     let reportingCurrency = context.reportingCurrency
-    let now = context.now  // gate: is this bill in the future, relative to the injected now?
-    let conversionDate = Date()  // convert a future obligation at the CURRENT wall-clock rate (Rule 6)
+    // Gate against the injected clock; price future obligations at the current
+    // wall-clock rate (Rule 6).
+    let now = context.now
+    let conversionDate = Date()
 
     // Phase 1 — gather each future candidate's contributing leg and build one
     // request per candidate, index-aligned so each outcome maps back.

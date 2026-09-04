@@ -152,8 +152,7 @@ struct ExchangeSyncEngineTests {
     #expect(result.candidates.count == 2)
     // Both candidates carry a `.single` ImportOrigin populated by the
     // factory — gated on the `importedAt` clock and the per-pass session
-    // id so `RecentlyAddedViewModel.filter` (which short-circuits on a
-    // nil `singleOrigin`) surfaces them.
+    // id so the Recently Added import-origin filter surfaces them.
     for candidate in result.candidates {
       let origin = try #require(candidate.transaction.importOrigin?.singleOrigin)
       #expect(origin.importedAt == pinnedNow)

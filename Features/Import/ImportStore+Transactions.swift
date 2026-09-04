@@ -160,11 +160,10 @@ extension ImportStore {
   /// File delete runs off the main actor so the UI isn't blocked on a slow
   /// filesystem call — network-share volumes, security-scoped resource
   /// locks, and iCloud Drive materialisation can all push `removeItem` into
-  /// the hundreds-of-ms range. As a `nonisolated` async function called via
-  /// `await` from the main actor, Swift's concurrency runtime schedules
-  /// the body on a cooperative pool thread automatically — no
-  /// `Task.detached` needed.
-  nonisolated static func deleteSourceInBackground(at url: URL) async {
+  /// the hundreds-of-ms range. The explicit `@concurrent` boundary keeps
+  /// that synchronous work on the cooperative pool under Swift 6.2.
+  @concurrent
+  static func deleteSourceInBackground(at url: URL) async {
     do {
       try FileManager.default.removeItem(at: url)
     } catch {

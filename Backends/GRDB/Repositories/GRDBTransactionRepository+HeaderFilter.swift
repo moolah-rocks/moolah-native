@@ -9,7 +9,22 @@ extension GRDBTransactionRepository {
     var request = request
     request = applyingScheduledFilter(to: request, scheduled: filter.scheduled)
     request = applyingDateFilters(to: request, filter: filter)
+    request = applyingImportedAtFilter(to: request, range: filter.importedAtRange)
     return applyingPayeeFilter(to: request, payee: filter.payee)
+  }
+}
+
+extension GRDBTransactionRepository {
+  private static func applyingImportedAtFilter(
+    to request: QueryInterfaceRequest<TransactionRow>,
+    range: ClosedRange<Date>?
+  ) -> QueryInterfaceRequest<TransactionRow> {
+    guard let range else { return request }
+    return request.filter(
+      (TransactionRow.Columns.importOriginKind == "single"
+        || TransactionRow.Columns.importOriginKind == nil)
+        && TransactionRow.Columns.importOriginImportedAt >= range.lowerBound
+        && TransactionRow.Columns.importOriginImportedAt <= range.upperBound)
   }
 
   private static func applyingScheduledFilter(

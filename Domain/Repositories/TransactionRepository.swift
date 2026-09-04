@@ -110,10 +110,13 @@ protocol TransactionRepository: Sendable {
   /// Used only by exchange-import resolution's rare registry-fallback
   /// tie-break; cheap (`SELECT DISTINCT`), not on a hot path.
   func distinctLegInstrumentIds() async throws -> Set<String>
-  /// Count of posted (non-scheduled) transactions whose every leg is
-  /// uncategorised (`Transaction.needsReview`). A SQL `COUNT` — never
-  /// materialises history. Drives the categorise-backlog insight nudge.
-  func countNeedsReview() async throws -> Int
+  /// Count of posted (non-scheduled) transactions with category-bearing
+  /// income/expense legs and no categorised income/expense leg. A SQL
+  /// `COUNT` — never materialises history. Drives the categorise-backlog
+  /// insight nudge. `instrumentIds` contains the registry's spam instrument
+  /// ids; an empty set applies no spam exclusion. A mixed transaction remains
+  /// reviewable when any leg uses an instrument outside the set.
+  func countNeedsReview(excludingInstrumentIds instrumentIds: Set<String>) async throws -> Int
   /// Returns the legs of every transaction that touches at least one
   /// non-fiat instrument, ordered by `(date, transaction_id, sort_order)`,
   /// for the profile-wide cost-basis pass. Pure-fiat transactions (the
@@ -127,5 +130,10 @@ extension TransactionRepository {
   /// `nil`. Returns the unfiltered frequency-sorted prefix matches.
   func fetchPayeeSuggestions(prefix: String) async throws -> [String] {
     try await fetchPayeeSuggestions(prefix: prefix, excludingTransactionId: nil)
+  }
+
+  /// Convenience for callers that do not need spam exclusion.
+  func countNeedsReview() async throws -> Int {
+    try await countNeedsReview(excludingInstrumentIds: [])
   }
 }

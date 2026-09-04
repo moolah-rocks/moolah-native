@@ -96,7 +96,6 @@ struct CSVImportSetupView: View {
   private var fileSection: some View {
     Section(header: Text("File")) {
       LabeledContent("Filename", value: store.pending.originalFilename)
-      LabeledContent("Parser", value: store.detectedParserIdentifier)
       LabeledContent("Rows") {
         Text("\(store.rowCount)").monospacedDigit()
       }

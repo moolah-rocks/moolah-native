@@ -172,7 +172,6 @@ struct TransactionDetailView: View {
         Button("Dismiss Suggestion", role: .destructive) {
           Task { await transactionStore.dismissSuggestedTransfer(transaction) }
         }
-        .accessibilityIdentifier(UITestIdentifiers.TransferDetection.dismissConfirm)
       } message: {
         Text(
           "These transactions stay separate and will not be suggested as a "

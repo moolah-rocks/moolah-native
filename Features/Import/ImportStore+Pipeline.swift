@@ -115,7 +115,7 @@ extension ImportStore {
     rows: [[String]], headers: [String], source: ImportSource
   ) async throws -> ParseOutcome {
     let parser = registry.select(for: headers)
-    let profileForOverride = try? await preExistingProfile(
+    let profileForOverride = try await preExistingProfile(
       parserIdentifier: parser.identifier,
       headers: headers,
       forcedAccountId: source.forcedAccountId)

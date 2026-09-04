@@ -43,6 +43,17 @@ struct TransactionDetailScreen {
     CounterpartAmountDriver(app: app)
   }
 
+  /// Asserts that the standard detail sidebar exposes the detected-transfer
+  /// review actions for the selected transaction.
+  func expectTransferSuggestion(for id: UUID) {
+    let banner = app.element(
+      for: UITestIdentifiers.TransferDetection.detailBanner(id))
+    if !banner.waitForExistence(timeout: 10) {
+      Trace.recordFailure("transfer suggestion banner did not appear for '\(id)'")
+      XCTFail("Transfer suggestion banner for \(id) did not appear within 10s")
+    }
+  }
+
   /// Moves keyboard focus from the Amount field to its adjacent instrument
   /// picker, then activates the picker with Space. Returns once the picker
   /// sheet appears.
@@ -97,13 +108,7 @@ struct TransactionDetailScreen {
     }
     picker.click()
 
-    // ui-test-review: allow single-resolver — on macOS, SwiftUI Pickers
-    // open a native NSMenu whose items attach to the application's menu
-    // hierarchy at runtime. `.accessibilityIdentifier(_:)` on the inline
-    // `Text(account.name)` inside the `ForEach` does not propagate to the
-    // NSMenuItem, so querying by label via `menuItems[name]` is the only
-    // viable resolution path here.
-    let menuItem = app.application.menuItems[name]
+    let menuItem = app.menuItem(label: name)
     if !menuItem.waitForExistence(timeout: 10) {
       Trace.recordFailure("menu item '\(name)' did not appear")
       XCTFail("Picker menu item '\(name)' did not appear within 10s")

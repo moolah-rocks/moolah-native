@@ -226,7 +226,7 @@ struct FailingTransactionRepository: TransactionRepository {
     throw BackendError.networkUnavailable
   }
 
-  func countNeedsReview() async throws -> Int {
+  func countNeedsReview(excludingInstrumentIds: Set<String>) async throws -> Int {
     throw BackendError.networkUnavailable
   }
 

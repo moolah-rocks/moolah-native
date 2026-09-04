@@ -7,7 +7,6 @@
 // platforms wire it into `sharedBodyModifiers`.
 
 import SwiftUI
-import os
 
 extension SidebarView {
   // MARK: - Cross-platform helpers
@@ -21,9 +20,6 @@ extension SidebarView {
 }
 
 #if os(iOS)
-  private let droppedImportLogger = Logger(
-    subsystem: "com.moolah.app", category: "SidebarView.DroppedImport")
-
   extension SidebarView {
     // MARK: - Sections
 
@@ -174,27 +170,9 @@ extension SidebarView {
     /// Dropped CSV onto a sidebar account row: force the import onto that
     /// account, bypassing profile matching. A profile is created on success.
     func ingestDroppedURLs(_ urls: [URL], forcedAccountId: UUID) async {
-      for url in urls
-      where url.pathExtension.lowercased() == "csv"
-        || url.pathExtension.isEmpty
-      {
-        let didStart = url.startAccessingSecurityScopedResource()
-        defer {
-          if didStart { url.stopAccessingSecurityScopedResource() }
-        }
-        let data: Data
-        do {
-          data = try Data(contentsOf: url)
-        } catch {
-          droppedImportLogger.warning(
-            "Skipping dropped file \(url.lastPathComponent, privacy: .public): could not read (\(error.localizedDescription, privacy: .public))"
-          )
-          continue
-        }
-        _ = await importStore.ingest(
-          data: data,
-          source: .droppedFile(url: url, forcedAccountId: forcedAccountId))
-      }
+      let report = await importStore.ingestDroppedFiles(
+        urls, forcedAccountId: forcedAccountId)
+      droppedImportError = report.userMessage
     }
 
     // MARK: - Actions

@@ -4,10 +4,10 @@ import GRDB
 // Transfer-detection baseline seed helpers for `UITestSeedHydrator`.
 //
 // Seeds a CloudKit profile, two bank accounts, and four imported
-// single-account transactions forming a merge pair and a dismiss pair.
-// Both members of each pair carry a `TransferSuggestion` pointing at
-// the other so the passive Recently Added pill renders for all four
-// rows at first launch with no detection-timing dependency.
+// single-account transactions forming one suggestion pair. A separate
+// `TransferSuggestion` record is indexed by both transaction IDs, so the
+// standard transaction inspector offers the
+// transfer action at first launch with no detection-timing dependency.
 extension UITestSeedHydrator {
   static func hydrateTransferDetectionBaseline(
     into manager: ProfileContainerManager
@@ -35,7 +35,7 @@ extension UITestSeedHydrator {
 
     try database.write { database in
       try seedTransferDetectionAccounts(instrument: instrument, in: database)
-      try seedTransferDetectionPairs(instrument: instrument, in: database)
+      try seedTransferDetectionPair(instrument: instrument, in: database)
     }
     return profile
   }
@@ -62,28 +62,23 @@ extension UITestSeedHydrator {
       in: database)
   }
 
-  /// Seeds both detected pairs. `importedAt` is anchored relative to
+  /// Seeds the detected pair. `importedAt` is anchored relative to
   /// "now" so the rows fall inside the default 24-hour Recently Added
   /// window whenever the suite runs; the transaction date and every
   /// UUID stay deterministic.
-  private static func seedTransferDetectionPairs(
+  private static func seedTransferDetectionPair(
     instrument: Instrument, in database: Database
   ) throws {
     let importedAt = Date().addingTimeInterval(-3600)
     let importSessionId = UITestFixtures.TransferDetection.profileId
-    try seedMergePair(
-      instrument: instrument,
-      importedAt: importedAt,
-      importSessionId: importSessionId,
-      in: database)
-    try seedDismissPair(
+    try seedSuggestionPair(
       instrument: instrument,
       importedAt: importedAt,
       importSessionId: importSessionId,
       in: database)
   }
 
-  private static func seedMergePair(
+  private static func seedSuggestionPair(
     instrument: Instrument,
     importedAt: Date,
     importSessionId: UUID,
@@ -92,81 +87,37 @@ extension UITestSeedHydrator {
     let fixtures = UITestFixtures.TransferDetection.self
     try upsertSuggestedTransfer(
       SuggestedTransferSpec(
-        id: fixtures.mergeOutgoingId,
-        payee: fixtures.mergeOutgoingPayee,
-        date: fixtures.mergeOutgoingDate,
+        id: fixtures.primaryOutgoingId,
+        payee: fixtures.primaryOutgoingPayee,
+        date: fixtures.primaryOutgoingDate,
         accountId: fixtures.everydayAccountId,
         amount: InstrumentAmount(
-          quantity: -Decimal(fixtures.mergeOutgoingCents) / 100,
+          quantity: -Decimal(fixtures.primaryOutgoingCents) / 100,
           instrument: instrument),
         type: .expense,
-        counterpartId: fixtures.mergeIncomingId,
+        counterpartId: fixtures.primaryIncomingId,
         suggestedAt: fixtures.suggestedAt,
         importedAt: importedAt,
         importSessionId: importSessionId),
       in: database)
     try upsertSuggestedTransfer(
       SuggestedTransferSpec(
-        id: fixtures.mergeIncomingId,
-        payee: fixtures.mergeIncomingPayee,
-        date: fixtures.mergeIncomingDate,
+        id: fixtures.primaryIncomingId,
+        payee: fixtures.primaryIncomingPayee,
+        date: fixtures.primaryIncomingDate,
         accountId: fixtures.savingsAccountId,
         amount: InstrumentAmount(
-          quantity: Decimal(fixtures.mergeIncomingCents) / 100,
+          quantity: Decimal(fixtures.primaryIncomingCents) / 100,
           instrument: instrument),
         type: .income,
-        counterpartId: fixtures.mergeOutgoingId,
+        counterpartId: fixtures.primaryOutgoingId,
         suggestedAt: fixtures.suggestedAt,
         importedAt: importedAt,
         importSessionId: importSessionId),
       in: database)
     try upsertSuggestedTransferRecord(
-      transactionId: fixtures.mergeOutgoingId,
-      counterpartId: fixtures.mergeIncomingId,
-      suggestedAt: fixtures.suggestedAt,
-      in: database)
-  }
-
-  private static func seedDismissPair(
-    instrument: Instrument,
-    importedAt: Date,
-    importSessionId: UUID,
-    in database: Database
-  ) throws {
-    let fixtures = UITestFixtures.TransferDetection.self
-    try upsertSuggestedTransfer(
-      SuggestedTransferSpec(
-        id: fixtures.dismissOutgoingId,
-        payee: fixtures.dismissOutgoingPayee,
-        date: fixtures.dismissOutgoingDate,
-        accountId: fixtures.everydayAccountId,
-        amount: InstrumentAmount(
-          quantity: -Decimal(fixtures.dismissOutgoingCents) / 100,
-          instrument: instrument),
-        type: .expense,
-        counterpartId: fixtures.dismissIncomingId,
-        suggestedAt: fixtures.suggestedAt,
-        importedAt: importedAt,
-        importSessionId: importSessionId),
-      in: database)
-    try upsertSuggestedTransfer(
-      SuggestedTransferSpec(
-        id: fixtures.dismissIncomingId,
-        payee: fixtures.dismissIncomingPayee,
-        date: fixtures.dismissIncomingDate,
-        accountId: fixtures.savingsAccountId,
-        amount: InstrumentAmount(
-          quantity: Decimal(fixtures.dismissIncomingCents) / 100,
-          instrument: instrument),
-        type: .income,
-        counterpartId: fixtures.dismissOutgoingId,
-        suggestedAt: fixtures.suggestedAt,
-        importedAt: importedAt,
-        importSessionId: importSessionId),
-      in: database)
-    try upsertSuggestedTransferRecord(
-      transactionId: fixtures.dismissOutgoingId,
-      counterpartId: fixtures.dismissIncomingId,
+      transactionId: fixtures.primaryOutgoingId,
+      counterpartId: fixtures.primaryIncomingId,
       suggestedAt: fixtures.suggestedAt,
       in: database)
   }

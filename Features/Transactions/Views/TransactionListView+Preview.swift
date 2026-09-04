@@ -7,27 +7,31 @@ private func seedTransactionListPreview(
   savingsId: UUID,
   store: TransactionStore
 ) async {
-  _ = try? await backend.transactions.create(
-    Transaction(
-      date: Date(),
-      payee: "Woolworths",
-      legs: [
-        TransactionLeg(accountId: accountId, instrument: .AUD, quantity: -50.23, type: .expense)
-      ]))
-  _ = try? await backend.transactions.create(
-    Transaction(
-      date: Date().addingTimeInterval(-86400),
-      payee: "Employer",
-      legs: [
-        TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 3500, type: .income)
-      ]))
-  _ = try? await backend.transactions.create(
-    Transaction(
-      date: Date().addingTimeInterval(-172800),
-      legs: [
-        TransactionLeg(accountId: accountId, instrument: .AUD, quantity: -1000, type: .transfer),
-        TransactionLeg(accountId: savingsId, instrument: .AUD, quantity: 1000, type: .transfer),
-      ]))
+  do {
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: Date(),
+        payee: "Woolworths",
+        legs: [
+          TransactionLeg(accountId: accountId, instrument: .AUD, quantity: -50.23, type: .expense)
+        ]))
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: Date().addingTimeInterval(-86400),
+        payee: "Employer",
+        legs: [
+          TransactionLeg(accountId: accountId, instrument: .AUD, quantity: 3500, type: .income)
+        ]))
+    _ = try await backend.transactions.create(
+      Transaction(
+        date: Date().addingTimeInterval(-172800),
+        legs: [
+          TransactionLeg(accountId: accountId, instrument: .AUD, quantity: -1000, type: .transfer),
+          TransactionLeg(accountId: savingsId, instrument: .AUD, quantity: 1000, type: .transfer),
+        ]))
+  } catch {
+    assertionFailure("Could not seed transaction-list preview: \(error)")
+  }
   await store.load(filter: TransactionFilter(accountId: accountId))
 }
 

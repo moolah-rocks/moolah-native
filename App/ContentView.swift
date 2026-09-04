@@ -148,12 +148,12 @@ struct ContentView: View {
       }
     }
     .alert(
-      "Import failed",
+      "Couldn’t import all files",
       isPresented: Binding(
         get: { importError != nil },
         set: { if !$0 { importError = nil } })
     ) {
-      Button("OK") { importError = nil }
+      Button("Dismiss") { importError = nil }
     } message: {
       Text(importError ?? "")
     }
@@ -270,39 +270,17 @@ struct ContentView: View {
   /// file importer: `url` comes from the system and needs explicit
   /// scope start/stop.
   private func ingestCSVFileURL(_ url: URL) async {
-    let didStart = url.startAccessingSecurityScopedResource()
-    defer {
-      if didStart { url.stopAccessingSecurityScopedResource() }
-    }
-    do {
-      let data = try Data(contentsOf: url)
-      _ = await importStore.ingest(
-        data: data,
-        source: .droppedFile(url: url, forcedAccountId: nil))
-      selection = .recentlyAdded
-    } catch {
-      importError = "Couldn't read \(url.lastPathComponent): \(error.localizedDescription)"
-    }
+    let report = await importStore.ingestDroppedFiles([url])
+    importError = report.userMessage
+    if report.acceptedFileCount > 0 { selection = .recentlyAdded }
   }
 
   private func handleImportPickerResult(_ result: Result<[URL], Error>) async {
     switch result {
     case .success(let urls):
-      for url in urls {
-        let didStart = url.startAccessingSecurityScopedResource()
-        defer {
-          if didStart { url.stopAccessingSecurityScopedResource() }
-        }
-        do {
-          let data = try Data(contentsOf: url)
-          _ = await importStore.ingest(
-            data: data,
-            source: .pickedFile(url: url, securityScoped: didStart))
-        } catch {
-          importError = "Couldn't read \(url.lastPathComponent): \(error.localizedDescription)"
-        }
-      }
-      selection = .recentlyAdded
+      let report = await importStore.ingestPickedFiles(urls)
+      importError = report.userMessage
+      if report.acceptedFileCount > 0 { selection = .recentlyAdded }
     case .failure(let error):
       importError = error.localizedDescription
     }

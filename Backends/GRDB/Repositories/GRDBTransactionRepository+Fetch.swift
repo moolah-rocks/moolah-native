@@ -119,7 +119,7 @@ extension GRDBTransactionRepository {
   /// Builds the filtered transaction request (NOT fetched) shared by the
   /// page, count, after-page, and `fetchAll` paths. Applies the
   /// `"transaction"`-table filters directly (`scheduled`, `dateRange`,
-  /// case-insensitive `payee` substring) and the leg-driven filters
+  /// `importedAtRange`, case-insensitive `payee` substring) and the leg-driven filters
   /// (`accountId` ∪ `accountIds`, `earmarkId`, `categoryIds`,
   /// `transactionTypes`, `uncategorisedLegType`) as
   /// intersecting `id IN (SELECT transaction_id FROM transaction_leg …)`

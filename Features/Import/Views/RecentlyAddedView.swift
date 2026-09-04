@@ -1,304 +1,135 @@
-import OSLog
 import SwiftUI
 
-/// Recently Added — landing page for CSV imports. Shows the Needs Setup /
-/// Failed Files panel at the top and a session-grouped list of recently
-/// imported transactions below. The time window picker is in the toolbar.
-///
-/// The transfer-detection coordinator is reached via
-/// `importStore.transferDetection` (it is owned by `ImportStore`, not
-/// injected into `@Environment`). Counterpart-transaction lookup and the
-/// pill title live in `RecentlyAddedViewModel`; the view stays thin.
+/// Recently imported transactions rendered through the standard transaction
+/// list. The wrapper owns only import-specific concerns: the setup panel,
+/// import-timestamp window, file drop, and sidebar review-badge refresh.
 struct RecentlyAddedView: View {
   let backend: any BackendProvider
-  // Module-internal (not `private`): the `RecentlyAddedView+List.swift`
-  // extension references these — `private` scope does not cross files
-  // even within the same type's extensions.
-  @Environment(ImportStore.self) var importStore
+
+  @Environment(ImportStore.self) private var importStore
   @Environment(TransactionStore.self) private var transactionStore
-  @Environment(AccountStore.self) var accountStore
-  @State private var viewModel: RecentlyAddedViewModel?
-  @State private var window: RecentlyAddedViewModel.Window = .last24Hours
-  @State private var searchText: String = ""
-  @State var createRuleFromTransaction: Transaction?
-  @State private var showingCreateRuleFromSearch: Bool = false
-  @State var transactionForDetail: Transaction?
-  @State var transactionPendingDelete: Transaction?
-  @State var transferPendingDismiss: RecentlyAddedTransferPair?
-  private let logger = Logger(
-    subsystem: "com.moolah.app", category: "RecentlyAddedView")
+  @Environment(AccountStore.self) private var accountStore
+  @Environment(CategoryStore.self) private var categoryStore
+  @Environment(EarmarkStore.self) private var earmarkStore
+  @State private var window: RecentlyAddedWindow = .last24Hours
+  @State private var filterReferenceDate = Date()
+  @State private var importError: String?
+  @State private var showImportIssues = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      RecentlyAddedNeedsSetupPanel(backend: backend, staging: importStore.staging)
-      mainContent
-    }
-    .accessibilityIdentifier(UITestIdentifiers.RecentlyAdded.container)
-    // The .searchable lives at the body level (not inside sessionList) so it
-    // is registered exactly once and at a stable view-tree position regardless
-    // of mainContent's loading/empty/list branches. Per UI_GUIDE.md §3
-    // (post-PR-1) the new invariant is "leaves without a TransactionListView
-    // may register at most one .searchable directly" — RecentlyAddedView
-    // qualifies (it has no TransactionListView) and this is its single
-    // .searchable. Issue #824 root-caused the original placement inside
-    // sessionList as the structural-variance source the rule guards against.
-    .searchable(text: $searchText, prompt: "Search description, payee, or notes")
-    .navigationTitle("Recently Added")
+    TransactionListView(
+      title: "Recently Added",
+      filter: recentFilter,
+      accounts: accountStore.accounts,
+      categories: categoryStore.categories,
+      earmarks: earmarkStore.earmarks,
+      transactionStore: transactionStore,
+      allowsScheduledFilter: false,
+      allowsAddingTransactions: false,
+      emptyState: TransactionListEmptyState(
+        title: emptyStateTitle,
+        systemImage: "tray",
+        description: emptyStatePrompt)
+    )
     .dropDestination(for: URL.self) { urls, _ in
-      Task { await ingestDroppedURLs(urls) }
-      return !urls.isEmpty
-    }
-    .toolbar {
-      ToolbarItem(placement: .automatic) {
-        Picker("Time window", selection: $window) {
-          ForEach(RecentlyAddedViewModel.Window.allCases) { windowOption in
-            Text(windowOption.label).tag(windowOption)
-          }
-        }
-        .pickerStyle(.menu)
-        .accessibilityLabel("Time window")
+      guard urls.contains(where: ImportStore.supportsImportFile) else { return false }
+      Task {
+        let report = await importStore.ingestDroppedFiles(urls)
+        importError = report.userMessage
       }
-      // Create-rule-from-search affordance: visible only when the search
-      // field is non-empty so the button offers a meaningful corpus.
-      if !searchText.isEmpty {
-        ToolbarItem(placement: .automatic) {
-          Button {
-            showingCreateRuleFromSearch = true
-          } label: {
-            Label("Create rule matching this search", systemImage: "plus.rectangle.on.folder")
-          }
-        }
-      }
+      return true
     }
-    .sheet(item: $createRuleFromTransaction) { transaction in
-      CreateRuleFromTransactionSheet(
-        transaction: transaction,
-        corpus: corpusFromViewModel())
-    }
-    .sheet(isPresented: $showingCreateRuleFromSearch) {
-      RecentlyAddedRuleFromSearchSheet(query: searchText)
-    }
-    .sheet(item: $transactionForDetail) { transaction in
-      RecentlyAddedDetailSheet(transaction: transaction)
-    }
-    .confirmationDialog(
-      "Delete this transaction?",
+    .alert(
+      "Couldn’t import all files",
       isPresented: Binding(
-        get: { transactionPendingDelete != nil },
-        set: { if !$0 { transactionPendingDelete = nil } }
-      ),
-      titleVisibility: .visible
+        get: { importError != nil },
+        set: { if !$0 { importError = nil } })
     ) {
-      Button("Delete Transaction", role: .destructive) {
-        if let transaction = transactionPendingDelete {
-          Task { await deleteTransaction(transaction) }
-        }
-        transactionPendingDelete = nil
-      }
-      Button("Cancel", role: .cancel) { transactionPendingDelete = nil }
+      Button("Dismiss") { importError = nil }
     } message: {
-      Text("This action cannot be undone.")
+      Text(importError ?? "")
     }
-    .confirmationDialog(
-      "Dismiss Transfer Suggestion",
-      isPresented: Binding(
-        get: { transferPendingDismiss != nil },
-        set: { if !$0 { transferPendingDismiss = nil } }
-      ),
-      titleVisibility: .visible
-    ) {
-      Button("Dismiss Suggestion", role: .destructive) {
-        if let pair = transferPendingDismiss {
-          Task {
-            await importStore.dismissTransfer(
-              pair.transaction, counterpart: pair.counterpart)
-            await reload()
-          }
-        }
-        transferPendingDismiss = nil
-      }
-      .accessibilityIdentifier(UITestIdentifiers.TransferDetection.dismissConfirm)
-      Button("Cancel", role: .cancel) { transferPendingDismiss = nil }
-    } message: {
-      Text(
-        "These transactions stay separate and will not be suggested as a "
-          + "transfer again. This decision is synced across your devices.")
+    .toolbar { recentlyAddedToolbar }
+    .task(id: importStore.recentSessions.count) {
+      await importStore.reloadStagingLists()
     }
-    // `.task(id:)` fires on first appearance and re-fires (auto-cancelling
-    // any in-flight load) whenever any of the tracked values change. We
-    // combine `window` and `importStore.recentSessions.count` into a
-    // single id so a finishSetup completion re-queries the backend with
-    // the same cancellation hygiene the window-picker already had —
-    // avoiding the unbounded `Task { … }` in `.onChange` that the
-    // concurrency review flagged.
-    .task(id: reloadKey) { await reload() }
-  }
-
-  /// Composite id for `.task(id:)` — re-fire the reload whenever the
-  /// window changes OR `ImportStore.recentSessions` grows (i.e. an
-  /// ingest completed). `recentSessions.count` is a stable proxy for
-  /// "something new was imported" without us having to observe the
-  /// session list itself.
-  private struct ReloadKey: Hashable {
-    let window: RecentlyAddedViewModel.Window
-    let importedCount: Int
-  }
-
-  @ViewBuilder private var mainContent: some View {
-    if let viewModel {
-      if viewModel.isLoading && viewModel.sessions.isEmpty {
-        ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if visibleSessions(viewModel).isEmpty {
-        ContentUnavailableView(
-          searchText.isEmpty ? "Nothing imported yet" : "No matches",
-          systemImage: "tray",
-          description: Text(
-            searchText.isEmpty ? emptyStatePrompt : "Try a different search term."))
-      } else {
-        sessionList(viewModel)
-      }
-    } else {
-      ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+    .onChange(of: window) {
+      filterReferenceDate = Date()
     }
-  }
-
-  private var reloadKey: ReloadKey {
-    ReloadKey(window: window, importedCount: importStore.recentSessions.count)
-  }
-
-  /// Platform-specific empty-state copy: macOS users drag files and use
-  /// menu items; iOS users share or paste.
-  private var emptyStatePrompt: String {
-    #if os(macOS)
-      return
-        "Drop a CSV onto the app, use the Import CSV menu item, "
-        + "or paste tabular text to get started."
-    #else
-      return
-        "Use the Share sheet from Files to open a CSV, "
-        + "or paste tabular text to get started."
-    #endif
-  }
-
-  func sessionHeader(_ session: RecentlyAddedViewModel.SessionGroup) -> some View {
-    let dateText = session.importedAt.formatted(
-      .dateTime.day().month().year().hour().minute())
-    let counts = "\(session.transactions.count) imported"
-    let needs =
-      session.needsReviewCount > 0 ? " · \(session.needsReviewCount) need review" : ""
-    return HStack {
-      Text(session.importedAt, format: .dateTime.day().month().year().hour().minute())
-        .font(.subheadline)
-        .monospacedDigit()
-      Spacer()
-      if !session.filenames.isEmpty {
-        Text(session.filenames.joined(separator: ", "))
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-      }
-      Text(counts + needs)
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .monospacedDigit()
+    .task(id: transactionStore.transactionContentGeneration) {
+      await importStore.refreshBadge()
     }
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel("Imported \(dateText), \(counts)\(needs)")
-  }
-
-  func reload() async {
-    if viewModel == nil {
-      viewModel = RecentlyAddedViewModel(backend: backend)
-    }
-    await viewModel?.load(window: window)
-    await importStore.reloadStagingLists()
-  }
-
-  /// Apply `searchText` to the view-model's grouped sessions. Empty query
-  /// returns the full list; non-empty filters each session's transactions
-  /// (keeping the session shell only if at least one row matches).
-  func visibleSessions(
-    _ viewModel: RecentlyAddedViewModel
-  ) -> [RecentlyAddedViewModel.SessionGroup] {
-    guard !searchText.isEmpty else { return viewModel.sessions }
-    let query = searchText.lowercased()
-    return
-      viewModel.sessions
-      .compactMap { group -> RecentlyAddedViewModel.SessionGroup? in
-        let matching = group.transactions.filter { transaction in
-          matches(transaction, query: query)
-        }
-        guard !matching.isEmpty else { return nil }
-        return RecentlyAddedViewModel.SessionGroup(
-          id: group.id,
-          importedAt: group.importedAt,
-          filenames: group.filenames,
-          transactions: matching
-        )
-      }
-  }
-
-  private func matches(_ transaction: Transaction, query: String) -> Bool {
-    let haystack: [String] = [
-      transaction.payee ?? "",
-      transaction.notes ?? "",
-      transaction.importOrigin?.singleOrigin?.rawDescription ?? "",
-    ]
-    return haystack.contains { $0.lowercased().contains(query) }
-  }
-
-  /// Corpus for distinguishing-token extraction: every `rawDescription`
-  /// visible in the current window. Empty array means extraction will
-  /// fall back to using the single description as-is.
-  private func corpusFromViewModel() -> [String] {
-    guard let viewModel else { return [] }
-    return viewModel.sessions.flatMap { group in
-      group.transactions.compactMap { $0.importOrigin?.singleOrigin?.rawDescription }
-    }
-  }
-
-  private func deleteTransaction(_ transaction: Transaction) async {
-    await transactionStore.delete(id: transaction.id)
-    await reload()
-  }
-
-  /// Handle a CSV drop (from Finder / Files / another app) onto the view.
-  /// Routes via `ImportStore.ingest(source: .droppedFile(forcedAccountId: nil))`
-  /// so the matcher picks up if a profile is registered, or the file lands
-  /// in Needs Setup otherwise. After ingest, refresh the view-model so new
-  /// rows appear.
-  private func ingestDroppedURLs(_ urls: [URL]) async {
-    for url in urls {
-      guard url.pathExtension.lowercased() == "csv" || url.pathExtension.isEmpty else {
-        continue
-      }
-      let didStart = url.startAccessingSecurityScopedResource()
-      defer {
-        if didStart { url.stopAccessingSecurityScopedResource() }
-      }
-      do {
-        let data = try Data(contentsOf: url)
-        _ = await importStore.ingest(
-          data: data, source: .droppedFile(url: url, forcedAccountId: nil))
-      } catch {
-        let filename = url.lastPathComponent
-        let reason = error.localizedDescription
-        logger.error(
-          "Failed to read dropped file \(filename, privacy: .public): \(reason, privacy: .public)"
-        )
+    .focusedSceneValue(
+      \.showImportIssuesAction,
+      importIssueCount > 0 ? { showImportIssues = true } : nil
+    )
+    .onChange(of: importIssueCount) { _, count in
+      if count == 0 {
+        showImportIssues = false
       }
     }
-    await reload()
   }
 }
 
-// `sessionList` and `row(for:in:)` live in `RecentlyAddedView+List.swift`.
+extension RecentlyAddedView {
+  private var importIssueCount: Int {
+    importStore.pendingSetup.count + importStore.failedFiles.count
+  }
 
-// `RecentlyAddedRow`, `PossibleTransferPill`, `TransferSwipeActions`, and
-// `RecentlyAddedTransferPair` live in `RecentlyAddedRow.swift`.
+  @ToolbarContentBuilder private var recentlyAddedToolbar: some ToolbarContent {
+    if importIssueCount > 0 {
+      ToolbarItem(placement: .automatic) {
+        Button {
+          showImportIssues.toggle()
+        } label: {
+          Label(
+            "Show Import Issues",
+            systemImage: "exclamationmark.triangle.fill")
+        }
+        .accessibilityValue("\(importIssueCount)")
+        .accessibilityHint("Shows files that need setup or could not be imported")
+        .popover(isPresented: $showImportIssues) { importIssuesPopover }
+      }
+    }
+    ToolbarItem(placement: .automatic) {
+      Picker("Time window", selection: $window) {
+        ForEach(RecentlyAddedWindow.allCases) { option in
+          Text(option.label).tag(option)
+        }
+      }
+      .pickerStyle(.menu)
+      .accessibilityLabel("Time window")
+    }
+  }
 
-// `RecentlyAddedNeedsSetupPanel`, `RecentlyAddedPendingRow`, and
-// `RecentlyAddedFailedRow` live in `RecentlyAddedNeedsSetupPanel.swift`.
+  private var importIssuesPopover: some View {
+    ScrollView {
+      RecentlyAddedNeedsSetupPanel(
+        backend: backend, staging: importStore.staging)
+    }
+    .frame(
+      minWidth: 420,
+      idealWidth: 500,
+      maxWidth: 600,
+      idealHeight: 300,
+      maxHeight: 500
+    )
+    .padding()
+  }
 
-// `RecentlyAddedDetailSheet` and `RecentlyAddedRuleFromSearchSheet` live in
-// `RecentlyAddedDetailSheet.swift`.
+  private var recentFilter: TransactionFilter {
+    TransactionFilter(importedAtRange: window.importedAtRange(now: filterReferenceDate))
+  }
+
+  private var emptyStateTitle: String {
+    "No imported transactions to show"
+  }
+
+  private var emptyStatePrompt: String {
+    if window != .all {
+      return "Choose All to include transactions outside this time window."
+    }
+    return "Import a CSV to add transactions here."
+  }
+
+}

@@ -19,8 +19,9 @@ struct TransactionListCSVImportAddons: ViewModifier {
       }
       .dropDestination(for: URL.self) { urls, _ in
         guard let accountId = forcedAccountId else { return false }
+        guard urls.contains(where: ImportStore.supportsImportFile) else { return false }
         Task { await ingestDroppedURLs(urls, accountId) }
-        return !urls.isEmpty
+        return true
       }
   }
 }

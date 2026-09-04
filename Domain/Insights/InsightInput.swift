@@ -134,8 +134,9 @@ struct InsightInput: Sendable {
   /// un-budgeted category.
   let budgetedCategoryIds: Set<UUID>
 
-  /// Count of posted transactions whose every leg is uncategorized (posted
-  /// meaning `recur_period IS NULL`; does not include scheduled templates).
+  /// Count of posted transactions with uncategorized income/expense legs,
+  /// excluding transactions composed entirely of spam instruments. Posted
+  /// means `recur_period IS NULL`; scheduled templates are not included.
   /// Drives the categorize-backlog nudge.
   let uncategorizedTransactionCount: Int
 

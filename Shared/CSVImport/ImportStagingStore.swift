@@ -120,7 +120,13 @@ actor ImportStagingStore {
   func dismiss(pendingId: UUID) throws {
     var index = try load()
     if let match = index.pending.first(where: { $0.id == pendingId }) {
-      try? fileManager.removeItem(at: match.stagingPath)
+      do {
+        try fileManager.removeItem(at: match.stagingPath)
+      } catch {
+        stagingLogger.warning(
+          "Could not delete dismissed pending file: \(error.localizedDescription, privacy: .public)"
+        )
+      }
     } else {
       throw StagingError.notFound(id: pendingId)
     }
@@ -142,10 +148,22 @@ actor ImportStagingStore {
     try load().failed
   }
 
+  /// Reads both staging lists from one index snapshot so callers never
+  /// publish a pending list and failed list from different revisions.
+  func stagedFiles() throws -> (pending: [PendingSetupFile], failed: [FailedImportFile]) {
+    let index = try load()
+    return (index.pending, index.failed)
+  }
+
   func dismiss(failedId: UUID) throws {
     var index = try load()
     if let match = index.failed.first(where: { $0.id == failedId }) {
-      try? fileManager.removeItem(at: match.stagingPath)
+      do {
+        try fileManager.removeItem(at: match.stagingPath)
+      } catch {
+        stagingLogger.warning(
+          "Could not delete dismissed failed file: \(error.localizedDescription, privacy: .public)")
+      }
     } else {
       throw StagingError.notFound(id: failedId)
     }

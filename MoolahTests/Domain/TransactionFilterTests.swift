@@ -25,6 +25,14 @@ struct TransactionFilterTests {
     #expect(filter.hasActiveFilters == true)
   }
 
+  @Test("Filter with importedAtRange is active")
+  func testFilterWithImportedAtRangeIsActive() {
+    let now = Date()
+    let filter = TransactionFilter(
+      importedAtRange: now.addingTimeInterval(-86_400)...now)
+    #expect(filter.hasActiveFilters == true)
+  }
+
   @Test("Filter with categoryIds is active")
   func testFilterWithCategoryIdsIsActive() {
     let filter = TransactionFilter(categoryIds: [UUID()])
