@@ -4,40 +4,90 @@ import Foundation
 /// Transaction fields repeat for each leg so transfers and custom split
 /// transactions retain every leg's amount and labels.
 enum TransactionCSVExportBuilder {
-  static let headers = [
-    "Date",
-    "Payee",
-    "Account",
-    "Amount",
-    "Instrument",
-    "Chain ID",
-    "ERC20 Contract Address",
-    "Transaction Type",
-    "Category",
-    "Earmark",
-    "On-chain Counterparty",
-    "On-chain Transaction ID",
-    "Block Explorer Link",
-    "Notes",
-  ]
+  private struct RowPlan: Sendable {
+    let transaction: Transaction
+    let leg: TransactionLeg
+    let conversionIndex: Int?
+  }
 
   @concurrent
   static func csv(
     for transactions: [Transaction],
-    context: TransactionCSVExportContext
+    context: TransactionCSVExportContext,
+    baseInstrument: Instrument,
+    conversionService: any InstrumentConversionService
   ) async throws -> String {
-    var lines = [row(headers)]
+    var plannedRows: [RowPlan] = []
+    var requests: [BatchConversionRequest] = []
     for transaction in visibleTransactions(from: transactions, context: context) {
       try Task.checkCancellation()
       for leg in transaction.legs {
-        lines.append(row(fields(for: leg, in: transaction, context: context)))
+        let conversionIndex: Int?
+        if leg.instrument == baseInstrument {
+          conversionIndex = nil
+        } else {
+          conversionIndex = requests.count
+          requests.append(
+            BatchConversionRequest(
+              amount: leg.amount,
+              target: baseInstrument,
+              date: transaction.date))
+        }
+        plannedRows.append(
+          RowPlan(
+            transaction: transaction,
+            leg: leg,
+            conversionIndex: conversionIndex))
       }
+    }
+
+    let outcomes = try await conversionService.convertResultBatch(requests)
+    var lines = [row(headers(baseInstrument: baseInstrument))]
+    for plannedRow in plannedRows {
+      try Task.checkCancellation()
+      let baseQuantity: Decimal
+      if let conversionIndex = plannedRow.conversionIndex {
+        switch outcomes[conversionIndex] {
+        case .value(let amount): baseQuantity = amount.quantity
+        case .knownZero: baseQuantity = 0
+        case .failure(let error): throw error
+        }
+      } else {
+        baseQuantity = plannedRow.leg.quantity
+      }
+      lines.append(
+        row(
+          fields(
+            for: plannedRow.leg,
+            in: plannedRow.transaction,
+            baseQuantity: baseQuantity,
+            context: context)))
     }
     return lines.joined(separator: "\n") + "\n"
   }
 }
 
 extension TransactionCSVExportBuilder {
+  private static func headers(baseInstrument: Instrument) -> [String] {
+    [
+      "Date",
+      "Payee",
+      "Account",
+      "Amount",
+      "Instrument",
+      "Base Currency Amount (\(baseInstrument.shortCode))",
+      "Chain ID",
+      "ERC20 Contract Address",
+      "Transaction Type",
+      "Category",
+      "Earmark",
+      "On-chain Counterparty",
+      "On-chain Transaction ID",
+      "Block Explorer Link",
+      "Notes",
+    ]
+  }
+
   private static func visibleTransactions(
     from transactions: [Transaction],
     context: TransactionCSVExportContext
@@ -55,6 +105,7 @@ extension TransactionCSVExportBuilder {
   private static func fields(
     for leg: TransactionLeg,
     in transaction: Transaction,
+    baseQuantity: Decimal,
     context: TransactionCSVExportContext
   ) -> [String] {
     let account = leg.accountId.flatMap { context.accounts.by(id: $0) }
@@ -69,6 +120,7 @@ extension TransactionCSVExportBuilder {
       account?.name ?? "",
       NSDecimalNumber(decimal: leg.quantity).stringValue,
       leg.instrument.pickerLabel,
+      NSDecimalNumber(decimal: baseQuantity).stringValue,
       chainId.map(String.init) ?? "",
       leg.instrument.contractAddress ?? "",
       leg.type.rawValue,

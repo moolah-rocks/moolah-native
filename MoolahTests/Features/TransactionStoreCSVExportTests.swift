@@ -55,7 +55,10 @@ struct TransactionStoreCSVExportTests {
     let repository = FailingTransactionRepository { filter in
       try await fetcher.fetch(filter: filter)
     }
-    let exportStore = TransactionCSVExportStore(repository: repository)
+    let exportStore = TransactionCSVExportStore(
+      repository: repository,
+      conversionService: FakeConversionService.alwaysThrows,
+      baseInstrument: .defaultTestInstrument)
     let context = TransactionCSVExportContext(
       filter: TransactionFilter(),
       searchText: "",
@@ -76,6 +79,40 @@ struct TransactionStoreCSVExportTests {
     #expect(exportStore.errorMessage == nil)
     #expect(exportStore.isPresented)
     #expect(exportStore.document.csv.contains("Recovered export"))
+  }
+
+  @Test("surfaces a conversion failure without presenting a partial export")
+  func surfacesConversionFailure() async {
+    let transaction = Transaction(
+      date: Date(timeIntervalSince1970: 0),
+      payee: "Foreign purchase",
+      legs: [
+        TransactionLeg(
+          accountId: nil,
+          instrument: .USD,
+          quantity: -1,
+          type: .expense)
+      ])
+    let repository = FailingTransactionRepository { _ in [transaction] }
+    let exportStore = TransactionCSVExportStore(
+      repository: repository,
+      conversionService: FakeConversionService.alwaysThrows,
+      baseInstrument: .AUD)
+    let context = TransactionCSVExportContext(
+      filter: TransactionFilter(),
+      searchText: "",
+      includesSpam: true,
+      spamInstruments: [],
+      timeZone: .utc,
+      accounts: Accounts(from: []),
+      categories: Categories(from: []),
+      earmarks: Earmarks(from: []))
+
+    await exportStore.export(context: context)
+
+    #expect(exportStore.errorMessage != nil)
+    #expect(!exportStore.isPresented)
+    #expect(exportStore.document.csv.isEmpty)
   }
 }
 
