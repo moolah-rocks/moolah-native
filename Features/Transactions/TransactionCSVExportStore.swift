@@ -8,6 +8,8 @@ import Observation
 @MainActor
 final class TransactionCSVExportStore {
   private let repository: any TransactionRepository
+  private let conversionService: any InstrumentConversionService
+  private let baseInstrument: Instrument
   private let logger = Logger(subsystem: "com.moolah.app", category: "TransactionCSVExportStore")
 
   private(set) var document = TransactionCSVDocument(csv: "")
@@ -15,8 +17,14 @@ final class TransactionCSVExportStore {
   private(set) var isPresented = false
   private(set) var errorMessage: String?
 
-  init(repository: any TransactionRepository) {
+  init(
+    repository: any TransactionRepository,
+    conversionService: any InstrumentConversionService,
+    baseInstrument: Instrument
+  ) {
     self.repository = repository
+    self.conversionService = conversionService
+    self.baseInstrument = baseInstrument
   }
 
   func export(context: TransactionCSVExportContext) async {
@@ -28,7 +36,11 @@ final class TransactionCSVExportStore {
     do {
       let transactions = try await repository.fetchAll(filter: context.filter)
       try Task.checkCancellation()
-      let csv = try await TransactionCSVExportBuilder.csv(for: transactions, context: context)
+      let csv = try await TransactionCSVExportBuilder.csv(
+        for: transactions,
+        context: context,
+        baseInstrument: baseInstrument,
+        conversionService: conversionService)
       try Task.checkCancellation()
       document = TransactionCSVDocument(csv: csv)
       isPresented = true

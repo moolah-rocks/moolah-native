@@ -10,7 +10,10 @@ struct TransactionCSVExportBuilderTests {
     let fixture = try syncedExportFixture()
 
     let csv = try await TransactionCSVExportBuilder.csv(
-      for: [fixture.transaction], context: fixture.context)
+      for: [fixture.transaction],
+      context: fixture.context,
+      baseInstrument: .AUD,
+      conversionService: FakeConversionService.passthrough)
 
     let rows = try CSVTokenizer.parse(Data(csv.utf8))
     try #require(rows.count == 3)
@@ -45,7 +48,11 @@ struct TransactionCSVExportBuilderTests {
       categories: Categories(from: []),
       earmarks: Earmarks(from: []))
 
-    let csv = try await TransactionCSVExportBuilder.csv(for: transactions, context: context)
+    let csv = try await TransactionCSVExportBuilder.csv(
+      for: transactions,
+      context: context,
+      baseInstrument: .AUD,
+      conversionService: FakeConversionService.passthrough)
 
     #expect(csv.contains("Coffee Shop"))
     #expect(!csv.contains("Coffee Airdrop"))
@@ -83,7 +90,11 @@ struct TransactionCSVExportBuilderTests {
         categories: Categories(from: []),
         earmarks: Earmarks(from: []))
 
-      let csv = try await TransactionCSVExportBuilder.csv(for: [transaction], context: context)
+      let csv = try await TransactionCSVExportBuilder.csv(
+        for: [transaction],
+        context: context,
+        baseInstrument: .AUD,
+        conversionService: FakeConversionService.passthrough)
       let rows = try CSVTokenizer.parse(Data(csv.utf8))
 
       try #require(rows.count >= 2)
@@ -107,11 +118,12 @@ struct TransactionCSVExportBuilderTests {
     for testCase in cases {
       let row = try await syncedNativeAssetRow(accountChainId: testCase.accountChainId)
 
-      try #require(row.count > 12)
-      #expect(row[5] == testCase.expectedChain)
-      #expect(row[12] == testCase.expectedURL)
+      try #require(row.count > 13)
+      #expect(row[6] == testCase.expectedChain)
+      #expect(row[13] == testCase.expectedURL)
     }
   }
+
 }
 
 // MARK: - Assertions and Fixtures
@@ -120,7 +132,8 @@ extension TransactionCSVExportBuilderTests {
   private func assertHeaders(_ row: [String]) {
     #expect(
       row == [
-        "Date", "Payee", "Account", "Amount", "Instrument", "Chain ID",
+        "Date", "Payee", "Account", "Amount", "Instrument", "Base Currency Amount (AUD)",
+        "Chain ID",
         "ERC20 Contract Address", "Transaction Type", "Category", "Earmark",
         "On-chain Counterparty", "On-chain Transaction ID", "Block Explorer Link", "Notes",
       ])
@@ -136,7 +149,8 @@ extension TransactionCSVExportBuilderTests {
     #expect(
       row == [
         "2026-08-01", "Merchant, Inc.", "Ethereum Wallet", "-12.5",
-        "USD Coin (USDC)", "1", "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "expense",
+        "USD Coin (USDC)", "-12.5", "1",
+        "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48", "expense",
         "Groceries", "Holiday", "0xcounterparty", "0xabc",
         "https://etherscan.io/tx/0xabc", "First line\nSecond line",
       ])
@@ -146,7 +160,7 @@ extension TransactionCSVExportBuilderTests {
     #expect(
       row == [
         "2026-08-01", "Merchant, Inc.", "Ethereum Wallet", "-0.01",
-        "Ethereum (ETH)", "1", "", "expense", "", "", "", "0xabc",
+        "Ethereum (ETH)", "-0.01", "1", "", "expense", "", "", "", "0xabc",
         "https://etherscan.io/tx/0xabc", "First line\nSecond line",
       ])
   }
@@ -231,7 +245,11 @@ extension TransactionCSVExportBuilderTests {
       categories: Categories(from: []),
       earmarks: Earmarks(from: []))
 
-    let csv = try await TransactionCSVExportBuilder.csv(for: [transaction], context: context)
+    let csv = try await TransactionCSVExportBuilder.csv(
+      for: [transaction],
+      context: context,
+      baseInstrument: .AUD,
+      conversionService: FakeConversionService.passthrough)
     let rows = try CSVTokenizer.parse(Data(csv.utf8))
     try #require(rows.count >= 2)
     return rows[1]

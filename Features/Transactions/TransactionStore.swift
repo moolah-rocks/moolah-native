@@ -255,7 +255,10 @@ final class TransactionStore {
     transferSuggestions: (any TransferSuggestionRepository)? = nil
   ) {
     self.repository = repository
-    self.csvExportStore = TransactionCSVExportStore(repository: repository)
+    self.csvExportStore = TransactionCSVExportStore(
+      repository: repository,
+      conversionService: conversionService,
+      baseInstrument: targetInstrument)
     self.payeeSuggestionSource = PayeeSuggestionSource(repository: repository)
     self.transferSuggestions = transferSuggestions
     if let transferSuggestions {
