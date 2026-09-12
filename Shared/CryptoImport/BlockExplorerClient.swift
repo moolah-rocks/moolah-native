@@ -36,7 +36,7 @@ struct LiveBlockscoutClient: Sendable {
   private let logger: Logger
 
   init(
-    session: URLSession = .shared,
+    session: URLSession = APIHTTPSession.shared,
     rateLimiter: RateLimiter,
     retryPolicy: HTTPRetryPolicy = HTTPRetryPolicy(
       honorsRetryAfterInPlace: true),

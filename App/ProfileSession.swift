@@ -4,7 +4,7 @@ import GRDB
 import OSLog
 
 /// Holds the backend and all stores for a single profile.
-/// Each profile gets its own isolated URLSession, cookie storage, and keychain entry.
+/// Profiles isolate their database and credentials; API networking is shared and cookie-free.
 @Observable
 @MainActor
 final class ProfileSession: Identifiable {
@@ -45,7 +45,6 @@ final class ProfileSession: Identifiable {
   private(set) var insightStore: InsightStore?
   let analysisStore: AnalysisStore
   let reportingStore: ReportingStore
-  /// The single profile-wide cost-basis provider — the same instance
   /// The single profile-wide cost-basis provider shared by reporting and
   /// position surfaces. Its observation is torn down in `cleanupSync`.
   let holdingsCostLedgerStore: HoldingsCostLedgerStore
