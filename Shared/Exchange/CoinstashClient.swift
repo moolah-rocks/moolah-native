@@ -23,7 +23,7 @@ struct CoinstashClient: ExchangeClient, Sendable {
   private static let nativeSentinel = "0x" + String(repeating: "e", count: 40)
 
   init(
-    transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }
+    transport: @escaping Transport = { try await APIHTTPSession.shared.data(for: $0) }
   ) {
     self.transport = transport
   }

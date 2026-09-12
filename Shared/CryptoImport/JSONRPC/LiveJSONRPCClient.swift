@@ -31,7 +31,7 @@ struct LiveJSONRPCClient: Sendable {
   ///   - endpoint: The JSON-RPC node URL every request POSTs to. Injected
   ///     rather than derived from a chain slug — this client is used for
   ///     both custom user-supplied endpoints and default public nodes.
-  ///   - session: `URLSession` for HTTP requests. Default is `.shared`;
+  ///   - session: `URLSession` for HTTP requests. Default is cookie-free;
   ///     tests inject an ephemeral session backed by `URLProtocol`.
   ///   - rateLimiter: Shared `RateLimiter` actor — caller sizes it to the
   ///     endpoint in use.
@@ -39,7 +39,7 @@ struct LiveJSONRPCClient: Sendable {
   ///     `Task.sleep`; tests pass an instant no-op.
   init(
     endpoint: URL,
-    session: URLSession = .shared,
+    session: URLSession = APIHTTPSession.shared,
     rateLimiter: RateLimiter,
     sleeper: @escaping @Sendable (TimeInterval) async throws -> Void = {
       try await Task.sleep(nanoseconds: UInt64($0 * 1e9))

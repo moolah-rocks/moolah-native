@@ -18,9 +18,9 @@ final class NetworkingServices: Sendable {
   private let registry: GateRegistry
 
   /// - Parameter session: URLSession used for every request. Defaults to
-  ///   `.shared` in production. Tests inject an ephemeral session whose
+  ///   a shared cookie-free session in production. Tests inject an ephemeral session whose
   ///   `protocolClasses` includes a `URLProtocol` stub.
-  init(session: URLSession = .shared) {
+  init(session: URLSession = APIHTTPSession.shared) {
     self.session = session
     self.failureCache = FailedRequestCache()
     self.registry = GateRegistry()

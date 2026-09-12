@@ -31,7 +31,7 @@ private let keychainLogger = Logger(subsystem: "com.moolah.app", category: "Keyc
 
 /// Generic Keychain wrapper supporting Data and String values, with optional iCloud sync.
 ///
-/// Used for API keys (String, synced) and cookies (Data, device-local).
+/// Stores string or data credentials, including API keys and account tokens.
 struct KeychainStore: Sendable {
   let service: String
   let account: String

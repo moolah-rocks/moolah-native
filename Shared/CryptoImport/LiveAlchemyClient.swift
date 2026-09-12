@@ -36,7 +36,7 @@ struct LiveAlchemyClient: Sendable {
   private let logger: Logger
 
   /// - Parameters:
-  ///   - session: `URLSession` for HTTP requests. Default is `.shared`;
+  ///   - session: `URLSession` for HTTP requests. Default is cookie-free;
   ///     tests inject an ephemeral session backed by `URLProtocol`.
   ///   - apiKeyProvider: Closure invoked at the start of every network
   ///     method. Reads the keychain on each call so a freshly-added key
@@ -49,7 +49,7 @@ struct LiveAlchemyClient: Sendable {
   ///   - sleeper: Backoff sleep for the 429 retry loop. Defaults to
   ///     `Task.sleep`; tests pass an instant no-op.
   init(
-    session: URLSession = .shared,
+    session: URLSession = APIHTTPSession.shared,
     apiKeyProvider: @escaping @Sendable () -> String?,
     rateLimiter: RateLimiter,
     sleeper: @escaping @Sendable (TimeInterval) async throws -> Void = {
