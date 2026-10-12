@@ -73,8 +73,8 @@ struct InsightTransaction: Sendable, Identifiable, Hashable {
   /// filter predicates, so combine the known day and leg/header attributes.
   func evidenceFilter(calendar: Calendar) -> TransactionFilter? {
     guard let day = calendar.dateInterval(of: .day, for: date) else { return nil }
-    let inclusiveEnd = Date(
-      timeIntervalSinceReferenceDate: day.end.timeIntervalSinceReferenceDate.nextDown)
+    // Keep the bound on this day when timestamps round to milliseconds.
+    let inclusiveEnd = day.end.addingTimeInterval(-0.001)
     return TransactionFilter(
       accountId: accountId,
       scheduled: .nonScheduledOnly,
