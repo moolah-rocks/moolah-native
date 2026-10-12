@@ -3,11 +3,12 @@ import Foundation
 import OSLog
 import os
 
-// `CKSyncEngineDelegate` conformance for `SyncCoordinator`. The delegate runs
+// `CKSyncEngineDelegate` witnesses for `SyncCoordinator`; the conformance is
+// declared in SyncCoordinator.swift. The delegate runs
 // on CKSyncEngine's internal executor. I/O-heavy events run through explicit
 // off-main boundaries; coordinator and CKSyncEngine state access hops to
 // `MainActor`. Outbound batch helpers live in `SyncCoordinator+BatchBuilder.swift`.
-extension SyncCoordinator: CKSyncEngineDelegate {
+extension SyncCoordinator {
 
   // MARK: - Inbound Events
 

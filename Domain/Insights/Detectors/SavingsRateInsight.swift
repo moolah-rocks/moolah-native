@@ -30,7 +30,7 @@ enum SavingsRateInsight {
 
     let latest = rates[rates.count - 1]
     guard let latestMonth = ratedMonths.last,
-      let throughMonth = context.formattedFinancialMonth(latestMonth.month.month)
+      let throughDate = context.formattedFinancialMonthEnd(latestMonth.month.month)
     else { return [] }
     let rising = result.isIncreasing
     // Surface only statistically credible trends (loose threshold — single
@@ -53,7 +53,7 @@ enum SavingsRateInsight {
           InsightFact("Current savings rate", percent(latest)),
           InsightFact("Direction", rising ? "Rising" : "Falling"),
           InsightFact("Months analysed", "\(rates.count)"),
-          InsightFact("Through month", throughMonth),
+          InsightFact("Through date", throughDate),
           InsightFact(
             "Trend p-value", result.pValue.formatted(.number.precision(.fractionLength(3)))),
         ],

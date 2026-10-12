@@ -98,10 +98,10 @@ struct InsightDescriptionComposerCoverageTests {
       kind: .savingsRateTrend, title: "Your savings rate is climbing",
       facts: [
         InsightFact("Current savings rate", "18%"), InsightFact("Direction", "Rising"),
-        InsightFact("Months analysed", "6"), InsightFact("Through month", "June 2026"),
+        InsightFact("Months analysed", "6"), InsightFact("Through date", "Jun 30, 2026"),
       ])
     #expect(
-      text == "Across 6 complete months through June 2026, your savings rate climbed to 18%.")
+      text == "Across 6 complete months through Jun 30, 2026, your savings rate climbed to 18%.")
   }
 
   @Test
@@ -110,9 +110,9 @@ struct InsightDescriptionComposerCoverageTests {
       kind: .savingsRateTrend, title: "Your savings rate is slipping",
       facts: [
         InsightFact("Current savings rate", "9%"), InsightFact("Direction", "Falling"),
-        InsightFact("Months analysed", "6"), InsightFact("Through month", "June 2026"),
+        InsightFact("Months analysed", "6"), InsightFact("Through date", "Jun 30, 2026"),
       ])
     #expect(
-      text == "Across 6 complete months through June 2026, your savings rate fell to 9%.")
+      text == "Across 6 complete months through Jun 30, 2026, your savings rate fell to 9%.")
   }
 }

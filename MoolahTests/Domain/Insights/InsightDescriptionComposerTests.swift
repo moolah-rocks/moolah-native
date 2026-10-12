@@ -173,11 +173,11 @@ struct InsightDescriptionComposerTests {
       facts: [
         InsightFact("Category", "Groceries"), InsightFact("Direction", "Rising"),
         InsightFact("Per month", "$45.00"), InsightFact("Months analysed", "6"),
-        InsightFact("Through month", "June 2026"),
+        InsightFact("Through date", "Jun 30, 2026"),
       ])
     #expect(
       text
-        == "Over the 6 months through June 2026, Groceries spending rose by about $45.00 a month."
+        == "Over the 6 months through Jun 30, 2026, Groceries spending rose by about $45.00 a month."
     )
   }
 
@@ -188,11 +188,12 @@ struct InsightDescriptionComposerTests {
       facts: [
         InsightFact("Category", "Transport"), InsightFact("Direction", "Falling"),
         InsightFact("Per month", "$30.00"), InsightFact("Months analysed", "6"),
-        InsightFact("Through month", "June 2026"),
+        InsightFact("Through date", "Jun 30, 2026"),
       ])
     #expect(
       text
-        == "Over the 6 months through June 2026, Transport spending fell by about $30.00 a month.")
+        == "Over the 6 months through Jun 30, 2026, Transport spending fell by about $30.00 a month."
+    )
   }
 
   @Test
