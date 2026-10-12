@@ -150,8 +150,9 @@ struct InsightContext: Sendable {
         of: endMonth),
       let nextDay = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: end))
     else { return nil }
-    let inclusiveEnd = Date(
-      timeIntervalSinceReferenceDate: nextDay.timeIntervalSinceReferenceDate.nextDown)
+    // Persisted timestamps have millisecond precision; nextDown rounds back
+    // to midnight when encoded and would include the following day.
+    let inclusiveEnd = nextDay.addingTimeInterval(-0.001)
     return calendar.startOfDay(for: start)...inclusiveEnd
   }
 
