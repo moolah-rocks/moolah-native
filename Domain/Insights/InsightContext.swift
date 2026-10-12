@@ -109,10 +109,31 @@ struct InsightContext: Sendable {
   }
 
   func formattedFinancialMonth(_ key: String) -> String? {
-    guard let endMonth = FinancialMonth.date(forKey: key) else { return nil }
+    guard let range = financialMonthDateRange(key) else { return nil }
     if financialMonthEnd == 31 {
+      guard let endMonth = FinancialMonth.date(forKey: key) else { return nil }
       return formattedMonth(endMonth)
     }
+    return Self.formattedRange(
+      start: range.lowerBound, end: Calendar.utc.startOfDay(for: range.upperBound))
+  }
+
+  /// An end date for prose describing a window "through" a financial month.
+  func formattedFinancialMonthEnd(_ key: String) -> String? {
+    guard let range = financialMonthDateRange(key) else { return nil }
+    return Calendar.utc.startOfDay(for: range.upperBound).formatted(
+      Date.FormatStyle(calendar: .utc, timeZone: .gmt)
+        .locale(Locale(identifier: "en_US_POSIX"))
+        .month(.abbreviated)
+        .day()
+        .year())
+  }
+
+  /// Inclusive UTC evidence bounds matching the financial-month bucketing
+  /// used by analysis, including the entire cutoff day. Chart positioning
+  /// tokens are converted to day boundaries before filtering transactions.
+  func financialMonthDateRange(_ key: String) -> ClosedRange<Date>? {
+    guard let endMonth = FinancialMonth.date(forKey: key) else { return nil }
     let calendar = Calendar.utc
     guard
       let previousMonth = calendar.date(byAdding: .month, value: -1, to: endMonth),
@@ -126,9 +147,12 @@ struct InsightContext: Sendable {
       let end = calendar.date(
         bySetting: .day,
         value: min(financialMonthEnd, endRange.count),
-        of: endMonth)
+        of: endMonth),
+      let nextDay = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: end))
     else { return nil }
-    return Self.formattedRange(start: start, end: end)
+    let inclusiveEnd = Date(
+      timeIntervalSinceReferenceDate: nextDay.timeIntervalSinceReferenceDate.nextDown)
+    return calendar.startOfDay(for: start)...inclusiveEnd
   }
 
   private static func formattedRange(start: Date, end: Date) -> String {

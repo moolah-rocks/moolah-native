@@ -15,8 +15,9 @@ import os
 ///
 /// The class body here is intentionally small: nested types, stored state, observers,
 /// handler access, refetch scheduling, and state-file persistence. Lifecycle, zone
-/// handling, backfill, record-change application, and the `CKSyncEngineDelegate`
-/// conformance live in sibling extension files under `Backends/CloudKit/Sync/`.
+/// handling, backfill, record-change application, and delegate witnesses live
+/// in sibling extension files under `Backends/CloudKit/Sync/`. The delegate
+/// conformance stays in this defining file for its inherited Sendable requirement.
 @Observable
 @MainActor
 final class SyncCoordinator {
@@ -391,3 +392,7 @@ final class SyncCoordinator {
   }
 
 }
+
+// Keep the delegate conformance in the defining file because the protocol
+// inherits Sendable; its witnesses live in SyncCoordinator+Delegate.swift.
+extension SyncCoordinator: CKSyncEngineDelegate {}

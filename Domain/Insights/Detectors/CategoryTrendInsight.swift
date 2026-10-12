@@ -57,8 +57,10 @@ enum CategoryTrendInsight {
     categories: Categories,
     context: InsightContext
   ) -> Insight? {
-    guard result.statistic != 0, let latest = points.last,
-      let through = context.formattedFinancialMonth(latest.month)
+    guard result.statistic != 0, let first = points.first, let latest = points.last,
+      let references = evidenceReferences(
+        categoryId: categoryId, firstMonth: first.month, lastMonth: latest.month, context: context),
+      let through = context.formattedFinancialMonthEnd(latest.month)
     else { return nil }
     let months = points.count
     let totalChange = result.sensSlope * Double(months - 1)
@@ -89,17 +91,38 @@ enum CategoryTrendInsight {
         InsightFact("Direction", rising ? "Rising" : "Falling"),
         InsightFact("Per month", perMonth),
         InsightFact("Months analysed", "\(months)"),
-        InsightFact("Through month", through),
+        InsightFact("Through date", through),
         InsightFact("Over \(months) months", context.formatted(Decimal(-abs(totalChange)))),
         InsightFact(
           "Trend p-value", result.pValue.formatted(.number.precision(.fractionLength(3)))),
       ],
-      references: InsightReferences(
-        categoryIds: resolved.map { [$0.id] } ?? [],
-        instrumentIds: [context.reportingCurrency.id]),
+      references: references,
       chart: InsightChartBuilders.categorySpend(
         points: points,
         reportingCurrency: context.reportingCurrency,
         highlightMonth: latest.month))
+  }
+}
+
+extension CategoryTrendInsight {
+  /// The drill-down reproduces the same category and monthly evidence window.
+  private static func evidenceReferences(
+    categoryId: UUID, firstMonth: String, lastMonth: String, context: InsightContext
+  ) -> InsightReferences? {
+    guard let firstRange = context.financialMonthDateRange(firstMonth),
+      let lastRange = context.financialMonthDateRange(lastMonth)
+    else { return nil }
+    let isUncategorized = categoryId == CategorySpendSeries.uncategorizedKey
+    let categoryIds: Set<UUID> = isUncategorized ? [] : [categoryId]
+    return InsightReferences(
+      categoryIds: Array(categoryIds),
+      instrumentIds: [context.reportingCurrency.id],
+      transactionFilter: TransactionFilter(
+        scheduled: .nonScheduledOnly,
+        dateRange: firstRange.lowerBound...lastRange.upperBound,
+        dateRangeCalendar: .utc,
+        categoryIds: categoryIds,
+        transactionTypes: [.expense],
+        uncategorisedLegType: isUncategorized ? .expense : nil))
   }
 }

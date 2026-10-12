@@ -71,14 +71,14 @@ extension InsightDescriptionComposer {
   }
   static func categoryTrendRising(title: String, facts: FactLookup) -> String {
     guard let category = facts.value("Category"), let perMonth = facts.value("Per month"),
-      let months = facts.value("Months analysed"), let through = facts.value("Through month")
+      let months = facts.value("Months analysed"), let through = facts.value("Through date")
     else { return title }
     return
       "Over the \(months) months through \(through), \(category) spending rose by about \(perMonth) a month."
   }
   static func categoryTrendFalling(title: String, facts: FactLookup) -> String {
     guard let category = facts.value("Category"), let perMonth = facts.value("Per month"),
-      let months = facts.value("Months analysed"), let through = facts.value("Through month")
+      let months = facts.value("Months analysed"), let through = facts.value("Through date")
     else { return title }
     return
       "Over the \(months) months through \(through), \(category) spending fell by about \(perMonth) a month."
@@ -118,7 +118,7 @@ extension InsightDescriptionComposer {
   }
   static func savingsRateTrend(title: String, facts: FactLookup) -> String {
     guard let rate = facts.value("Current savings rate"), let direction = facts.value("Direction"),
-      let months = facts.value("Months analysed"), let through = facts.value("Through month")
+      let months = facts.value("Months analysed"), let through = facts.value("Through date")
     else { return title }
     let verb = direction == "Rising" ? "climbed" : "fell"
     return
