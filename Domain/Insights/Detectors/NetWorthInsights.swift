@@ -14,29 +14,31 @@ enum NetWorthInsights {
     let current = latest.netWorth.quantity
 
     let baseline =
-      actual.last { context.daysSince($0.date) >= lookbackDays }?.netWorth.quantity
-      ?? actual.first?.netWorth.quantity
-    guard let baseline, current > baseline, current > 0 else { return [] }
+      actual.last { context.daysSince($0.date) >= lookbackDays } ?? actual.first
+    guard let baseline, current > baseline.netWorth.quantity, current > 0 else { return [] }
 
     let step = milestoneStep(for: current)
     guard step > 0 else { return [] }
     let crossed = highestMultiple(of: step, atOrBelow: current)
-    guard crossed > baseline, crossed > 0 else { return [] }
+    guard crossed > baseline.netWorth.quantity, crossed > 0,
+      let lastBelow = actual.lastIndex(where: { $0.netWorth.quantity < crossed }),
+      let crossing = actual.dropFirst(lastBelow + 1).first
+    else { return [] }
 
     return [
       Insight(
         id: "\(InsightKind.netWorthMilestone.rawValue):\(decimalKey(crossed))",
         kind: .netWorthMilestone,
         title: "Net worth passed \(context.formatted(crossed))",
-        date: latest.date,
+        date: crossing.date,
         framing: .positive,
         actionability: .informational,
         surprise: 0.5,
-        monetaryImpact: latest.netWorth,
+        monetaryImpact: latest.netWorth - baseline.netWorth,
         facts: [
           InsightFact("Net worth", context.formatted(current)),
           InsightFact("Milestone", context.formatted(crossed)),
-          InsightFact("Was", context.formatted(baseline)),
+          InsightFact("Was", context.formatted(baseline.netWorth)),
         ],
         references: InsightReferences(instrumentIds: [context.reportingCurrency.id]),
         chart: InsightChartBuilders.netWorthTrend(

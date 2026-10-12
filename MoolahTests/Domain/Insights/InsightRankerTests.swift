@@ -41,8 +41,8 @@ struct InsightRankerTests {
     #expect(fatigued < base)
   }
 
-  @Test("displaying an insight today does not downscore it until tomorrow")
-  func sameDayDisplayKeepsScore() {
+  @Test("an insight already shown today is downscored on refresh")
+  func sameDayDisplayLowersScore() {
     let ranker = InsightRanker(displayCalendar: InsightContext.defaultCalendar)
     let candidate = insight(id: "cash", presentationKey: "idle-cash")
     let morning = now
@@ -52,7 +52,7 @@ struct InsightRankerTests {
     let shownToday = ranker.score(
       candidate, now: evening, displayHistory: ["idle-cash": morning])
 
-    #expect(shownToday == fresh)
+    #expect(shownToday < fresh)
   }
 
   @Test("yesterday's insight is downscored more than an older display")
@@ -116,13 +116,13 @@ struct InsightRankerTests {
     #expect(ranked.first?.id == alternative.id)
   }
 
-  @Test("display fatigue starts at midnight in the user's timezone")
+  @Test("display fatigue decays by calendar day in the user's timezone")
   func displayDayUsesUserCalendar() throws {
-    var brisbane = Calendar(identifier: .gregorian)
+    var brisbane = Calendar.utc
     brisbane.timeZone = try #require(TimeZone(identifier: "Australia/Brisbane"))
     let candidate = insight(id: "cash", presentationKey: "idle-cash")
     let shownAt = InsightTestSupport.date(2026, 6, 1).addingTimeInterval(13.5 * 60 * 60)
-    let now = shownAt.addingTimeInterval(60 * 60)
+    let now = shownAt.addingTimeInterval(25 * 60 * 60)
     let history = [candidate.presentationKey: shownAt]
 
     let utcScore = InsightRanker(displayCalendar: InsightContext.defaultCalendar)
@@ -130,7 +130,7 @@ struct InsightRankerTests {
     let localScore = InsightRanker(displayCalendar: brisbane)
       .score(candidate, now: now, displayHistory: history)
 
-    #expect(localScore < utcScore)
+    #expect(localScore > utcScore)
   }
 
   @Test
