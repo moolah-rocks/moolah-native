@@ -42,8 +42,8 @@ struct InsightRanker: Sendable {
   var weights: Weights
   /// Recency decay time-constant τ (days). Design suggests ≈7.
   var recencyHalfLife: Double
-  /// Days for a post-day-one display penalty to halve. A recently displayed
-  /// insight gets room to breathe, then naturally returns to contention.
+  /// Days for the display penalty to halve after the full-penalty window.
+  /// A displayed insight gets room to breathe, then returns to contention.
   var displayFatigueHalfLife: Double
   var calendar: Calendar
   /// User-local calendar for the UI meaning of “shown today”. This is
@@ -128,7 +128,7 @@ struct InsightRanker: Sendable {
     guard displayCap > 0 else { return [] }
     var top = Array(scored.prefix(displayCap))
     if guaranteePositive {
-      top = ensurePositive(in: top, from: scored)
+      top = ensurePositive(in: top, from: scored, now: now, displayHistory: displayHistory)
     }
     return top
   }
@@ -147,11 +147,27 @@ struct InsightRanker: Sendable {
     return result
   }
 
-  private func ensurePositive(in top: [ScoredInsight], from scored: [ScoredInsight])
-    -> [ScoredInsight]
-  {
+  private func ensurePositive(
+    in top: [ScoredInsight],
+    from scored: [ScoredInsight],
+    now: Date,
+    displayHistory: [String: Date]
+  ) -> [ScoredInsight] {
     guard !top.contains(where: { $0.insight.framing == .positive }) else { return top }
-    guard let bestPositive = scored.first(where: { $0.insight.framing == .positive }),
+    guard
+      let bestPositive = scored.first(where: {
+        guard $0.insight.framing == .positive else { return false }
+        guard let lastShown = displayHistory[$0.insight.presentationKey] else { return true }
+        // A weekly positive guarantee must not force the same observation back
+        // into every refresh while display fatigue is trying to rotate it out.
+        let shownDay = displayCalendar.startOfDay(for: lastShown)
+        let currentDay = displayCalendar.startOfDay(for: now)
+        let elapsedDays =
+          displayCalendar.dateComponents(
+            [.day], from: shownDay, to: currentDay
+          ).day ?? 0
+        return elapsedDays >= 7
+      }),
       !top.contains(where: { $0.id == bestPositive.id }),
       !top.isEmpty
     else { return top }
@@ -167,9 +183,10 @@ struct InsightRanker: Sendable {
     return insight.references.earmarkIds.contains(where: interests.earmarkIds.contains)
   }
 
-  /// No penalty on the calendar day an insight is first shown, keeping the
-  /// day's recommendations steady. Starting the next day, apply the full
-  /// penalty and decay it by recency so the insight can return later.
+  /// Penalize every previously displayed observation, including today's.
+  /// Refresh writes the visible batch back to history, so exempting same-day
+  /// displays would reset an older insight to a fresh score after each refresh.
+  /// Keep the full penalty through tomorrow, then decay it by calendar day.
   private func displayFatiguePenalty(
     for insight: Insight,
     now: Date,
@@ -180,8 +197,7 @@ struct InsightRanker: Sendable {
     let currentDay = displayCalendar.startOfDay(for: now)
     let elapsedDays = max(
       0, displayCalendar.dateComponents([.day], from: shownDay, to: currentDay).day ?? 0)
-    guard elapsedDays > 0 else { return 0 }
-    let decayDays = Double(elapsedDays - 1)
+    let decayDays = Double(max(0, elapsedDays - 1))
     return exp(-log(2) * decayDays / displayFatigueHalfLife)
   }
 
