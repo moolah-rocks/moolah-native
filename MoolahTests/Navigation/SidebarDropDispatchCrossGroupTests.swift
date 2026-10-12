@@ -34,14 +34,16 @@ struct SidebarDropDispatchCrossGroupTests {
       joining: aMember1, and: aMember2, name: "A",
       accountStore: stores.accountStore)
     await expectEventually("group A members joined") {
-      stores.accountStore.accounts.by(id: aMember1.id)?.groupId == groupA.id
+      stores.accountGroupStore.by(id: groupA.id) != nil
+        && stores.accountStore.accounts.by(id: aMember1.id)?.groupId == groupA.id
         && stores.accountStore.accounts.by(id: aMember2.id)?.groupId == groupA.id
     }
 
     let groupB = try await stores.accountGroupStore.createGroup(
       from: bMember, name: "B", accountStore: stores.accountStore)
     await expectEventually("B single-member group seeded") {
-      stores.accountStore.accounts.by(id: bMember.id)?.groupId == groupB.id
+      stores.accountGroupStore.by(id: groupB.id) != nil
+        && stores.accountStore.accounts.by(id: bMember.id)?.groupId == groupB.id
     }
 
     _ = try await SidebarDropDispatch.dropOntoAccount(
@@ -69,12 +71,14 @@ struct SidebarDropDispatchCrossGroupTests {
     let groupA = try await stores.accountGroupStore.createGroup(
       from: aSole, name: "A", accountStore: stores.accountStore)
     await expectEventually("aSole joined group A") {
-      stores.accountStore.accounts.by(id: aSole.id)?.groupId == groupA.id
+      stores.accountGroupStore.by(id: groupA.id) != nil
+        && stores.accountStore.accounts.by(id: aSole.id)?.groupId == groupA.id
     }
     let groupB = try await stores.accountGroupStore.createGroup(
       from: bMember, name: "B", accountStore: stores.accountStore)
     await expectEventually("bMember joined group B") {
-      stores.accountStore.accounts.by(id: bMember.id)?.groupId == groupB.id
+      stores.accountGroupStore.by(id: groupB.id) != nil
+        && stores.accountStore.accounts.by(id: bMember.id)?.groupId == groupB.id
     }
 
     _ = try await SidebarDropDispatch.dropOntoAccount(
@@ -101,12 +105,14 @@ struct SidebarDropDispatchCrossGroupTests {
     let groupA = try await stores.accountGroupStore.createGroup(
       from: aSole, name: "A", accountStore: stores.accountStore)
     await expectEventually("aSole joined group A") {
-      stores.accountStore.accounts.by(id: aSole.id)?.groupId == groupA.id
+      stores.accountGroupStore.by(id: groupA.id) != nil
+        && stores.accountStore.accounts.by(id: aSole.id)?.groupId == groupA.id
     }
     let groupB = try await stores.accountGroupStore.createGroup(
       from: bMember, name: "B", accountStore: stores.accountStore)
     await expectEventually("bMember joined group B") {
-      stores.accountStore.accounts.by(id: bMember.id)?.groupId == groupB.id
+      stores.accountGroupStore.by(id: groupB.id) != nil
+        && stores.accountStore.accounts.by(id: bMember.id)?.groupId == groupB.id
     }
 
     try await SidebarDropDispatch.dropOntoGroup(

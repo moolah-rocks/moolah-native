@@ -88,7 +88,8 @@ struct SidebarDropDispatchReorderRootTests {
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
     await expectEventually("members joined") {
-      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+      stores.accountGroupStore.by(id: group.id) != nil
+        && stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
         && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
     }
 
@@ -151,7 +152,8 @@ struct SidebarDropDispatchReorderRootTests {
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
     await expectEventually("members joined") {
-      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+      stores.accountGroupStore.by(id: group.id) != nil
+        && stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
         && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
     }
 
@@ -213,7 +215,8 @@ struct SidebarDropDispatchReorderRootTests {
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
     await expectEventually("members joined") {
-      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+      stores.accountGroupStore.by(id: group.id) != nil
+        && stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
         && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
     }
 
@@ -245,7 +248,8 @@ struct SidebarDropDispatchReorderRootTests {
     let group = try await stores.accountGroupStore.createGroup(
       from: soleMember, name: "Lonely", accountStore: stores.accountStore)
     await expectEventually("soleMember joined group") {
-      stores.accountStore.accounts.by(id: soleMember.id)?.groupId == group.id
+      stores.accountGroupStore.by(id: group.id) != nil
+        && stores.accountStore.accounts.by(id: soleMember.id)?.groupId == group.id
     }
 
     try await SidebarDropDispatch.reorderRoot(

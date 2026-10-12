@@ -34,7 +34,8 @@ struct SidebarDropDispatchReorderMembersTests {
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
     await expectEventually("A,B joined") {
-      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+      stores.accountGroupStore.by(id: group.id) != nil
+        && stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
         && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
     }
 
@@ -73,7 +74,8 @@ struct SidebarDropDispatchReorderMembersTests {
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
     await expectEventually("A,B joined") {
-      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+      stores.accountGroupStore.by(id: group.id) != nil
+        && stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
         && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
     }
     let postC = try #require(stores.accountStore.accounts.by(id: memberC.id))
@@ -111,7 +113,8 @@ struct SidebarDropDispatchReorderMembersTests {
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
     await expectEventually("members joined") {
-      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+      stores.accountGroupStore.by(id: group.id) != nil
+        && stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
         && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
     }
 
@@ -140,7 +143,8 @@ struct SidebarDropDispatchReorderMembersTests {
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
     await expectEventually("members joined") {
-      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+      stores.accountGroupStore.by(id: group.id) != nil
+        && stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
         && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
     }
 
@@ -179,7 +183,9 @@ struct SidebarDropDispatchReorderMembersTests {
       joining: memberA, and: memberB, name: "G",
       accountStore: stores.accountStore)
     await expectEventually("group seeded") {
-      stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+      stores.accountGroupStore.by(id: group.id) != nil
+        && stores.accountStore.accounts.by(id: memberA.id)?.groupId == group.id
+        && stores.accountStore.accounts.by(id: memberB.id)?.groupId == group.id
     }
 
     try await SidebarDropDispatch.reorderMembers(
@@ -211,12 +217,16 @@ struct SidebarDropDispatchReorderMembersTests {
     let groupA = try await stores.accountGroupStore.createGroup(
       joining: accA1, and: accA2, name: "A", accountStore: stores.accountStore)
     await expectEventually("group A seeded") {
-      stores.accountStore.accounts.by(id: accA1.id)?.groupId == groupA.id
+      stores.accountGroupStore.by(id: groupA.id) != nil
+        && stores.accountStore.accounts.by(id: accA1.id)?.groupId == groupA.id
+        && stores.accountStore.accounts.by(id: accA2.id)?.groupId == groupA.id
     }
     let groupB = try await stores.accountGroupStore.createGroup(
       joining: accB1, and: accB2, name: "B", accountStore: stores.accountStore)
     await expectEventually("group B seeded") {
-      stores.accountStore.accounts.by(id: accB1.id)?.groupId == groupB.id
+      stores.accountGroupStore.by(id: groupB.id) != nil
+        && stores.accountStore.accounts.by(id: accB1.id)?.groupId == groupB.id
+        && stores.accountStore.accounts.by(id: accB2.id)?.groupId == groupB.id
     }
 
     try await SidebarDropDispatch.reorderMembers(
@@ -252,12 +262,15 @@ struct SidebarDropDispatchReorderMembersTests {
     let groupA = try await stores.accountGroupStore.createGroup(
       from: aSole, name: "A", accountStore: stores.accountStore)
     await expectEventually("aSole joined A") {
-      stores.accountStore.accounts.by(id: aSole.id)?.groupId == groupA.id
+      stores.accountGroupStore.by(id: groupA.id) != nil
+        && stores.accountStore.accounts.by(id: aSole.id)?.groupId == groupA.id
     }
     let groupB = try await stores.accountGroupStore.createGroup(
       joining: accB1, and: accB2, name: "B", accountStore: stores.accountStore)
     await expectEventually("group B seeded") {
-      stores.accountStore.accounts.by(id: accB1.id)?.groupId == groupB.id
+      stores.accountGroupStore.by(id: groupB.id) != nil
+        && stores.accountStore.accounts.by(id: accB1.id)?.groupId == groupB.id
+        && stores.accountStore.accounts.by(id: accB2.id)?.groupId == groupB.id
     }
 
     try await SidebarDropDispatch.reorderMembers(
