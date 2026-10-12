@@ -67,9 +67,10 @@
         seedAccounts: [seedMember, source], in: database, backend: backend)
       let group = try await stores.accountGroupStore.createGroup(
         from: seedMember, name: "G", accountStore: stores.accountStore)
-      try await stores.accountStore.waitForNextEmission(
-        matching: { $0.accounts.by(id: seedMember.id)?.groupId == group.id },
-        description: "seed member observed")
+      await expectEventually("seed member observed") {
+        stores.accountGroupStore.by(id: group.id) != nil
+          && stores.accountStore.accounts.by(id: seedMember.id)?.groupId == group.id
+      }
       // Collapse the target group so the auto-expand effect is observable.
       await stores.groupUIStateStore.setExpanded(false, for: group.id)
       try await stores.groupUIStateStore.waitForNextEmission(
@@ -135,9 +136,11 @@
         seedAccounts: [accA, accB, accC], in: database, backend: backend)
       let group = try await stores.accountGroupStore.createGroup(
         joining: accA, and: accB, name: "G", accountStore: stores.accountStore)
-      try await stores.accountStore.waitForNextEmission(
-        matching: { $0.accounts.by(id: accB.id)?.groupId == group.id },
-        description: "members observed")
+      await expectEventually("members observed") {
+        stores.accountGroupStore.by(id: group.id) != nil
+          && stores.accountStore.accounts.by(id: accA.id)?.groupId == group.id
+          && stores.accountStore.accounts.by(id: accB.id)?.groupId == group.id
+      }
       try await stores.accountGroupStore.addAccount(
         accC, to: group, accountStore: stores.accountStore)
       try await stores.accountStore.waitForNextEmission(
@@ -208,14 +211,17 @@
         seedAccounts: [aSole, accB1, accB2], in: database, backend: backend)
       let groupA = try await stores.accountGroupStore.createGroup(
         from: aSole, name: "A", accountStore: stores.accountStore)
-      try await stores.accountStore.waitForNextEmission(
-        matching: { $0.accounts.by(id: aSole.id)?.groupId == groupA.id },
-        description: "aSole joined A")
+      await expectEventually("aSole joined A") {
+        stores.accountGroupStore.by(id: groupA.id) != nil
+          && stores.accountStore.accounts.by(id: aSole.id)?.groupId == groupA.id
+      }
       let groupB = try await stores.accountGroupStore.createGroup(
         joining: accB1, and: accB2, name: "B", accountStore: stores.accountStore)
-      try await stores.accountStore.waitForNextEmission(
-        matching: { $0.accounts.by(id: accB1.id)?.groupId == groupB.id },
-        description: "group B seeded")
+      await expectEventually("group B seeded") {
+        stores.accountGroupStore.by(id: groupB.id) != nil
+          && stores.accountStore.accounts.by(id: accB1.id)?.groupId == groupB.id
+          && stores.accountStore.accounts.by(id: accB2.id)?.groupId == groupB.id
+      }
       let coordinator = SidebarOutlineDropCoordinator(
         accountStore: stores.accountStore,
         accountGroupStore: stores.accountGroupStore,

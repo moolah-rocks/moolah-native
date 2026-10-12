@@ -8,6 +8,9 @@ import GRDB
 /// test boilerplate (spin up TestBackend, attach stores, wait for the
 /// first observation tick) recurs across every suite and gets
 /// extracted here to keep individual test files short.
+/// After creating a group, fixtures must await both its group-store
+/// snapshot and its account memberships. The stores observe independently;
+/// seeing membership alone does not make the group available to dispatch.
 ///
 /// `DispatchTestStores` bundles the trio so callers don't have to
 /// destructure a tuple at every test (a 3-element tuple trips
