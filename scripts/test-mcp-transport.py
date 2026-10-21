@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Exercise the real localhost listener using the official Python MCP client.
 
-Run with mcp==2.3.0 in an isolated environment. The fixture receives an ephemeral
-secret over stdin; it has no connection to the app, Keychain, or financial data.
+Run with mcp==2.3.0 in an isolated environment. The fixture returns its generated
+credential over a private pipe, never logs. It has no app, Keychain or financial data.
 """
 import asyncio
 import os
 from pathlib import Path
-import secrets
 import selectors
 import socket
 import subprocess
@@ -19,20 +18,26 @@ from mcp.client.streamable_http import streamable_http_client
 
 
 async def verify(binary):
-    token = secrets.token_urlsafe(32)
     # Each isolated fixture is explicitly configured with its own port.
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
         port = reservation.getsockname()[1]
     log_path = Path(".agent-tmp/mcp-transport-fixture.txt")
-    with log_path.open("w") as log:
-        process = subprocess.Popen(
-            [binary, str(port)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-            stderr=log, text=True,
-        )
+    read_fd, write_fd = os.pipe()
+    with log_path.open("w") as log, os.fdopen(read_fd) as credentials:
         try:
-            process.stdin.write(token + "\n")
-            process.stdin.close()
+            process = subprocess.Popen(
+                [binary, str(port), str(write_fd)], stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=log, text=True, pass_fds=(write_fd,),
+            )
+        finally:
+            os.close(write_fd)
+        try:
+            with selectors.DefaultSelector() as selector:
+                selector.register(credentials, selectors.EVENT_READ)
+                assert selector.select(timeout=30), f"Credential pipe failed; see {log_path}"
+                token = credentials.readline().strip()
+                assert token.startswith("moolah_"), f"Fixture startup failed; see {log_path}"
             with selectors.DefaultSelector() as selector:
                 selector.register(process.stdout, selectors.EVENT_READ)
                 assert selector.select(timeout=30), f"Listener did not become ready; see {log_path}"
@@ -75,7 +80,23 @@ async def verify(binary):
                     result = await session.call_tool("moolah_transport_probe", {})
                     assert result.structured_content == {"ready": True}
                     assert not result.is_error
-            print("PASS: reference-client handshake/list/call, bearer, Host, Origin, methods, body cap, raw target, loopback bind")
+            async with httpx.AsyncClient(timeout=20, trust_env=False) as client:
+                for _ in range(61):
+                    response = await client.post(endpoint, headers=auth | {
+                        "Content-Type": "application/json", "Accept": "application/json",
+                        "MCP-Protocol-Version": "2025-11-25",
+                    }, json={"jsonrpc": "2.0", "id": 1, "method": "ping"})
+                    if response.status_code == 429:
+                        assert response.headers.get("Retry-After") == "60"
+                        break
+                    assert response.status_code == 200, response.status_code
+                else:
+                    raise AssertionError("Authenticated request rate was not bounded")
+            log.flush()
+            logged = log_path.read_text()
+            assert token not in logged, "Fixture logged its credential"
+            assert "Transport probe succeeded" not in logged, "Fixture logged a tool payload"
+            print("PASS: reference-client handshake/list/call, bearer, Host, Origin, methods, body cap, raw target, loopback bind, production grant validation and rate limit")
         finally:
             process.terminate()
             try:

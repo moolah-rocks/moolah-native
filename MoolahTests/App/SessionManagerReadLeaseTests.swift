@@ -87,8 +87,8 @@ struct SessionManagerReadLeaseTests {
     await #expect(throws: ReadQueryError.profileUnavailable) {
       try await manager.acquireReadSession(profileID: profile.id, owner: UUID())
     }
-    #expect(throws: ReadQueryError.profileUnavailable) {
-      try manager.readAccess(profileID: profile.id)
+    await #expect(throws: ReadQueryError.profileUnavailable) {
+      try await manager.readAccess(profileID: profile.id)
     }
   }
 
@@ -97,9 +97,11 @@ struct SessionManagerReadLeaseTests {
     let (manager, profile) = try await makeManager()
     defer { manager.removeSession(for: profile.id) }
     _ = try await manager.acquireReadSession(profileID: profile.id, owner: UUID())
-    let access = try manager.readAccess(profileID: profile.id)
+    let access = try await manager.readAccess(profileID: profile.id)
     manager.removeSession(for: profile.id)
-    #expect(throws: ReadQueryError.profileUnavailable) { try manager.validateReadAccess(access) }
+    await #expect(throws: ReadQueryError.profileUnavailable) {
+      try await manager.validateReadAccess(access)
+    }
   }
 
   @Test
@@ -107,13 +109,13 @@ struct SessionManagerReadLeaseTests {
     let (manager, profile) = try await makeManager()
     defer { manager.removeSession(for: profile.id) }
     _ = try await manager.acquireReadSession(profileID: profile.id, owner: UUID())
-    let original = try manager.readAccess(profileID: profile.id)
+    let original = try await manager.readAccess(profileID: profile.id)
     manager.removeSession(for: profile.id)
     _ = try await manager.acquireReadSession(profileID: profile.id, owner: UUID())
-    let replacement = try manager.readAccess(profileID: profile.id)
+    let replacement = try await manager.readAccess(profileID: profile.id)
     #expect(original.identity != replacement.identity)
-    #expect(throws: ReadQueryError.profileUnavailable) {
-      try manager.validateReadAccess(original)
+    await #expect(throws: ReadQueryError.profileUnavailable) {
+      try await manager.validateReadAccess(original)
     }
   }
 
@@ -130,7 +132,8 @@ struct SessionManagerReadLeaseTests {
     guard
       case .incompatible = manager.displayedOpenResult(
         profileID: profile.id,
-        cached: cached)
+        cached: cached
+      )
     else {
       Issue.record("Root routing must observe mid-session eviction immediately")
       return
@@ -143,8 +146,8 @@ struct SessionManagerReadLeaseTests {
     defer { manager.removeSession(for: profile.id) }
     let session = try await manager.acquireReadSession(profileID: profile.id, owner: UUID())
     await session.authStore.signOut()
-    #expect(throws: ReadQueryError.profileUnavailable) {
-      try manager.readAccess(profileID: profile.id)
+    await #expect(throws: ReadQueryError.profileUnavailable) {
+      try await manager.readAccess(profileID: profile.id)
     }
   }
 
@@ -157,7 +160,8 @@ struct SessionManagerReadLeaseTests {
       SessionManager(
         resources: .disconnected,
         containerManager: containers,
-        profileIndexRepository: repository),
+        profileIndexRepository: repository
+      ),
       profile
     )
   }

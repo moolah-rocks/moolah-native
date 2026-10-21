@@ -70,8 +70,9 @@ reusing IDs. Tests do not initialize the app or any financial profile.
 `just verify-mcp-transport` installs the exact Python client in an isolated venv
 and runs the live checks in CI.
 
-`just build-mcp-spike` builds an isolated synthetic listener. It accepts an
-unpersisted random token on stdin and exposes only `moolah_transport_probe`.
+`just build-mcp-spike` builds an isolated synthetic listener. It generates an
+unpersisted random token and returns it through an inherited private pipe, then
+exposes only `moolah_transport_probe`.
 `scripts/test-mcp-transport.py` launches it and uses the official Python MCP SDK
 2.3.0 with a custom bearer header for initialize → list → call. It also exercises
 HTTP authentication, Host/Origin rejection, method handling and the body cap.
@@ -178,3 +179,47 @@ cycles addressed their findings before this stage's commit.
 An additional 83 tests across 15 existing automation suites passed after migrating
 their shared session fixtures to disconnected resources. Final warning-copy
 review passed, and formatting was checked again after that copy change.
+
+
+## Stage 3: credentials and enforced security boundaries
+
+The macOS-only package now supplies the authenticated endpoint, device-local grants,
+and opaque continuation signing. Grant creation returns a 256-bit random bearer
+secret once. The Keychain archive holds only SHA-256 verifiers and explicit grant
+metadata: credential identity, label, profile UUIDs, scopes, revision, expiry,
+revocation and last use. The archive is bounded and written atomically before
+publishing changes. Revoked credentials can be removed to recover capacity.
+
+Keychain requests select the Data Protection Keychain, disable synchronization,
+and use AfterFirstUnlockThisDeviceOnly accessibility with no user-presence gate.
+Opening persistence runs off the main actor. These source-level policy checks
+and isolated persistence tests do not establish locked-screen hardware behavior.
+
+Every HTTP message authenticates and consumes the per-credential rolling limit
+of 60 messages per minute before body collection. Tool execution additionally
+checks the explicit profile and scope, permits four active queries per grant,
+and applies a 15-second cancellation-aware deadline. Revocation and permission
+changes cancel active work and invalidate captured authorization. Each listener
+has an exclusive generation; stopping a listener cancels and awaits its queries,
+and stale work cannot return data after another listener starts. Responses are
+bounded before encoding the outer protocol envelope. Unexpected failures return
+safe errors without exposing underlying paths or data.
+
+Continuation tokens use a process-local HMAC key and a monotonic 15-minute TTL.
+They bind credential/revision, profile, tool, canonical validated filters and the
+repository continuation/revision. Tampering, restart, changed permission or a
+changed repository revision requires restarting the query. Rate windows also use
+monotonic time; grant expiry and audit-facing metadata use civil timestamps.
+
+Profile validation now refreshes the authoritative profile index before and after
+reads. Removed or incompatible profiles evict their cached sessions, and current
+profile currency is used without depending on a visible window updating first.
+
+Verification: 32 isolated package tests and 16 targeted application tests passed.
+The official Python MCP SDK 2.3.0 completed live authentication, handshake,
+discovery and call checks against both unsigned and Apple Development signed
+sandbox fixtures. Live checks also passed for loopback-only binding, Host/Origin
+rejection, malformed raw targets, body size, methods, and the 60-message limit.
+Fixtures use synthetic data and memory persistence; they never open production
+profiles or Keychain. The local reference-client environment uses Python 3.14;
+the system Python 3.9 cannot install this client version.

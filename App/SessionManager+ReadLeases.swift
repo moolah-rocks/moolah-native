@@ -10,12 +10,6 @@ extension SessionManager {
   ) async throws -> ProfileSession {
     let profile = try await readProfile(profileID: profileID)
     try Task.checkCancellation()
-    guard profile.dataFormatVersion <= DataFormatVersion.current else {
-      removeSession(for: profileID)
-      syncCoordinator?.evictCachedState(for: profileID)
-      recordReadIncompatibility(profile)
-      throw ReadQueryError.profileIncompatible
-    }
     let session: ProfileSession
     if let existing = sessions[profileID] {
       session = existing
@@ -46,7 +40,8 @@ extension SessionManager {
     cleanUpUnownedSession(profileID: profileID)
   }
 
-  func readAccess(profileID: UUID) throws -> ReadProfileAccess {
+  func readAccess(profileID: UUID) async throws -> ReadProfileAccess {
+    let profile = try await readProfile(profileID: profileID)
     guard readReadyProfiles.contains(profileID),
       readSessionOwners[profileID]?.isEmpty == false,
       let session = sessions[profileID],
@@ -54,13 +49,14 @@ extension SessionManager {
       session.authStore.state != .signedOut
     else { throw ReadQueryError.profileUnavailable }
     return ReadProfileAccess(
-      profile: session.profile,
-      repository: repository.using(defaultInstrument: session.profile.instrument),
-      identity: session.readGeneration)
+      profile: profile,
+      repository: repository.using(defaultInstrument: profile.instrument),
+      identity: session.readGeneration
+    )
   }
 
-  func validateReadAccess(_ access: ReadProfileAccess) throws {
-    let current = try readAccess(profileID: access.profile.id)
+  func validateReadAccess(_ access: ReadProfileAccess) async throws {
+    let current = try await readAccess(profileID: access.profile.id)
     guard current.identity == access.identity,
       current.profile.currencyCode == access.profile.currencyCode
     else { throw ReadQueryError.profileUnavailable }
@@ -69,15 +65,28 @@ extension SessionManager {
 
 extension SessionManager {
   private func readProfile(profileID: UUID) async throws -> Profile {
+    let profile: Profile
     do {
-      guard let profile = try await profileIndexRepository.profile(forID: profileID) else {
+      guard let current = try await profileIndexRepository.profile(forID: profileID) else {
+        removeSession(for: profileID)
+        syncCoordinator?.evictCachedState(for: profileID)
         throw ReadQueryError.profileUnavailable
       }
-      return profile
+      profile = current
     } catch is CancellationError {
       throw CancellationError()
+    } catch let error as ReadQueryError {
+      throw error
     } catch {
       throw ReadQueryError.profileUnavailable
     }
+    try Task.checkCancellation()
+    guard profile.dataFormatVersion <= DataFormatVersion.current else {
+      removeSession(for: profileID)
+      syncCoordinator?.evictCachedState(for: profileID)
+      recordReadIncompatibility(profile)
+      throw ReadQueryError.profileIncompatible
+    }
+    return profile
   }
 }
