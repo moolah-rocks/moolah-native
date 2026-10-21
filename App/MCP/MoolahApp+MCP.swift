@@ -28,7 +28,11 @@ extension MoolahApp {
       persistence: isolated
         ? MCPTransientSecrets()
         : MCPKeychainPersistence(service: "rocks.moolah.app.mcp.grants"),
-      history: MCPAuditHistory(url: directory.appendingPathComponent("audit.json"))
+      history: MCPAuditHistory(url: directory.appendingPathComponent("audit.json")),
+      makeTools: { grants in
+        try MCPToolRegistry(service: MoolahReadQueryService(sessions: sessions), grants: grants)
+          .tools
+      }
     )
     controller.startIfEnabled()
     return controller

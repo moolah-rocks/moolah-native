@@ -365,3 +365,31 @@ private actor MCPAuditPublishGate {
     continuation = nil
   }
 }
+
+extension MCPServerControllerTests {
+  @Test
+  func signedOutProfileCannotBeReopenedByMaintenance() async throws {
+    let fixture = try fixture()
+    defer { fixture.cleanUp() }
+    let controller = fixture.controller
+    let profile = Profile(label: "Sign-out fixture")
+    try await controller.sessions.profileIndexRepository.upsert(profile)
+    controller.isEnabled = true
+    controller.listenerGeneration = UUID()
+    let store = try await MCPGrantStore.open(persistence: MCPTestSecrets())
+    controller.grants = [try await store.create(label: "Fixture", profileIDs: [profile.id]).grant]
+    await controller.reconcileLeases()
+    let session = try #require(controller.sessions.sessions[profile.id])
+    await session.authStore.signOut()
+    await controller.reconcileLeases()
+    #expect(controller.leasedProfiles.isEmpty)
+    #expect(controller.sessions.sessions.isEmpty)
+    await controller.reconcileLeases()
+    #expect(controller.sessions.sessions.isEmpty)
+    #expect(controller.readiness[profile.id]?.contains("sign-out") == true)
+    controller.grants = []
+    await controller.reconcileLeases()
+    #expect(controller.readiness.isEmpty)
+    await controller.shutdown()
+  }
+}

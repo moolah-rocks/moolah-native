@@ -51,6 +51,7 @@ extension SessionManager {
     return ReadProfileAccess(
       profile: profile,
       repository: repository.using(defaultInstrument: profile.instrument),
+      conversionService: session.backend.conversionService,
       identity: session.readGeneration
     )
   }
@@ -58,7 +59,7 @@ extension SessionManager {
   func validateReadAccess(_ access: ReadProfileAccess) async throws {
     let current = try await readAccess(profileID: access.profile.id)
     guard current.identity == access.identity,
-      current.profile.currencyCode == access.profile.currencyCode
+      current.profile == access.profile
     else { throw ReadQueryError.profileUnavailable }
   }
 }

@@ -95,6 +95,8 @@ targets:
           - Settings/MCP
       - path: Shared
       - path: Automation
+        excludes:
+          - MCP
       - path: UITestSupport
     preBuildScripts:
       - script: "${SRCROOT}/scripts/check-release-build-number.sh"

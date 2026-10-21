@@ -18,7 +18,8 @@ struct ReadQueryPlanPinningTests {
         """,
       arguments: [
         Date.distantPast, Date.distantFuture, Date.distantFuture, Date.distantFuture, UUID(), 101,
-      ])
+      ]
+    )
     #expect(detail.contains("transaction_by_date_id"))
     #expect(!detail.contains("USE TEMP B-TREE"))
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "transaction"))
@@ -37,7 +38,8 @@ struct ReadQueryPlanPinningTests {
         HAVING SUM(leg.quantity) <> 0
         ORDER BY leg.account_id, leg.instrument_id
         """,
-      arguments: [UUID()])
+      arguments: [UUID()]
+    )
     #expect(detail.contains("leg_by_account"))
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
     // Grouping heterogeneous instruments may use a temporary B-tree; the selective account
@@ -59,10 +61,12 @@ extension ReadQueryPlanPinningTests {
         HAVING SUM(leg.quantity) <> 0
         ORDER BY leg.earmark_id, leg.instrument_id
         """,
-      arguments: [UUID()])
+      arguments: [UUID()]
+    )
     #expect(
       detail.contains("leg_by_earmark") || detail.contains("leg_analysis_by_earmark_type"),
-      "Expected a selective earmark index; actual plan: \(detail)")
+      "Expected a selective earmark index; actual plan: \(detail)"
+    )
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
     // As with account positions, instrument grouping may use a temporary B-tree after
     // the earmark index narrows the source rows.
@@ -84,7 +88,8 @@ extension ReadQueryPlanPinningTests {
     let detail = try PlanPinningTestHelpers.planDetail(
       database,
       query: "SELECT COUNT(*) FROM (\(source))",
-      arguments: [UUID()])
+      arguments: [UUID()]
+    )
     #expect(detail.contains("SEARCH leg USING"), "\(detail)")
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
     #expect(!detail.contains("USE TEMP B-TREE"))
@@ -97,7 +102,8 @@ extension ReadQueryPlanPinningTests {
     let detail = try PlanPinningTestHelpers.planDetail(
       database,
       query: "SELECT id FROM \(table) WHERE id > ? \(visibility) ORDER BY id ASC LIMIT 101",
-      arguments: [UUID()])
+      arguments: [UUID()]
+    )
     #expect(detail.contains("SEARCH \(table) USING"), "\(detail)")
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: table))
     #expect(!detail.contains("USE TEMP B-TREE"))
@@ -117,7 +123,8 @@ extension ReadQueryPlanPinningTests {
     default: filter.payee = "Fixture"
     }
     let request = GRDBReadQueryRepository.transactionRequest(
-      filter: filter, after: ReadPageKey(id: UUID(), date: Date.distantFuture)
+      filter: filter,
+      after: ReadPageKey(id: UUID(), date: Date.distantFuture)
     ).limit(101)
     let detail = try database.read { database in
       let statement = try request.makePreparedRequest(
@@ -131,7 +138,10 @@ extension ReadQueryPlanPinningTests {
     #expect(
       !PlanPinningTestHelpers.planHasFullTableScanOf(
         detail,
-        alias: "transaction"), "\(detail)")
+        alias: "transaction"
+      ),
+      "\(detail)"
+    )
     if variant == "payee" {
       #expect(detail.contains("transaction_by_date_id"), "\(detail)")
       #expect(!detail.contains("USE TEMP B-TREE"))
@@ -141,5 +151,23 @@ extension ReadQueryPlanPinningTests {
       // An IN subquery selects parent IDs through the leg index, followed by indexed
       // parent lookups. SQLite may sort this selective parent set into date/UUID order.
     }
+  }
+}
+
+extension ReadQueryPlanPinningTests {
+  @Test
+  func summaryFlowsSearchDateRangeBeforeTransactionLegs() throws {
+    let database = try PlanPinningTestHelpers.makeDatabase()
+    let detail = try PlanPinningTestHelpers.planDetail(
+      database,
+      query: GRDBReadQueryRepository.summaryFlowSQL,
+      arguments: StatementArguments(["from": Date.distantPast, "through": Date.distantFuture])
+    )
+    let parent = try #require(detail.range(of: "SEARCH txn USING INDEX transaction_by_date"))
+    let legs = try #require(detail.range(of: "SEARCH leg USING INDEX leg_by_transaction"))
+    #expect(parent.lowerBound < legs.lowerBound)
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "txn"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
+    #expect(!detail.contains("USE TEMP B-TREE"))
   }
 }

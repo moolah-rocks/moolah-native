@@ -39,6 +39,7 @@ final class MCPServerController {
   @ObservationIgnored var auditMaintenanceTask: Task<Void, Never>?
   @ObservationIgnored var maintenanceTask: Task<Void, Never>?
   @ObservationIgnored var activity: (any NSObjectProtocol)?
+  @ObservationIgnored var signedOutProfiles: Set<UUID> = []
   @ObservationIgnored var leasedProfiles: Set<UUID> = []
   @ObservationIgnored let leaseOwner = UUID()
   @ObservationIgnored var isShuttingDown = false
