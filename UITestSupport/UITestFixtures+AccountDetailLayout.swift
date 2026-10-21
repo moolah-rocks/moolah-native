@@ -39,6 +39,13 @@ extension UITestFixtures {
     public static let profileLabel = "Personal"
     public static let profileCurrencyCode = "AUD"
 
+    /// Daily constant cache rates, inclusive 2020-01-01 through 2040-01-01 UTC.
+    /// Covers the complete chart horizon without a live exchange-rate request.
+    public static let exchangeRateFirstDate = Date(timeIntervalSince1970: 1_577_836_800)
+    public static let exchangeRateLastDate = Date(timeIntervalSince1970: 2_208_988_800)
+    public static let usdToAUDRate = 1.5
+    public static let audToUSDRate = 2.0 / 3.0
+
     // MARK: - Accounts
 
     /// Bank account (AUD host) with an additional USD position.
@@ -53,21 +60,21 @@ extension UITestFixtures {
 
     // MARK: - Multi-currency transactions
 
-    /// 2026-01-01 00:00:00 UTC — opening AUD income.
+    /// 2025-01-01 00:00:00 UTC — opening AUD income.
     public static let multiCurrencyTxn1Id = uuidLiteral("F1000000-0000-0000-0000-000000000020")
     public static let multiCurrencyTxn1Payee = "Opening Balance"
     public static let multiCurrencyTxn1Date = Date(timeIntervalSince1970: 1_735_689_600)
     /// 1,000.00 AUD income.
     public static let multiCurrencyTxn1Cents = 100_000
 
-    /// 2026-01-15 00:00:00 UTC — AUD expense.
+    /// 2025-01-15 00:00:00 UTC — AUD expense.
     public static let multiCurrencyTxn2Id = uuidLiteral("F1000000-0000-0000-0000-000000000021")
     public static let multiCurrencyTxn2Payee = "Supermarket"
     public static let multiCurrencyTxn2Date = Date(timeIntervalSince1970: 1_736_899_200)
     /// 150.00 AUD expense.
     public static let multiCurrencyTxn2Cents = 15_000
 
-    /// 2026-02-01 00:00:00 UTC — USD income. The USD income leg on the AUD
+    /// 2025-02-01 00:00:00 UTC — USD income. The USD income leg on the AUD
     /// account creates the non-host position that triggers the macOS
     /// pinned-positions layout.
     public static let multiCurrencyTxn3Id = uuidLiteral("F1000000-0000-0000-0000-000000000022")
@@ -78,21 +85,21 @@ extension UITestFixtures {
 
     // MARK: - Everyday fiat transactions
 
-    /// 2026-01-10 00:00:00 UTC — salary income.
+    /// 2025-01-10 00:00:00 UTC — salary income.
     public static let everydayTxn1Id = uuidLiteral("F1000000-0000-0000-0000-000000000030")
     public static let everydayTxn1Payee = "Salary"
     public static let everydayTxn1Date = Date(timeIntervalSince1970: 1_736_467_200)
     /// 2,500.00 AUD income.
     public static let everydayTxn1Cents = 250_000
 
-    /// 2026-01-20 00:00:00 UTC — rent expense.
+    /// 2025-01-20 00:00:00 UTC — rent expense.
     public static let everydayTxn2Id = uuidLiteral("F1000000-0000-0000-0000-000000000031")
     public static let everydayTxn2Payee = "Rent"
     public static let everydayTxn2Date = Date(timeIntervalSince1970: 1_737_331_200)
     /// 1,200.00 AUD expense.
     public static let everydayTxn2Cents = 120_000
 
-    /// 2026-02-10 00:00:00 UTC — groceries expense.
+    /// 2025-02-10 00:00:00 UTC — groceries expense.
     public static let everydayTxn3Id = uuidLiteral("F1000000-0000-0000-0000-000000000032")
     public static let everydayTxn3Payee = "Groceries"
     public static let everydayTxn3Date = Date(timeIntervalSince1970: 1_739_145_600)

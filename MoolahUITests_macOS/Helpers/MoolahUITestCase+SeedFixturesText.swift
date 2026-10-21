@@ -247,6 +247,9 @@ extension MoolahUITestCase {
   func appendAccountDetailLayoutFixtures(into lines: inout [String]) {
     let fixtures = UITestFixtures.AccountDetailLayout.self
     lines.append("# fixtures — two bank accounts: multi-currency (AUD+USD) + fiat-only (AUD)")
+    lines.append(
+      "FX daily cache = \(fixtures.exchangeRateFirstDate)...\(fixtures.exchangeRateLastDate)")
+    lines.append("FX USD/AUD = \(fixtures.usdToAUDRate); AUD/USD = \(fixtures.audToUSDRate)")
     lines.append("profile.id       = \(fixtures.profileId)")
     lines.append("profile.label    = \(fixtures.profileLabel)")
     lines.append("profile.currency = \(fixtures.profileCurrencyCode)")
