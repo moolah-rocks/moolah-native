@@ -76,6 +76,8 @@ packages:
     exactVersion: 7.10.0
   ImportExtensionKit:
     path: Modules/ImportExtensionKit
+  MoolahMCP:
+    path: Modules/MoolahMCP
 
 targets:
   Moolah_iOS:
@@ -162,6 +164,7 @@ targets:
     dependencies:
       - sdk: AppIntents.framework
       - sdk: FoundationModels.framework
+      - package: MoolahMCP
       - package: GRDB
       - package: ImportExtensionKit
       - target: MoolahImportExtension_macOS

@@ -547,3 +547,17 @@ verify-help:
         exit 1
     fi
     echo "verify-help: idempotent, stamp unchanged."
+
+# Isolated MCP transport/security tests; no CloudKit or financial profiles.
+test-mcp:
+    swift test --package-path Modules/MoolahMCP --scratch-path .agent-tmp/mcp-build
+
+# Build the synthetic localhost-only MCP fixture (never opens financial data).
+build-mcp-spike:
+    swift build --package-path tools/MCPTransportSpike --scratch-path .agent-tmp/mcp-build
+
+# Live HTTP checks with the official client; installs only an isolated fixture environment.
+verify-mcp-transport: build-mcp-spike
+    python3 -m venv .agent-tmp/mcp-python
+    .agent-tmp/mcp-python/bin/python -m pip install --quiet 'mcp==2.3.0'
+    .agent-tmp/mcp-python/bin/python scripts/test-mcp-transport.py .agent-tmp/mcp-build/debug/MCPTransportSpike

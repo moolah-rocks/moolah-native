@@ -27,6 +27,15 @@ jobs:
       - name: Generate Xcode project
         run: just generate
 
+      - name: Verify MCP platform boundary
+        run: python3 scripts/check-mcp-platform-boundary.py
+
+      - name: MCP transport unit tests
+        run: just test-mcp
+
+      - name: MCP live reference-client checks
+        run: just verify-mcp-transport
+
       - name: Validate App Store requirements
         run: just validate-appstore
 
