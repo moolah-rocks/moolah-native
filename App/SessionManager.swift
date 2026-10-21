@@ -19,6 +19,11 @@ final class SessionManager {
   /// Adding new tracked tasks to `ProfileSession`? Cancel them in
   /// `cleanupSync` and uphold this rule for any new mutation site.
   private(set) var sessions: [UUID: ProfileSession] = [:]
+  /// Internal mutation is restricted to session ownership helpers in sibling extensions.
+  var readSessionOwners: [UUID: Set<UUID>] = [:]
+  var readReadyProfiles: Set<UUID> = []
+  var windowSessionProfiles: [UUID: UUID] = [:]
+  var legacySessionProfiles: Set<UUID> = []
 
   /// Profiles whose `dataFormatVersion` exceeds `DataFormatVersion.current`
   /// — either the gate refused to open them or a remote bump arrived
@@ -45,6 +50,7 @@ final class SessionManager {
   /// reachable.
   private var reconcileTask: Task<Void, Never>?
 
+  private let resources: ProfileSessionResources
   let containerManager: ProfileContainerManager
   let syncCoordinator: SyncCoordinator?
   let profileIndexRepository: any ProfileIndexRepository
@@ -52,10 +58,12 @@ final class SessionManager {
   private let logger = Logger(subsystem: "com.moolah.app", category: "SessionManager")
 
   init(
+    resources: ProfileSessionResources = .live,
     containerManager: ProfileContainerManager,
     profileIndexRepository: any ProfileIndexRepository,
     syncCoordinator: SyncCoordinator? = nil
   ) {
+    self.resources = resources
     self.containerManager = containerManager
     self.profileIndexRepository = profileIndexRepository
     self.syncCoordinator = syncCoordinator
@@ -67,29 +75,59 @@ final class SessionManager {
   /// Re-reads the profile-index row before the gate check so a stale
   /// in-memory `Profile` snapshot can't bypass an incompatibility that
   /// was just delivered over sync.
-  func session(for profile: Profile) async -> SessionOpenResult {
-    if let existing = sessions[profile.id] {
-      // A concurrent caller may have constructed the session and is still
-      // inside `setUp()`. `ProfileSession.setUp()` is idempotent (its
-      // `setUpTask` returns the same in-flight task value), so awaiting
-      // here makes both callers observe migration completion before the
-      // second one returns `.ready`. `try?` because the first caller has
-      // already logged the error path; we don't double-log.
-      _ = try? await existing.setUp()
-      return .ready(existing)
+  func session(
+    for profile: Profile,
+    windowOwner: UUID? = nil
+  ) async -> SessionOpenResult {
+    // Legacy callers receive cached ownership only after a successful open. A temporary
+    // owner keeps shared setup alive while awaiting, and is always released on cancellation.
+    let openOwner = windowOwner ?? UUID()
+    registerWindowSession(profileID: profile.id, owner: openOwner)
+    defer {
+      if windowOwner == nil { releaseWindowSession(owner: openOwner) }
     }
-
+    guard openIsCurrent(profileID: profile.id, windowOwner: openOwner) else { return .cancelled }
     let live = await freshProfile(fallingBackTo: profile)
+    guard openIsCurrent(profileID: profile.id, windowOwner: openOwner) else { return .cancelled }
     if live.dataFormatVersion > DataFormatVersion.current {
       return makeIncompatible(for: live)
     }
-
-    let session = makeSession(for: live)
+    let session = sessions[live.id] ?? makeSession(for: live)
     let setUpSucceeded = await runSetUp(on: session)
+    guard
+      openIsCurrent(
+        profileID: live.id,
+        windowOwner: openOwner),
+      sessions[live.id] === session
+    else {
+      cleanUpUnownedSession(profileID: live.id)
+      return .cancelled
+    }
     if setUpSucceeded {
       await bumpDataFormatVersionIfNeeded(profile: live, session: session)
     }
+    guard
+      openIsCurrent(
+        profileID: live.id,
+        windowOwner: openOwner),
+      sessions[live.id] === session
+    else {
+      cleanUpUnownedSession(profileID: live.id)
+      return .cancelled
+    }
+    if windowOwner == nil { legacySessionProfiles.insert(live.id) }
     return .ready(session)
+  }
+
+  private func openIsCurrent(
+    profileID: UUID,
+    windowOwner: UUID?
+  ) -> Bool {
+    guard !Task.isCancelled else {
+      cleanUpUnownedSession(profileID: profileID)
+      return false
+    }
+    return windowOwner.map { windowSessionProfiles[$0] == profileID } ?? true
   }
 
   /// Re-reads the profile-index row so the gate sees the latest
@@ -120,6 +158,7 @@ final class SessionManager {
     let session: ProfileSession
     do {
       session = try ProfileSession(
+        resources: resources,
         profile: profile,
         containerManager: containerManager,
         syncCoordinator: syncCoordinator)
@@ -151,7 +190,8 @@ final class SessionManager {
   }
 
   private func bumpDataFormatVersionIfNeeded(
-    profile: Profile, session: ProfileSession
+    profile: Profile,
+    session: ProfileSession
   ) async {
     guard profile.dataFormatVersion < DataFormatVersion.current else { return }
     do {
@@ -176,10 +216,44 @@ final class SessionManager {
   /// no-coordinator builds would leak the session's tracked tasks
   /// (`setUpTask`, etc.) past teardown.
   func removeSession(for profileID: UUID) {
+    readSessionOwners.removeValue(forKey: profileID)
+    readReadyProfiles.remove(profileID)
+    legacySessionProfiles.remove(profileID)
+    windowSessionProfiles = windowSessionProfiles.filter { $0.value != profileID }
+    incompatibleProfiles.removeValue(forKey: profileID)
     guard let session = sessions.removeValue(forKey: profileID) else { return }
     session.cleanupSync(coordinator: syncCoordinator)
     syncCoordinator?.removeDataHandler(for: profileID)
-    incompatibleProfiles.removeValue(forKey: profileID)
+  }
+
+  /// Service creation propagates database-open failures instead of taking the UI's fatal path.
+  func makeReadSession(for profile: Profile) throws -> ProfileSession {
+    do {
+      let session = try ProfileSession(
+        resources: resources,
+        profile: profile,
+        containerManager: containerManager,
+        syncCoordinator: syncCoordinator)
+      sessions[profile.id] = session
+      incompatibleProfiles.removeValue(forKey: profile.id)
+      return session
+    } catch {
+      throw ReadQueryError.profileUnavailable
+    }
+  }
+
+  func recordReadIncompatibility(_ profile: Profile) {
+    _ = makeIncompatible(for: profile)
+  }
+
+  /// Live eviction state takes precedence over a root's previously resolved result.
+  func displayedOpenResult(
+    profileID: UUID,
+    cached: SessionOpenResult?
+  ) -> SessionOpenResult? {
+    if let info = incompatibleProfiles[profileID] { return .incompatible(info) }
+    if case .ready(let session) = cached, sessions[profileID] !== session { return nil }
+    return cached
   }
 
   // MARK: - Automation Lookup
@@ -279,20 +353,12 @@ final class SessionManager {
         profileLabel: profile.label,
         profileVersion: profile.dataFormatVersion,
         buildVersion: DataFormatVersion.current)
-      incompatibleProfiles[profile.id] = info
-      if let session = sessions.removeValue(forKey: profile.id),
-        let syncCoordinator
-      {
-        session.cleanupSync(coordinator: syncCoordinator)
-        // evictCachedState (not removeDataHandler) clears both
-        // dataHandlers AND cachedGRDBRepositories — without the second
-        // eviction, handlerForProfileZone would silently reconstruct a
-        // handler from the cached repos on the next fetched-changes
-        // event, routing writes back into local storage and violating
-        // the gate's "no further fetched changes for the per-profile
-        // zone are applied locally" guarantee.
-        syncCoordinator.evictCachedState(for: profile.id)
+      if sessions[profile.id] != nil {
+        removeSession(for: profile.id)
+        // Drop cached repositories as well as the live handler so sync cannot reopen it.
+        syncCoordinator?.evictCachedState(for: profile.id)
       }
+      incompatibleProfiles[profile.id] = info
     }
   }
 

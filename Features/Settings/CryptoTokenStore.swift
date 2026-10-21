@@ -69,7 +69,8 @@ final class CryptoTokenStore {
   /// extension in its own file can log keychain failures through the
   /// same category.
   let logger = Logger(
-    subsystem: "com.moolah.app", category: "CryptoTokenStore")
+    subsystem: "com.moolah.app",
+    category: "CryptoTokenStore")
 
   // The two API-key keychain stores are internal (not `private`) so
   // the `CryptoTokenStore+APIKeys` extension — which lives in a sibling
@@ -139,7 +140,14 @@ final class CryptoTokenStore {
     apiKeyStore: KeychainStore,
     alchemyKeyStore: KeychainStore,
     rpcEndpointsStore: any CryptoRPCEndpointsStoring = CryptoRPCEndpointsStore(),
-    sharedStore: SharedRegistryStore? = nil
+    sharedStore: SharedRegistryStore? = nil,
+    removeObsoleteCredential: @Sendable () -> Void = {
+      KeychainStore(
+        service: KeychainServices.apiKeys,
+        account: "cryptocompare",
+        synchronizable: true
+      ).clear()
+    }
   ) {
     self.registry = registry
     self.cryptoPriceService = cryptoPriceService
@@ -149,13 +157,7 @@ final class CryptoTokenStore {
     self.rpcEndpointsStore = rpcEndpointsStore
     self.rpcEndpoints = rpcEndpointsStore.load()
     self.sharedStore = sharedStore
-    // Migration cleanup: CryptoCompare is not a supported provider and
-    // its keychain entry may linger in iCloud keychains. `clear()` is
-    // idempotent — a missing entry is a no-op; the call is cheap on
-    // every init.
-    KeychainStore(
-      service: KeychainServices.apiKeys, account: "cryptocompare", synchronizable: true
-    ).clear()
+    removeObsoleteCredential()
   }
 
   /// Production convenience initialiser — wires the keychain stores to
@@ -168,18 +170,30 @@ final class CryptoTokenStore {
     cryptoPriceService: CryptoPriceService,
     conversionService: any InstrumentConversionService,
     rpcEndpointsStore: any CryptoRPCEndpointsStoring = CryptoRPCEndpointsStore(),
-    sharedStore: SharedRegistryStore? = nil
+    sharedStore: SharedRegistryStore? = nil,
+    removeObsoleteCredential: @Sendable () -> Void = {
+      KeychainStore(
+        service: KeychainServices.apiKeys,
+        account: "cryptocompare",
+        synchronizable: true
+      ).clear()
+    }
   ) {
     self.init(
       registry: registry,
       cryptoPriceService: cryptoPriceService,
       conversionService: conversionService,
       apiKeyStore: KeychainStore(
-        service: KeychainServices.apiKeys, account: "coingecko", synchronizable: true),
+        service: KeychainServices.apiKeys,
+        account: "coingecko",
+        synchronizable: true),
       alchemyKeyStore: KeychainStore(
-        service: KeychainServices.apiKeys, account: "alchemy", synchronizable: true),
+        service: KeychainServices.apiKeys,
+        account: "alchemy",
+        synchronizable: true),
       rpcEndpointsStore: rpcEndpointsStore,
-      sharedStore: sharedStore)
+      sharedStore: sharedStore,
+      removeObsoleteCredential: removeObsoleteCredential)
   }
 
   // MARK: - Filtered registrations

@@ -63,18 +63,19 @@ extension ProfileSession {
   @MainActor
   static func makeRegistryWiring(
     backend: BackendProvider,
-    cryptoPriceService: CryptoPriceService,
-    yahooPriceFetcher: any YahooFinancePriceFetcher,
-    coinGeckoApiKeyProvider: @Sendable @escaping () -> String?,
+    marketData: MarketDataServices,
     networking: NetworkingServices,
-    sharedRegistryStore: SharedRegistryStore? = nil
+    sharedRegistryStore: SharedRegistryStore? = nil,
+    resources: ProfileSessionResources = .live
   ) -> RegistryWiring {
     guard let cloudBackend = backend as? CloudKitBackend else {
       fatalError("makeBackend only constructs CloudKitBackend")
     }
 
     let wiring = makeResolutionWiring(
-      coinGeckoApiKeyProvider: coinGeckoApiKeyProvider, networking: networking)
+      coinGeckoApiKeyProvider: marketData.coinGeckoApiKeyProvider,
+      networking: networking,
+      directory: resources.catalogDirectory)
     // Pass the shared registry store from the coordinator when
     // wired so cross-session mutations are observed transparently
     // through the proxy. Falls back to local storage when no
@@ -93,13 +94,14 @@ extension ProfileSession {
     let rpcEndpointsStore: any CryptoRPCEndpointsStoring =
       ProcessInfo.processInfo.environment[UITestEnvironment.rpcProbeStubbedReachable] == "1"
       ? InMemoryCryptoRPCEndpointsStore()
-      : CryptoRPCEndpointsStore()
+      : resources.rpcEndpoints
     let store = CryptoTokenStore(
       registry: cloudBackend.instrumentRegistryRepository,
-      cryptoPriceService: cryptoPriceService,
+      cryptoPriceService: marketData.cryptoPrice,
       conversionService: cloudBackend.conversionService,
       rpcEndpointsStore: rpcEndpointsStore,
-      sharedStore: sharedRegistryStore)
+      sharedStore: sharedRegistryStore,
+      removeObsoleteCredential: resources.removeObsoleteCredential)
     let searchService = InstrumentSearchService(
       registry: cloudBackend.instrumentRegistryRepository,
       catalog: wiring.catalog,
@@ -125,7 +127,8 @@ extension ProfileSession {
   @MainActor
   private static func makeResolutionWiring(
     coinGeckoApiKeyProvider: @Sendable @escaping () -> String?,
-    networking: NetworkingServices
+    networking: NetworkingServices,
+    directory: URL?
   ) -> ResolutionWiring {
     if let overrides = uiTestingCryptoOverrides() {
       return ResolutionWiring(
@@ -136,12 +139,14 @@ extension ProfileSession {
         cacheRefreshTasks: [])
     }
     let made = makeCoinGeckoCatalog(
-      coinGeckoApiKeyProvider: coinGeckoApiKeyProvider, networking: networking)
+      coinGeckoApiKeyProvider: coinGeckoApiKeyProvider,
+      networking: networking,
+      directory: directory)
     // Build the Binance cache alongside the CoinGecko catalog, firing its
     // own once-per-session background `refreshIfStale()`. The resolver
     // consults it in place of an ad-hoc full exchange-info download; a nil
     // cache (open failure) degrades the resolver to its live-download path.
-    let madeBinance = makeBinanceCache(networking: networking)
+    let madeBinance = makeBinanceCache(networking: networking, directory: directory)
     let cacheRefreshTasks = [madeBinance.refreshTask].compactMap { $0 }
     // Resolves the key per request: an empty key targets the free public
     // CoinGecko endpoint, a configured key the Pro host. Coalesce a missing
@@ -176,7 +181,10 @@ extension ProfileSession {
   /// two call sites.
   @MainActor
   private static func uiTestingCryptoOverrides()
-    -> (catalog: any CoinGeckoCatalog, resolutionClient: any TokenResolutionClient)?
+    -> (
+      catalog: any CoinGeckoCatalog,
+      resolutionClient: any TokenResolutionClient
+    )?
   {
     guard let seed = currentUITestSeed() else { return nil }
     return UITestSeedCryptoOverrides.overrides(for: seed)

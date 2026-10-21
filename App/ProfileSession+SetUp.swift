@@ -20,8 +20,12 @@ extension ProfileSession {
 
   private func bootstrapImplicitDefaultTaxOwner() async throws {
     guard let backend = backend as? CloudKitBackend else { return }
-    try await Task.detached {
-      try backend.grdbTaxOwners.bootstrapImplicitDefaultOwner()
-    }.value
+    try await Self.bootstrap(backend)
+  }
+
+  @concurrent
+  private static func bootstrap(_ backend: CloudKitBackend) async throws {
+    try Task.checkCancellation()
+    try backend.grdbTaxOwners.bootstrapImplicitDefaultOwner()
   }
 }

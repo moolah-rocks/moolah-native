@@ -62,7 +62,7 @@ extension GRDBTransactionRepository {
     payee: String?
   ) -> QueryInterfaceRequest<TransactionRow> {
     guard let payee, !payee.isEmpty else { return request }
-    let pattern = "%" + payee.lowercased() + "%"
-    return request.filter(sql: "lower(payee) LIKE ?", arguments: [pattern])
+    let pattern = "%" + GRDBLikePattern.escapedLiteral(payee.lowercased()) + "%"
+    return request.filter(sql: "lower(payee) LIKE ? ESCAPE '\\'", arguments: [pattern])
   }
 }

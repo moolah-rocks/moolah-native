@@ -4,11 +4,6 @@ import Testing
 
 @testable import Moolah
 
-// Serialised because the suite mutates `URL.moolahApplicationSupportOverride`,
-// a `nonisolated(unsafe)` static, to keep the on-disk SQLite catalogue out
-// of the user's real Application Support directory. Parallel execution would
-// let one test's override leak into another's assertions.
-@Suite("ProfileSession — CoinGecko catalog wiring", .serialized)
 @MainActor
 struct ProfileSessionCatalogIntegrationTests {
   @Test("CloudKit profile exposes a non-nil CoinGecko catalog")
@@ -16,20 +11,24 @@ struct ProfileSessionCatalogIntegrationTests {
     let root = FileManager.default.temporaryDirectory
       .appending(path: "ProfileSessionCatalogIntegrationTests-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-    URL.moolahApplicationSupportOverride = root
-    // The catalog actor outlives this test (a background `refreshIfStale()`
-    // task captures it); deleting `root` here would race with the actor's
-    // SQLite handle and produce noisy "vnode unlinked while in use" logs
-    // from libsqlite3. The temp directory is reaped by the OS on exit.
-    defer { URL.moolahApplicationSupportOverride = nil }
-
     let containerManager = try ProfileContainerManager.forTesting()
     let profile = Profile(
       label: "iCloud",
-      currencyCode: "AUD", financialYearStartMonth: 7
+      currencyCode: "AUD",
+      financialYearStartMonth: 7
     )
-    let session = try ProfileSession(profile: profile, containerManager: containerManager)
+    let session = try ProfileSession(
+      resources: ProfileSessionResources(
+        networking: ProfileSessionResources.disconnected.networking,
+        catalogDirectory: root,
+        coinGeckoAPIKey: { nil },
+        alchemyAPIKey: { nil },
+        removeObsoleteCredential: {},
+        rpcEndpoints: InMemoryCryptoRPCEndpointsStore()),
+      profile: profile,
+      containerManager: containerManager)
 
+    defer { session.cleanupSync(coordinator: nil) }
     #expect(session.coinGeckoCatalog != nil)
   }
 }

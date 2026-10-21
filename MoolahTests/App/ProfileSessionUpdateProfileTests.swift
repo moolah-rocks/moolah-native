@@ -11,7 +11,9 @@ struct ProfileSessionUpdateProfileTests {
     let containerManager = try ProfileContainerManager.forTesting()
     let original = Profile(label: "Test")
     let session = try ProfileSession(
-      profile: original, containerManager: containerManager)
+      resources: .disconnected,
+      profile: original,
+      containerManager: containerManager)
 
     var bumped = original
     bumped.dataFormatVersion = 1
@@ -26,7 +28,9 @@ struct ProfileSessionUpdateProfileTests {
     let containerManager = try ProfileContainerManager.forTesting()
     let original = Profile(label: "Test")
     let session = try ProfileSession(
-      profile: original, containerManager: containerManager)
+      resources: .disconnected,
+      profile: original,
+      containerManager: containerManager)
     let newDefaultOwnerId = UUID()
 
     var bumped = original

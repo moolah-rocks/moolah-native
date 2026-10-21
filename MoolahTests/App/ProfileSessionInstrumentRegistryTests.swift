@@ -12,9 +12,13 @@ struct ProfileSessionInstrumentRegistryTests {
     let containerManager = try ProfileContainerManager.forTesting()
     let profile = Profile(
       label: "iCloud",
-      currencyCode: "AUD", financialYearStartMonth: 7
+      currencyCode: "AUD",
+      financialYearStartMonth: 7
     )
-    let session = try ProfileSession(profile: profile, containerManager: containerManager)
+    let session = try ProfileSession(
+      resources: .disconnected,
+      profile: profile,
+      containerManager: containerManager)
 
     #expect(session.instrumentRegistry != nil)
     #expect(session.cryptoTokenStore != nil)

@@ -10,7 +10,7 @@ extension ProfileSession {
   /// container so every catalog/cache `.sqlite` lives together.
   /// `nonisolated` so `makeLookupCatalog` (which also runs off `@MainActor`)
   /// can read it.
-  nonisolated private static var instrumentRegistryDirectory: URL {
+  nonisolated static var instrumentRegistryDirectory: URL {
     URL.moolahScopedApplicationSupport
       .appending(path: "InstrumentRegistry", directoryHint: .isDirectory)
   }
@@ -24,9 +24,13 @@ extension ProfileSession {
   @MainActor
   static func makeCoinGeckoCatalog(
     coinGeckoApiKeyProvider: @Sendable @escaping () -> String?,
-    networking: NetworkingServices
-  ) -> (catalog: (any CoinGeckoCatalog)?, refreshTask: Task<Void, Never>?) {
-    let directory = Self.instrumentRegistryDirectory
+    networking: NetworkingServices,
+    directory: URL? = ProfileSession.instrumentRegistryDirectory
+  ) -> (
+    catalog: (any CoinGeckoCatalog)?,
+    refreshTask: Task<Void, Never>?
+  ) {
+    guard let directory else { return (nil, nil) }
     do {
       let catalog = try SQLiteCoinGeckoCatalog.make(
         directory: directory,
@@ -56,9 +60,13 @@ extension ProfileSession {
   /// Binance's `exchangeInfo` endpoint is keyless so there is no API key to resolve.
   @MainActor
   static func makeBinanceCache(
-    networking: NetworkingServices
-  ) -> (cache: BinanceTokenCache?, refreshTask: Task<Void, Never>?) {
-    let directory = Self.instrumentRegistryDirectory
+    networking: NetworkingServices,
+    directory: URL? = ProfileSession.instrumentRegistryDirectory
+  ) -> (
+    cache: BinanceTokenCache?,
+    refreshTask: Task<Void, Never>?
+  ) {
+    guard let directory else { return (nil, nil) }
     do {
       let cache = try BinanceTokenCache.make(
         directory: directory,
@@ -88,11 +96,14 @@ extension ProfileSession {
   /// `@MainActor` `ProfileSession.init` path and the non-isolated app-boot
   /// `bootstrapSyncCoordinator` path, and no `Task` is spawned here.
   static func makeDefiLlamaSupportCache(
-    networking: NetworkingServices
+    networking: NetworkingServices,
+    directory: URL? = ProfileSession.instrumentRegistryDirectory
   ) -> DefiLlamaSupportCache? {
+    guard let directory else { return nil }
     do {
       return try DefiLlamaSupportCache.make(
-        directory: Self.instrumentRegistryDirectory, networking: networking)
+        directory: directory,
+        networking: networking)
     } catch {
       Logger(subsystem: "com.moolah.app", category: "ProfileSession")
         .error(
@@ -115,10 +126,11 @@ extension ProfileSession {
   /// `CommandLine` / `ProcessInfo`.
   static func makeLookupCatalog(
     coinGeckoApiKeyProvider: @Sendable @escaping () -> String?,
-    networking: NetworkingServices
+    networking: NetworkingServices,
+    directory: URL? = ProfileSession.instrumentRegistryDirectory
   ) -> (any LocalContractResolver)? {
     guard currentUITestSeed() == nil else { return nil }
-    let directory = Self.instrumentRegistryDirectory
+    guard let directory else { return nil }
     do {
       return try SQLiteCoinGeckoCatalog.make(
         directory: directory,

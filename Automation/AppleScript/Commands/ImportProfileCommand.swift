@@ -27,6 +27,8 @@
         switch await sessionManager.session(for: profile) {
         case .ready(let session):
           return ScriptableProfile(session: session)
+        case .cancelled:
+          throw CancellationError()
         case .incompatible:
           throw AutomationError.operationFailed(
             "Profile is incompatible with this build")

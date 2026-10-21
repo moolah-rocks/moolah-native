@@ -8,6 +8,7 @@ import OSLog
 @Observable
 @MainActor
 final class ProfileSession: Identifiable {
+  let readGeneration = UUID()
   var profile: Profile
   /// Per-profile GRDB connection. Owns the lifecycle of `data.sqlite`
   /// (or an in-memory queue under previews / tests). Released when the
@@ -169,6 +170,7 @@ final class ProfileSession: Identifiable {
   /// `SessionManager.session(for:)` schedules
   /// this automatically when it creates the session.
   init(
+    resources: ProfileSessionResources = .live,
     profile: Profile,
     containerManager: ProfileContainerManager? = nil,
     syncCoordinator: SyncCoordinator? = nil,
@@ -183,8 +185,8 @@ final class ProfileSession: Identifiable {
       database: database,
       profile: profile,
       containerManager: containerManager,
-      override: networking,
-      syncCoordinator: syncCoordinator)
+      syncCoordinator: syncCoordinator,
+      resources: resources.using(networking: networking))
     self.database = infrastructure.database
 
     let services = infrastructure.marketData
@@ -206,11 +208,10 @@ final class ProfileSession: Identifiable {
     // `syncCoordinator`) but assigned in `finishInit` — see its declarations.
     let registryWiring = Self.makeRegistryWiring(
       backend: backend,
-      cryptoPriceService: services.cryptoPrice,
-      yahooPriceFetcher: services.yahooPriceFetcher,
-      coinGeckoApiKeyProvider: services.coinGeckoApiKeyProvider,
+      marketData: services,
       networking: infrastructure.networking,
-      sharedRegistryStore: syncCoordinator?.sharedRegistryStore
+      sharedRegistryStore: syncCoordinator?.sharedRegistryStore,
+      resources: resources
     )
     let stores = Self.makeDomainStores(profile: profile, backend: backend)
     self.authStore = stores.auth
@@ -225,21 +226,27 @@ final class ProfileSession: Identifiable {
     // staging store lives per-profile on disk so pending/failed files
     // follow the profile across app restarts.
     let importPipeline = Self.makeImportPipeline(
-      backend: backend, profileId: profile.id, logger: logger)
+      backend: backend,
+      profileId: profile.id,
+      logger: logger)
     self.importStore = importPipeline.importStore
     self.importRuleStore = importPipeline.importRuleStore
     self.importPreferences = importPipeline.preferences
     self.folderScanner = importPipeline.scanner
     self.folderWatcher = importPipeline.watcher
 
-    finishInit(registryWiring: registryWiring, syncCoordinator: syncCoordinator)
+    finishInit(wiring: registryWiring, syncCoordinator: syncCoordinator, resources: resources)
   }
 
   /// Tail of the initialiser: wires registry pieces, AccountGroupStore,
   /// InsightStore, the canonical resolver, and crypto sync stores; starts
   /// the hourly `PRAGMA optimize` tick (issue #576). Reads from `self` —
   /// every property is fully initialised before this runs.
-  private func finishInit(registryWiring: RegistryWiring, syncCoordinator: SyncCoordinator?) {
+  private func finishInit(
+    wiring registryWiring: RegistryWiring,
+    syncCoordinator: SyncCoordinator?,
+    resources: ProfileSessionResources
+  ) {
     // MUST run before `makeCryptoSyncWiring` / `seedBuiltInCryptoPresets`
     // below, which read `instrumentRegistry`.
     self.instrumentRegistry = registryWiring.registry
@@ -297,7 +304,7 @@ final class ProfileSession: Identifiable {
       availability: insightAvailability,
       narrator: insightNarrator,
       fixtureInsights: Self.uiTestingInsightFixtures())
-    wireCanonicalResolverAndCryptoSync(syncCoordinator: syncCoordinator)
+    wireCanonicalResolverAndCryptoSync(syncCoordinator: syncCoordinator, resources: resources)
     seedBuiltInCryptoPresets(registry: instrumentRegistry)
     wireCrossStoreSideEffects()
     startPeriodicPragmaOptimize()
@@ -306,7 +313,10 @@ final class ProfileSession: Identifiable {
   // `seedBuiltInCryptoPresets(registry:)` and `reconcileFromCaches(registry:)`
   // live in `ProfileSession+CryptoPresets.swift`.
 
-  private func wireCanonicalResolverAndCryptoSync(syncCoordinator: SyncCoordinator?) {
+  private func wireCanonicalResolverAndCryptoSync(
+    syncCoordinator: SyncCoordinator?,
+    resources: ProfileSessionResources
+  ) {
     let canonicalResolver =
       syncCoordinator?.sharedCanonicalResolver ?? CanonicalInstrumentResolver()
     self.canonicalResolver = canonicalResolver
@@ -315,7 +325,8 @@ final class ProfileSession: Identifiable {
       registry: instrumentRegistry,
       cryptoPriceService: cryptoPriceService,
       profileInstrument: profile.instrument,
-      canonicalResolver: canonicalResolver)
+      canonicalResolver: canonicalResolver,
+      resources: resources)
     self.cryptoSyncStore = cryptoWiring?.store
     self.cryptoTokenDiscovery = cryptoWiring?.discovery
     self.reloadRPCEndpoints = cryptoWiring?.reloadRPCEndpoints

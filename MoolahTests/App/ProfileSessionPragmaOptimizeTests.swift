@@ -22,7 +22,9 @@ struct ProfileSessionPragmaOptimizeTests {
   func runPragmaOptimizeBumpsCounter() async throws {
     let containerManager = try ProfileContainerManager.forTesting()
     let session = try ProfileSession(
-      profile: makeProfile(), containerManager: containerManager)
+      resources: .disconnected,
+      profile: makeProfile(),
+      containerManager: containerManager)
 
     let before = session.pragmaOptimizeRunCount
     await session.runPragmaOptimize()
@@ -34,7 +36,9 @@ struct ProfileSessionPragmaOptimizeTests {
   func periodicTickFiresRepeatedly() async throws {
     let containerManager = try ProfileContainerManager.forTesting()
     let session = try ProfileSession(
-      profile: makeProfile(), containerManager: containerManager)
+      resources: .disconnected,
+      profile: makeProfile(),
+      containerManager: containerManager)
     let baseline = session.pragmaOptimizeRunCount
 
     session.startPeriodicPragmaOptimize(interval: .milliseconds(20))
@@ -54,7 +58,9 @@ struct ProfileSessionPragmaOptimizeTests {
   func startReplacesPriorPeriodicTask() async throws {
     let containerManager = try ProfileContainerManager.forTesting()
     let session = try ProfileSession(
-      profile: makeProfile(), containerManager: containerManager)
+      resources: .disconnected,
+      profile: makeProfile(),
+      containerManager: containerManager)
 
     // First scheduling, with a long interval so it never fires during the test.
     session.startPeriodicPragmaOptimize(interval: .seconds(3600))
@@ -80,6 +86,7 @@ struct ProfileSessionPragmaOptimizeTests {
       containerManager: containerManager,
       isCloudKitAvailable: true)
     let session = try ProfileSession(
+      resources: .disconnected,
       profile: makeProfile(),
       containerManager: containerManager,
       syncCoordinator: coordinator)

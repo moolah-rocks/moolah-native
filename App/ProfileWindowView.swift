@@ -8,6 +8,7 @@
   /// Each window receives a Profile.ID from `WindowGroup(for:)` and resolves it to a session.
   struct ProfileWindowView: View {
     let profileID: Profile.ID?
+    @State private var sessionOwner = UUID()
     @Environment(ProfileStore.self) private var profileStore
     @Environment(SessionManager.self) private var sessionManager
     @Environment(\.openWindow) private var openWindow
@@ -46,7 +47,9 @@
       }
       let fallback = fallbackProfile()
       if let fallback,
-        let owner = ProfileWindowLocator.existingWindow(for: fallback.id, in: NSApp.windows),
+        let owner = ProfileWindowLocator.existingWindow(
+          for: fallback.id,
+          in: NSApp.windows),
         owner !== hostingWindow
       {
         return nil
@@ -76,7 +79,8 @@
       profileID == nil
         && !profileStore.profiles.isEmpty
         && ProfileWindowLocator.anyOtherProfileWindowPresent(
-          excluding: hostingWindow, in: NSApp.windows)
+          excluding: hostingWindow,
+          in: NSApp.windows)
     }
 
     var body: some View {
@@ -133,11 +137,18 @@
         // against a different profile, or the active profile flips
         // mid-session).
         if let profile = resolvedProfile {
-          sessionResult = await sessionManager.session(for: profile)
+          let result = await sessionManager.session(for: profile, windowOwner: sessionOwner)
+          guard !Task.isCancelled,
+            sessionManager.windowSessionProfiles[sessionOwner] == profile.id,
+            resolvedProfile?.id == profile.id
+          else { return }
+          sessionResult = result
         } else {
+          sessionManager.releaseWindowSession(owner: sessionOwner)
           sessionResult = nil
         }
       }
+      .onDisappear { sessionManager.releaseWindowSession(owner: sessionOwner) }
       .onChange(of: resolvedProfile) { _, profile in
         // Metadata changes update the cached session's profile in place — no
         // teardown, no data reload. This covers renames and default tax-owner
@@ -167,7 +178,9 @@
     /// indicator while the open is in flight.
     @ViewBuilder
     private func sessionContent(for resolved: Profile) -> some View {
-      switch sessionResult {
+      switch sessionManager.displayedOpenResult(profileID: resolved.id, cached: sessionResult) {
+      case .cancelled:
+        ProgressView("Opening profile…")
       case .ready(let session):
         SessionRootView(session: session)
           .environment(profileStore)
@@ -190,7 +203,7 @@
           }
         )
       case .none:
-        ProgressView()
+        ProgressView("Opening profile…")
       }
     }
 
@@ -222,7 +235,9 @@
           // `viewDidMoveToWindow` would tear down our own host view
           // mid-callback.
           if let existing = ProfileWindowLocator.duplicateWindow(
-            for: profile.id, currentWindow: window, in: NSApp.windows)
+            for: profile.id,
+            currentWindow: window,
+            in: NSApp.windows)
           {
             logger.warning(
               "Closing duplicate window for profileID=\(profile.id, privacy: .public)"

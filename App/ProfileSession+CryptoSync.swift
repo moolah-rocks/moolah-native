@@ -114,7 +114,8 @@ extension ProfileSession {
     registry: (any InstrumentRegistryRepository)?,
     cryptoPriceService: CryptoPriceService,
     profileInstrument: Instrument,
-    canonicalResolver: CanonicalInstrumentResolver = CanonicalInstrumentResolver()
+    canonicalResolver: CanonicalInstrumentResolver = CanonicalInstrumentResolver(),
+    resources: ProfileSessionResources = .live
   ) -> CryptoSyncWiring? {
     guard let registry else { return nil }
     // Shared Alchemy de-burst limiter: `burstCapacity: 1` strictly spaces the
@@ -126,14 +127,15 @@ extension ProfileSession {
       // Closure (not a resolved value): a key entered in Settings after this
       // wiring is built is visible on the next sync cycle without a rebuild,
       // and the key never lives on the client object itself.
-      apiKeyProvider: { ProfileSession.resolveAlchemyApiKey() },
+      apiKeyProvider: resources.alchemyAPIKey,
       rateLimiter: alchemyRateLimiter)
     // With no custom endpoint and an Alchemy key present, every chain resolves
     // to `.alchemy`, so on-chain calls go through `alchemyClient`. A configured
     // custom endpoint (or a missing Alchemy key) routes the matching chain to a
     // direct JSON-RPC client. `reloadRPCEndpoints` resets that routing in place
     // when the user edits the endpoint list (see `makeRPCRouting`).
-    let (chainClient, reloadRPCEndpoints) = makeRPCRouting(alchemyClient: alchemyClient)
+    let (chainClient, reloadRPCEndpoints) = makeRPCRouting(
+      alchemyClient: alchemyClient, resources: resources)
     let discovery = CryptoTokenDiscoveryService(
       registry: registry, resolver: cryptoPriceService, canonicalResolver: canonicalResolver)
     let walletSyncEngine = makeWalletSyncEngine(
@@ -203,11 +205,11 @@ extension ProfileSession {
   /// chain resolves to `.alchemy` exactly as at construction time.
   @MainActor
   private static func makeRPCRouting(
-    alchemyClient: LiveAlchemyClient
+    alchemyClient: LiveAlchemyClient, resources: ProfileSessionResources
   ) -> (chainClient: any ChainDataClient, reloadRPCEndpoints: @Sendable () async -> Void) {
     let resolver = RPCEndpointResolver(
-      customEndpoints: CryptoRPCEndpointsStore().load(),
-      alchemyKeyPresent: { ProfileSession.resolveAlchemyApiKey() != nil },
+      customEndpoints: resources.rpcEndpoints.load(),
+      alchemyKeyPresent: { resources.alchemyAPIKey() != nil },
       makeRPC: { url in
         LiveJSONRPCClient(endpoint: url, rateLimiter: RateLimiter(permitsPerSecond: 5))
       })
@@ -218,7 +220,7 @@ extension ProfileSession {
         DirectRPCChainClient(rpc: rpc, metadata: TokenMetadataResolver(rpc: rpc))
       })
     let reloadRPCEndpoints: @Sendable () async -> Void = {
-      await routing.invalidate(customEndpoints: CryptoRPCEndpointsStore().load())
+      await routing.invalidate(customEndpoints: resources.rpcEndpoints.load())
     }
     return (routing, reloadRPCEndpoints)
   }

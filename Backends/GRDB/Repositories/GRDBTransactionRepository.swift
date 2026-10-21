@@ -294,9 +294,7 @@ final class GRDBTransactionRepository: TransactionRepository, @unchecked Sendabl
   ) async throws -> [String] {
     guard !prefix.isEmpty else { return [] }
     return try await database.read { database in
-      // `LIKE ? || '%'` keeps the wildcard out of the bound argument so
-      // a payee containing literal `%` cannot inject a wildcard into
-      // the match. Lowercasing is symmetric on both sides. Ordering by
+      // Escape literal wildcard characters in the bound prefix. Ordering by
       // frequency (descending) puts most-used payees at the top, with
       // the payee string as a stable tie-breaker for deterministic
       // pagination.
@@ -311,24 +309,27 @@ final class GRDBTransactionRepository: TransactionRepository, @unchecked Sendabl
           FROM "transaction"
           WHERE payee IS NOT NULL
             AND id != ?
-            AND lower(payee) LIKE lower(?) || '%'
+            AND lower(payee) LIKE lower(?) || '%' ESCAPE '\\'
           GROUP BY payee
           ORDER BY COUNT(*) DESC, payee ASC
           LIMIT 20
           """
         return try String.fetchAll(
-          database, sql: sql, arguments: [excludingTransactionId, prefix])
+          database,
+          sql: sql,
+          arguments: [excludingTransactionId, GRDBLikePattern.escapedLiteral(prefix)])
       }
       let sql = """
         SELECT payee
         FROM "transaction"
         WHERE payee IS NOT NULL
-          AND lower(payee) LIKE lower(?) || '%'
+          AND lower(payee) LIKE lower(?) || '%' ESCAPE '\\'
         GROUP BY payee
         ORDER BY COUNT(*) DESC, payee ASC
         LIMIT 20
         """
-      return try String.fetchAll(database, sql: sql, arguments: [prefix])
+      return try String.fetchAll(
+        database, sql: sql, arguments: [GRDBLikePattern.escapedLiteral(prefix)])
     }
   }
 

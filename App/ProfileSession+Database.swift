@@ -64,6 +64,7 @@ extension ProfileSession {
     profile: Profile = Profile(label: "Preview")
   ) throws -> ProfileSession {
     try ProfileSession(
+      resources: .disconnected,
       profile: profile,
       containerManager: ProfileContainerManager.forTesting(),
       database: ProfileDatabase.openInMemory())

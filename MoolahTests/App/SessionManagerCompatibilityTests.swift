@@ -11,6 +11,7 @@ struct SessionManagerCompatibilityTests {
     let repository = containerManager.profileIndexRepositoryForTesting
     return (
       SessionManager(
+        resources: .disconnected,
         containerManager: containerManager,
         profileIndexRepository: repository),
       repository
@@ -32,7 +33,8 @@ struct SessionManagerCompatibilityTests {
   func readyBelowCurrent() async throws {
     let (manager, repo) = try makeFixture()
     let profile = Profile(
-      label: "Test", dataFormatVersion: max(DataFormatVersion.current - 1, 0))
+      label: "Test",
+      dataFormatVersion: max(DataFormatVersion.current - 1, 0))
     try await repo.upsert(profile)
 
     if case .incompatible = await manager.session(for: profile) {
@@ -55,7 +57,8 @@ struct SessionManagerCompatibilityTests {
   func incompatibleAboveCurrent() async throws {
     let (manager, repo) = try makeFixture()
     let profile = Profile(
-      label: "Test", dataFormatVersion: DataFormatVersion.current + 1)
+      label: "Test",
+      dataFormatVersion: DataFormatVersion.current + 1)
     try await repo.upsert(profile)
 
     let result = await manager.session(for: profile)
@@ -72,7 +75,8 @@ struct SessionManagerCompatibilityTests {
   func incompatibleDoesNotRegisterZone() async throws {
     let (manager, repo) = try makeFixture()
     let profile = Profile(
-      label: "Test", dataFormatVersion: DataFormatVersion.current + 1)
+      label: "Test",
+      dataFormatVersion: DataFormatVersion.current + 1)
     try await repo.upsert(profile)
 
     _ = await manager.session(for: profile)
@@ -86,7 +90,9 @@ struct SessionManagerCompatibilityTests {
     let id = UUID()
     let stale = Profile(id: id, label: "Stale", dataFormatVersion: 0)
     let stored = Profile(
-      id: id, label: "Stale", dataFormatVersion: DataFormatVersion.current + 1)
+      id: id,
+      label: "Stale",
+      dataFormatVersion: DataFormatVersion.current + 1)
     try await repo.upsert(stored)
 
     let result = await manager.session(for: stale)
