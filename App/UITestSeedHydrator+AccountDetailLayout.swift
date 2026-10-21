@@ -52,6 +52,7 @@ extension UITestSeedHydrator {
     try manager.profileIndexDatabase.write { indexDatabase in
       try upsertInstrument(instrument, in: indexDatabase)
       try upsertInstrument(.USD, in: indexDatabase)
+      try seedAccountDetailExchangeRates(in: indexDatabase)
     }
 
     try database.write { profileDatabase in
@@ -199,5 +200,42 @@ extension UITestSeedHydrator {
       quantity: spec.amount.quantity,  // positive = income / inflow
       type: .income)
     try TransactionLegRow(domain: leg, transactionId: spec.id, sortOrder: 0).insert(database)
+  }
+}
+
+extension UITestSeedHydrator {
+  /// Constant fixture FX over the seed's complete chart horizon. Rendering must never
+  /// depend on Frankfurter availability or its per-host request gate.
+  static func seedAccountDetailExchangeRates(in database: Database) throws {
+    let fixtures = UITestFixtures.AccountDetailLayout.self
+    let lower = fixtures.exchangeRateFirstDate
+    let upper = fixtures.exchangeRateLastDate
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withFullDate]
+    formatter.timeZone = .utc
+    var date = lower
+    while date <= upper {
+      let key = formatter.string(from: date)
+      try ExchangeRateRecord(base: "USD", quote: "AUD", date: key, rate: fixtures.usdToAUDRate)
+        .insert(
+          database,
+          onConflict: .replace
+        )
+      try ExchangeRateRecord(base: "AUD", quote: "USD", date: key, rate: fixtures.audToUSDRate)
+        .insert(
+          database,
+          onConflict: .replace
+        )
+      date = date.addingTimeInterval(86400)
+    }
+    for base in ["AUD", "USD"] {
+      try ExchangeRateMetaRecord(
+        base: base,
+        earliestDate: formatter.string(from: lower),
+        latestDate: formatter.string(from: upper)
+      )
+      .insert(database, onConflict: .replace)
+    }
+    try database.notifyRateCacheChange(.exchangeRate)
   }
 }
