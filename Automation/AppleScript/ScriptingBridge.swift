@@ -11,6 +11,20 @@
   /// via KVC for the SDEF's application class.
   final class ScriptingBridge: NSObject, NSApplicationDelegate {
 
+    var mcpController: MCPServerController?
+    private var terminationTask: Task<Void, Never>?
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+      guard let mcpController else { return .terminateNow }
+      guard terminationTask == nil else { return .terminateLater }
+      terminationTask = Task {
+        await mcpController.shutdown()
+        sender.reply(toApplicationShouldTerminate: true)
+        terminationTask = nil
+      }
+      return .terminateLater
+    }
+
     // MARK: - NSApplicationDelegate
 
     func applicationDidFinishLaunching(_ notification: Notification) {

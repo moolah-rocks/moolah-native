@@ -87,9 +87,12 @@ targets:
       - path: App
         excludes:
           - Info-macOS.plist
+          - MCP
       - path: Domain
       - path: Backends
       - path: Features
+        excludes:
+          - Settings/MCP
       - path: Shared
       - path: Automation
       - path: UITestSupport
@@ -306,6 +309,8 @@ targets:
     platform: iOS
     sources:
       - path: MoolahTests
+        excludes:
+          - MCP
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: rocks.moolah.tests
@@ -337,6 +342,8 @@ targets:
         BUNDLE_LOADER: "$(TEST_HOST)"
     dependencies:
       - target: Moolah_macOS
+      - package: MoolahMCP
+        link: false
       - package: GRDB
         link: false
       - package: ImportExtensionKit

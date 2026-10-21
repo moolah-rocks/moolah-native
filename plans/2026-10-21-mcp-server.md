@@ -209,7 +209,7 @@ Continuation tokens use a process-local HMAC key and a monotonic 15-minute TTL.
 They bind credential/revision, profile, tool, canonical validated filters and the
 repository continuation/revision. Tampering, restart, changed permission or a
 changed repository revision requires restarting the query. Rate windows also use
-monotonic time; grant expiry and audit-facing metadata use civil timestamps.
+monotonic time; grant expiry and audit-facing metadata use wall-clock instants.
 
 Profile validation now refreshes the authoritative profile index before and after
 reads. Removed or incompatible profiles evict their cached sessions, and current
@@ -223,3 +223,58 @@ rejection, malformed raw targets, body size, methods, and the 60-message limit.
 Fixtures use synthetic data and memory persistence; they never open production
 profiles or Keychain. The local reference-client environment uses Python 3.14;
 the system Python 3.9 cannot install this client version.
+
+## Stage 4: macOS product integration
+
+Settings → Integrations now contains MCP enablement, a validated stable port,
+listener status and endpoint, explicit profile/scope selection, optional expiry,
+permission edits, replacement credentials and confirmed revocation/removal. No
+profile is selected in a new draft; transaction notes remain separately disabled.
+A replacement opens a prefilled creation draft with a fresh valid expiry. Tokens
+are displayed only after creation, can be copied deliberately, and are discarded
+when the disclosure closes. Owned clipboard contents expire after one minute
+without clearing a newer clipboard item. Setup help covers local HTTP clients with
+manual bearer headers, optional login-item setup, availability and data privacy.
+
+An app-scoped controller restores enablement from device-local preferences. It
+owns the listener and background tasks independently of windows, retains the union
+of active grants' profile leases, and drains queries/listener/tasks before releasing
+leases on disable or quit. Generation checks release late acquisitions after a
+listener fails. Readiness failures drop stale lease bookkeeping so restored profiles
+can recover. Existing session ownership prevents closing a window from ending an
+MCP-owned session. Sync freshness remains explicitly unknown.
+
+The audit actor serializes complete off-caller file transactions. Only completion
+time, credential UUID, registered tool name, parsed profile UUID, elapsed duration
+and stable outcome are accepted, including when decoding a persisted archive. The
+atomic device-local JSON archive is bounded to 512 KiB and 1,000 records, retaining
+at most seven elapsed days. App startup and hourly maintenance purge expired rows
+even when MCP is off, without opening Keychain or a listener. Clear history remains
+available for corrupt-file recovery. Foreground command revisions prevent delayed
+maintenance errors from overwriting a successful recovery.
+
+All hosting, settings, preview and MCP-specific test sources are excluded from iOS
+membership; shared integration references remain conditional. App-hosted unit tests
+and UI seeds use isolated local preferences, memory credentials and disconnected
+sessions. Fresh disabled startup opens neither credential storage nor a socket.
+
+Lifecycle testing exposed a real immediate-restart issue: the original listener
+could not rebind while accepted connections remained in TIME_WAIT. Hummingbird's
+SO_REUSEADDR option now permits immediate restart; SO_REUSEPORT is not enabled.
+A live competing-listener regression confirms that another active listener still
+fails closed on the configured port.
+
+Stage 4 verification: 15 targeted application tests across five suites and 33 MCP
+package tests passed. The iOS build and generated membership check passed. Code,
+concurrency, retention/schema, dates, help and UI source reviews addressed their
+findings. Native isolated test-host captures verified settings/create/edit layouts
+in both appearances, including long labels. The temporary capture fixture is not
+part of the delivered code.
+
+Stage 4 remains a draft: credential token/button contrast and the actual integration
+sheet navigation title/toolbar still need visual verification. The locked macOS
+session's security shield prevents native capture, and Xcode's bridge is awaiting
+user approval. No security shield was bypassed. UI review reports no remaining code
+findings; these exact environmental verification limits carry into finished-app
+checks in stage 5. Locked-screen Keychain access, sleep/wake and signed finished-app
+checks also remain open; synthetic controller tests do not establish those results.

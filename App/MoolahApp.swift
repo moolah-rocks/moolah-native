@@ -57,6 +57,7 @@ struct MoolahApp: App {
 
   #if os(macOS)
     @NSApplicationDelegateAdaptor(ScriptingBridge.self) var scriptingBridge
+    @State var mcpController: MCPServerController
     private let backupManager: StoreBackupManager
     // internal so `+Lifecycle` can iterate open sessions for
     // `PRAGMA optimize` on resign-active.
@@ -112,14 +113,7 @@ struct MoolahApp: App {
     // profiles are persisted there by `ProfileStore.loadFromDefaults` and
     // would bleed into the seeded container otherwise. A per-launch
     // suite gives the store an isolated, ephemeral defaults store.
-    let storeDefaults: UserDefaults
-    if isUITestingLaunch {
-      let suiteName = "com.moolah.ui-testing.\(UUID().uuidString)"
-      storeDefaults = UserDefaults(suiteName: suiteName) ?? .standard
-      storeDefaults.removePersistentDomain(forName: suiteName)
-    } else {
-      storeDefaults = .moolahShared
-    }
+    let storeDefaults = Self.profileStoreDefaults(isUITesting: isUITestingLaunch)
     let store = ProfileStore(
       defaults: storeDefaults,
       containerManager: setup.manager,
@@ -134,11 +128,6 @@ struct MoolahApp: App {
 
     let sessionManager = Self.makeSessionManager(
       setup: setup, store: store, coordinator: coordinator)
-    Self.configureAutomationService(
-      store: store,
-      sessionManager: sessionManager,
-      containerManager: setup.manager,
-      coordinator: coordinator)
 
     #if os(macOS)
       backupManager = StoreBackupManager()
@@ -153,6 +142,12 @@ struct MoolahApp: App {
       sessionManager: sessionManager)
     _deepLinkCoordinator = State(initialValue: deepLink)
     _pendingImportsBannerModel = State(initialValue: bannerModel)
+    #if os(macOS)
+      let mcp = Self.makeMCPController(
+        sessions: sessionManager, isolated: isUITestingLaunch || Self.isRunningUnderXCTest())
+      _mcpController = State(initialValue: mcp)
+      scriptingBridge.mcpController = mcp
+    #endif
   }
 
   var body: some Scene {
@@ -254,6 +249,7 @@ struct MoolahApp: App {
 
       Settings {
         SettingsView()
+          .environment(mcpController)
           .environment(profileStore)
           .environment(sessionManager)
           .environment(containerManager)

@@ -239,3 +239,51 @@ extension MCPAuthenticatedEndpointTests {
     )
   }
 }
+
+extension MCPAuthenticatedEndpointTests {
+  @Test
+  func auditRecordsOnlyClosedMetadataAndFailureSuppressesResults() async throws {
+    let store = try await MCPGrantStore.open(persistence: MCPMemorySecrets())
+    let profile = UUID()
+    let credential = try await store.create(label: "Fixture", profileIDs: [profile])
+    let events = Mutex<[MCPAuditEvent]>([])
+    let endpoint = try MCPAuthenticatedEndpoint(
+      policy: MCPRequestPolicy(port: 49137),
+      grants: store,
+      tools: [
+        tool { _ in .init(structuredContent: .object(["private": .string("financial payload")])) }
+      ],
+      audit: { event in events.withLock { $0.append(event) } }
+    )
+    _ = try await endpoint.respond(callRequest(token: credential.token, profile: profile))
+    _ = try await endpoint.respond(
+      callRequest(token: credential.token, profile: profile, name: "secret search")
+    )
+    let recorded = events.withLock { $0 }
+    #expect(recorded.count == 2)
+    #expect(recorded.first?.credentialID == credential.grant.id)
+    #expect(recorded.first?.profileID == profile)
+    #expect(recorded.first?.outcome == "OK")
+    #expect(recorded.last?.tool == "unknown")
+    #expect(recorded.last?.outcome == "ACCESS_DENIED")
+    let serialized = try #require(String(bytes: JSONEncoder().encode(recorded), encoding: .utf8))
+    #expect(!serialized.contains(credential.token))
+    #expect(!serialized.contains("financial payload"))
+    #expect(!serialized.contains("secret search"))
+    let failing = try MCPAuthenticatedEndpoint(
+      policy: MCPRequestPolicy(port: 49137),
+      grants: store,
+      tools: [
+        tool { _ in .init(structuredContent: .object(["private": .string("financial payload")])) }
+      ],
+      audit: { _ in throw SensitiveFixtureError() }
+    )
+    let response = try await failing.respond(callRequest(token: credential.token, profile: profile))
+    #expect(try errorCode(response) == "QUERY_FAILED")
+    #expect(
+      !(String(bytes: response.bodyData ?? Data(), encoding: .utf8) ?? "").contains(
+        "financial payload"
+      )
+    )
+  }
+}

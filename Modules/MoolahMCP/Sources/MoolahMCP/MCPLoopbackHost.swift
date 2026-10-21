@@ -61,7 +61,9 @@ public struct MCPLoopbackHost: Sendable {
       configuration: .init(
         address: .hostname("127.0.0.1", port: policy.port),
         backlog: 32,
-        reuseAddress: false,
+        // Rebind after an app restart while old accepted connections remain in TIME_WAIT.
+        // This is SO_REUSEADDR, not SO_REUSEPORT: a live listener still owns the endpoint.
+        reuseAddress: true,
         availableConnectionsDelegate: .maximum(32, logger: .init(label: "Moolah.MCP"))
       ),
       onServerRunning: { _ in await onRunning() }

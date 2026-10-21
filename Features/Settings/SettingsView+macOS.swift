@@ -78,6 +78,7 @@
         // macOS Settings tabs host the Form / List directly — the window
         // already supplies chrome and a title, so wrapping in a second
         // `NavigationStack` would produce a duplicate navigation bar.
+        integrationsTab
         Tab("Import", systemImage: "tray.and.arrow.down") {
           importTabContent
         }
@@ -121,6 +122,10 @@
           Text(importError)
         }
       }
+    }
+
+    private var integrationsTab: some TabContent<Never> {
+      Tab("Integrations", systemImage: "puzzlepiece.extension") { MCPSettingsView() }
     }
 
     var profilesContent: some View {

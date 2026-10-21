@@ -25,5 +25,5 @@ for target in project.values():
             for build_id in phase["files"]:
                 file = project[project[build_id]["fileRef"]]
                 path = file.get("path", "")
-                assert not path.startswith("MCP"), f"{name} compiles {path}"
+                assert "MCP" not in path, f"{name} compiles {path}"
 print("MCP hosting is exclusive to macOS targets.")
