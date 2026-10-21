@@ -24,7 +24,7 @@ public struct MCPGrant: Codable, Equatable, Sendable, Identifiable {
   public let profileIDs: Set<UUID>
   /// Explicit read permissions captured for this grant or context.
   public let scopes: Set<MCPReadScope>
-  /// Civil timestamp when the credential was created.
+  /// Wall-clock instant when the credential was created.
   public let createdAt: Date
   /// Optional absolute expiry; authorization rejects this instant and later.
   public let expiresAt: Date?

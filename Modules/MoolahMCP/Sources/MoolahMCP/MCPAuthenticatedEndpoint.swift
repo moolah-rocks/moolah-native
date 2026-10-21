@@ -6,6 +6,7 @@ public struct MCPAuthenticatedEndpoint: Sendable {
   let host: MCPLoopbackHost
   let grants: MCPGrantStore
   let tools: [String: MCPAuthorizedTool]
+  let audit: @Sendable (MCPAuditEvent) async throws -> Void
 
   /// Configures an inert loopback endpoint with explicit grants and registered read tools.
   /// - Throws: invalidTool for duplicate, oversized or invalid tool registrations. No socket is opened.
@@ -13,10 +14,12 @@ public struct MCPAuthenticatedEndpoint: Sendable {
   ///   - policy: Validated fixed loopback port and explicit browser-origin policy.
   ///   - grants: Device-local credential authority shared by this endpoint.
   ///   - tools: At most sixteen unique, explicitly registered read tools.
+  ///   - audit: Bounded local metadata sink; failure suppresses the tool result.
   public init(
     policy: MCPRequestPolicy,
     grants: MCPGrantStore,
-    tools: [MCPAuthorizedTool]
+    tools: [MCPAuthorizedTool],
+    audit: @escaping @Sendable (MCPAuditEvent) async throws -> Void = { _ in }
   ) throws {
     guard tools.count <= 16, Set(tools.map(\.schema.name)).count == tools.count,
       tools.allSatisfy({
@@ -26,6 +29,7 @@ public struct MCPAuthenticatedEndpoint: Sendable {
     else { throw MCPConfigurationError.invalidTool }
     self.host = MCPLoopbackHost(policy: policy)
     self.grants = grants
+    self.audit = audit
     self.tools = Dictionary(uniqueKeysWithValues: tools.map { ($0.schema.name, $0) })
   }
 
@@ -137,36 +141,72 @@ extension MCPAuthenticatedEndpoint {
     requestID: MCPRequestIdentifier?,
     owner: UUID?
   ) async -> CallTool.Result {
+    let started = ProcessInfo.processInfo.systemUptime
+    let result: CallTool.Result
+    let outcome: String
     do {
-      guard let tool = tools[parameters.name] else { throw MCPAccessFailure.accessDenied }
-      try await grants.validate(context, scope: tool.scope)
-      let arguments = parameters.arguments ?? [:]
-      let profileID = try Self.profileID(arguments, required: tool.requiresProfile)
-      return try await grants.execute(
+      result = try await executeCall(
+        parameters,
         context: context,
-        scope: tool.scope,
-        profileID: profileID,
         requestID: requestID,
-        endpointOwner: owner
-      ) {
-        let invocation = MCPToolInvocation(
-          context: context,
-          profileID: profileID,
-          arguments: arguments
-        )
-        let result = try await tool.handler(invocation)
-        guard try JSONEncoder().encode(result).count <= MCPLoopbackHost.maximumBodyBytes - 4096
-        else {
-          throw MCPAccessFailure.resultTooLarge
-        }
-        return result
-      }
+        owner: owner
+      )
+      outcome = result.isError == true ? "TOOL_ERROR" : "OK"
     } catch let failure as MCPAccessFailure {
-      return failure.result()
+      result = failure.result()
+      outcome = failure.rawValue
     } catch is CancellationError {
-      return MCPAccessFailure.queryCancelled.result()
+      result = MCPAccessFailure.queryCancelled.result()
+      outcome = MCPAccessFailure.queryCancelled.rawValue
+    } catch {
+      result = MCPAccessFailure.internalFailure.result()
+      outcome = MCPAccessFailure.internalFailure.rawValue
+    }
+    do {
+      try await audit(
+        MCPAuditEvent(
+          timestamp: Date(),
+          credentialID: context.grantID,
+          tool: tools[parameters.name] == nil ? "unknown" : parameters.name,
+          profileID: parameters.arguments?["profile_id"]?.stringValue.flatMap(
+            UUID.init(uuidString:)
+          ),
+          duration: max(0, ProcessInfo.processInfo.systemUptime - started),
+          outcome: outcome
+        )
+      )
+      return result
     } catch {
       return MCPAccessFailure.internalFailure.result()
+    }
+  }
+
+  private func executeCall(
+    _ parameters: CallTool.Parameters,
+    context: MCPAuthorizationContext,
+    requestID: MCPRequestIdentifier?,
+    owner: UUID?
+  ) async throws -> CallTool.Result {
+    guard let tool = tools[parameters.name] else { throw MCPAccessFailure.accessDenied }
+    try await grants.validate(context, scope: tool.scope)
+    let arguments = parameters.arguments ?? [:]
+    let profileID = try Self.profileID(arguments, required: tool.requiresProfile)
+    return try await grants.execute(
+      context: context,
+      scope: tool.scope,
+      profileID: profileID,
+      requestID: requestID,
+      endpointOwner: owner
+    ) {
+      let invocation = MCPToolInvocation(
+        context: context,
+        profileID: profileID,
+        arguments: arguments
+      )
+      let result = try await tool.handler(invocation)
+      guard try JSONEncoder().encode(result).count <= MCPLoopbackHost.maximumBodyBytes - 4096
+      else { throw MCPAccessFailure.resultTooLarge }
+      return result
     }
   }
 

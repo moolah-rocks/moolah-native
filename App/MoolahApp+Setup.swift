@@ -177,6 +177,19 @@ extension MoolahApp {
   // `attachSharedInstrumentRegistrySyncHooks`) lives in the sibling
   // `MoolahApp+SharedInstrumentScope.swift` file.
 
+  /// UI tests receive an isolated defaults domain rather than real persisted profiles.
+  static func profileStoreDefaults(isUITesting: Bool) -> UserDefaults {
+    if isUITesting {
+      let suiteName = "com.moolah.ui-testing.\(UUID().uuidString)"
+      guard let defaults = UserDefaults(suiteName: suiteName) else {
+        preconditionFailure("Unable to create isolated UI test defaults")
+      }
+      defaults.removePersistentDomain(forName: suiteName)
+      return defaults
+    }
+    return .moolahShared
+  }
+
   /// Build the `SessionManager` and wire its `onProfileRemoved` cleanup
   /// hook. The hook closure captures the manager and coordinator weakly
   /// so a cleanup hop after profile deletion doesn't keep them alive
@@ -207,6 +220,9 @@ extension MoolahApp {
       // only — never the data-format-incompatibility gate.
       coordinator?.purgePendingChanges(forProfileZone: profileID)
     }
+    configureAutomationService(
+      store: store, sessionManager: sessionManager, containerManager: setup.manager,
+      coordinator: coordinator)
     return sessionManager
   }
 
