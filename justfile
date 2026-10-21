@@ -561,3 +561,9 @@ verify-mcp-transport: build-mcp-spike
     python3 -m venv .agent-tmp/mcp-python
     .agent-tmp/mcp-python/bin/python -m pip install --quiet 'mcp==2.3.0'
     .agent-tmp/mcp-python/bin/python scripts/test-mcp-transport.py .agent-tmp/mcp-build/debug/MCPTransportSpike
+
+
+# Second supported client; credentials stay in an anonymous stdin pipe.
+verify-mcp-inspector: verify-mcp-transport
+    npm install --prefix .agent-tmp/inspector --no-audit --no-fund @modelcontextprotocol/inspector@2.11.0
+    .agent-tmp/mcp-python/bin/python scripts/test-mcp-transport.py .agent-tmp/mcp-build/debug/MCPTransportSpike .agent-tmp/inspector/node_modules/.bin/mcp-inspector

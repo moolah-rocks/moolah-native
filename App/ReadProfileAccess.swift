@@ -4,5 +4,6 @@ import Foundation
 struct ReadProfileAccess: Sendable {
   let profile: Profile
   let repository: any ReadQueryRepository
+  let conversionService: any InstrumentConversionService
   let identity: UUID
 }

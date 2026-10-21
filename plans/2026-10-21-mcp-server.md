@@ -278,3 +278,67 @@ user approval. No security shield was bypassed. UI review reports no remaining c
 findings; these exact environmental verification limits carry into finished-app
 checks in stage 5. Locked-screen Keychain access, sleep/wake and signed finished-app
 checks also remain open; synthetic controller tests do not establish those results.
+
+## Stage 5: complete read-only catalogue
+
+The macOS app now registers all nine V1 tools explicitly. Each call checks its
+scope and explicit profile UUID before resolving profile metadata or entities.
+Notes require both an explicit request and the separate notes permission. Closed
+input schemas, strict argument validation, exact decimal-string outputs and
+read-only annotations describe the implemented contract. Every response includes
+local query/snapshot metadata and an explicit unknown sync-freshness state.
+
+List continuations bind the grant revision, profile, tool, normalised filters and
+local database revision. UUID sets are canonicalised before signing. Transaction
+continuations retain subsecond keyset precision inside their opaque payload.
+Changes to data or permissions require restarting the query.
+
+Balances retain every native position and value all requested accounts in one
+conversion batch. Reporting totals require every contributing valuation. Summary
+flows match Reports classification and convert on each UTC report day; current net
+worth values all posted positions at the query instant. Hidden accounts and
+future-dated posted transactions are explicitly included in current net worth.
+Missing prices remain unavailable, intentional pricing-policy zeros are labelled,
+and an aggregate price date remains unknown if any priced contributor lacks one.
+Unexpected conversion failures are QUERY_FAILED, rather than profile availability
+errors. Bounded static diagnostics contain no query arguments or financial data.
+
+Summary inputs share one financial database snapshot. The exact production flow
+SQL has a plan-pinning test that requires the date-index transaction search before
+the indexed leg lookup, without full scans or a temporary sort. Financial input
+caps fail explicitly. Price reads remain separate from the financial snapshot.
+
+Status reads now derive metadata from the same captured session/profile as their
+repository read. Final validation compares session generation and the full profile.
+A sign-out latch prevents periodic maintenance from recreating a signed-out
+session; resuming requires a signed-in session opened in Moolah.
+
+The official Python MCP client 2.3.0 and MCP Inspector 2.11.0 both passed real
+localhost HTTP authentication, discovery and structured tool calls against the
+synthetic fixture. Inspector receives its configuration over anonymous stdin;
+credentials are absent from command arguments, environment variables and files.
+`just verify-mcp-inspector` reproduces this second-client check. The application
+integration tests separately exercise the complete nine-tool registry against an
+isolated profile, scope/profile/notes denial, signed pagination and revision expiry,
+unsupported arguments, exact valuations, and unchanged visible filters.
+
+Stage 4 CI found the account-performance UI seed could wait on live Frankfurter
+history. Its failure artifacts show loading spinners. The seed now supplies daily
+constant AUD/USD fixture rates over its chart horizon in the isolated shared index;
+a regression verifies the complete history is available without provider requests.
+The actual UI stability run is still pending an unlocked graphical session.
+
+Finished-app signed sandbox/Keychain locked-screen, sleep/wake, credential contrast
+and real sheet navigation checks remain pending. The first three PRs have green CI.
+The fourth PR is a draft with the recorded UI failure; the final stage also remains
+a draft until outstanding acceptance checks are complete. No synthetic transport
+or unit-test result is presented as proof of those hardware/UI checks.
+
+Stage 5 verification: 65 application regressions across 17 suites passed. A final
+focused run passed three tests across two suites, including the four-zone offline
+FX cases, full seed-write rollback, and invalid-conversion endpoint failure. The MCP
+package passed all 33 tests across six suites. The final iOS build and macOS-only
+membership check passed. Full formatting and strict lint passed; compiler-warning
+sweeps found no application Swift warnings. Code, concurrency, database, date/time,
+instrument, help and UI-test source reviews report no remaining findings. The
+reviewed offline seed fix is also backported to the Settings PR for its CI failure.

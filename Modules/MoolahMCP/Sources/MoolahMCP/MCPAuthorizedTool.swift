@@ -64,7 +64,7 @@ extension MCPAccessFailure {
     switch self {
     case .accessDenied:
       "This integration cannot access the requested data. Check its access in Moolah and try again."
-    case .invalidFilter: "Check the query filters and try again."
+    case .invalidFilter: "Check the query arguments and try again."
     case .cursorExpired: "Restart this query without a cursor."
     case .queryLimit: "Four queries are already running. Try again when one finishes."
     case .rateLimited: "Too many requests. Try again in a minute."

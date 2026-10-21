@@ -133,6 +133,7 @@ extension MCPServerController {
       leasedProfiles.remove(id)
       readiness.removeValue(forKey: id)
     }
+    readiness = readiness.filter { desired.contains($0.key) }
     for id in desired.sorted(by: { $0.uuidString < $1.uuidString }) {
       guard listenerGeneration == generation else { return }
       await updateReadiness(profileID: id, generation: generation)
@@ -143,14 +144,8 @@ extension MCPServerController {
     do {
       try Task.checkCancellation()
       guard listenerGeneration == generation else { return }
-      if !leasedProfiles.contains(id) {
-        _ = try await sessions.acquireReadSession(profileID: id, owner: leaseOwner)
-        guard listenerGeneration == generation, !Task.isCancelled else {
-          sessions.releaseReadSession(profileID: id, owner: leaseOwner)
-          return
-        }
-        leasedProfiles.insert(id)
-      }
+      guard canResumeAccess(profileID: id) else { return }
+      guard try await acquireLease(profileID: id, generation: generation) else { return }
       _ = try await sessions.readAccess(profileID: id)
       guard listenerGeneration == generation else { return }
       readiness[id] = "Ready · sync freshness unknown"
@@ -163,10 +158,33 @@ extension MCPServerController {
       return
     } catch {
       guard listenerGeneration == generation else { return }
+      if sessions.sessions[id]?.authStore.state == .signedOut { signedOutProfiles.insert(id) }
       sessions.releaseReadSession(profileID: id, owner: leaseOwner)
       leasedProfiles.remove(id)
       readiness[id] = "Unavailable · check this profile in Moolah"
     }
+  }
+
+  private func acquireLease(profileID id: UUID, generation: UUID) async throws -> Bool {
+    if leasedProfiles.contains(id) { return true }
+    _ = try await sessions.acquireReadSession(profileID: id, owner: leaseOwner)
+    guard listenerGeneration == generation, !Task.isCancelled else {
+      sessions.releaseReadSession(profileID: id, owner: leaseOwner)
+      return false
+    }
+    leasedProfiles.insert(id)
+    return true
+  }
+
+  private func canResumeAccess(profileID id: UUID) -> Bool {
+    guard signedOutProfiles.contains(id) else { return true }
+    guard let existing = sessions.sessions[id], case .signedIn = existing.authStore.state else {
+      readiness[id] =
+        "Access paused after sign-out. Open this profile in Moolah and sign in to resume access."
+      return false
+    }
+    signedOutProfiles.remove(id)
+    return true
   }
 
   static func message(for error: any Error) -> String {

@@ -5,6 +5,7 @@ Run with mcp==2.3.0 in an isolated environment. The fixture returns its generate
 credential over a private pipe, never logs. It has no app, Keychain or financial data.
 """
 import asyncio
+import json
 import os
 from pathlib import Path
 import selectors
@@ -17,7 +18,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 
-async def verify(binary):
+async def verify(binary, inspector=None):
     # Each isolated fixture is explicitly configured with its own port.
     with socket.socket() as reservation:
         reservation.bind(("127.0.0.1", 0))
@@ -80,6 +81,28 @@ async def verify(binary):
                     result = await session.call_tool("moolah_transport_probe", {})
                     assert result.structured_content == {"ready": True}
                     assert not result.is_error
+            if inspector:
+                config = json.dumps({"mcpServers": {"fixture": {
+                    "type": "http", "url": endpoint, "headers": auth,
+                }}})
+                for method in ("tools/list", "tools/call"):
+                    command = [inspector, "--cli", "--config", "/dev/stdin",
+                               "--server", "fixture", "--method", method]
+                    if method == "tools/call":
+                        command += ["--tool-name", "moolah_transport_probe"]
+                    checked = await asyncio.to_thread(
+                        subprocess.run, command, input=config, text=True,
+                        capture_output=True, timeout=30,
+                    )
+                    # Never print subprocess output: clients may echo configuration.
+                    assert checked.returncode == 0, "Inspector fixture check failed"
+                    response = json.loads(checked.stdout)
+                    if method == "tools/list":
+                        assert [tool["name"] for tool in response["tools"]] == ["moolah_transport_probe"]
+                    else:
+                        assert response["structuredContent"] == {"ready": True}
+                        assert not response.get("isError", False)
+                print("PASS: MCP Inspector 2.11.0 authenticated discovery and structured call")
             async with httpx.AsyncClient(timeout=20, trust_env=False) as client:
                 for _ in range(61):
                     response = await client.post(endpoint, headers=auth | {
@@ -107,4 +130,4 @@ async def verify(binary):
 
 
 if __name__ == "__main__":
-    asyncio.run(verify(os.path.abspath(sys.argv[1])))
+    asyncio.run(verify(os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else None))
