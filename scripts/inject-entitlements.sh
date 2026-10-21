@@ -84,6 +84,11 @@ cat > "$ENTITLEMENTS_FILE" <<'PLIST'
 </plist>
 PLIST
 
+# Inbound networking belongs only to the macOS host, never the iOS host.
+MAC_ENTITLEMENTS_FILE=".build/Moolah-mac.entitlements"
+cp "$ENTITLEMENTS_FILE" "$MAC_ENTITLEMENTS_FILE"
+/usr/libexec/PlistBuddy -c "Add :com.apple.security.network.server bool true" "$MAC_ENTITLEMENTS_FILE"
+
 OUTFILE="$TEMP_FILE" ENTITLEMENTS_FILE="$ENTITLEMENTS_FILE" python3 << 'PY'
 import os
 
@@ -117,7 +122,7 @@ for target in ("Moolah_iOS", "Moolah_macOS"):
         )
     debug_insert_at = debug_pos + len(debug_header)
     debug_injection = (
-        f"          CODE_SIGN_ENTITLEMENTS: {entitlements_path}\n"
+        f"          CODE_SIGN_ENTITLEMENTS: {entitlements_path if target == 'Moolah_iOS' else '.build/Moolah-mac.entitlements'}\n"
         '          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) CLOUDKIT_ENABLED"\n'
     )
     content = content[:debug_insert_at] + debug_injection + content[debug_insert_at:]
