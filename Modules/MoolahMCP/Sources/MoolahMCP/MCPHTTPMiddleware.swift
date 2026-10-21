@@ -6,7 +6,7 @@ import struct HTTPTypes.HTTPField
 
 struct MCPHTTPMiddleware {
   let policy: MCPRequestPolicy
-  let authorize: @Sendable (MCP.HTTPRequest) async -> Bool
+  let checkAccess: @Sendable (MCP.HTTPRequest) async -> MCP.HTTPResponse?
   let respond: @Sendable (MCP.HTTPRequest) async throws -> MCP.HTTPResponse
 }
 
@@ -22,8 +22,8 @@ extension MCPHTTPMiddleware: RouterMiddleware {
     if let rejection = policy.rejection(for: incoming) {
       return makeResponse(rejection)
     }
-    guard await authorize(incoming) else {
-      return Response(status: .unauthorized, headers: [.wwwAuthenticate: "Bearer"])
+    if let rejection = await checkAccess(incoming) {
+      return makeResponse(rejection)
     }
     guard request.method == .post else {
       return Response(status: .methodNotAllowed, headers: [.allow: "POST"])
@@ -65,7 +65,8 @@ extension MCPHTTPMiddleware {
       method: request.method.rawValue,
       headers: headers,
       body: body,
-      path: request.uri.string)
+      path: request.uri.string
+    )
   }
 
   private func makeResponse(_ response: MCP.HTTPResponse) -> Response {

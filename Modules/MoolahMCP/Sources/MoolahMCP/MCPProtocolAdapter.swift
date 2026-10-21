@@ -24,7 +24,8 @@ public enum MCPProtocolAdapter {
       to: request,
       tools: tools,
       waitForDeadline: { try await Task.sleep(for: deadline) },
-      call: call)
+      call: call
+    )
   }
 
   static func respond(
@@ -41,11 +42,13 @@ public enum MCPProtocolAdapter {
         AcceptHeaderValidator(mode: .jsonOnly),
         ContentTypeValidator(),
         ProtocolVersionValidator(),
-      ]))
+      ])
+    )
     let server = Server(
       name: "Moolah",
       version: "1",
-      capabilities: .init(tools: .init(listChanged: false)))
+      capabilities: .init(tools: .init(listChanged: false))
+    )
     let execution = MCPRequestExecution()
     await server.withMethodHandler(ListTools.self) { _ in .init(tools: tools) }
     await server.withMethodHandler(CallTool.self) { parameters in
@@ -54,7 +57,10 @@ public enum MCPProtocolAdapter {
     try await server.start(transport: transport)
     do {
       let response = try await response(
-        to: request, transport: transport, waitForDeadline: waitForDeadline)
+        to: request,
+        transport: transport,
+        waitForDeadline: waitForDeadline
+      )
       try Task.checkCancellation()
       await execution.cancelAndWait()
       await server.stop()
@@ -100,7 +106,8 @@ extension MCPProtocolAdapter {
     else { return false }
     guard let identifier = value["id"] else { return true }
     switch identifier {
-    case .string, .int: return true
+    case .string(let value): return value.utf8.count <= 128
+    case .int: return true
     default: return false
     }
   }

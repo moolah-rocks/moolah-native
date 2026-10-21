@@ -1,42 +1,41 @@
-import CryptoKit
 import Foundation
 import MCP
 import MoolahMCP
+import Synchronization
 
-/// Isolated handshake fixture. Reads an ephemeral bearer token from stdin; never opens Moolah data.
+/// Isolated real-server fixture. Its generated credential travels only over a dedicated pipe.
+/// The in-memory verifier store never opens the app, Keychain, or financial profiles.
 @main
 enum MCPTransportSpike {
   static func main() async throws {
-    guard let token = readLine(), token.utf8.count >= 32 else {
-      throw MCPConfigurationError.invalidEndpoint
-    }
-    let expected = Array(SHA256.hash(data: Data(token.utf8)))
-    let port: Int
-    if CommandLine.arguments.count == 1 {
-      port = 49_137
-    } else if CommandLine.arguments.count == 2, let value = Int(CommandLine.arguments[1]) {
-      port = value
-    } else {
-      throw MCPConfigurationError.invalidEndpoint
-    }
+    guard CommandLine.arguments.count == 3,
+      let port = Int(CommandLine.arguments[1]),
+      let descriptor = Int32(CommandLine.arguments[2]), descriptor >= 3
+    else { throw MCPConfigurationError.invalidEndpoint }
     let policy = try MCPRequestPolicy(port: port)
-    let host = MCPLoopbackHost(policy: policy)
-    try await host.run { request in
-      guard let authorization = request.header("Authorization"),
-        authorization.hasPrefix("Bearer ")
-      else { return false }
-      let candidate = Array(SHA256.hash(data: Data(authorization.dropFirst(7).utf8)))
-      return zip(expected, candidate).reduce(UInt8(0)) { $0 | ($1.0 ^ $1.1) } == 0
-    } respond: { request in
-      try await MCPProtocolAdapter.respond(to: request, tools: [tool]) { params in
-        guard params.name == "moolah_transport_probe", params.arguments?.isEmpty != false else {
-          throw MCPError.invalidParams("Unknown tool or arguments")
+    let grants = try await MCPGrantStore.open(persistence: FixtureSecrets())
+    let credential = try await grants.create(
+      label: "Transport fixture",
+      profileIDs: [UUID()],
+      scopes: [.profiles]
+    )
+    let pipe = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    try pipe.write(contentsOf: Data((credential.token + "\n").utf8))
+    try pipe.close()
+    let endpoint = try MCPAuthenticatedEndpoint(
+      policy: policy,
+      grants: grants,
+      tools: [
+        MCPAuthorizedTool(schema: tool, scope: .profiles, requiresProfile: false) { invocation in
+          guard invocation.arguments.isEmpty else { throw MCPAccessFailure.invalidFilter }
+          return .init(
+            content: [.text(text: "Transport probe succeeded", annotations: nil, _meta: nil)],
+            structuredContent: .object(["ready": .bool(true)])
+          )
         }
-        return .init(
-          content: [.text(text: "Transport probe succeeded", annotations: nil, _meta: nil)],
-          structuredContent: .object(["ready": .bool(true)]))
-      }
-    } onRunning: {
+      ]
+    )
+    try await endpoint.run {
       FileHandle.standardOutput.write(Data("READY http://127.0.0.1:\(port)/mcp\n".utf8))
     }
   }
@@ -48,11 +47,17 @@ enum MCPTransportSpike {
       "type": .string("object"), "properties": .object([:]),
       "additionalProperties": .bool(false),
     ]),
-    annotations: .init(
-      readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false),
     outputSchema: .object([
       "type": .string("object"),
       "properties": .object(["ready": .object(["type": .string("boolean")])]),
       "required": .array([.string("ready")]),
-    ]))
+    ])
+  )
+}
+
+private final class FixtureSecrets: MCPSecretPersisting {
+  let data = Mutex<Data?>(nil)
+
+  func readData() throws -> Data? { data.withLock { $0 } }
+  func writeData(_ value: Data) throws { data.withLock { $0 = value } }
 }

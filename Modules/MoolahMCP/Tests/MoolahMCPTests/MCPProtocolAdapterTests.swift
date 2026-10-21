@@ -10,7 +10,8 @@ struct MCPProtocolAdapterTests {
     let response = try await MCPProtocolAdapter.respond(
       to: request(
         #"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}"#
-      ))
+      )
+    )
     let json = try object(response)
     let result = try #require(json["result"] as? [String: Any])
     #expect(result["protocolVersion"] as? String == "2025-11-25")
@@ -23,7 +24,9 @@ struct MCPProtocolAdapterTests {
   func handlesNotificationsAndRejectsGET() async throws {
     let notification = try await MCPProtocolAdapter.respond(
       to: request(
-        #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#))
+        #"{"jsonrpc":"2.0","method":"notifications/initialized"}"#
+      )
+    )
     #expect(notification.statusCode == 202)
     #expect(notification.bodyData == nil)
     let get = try await MCPProtocolAdapter.respond(to: HTTPRequest(method: "GET", path: "/mcp"))
@@ -36,13 +39,19 @@ struct MCPProtocolAdapterTests {
     headers["MCP-Protocol-Version"] = "bogus"
     let version = try await MCPProtocolAdapter.respond(
       to: request(
-        #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#, headers: headers))
+        #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#,
+        headers: headers
+      )
+    )
     #expect(version.statusCode == 400)
     headers = Self.headers
     headers["Content-Type"] = "text/plain"
     let contentType = try await MCPProtocolAdapter.respond(
       to: request(
-        #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#, headers: headers))
+        #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#,
+        headers: headers
+      )
+    )
     #expect(contentType.statusCode == 415)
   }
 
@@ -53,7 +62,9 @@ struct MCPProtocolAdapterTests {
         group.addTask {
           try await MCPProtocolAdapter.respond(
             to: request(
-              #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#))
+              #"{"jsonrpc":"2.0","id":1,"method":"ping"}"#
+            )
+          )
         }
       }
       var values: [HTTPResponse] = []
@@ -84,9 +95,11 @@ struct MCPProtocolAdapterTests {
     let probe = MCPQueryCancellationProbe()
     let response = try await MCPProtocolAdapter.respond(
       to: request(
-        #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"probe","arguments":{}}}"#),
+        #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"probe","arguments":{}}}"#
+      ),
       waitForDeadline: { await probe.waitUntilStarted() },
-      call: { _ in try await probe.run() })
+      call: { _ in try await probe.run() }
+    )
     #expect(response.statusCode == 504)
     #expect(await probe.didCancel)
   }
@@ -99,7 +112,8 @@ struct MCPProtocolAdapterTests {
         to: request(
           #"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"probe","arguments":{}}}"#
         ),
-        call: { _ in try await probe.run() })
+        call: { _ in try await probe.run() }
+      )
     }
     await probe.waitUntilStarted()
     task.cancel()
@@ -120,5 +134,18 @@ struct MCPProtocolAdapterTests {
   private func object(_ response: HTTPResponse) throws -> [String: Any] {
     let data = try #require(response.bodyData)
     return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+  }
+}
+
+extension MCPProtocolAdapterTests {
+  @Test
+  func boundsStringRequestIDsBeforeDispatchAndReflection() async throws {
+    for count in [128, 129] {
+      let identifier = String(repeating: "x", count: count)
+      let body = "{\"jsonrpc\":\"2.0\",\"id\":\"\(identifier)\",\"method\":\"ping\"}"
+      let response = try await MCPProtocolAdapter.respond(to: request(body))
+      #expect(response.statusCode == (count == 128 ? 200 : 400))
+      #expect((response.bodyData?.count ?? 0) < 1024)
+    }
   }
 }

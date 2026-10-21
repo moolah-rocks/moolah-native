@@ -26,10 +26,35 @@ public struct MCPLoopbackHost: Sendable {
     respond: @escaping @Sendable (MCP.HTTPRequest) async throws -> MCP.HTTPResponse,
     onRunning: @escaping @Sendable () async -> Void = {}
   ) async throws {
+    try await run(
+      checkAccess: { request in
+        await authorize(request)
+          ? nil
+          : .error(
+            statusCode: 401,
+            .invalidRequest("Authentication required"),
+            extraHeaders: ["WWW-Authenticate": "Bearer"]
+          )
+      },
+      respond: respond,
+      onRunning: onRunning
+    )
+  }
+
+  /// Authentication/overload checks run before body collection, with generic HTTP rejections.
+  public func run(
+    checkAccess: @escaping @Sendable (MCP.HTTPRequest) async -> MCP.HTTPResponse?,
+    respond: @escaping @Sendable (MCP.HTTPRequest) async throws -> MCP.HTTPResponse,
+    onRunning: @escaping @Sendable () async -> Void = {}
+  ) async throws {
     let router = Router()
     router.add(
       middleware: MCPHTTPMiddleware(
-        policy: policy, authorize: authorize, respond: respond))
+        policy: policy,
+        checkAccess: checkAccess,
+        respond: respond
+      )
+    )
     let application = Application(
       router: router,
       server: .init { MCPHTTP1Channel(responder: $0) },
@@ -37,8 +62,10 @@ public struct MCPLoopbackHost: Sendable {
         address: .hostname("127.0.0.1", port: policy.port),
         backlog: 32,
         reuseAddress: false,
-        availableConnectionsDelegate: .maximum(32, logger: .init(label: "Moolah.MCP"))),
-      onServerRunning: { _ in await onRunning() })
+        availableConnectionsDelegate: .maximum(32, logger: .init(label: "Moolah.MCP"))
+      ),
+      onServerRunning: { _ in await onRunning() }
+    )
     try await application.run()
   }
 }
