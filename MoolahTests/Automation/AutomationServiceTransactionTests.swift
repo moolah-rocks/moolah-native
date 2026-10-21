@@ -19,6 +19,7 @@ struct AutomationServiceTransactionTests {
   private func makeServiceWithSession() async throws -> (AutomationService, ProfileSession) {
     let containerManager = try ProfileContainerManager.forTesting()
     let sessionManager = SessionManager(
+      resources: .disconnected,
       containerManager: containerManager,
       profileIndexRepository: containerManager.profileIndexRepositoryForTesting)
     let profile = Profile(

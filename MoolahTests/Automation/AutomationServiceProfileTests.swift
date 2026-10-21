@@ -9,6 +9,7 @@ struct AutomationServiceProfileTests {
   private func makeService() throws -> (AutomationService, SessionManager) {
     let containerManager = try ProfileContainerManager.forTesting()
     let sessionManager = SessionManager(
+      resources: .disconnected,
       containerManager: containerManager,
       profileIndexRepository: containerManager.profileIndexRepositoryForTesting)
     let service = AutomationService(sessionManager: sessionManager)

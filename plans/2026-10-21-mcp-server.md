@@ -111,3 +111,70 @@ An isolated fixture handshake does not establish these product acceptance criter
 Upstream sources: [Swift SDK 0.12.1](https://github.com/modelcontextprotocol/swift-sdk/tree/0.12.1),
 [Hummingbird 2.28.0](https://github.com/hummingbird-project/hummingbird/tree/2.28.0),
 [Streamable HTTP contract](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports).
+
+## Stage 2: authoritative reads and session ownership
+
+The transport-independent `ReadQueryRepository` supplies explicit DTOs for accounts,
+categories, earmarks, native balances, and full multi-leg transactions. All list
+limits and transaction keysets are pushed into SQLite. Transaction searches use
+an explicit bounded interval and require account/category filters to match the
+same leg; matching parents retain every leg, with `matches_filters` on each leg.
+No UI store load path is used. Notes are omitted unless explicitly requested by
+a trusted caller; the later grant layer must authorize that separate permission.
+
+Pages order lists by UUID, and transactions by date descending / UUID ascending.
+The revision combines repository lifetime, the single DatabaseQueue connection's
+write count, SQLite external-writer detection, and a canonical SHA-256 fingerprint
+of the lookup instrument DTOs plus the current profile default instrument. Any intervening write can
+expire a continuation, including sync bookkeeping; clients restart the query.
+This is a conservative invalidation policy, not a frozen cross-page snapshot.
+Native position aggregates are bounded to the selected owners and return each
+instrument separately, omit zeroed positions, and preflight at most 10,001
+contributing legs before exact aggregation or loading. Result cardinality caps fail explicitly rather than
+omitting legs or positions. Monetary quantities serialize as signed decimal
+strings at the domain's eight-place storage scale.
+
+Financial rows and their revision are read within one database read transaction.
+Canonical instrument metadata comes from the existing shared registry before
+that transaction, matching the established cross-database identity lookup
+contract; the facade does not claim a cross-database snapshot. Sync freshness
+remains unknown, with a warning that local data may not reflect other devices.
+
+`SessionManager` owns both service leases and explicit macOS-window ownership.
+A successful setup gate is distinct from a session object's existence; failed,
+initializing, signed-out, removed, and incompatible sessions cannot supply read
+access. The facade checks session identity both before and after a query.
+Closing a macOS window retains a leased session; final-owner release runs the
+existing sync/task/observation cleanup. Existing legacy cached callers retain
+their lifetime. Compatibility eviction now uses that same cleanup path even
+when no sync coordinator is present.
+
+Date-only inputs use an explicit Gregorian/POSIX calendar and timezone, inclusive
+days become a half-open instant interval using calendar arithmetic, and searches
+are capped to one calendar year. Tests include the 23-hour spring day, 25-hour
+autumn day, invalid dates, and leap-year range limits.
+
+This stage does not expose a server or tools. Per-call grant checks, signed
+cursors, price/report calculations, settings, and lifecycle wiring remain in
+the following stages.
+
+Review also hardened shared session routing: interrupted opens cannot publish a
+stale profile, legacy ownership is committed only after success, and active roots
+observe compatibility eviction. Tests and previews inject disconnected resources
+so construction does not access shared public catalogues, live HTTP, or credential
+providers. Public catalogue integration uses an explicit temporary directory.
+Literal payee search escapes SQL LIKE wildcards in both contains queries and
+prefix suggestions.
+
+Stage 2 verification: 78 targeted tests across 19 suites passed, covering read
+contracts, bounds, SQL plans, cursor revisions, session ownership, existing
+session compatibility/bootstrap, and public-catalogue composition. The iOS build
+passed and the generated-project boundary check confirms macOS-exclusive hosting.
+Full `just format-check` passed with no SwiftLint output. The warning sweep found
+no app Swift warnings; iOS emitted only the existing package AppIntents metadata
+extraction notice. Code, concurrency, database, dates, instruments, UI, and help review
+cycles addressed their findings before this stage's commit.
+
+An additional 83 tests across 15 existing automation suites passed after migrating
+their shared session fixtures to disconnected resources. Final warning-copy
+review passed, and formatting was checked again after that copy change.

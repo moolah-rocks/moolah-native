@@ -12,6 +12,7 @@ struct SessionManagerMidSessionBumpTests {
     let repository = containerManager.profileIndexRepositoryForTesting
     let coordinator = SyncCoordinator(containerManager: containerManager)
     let manager = SessionManager(
+      resources: .disconnected,
       containerManager: containerManager,
       profileIndexRepository: repository,
       syncCoordinator: coordinator)
@@ -45,13 +46,15 @@ struct SessionManagerMidSessionBumpTests {
     let repository = containerManager.profileIndexRepositoryForTesting
     let coordinator = SyncCoordinator(containerManager: containerManager)
     let manager = SessionManager(
+      resources: .disconnected,
       containerManager: containerManager,
       profileIndexRepository: repository,
       syncCoordinator: coordinator)
 
     let id = UUID()
     let bumped = Profile(
-      id: id, label: "Never opened",
+      id: id,
+      label: "Never opened",
       dataFormatVersion: DataFormatVersion.current + 1)
     try await repository.upsert(bumped)
 
@@ -66,12 +69,15 @@ struct SessionManagerMidSessionBumpTests {
     let containerManager = try ProfileContainerManager.forTesting()
     let repository = containerManager.profileIndexRepositoryForTesting
     let manager = SessionManager(
+      resources: .disconnected,
       containerManager: containerManager,
       profileIndexRepository: repository)
 
     let id = UUID()
     let staleInfo = IncompatibleProfileInfo(
-      profileLabel: "Stale", profileVersion: 9, buildVersion: 0)
+      profileLabel: "Stale",
+      profileVersion: 9,
+      buildVersion: 0)
     manager.setIncompatibleProfileForTesting(id: id, info: staleInfo)
 
     // Now store a compatible profile (e.g. after the user updates the app).
@@ -88,6 +94,7 @@ struct SessionManagerMidSessionBumpTests {
     let repository = containerManager.profileIndexRepositoryForTesting
     let coordinator = SyncCoordinator(containerManager: containerManager)
     let manager = SessionManager(
+      resources: .disconnected,
       containerManager: containerManager,
       profileIndexRepository: repository,
       syncCoordinator: coordinator)
@@ -95,7 +102,8 @@ struct SessionManagerMidSessionBumpTests {
 
     let id = UUID()
     let bumped = Profile(
-      id: id, label: "Bump",
+      id: id,
+      label: "Bump",
       dataFormatVersion: DataFormatVersion.current + 1)
     try await repository.upsert(bumped)
 

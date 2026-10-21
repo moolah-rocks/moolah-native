@@ -15,6 +15,22 @@
     @Environment(\.pendingNavigation) private var pendingNavigationBinding
     @Binding var activeSession: ProfileSession?
     @State private var incompatibleInfo: IncompatibleProfileInfo?
+    @State private var incompatibleProfileID: UUID?
+
+    private var displayedIncompatibility: IncompatibleProfileInfo? {
+      guard let profileID = profileStore.activeProfileID else { return nil }
+      let cached: SessionOpenResult? =
+        (incompatibleProfileID == profileID ? incompatibleInfo : nil)
+        .map(SessionOpenResult.incompatible)
+        ?? activeSession.map(SessionOpenResult.ready)
+      if case .incompatible(let info) = sessionManager.displayedOpenResult(
+        profileID: profileID,
+        cached: cached)
+      {
+        return info
+      }
+      return nil
+    }
 
     var body: some View {
       Group {
@@ -23,7 +39,7 @@
         // `activeSession` is only set once the user has explicitly
         // selected a profile, so the else branch naturally handles
         // the picker case.
-        if let info = incompatibleInfo {
+        if let info = displayedIncompatibility {
           IncompatibleProfileView(
             info: info,
             onCheckForUpdates: {
@@ -39,20 +55,20 @@
               incompatibleInfo = nil
             }
           )
-        } else if let session = activeSession {
+        } else if let session = activeSession, session.profile.id == profileStore.activeProfileID {
           SessionRootView(session: session)
         } else if profileStore.hasProfiles
           && profileStore.activeProfileID != nil
         {
           // Has an active profile ID but the session hasn't been
           // created yet (cloud store warming up). Brief transient.
-          ProgressView()
+          ProgressView("Opening profile…")
         } else {
           WelcomeView()
         }
       }
-      .onChange(of: profileStore.activeProfileID) { _, newID in
-        updateSession(for: newID)
+      .task(id: profileStore.activeProfile?.id) {
+        await updateSession()
       }
       .onChange(of: profileStore.activeProfile) { _, _ in
         // Metadata changes update the cached session's profile in place — no
@@ -60,18 +76,6 @@
         // changes; remote `dataFormatVersion` incompatibility is handled by
         // `SessionManager`'s index observer.
         refreshSessionProfile()
-      }
-      .onChange(of: profileStore.profiles) { _, _ in
-        // Cloud profiles may arrive late (CloudKit not ready at startup).
-        // Retry session creation once they appear.
-        if activeSession == nil, let id = profileStore.activeProfileID {
-          updateSession(for: id)
-        }
-      }
-      .onAppear {
-        if activeSession == nil, let id = profileStore.activeProfileID {
-          updateSession(for: id)
-        }
       }
       .task {
         // Register in-process entry points for App Intents so
@@ -95,22 +99,16 @@
       }
     }
 
-    private func updateSession(for profileID: UUID?) {
-      guard let profileID,
-        let profile = profileStore.profiles.first(where: { $0.id == profileID })
-      else {
-        activeSession = nil
-        incompatibleInfo = nil
-        return
-      }
-
-      // Only create a new session if profile changed
-      if activeSession?.profile.id != profileID {
-        Task {
-          let result = await sessionManager.session(for: profile)
-          applyOpenResult(result)
-        }
-      }
+    private func updateSession() async {
+      activeSession = nil
+      incompatibleInfo = nil
+      incompatibleProfileID = nil
+      guard let profile = profileStore.activeProfile else { return }
+      let result = await sessionManager.session(for: profile)
+      guard !Task.isCancelled, profileStore.activeProfileID == profile.id else { return }
+      incompatibleProfileID = profile.id
+      let displayed = sessionManager.displayedOpenResult(profileID: profile.id, cached: result)
+      applyOpenResult(displayed ?? .cancelled)
     }
 
     /// Propagates a metadata edit (e.g. label changed in Settings)
@@ -126,6 +124,11 @@
 
     private func applyOpenResult(_ result: SessionOpenResult) {
       switch result {
+      case .cancelled:
+        activeSession = nil
+        incompatibleInfo = nil
+        incompatibleProfileID = nil
+        profileStore.activeProfileID = nil
       case .ready(let session):
         activeSession = session
         incompatibleInfo = nil

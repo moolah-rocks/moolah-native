@@ -14,7 +14,9 @@ struct ProfileSessionTests {
   func createsStores() throws {
     let containerManager = try ProfileContainerManager.forTesting()
     let session = try ProfileSession(
-      profile: makeProfile(), containerManager: containerManager)
+      resources: .disconnected,
+      profile: makeProfile(),
+      containerManager: containerManager)
 
     #expect(session.authStore.state == .loading)
     #expect(session.accountStore.accounts.ordered.isEmpty)
@@ -28,7 +30,10 @@ struct ProfileSessionTests {
   func sessionIdMatchesProfile() throws {
     let containerManager = try ProfileContainerManager.forTesting()
     let profile = makeProfile()
-    let session = try ProfileSession(profile: profile, containerManager: containerManager)
+    let session = try ProfileSession(
+      resources: .disconnected,
+      profile: profile,
+      containerManager: containerManager)
 
     #expect(session.id == profile.id)
   }
@@ -38,9 +43,13 @@ struct ProfileSessionTests {
     let containerManager1 = try ProfileContainerManager.forTesting()
     let containerManager2 = try ProfileContainerManager.forTesting()
     let session1 = try ProfileSession(
-      profile: makeProfile(label: "One"), containerManager: containerManager1)
+      resources: .disconnected,
+      profile: makeProfile(label: "One"),
+      containerManager: containerManager1)
     let session2 = try ProfileSession(
-      profile: makeProfile(label: "Two"), containerManager: containerManager2)
+      resources: .disconnected,
+      profile: makeProfile(label: "Two"),
+      containerManager: containerManager2)
 
     #expect(session1.id != session2.id)
   }
@@ -53,7 +62,10 @@ struct ProfileSessionTests {
   func cloudKitProfileUsesFullConversionService() throws {
     let containerManager = try ProfileContainerManager.forTesting()
     let profile = Profile(label: "iCloud", currencyCode: "AUD", financialYearStartMonth: 7)
-    let session = try ProfileSession(profile: profile, containerManager: containerManager)
+    let session = try ProfileSession(
+      resources: .disconnected,
+      profile: profile,
+      containerManager: containerManager)
 
     #expect(session.backend.conversionService is FullConversionService)
   }
@@ -72,7 +84,9 @@ struct ProfileSessionTests {
   func setUpIsIdempotent() async throws {
     let containerManager = try ProfileContainerManager.forTesting()
     let session = try ProfileSession(
-      profile: makeProfile(), containerManager: containerManager)
+      resources: .disconnected,
+      profile: makeProfile(),
+      containerManager: containerManager)
     try await session.setUp()
     try await session.setUp()
     try await session.setUp()
@@ -85,7 +99,10 @@ struct ProfileSessionTests {
   func setUpBootstrapsImplicitDefaultTaxOwner() async throws {
     let containerManager = try ProfileContainerManager.forTesting()
     let profile = makeProfile(label: "Family")
-    let session = try ProfileSession(profile: profile, containerManager: containerManager)
+    let session = try ProfileSession(
+      resources: .disconnected,
+      profile: profile,
+      containerManager: containerManager)
 
     try await session.setUp()
 
@@ -98,7 +115,10 @@ struct ProfileSessionTests {
   func cloudKitProfileExposesCryptoTokenStore() throws {
     let containerManager = try ProfileContainerManager.forTesting()
     let profile = Profile(label: "iCloud", currencyCode: "AUD", financialYearStartMonth: 7)
-    let session = try ProfileSession(profile: profile, containerManager: containerManager)
+    let session = try ProfileSession(
+      resources: .disconnected,
+      profile: profile,
+      containerManager: containerManager)
 
     // Store exists and starts empty (registrations load on demand).
     #expect(session.cryptoTokenStore?.registrations.isEmpty == true)
@@ -118,19 +138,29 @@ struct ProfileSessionTests {
   func fallbackSessionResolvesCryptoRegistryStatus() async throws {
     let containerManager = try ProfileContainerManager.forTesting()
     let profile = Profile(label: "iCloud", currencyCode: "AUD", financialYearStartMonth: 7)
-    let session = try ProfileSession(profile: profile, containerManager: containerManager)
+    let session = try ProfileSession(
+      resources: .disconnected,
+      profile: profile,
+      containerManager: containerManager)
 
     let eth = Instrument.crypto(
-      chainId: 1, contractAddress: nil, symbol: "ETH", name: "Ethereum", decimals: 18)
+      chainId: 1,
+      contractAddress: nil,
+      symbol: "ETH",
+      name: "Ethereum",
+      decimals: 18)
     let mapping = CryptoProviderMapping(
-      instrumentId: eth.id, coingeckoId: "ethereum",
+      instrumentId: eth.id,
+      coingeckoId: "ethereum",
       binanceSymbol: "ETHUSDT")
     let registry = try #require(session.instrumentRegistry)
     try await registry.registerCrypto(eth, mapping: mapping, forcingStatus: .spam)
 
     let amount = InstrumentAmount(quantity: dec("1"), instrument: eth)
     let result = try await session.backend.conversionService.convertResult(
-      amount, to: profile.instrument, on: Date())
+      amount,
+      to: profile.instrument,
+      on: Date())
 
     #expect(result == .knownZero(targetInstrument: profile.instrument))
   }

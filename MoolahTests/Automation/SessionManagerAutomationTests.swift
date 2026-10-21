@@ -9,6 +9,7 @@ struct SessionManagerAutomationTests {
   private func makeManager() throws -> SessionManager {
     let containerManager = try ProfileContainerManager.forTesting()
     return SessionManager(
+      resources: .disconnected,
       containerManager: containerManager,
       profileIndexRepository: containerManager.profileIndexRepositoryForTesting)
   }

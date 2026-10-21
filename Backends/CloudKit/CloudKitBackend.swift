@@ -7,6 +7,7 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
   let accountGroups: any AccountGroupRepository
   let insightDismissals: any InsightDismissalRepository
   let insightDisplayHistory: any InsightDisplayHistoryRepository
+  let readQueries: (any ReadQueryRepository)?
   let transactions: any TransactionRepository
   let categories: any CategoryRepository
   let taxOwners: any TaxOwnerRepository
@@ -132,6 +133,8 @@ final class CloudKitBackend: BackendProvider, @unchecked Sendable {
     instrumentRegistry: GRDBInstrumentRegistryRepository,
     hooks: CloudKitBackendHooks = .noop
   ) {
+    self.readQueries = GRDBReadQueryRepository(
+      database: database, instrumentResolver: instrumentRegistry, defaultInstrument: instrument)
     self.auth = CloudKitAuthProvider(profileLabel: profileLabel)
     let repos = Self.makeRepositories(
       environment: GRDBRepositoryEnvironment(

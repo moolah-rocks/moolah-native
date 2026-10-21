@@ -33,19 +33,20 @@ extension ProfileSession {
     database: DatabaseQueue?,
     profile: Profile,
     containerManager: ProfileContainerManager?,
-    override networking: NetworkingServices?,
-    syncCoordinator: SyncCoordinator?
+    syncCoordinator: SyncCoordinator?,
+    resources: ProfileSessionResources
   ) throws -> InitInfrastructure {
     let resolvedDatabase = try Self.resolveDatabase(
       override: database, profile: profile, containerManager: containerManager)
-    let resolvedNetworking = syncCoordinator?.sharedNetworking ?? networking ?? NetworkingServices()
+    let resolvedNetworking = syncCoordinator?.sharedNetworking ?? resources.networking
     let fallbackMetadataLookup = LateBoundCryptoMetadataLookup()
     let marketData =
       syncCoordinator?.sharedMarketData
       ?? Self.makeMarketDataServices(
         database: resolvedDatabase,
         networking: resolvedNetworking,
-        cryptoMetadataLookup: fallbackMetadataLookup.lookup)
+        cryptoMetadataLookup: fallbackMetadataLookup.lookup,
+        resources: resources)
     return InitInfrastructure(
       database: resolvedDatabase,
       networking: resolvedNetworking,
@@ -67,7 +68,8 @@ extension ProfileSession {
   static func makeMarketDataServices(
     database: any DatabaseWriter,
     networking: NetworkingServices,
-    cryptoMetadataLookup: @escaping CryptoMetadataLookup = { _ in nil }
+    cryptoMetadataLookup: @escaping CryptoMetadataLookup = { _ in nil },
+    resources: ProfileSessionResources = .live
   ) -> MarketDataServices {
     let yahooClient = YahooFinanceClient(
       http: networking.client(forHost: "query2.finance.yahoo.com"))
@@ -75,12 +77,14 @@ extension ProfileSession {
     // after this wiring is built takes effect on the next price fetch / token
     // resolution / catalog refresh without rebuilding the session — every
     // consumer reads the key per request through this provider.
-    let cgKeyProvider: @Sendable () -> String? = { ProfileSession.resolveCoinGeckoApiKey() }
+    let cgKeyProvider = resources.coinGeckoAPIKey
     // Read-only handle to the shared CoinGecko catalog so the discovery token
     // resolver can price a known token offline (see `makeLookupCatalog`).
     let lookupCatalog = Self.makeLookupCatalog(
-      coinGeckoApiKeyProvider: cgKeyProvider, networking: networking)
-    let defiLlamaSupportCache = Self.makeDefiLlamaSupportCache(networking: networking)
+      coinGeckoApiKeyProvider: cgKeyProvider, networking: networking,
+      directory: resources.catalogDirectory)
+    let defiLlamaSupportCache = Self.makeDefiLlamaSupportCache(
+      networking: networking, directory: resources.catalogDirectory)
     return MarketDataServices(
       exchangeRate: ExchangeRateService(
         client: FrankfurterClient(

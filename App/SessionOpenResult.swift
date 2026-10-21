@@ -21,5 +21,6 @@ struct IncompatibleProfileInfo: Equatable, Sendable {
 /// registered with `SyncCoordinator` (issue #764).
 enum SessionOpenResult {
   case ready(ProfileSession)
+  case cancelled
   case incompatible(IncompatibleProfileInfo)
 }

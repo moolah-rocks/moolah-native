@@ -11,6 +11,7 @@ struct DataFormatVersionBumpTests {
     let repository = containerManager.profileIndexRepositoryForTesting
     return (
       SessionManager(
+        resources: .disconnected,
         containerManager: containerManager,
         profileIndexRepository: repository),
       repository
@@ -22,7 +23,8 @@ struct DataFormatVersionBumpTests {
     let (manager, repo) = try makeFixture()
     let id = UUID()
     let profile = Profile(
-      id: id, label: "Test",
+      id: id,
+      label: "Test",
       dataFormatVersion: max(DataFormatVersion.current - 1, 0))
     try await repo.upsert(profile)
 
@@ -37,7 +39,9 @@ struct DataFormatVersionBumpTests {
     let (manager, repo) = try makeFixture()
     let id = UUID()
     let profile = Profile(
-      id: id, label: "Test", dataFormatVersion: DataFormatVersion.current)
+      id: id,
+      label: "Test",
+      dataFormatVersion: DataFormatVersion.current)
     try await repo.upsert(profile)
 
     _ = await manager.session(for: profile)
@@ -51,7 +55,8 @@ struct DataFormatVersionBumpTests {
     let (manager, repo) = try makeFixture()
     let id = UUID()
     let profile = Profile(
-      id: id, label: "Test",
+      id: id,
+      label: "Test",
       dataFormatVersion: max(DataFormatVersion.current - 1, 0))
     try await repo.upsert(profile)
 

@@ -11,6 +11,7 @@ struct AutomationServiceMergeTransactionsTests {
   private func makeServiceWithSession() async throws -> (AutomationService, ProfileSession) {
     let containerManager = try ProfileContainerManager.forTesting()
     let sessionManager = SessionManager(
+      resources: .disconnected,
       containerManager: containerManager,
       profileIndexRepository: containerManager.profileIndexRepositoryForTesting)
     let profile = Profile(label: "Test", currencyCode: "AUD", financialYearStartMonth: 7)

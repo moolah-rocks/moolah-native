@@ -12,6 +12,8 @@ protocol BackendProvider: Sendable {
   /// Per-device semantic display history that rotates the For You batch.
   var insightDisplayHistory: any InsightDisplayHistoryRepository { get }
   var transactions: any TransactionRepository { get }
+  /// Bounded automation reads, absent when a backend cannot provide authoritative snapshots.
+  var readQueries: (any ReadQueryRepository)? { get }
   var categories: any CategoryRepository { get }
   var taxOwners: any TaxOwnerRepository { get }
   var transferSuggestions: any TransferSuggestionRepository { get }
@@ -56,6 +58,8 @@ protocol BackendProvider: Sendable {
 }
 
 extension BackendProvider {
+  var readQueries: (any ReadQueryRepository)? { nil }
+
   /// Default for backends without a shared instrument registry. Only a
   /// backend that actually owns one (production `CloudKitBackend`)
   /// overrides this — keeps the blast radius of the seam to a single

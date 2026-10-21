@@ -22,6 +22,7 @@
     private func makeHarness() throws -> Harness {
       let containerManager = try ProfileContainerManager.forTesting()
       let sessionManager = SessionManager(
+        resources: .disconnected,
         containerManager: containerManager,
         profileIndexRepository: containerManager.profileIndexRepositoryForTesting)
       let defaults = try #require(UserDefaults(suiteName: "test-\(UUID().uuidString)"))
@@ -161,6 +162,7 @@
     func importThrowsWithoutProfileStore() async throws {
       let containerManager = try ProfileContainerManager.forTesting()
       let sessionManager = SessionManager(
+        resources: .disconnected,
         containerManager: containerManager,
         profileIndexRepository: containerManager.profileIndexRepositoryForTesting)
       let service = AutomationService(sessionManager: sessionManager)
