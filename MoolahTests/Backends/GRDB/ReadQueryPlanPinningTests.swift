@@ -161,7 +161,9 @@ extension ReadQueryPlanPinningTests {
     let detail = try PlanPinningTestHelpers.planDetail(
       database,
       query: GRDBReadQueryRepository.summaryFlowSQL,
-      arguments: StatementArguments(["from": Date.distantPast, "through": Date.distantFuture])
+      arguments: StatementArguments([
+        "from": Date.distantPast, "through": Date.distantFuture, "maximum": 250_001,
+      ])
     )
     let parent = try #require(detail.range(of: "SEARCH txn USING INDEX transaction_by_date"))
     let legs = try #require(detail.range(of: "SEARCH leg USING INDEX leg_by_transaction"))
@@ -195,5 +197,28 @@ extension ReadQueryPlanPinningTests {
     #expect(detail.contains("SEARCH account USING"), "\(detail)")
     #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "account"))
     #expect(!detail.contains("USE TEMP B-TREE"), "\(detail)")
+  }
+}
+
+extension ReadQueryPlanPinningTests {
+  @Test(arguments: [ReadPositionOwner.account, .earmark])
+  func streamingPositionsSearchOwnersBeforeTransactions(owner: ReadPositionOwner) throws {
+    let queue = try PlanPinningTestHelpers.makeDatabase()
+    let detail = try queue.read { database in
+      let statement = try GRDBReadQueryRepository.positionRequest(ids: [UUID()], owner: owner)
+        .makePreparedRequest(database, forSingleResult: false).statement
+      let sql: SQL = "EXPLAIN QUERY PLAN \(sql: statement.sql, arguments: statement.arguments)"
+      return try SQLRequest<Row>(literal: sql).fetchAll(database)
+        .compactMap { $0["detail"] as String? }.joined(separator: "; ")
+    }
+    #expect(
+      detail.contains("SEARCH leg USING INDEX")
+        || detail.contains("SEARCH leg USING COVERING INDEX"),
+      "\(detail)"
+    )
+    #expect(detail.contains("SEARCH txn USING INDEX"), "\(detail)")
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "leg"))
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "txn"))
+    #expect(!detail.contains("USE TEMP B-TREE"))
   }
 }

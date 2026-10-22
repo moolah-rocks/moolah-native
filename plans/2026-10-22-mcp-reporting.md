@@ -48,3 +48,17 @@ pass, including 501-account traversal, sentinel isolation, complete selected-ID
 validation, exact production query-plan pins, and cursor invalidation after data
 or filter changes. iOS build, full formatting/strict lint and compiler warning
 sweep pass. Code, concurrency, database, instruments and help reviews are clear.
+
+Step 3 complete: balances, earmarks and report flows stream raw rows inside one
+read snapshot and fold exact Decimal quantities. Work is capped at 250,000 raw
+legs (including exclusions); 10,000 monotonic calculation groups separately
+bound memory and match output-array schemas. Encoded responses retain their
+separate transport limits. Transaction-detail responses retain their raw-leg cap.
+48 tests across ten suites pass, including dense histories, totals beyond SQLite
+Int64 SUM range, raw/excluded-row and key bounds, cancellation checkpoints,
+exact query plans and three-zone month/UTC-day boundaries. The 250,000-leg
+read-only probes took 0.87 seconds for balances and 1.66 seconds for summary
+folding on this Mac (queue occupancy, excluding seeding and conversion). These
+measurements support the bounded ceiling; they are not a cross-device guarantee.
+iOS build, strict lint, formatting and warning sweep pass. Required code,
+concurrency, database, instruments, datetime and copy reviews are clear.
