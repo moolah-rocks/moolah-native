@@ -30,7 +30,8 @@ enum MCPToolDefinition: String, CaseIterable, Sendable {
     case .profiles: return ["time_zone"]
     case .status: break
     case .accounts: result.formUnion(["include_hidden", "limit", "cursor"])
-    case .balances: result.formUnion(["account_ids", "as_of", "reporting_instrument"])
+    case .balances:
+      result.formUnion(["account_ids", "as_of", "reporting_instrument", "limit", "cursor", "mode"])
     case .transactions:
       result.formUnion([
         "from_date", "to_date", "account_ids", "category_ids", "payee_query", "scheduled",

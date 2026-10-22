@@ -32,7 +32,9 @@ extension GRDBReadQueryRepository {
       database: database,
       instruments: instruments
     )
-    return accounts.map { ReadBalanceInput(accountID: $0.id, positions: positions[$0.id] ?? []) }
+    return accounts.map {
+      ReadBalanceInput(accountID: $0.id, positions: positions[$0.id] ?? [], accountName: $0.name)
+    }
   }
 
   /// The date-bounded outer loop avoids scanning lifetime leg history for a narrow query.

@@ -3,7 +3,7 @@ import Foundation
 extension MoolahReadQueryService {
   func valuedBalances(
     profileID: UUID,
-    accountIDs: Set<UUID>,
+    query: ReadBalanceQuery,
     reportingInstrument: Instrument?,
     timeZone: TimeZone
   ) async throws -> ReadQueryResponse<ReadValuedBalanceDTO> {
@@ -11,9 +11,14 @@ extension MoolahReadQueryService {
       profileID: profileID,
       reportingInstrument: reportingInstrument,
       timeZone: timeZone,
-      read: { try await $0.balanceInputs(accountIDs: accountIDs) },
+      read: { try await $0.balanceInputs(accountIDs: query.accountIDs, page: query.page) },
       transform: { inputs, calculation, target, date in
-        let (items, warnings) = try await calculation.balances(inputs, target: target, on: date)
+        let (items, warnings) = try await calculation.balances(
+          inputs,
+          target: target,
+          on: date,
+          includePositions: query.includePositions
+        )
         return ReadCalculatedItems(items: items, warnings: warnings)
       }
     )
@@ -89,7 +94,7 @@ extension MoolahReadQueryService {
           ] + result.warnings
         ),
         items: result.items,
-        nextKey: nil
+        nextKey: page.nextKey
       )
     } catch is CancellationError { throw CancellationError() } catch let error as ReadQueryError {
       throw error

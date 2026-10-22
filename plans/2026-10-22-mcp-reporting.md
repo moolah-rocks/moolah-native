@@ -40,3 +40,11 @@ wire omission and unchanged flow classifications/plans. iOS build, full formatti
 and strict lint pass. Code, concurrency, database, instruments and help reviews have
 no remaining findings. Net worth remains bounded by the existing limits when
 explicitly requested; later steps address those limits independently.
+
+Step 2 complete: account UUID cursors automatically traverse the full profile,
+including more than 500 accounts. Compact account_totals retains identical
+valuations and clearly marks positions as omitted. 37 tests across seven suites
+pass, including 501-account traversal, sentinel isolation, complete selected-ID
+validation, exact production query-plan pins, and cursor invalidation after data
+or filter changes. iOS build, full formatting/strict lint and compiler warning
+sweep pass. Code, concurrency, database, instruments and help reviews are clear.

@@ -132,16 +132,19 @@ struct ReadFinancialCalculationService: Sendable {
     )
   }
 
-  func warnings(_ values: [ReadValuation]) -> [String] {
+  func warnings(_ values: [ReadValuation], originalAmountsIncluded: Bool = true) -> [String] {
     var result: [String] = []
     if values.contains(where: { $0.amount == nil }) {
       result.append(
-        "Some prices are unavailable, so related reporting totals are unavailable. Amounts in their original currencies or assets remain complete."
+        "Some prices are unavailable, so related reporting totals are unavailable."
+          + (originalAmountsIncluded
+            ? " Amounts in their original currencies or assets remain complete." : "")
       )
     }
     if values.contains(where: { $0.status == "known_zero_by_policy" }) {
       result.append(
-        "Moolah’s pricing rules assign some assets a reporting value of zero. Their original amounts remain in the results."
+        "Moolah’s pricing rules assign some assets a reporting value of zero."
+          + (originalAmountsIncluded ? " Their original amounts remain in the results." : "")
       )
     }
     if values.contains(where: { $0.status == "priced" }) {

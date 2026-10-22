@@ -17,11 +17,15 @@ struct ReadValuedPositionDTO: Codable, Sendable {
   let valuation: ReadValuationDTO
 }
 
-/// Includes every requested account, with each instrument valued separately and a complete-only total.
+/// One account from a requested page. Detailed mode includes each position; compact mode
+/// marks position details as omitted. Both modes retain the same complete-only reporting total.
 struct ReadValuedBalanceDTO: Codable, Sendable {
   let accountID: UUID
   let positions: [ReadValuedPositionDTO]
   let total: ReadValuationDTO
+  let accountName: String?
+  let positionsIncluded: Bool
+
 }
 
 /// Report signs are preserved: spending is normally negative, refunds can be positive.

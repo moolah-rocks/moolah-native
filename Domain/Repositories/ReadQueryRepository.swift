@@ -21,7 +21,9 @@ protocol ReadQueryRepository: Sendable {
   ) async throws -> ReadPage<ReadTransactionDTO>
   func balances(accountIDs: Set<UUID>) async throws -> ReadPage<ReadBalanceDTO>
   /// Canonical inputs for valuation; implementations preserve the same bounded snapshot contract.
-  func balanceInputs(accountIDs: Set<UUID>) async throws -> ReadPage<ReadBalanceInput>
+  func balanceInputs(accountIDs: Set<UUID>, page: ReadPageRequest) async throws -> ReadPage<
+    ReadBalanceInput
+  >
   /// Always reads Reports income/expense flows. Current positions are read in the same
   /// snapshot only when includeNetWorth is explicitly true; false skips lifetime history.
   func summaryInputs(range: ReadDateRange, includeNetWorth: Bool) async throws
@@ -29,6 +31,10 @@ protocol ReadQueryRepository: Sendable {
 }
 
 extension ReadQueryRepository {
+  func balanceInputs(accountIDs: Set<UUID>) async throws -> ReadPage<ReadBalanceInput> {
+    try await balanceInputs(accountIDs: accountIDs, page: ReadPageRequest(limit: 500))
+  }
+
   func summaryInputs(range: ReadDateRange) async throws -> ReadSummarySnapshot {
     try await summaryInputs(range: range, includeNetWorth: false)
   }

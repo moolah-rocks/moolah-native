@@ -211,3 +211,61 @@ extension MCPToolRegistryTests {
     #expect(requestedItem["current_net_worth"] is [String: Any])
   }
 }
+
+extension MCPToolRegistryTests {
+  @Test
+  func balancePagesSupportCompactTotalsAndAccountNames() async throws {
+    let fixture = try await balanceFixture()
+    defer { fixture.manager.removeSession(for: fixture.profile.id) }
+    var arguments = fixture.arguments
+    arguments["limit"] = .int(1)
+    arguments["mode"] = .string("account_totals")
+    let first = try object(
+      await fixture.registry.call(.balances, context: fixture.context, arguments: arguments)
+    )
+    let item = try #require((first["items"] as? [[String: Any]])?.first)
+    #expect(item["positions_included"] as? Bool == false)
+    #expect((item["positions"] as? [Any])?.isEmpty == true)
+    #expect(item["account_name"] is String)
+    arguments["cursor"] = .string(try #require(first["next_cursor"] as? String))
+    let second = try object(
+      await fixture.registry.call(.balances, context: fixture.context, arguments: arguments)
+    )
+    #expect(second["has_more"] as? Bool == false)
+  }
+
+  @Test(arguments: ["mode", "reporting_instrument", "account_ids", "write"])
+  func balanceCursorsRejectChangedFiltersOrData(change: String) async throws {
+    let fixture = try await balanceFixture()
+    defer { fixture.manager.removeSession(for: fixture.profile.id) }
+    var arguments = fixture.arguments
+    arguments["limit"] = .int(1)
+    let first = try object(
+      await fixture.registry.call(.balances, context: fixture.context, arguments: arguments)
+    )
+    arguments["cursor"] = .string(try #require(first["next_cursor"] as? String))
+    switch change {
+    case "mode": arguments[change] = .string("account_totals")
+    case "reporting_instrument": arguments[change] = .string("USD")
+    case "account_ids": arguments[change] = .array([.string(UUID().uuidString)])
+    default:
+      _ = try await fixture.session.backend.accounts.create(
+        Account(name: "New", type: .bank, instrument: fixture.profile.instrument)
+      )
+    }
+    await #expect(throws: MCPAccessFailure.cursorExpired) {
+      try await fixture.registry.call(.balances, context: fixture.context, arguments: arguments)
+    }
+  }
+
+  private func balanceFixture() async throws -> Fixture {
+    let fixture = try await fixture()
+    for name in ["First", "Second"] {
+      _ = try await fixture.session.backend.accounts.create(
+        Account(name: name, type: .bank, instrument: fixture.profile.instrument)
+      )
+    }
+    return fixture
+  }
+
+}

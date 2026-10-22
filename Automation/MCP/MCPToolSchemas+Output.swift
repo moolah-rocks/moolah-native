@@ -128,13 +128,13 @@ extension MCPToolSchemas {
   private static var balance: MCPToolValue {
     object(
       [
-        "account_id": uuid,
+        "account_id": uuid, "account_name": nullable(string), "positions_included": boolean,
         "positions": array(
           object(["native": quantity, "valuation": valuation], required: ["native", "valuation"])
         ),
         "total": valuation,
       ],
-      required: ["account_id", "positions", "total"]
+      required: ["account_id", "positions", "positions_included", "total"]
     )
   }
 
