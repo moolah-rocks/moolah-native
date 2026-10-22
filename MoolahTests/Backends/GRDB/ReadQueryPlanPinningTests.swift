@@ -171,3 +171,29 @@ extension ReadQueryPlanPinningTests {
     #expect(!detail.contains("USE TEMP B-TREE"))
   }
 }
+
+extension ReadQueryPlanPinningTests {
+  @Test(arguments: ["validation", "filtered", "unfiltered"])
+  func balanceAccountRequestsUsePrimaryKeySearch(variant: String) throws {
+    let database = try PlanPinningTestHelpers.makeDatabase()
+    let ids: Set<UUID> = [UUID(), UUID()]
+    let detail = try database.read { database in
+      let statement: Statement
+      if variant == "validation" {
+        statement = try GRDBReadQueryRepository.balanceAccountCountRequest(accountIDs: ids)
+          .makePreparedRequest(database, forSingleResult: false).statement
+      } else {
+        statement = try GRDBReadQueryRepository.balanceAccountRequest(
+          accountIDs: variant == "filtered" ? ids : [],
+          after: ReadPageKey(id: UUID())
+        ).limit(101).makePreparedRequest(database, forSingleResult: false).statement
+      }
+      let sql: SQL = "EXPLAIN QUERY PLAN \(sql: statement.sql, arguments: statement.arguments)"
+      return try SQLRequest<Row>(literal: sql).fetchAll(database)
+        .compactMap { $0["detail"] as String? }.joined(separator: "; ")
+    }
+    #expect(detail.contains("SEARCH account USING"), "\(detail)")
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "account"))
+    #expect(!detail.contains("USE TEMP B-TREE"), "\(detail)")
+  }
+}

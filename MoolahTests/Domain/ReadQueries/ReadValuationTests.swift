@@ -173,11 +173,13 @@ extension ReadValuationTests {
       [
         ReadBalanceInput(
           accountID: first,
-          positions: [InstrumentAmount(quantity: 3, instrument: usd)]
+          positions: [InstrumentAmount(quantity: 3, instrument: usd)],
+          accountName: nil
         ),
         ReadBalanceInput(
           accountID: second,
-          positions: [InstrumentAmount(quantity: 7, instrument: stock)]
+          positions: [InstrumentAmount(quantity: 7, instrument: stock)],
+          accountName: nil
         ),
       ],
       target: aud,
@@ -189,5 +191,34 @@ extension ReadValuationTests {
     #expect(items[0].total.value?.quantity == "6")
     #expect(items[1].total.value == nil)
     #expect(items[1].positions[0].native.quantity == "7")
+  }
+}
+
+extension ReadValuationTests {
+  @Test
+  func compactAccountTotalsOmitPositionDetailsWithoutChangingTheTotal() async throws {
+    let calculation = ReadFinancialCalculationService(
+      conversion: FakeConversionService.fixedRates(["USD": 2])
+    )
+    let inputs = [
+      ReadBalanceInput(
+        accountID: UUID(),
+        positions: [InstrumentAmount(quantity: 3, instrument: usd)],
+        accountName: "Fixture"
+      )
+    ]
+    let (detailed, _) = try await calculation.balances(inputs, target: aud, on: instant)
+    let (compact, _) = try await calculation.balances(
+      inputs,
+      target: aud,
+      on: instant,
+      includePositions: false
+    )
+    #expect(detailed[0].total.value?.quantity == "6")
+    #expect(compact[0].total.value?.quantity == "6")
+    #expect(compact[0].positions.isEmpty)
+    #expect(!compact[0].positionsIncluded)
+    #expect(detailed[0].positionsIncluded)
+    #expect(compact[0].accountName == "Fixture")
   }
 }

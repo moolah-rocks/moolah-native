@@ -10,13 +10,31 @@ extension MCPToolRegistry {
   ) async throws -> MCPToolResult {
     // Historical balances are deliberately unsupported; never return a current value labelled as historical.
     if input.values["as_of"] != nil { throw MCPAccessFailure.unsupported }
+    let mode = try input.string("mode") ?? "positions"
+    guard ["positions", "account_totals"].contains(mode) else { throw MCPAccessFailure.unsupported }
+    let accountIDs = try input.ids("account_ids")
+    let target = try reportingInstrument(input)
+    var filters = MCPPageFilters(limit: try input.limit(), timeZone: timeZone.identifier)
+    filters.accountIDs = accountIDs.sorted { $0.uuidString < $1.uuidString }
+    filters.reportingInstrument = target?.id
+    filters.balanceMode = mode
+    let binding = try cursorBinding(
+      tool: .balances,
+      profileID: profileID,
+      context: context,
+      filters: filters
+    )
     let page = try await service.valuedBalances(
       profileID: profileID,
-      accountIDs: input.ids("account_ids"),
-      reportingInstrument: reportingInstrument(input),
+      query: ReadBalanceQuery(
+        accountIDs: accountIDs,
+        page: pageRequest(input: input, binding: binding, limit: filters.limit),
+        includePositions: mode == "positions"
+      ),
+      reportingInstrument: target,
       timeZone: timeZone
     )
-    return try await encode(page: page, context: context)
+    return try await encode(page: page, context: context, binding: binding)
   }
 
   func summary(

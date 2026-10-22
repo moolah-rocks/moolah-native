@@ -4,6 +4,8 @@ import Foundation
 struct ReadBalanceInput: Sendable {
   let accountID: UUID
   let positions: [InstrumentAmount]
+  let accountName: String?
+
 }
 
 /// A posted report leg from one bounded profile-database snapshot.

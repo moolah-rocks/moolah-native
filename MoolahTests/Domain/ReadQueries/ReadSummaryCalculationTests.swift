@@ -58,11 +58,13 @@ struct ReadSummaryCalculationTests {
           positions: [
             InstrumentAmount(quantity: 80, instrument: aud),
             InstrumentAmount(quantity: 10, instrument: usd),
-          ]
+          ],
+          accountName: nil
         ),
         ReadBalanceInput(
           accountID: UUID(),
-          positions: [InstrumentAmount(quantity: -5, instrument: usd)]
+          positions: [InstrumentAmount(quantity: -5, instrument: usd)],
+          accountName: nil
         ),
       ]),
       revision: "fixture",

@@ -15,41 +15,63 @@ extension GRDBReadQueryRepository {
       },
       revision: input.revision,
       queriedAt: input.queriedAt,
-      nextKey: nil
+      nextKey: input.nextKey
     )
   }
 
-  func balanceInputs(accountIDs: Set<UUID>) async throws -> ReadPage<ReadBalanceInput> {
+  func balanceInputs(accountIDs: Set<UUID>, page: ReadPageRequest) async throws -> ReadPage<
+    ReadBalanceInput
+  > {
     guard accountIDs.count <= 500 else { throw ReadQueryError.invalidFilter }
     let instruments = try await instrumentResolver.instrumentMap()
     let fingerprint = try self.instrumentFingerprint(instruments)
     return try await database.read { database in
-      let revision = try self.revision(in: database, fingerprint: fingerprint)
-      var request = AccountRow.order(AccountRow.Columns.id.asc)
+      let revision = try self.revision(in: database, fingerprint: fingerprint, page: page)
+      let request = Self.balanceAccountRequest(accountIDs: accountIDs, after: page.after)
       if !accountIDs.isEmpty {
-        request = request.filter(accountIDs.contains(AccountRow.Columns.id))
+        guard
+          try Self.balanceAccountCountRequest(accountIDs: accountIDs).fetchOne(database)
+            == accountIDs.count
+        else {
+          throw ReadQueryError.notFound
+        }
       }
-      let rows = try request.limit(501).fetchAll(database)
-      guard rows.count <= 500 else { throw ReadQueryError.resultTooLarge }
-      let ids = Set(rows.map(\.id))
-      guard accountIDs.isSubset(of: ids) else { throw ReadQueryError.notFound }
+      let rows = try request.limit(page.limit + 1).fetchAll(database)
+      let selected = Array(rows.prefix(page.limit))
+      let ids = Set(selected.map(\.id))
       let positions = try self.accountPositionAmounts(
         ids: ids,
         database: database,
         instruments: instruments
       )
       return ReadPage(
-        items: rows.map {
+        items: selected.map {
           ReadBalanceInput(
             accountID: $0.id,
-            positions: positions[$0.id] ?? []
+            positions: positions[$0.id] ?? [],
+            accountName: $0.name
           )
         },
         revision: revision,
         queriedAt: self.now(),
-        nextKey: nil
+        nextKey: rows.count > page.limit ? selected.last.map { ReadPageKey(id: $0.id) } : nil
       )
     }
+  }
+
+  static func balanceAccountCountRequest(accountIDs: Set<UUID>) -> QueryInterfaceRequest<Int> {
+    balanceAccountRequest(accountIDs: accountIDs, after: nil)
+      .select(count(AccountRow.Columns.id), as: Int.self)
+  }
+
+  static func balanceAccountRequest(
+    accountIDs: Set<UUID>,
+    after: ReadPageKey?
+  ) -> QueryInterfaceRequest<AccountRow> {
+    var request = AccountRow.order(AccountRow.Columns.id.asc)
+    if !accountIDs.isEmpty { request = request.filter(accountIDs.contains(AccountRow.Columns.id)) }
+    if let after { request = request.filter(AccountRow.Columns.id > after.id) }
+    return request
   }
 
   func accountPositionAmounts(

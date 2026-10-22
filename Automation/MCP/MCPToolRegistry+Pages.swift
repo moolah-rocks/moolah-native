@@ -13,6 +13,8 @@ struct MCPPageFilters: Codable, Sendable {
   var payeeQuery: String?
   var scheduled = false
   var includeNotes = false
+  var reportingInstrument: String?
+  var balanceMode = "positions"
 }
 
 extension MCPToolRegistry {
@@ -97,7 +99,7 @@ extension MCPToolRegistry {
     return try await encode(page: page, context: context, binding: binding)
   }
 
-  private func cursorBinding(
+  func cursorBinding(
     tool: MCPToolDefinition,
     profileID: UUID,
     context: MCPAuthorizationContext,
@@ -113,7 +115,7 @@ extension MCPToolRegistry {
     )
   }
 
-  private func pageRequest(
+  func pageRequest(
     input: MCPToolArguments,
     binding: MCPCursorBinding,
     limit: Int
