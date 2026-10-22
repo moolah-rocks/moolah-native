@@ -15,7 +15,6 @@ struct MCPSettingsView: View {
       serverSection
       integrationsSection
       readinessSection
-      MCPSetupHelpView(endpoint: controller.endpoint)
       historySection
     }
     .formStyle(.grouped)
