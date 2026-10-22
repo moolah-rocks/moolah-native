@@ -38,7 +38,10 @@ enum MCPToolDefinition: String, CaseIterable, Sendable {
       ])
     case .transaction: result.formUnion(["transaction_id", "include_notes"])
     case .categories, .earmarks: result.formUnion(["limit", "cursor"])
-    case .summary: result.formUnion(["from_date", "to_date", "group_by", "reporting_instrument"])
+    case .summary:
+      result.formUnion([
+        "from_date", "to_date", "group_by", "reporting_instrument", "include_net_worth",
+      ])
     }
     return result
   }

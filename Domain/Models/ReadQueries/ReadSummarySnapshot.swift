@@ -14,10 +14,16 @@ struct ReadSummaryFlow: Sendable {
   let amount: InstrumentAmount
 }
 
-/// Flows and current posted positions share one database snapshot, excluding scheduled entries.
+/// Requested flows and optional current positions share one database snapshot, excluding scheduled entries.
 struct ReadSummarySnapshot: Sendable {
   let flows: [ReadSummaryFlow]
-  let balances: [ReadBalanceInput]
+  let netWorth: ReadNetWorthInput
   let revision: String
   let queriedAt: Date
+}
+
+/// Omission is distinct from an explicitly requested empty portfolio.
+enum ReadNetWorthInput: Sendable {
+  case omitted
+  case requested([ReadBalanceInput])
 }

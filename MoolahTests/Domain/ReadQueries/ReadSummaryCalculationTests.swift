@@ -22,8 +22,8 @@ struct ReadSummaryCalculationTests {
     )
     #expect(result.reportingIncome.value?.quantity == "120")
     #expect(result.reportingSpending.value?.quantity == "-35")
-    #expect(result.currentNetWorth.value?.quantity == "100")
-    #expect(result.currentNetWorth.requestedAt == current)
+    #expect(result.currentNetWorth?.value?.quantity == "100")
+    #expect(result.currentNetWorth?.requestedAt == current)
     #expect(result.reportingIncome.requestedAt == nil)
     #expect(result.income.map(\.quantity) == ["100", "10"])
     #expect(result.spending.map(\.quantity) == ["-20", "-5"])
@@ -52,7 +52,7 @@ struct ReadSummaryCalculationTests {
           amount: InstrumentAmount(quantity: Decimal(quantity), instrument: instrument)
         )
       },
-      balances: [
+      netWorth: .requested([
         ReadBalanceInput(
           accountID: UUID(),
           positions: [
@@ -64,7 +64,7 @@ struct ReadSummaryCalculationTests {
           accountID: UUID(),
           positions: [InstrumentAmount(quantity: -5, instrument: usd)]
         ),
-      ],
+      ]),
       revision: "fixture",
       queriedAt: current
     )
@@ -96,7 +96,7 @@ extension ReadSummaryCalculationTests {
           amount: InstrumentAmount(quantity: 1, instrument: usd)
         )
       },
-      balances: [],
+      netWorth: .requested([]),
       revision: "fixture",
       queriedAt: after
     )
@@ -107,5 +107,31 @@ extension ReadSummaryCalculationTests {
     )
     #expect(result.reportingIncome.value?.quantity == "5")
     #expect(conversion.recordedBatches.flatMap { $0 }.map(\.date) == [firstDay, secondDay])
+  }
+}
+
+extension ReadSummaryCalculationTests {
+  @Test
+  func omittedNetWorthMakesNoLifetimePriceRequests() async throws {
+    let conversion = FakeConversionService.alwaysThrows
+    let snapshot = ReadSummarySnapshot(
+      flows: [],
+      netWorth: .omitted,
+      revision: "fixture",
+      queriedAt: Date(timeIntervalSince1970: 1_700_000_000)
+    )
+    let (summary, _) = try await ReadFinancialCalculationService(conversion: conversion).summary(
+      snapshot,
+      target: .defaultTestInstrument,
+      groupByCategory: false
+    )
+    #expect(!summary.netWorthIncluded)
+    #expect(summary.currentNetWorth == nil)
+    #expect(conversion.recordedBatches.isEmpty)
+    let json = try #require(
+      JSONSerialization.jsonObject(with: JSONEncoder().encode(summary)) as? [String: Any]
+    )
+    #expect(json["netWorthIncluded"] as? Bool == false)
+    #expect(json["currentNetWorth"] == nil)
   }
 }

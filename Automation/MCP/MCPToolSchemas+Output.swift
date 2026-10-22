@@ -150,8 +150,12 @@ extension MCPToolSchemas {
       "semantics": string, "reporting_instrument": instrument,
       "income": array(quantity), "spending": array(quantity),
       "reporting_income": valuation, "reporting_spending": valuation,
-      "current_net_worth": valuation, "groups": array(group, maximum: 500),
+      "current_net_worth": nullable(valuation), "net_worth_included": boolean,
+      "groups": array(group, maximum: 500),
     ]
-    return object(properties, required: properties.keys.sorted())
+    return object(
+      properties,
+      required: properties.keys.filter { $0 != "current_net_worth" }.sorted()
+    )
   }
 }

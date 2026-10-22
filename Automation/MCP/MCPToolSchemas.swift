@@ -45,6 +45,7 @@ enum MCPToolSchemas {
           "Historical balances are unsupported; any as_of request returns UNSUPPORTED."
         ),
       ]),
+      "include_net_worth": includeNetWorth,
       "group_by": .object([
         "type": .string("string"), "enum": .array([.string("none"), .string("category")]),
         "default": .string("none"),
@@ -60,6 +61,15 @@ enum MCPToolSchemas {
     if tool == .transactions || tool == .summary { required += ["from_date", "to_date"] }
     if tool == .transaction { required.append("transaction_id") }
     return object(available.filter { tool.argumentKeys.contains($0.key) }, required: required)
+  }
+
+  private static var includeNetWorth: MCPToolValue {
+    .object([
+      "type": .string("boolean"), "default": .bool(false),
+      "description": .string(
+        "Set to true to include current net worth across all accounts. Defaults to false, so this query skips transaction history outside the requested dates."
+      ),
+    ])
   }
 
   private static func description(_ tool: MCPToolDefinition) -> String {
@@ -80,7 +90,7 @@ enum MCPToolSchemas {
     case .earmarks:
       "List earmark UUIDs, names, targets and posted balances by currency or asset. Results use stable UUID order."
     case .summary:
-      "Compute income and spending for an inclusive date range, plus current net worth. Results use the same rules as Moolah Reports. Amounts stay in their original currencies or assets, with separate reporting values. Flows exclude transfers, trades, opening balances and scheduled transactions. Spending signs are preserved. group_by supports none or category. Calculations are limited to 10,000 contributing legs and 500 accounts or groups; larger results return RESULT_TOO_LARGE."
+      "Compute income and spending for an inclusive date range. Current net worth is omitted unless include_net_worth is true. Results use the same rules as Moolah Reports. Amounts stay in their original currencies or assets, with separate reporting values. Flows exclude transfers, trades, opening balances and scheduled transactions. Spending signs are preserved. group_by supports none or category. Calculations are limited to 10,000 contributing legs and 500 accounts or groups; larger results return RESULT_TOO_LARGE."
     }
   }
 

@@ -17,10 +17,10 @@ extension ReadFinancialCalculationService {
     )
     let income = flows.filter { $0.type == .income }.map(\.amount)
     let spending = flows.filter { $0.type == .expense }.map(\.amount)
-    let positions = nativeTotals(snapshot.balances.flatMap(\.positions))
-    let current = try await value(
-      positions.map { ReadDatedAmount(amount: $0, date: snapshot.queriedAt) },
-      target: target
+    let (current, netWorthWarnings) = try await netWorth(
+      snapshot.netWorth,
+      target: target,
+      on: snapshot.queriedAt
     )
     let groups = try summaryGroups(
       flows: flows,
@@ -31,7 +31,7 @@ extension ReadFinancialCalculationService {
     )
     let result = ReadSummaryDTO(
       semantics:
-        "Income and spending follow Moolah Reports. They exclude transfers, trades, opening balances, scheduled transactions and uncategorised reserve movements without an account. Signs are preserved, so spending is usually negative. Current net worth includes posted balances from every account, including hidden accounts and future-dated transactions. Flow conversions use each transaction’s UTC calendar day. Current net worth uses prices at queried_at. Prices are read separately from the financial data snapshot.",
+        "Income and spending follow Moolah Reports. They exclude transfers, trades, opening balances, scheduled transactions and uncategorised reserve movements without an account. Signs are preserved, so spending is usually negative. current_net_worth is omitted unless include_net_worth is true. When included, it uses posted balances from every account, including hidden accounts and future-dated transactions. Flow conversions use each transaction’s UTC calendar day. When included, net worth uses prices at queried_at. Prices are read separately from the financial data snapshot.",
       reportingInstrument: ReadInstrumentDTO(target),
       income: wireTotals(income),
       spending: wireTotals(spending),
@@ -45,10 +45,23 @@ extension ReadFinancialCalculationService {
         target: target,
         on: nil
       ).dto,
-      currentNetWorth: total(current, target: target, on: snapshot.queriedAt).dto,
+      currentNetWorth: current,
+      netWorthIncluded: current != nil,
       groups: groups
     )
-    return (result, warnings(valuations + current))
+    return (result, Array(Set(warnings(valuations) + netWorthWarnings)).sorted())
+  }
+
+  private func netWorth(_ input: ReadNetWorthInput, target: Instrument, on date: Date) async throws
+    -> (ReadValuationDTO?, [String])
+  {
+    guard case .requested(let balances) = input else { return (nil, []) }
+    let positions = nativeTotals(balances.flatMap(\.positions))
+    let values = try await value(
+      positions.map { ReadDatedAmount(amount: $0, date: date) },
+      target: target
+    )
+    return (total(values, target: target, on: date).dto, warnings(values))
   }
 
   private func summaryGroups(

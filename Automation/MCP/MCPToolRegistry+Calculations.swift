@@ -31,7 +31,8 @@ extension MCPToolRegistry {
       profileID: profileID,
       range: input.dateRange(timeZone: timeZone),
       reportingInstrument: reportingInstrument(input),
-      groupByCategory: group == "category"
+      groupByCategory: group == "category",
+      includeNetWorth: input.bool("include_net_worth")
     )
     return try await encode(page: page, context: context)
   }

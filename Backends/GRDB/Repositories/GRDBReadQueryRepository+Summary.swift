@@ -2,29 +2,39 @@ import Foundation
 import GRDB
 
 extension GRDBReadQueryRepository {
-  func summaryInputs(range: ReadDateRange) async throws -> ReadSummarySnapshot {
+  func summaryInputs(range: ReadDateRange, includeNetWorth: Bool) async throws
+    -> ReadSummarySnapshot
+  {
     let instruments = try await instrumentResolver.instrumentMap()
     let fingerprint = try instrumentFingerprint(instruments)
     return try await database.read { database in
       let revision = try self.revision(in: database, fingerprint: fingerprint)
-      let accounts = try AccountRow.order(AccountRow.Columns.id.asc).limit(501).fetchAll(database)
-      guard accounts.count <= 500 else { throw ReadQueryError.resultTooLarge }
-      let positions = try self.accountPositionAmounts(
-        ids: Set(accounts.map(\.id)),
-        database: database,
-        instruments: instruments
-      )
+      let netWorth: ReadNetWorthInput =
+        includeNetWorth
+        ? .requested(try self.summaryBalances(database: database, instruments: instruments))
+        : .omitted
       let flows = try self.summaryFlows(range: range, database: database, instruments: instruments)
       return ReadSummarySnapshot(
         flows: flows,
-        balances: accounts.map {
-          ReadBalanceInput(accountID: $0.id, positions: positions[$0.id] ?? [])
-        },
+        netWorth: netWorth,
         revision: revision,
         queriedAt: self.now()
       )
     }
   }
+  private func summaryBalances(database: Database, instruments: [String: Instrument]) throws
+    -> [ReadBalanceInput]
+  {
+    let accounts = try AccountRow.order(AccountRow.Columns.id.asc).limit(501).fetchAll(database)
+    guard accounts.count <= 500 else { throw ReadQueryError.resultTooLarge }
+    let positions = try self.accountPositionAmounts(
+      ids: Set(accounts.map(\.id)),
+      database: database,
+      instruments: instruments
+    )
+    return accounts.map { ReadBalanceInput(accountID: $0.id, positions: positions[$0.id] ?? []) }
+  }
+
   /// The date-bounded outer loop avoids scanning lifetime leg history for a narrow query.
   /// There is no sorting/materialization before LIMIT; grouping order is deterministic in the domain fold.
   static let summaryFlowSQL = """
