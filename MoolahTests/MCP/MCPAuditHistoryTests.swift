@@ -122,4 +122,25 @@ struct MCPAuditHistoryTests {
     }
     #expect(try await history.entries().isEmpty)
   }
+  @Test(arguments: ["RESULT_TOO_LARGE", "CALCULATION_LIMIT_EXCEEDED", "RESPONSE_TOO_LARGE"])
+  func limitOutcomeCodesSurviveReopening(code: String) async throws {
+    let directory = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let url = directory.appendingPathComponent("audit.json")
+    let instant = Date(timeIntervalSince1970: 1_700_000_000)
+    let history = MCPAuditHistory(url: url, now: { instant })
+    try await history.append(
+      MCPAuditEvent(
+        timestamp: instant,
+        credentialID: UUID(),
+        tool: "moolah_get_summary",
+        profileID: nil,
+        duration: 0,
+        outcome: code
+      )
+    )
+    let reopened = MCPAuditHistory(url: url, now: { instant })
+    #expect(try await reopened.entries().first?.outcome == code)
+  }
+
 }

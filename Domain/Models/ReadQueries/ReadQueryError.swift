@@ -5,6 +5,5 @@ enum ReadQueryError: Error, Equatable {
   case profileUnavailable
   case profileIncompatible
   case cursorExpired
-  case resultTooLarge
   case priceUnavailable
 }

@@ -62,7 +62,10 @@ public enum MCPAccessFailure: String, Error, Sendable {
   case rateLimited = "RATE_LIMITED"
   case queryTimeout = "QUERY_TIMEOUT"
   case queryCancelled = "QUERY_CANCELLED"
+  /// Retained for reading existing local audit records; new query limits use detailed failures.
   case resultTooLarge = "RESULT_TOO_LARGE"
+  case calculationLimit = "CALCULATION_LIMIT_EXCEEDED"
+  case responseTooLarge = "RESPONSE_TOO_LARGE"
   case unavailable = "PROFILE_UNAVAILABLE"
   case incompatible = "PROFILE_INCOMPATIBLE"
   case priceUnavailable = "PRICE_UNAVAILABLE"

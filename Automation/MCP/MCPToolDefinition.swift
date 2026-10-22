@@ -13,6 +13,16 @@ enum MCPToolDefinition: String, CaseIterable, Sendable {
   case earmarks = "moolah_list_earmarks"
   case summary = "moolah_get_summary"
 
+  var responseOperation: MCPQueryOperation {
+    switch self {
+    case .balances: .balances
+    case .earmarks: .earmarks
+    case .summary: .summary
+    case .transaction, .transactions: .transactionDetails
+    default: .readQuery
+    }
+  }
+
   var scope: MCPReadScope {
     switch self {
     case .profiles, .status: .profiles

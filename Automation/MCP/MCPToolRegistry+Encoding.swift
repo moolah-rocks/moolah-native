@@ -42,7 +42,7 @@ extension MCPToolRegistry {
     encoder.keyEncodingStrategy = .convertToSnakeCase
     encoder.outputFormatting = .sortedKeys
     let data = try encoder.encode(value)
-    guard data.count <= 500_000 else { throw MCPAccessFailure.resultTooLarge }
+    guard data.count <= 500_000 else { throw MCPAccessFailure.responseTooLarge }
     let structured = try JSONDecoder().decode(MCPToolValue.self, from: data)
     guard let text = String(bytes: data, encoding: .utf8) else {
       throw MCPAccessFailure.internalFailure

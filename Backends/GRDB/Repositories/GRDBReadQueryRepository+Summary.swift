@@ -32,9 +32,12 @@ extension GRDBReadQueryRepository {
     -> [ReadBalanceInput]
   {
     let accounts = try AccountRow.order(AccountRow.Columns.id.asc).limit(501).fetchAll(database)
-    guard accounts.count <= 500 else { throw ReadQueryError.resultTooLarge }
-    let positions = try self.accountPositionAmounts(
+    guard accounts.count <= 500 else {
+      throw ReadLimitError(operation: .netWorth, unit: .accounts, maximum: 500)
+    }
+    let positions = try self.positionAmounts(
       ids: Set(accounts.map(\.id)),
+      query: .netWorth,
       database: database,
       instruments: instruments
     )
@@ -70,7 +73,7 @@ extension GRDBReadQueryRepository {
       ]
     )
     let cursor = try Row.fetchCursor(database, request)
-    var budget = ReadAggregationBudget()
+    var budget = ReadAggregationBudget(operation: .summaryFlows)
     var totals: [ReadFlowKey: ReadSummaryFlow] = [:]
     var previousDates: ReadFlowDates?
     var calendar = Calendar.utc
@@ -104,9 +107,7 @@ extension GRDBReadQueryRepository {
         type: type,
         amount: InstrumentAmount(quantity: quantity, instrument: instrument)
       )
-      guard totals.count <= ReadAggregationBudget.maximumKeys else {
-        throw ReadQueryError.resultTooLarge
-      }
+      try budget.validateGroupCount(totals.count)
     }
     try Task.checkCancellation()
     return totals.keys.sorted().compactMap { totals[$0] }

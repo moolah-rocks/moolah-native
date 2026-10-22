@@ -8,7 +8,7 @@ extension ReadFinancialCalculationService {
   ) async throws -> (ReadSummaryDTO, [String]) {
     let flows = snapshot.flows.filter { $0.type == .income || $0.type == .expense }
     guard !groupByCategory || Set(flows.map(\.categoryID)).count <= 500 else {
-      throw ReadQueryError.resultTooLarge
+      throw ReadLimitError(operation: .summaryGroups, unit: .calculationGroups, maximum: 500)
     }
     let buckets = summaryBuckets(flows, groupByCategory: groupByCategory)
     let valuations = try await value(
@@ -73,7 +73,9 @@ extension ReadFinancialCalculationService {
   ) throws -> [ReadSummaryGroupDTO] {
     guard enabled else { return [] }
     let groups = Dictionary(grouping: flows, by: \.categoryID)
-    guard groups.count <= 500 else { throw ReadQueryError.resultTooLarge }
+    guard groups.count <= 500 else {
+      throw ReadLimitError(operation: .summaryGroups, unit: .calculationGroups, maximum: 500)
+    }
     return groups.keys.sorted { ($0?.uuidString ?? "") < ($1?.uuidString ?? "") }.map { id in
       let rows = groups[id] ?? []
       let indexed = zip(buckets, values).filter { $0.0.categoryID == id }

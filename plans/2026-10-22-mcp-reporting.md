@@ -62,3 +62,13 @@ folding on this Mac (queue occupancy, excluding seeding and conversion). These
 measurements support the bounded ceiling; they are not a cross-device guarantee.
 iOS build, strict lint, formatting and warning sweep pass. Required code,
 concurrency, database, instruments, datetime and copy reviews are clear.
+
+Step 4 complete: CALCULATION_LIMIT_EXCEEDED and RESPONSE_TOO_LARGE are distinct.
+Errors contain closed operation/unit names, the numeric bound and an actionable
+next_step. Net-worth limits identify optional lifetime work; balance responses
+suggest compact totals, while raw transaction-detail caps direct oversized single
+transactions to Moolah. App soft and transport hard response caps are independent.
+55 app tests across twelve suites and 36 transport tests across seven suites pass,
+including real registry calculation/byte-limit paths and old/new audit-code
+reopening. iOS build, formatting, strict lint and warning sweep pass. Required
+code, concurrency, database, instruments and copy reviews have no findings.

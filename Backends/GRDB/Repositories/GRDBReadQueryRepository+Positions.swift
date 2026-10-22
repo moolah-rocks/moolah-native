@@ -39,24 +39,25 @@ extension GRDBReadQueryRepository {
       let rows = try request.limit(page.limit + 1).fetchAll(database)
       let selected = Array(rows.prefix(page.limit))
       let ids = Set(selected.map(\.id))
-      let positions = try self.accountPositionAmounts(
+      let positions = try self.positionAmounts(
         ids: ids,
+        query: .balances,
         database: database,
         instruments: instruments
       )
       return ReadPage(
-        items: selected.map {
-          ReadBalanceInput(
-            accountID: $0.id,
-            positions: positions[$0.id] ?? [],
-            accountName: $0.name
-          )
-        },
+        items: selected.map { self.balanceInput($0, positions: positions) },
         revision: revision,
         queriedAt: self.now(),
         nextKey: rows.count > page.limit ? selected.last.map { ReadPageKey(id: $0.id) } : nil
       )
     }
+  }
+
+  private func balanceInput(_ row: AccountRow, positions: [UUID: [InstrumentAmount]])
+    -> ReadBalanceInput
+  {
+    ReadBalanceInput(accountID: row.id, positions: positions[row.id] ?? [], accountName: row.name)
   }
 
   static func balanceAccountCountRequest(accountIDs: Set<UUID>) -> QueryInterfaceRequest<Int> {
@@ -74,34 +75,26 @@ extension GRDBReadQueryRepository {
     return request
   }
 
-  func accountPositionAmounts(
-    ids: Set<UUID>,
-    database: Database,
-    instruments: [String: Instrument]
-  ) throws -> [UUID: [InstrumentAmount]] {
-    try positionAmounts(ids: ids, owner: .account, database: database, instruments: instruments)
-  }
-
   func earmarkPositions(
     ids: Set<UUID>,
     database: Database,
     instruments: [String: Instrument]
   ) throws -> [UUID: [ReadQuantityDTO]] {
-    try positionAmounts(ids: ids, owner: .earmark, database: database, instruments: instruments)
+    try positionAmounts(ids: ids, query: .earmarks, database: database, instruments: instruments)
       .mapValues { $0.map { ReadQuantityDTO(quantity: $0.quantity, instrument: $0.instrument) } }
   }
 
   /// Fixed selective queries stream raw legs before any filtering, grouping or sorting.
-  static func positionRequest(ids: Set<UUID>, owner: ReadPositionOwner) -> SQLRequest<Row> {
-    switch owner {
-    case .account:
+  static func positionRequest(ids: Set<UUID>, query: ReadPositionQuery) -> SQLRequest<Row> {
+    switch query {
+    case .balances, .netWorth:
       """
       SELECT leg.account_id AS owner_id, leg.instrument_id, leg.quantity, txn.recur_period
       FROM transaction_leg AS leg
       CROSS JOIN "transaction" AS txn ON txn.id = leg.transaction_id
       WHERE leg.account_id IN \(ids) LIMIT \(ReadAggregationBudget.maximumLegs + 1)
       """
-    case .earmark:
+    case .earmarks:
       """
       SELECT leg.earmark_id AS owner_id, leg.instrument_id, leg.quantity, txn.recur_period
       FROM transaction_leg AS leg
@@ -111,15 +104,15 @@ extension GRDBReadQueryRepository {
     }
   }
 
-  private func positionAmounts(
+  func positionAmounts(
     ids: Set<UUID>,
-    owner: ReadPositionOwner,
+    query: ReadPositionQuery,
     database: Database,
     instruments: [String: Instrument]
   ) throws -> [UUID: [InstrumentAmount]] {
     guard !ids.isEmpty else { return [:] }
-    let cursor = try Row.fetchCursor(database, Self.positionRequest(ids: ids, owner: owner))
-    var budget = ReadAggregationBudget()
+    let cursor = try Row.fetchCursor(database, Self.positionRequest(ids: ids, query: query))
+    var budget = ReadAggregationBudget(operation: query.operation)
     var totals: [ReadPositionKey: Decimal] = [:]
     while let row = try cursor.next() {
       try budget.consume()
@@ -127,9 +120,7 @@ extension GRDBReadQueryRepository {
       let key = ReadPositionKey(ownerID: row["owner_id"], instrumentID: row["instrument_id"])
       totals[key] = try ReadAggregationBudget.adding(row["quantity"], to: totals[key] ?? 0)
       // Keys remain present even when they cancel to zero, so this cap is monotonic.
-      guard totals.count <= ReadAggregationBudget.maximumKeys else {
-        throw ReadQueryError.resultTooLarge
-      }
+      try budget.validateGroupCount(totals.count)
     }
     try Task.checkCancellation()
     var result: [UUID: [InstrumentAmount]] = [:]
@@ -146,9 +137,18 @@ extension GRDBReadQueryRepository {
   }
 }
 
-enum ReadPositionOwner: Sendable {
-  case account
-  case earmark
+enum ReadPositionQuery: Sendable {
+  case balances
+  case earmarks
+  case netWorth
+
+  var operation: ReadLimitOperation {
+    switch self {
+    case .balances: .balances
+    case .earmarks: .earmarks
+    case .netWorth: .netWorth
+    }
+  }
 }
 
 private struct ReadPositionKey: Hashable, Sendable {
