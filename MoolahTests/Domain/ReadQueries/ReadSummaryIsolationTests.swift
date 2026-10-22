@@ -45,9 +45,12 @@ struct ReadSummaryIsolationTests {
     #expect(summary.reportingSpending.value?.quantity == "-7")
     #expect(summary.currentNetWorth == nil)
     #expect(!summary.netWorthIncluded)
-    await #expect(throws: ReadQueryError.resultTooLarge) {
-      try await repository.summaryInputs(range: range, includeNetWorth: true)
+    let full = try await repository.summaryInputs(range: range, includeNetWorth: true)
+    guard case .requested(let balances) = full.netWorth else {
+      Issue.record("Explicit net worth request was omitted")
+      return
     }
+    #expect(balances.first?.positions.first?.quantity == 9_994)
   }
   private func seedHistoricalLegs(_ database: DatabaseQueue, accountID: UUID, transactionID: UUID)
     async throws

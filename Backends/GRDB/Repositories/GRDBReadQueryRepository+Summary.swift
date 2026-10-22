@@ -2,7 +2,8 @@ import Foundation
 import GRDB
 
 extension GRDBReadQueryRepository {
-  func summaryInputs(range: ReadDateRange, includeNetWorth: Bool) async throws
+  func summaryInputs(range: ReadDateRange, includeNetWorth: Bool, groupByCategory: Bool)
+    async throws
     -> ReadSummarySnapshot
   {
     let instruments = try await instrumentResolver.instrumentMap()
@@ -13,7 +14,12 @@ extension GRDBReadQueryRepository {
         includeNetWorth
         ? .requested(try self.summaryBalances(database: database, instruments: instruments))
         : .omitted
-      let flows = try self.summaryFlows(range: range, database: database, instruments: instruments)
+      let flows = try self.summaryFlows(
+        range: range,
+        groupByCategory: groupByCategory,
+        database: database,
+        instruments: instruments
+      )
       return ReadSummarySnapshot(
         flows: flows,
         netWorth: netWorth,
@@ -40,21 +46,19 @@ extension GRDBReadQueryRepository {
   /// The date-bounded outer loop avoids scanning lifetime leg history for a narrow query.
   /// There is no sorting/materialization before LIMIT; grouping order is deterministic in the domain fold.
   static let summaryFlowSQL = """
-    SELECT txn.date, leg.category_id, leg.type, leg.instrument_id, leg.quantity
+    SELECT txn.date, txn.recur_period, leg.category_id, leg.account_id,
+      leg.type, leg.instrument_id, leg.quantity
     FROM "transaction" AS txn
     CROSS JOIN transaction_leg AS leg ON leg.transaction_id = txn.id
-    WHERE txn.recur_period IS NULL
-      AND txn.date >= :from AND txn.date < :through
-      AND leg.type IN ('income', 'expense')
-      AND (leg.category_id IS NOT NULL OR leg.account_id IS NOT NULL)
-    LIMIT 10001
+    WHERE txn.date >= :from AND txn.date < :through
+    LIMIT :maximum
     """
 
-  /// Matches Reports category balances: income/expense only, across account types, excluding
-  /// account-less uncategorized reserve movements. Transfer/trade/opening legs never enter it.
-  /// LIMIT is applied before materialization; 10,001 signals an explicit calculation limit.
+  /// Count every joined leg before applying Reports exclusions. Fold within this read
+  /// snapshot; no raw history or GRDB objects escape to the conversion service.
   private func summaryFlows(
     range: ReadDateRange,
+    groupByCategory: Bool,
     database: Database,
     instruments: [String: Instrument]
   ) throws -> [ReadSummaryFlow] {
@@ -62,27 +66,85 @@ extension GRDBReadQueryRepository {
       sql: Self.summaryFlowSQL,
       arguments: [
         "from": range.interval.lowerBound, "through": range.interval.upperBound,
+        "maximum": ReadAggregationBudget.maximumLegs + 1,
       ]
     )
-    let rows = try Row.fetchAll(database, request)
-    guard rows.count <= 10_000 else { throw ReadQueryError.resultTooLarge }
-    return try rows.map { row in
-      let rawType: String = row["type"]
-      guard let type = TransactionType(rawValue: rawType), type == .income || type == .expense
-      else {
-        throw ReadQueryError.profileUnavailable
+    let cursor = try Row.fetchCursor(database, request)
+    var budget = ReadAggregationBudget()
+    var totals: [ReadFlowKey: ReadSummaryFlow] = [:]
+    var previousDates: ReadFlowDates?
+    var calendar = Calendar.utc
+    calendar.timeZone = range.timeZone
+    while let row = try cursor.next() {
+      try budget.consume()
+      guard row["recur_period"] == nil as String?,
+        let type = TransactionType(rawValue: row["type"]), type == .income || type == .expense,
+        (row["category_id"] as UUID?) != nil || (row["account_id"] as UUID?) != nil
+      else { continue }
+      let date: Date = row["date"]
+      if previousDates?.instant != date {
+        previousDates = try ReadFlowDates(date: date, calendar: calendar)
       }
-      let instrumentID: String = row["instrument_id"]
-      let quantity: Int64 = row["quantity"]
-      return ReadSummaryFlow(
-        date: row["date"],
-        categoryID: row["category_id"],
+      guard let dates = previousDates else { throw ReadCalculationError.invalidResult }
+      let key = ReadFlowKey(
+        day: dates.utcDay,
+        month: dates.localMonth,
+        categoryID: groupByCategory ? row["category_id"] : nil,
         type: type,
-        amount: InstrumentAmount(
-          storageValue: quantity,
-          instrument: try instrument(instrumentID, in: instruments)
-        )
+        instrumentID: row["instrument_id"]
       )
+      let instrument = try self.instrument(key.instrumentID, in: instruments)
+      let quantity = try ReadAggregationBudget.adding(
+        row["quantity"],
+        to: totals[key]?.amount.quantity ?? 0
+      )
+      totals[key] = ReadSummaryFlow(
+        date: date,
+        categoryID: key.categoryID,
+        type: type,
+        amount: InstrumentAmount(quantity: quantity, instrument: instrument)
+      )
+      guard totals.count <= ReadAggregationBudget.maximumKeys else {
+        throw ReadQueryError.resultTooLarge
+      }
     }
+    try Task.checkCancellation()
+    return totals.keys.sorted().compactMap { totals[$0] }
+  }
+}
+
+private struct ReadFlowKey: Hashable, Sendable {
+  let day: Date
+  let month: Date
+  let categoryID: UUID?
+  let type: TransactionType
+  let instrumentID: String
+}
+
+extension ReadFlowKey: Comparable {
+  static func < (lhs: Self, rhs: Self) -> Bool {
+    if lhs.day != rhs.day { return lhs.day < rhs.day }
+    if lhs.month != rhs.month { return lhs.month < rhs.month }
+    if lhs.categoryID != rhs.categoryID {
+      return (lhs.categoryID?.uuidString ?? "") < (rhs.categoryID?.uuidString ?? "")
+    }
+    if lhs.type != rhs.type { return lhs.type.rawValue < rhs.type.rawValue }
+    return lhs.instrumentID < rhs.instrumentID
+  }
+}
+
+/// One-entry date cache avoids repeating calendar work for every leg of a dense transaction.
+private struct ReadFlowDates {
+  let instant: Date
+  let utcDay: Date
+  let localMonth: Date
+
+  init(date: Date, calendar: Calendar) throws {
+    guard let month = calendar.dateInterval(of: .month, for: date)?.start else {
+      throw ReadCalculationError.invalidResult
+    }
+    instant = date
+    utcDay = Calendar.utc.startOfDay(for: date)
+    localMonth = month
   }
 }

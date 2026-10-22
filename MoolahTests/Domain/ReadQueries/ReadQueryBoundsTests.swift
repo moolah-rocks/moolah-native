@@ -6,7 +6,7 @@ import Testing
 
 struct ReadQueryBoundsTests {
   @Test(arguments: [false, true])
-  func denseTransactionRespectsPostedOnlyPositionBounds(scheduled: Bool) async throws {
+  func denseTransactionDetailsStayBoundedWhilePositionsAggregate(scheduled: Bool) async throws {
     let (backend, database) = try TestBackend.create()
     let account = Account(name: "Dense", type: .bank, instrument: .defaultTestInstrument)
     let earmark = Earmark(name: "Dense", instrument: .defaultTestInstrument)
@@ -15,7 +15,8 @@ struct ReadQueryBoundsTests {
     let transaction = Transaction(
       date: Date(timeIntervalSince1970: 1_777_680_000),
       recurPeriod: scheduled ? .once : nil,
-      legs: [])
+      legs: []
+    )
     _ = try await backend.transactions.create(transaction)
     try await database.write { database in
       for index in 0..<10_001 {
@@ -24,7 +25,8 @@ struct ReadQueryBoundsTests {
           instrument: .defaultTestInstrument,
           quantity: 1,
           type: .income,
-          earmarkId: earmark.id)
+          earmarkId: earmark.id
+        )
         try TransactionLegRow(domain: leg, transactionId: transaction.id, sortOrder: index)
           .insert(database)
       }
@@ -36,8 +38,10 @@ struct ReadQueryBoundsTests {
     let search = try ReadTransactionSearch(
       range: ReadDateRange(
         interval: transaction.date..<transaction.date.addingTimeInterval(1),
-        timeZone: .utc),
-      scheduled: scheduled)
+        timeZone: .utc
+      ),
+      scheduled: scheduled
+    )
     await #expect(throws: ReadQueryError.resultTooLarge) {
       try await repository.transactions(search: search, page: ReadPageRequest())
     }
@@ -47,12 +51,10 @@ struct ReadQueryBoundsTests {
       #expect(balances.items.first?.positions.isEmpty == true)
       #expect(earmarks.items.first?.positions.isEmpty == true)
     } else {
-      await #expect(throws: ReadQueryError.resultTooLarge) {
-        try await repository.balances(accountIDs: [account.id])
-      }
-      await #expect(throws: ReadQueryError.resultTooLarge) {
-        try await repository.earmarks(page: ReadPageRequest())
-      }
+      let balances = try await repository.balances(accountIDs: [account.id])
+      let earmarks = try await repository.earmarks(page: ReadPageRequest())
+      #expect(balances.items.first?.positions.first?.quantity == "10001")
+      #expect(earmarks.items.first?.positions.first?.quantity == "10001")
     }
   }
 }

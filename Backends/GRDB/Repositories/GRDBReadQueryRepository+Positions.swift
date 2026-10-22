@@ -79,27 +79,7 @@ extension GRDBReadQueryRepository {
     database: Database,
     instruments: [String: Instrument]
   ) throws -> [UUID: [InstrumentAmount]] {
-    guard !ids.isEmpty else { return [:] }
-    let probe: SQLRequest<Int> = """
-      SELECT COUNT(*) FROM (
-        SELECT 1 FROM transaction_leg AS leg
-        JOIN "transaction" AS txn ON txn.id = leg.transaction_id
-        WHERE txn.recur_period IS NULL AND leg.account_id IN \(ids) LIMIT 10001
-      )
-      """
-    guard try Int.fetchOne(database, probe) ?? 0 <= 10_000 else {
-      throw ReadQueryError.resultTooLarge
-    }
-    let request: SQLRequest<Row> = """
-      SELECT leg.account_id AS owner_id, leg.instrument_id, SUM(leg.quantity) AS quantity
-      FROM transaction_leg AS leg
-      JOIN "transaction" AS txn ON txn.id = leg.transaction_id
-      WHERE txn.recur_period IS NULL AND leg.account_id IN \(ids)
-      GROUP BY leg.account_id, leg.instrument_id
-      HAVING SUM(leg.quantity) <> 0
-      ORDER BY leg.account_id, leg.instrument_id
-      """
-    return try positionAmounts(rows: Row.fetchAll(database, request), instruments: instruments)
+    try positionAmounts(ids: ids, owner: .account, database: database, instruments: instruments)
   }
 
   func earmarkPositions(
@@ -107,52 +87,78 @@ extension GRDBReadQueryRepository {
     database: Database,
     instruments: [String: Instrument]
   ) throws -> [UUID: [ReadQuantityDTO]] {
-    guard !ids.isEmpty else { return [:] }
-    let probe: SQLRequest<Int> = """
-      SELECT COUNT(*) FROM (
-        SELECT 1 FROM transaction_leg AS leg
-        JOIN "transaction" AS txn ON txn.id = leg.transaction_id
-        WHERE txn.recur_period IS NULL AND leg.earmark_id IN \(ids) LIMIT 10001
-      )
-      """
-    guard try Int.fetchOne(database, probe) ?? 0 <= 10_000 else {
-      throw ReadQueryError.resultTooLarge
-    }
-    let request: SQLRequest<Row> = """
-      SELECT leg.earmark_id AS owner_id, leg.instrument_id, SUM(leg.quantity) AS quantity
-      FROM transaction_leg AS leg
-      JOIN "transaction" AS txn ON txn.id = leg.transaction_id
-      WHERE txn.recur_period IS NULL AND leg.earmark_id IN \(ids)
-      GROUP BY leg.earmark_id, leg.instrument_id
-      HAVING SUM(leg.quantity) <> 0
-      ORDER BY leg.earmark_id, leg.instrument_id
-      """
-    return try positions(rows: Row.fetchAll(database, request), instruments: instruments)
+    try positionAmounts(ids: ids, owner: .earmark, database: database, instruments: instruments)
+      .mapValues { $0.map { ReadQuantityDTO(quantity: $0.quantity, instrument: $0.instrument) } }
   }
 
-  private func positions(
-    rows: [Row],
-    instruments: [String: Instrument]
-  ) throws -> [UUID: [ReadQuantityDTO]] {
-    try positionAmounts(rows: rows, instruments: instruments).mapValues { amounts in
-      amounts.map { ReadQuantityDTO(quantity: $0.quantity, instrument: $0.instrument) }
+  /// Fixed selective queries stream raw legs before any filtering, grouping or sorting.
+  static func positionRequest(ids: Set<UUID>, owner: ReadPositionOwner) -> SQLRequest<Row> {
+    switch owner {
+    case .account:
+      """
+      SELECT leg.account_id AS owner_id, leg.instrument_id, leg.quantity, txn.recur_period
+      FROM transaction_leg AS leg
+      CROSS JOIN "transaction" AS txn ON txn.id = leg.transaction_id
+      WHERE leg.account_id IN \(ids) LIMIT \(ReadAggregationBudget.maximumLegs + 1)
+      """
+    case .earmark:
+      """
+      SELECT leg.earmark_id AS owner_id, leg.instrument_id, leg.quantity, txn.recur_period
+      FROM transaction_leg AS leg
+      CROSS JOIN "transaction" AS txn ON txn.id = leg.transaction_id
+      WHERE leg.earmark_id IN \(ids) LIMIT \(ReadAggregationBudget.maximumLegs + 1)
+      """
     }
   }
 
   private func positionAmounts(
-    rows: [Row],
+    ids: Set<UUID>,
+    owner: ReadPositionOwner,
+    database: Database,
     instruments: [String: Instrument]
   ) throws -> [UUID: [InstrumentAmount]] {
-    guard rows.count <= 10_000 else { throw ReadQueryError.resultTooLarge }
+    guard !ids.isEmpty else { return [:] }
+    let cursor = try Row.fetchCursor(database, Self.positionRequest(ids: ids, owner: owner))
+    var budget = ReadAggregationBudget()
+    var totals: [ReadPositionKey: Decimal] = [:]
+    while let row = try cursor.next() {
+      try budget.consume()
+      guard row["recur_period"] == nil as String? else { continue }
+      let key = ReadPositionKey(ownerID: row["owner_id"], instrumentID: row["instrument_id"])
+      totals[key] = try ReadAggregationBudget.adding(row["quantity"], to: totals[key] ?? 0)
+      // Keys remain present even when they cancel to zero, so this cap is monotonic.
+      guard totals.count <= ReadAggregationBudget.maximumKeys else {
+        throw ReadQueryError.resultTooLarge
+      }
+    }
+    try Task.checkCancellation()
     var result: [UUID: [InstrumentAmount]] = [:]
-    for row in rows {
-      let ownerID: UUID = row["owner_id"]
-      let instrumentID: String = row["instrument_id"]
-      let quantity: Int64 = row["quantity"]
-      let instrument = try instrument(instrumentID, in: instruments)
-      let amount = InstrumentAmount(storageValue: quantity, instrument: instrument)
-      result[ownerID, default: []].append(amount)
+    for key in totals.keys.sorted() {
+      guard let quantity = totals[key], quantity != 0 else { continue }
+      result[key.ownerID, default: []].append(
+        InstrumentAmount(
+          quantity: quantity,
+          instrument: try instrument(key.instrumentID, in: instruments)
+        )
+      )
     }
     return result
+  }
+}
+
+enum ReadPositionOwner: Sendable {
+  case account
+  case earmark
+}
+
+private struct ReadPositionKey: Hashable, Sendable {
+  let ownerID: UUID
+  let instrumentID: String
+}
+
+extension ReadPositionKey: Comparable {
+  static func < (lhs: Self, rhs: Self) -> Bool {
+    if lhs.ownerID != rhs.ownerID { return lhs.ownerID.uuidString < rhs.ownerID.uuidString }
+    return lhs.instrumentID < rhs.instrumentID
   }
 }

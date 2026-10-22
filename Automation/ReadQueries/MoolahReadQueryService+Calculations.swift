@@ -38,7 +38,8 @@ extension MoolahReadQueryService {
       read: { repository in
         let snapshot = try await repository.summaryInputs(
           range: range,
-          includeNetWorth: includeNetWorth
+          includeNetWorth: includeNetWorth,
+          groupByCategory: groupByCategory
         )
         return ReadPage(
           items: [snapshot],
