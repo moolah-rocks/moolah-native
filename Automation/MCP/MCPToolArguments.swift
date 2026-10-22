@@ -66,10 +66,12 @@ struct MCPToolArguments: Sendable {
     return zone
   }
 
-  func dateRange(timeZone: TimeZone) throws -> ReadDateRange {
+  func dateRange(timeZone: TimeZone, horizon: ReadDateHorizon = .transactions) throws
+    -> ReadDateRange
+  {
     guard let from = try string("from_date", required: true, maximumBytes: 10),
       let to = try string("to_date", required: true, maximumBytes: 10)
     else { throw MCPAccessFailure.invalidFilter }
-    return try ReadDateRange(from: from, through: to, timeZone: timeZone)
+    return try ReadDateRange(from: from, through: to, timeZone: timeZone, horizon: horizon)
   }
 }

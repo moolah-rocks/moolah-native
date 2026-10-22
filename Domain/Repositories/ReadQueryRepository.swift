@@ -26,9 +26,7 @@ protocol ReadQueryRepository: Sendable {
   >
   /// Always reads Reports income/expense flows. Current positions are read in the same
   /// snapshot only when includeNetWorth is explicitly true; false skips lifetime history.
-  func summaryInputs(range: ReadDateRange, includeNetWorth: Bool, groupByCategory: Bool)
-    async throws
-    -> ReadSummarySnapshot
+  func summaryInputs(query: ReadSummaryQuery) async throws -> ReadSummarySnapshot
 }
 
 extension ReadQueryRepository {
@@ -36,16 +34,20 @@ extension ReadQueryRepository {
     try await balanceInputs(accountIDs: accountIDs, page: ReadPageRequest(limit: 500))
   }
 
-  func summaryInputs(range: ReadDateRange, includeNetWorth: Bool) async throws
-    -> ReadSummarySnapshot
-  {
-    try await summaryInputs(range: range, includeNetWorth: includeNetWorth, groupByCategory: true)
+  func summaryInputs(
+    range: ReadDateRange,
+    includeNetWorth: Bool = false,
+    groupByCategory: Bool = true
+  ) async throws -> ReadSummarySnapshot {
+    try await summaryInputs(
+      query: ReadSummaryQuery(
+        range: range,
+        grouping: groupByCategory ? .category : .none,
+        includeNetWorth: includeNetWorth,
+        includeParentTotals: true
+      )
+    )
   }
-
-  func summaryInputs(range: ReadDateRange) async throws -> ReadSummarySnapshot {
-    try await summaryInputs(range: range, includeNetWorth: false)
-  }
-
   func using(defaultInstrument: Instrument) -> any ReadQueryRepository { self }
 
   func transactions(

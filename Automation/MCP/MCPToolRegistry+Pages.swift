@@ -63,7 +63,7 @@ extension MCPToolRegistry {
     profileID: UUID,
     timeZone: TimeZone
   ) async throws -> MCPToolResult {
-    let range = try input.dateRange(timeZone: timeZone)
+    let range = try input.dateRange(timeZone: timeZone, horizon: .transactions)
     let accountIDs = try input.ids("account_ids")
     let categoryIDs = try input.ids("category_ids")
     let query = try input.string("payee_query")

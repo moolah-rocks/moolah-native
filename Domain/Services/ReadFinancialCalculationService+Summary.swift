@@ -4,13 +4,14 @@ extension ReadFinancialCalculationService {
   func summary(
     _ snapshot: ReadSummarySnapshot,
     target: Instrument,
-    groupByCategory: Bool
+    grouping: ReadSummaryGrouping,
+    includeParentTotals: Bool = true
   ) async throws -> (ReadSummaryDTO, [String]) {
     let flows = snapshot.flows.filter { $0.type == .income || $0.type == .expense }
-    guard !groupByCategory || Set(flows.map(\.categoryID)).count <= 500 else {
+    guard !grouping.includesCategories || Set(flows.map(\.categoryID)).count <= 500 else {
       throw ReadLimitError(operation: .summaryGroups, unit: .calculationGroups, maximum: 500)
     }
-    let buckets = summaryBuckets(flows, groupByCategory: groupByCategory)
+    let buckets = try summaryBuckets(flows, grouping: grouping, timeZone: snapshot.timeZone)
     let valuations = try await value(
       buckets.map { ReadDatedAmount(amount: $0.amount, date: $0.date) },
       target: target
@@ -23,16 +24,20 @@ extension ReadFinancialCalculationService {
       on: snapshot.queriedAt
     )
     let groups = try summaryGroups(
-      flows: flows,
-      buckets: buckets,
-      values: valuations,
-      target: target,
-      enabled: groupByCategory
+      ReadSummaryGroupContext(
+        buckets: buckets,
+        values: valuations,
+        categories: snapshot.categories,
+        target: target,
+        grouping: grouping,
+        includeParentTotals: includeParentTotals
+      )
     )
     let result = ReadSummaryDTO(
       semantics:
-        "Income and spending follow Moolah Reports. They exclude transfers, trades, opening balances, scheduled transactions and uncategorised reserve movements without an account. Signs are preserved, so spending is usually negative. current_net_worth is omitted unless include_net_worth is true. When included, it uses posted balances from every account, including hidden accounts and future-dated transactions. Flow conversions use each transaction’s UTC calendar day. When included, net worth uses prices at queried_at. Prices are read separately from the financial data snapshot.",
+        "Income and spending follow Moolah Reports. They exclude transfers, trades, opening balances, scheduled transactions and uncategorised reserve movements without an account. Signs are preserved, so spending is usually negative. current_net_worth is omitted unless include_net_worth is true. When included, it uses posted balances from every account, including hidden accounts and future-dated transactions. Flow conversions use each transaction’s UTC calendar day. When included, net worth uses prices at queried_at. Prices are read separately from the financial data snapshot. Month values use YYYY-MM for Gregorian months in the requested time zone. Only months with report flows are returned. Category rows with includes_descendants true overlap: use the overall totals instead of adding those rows together.",
       reportingInstrument: ReadInstrumentDTO(target),
+      groupBy: grouping.rawValue,
       income: wireTotals(income),
       spending: wireTotals(spending),
       reportingIncome: total(
@@ -64,39 +69,6 @@ extension ReadFinancialCalculationService {
     return (total(values, target: target, on: date).dto, warnings(values))
   }
 
-  private func summaryGroups(
-    flows: [ReadSummaryFlow],
-    buckets: [ReadSummaryBucket],
-    values: [ReadValuation],
-    target: Instrument,
-    enabled: Bool
-  ) throws -> [ReadSummaryGroupDTO] {
-    guard enabled else { return [] }
-    let groups = Dictionary(grouping: flows, by: \.categoryID)
-    guard groups.count <= 500 else {
-      throw ReadLimitError(operation: .summaryGroups, unit: .calculationGroups, maximum: 500)
-    }
-    return groups.keys.sorted { ($0?.uuidString ?? "") < ($1?.uuidString ?? "") }.map { id in
-      let rows = groups[id] ?? []
-      let indexed = zip(buckets, values).filter { $0.0.categoryID == id }
-      return ReadSummaryGroupDTO(
-        categoryID: id,
-        income: wireTotals(rows.filter { $0.type == .income }.map(\.amount)),
-        spending: wireTotals(rows.filter { $0.type == .expense }.map(\.amount)),
-        reportingIncome: total(
-          indexed.filter { $0.0.type == .income }.map(\.1),
-          target: target,
-          on: nil
-        ).dto,
-        reportingSpending: total(
-          indexed.filter { $0.0.type == .expense }.map(\.1),
-          target: target,
-          on: nil
-        ).dto
-      )
-    }
-  }
-
   private func selected(
     _ type: TransactionType,
     buckets: [ReadSummaryBucket],
@@ -105,15 +77,22 @@ extension ReadFinancialCalculationService {
     zip(buckets, values).filter { $0.0.type == type }.map(\.1)
   }
 
-  private func summaryBuckets(_ flows: [ReadSummaryFlow], groupByCategory: Bool)
-    -> [ReadSummaryBucket]
+  private func summaryBuckets(
+    _ flows: [ReadSummaryFlow],
+    grouping: ReadSummaryGrouping,
+    timeZone: TimeZone
+  )
+    throws -> [ReadSummaryBucket]
   {
     var buckets: [ReadSummaryBucketKey: InstrumentAmount] = [:]
+    var calendar = Calendar.utc
+    calendar.timeZone = timeZone
     for flow in flows {
       let key = ReadSummaryBucketKey(
         day: Calendar.utc.startOfDay(for: flow.date),
+        month: grouping.includesMonths ? try Self.summaryMonth(flow.date, calendar: calendar) : nil,
         type: flow.type,
-        categoryID: groupByCategory ? flow.categoryID : nil,
+        categoryID: grouping.includesCategories ? flow.categoryID : nil,
         instrumentID: flow.amount.instrument.id
       )
       let previous = buckets[key]?.quantity ?? 0
@@ -124,7 +103,13 @@ extension ReadFinancialCalculationService {
     }
     return buckets.keys.sorted().compactMap { key in
       buckets[key].map {
-        ReadSummaryBucket(date: key.day, categoryID: key.categoryID, type: key.type, amount: $0)
+        ReadSummaryBucket(
+          date: key.day,
+          month: key.month,
+          categoryID: key.categoryID,
+          type: key.type,
+          amount: $0
+        )
       }
     }
   }
@@ -141,19 +126,26 @@ extension ReadFinancialCalculationService {
     return totals.keys.sorted().compactMap { totals[$0] }
   }
 
-  private func wireTotals(_ amounts: [InstrumentAmount]) -> [ReadQuantityDTO] {
+  func wireTotals(_ amounts: [InstrumentAmount]) -> [ReadQuantityDTO] {
     nativeTotals(amounts).map { ReadQuantityDTO(quantity: $0.quantity, instrument: $0.instrument) }
   }
 }
 
-private struct ReadSummaryBucketKey: Hashable, Comparable, Sendable {
+private struct ReadSummaryBucketKey {
   let day: Date
+  let month: String?
   let type: TransactionType
   let categoryID: UUID?
   let instrumentID: String
 
+}
+
+extension ReadSummaryBucketKey: Hashable {}
+extension ReadSummaryBucketKey: Sendable {}
+extension ReadSummaryBucketKey: Comparable {
   static func < (lhs: Self, rhs: Self) -> Bool {
     if lhs.day != rhs.day { return lhs.day < rhs.day }
+    if lhs.month != rhs.month { return (lhs.month ?? "") < (rhs.month ?? "") }
     if lhs.type != rhs.type { return lhs.type.rawValue < rhs.type.rawValue }
     if lhs.categoryID != rhs.categoryID {
       return (lhs.categoryID?.uuidString ?? "") < (rhs.categoryID?.uuidString ?? "")
@@ -162,9 +154,12 @@ private struct ReadSummaryBucketKey: Hashable, Comparable, Sendable {
   }
 }
 
-private struct ReadSummaryBucket: Sendable {
-  let date: Date
-  let categoryID: UUID?
-  let type: TransactionType
-  let amount: InstrumentAmount
+extension ReadFinancialCalculationService {
+  private static func summaryMonth(_ date: Date, calendar: Calendar) throws -> String {
+    let components = calendar.dateComponents([.year, .month], from: date)
+    guard let year = components.year, (1...9999).contains(year), let month = components.month else {
+      throw ReadCalculationError.invalidResult
+    }
+    return String(format: "%04d-%02d", year, month)
+  }
 }

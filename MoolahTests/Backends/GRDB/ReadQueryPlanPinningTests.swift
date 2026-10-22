@@ -222,3 +222,20 @@ extension ReadQueryPlanPinningTests {
     #expect(!detail.contains("USE TEMP B-TREE"))
   }
 }
+
+extension ReadQueryPlanPinningTests {
+  @Test
+  func summaryCategoryLookupsSearchTheUUIDIndex() throws {
+    let queue = try PlanPinningTestHelpers.makeDatabase()
+    let detail = try queue.read { database in
+      let statement = try GRDBReadQueryRepository.summaryCategoryRequest(ids: [UUID(), UUID()])
+        .makePreparedRequest(database, forSingleResult: false).statement
+      let sql: SQL = "EXPLAIN QUERY PLAN \(sql: statement.sql, arguments: statement.arguments)"
+      return try SQLRequest<Row>(literal: sql).fetchAll(database)
+        .compactMap { $0["detail"] as String? }.joined(separator: "; ")
+    }
+    #expect(detail.contains("SEARCH category USING INDEX"), "\(detail)")
+    #expect(!PlanPinningTestHelpers.planHasFullTableScanOf(detail, alias: "category"))
+    #expect(!detail.contains("USE TEMP B-TREE"))
+  }
+}

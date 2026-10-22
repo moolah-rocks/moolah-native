@@ -7,8 +7,10 @@ import GRDB
 final class GRDBReadQueryRepository {
   // MARK: - Cross-extension internals
 
-  // Positions and Transactions share the queue, immutable lookup dependencies, clock,
-  // revision validation and instrument mapping. No database objects escape read closures.
+  // Positions, Transactions, Summary and SummaryCategories share the queue, lookup
+  // dependencies, clock, revision validation and instrument mapping. Summary's bounded
+  // category-frontier helper runs within its caller's read snapshot. No database objects
+  // escape read closures.
   let database: any DatabaseWriter
   let instrumentResolver: any InstrumentMapResolving
   let defaultInstrument: Instrument

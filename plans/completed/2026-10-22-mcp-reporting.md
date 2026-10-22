@@ -72,3 +72,21 @@ transactions to Moolah. App soft and transport hard response caps are independen
 including real registry calculation/byte-limit paths and old/new audit-code
 reopening. iOS build, formatting, strict lint and warning sweep pass. Required
 code, concurrency, database, instruments and copy reviews have no findings.
+
+Step 5 complete: category modes include names and optional subtree totals, with
+explicit overlap flags; monthly and category/month modes use sparse Gregorian
+YYYY-MM groups in the requested timezone. Used categories and requested ancestors
+are fetched through indexed frontiers inside the same financial read snapshot.
+Malformed metadata and cycles fail closed. Overall totals never sum rollup rows.
+Daily UTC FX pricing stays separate from local month grouping. Summaries accept
+up to 10 calendar years; transaction searches independently retain one year.
+70 reporting tests across sixteen suites pass, with an additional three-test
+pagination run verifying a 250,001-leg next-page account cannot block the current
+page. iOS and signed Development macOS builds, formatting/strict lint and warning
+sweeps pass. All required reviewers are clear. The signed dev app is running on
+127.0.0.1:49137; unauthenticated HTTP requests correctly return 401.
+
+All five reporting steps are complete. Original V1 UI/hardware acceptance remains
+tracked separately in [the server plan](../2026-10-21-mcp-server.md). The attempted
+20-run UI gate could not begin: macOS LocalAuthentication reported “System
+authentication is running” before the first test. No UI stability pass is claimed.

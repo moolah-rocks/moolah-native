@@ -31,6 +31,10 @@ struct ReadValuedBalanceDTO: Codable, Sendable {
 /// Report signs are preserved: spending is normally negative, refunds can be positive.
 struct ReadSummaryGroupDTO: Codable, Sendable {
   let categoryID: UUID?
+  let categoryName: String?
+  let parentCategoryID: UUID?
+  let month: String?
+  let includesDescendants: Bool
   let income: [ReadQuantityDTO]
   let spending: [ReadQuantityDTO]
   let reportingIncome: ReadValuationDTO
@@ -42,6 +46,7 @@ struct ReadSummaryGroupDTO: Codable, Sendable {
 struct ReadSummaryDTO: Codable, Sendable {
   let semantics: String
   let reportingInstrument: ReadInstrumentDTO
+  let groupBy: String
   let income: [ReadQuantityDTO]
   let spending: [ReadQuantityDTO]
   let reportingIncome: ReadValuationDTO

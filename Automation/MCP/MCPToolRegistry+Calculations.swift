@@ -43,14 +43,20 @@ extension MCPToolRegistry {
     profileID: UUID,
     timeZone: TimeZone
   ) async throws -> MCPToolResult {
-    let group = try input.string("group_by") ?? "none"
-    guard ["none", "category"].contains(group) else { throw MCPAccessFailure.unsupported }
+    guard let grouping = ReadSummaryGrouping(rawValue: try input.string("group_by") ?? "none")
+    else {
+      throw MCPAccessFailure.unsupported
+    }
+    let query = try ReadSummaryQuery(
+      range: input.dateRange(timeZone: timeZone, horizon: .summary),
+      grouping: grouping,
+      includeNetWorth: input.bool("include_net_worth"),
+      includeParentTotals: input.bool("include_parent_totals", default: true)
+    )
     let page = try await service.summary(
       profileID: profileID,
-      range: input.dateRange(timeZone: timeZone),
-      reportingInstrument: reportingInstrument(input),
-      groupByCategory: group == "category",
-      includeNetWorth: input.bool("include_net_worth")
+      query: query,
+      reportingInstrument: reportingInstrument(input)
     )
     return try await encode(page: page, context: context)
   }
