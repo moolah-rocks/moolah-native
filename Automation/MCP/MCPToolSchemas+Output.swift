@@ -141,13 +141,26 @@ extension MCPToolSchemas {
   private static var summary: MCPToolValue {
     let group = object(
       [
-        "category_id": nullable(uuid), "income": array(quantity), "spending": array(quantity),
+        "category_id": nullable(uuid), "category_name": nullable(string),
+        "parent_category_id": nullable(uuid),
+        "month": nullable(
+          .object([
+            "type": .string("string"), "pattern": .string("^[0-9]{4}-(0[1-9]|1[0-2])$"),
+            "description": .string(
+              "Gregorian YYYY-MM in the requested time_zone; omitted when group_by excludes month."
+            ),
+          ])
+        ),
+        "includes_descendants": boolean,
+        "income": array(quantity), "spending": array(quantity),
         "reporting_income": valuation, "reporting_spending": valuation,
       ],
-      required: ["income", "spending", "reporting_income", "reporting_spending"]
+      required: [
+        "includes_descendants", "income", "spending", "reporting_income", "reporting_spending",
+      ]
     )
     let properties = [
-      "semantics": string, "reporting_instrument": instrument,
+      "semantics": string, "reporting_instrument": instrument, "group_by": string,
       "income": array(quantity), "spending": array(quantity),
       "reporting_income": valuation, "reporting_spending": valuation,
       "current_net_worth": nullable(valuation), "net_worth_included": boolean,

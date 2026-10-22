@@ -15,6 +15,7 @@ struct ReadTransactionSearch: Sendable {
     payeeQuery: String? = nil,
     scheduled: Bool = false
   ) throws {
+    try range.validate(horizon: .transactions)
     guard accountIDs.count <= 500, categoryIDs.count <= 500,
       (payeeQuery?.utf8.count ?? 0) <= 256
     else { throw ReadQueryError.invalidFilter }
@@ -31,6 +32,7 @@ struct ReadTransactionSearch: Sendable {
       scheduled: scheduled ? .scheduledOnly : .nonScheduledOnly,
       dateInterval: range.interval,
       categoryIds: categoryIDs,
-      payee: payeeQuery)
+      payee: payeeQuery
+    )
   }
 }

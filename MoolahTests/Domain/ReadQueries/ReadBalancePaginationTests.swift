@@ -81,23 +81,33 @@ extension ReadBalancePaginationTests {
     #expect(first.items.map(\.accountID) == [firstID])
     #expect(first.items.first?.positions.isEmpty == true)
     #expect(first.hasMore)
+    let next = try #require(first.nextKey)
+    await #expect(
+      throws: ReadLimitError(operation: .balances, unit: .transactionLegs, maximum: 250_000)
+    ) {
+      try await repository.balanceInputs(
+        accountIDs: [],
+        page: ReadPageRequest(limit: 1, after: next, revision: first.revision)
+      )
+    }
   }
 
   private func seedDenseAccount(_ database: DatabaseQueue, accountID: UUID, transactionID: UUID)
     async throws
   {
     try await database.write { database in
-      for index in 0..<10_001 {
-        let leg = TransactionLeg(
-          accountId: accountID,
-          instrument: .defaultTestInstrument,
-          quantity: 1,
-          type: .income
-        )
-        try TransactionLegRow(domain: leg, transactionId: transactionID, sortOrder: index).insert(
-          database
-        )
-      }
+      try database.execute(
+        sql: """
+          WITH RECURSIVE sequence(n) AS (
+            SELECT 1 UNION ALL SELECT n + 1 FROM sequence WHERE n < 250001
+          )
+          INSERT INTO transaction_leg
+            (id, record_name, transaction_id, account_id, instrument_id, quantity, type, sort_order)
+          SELECT CAST(printf('%016x', n) AS BLOB), 'sentinel-' || n, ?, ?, ?, 100000000, 'income', n
+          FROM sequence
+          """,
+        arguments: [transactionID, accountID, Instrument.defaultTestInstrument.id]
+      )
     }
   }
 }

@@ -18,7 +18,7 @@ struct ReadSummaryCalculationTests {
     let (result, warnings) = try await calculation.summary(
       snapshot,
       target: aud,
-      groupByCategory: true
+      grouping: .category
     )
     #expect(result.reportingIncome.value?.quantity == "120")
     #expect(result.reportingSpending.value?.quantity == "-35")
@@ -67,6 +67,11 @@ struct ReadSummaryCalculationTests {
           accountName: nil
         ),
       ]),
+      categories: [
+        ReadCategoryDTO(id: salary, name: "Salary", parentID: nil),
+        ReadCategoryDTO(id: groceries, name: "Groceries", parentID: nil),
+      ],
+      timeZone: .utc,
       revision: "fixture",
       queriedAt: current
     )
@@ -99,13 +104,15 @@ extension ReadSummaryCalculationTests {
         )
       },
       netWorth: .requested([]),
+      categories: [],
+      timeZone: zone,
       revision: "fixture",
       queriedAt: after
     )
     let (result, _) = try await ReadFinancialCalculationService(conversion: conversion).summary(
       snapshot,
       target: .fiat(code: "AUD"),
-      groupByCategory: false
+      grouping: .none
     )
     #expect(result.reportingIncome.value?.quantity == "5")
     #expect(conversion.recordedBatches.flatMap { $0 }.map(\.date) == [firstDay, secondDay])
@@ -119,13 +126,15 @@ extension ReadSummaryCalculationTests {
     let snapshot = ReadSummarySnapshot(
       flows: [],
       netWorth: .omitted,
+      categories: [],
+      timeZone: .utc,
       revision: "fixture",
       queriedAt: Date(timeIntervalSince1970: 1_700_000_000)
     )
     let (summary, _) = try await ReadFinancialCalculationService(conversion: conversion).summary(
       snapshot,
       target: .defaultTestInstrument,
-      groupByCategory: false
+      grouping: .none
     )
     #expect(!summary.netWorthIncluded)
     #expect(summary.currentNetWorth == nil)

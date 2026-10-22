@@ -52,6 +52,7 @@ enum MCPToolDefinition: String, CaseIterable, Sendable {
     case .summary:
       result.formUnion([
         "from_date", "to_date", "group_by", "reporting_instrument", "include_net_worth",
+        "include_parent_totals",
       ])
     }
     return result

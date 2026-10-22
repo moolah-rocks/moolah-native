@@ -7,17 +7,10 @@ struct ReadDateRange: Sendable {
 
   init(
     interval: Range<Date>,
-    timeZone: TimeZone
+    timeZone: TimeZone,
+    horizon: ReadDateHorizon = .transactions
   ) throws {
-    var calendar = Calendar.utc
-    calendar.timeZone = timeZone
-    guard interval.lowerBound < interval.upperBound,
-      let maximum = calendar.date(
-        byAdding: .year,
-        value: 1,
-        to: interval.lowerBound),
-      interval.upperBound <= maximum
-    else { throw ReadQueryError.invalidFilter }
+    try Self.validate(interval: interval, timeZone: timeZone, horizon: horizon)
     self.interval = interval
     self.timeZone = timeZone
   }
@@ -25,7 +18,8 @@ struct ReadDateRange: Sendable {
   init(
     from: String,
     through: String,
-    timeZone: TimeZone
+    timeZone: TimeZone,
+    horizon: ReadDateHorizon = .transactions
   ) throws {
     var calendar = Calendar.utc
     calendar.timeZone = timeZone
@@ -35,15 +29,32 @@ struct ReadDateRange: Sendable {
       let upper = calendar.date(
         byAdding: .day,
         value: 1,
-        to: last)
+        to: last
+      )
     else {
       throw ReadQueryError.invalidFilter
     }
-    try self.init(interval: lower..<upper, timeZone: timeZone)
+    try self.init(interval: lower..<upper, timeZone: timeZone, horizon: horizon)
   }
 }
 
 extension ReadDateRange {
+  func validate(horizon: ReadDateHorizon) throws {
+    try Self.validate(interval: interval, timeZone: timeZone, horizon: horizon)
+  }
+
+  private static func validate(interval: Range<Date>, timeZone: TimeZone, horizon: ReadDateHorizon)
+    throws
+  {
+    var calendar = Calendar.utc
+    calendar.timeZone = timeZone
+    let years = horizon == .summary ? 10 : 1
+    guard interval.lowerBound < interval.upperBound,
+      let maximum = calendar.date(byAdding: .year, value: years, to: interval.lowerBound),
+      interval.upperBound <= maximum
+    else { throw ReadQueryError.invalidFilter }
+  }
+
   private static func date(
     _ value: String,
     calendar: Calendar
@@ -59,4 +70,10 @@ extension ReadDateRange {
     else { throw ReadQueryError.invalidFilter }
     return calendar.startOfDay(for: date)
   }
+}
+
+/// A tool chooses the horizon; a client cannot widen transaction-search limits.
+enum ReadDateHorizon: Sendable {
+  case transactions
+  case summary
 }

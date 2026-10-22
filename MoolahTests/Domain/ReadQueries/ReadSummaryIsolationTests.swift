@@ -40,7 +40,7 @@ struct ReadSummaryIsolationTests {
     ).summary(
       snapshot,
       target: .defaultTestInstrument,
-      groupByCategory: false
+      grouping: .none
     )
     #expect(summary.reportingSpending.value?.quantity == "-7")
     #expect(summary.currentNetWorth == nil)

@@ -20,6 +20,8 @@ struct ReadSummaryFlow: Sendable {
 struct ReadSummarySnapshot: Sendable {
   let flows: [ReadSummaryFlow]
   let netWorth: ReadNetWorthInput
+  let categories: [ReadCategoryDTO]
+  let timeZone: TimeZone
   let revision: String
   let queriedAt: Date
 }

@@ -2,27 +2,31 @@ import Foundation
 import GRDB
 
 extension GRDBReadQueryRepository {
-  func summaryInputs(range: ReadDateRange, includeNetWorth: Bool, groupByCategory: Bool)
-    async throws
-    -> ReadSummarySnapshot
-  {
+  func summaryInputs(query: ReadSummaryQuery) async throws -> ReadSummarySnapshot {
     let instruments = try await instrumentResolver.instrumentMap()
     let fingerprint = try instrumentFingerprint(instruments)
     return try await database.read { database in
       let revision = try self.revision(in: database, fingerprint: fingerprint)
       let netWorth: ReadNetWorthInput =
-        includeNetWorth
+        query.includeNetWorth
         ? .requested(try self.summaryBalances(database: database, instruments: instruments))
         : .omitted
       let flows = try self.summaryFlows(
-        range: range,
-        groupByCategory: groupByCategory,
+        range: query.range,
+        groupByCategory: query.grouping.includesCategories,
         database: database,
         instruments: instruments
       )
       return ReadSummarySnapshot(
         flows: flows,
         netWorth: netWorth,
+        categories: query.grouping.includesCategories
+          ? try self.summaryCategories(
+            flows: flows,
+            includeParents: query.includeParentTotals,
+            database: database
+          ) : [],
+        timeZone: query.range.timeZone,
         revision: revision,
         queriedAt: self.now()
       )

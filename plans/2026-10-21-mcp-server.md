@@ -342,3 +342,20 @@ membership check passed. Full formatting and strict lint passed; compiler-warnin
 sweeps found no application Swift warnings. Code, concurrency, database, date/time,
 instrument, help and UI-test source reviews report no remaining findings. The
 reviewed offline seed fix is also backported to the Settings PR for its CI failure.
+
+## Reporting follow-up (2026-10-22)
+
+The [completed reporting plan](completed/2026-10-22-mcp-reporting.md) records the
+five follow-up steps: opt-in net worth, cursor-paged compact balances, exact
+streaming aggregation, actionable limits, and named category/monthly rollups.
+The signed Development app with these changes is running on localhost HTTP.
+70 reporting regressions, the strengthened three-test pagination boundary run,
+iOS/signed macOS builds and strict lint pass. The settings/tools PRs now have
+green CI, including their UI jobs.
+
+A local attempt at the required 20-run chart stability gate stopped at run 1:
+macOS LocalAuthentication prevented the UI runner from initializing with
+“System authentication is running.” Zero stability runs completed. The OS state
+must be resolved before repeating the gate; no automatic retry masks this block.
+Locked-screen Keychain, sleep/wake and the remaining visual credential/sheet
+checks are still unverified. The PRs remain draft where acceptance is incomplete.
