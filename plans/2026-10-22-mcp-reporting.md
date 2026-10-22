@@ -1,0 +1,42 @@
+# MCP reporting improvements
+
+User-requested order, each delivered with its own review and validation boundary:
+
+1. Spending summaries exclude current net worth by default. Explicit
+   include_net_worth requests it; omitted net worth is explicit in the response.
+   A narrow spending query must succeed with over 10,000 unrelated lifetime legs.
+2. Balances use signed account-keyset cursors, default/maximum page limits and a
+   compact account-total mode. No manual account batching is necessary.
+3. Stream and aggregate larger histories inside a consistent database snapshot.
+   Bound work, aggregate cardinality and encoded response size independently;
+   preserve exact Decimal arithmetic, signs, cancellation and instrument separation.
+4. Distinguish calculation limits from response size. Errors identify the operation,
+   limit and usable next action without exposing query contents or financial data.
+5. Include category names, hierarchy/parent totals and monthly breakdowns. Keep
+   report-day price conversion distinct from local-calendar month grouping.
+
+Localhost HTTP only. No HTTPS, certificate, proxy or remote-exposure instructions.
+
+Streaming/pagination design review constraints:
+
+- Count every raw joined leg (including scheduled/excluded report types) against
+  the processing cap; filter only after counting. Preserve selective date/owner
+  query plans, fixed SQL and no pre-cap sort/materialisation.
+- Aggregate only the selected account page, excluding its sentinel. Validate
+  explicit account IDs separately in the same snapshot. Bind IDs, reporting
+  currency, mode, limit and timezone into signed cursors.
+- Keep a monotonic distinct-key computation cap, sort complete outputs, then
+  remove zero quantities. Sum Decimal values, never aggregate through Int64.
+  Apply the shared fix to earmark positions too.
+- UTC historical price days and requested-zone calendar months are separate key
+  dimensions. Do not convert monthly totals at a single rate. Keep transaction
+  searches at one year; a larger summary horizon needs a separate range policy.
+- Benchmark queue occupancy and cancellation at realistic density before choosing
+  the processing ceiling. RowCursor/Row never escape their database read closure.
+
+Step 1 complete: 17 targeted tests across five suites pass, including 10,001
+out-of-range historical legs with one requested expense, explicit net-worth opt-in,
+wire omission and unchanged flow classifications/plans. iOS build, full formatting
+and strict lint pass. Code, concurrency, database, instruments and help reviews have
+no remaining findings. Net worth remains bounded by the existing limits when
+explicitly requested; later steps address those limits independently.

@@ -187,3 +187,27 @@ extension MCPToolRegistryTests {
     }
   }
 }
+
+extension MCPToolRegistryTests {
+  @Test
+  func summaryNetWorthRequiresAnExplicitRequest() async throws {
+    let fixture = try await fixture()
+    defer { fixture.manager.removeSession(for: fixture.profile.id) }
+    var arguments = fixture.arguments
+    arguments["from_date"] = .string("2026-01-01")
+    arguments["to_date"] = .string("2026-01-01")
+    let ordinary = try object(
+      await fixture.registry.call(.summary, context: fixture.context, arguments: arguments)
+    )
+    let ordinaryItem = try #require((ordinary["items"] as? [[String: Any]])?.first)
+    #expect(ordinaryItem["net_worth_included"] as? Bool == false)
+    #expect(ordinaryItem["current_net_worth"] == nil)
+    arguments["include_net_worth"] = .bool(true)
+    let requested = try object(
+      await fixture.registry.call(.summary, context: fixture.context, arguments: arguments)
+    )
+    let requestedItem = try #require((requested["items"] as? [[String: Any]])?.first)
+    #expect(requestedItem["net_worth_included"] as? Bool == true)
+    #expect(requestedItem["current_net_worth"] is [String: Any])
+  }
+}

@@ -39,12 +39,17 @@ struct ReadSummaryRepositoryTests {
       )
     }
     let snapshot = try await repository.summaryInputs(
-      range: ReadDateRange(interval: lower..<upper, timeZone: .utc)
+      range: ReadDateRange(interval: lower..<upper, timeZone: .utc),
+      includeNetWorth: true
     )
     #expect(snapshot.flows.count == 2)
     #expect(Set(snapshot.flows.map { $0.amount.quantity }) == [10, -3])
-    #expect(snapshot.balances.count == 1)
-    #expect(snapshot.balances.first?.accountID == account.id)
-    #expect(snapshot.balances.first?.positions.first?.quantity == 357)
+    guard case .requested(let balances) = snapshot.netWorth else {
+      Issue.record("Explicit net worth request was omitted")
+      return
+    }
+    #expect(balances.count == 1)
+    #expect(balances.first?.accountID == account.id)
+    #expect(balances.first?.positions.first?.quantity == 357)
   }
 }

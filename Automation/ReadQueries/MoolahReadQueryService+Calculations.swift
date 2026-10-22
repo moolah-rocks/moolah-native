@@ -23,14 +23,18 @@ extension MoolahReadQueryService {
     profileID: UUID,
     range: ReadDateRange,
     reportingInstrument: Instrument?,
-    groupByCategory: Bool
+    groupByCategory: Bool,
+    includeNetWorth: Bool = false
   ) async throws -> ReadQueryResponse<ReadSummaryDTO> {
     try await calculate(
       profileID: profileID,
       reportingInstrument: reportingInstrument,
       timeZone: range.timeZone,
       read: { repository in
-        let snapshot = try await repository.summaryInputs(range: range)
+        let snapshot = try await repository.summaryInputs(
+          range: range,
+          includeNetWorth: includeNetWorth
+        )
         return ReadPage(
           items: [snapshot],
           revision: snapshot.revision,

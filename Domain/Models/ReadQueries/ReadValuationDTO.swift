@@ -33,7 +33,8 @@ struct ReadSummaryGroupDTO: Codable, Sendable {
   let reportingSpending: ReadValuationDTO
 }
 
-/// Flows cover the requested date range; net worth is explicitly the current posted position.
+/// Flows cover the requested date range. Current posted net worth is read and returned
+/// only when explicitly requested; omission never represents a calculated zero.
 struct ReadSummaryDTO: Codable, Sendable {
   let semantics: String
   let reportingInstrument: ReadInstrumentDTO
@@ -41,7 +42,8 @@ struct ReadSummaryDTO: Codable, Sendable {
   let spending: [ReadQuantityDTO]
   let reportingIncome: ReadValuationDTO
   let reportingSpending: ReadValuationDTO
-  let currentNetWorth: ReadValuationDTO
+  let currentNetWorth: ReadValuationDTO?
+  let netWorthIncluded: Bool
   let groups: [ReadSummaryGroupDTO]
 }
 
