@@ -201,11 +201,11 @@ extension ReadQueryPlanPinningTests {
 }
 
 extension ReadQueryPlanPinningTests {
-  @Test(arguments: [ReadPositionOwner.account, .earmark])
-  func streamingPositionsSearchOwnersBeforeTransactions(owner: ReadPositionOwner) throws {
+  @Test(arguments: [ReadPositionQuery.balances, .earmarks, .netWorth])
+  func streamingPositionsSearchOwnersBeforeTransactions(query: ReadPositionQuery) throws {
     let queue = try PlanPinningTestHelpers.makeDatabase()
     let detail = try queue.read { database in
-      let statement = try GRDBReadQueryRepository.positionRequest(ids: [UUID()], owner: owner)
+      let statement = try GRDBReadQueryRepository.positionRequest(ids: [UUID()], query: query)
         .makePreparedRequest(database, forSingleResult: false).statement
       let sql: SQL = "EXPLAIN QUERY PLAN \(sql: statement.sql, arguments: statement.arguments)"
       return try SQLRequest<Row>(literal: sql).fetchAll(database)

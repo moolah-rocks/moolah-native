@@ -22,7 +22,8 @@ extension GRDBReadQueryRepository {
         database: database,
         instruments: instruments,
         includeNotes: includeNotes,
-        filter: filter)
+        filter: filter
+      )
       return ReadPage(
         items: items,
         revision: revision,
@@ -31,8 +32,10 @@ extension GRDBReadQueryRepository {
           ? selected.last.map {
             ReadPageKey(
               id: $0.id,
-              date: $0.date)
-          } : nil)
+              date: $0.date
+            )
+          } : nil
+      )
     }
   }
 
@@ -51,7 +54,8 @@ extension GRDBReadQueryRepository {
         database: database,
         instruments: instruments,
         includeNotes: includeNotes,
-        filter: TransactionFilter())
+        filter: TransactionFilter()
+      )
       return ReadPage(items: items, revision: revision, queriedAt: self.now(), nextKey: nil)
     }
   }
@@ -63,7 +67,8 @@ extension GRDBReadQueryRepository {
   ) -> QueryInterfaceRequest<TransactionRow> {
     var request = GRDBTransactionRepository.applyingHeaderFilters(
       to: TransactionRow.all(),
-      filter: filter)
+      filter: filter
+    )
     var accountIDs = filter.accountIds
     if let id = filter.accountId { accountIDs.insert(id) }
     var legs = TransactionLegRow.all()
@@ -80,7 +85,8 @@ extension GRDBReadQueryRepository {
     if let after, let date = after.date {
       let columns = TransactionRow.Columns.self
       request = request.filter(
-        columns.date < date || (columns.date == date && columns.id > after.id))
+        columns.date < date || (columns.date == date && columns.id > after.id)
+      )
     }
     return request.order(TransactionRow.Columns.date.desc, TransactionRow.Columns.id.asc)
   }
@@ -102,16 +108,20 @@ extension GRDBReadQueryRepository {
       )
       """
     let legCount = try Int.fetchOne(database, probe) ?? 0
-    guard legCount <= 10_000 else { throw ReadQueryError.resultTooLarge }
+    guard legCount <= 10_000 else {
+      throw ReadLimitError(operation: .transactionDetails, unit: .transactionLegs, maximum: 10_000)
+    }
     let instrumentIDs = try String.fetchSet(
       database,
       TransactionLegRow.filter(ids.contains(TransactionLegRow.Columns.transactionId))
-        .select(TransactionLegRow.Columns.instrumentId).distinct())
+        .select(TransactionLegRow.Columns.instrumentId).distinct()
+    )
     for id in instrumentIDs { _ = try instrument(id, in: instruments) }
     let legs = try GRDBTransactionRepository.fetchLegs(
       database: database,
       transactionIds: rows.map(\.id),
-      instruments: instruments)
+      instruments: instruments
+    )
     return try rows.map { row in
       let transaction = try row.toDomain(legs: legs[row.id] ?? [])
       return ReadTransactionDTO(transaction, includeNotes: includeNotes, filter: filter)
@@ -123,7 +133,8 @@ extension GRDBReadQueryRepository {
     if let id = filter.accountId { accounts.insert(id) }
     if !accounts.isEmpty {
       let count = try AccountRow.filter(accounts.contains(AccountRow.Columns.id)).fetchCount(
-        database)
+        database
+      )
       guard count == accounts.count else { throw ReadQueryError.notFound }
     }
     if !filter.categoryIds.isEmpty {

@@ -6,12 +6,30 @@ import Foundation
 struct ReadAggregationBudget {
   static let maximumLegs = 250_000
   static let maximumKeys = 10_000
+  let operation: ReadLimitOperation
   private var legs = 0
+
+  /// Every operation starts with an unconsumed budget; callers cannot seed the counter.
+  init(operation: ReadLimitOperation) {
+    self.operation = operation
+  }
 
   mutating func consume() throws {
     legs += 1
     if legs == 1 || legs.isMultiple(of: 1024) { try Task.checkCancellation() }
-    guard legs <= Self.maximumLegs else { throw ReadQueryError.resultTooLarge }
+    guard legs <= Self.maximumLegs else {
+      throw ReadLimitError(operation: operation, unit: .transactionLegs, maximum: Self.maximumLegs)
+    }
+  }
+
+  func validateGroupCount(_ count: Int) throws {
+    guard count <= Self.maximumKeys else {
+      throw ReadLimitError(
+        operation: operation,
+        unit: .calculationGroups,
+        maximum: Self.maximumKeys
+      )
+    }
   }
 
   static func adding(_ quantity: Int64, to previous: Decimal) throws -> Decimal {

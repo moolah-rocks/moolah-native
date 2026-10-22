@@ -51,7 +51,9 @@ struct ReadStreamingAggregationTests {
     _ = try await backend.transactions.create(transaction)
     try await seed(database, transaction: transaction.id, account: nil, count: 250_001)
     let repository = try #require(backend.readQueries)
-    await #expect(throws: ReadQueryError.resultTooLarge) {
+    await #expect(
+      throws: ReadLimitError(operation: .summaryFlows, unit: .transactionLegs, maximum: 250_000)
+    ) {
       try await repository.summaryInputs(
         range: ReadDateRange(interval: date..<date.addingTimeInterval(1), timeZone: .utc)
       )
@@ -110,7 +112,9 @@ struct ReadStreamingAggregationTests {
       )
     }
     let repository = try #require(backend.readQueries)
-    await #expect(throws: ReadQueryError.resultTooLarge) {
+    await #expect(
+      throws: ReadLimitError(operation: .balances, unit: .calculationGroups, maximum: 10_000)
+    ) {
       try await repository.balanceInputs(accountIDs: [account.id])
     }
   }
@@ -157,7 +161,7 @@ struct ReadStreamingAggregationTests {
   @Test
   func cancelledAggregationStopsAtTheNextCheckpoint() async throws {
     let calculation = Task {
-      var budget = ReadAggregationBudget()
+      var budget = ReadAggregationBudget(operation: .balances)
       try budget.consume()
       withUnsafeCurrentTask { $0?.cancel() }
       for _ in 0..<1024 { try budget.consume() }

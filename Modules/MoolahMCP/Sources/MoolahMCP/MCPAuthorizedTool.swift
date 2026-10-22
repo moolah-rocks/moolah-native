@@ -70,6 +70,10 @@ extension MCPAccessFailure {
     case .rateLimited: "Too many requests. Try again in a minute."
     case .queryTimeout: "The query took too long. Narrow its date range or filters."
     case .queryCancelled: "The query was cancelled."
+    case .calculationLimit:
+      "The calculation exceeds its limit. Request less data, use a shorter date range or use a smaller page."
+    case .responseTooLarge:
+      "The response exceeds its size limit. Request fewer details or a smaller page."
     case .resultTooLarge: "The result is too large. Use a smaller page or narrower filters."
     case .unavailable:
       "Moolah couldn’t access this profile. Confirm that it is available in Moolah, then try again."

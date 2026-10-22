@@ -72,8 +72,35 @@ struct MCPAuthenticatedEndpointTests {
     let oversized = try await endpoint.respond(
       callRequest(token: credential.token, profile: profile, name: "moolah_large")
     )
-    #expect(try errorCode(oversized) == "RESULT_TOO_LARGE")
+    #expect(try errorCode(oversized) == "RESPONSE_TOO_LARGE")
     #expect((oversized.bodyData?.count ?? 0) < 4096)
+  }
+
+  @Test
+  func calculationLimitsRetainTheirOperationAndAuditCode() async throws {
+    let store = try await MCPGrantStore.open(persistence: MCPMemorySecrets())
+    let profile = UUID()
+    let credential = try await store.create(label: "Fixture", profileIDs: [profile])
+    let audit = Mutex<[MCPAuditEvent]>([])
+    let endpoint = try MCPAuthenticatedEndpoint(
+      policy: MCPRequestPolicy(port: 49137),
+      grants: store,
+      tools: [
+        tool { _ in
+          throw MCPQueryLimit.calculation(
+            operation: .netWorth,
+            unit: .transactionLegs,
+            maximum: 250_000
+          )
+        }
+      ],
+      audit: { event in audit.withLock { $0.append(event) } }
+    )
+    let response = try await endpoint.respond(
+      callRequest(token: credential.token, profile: profile)
+    )
+    #expect(try errorCode(response) == "CALCULATION_LIMIT_EXCEEDED")
+    #expect(audit.withLock { $0.last?.outcome } == "CALCULATION_LIMIT_EXCEEDED")
   }
 
   @Test

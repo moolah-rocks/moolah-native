@@ -101,7 +101,7 @@ enum MCPToolSchemas {
     case .earmarks:
       "List earmark UUIDs, names, targets and posted balances by currency or asset. Results use stable UUID order."
     case .summary:
-      "Compute income and spending for an inclusive date range. Current net worth is omitted unless include_net_worth is true. Results use the same rules as Moolah Reports. Amounts stay in their original currencies or assets, with separate reporting values. Flows exclude transfers, trades, opening balances and scheduled transactions. Spending signs are preserved. group_by supports none or category. Calculations are limited to 250,000 scanned transaction legs, 10,000 calculation groups and 500 accounts or category groups; larger results return RESULT_TOO_LARGE."
+      "Compute income and spending for an inclusive date range. Current net worth is omitted unless include_net_worth is true. Results use the same rules as Moolah Reports. Amounts stay in their original currencies or assets, with separate reporting values. Flows exclude transfers, trades, opening balances and scheduled transactions. Spending signs are preserved. group_by supports none or category. Calculations are limited to 250,000 scanned transaction legs, 10,000 calculation groups and 500 accounts or category groups. Calculation limits return CALCULATION_LIMIT_EXCEEDED. Response limits return RESPONSE_TOO_LARGE. Errors identify the operation, limit and next step."
     }
   }
 

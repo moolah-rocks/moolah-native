@@ -152,6 +152,9 @@ extension MCPAuthenticatedEndpoint {
         owner: owner
       )
       outcome = result.isError == true ? "TOOL_ERROR" : "OK"
+    } catch let failure as MCPQueryLimit {
+      result = failure.result()
+      outcome = failure.code.rawValue
     } catch let failure as MCPAccessFailure {
       result = failure.result()
       outcome = failure.rawValue
@@ -205,7 +208,13 @@ extension MCPAuthenticatedEndpoint {
       )
       let result = try await tool.handler(invocation)
       guard try JSONEncoder().encode(result).count <= MCPLoopbackHost.maximumBodyBytes - 4096
-      else { throw MCPAccessFailure.resultTooLarge }
+      else {
+        throw MCPQueryLimit.response(
+          operation: .responseOperation(toolName: tool.schema.name),
+          unit: .bytes,
+          maximum: MCPLoopbackHost.maximumBodyBytes - 4096
+        )
+      }
       return result
     }
   }

@@ -80,7 +80,8 @@ struct MCPAuditFile: Sendable {
 extension MCPAccessFailure {
   static let allAuditCodes = [
     accessDenied, invalidFilter, cursorExpired, queryLimit, rateLimited, queryTimeout,
-    queryCancelled, resultTooLarge, unavailable, incompatible, priceUnavailable, unsupported,
+    queryCancelled, resultTooLarge, calculationLimit, responseTooLarge, unavailable, incompatible,
+    priceUnavailable, unsupported,
     internalFailure,
   ].map(\.rawValue)
 }

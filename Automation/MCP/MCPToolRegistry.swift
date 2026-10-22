@@ -55,6 +55,14 @@ struct MCPToolRegistry: Sendable {
         profileID: id,
         timeZone: zone
       )
+    } catch let failure as ReadLimitError {
+      throw failure.mcpFailure
+    } catch MCPAccessFailure.responseTooLarge {
+      throw MCPQueryLimit.response(
+        operation: tool.responseOperation,
+        unit: .bytes,
+        maximum: 500_000
+      )
     } catch let failure as ReadQueryError {
       throw Self.accessFailure(failure)
     }
@@ -147,7 +155,6 @@ struct MCPToolRegistry: Sendable {
     case .profileUnavailable: .unavailable
     case .profileIncompatible: .incompatible
     case .cursorExpired: .cursorExpired
-    case .resultTooLarge: .resultTooLarge
     case .priceUnavailable: .priceUnavailable
     }
   }
