@@ -6,6 +6,7 @@ struct ReadQueryMetadata: Codable, Sendable {
   let timeZone: String
   let localRevision: String
   let consistency: String
+  /// App-wide iCloud engine state observed separately from the database snapshot.
   let syncState: String
   let warnings: [String]
 }

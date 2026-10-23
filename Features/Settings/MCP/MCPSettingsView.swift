@@ -184,14 +184,14 @@ struct MCPSettingsView: View {
         VStack(alignment: .leading) {
           LabeledContent(
             profileStore.profiles.first(where: { $0.id == id })?.label ?? "Unavailable profile",
-            value: controller.readiness[id] ?? "Unavailable"
+            value: controller.readinessText(profileID: id)
           )
           Text(id.uuidString).font(.caption).textSelection(.enabled)
         }
       }
       Button("Refresh Status") { controller.refresh() }
       Text(
-        "Sync freshness is unknown. If you use iCloud sync, local results may not include recent changes from your other devices."
+        "Sync status reflects iCloud activity on this Mac. Local results may not include recent changes from your other devices."
       )
       .foregroundStyle(.secondary)
     }

@@ -5,7 +5,7 @@ extension MCPToolSchemas {
     if tool == .profiles {
       return object(
         [
-          "queried_at": instant, "time_zone": string, "sync_state": string,
+          "queried_at": instant, "time_zone": string, "sync_state": syncState,
           "items": array(profile, maximum: 500),
         ],
         required: ["queried_at", "time_zone", "sync_state", "items"]
@@ -30,10 +30,20 @@ extension MCPToolSchemas {
     )
   }
 
+  private static var syncState: MCPToolValue {
+    .object([
+      "type": .string("string"),
+      "enum": .array(ReadSyncState.allCases.map { .string($0.rawValue) }),
+      "description": .string(
+        "App-wide iCloud engine state observed separately from the financial snapshot. up_to_date means this Mac’s sync engine has no known work; it does not guarantee that changes from other devices are present. A profile that is not ready reports unknown."
+      ),
+    ])
+  }
+
   private static var metadata: MCPToolValue {
     let properties = [
       "queried_at": instant, "profile_id": uuid, "time_zone": string,
-      "local_revision": string, "consistency": string, "sync_state": string,
+      "local_revision": string, "consistency": string, "sync_state": syncState,
       "warnings": array(string),
     ]
     return object(properties, required: properties.keys.sorted())
@@ -69,7 +79,7 @@ extension MCPToolSchemas {
     object(
       [
         "id": uuid, "label": nullable(string), "base_instrument": nullable(instrument),
-        "readiness": string, "sync_state": string,
+        "readiness": string, "sync_state": syncState,
       ],
       required: ["id", "readiness", "sync_state"]
     )

@@ -124,17 +124,19 @@ struct MCPToolRegistry: Sendable {
   private func profiles(context: MCPAuthorizationContext, timeZone: TimeZone) async throws
     -> MCPToolResult
   {
+    let syncState = await service.sessions.readSyncState
     var items: [ReadProfileStatusDTO] = []
     for id in context.profileIDs.sorted(by: { $0.uuidString < $1.uuidString }) {
       try Task.checkCancellation()
       try await grants.validate(context, scope: .profiles, profileID: id)
-      items.append(try await service.sessions.readProfileStatus(profileID: id))
+      items.append(
+        try await service.sessions.readProfileStatus(profileID: id, syncState: syncState))
     }
     return try await encode(
       MCPProfileListResult(
         queriedAt: now(),
         timeZone: timeZone.identifier,
-        syncState: "unknown",
+        syncState: syncState.rawValue,
         items: items
       ),
       context: context

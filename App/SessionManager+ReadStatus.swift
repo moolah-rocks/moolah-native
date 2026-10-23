@@ -2,7 +2,9 @@ import Foundation
 
 extension SessionManager {
   /// Callers authorize the UUID first. This never opens a window or creates a profile session.
-  func readProfileStatus(profileID: UUID) async throws -> ReadProfileStatusDTO {
+  func readProfileStatus(profileID: UUID, syncState: ReadSyncState? = nil) async throws
+    -> ReadProfileStatusDTO
+  {
     let profile: Profile?
     do { profile = try await profileIndexRepository.profile(forID: profileID) } catch {
       if error is CancellationError { throw CancellationError() }
@@ -37,7 +39,7 @@ extension SessionManager {
       label: profile.label,
       baseInstrument: ReadInstrumentDTO(profile.instrument),
       readiness: readiness,
-      syncState: "unknown"
+      syncState: readiness == "ready" ? (syncState ?? readSyncState).rawValue : "unknown"
     )
   }
 }

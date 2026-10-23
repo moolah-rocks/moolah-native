@@ -6,5 +6,6 @@ struct ReadProfileStatusDTO: Codable, Sendable {
   let label: String?
   let baseInstrument: ReadInstrumentDTO?
   let readiness: String
+  /// App-wide iCloud engine state; unknown when this profile is not ready.
   let syncState: String
 }

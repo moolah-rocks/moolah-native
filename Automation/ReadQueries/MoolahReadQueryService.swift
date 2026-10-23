@@ -94,7 +94,7 @@ struct MoolahReadQueryService: Sendable {
             label: reads.profile.label,
             baseInstrument: ReadInstrumentDTO(reads.profile.instrument),
             readiness: "ready",
-            syncState: "unknown"
+            syncState: reads.syncState.rawValue
           )
         ],
         revision: snapshot.revision,
@@ -121,7 +121,7 @@ struct MoolahReadQueryService: Sendable {
           timeZone: timeZone.identifier,
           localRevision: page.revision,
           consistency: "profile_database_read_snapshot",
-          syncState: "unknown",
+          syncState: access.syncState.rawValue,
           warnings: [
             "Results use data currently available on this Mac. "
               + "If you use iCloud sync, recent changes from your other devices may not appear yet."

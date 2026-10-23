@@ -138,8 +138,8 @@ strings at the domain's eight-place storage scale.
 Financial rows and their revision are read within one database read transaction.
 Canonical instrument metadata comes from the existing shared registry before
 that transaction, matching the established cross-database identity lookup
-contract; the facade does not claim a cross-database snapshot. Sync freshness
-remains unknown, with a warning that local data may not reflect other devices.
+contract; the facade does not claim a cross-database snapshot. The app-wide iCloud engine state is sampled separately from that database
+snapshot, with a warning that local data may not reflect other devices.
 
 `SessionManager` owns both service leases and explicit macOS-window ownership.
 A successful setup gate is distinct from a session object's existence; failed,
@@ -242,7 +242,10 @@ of active grants' profile leases, and drains queries/listener/tasks before relea
 leases on disable or quit. Generation checks release late acquisitions after a
 listener fails. Readiness failures drop stale lease bookkeeping so restored profiles
 can recover. Existing session ownership prevents closing a window from ending an
-MCP-owned session. Sync freshness remains explicitly unknown.
+MCP-owned session. Readiness displays the same live sync progress as the sidebar.
+MCP responses capture one app-wide sync state per call; unready profile items
+retain `unknown`. `up_to_date` describes this Mac’s known engine work and does not
+guarantee that all recent remote changes are present.
 
 The audit actor serializes complete off-caller file transactions. Only completion
 time, credential UUID, registered tool name, parsed profile UUID, elapsed duration

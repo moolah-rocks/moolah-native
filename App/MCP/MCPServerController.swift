@@ -73,6 +73,13 @@ final class MCPServerController {
     }
   }
 
+  /// Resolve progress while rendering so Observation tracks sync changes immediately.
+  func readinessText(profileID: UUID) -> String {
+    guard let status = readiness[profileID] else { return "Unavailable" }
+    guard status == "Ready" else { return status }
+    return "Ready · \(sessions.readSyncState.title)"
+  }
+
   var readinessIDs: [UUID] { readiness.keys.sorted { $0.uuidString < $1.uuidString } }
 
   var readinessEmptyMessage: String {

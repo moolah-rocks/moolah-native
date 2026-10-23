@@ -49,6 +49,7 @@ extension SessionManager {
       session.authStore.state != .signedOut
     else { throw ReadQueryError.profileUnavailable }
     return ReadProfileAccess(
+      syncState: readSyncState,
       profile: profile,
       repository: repository.using(defaultInstrument: profile.instrument),
       conversionService: session.backend.conversionService,
