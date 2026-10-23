@@ -148,7 +148,7 @@ extension MCPServerController {
       guard try await acquireLease(profileID: id, generation: generation) else { return }
       _ = try await sessions.readAccess(profileID: id)
       guard listenerGeneration == generation else { return }
-      readiness[id] = "Ready · sync freshness unknown"
+      readiness[id] = "Ready"
     } catch ReadQueryError.profileIncompatible {
       guard listenerGeneration == generation else { return }
       sessions.releaseReadSession(profileID: id, owner: leaseOwner)

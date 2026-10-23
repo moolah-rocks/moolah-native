@@ -83,7 +83,7 @@ extension MoolahReadQueryService {
           timeZone: timeZone.identifier,
           localRevision: page.revision,
           consistency: "profile_database_read_snapshot;prices_read_separately",
-          syncState: "unknown",
+          syncState: access.syncState.rawValue,
           warnings: [
             "Results use data currently available on this Mac. If you use iCloud sync, recent changes from your other devices may not appear yet.",
             "Financial records come from one database snapshot. Prices are read separately and may be cached or dated to an earlier market day.",
