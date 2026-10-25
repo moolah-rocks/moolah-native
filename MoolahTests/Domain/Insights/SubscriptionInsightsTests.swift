@@ -97,6 +97,16 @@ struct SubscriptionInsightsTests {
   }
 
   @Test
+  func overdueSubscriptionPromptsReviewWithoutClaimingContinuedPayment() throws {
+    let transactions = (0..<4).map { index in
+      InsightTestSupport.expense(40, payee: "Gym", daysAgo: 65 + index * 30)
+    }
+    let insight = try #require(
+      SubscriptionInsights.cancellationCandidates(detect(transactions), context: context).first)
+    #expect(insight.title == "Check your Gym subscription")
+  }
+
+  @Test
   func subscriptionOverspendFlagsHighShare() {
     let transactions = (0..<4).flatMap { index in
       [

@@ -22,11 +22,11 @@ extension InsightDescriptionComposer {
       "You're paying for overlapping \(category) subscriptions (\(services)) — \(combined) a month combined."
   }
   static func subscriptionCancellationCandidate(title: String, facts: FactLookup) -> String {
-    guard let merchant = facts.value("Merchant"), let monthly = facts.value("Monthly cost"),
+    guard let merchant = facts.value("Merchant"), let cadence = facts.value("Usual cadence"),
       let days = facts.value("Days since last")
     else { return title }
     return
-      "You're still paying \(monthly) a month for \(merchant), but there hasn't been a charge in \(days) \(plural(days, "day"))."
+      "No charge recorded for \(merchant) in \(days) \(plural(days, "day")). Charges usually appeared \(cadence)."
   }
   static func subscriptionOverspend(title: String, facts: FactLookup) -> String {
     guard let count = facts.value("Active subscriptions"),

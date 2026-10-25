@@ -62,14 +62,14 @@ struct InsightDescriptionComposerTests {
   @Test
   func subscriptionCancellationCandidateReadsClearly() {
     let text = InsightDescriptionComposer.compose(
-      kind: .subscriptionCancellationCandidate, title: "Still paying for Gym",
+      kind: .subscriptionCancellationCandidate, title: "Check your Gym subscription",
       facts: [
         InsightFact("Merchant", "Gym"), InsightFact("Usual cadence", "every 30 days"),
         InsightFact("Days since last", "65"), InsightFact("Monthly cost", "$40.00"),
       ])
     #expect(
       text
-        == "You're still paying $40.00 a month for Gym, but there hasn't been a charge in 65 days."
+        == "No charge recorded for Gym in 65 days. Charges usually appeared every 30 days."
     )
   }
 
@@ -98,13 +98,13 @@ struct InsightDescriptionComposerTests {
   @Test
   func subscriptionCancellationCandidateSingularDayReadsClearly() {
     let text = InsightDescriptionComposer.compose(
-      kind: .subscriptionCancellationCandidate, title: "Still paying for Gym",
+      kind: .subscriptionCancellationCandidate, title: "Check your Gym subscription",
       facts: [
-        InsightFact("Merchant", "Gym"), InsightFact("Monthly cost", "$40.00"),
+        InsightFact("Merchant", "Gym"), InsightFact("Usual cadence", "every 30 days"),
         InsightFact("Days since last", "1"),
       ])
     #expect(
-      text == "You're still paying $40.00 a month for Gym, but there hasn't been a charge in 1 day."
+      text == "No charge recorded for Gym in 1 day. Charges usually appeared every 30 days."
     )
   }
 
