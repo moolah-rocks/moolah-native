@@ -135,7 +135,7 @@ enum SubscriptionInsights {
       return Insight(
         id: "\(InsightKind.subscriptionCancellationCandidate.rawValue):\(subscription.id)",
         kind: .subscriptionCancellationCandidate,
-        title: "Still paying for \(subscription.displayPayee)",
+        title: "Check your \(subscription.displayPayee) subscription",
         date: subscription.lastDate,
         framing: .neutral,
         actionability: .review,
