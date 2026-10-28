@@ -113,8 +113,8 @@ extension SpendAndTrendInsightTests {
   @Test
   func monthOverMonthSpendIncrease() throws {
     let monthly = [
-      InsightTestSupport.monthly(month: "202604", income: 5000, expense: 100),
-      InsightTestSupport.monthly(month: "202605", income: 5000, expense: 130),
+      InsightTestSupport.monthlySpending(month: "202604", expense: 100),
+      InsightTestSupport.monthlySpending(month: "202605", expense: 130),
     ]
     let insights = PeriodComparisonInsights.detect(monthly: monthly, context: context)
     let delta = try #require(insights.first { $0.kind == .monthOverMonthDelta })
@@ -124,9 +124,9 @@ extension SpendAndTrendInsightTests {
   @Test
   func monthOverMonthAttachesSpendChart() throws {
     let monthly = [
-      InsightTestSupport.monthly(month: "202603", income: 5000, expense: 1800),
-      InsightTestSupport.monthly(month: "202604", income: 5000, expense: 2000),
-      InsightTestSupport.monthly(month: "202605", income: 5000, expense: 2600),
+      InsightTestSupport.monthlySpending(month: "202603", expense: 1800),
+      InsightTestSupport.monthlySpending(month: "202604", expense: 2000),
+      InsightTestSupport.monthlySpending(month: "202605", expense: 2600),
     ]
     let insights = PeriodComparisonInsights.detect(monthly: monthly, context: context)
     let delta = try #require(insights.first { $0.kind == .monthOverMonthDelta })
@@ -148,8 +148,8 @@ extension SpendAndTrendInsightTests {
     // Only the current (in-progress) bucket plus one complete month — not
     // enough complete months to compare.
     let monthly = [
-      InsightTestSupport.monthly(month: "202605", income: 5000, expense: 100),
-      InsightTestSupport.monthly(month: "202606", income: 5000, expense: 5),
+      InsightTestSupport.monthlySpending(month: "202605", expense: 100),
+      InsightTestSupport.monthlySpending(month: "202606", expense: 5),
     ]
     let insights = PeriodComparisonInsights.detect(monthly: monthly, context: context)
     #expect(insights.isEmpty)

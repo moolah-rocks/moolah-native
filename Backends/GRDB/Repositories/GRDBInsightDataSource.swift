@@ -101,13 +101,20 @@ final class GRDBInsightDataSource: InsightDataSource, @unchecked Sendable {
     let expenseQty: Int64
   }
 
+  /// Keeps expense-only consumers independent of unavailable income rates.
+  struct DailyTotalsProjection: Sendable {
+    let items: [DailySpendSummary]
+    let unavailableDays: Set<Date>
+    let unavailableExpenseDays: Set<Date>
+  }
+
   func dailyTotals(context: InsightContext) async throws -> [DailySpendSummary] {
     try await dailyTotalsWithDrops(context: context).items
   }
 
   func dailyTotalsWithDrops(
     context: InsightContext
-  ) async throws -> (items: [DailySpendSummary], dropped: Int) {
+  ) async throws -> DailyTotalsProjection {
     let instruments = try await resolveInstruments()
     let rows = try await profileDatabase.read { database -> [DailyTotalsRow] in
       try Row.fetchAll(
@@ -147,42 +154,28 @@ final class GRDBInsightDataSource: InsightDataSource, @unchecked Sendable {
     _ rows: [DailyTotalsRow],
     instruments: [String: Instrument],
     context: InsightContext
-  ) async throws -> (items: [DailySpendSummary], dropped: Int) {
+  ) async throws -> DailyTotalsProjection {
     var income: [Date: InstrumentAmount] = [:]
     var expense: [Date: InstrumentAmount] = [:]
     let zero = context.zero
-    var dropped = 0
+    var unavailableDays: Set<Date> = []
+    var unavailableExpenseDays: Set<Date> = []
     for row in rows {
       guard let day = GRDBAnalysisRepository.parseDayString(row.day) else {
         logger.error("dailyTotals: unparseable day '\(row.day, privacy: .public)'")
         continue
       }
       let source = instrument(forId: row.instrumentId, in: instruments)
-      do {
-        let incomeAmount = try await GRDBAnalysisRepository.convertedQuantity(
-          storageValue: row.incomeQty,
-          instrument: source,
-          to: instrument,
-          on: day,
-          conversionService: conversionService)
-        let expenseAmount = try await GRDBAnalysisRepository.convertedQuantity(
-          storageValue: row.expenseQty,
-          instrument: source,
-          to: instrument,
-          on: day,
-          conversionService: conversionService)
-        income[day] = (income[day] ?? zero) + incomeAmount
-        expense[day] = (expense[day] ?? zero) + expenseAmount
-      } catch let cancel as CancellationError {
-        throw cancel
-      } catch {
-        dropped += 1
-        logger.warning(
-          """
-          dailyTotals: skipping day=\(row.day, privacy: .public) \
-          instrument=\(row.instrumentId, privacy: .public) — conversion failed: \
-          \(error.localizedDescription, privacy: .public)
-          """)
+      if let amount = try await convertedDailyQuantity(row.incomeQty, source: source, on: day) {
+        income[day] = (income[day] ?? zero) + amount
+      } else {
+        unavailableDays.insert(day)
+      }
+      if let amount = try await convertedDailyQuantity(row.expenseQty, source: source, on: day) {
+        expense[day] = (expense[day] ?? zero) + amount
+      } else {
+        unavailableDays.insert(day)
+        unavailableExpenseDays.insert(day)
       }
     }
     let days = Set(income.keys).union(expense.keys)
@@ -195,6 +188,31 @@ final class GRDBInsightDataSource: InsightDataSource, @unchecked Sendable {
           income: income[day] ?? zero)
       }
       .sorted { $0.day < $1.day }
-    return (items, dropped)
+    return DailyTotalsProjection(
+      items: items,
+      unavailableDays: unavailableDays,
+      unavailableExpenseDays: unavailableExpenseDays)
+  }
+
+  /// Zero quantities need no price; each nonzero column fails independently.
+  private func convertedDailyQuantity(
+    _ quantity: Int64, source: Instrument, on day: Date
+  ) async throws -> InstrumentAmount? {
+    guard quantity != 0 else { return .zero(instrument: instrument) }
+    do {
+      return try await GRDBAnalysisRepository.convertedQuantity(
+        storageValue: quantity,
+        instrument: source,
+        to: instrument,
+        on: day,
+        conversionService: conversionService)
+    } catch let cancel as CancellationError {
+      throw cancel
+    } catch {
+      logger.warning(
+        "dailyTotals: skipping day=\(day, privacy: .public) instrument=\(source.id, privacy: .public) — conversion failed: \(error.localizedDescription, privacy: .public)"
+      )
+      return nil
+    }
   }
 }

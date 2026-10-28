@@ -100,6 +100,9 @@ struct InsightInput: Sendable {
   /// Per-financial-month income/expense aggregates (`AnalysisStore`).
   let monthly: [MonthlyIncomeExpense]
 
+  /// Posted expenses, excluding available-funds reserve and transfer adjustments.
+  let monthlySpending: [InsightMonthlySpending]
+
   /// Per-category per-month expense aggregates (`AnalysisStore`).
   let expenseBreakdown: [ExpenseBreakdown]
 
@@ -158,6 +161,7 @@ struct InsightInput: Sendable {
     unbudgetedCategorySpend: [CategorySpendSummary] = [],
     accountSpend: [AccountSpendSummary] = [],
     monthly: [MonthlyIncomeExpense] = [],
+    monthlySpending: [InsightMonthlySpending] = [],
     expenseBreakdown: [ExpenseBreakdown] = [],
     dailyBalances: [DailyBalance] = [],
     scheduledBills: [ScheduledBill] = [],
@@ -186,6 +190,7 @@ struct InsightInput: Sendable {
     self.unbudgetedCategorySpend = unbudgetedCategorySpend
     self.accountSpend = accountSpend
     self.monthly = monthly
+    self.monthlySpending = monthlySpending
     self.expenseBreakdown = expenseBreakdown
     self.dailyBalances = dailyBalances
     self.scheduledBills = scheduledBills

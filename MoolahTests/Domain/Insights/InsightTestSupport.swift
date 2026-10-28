@@ -252,3 +252,15 @@ enum InsightTestSupport {
       hasUnavailableData: hasUnavailableData)
   }
 }
+
+extension InsightTestSupport {
+  static func monthlySpending(
+    month: String, expense: Decimal, hasUnavailableData: Bool = false
+  ) -> InsightMonthlySpending {
+    let date = FinancialMonth.date(forKey: month) ?? now
+    return InsightMonthlySpending(
+      month: month, start: date, end: date,
+      expense: InstrumentAmount(quantity: -expense, instrument: currency),
+      hasUnavailableData: hasUnavailableData)
+  }
+}

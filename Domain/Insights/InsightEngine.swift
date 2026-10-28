@@ -101,7 +101,7 @@ struct InsightEngine: Sendable {
         context: context,
         historyWindowDays: input.dataWindow.payeeCadenceDays)
     }
-    if input.dataAvailability.dailyTotals {
+    if input.dataAvailability.dailyExpenseTotals {
       insights += UnusualDayInsight.detect(dailyTotals: input.dailyTotals, context: context)
     }
     insights += CategoryAnomalyInsight.detect(
@@ -119,7 +119,7 @@ struct InsightEngine: Sendable {
     var insights: [Insight] = []
     insights += CategoryTrendInsight.detect(
       breakdown: input.expenseBreakdown, categories: input.categories, context: context)
-    insights += PeriodComparisonInsights.detect(monthly: input.monthly, context: context)
+    insights += PeriodComparisonInsights.detect(monthly: input.monthlySpending, context: context)
     insights += CategoryMixShiftInsight.detect(
       breakdown: input.expenseBreakdown, categories: input.categories, context: context)
     return insights
@@ -182,7 +182,7 @@ struct InsightEngine: Sendable {
     var insights: [Insight] = []
     insights += SpendHabitInsights.lapsedMerchant(
       payees: input.payees.filter { !$0.hasUnavailableData }, context: context)
-    if input.dataAvailability.dailyTotals {
+    if input.dataAvailability.dailyExpenseTotals {
       insights += SpendHabitInsights.weekendSkew(dailyTotals: input.dailyTotals, context: context)
     }
     return insights

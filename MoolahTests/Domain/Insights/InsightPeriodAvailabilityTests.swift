@@ -107,9 +107,9 @@ struct InsightPeriodAvailabilityTests {
   @Test
   func monthOverMonthSuppressesUnavailableComparison() {
     let monthly = [
-      InsightTestSupport.monthly(month: "202604", income: 5000, expense: 100),
-      InsightTestSupport.monthly(
-        month: "202605", income: 5000, expense: 130, hasUnavailableData: true),
+      InsightTestSupport.monthlySpending(month: "202604", expense: 100),
+      InsightTestSupport.monthlySpending(
+        month: "202605", expense: 130, hasUnavailableData: true),
     ]
     #expect(PeriodComparisonInsights.detect(monthly: monthly, context: context).isEmpty)
   }
@@ -117,10 +117,10 @@ struct InsightPeriodAvailabilityTests {
   @Test
   func monthOverMonthOmitsChartWithOlderUnavailableMonth() throws {
     let monthly = [
-      InsightTestSupport.monthly(
-        month: "202603", income: 5000, expense: 90, hasUnavailableData: true),
-      InsightTestSupport.monthly(month: "202604", income: 5000, expense: 100),
-      InsightTestSupport.monthly(month: "202605", income: 5000, expense: 130),
+      InsightTestSupport.monthlySpending(
+        month: "202603", expense: 90, hasUnavailableData: true),
+      InsightTestSupport.monthlySpending(month: "202604", expense: 100),
+      InsightTestSupport.monthlySpending(month: "202605", expense: 130),
     ]
     let insight = try #require(
       PeriodComparisonInsights.detect(monthly: monthly, context: context).first)
