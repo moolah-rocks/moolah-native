@@ -89,9 +89,9 @@ struct InsightChartBuildersTests {
   @Test
   func monthlySpendChartHighlightsTheGivenMonth() throws {
     let monthly = [
-      InsightTestSupport.monthly(month: "202604", income: 5000, expense: 2000),
-      InsightTestSupport.monthly(month: "202605", income: 5000, expense: 2200),
-      InsightTestSupport.monthly(month: "202606", income: 5000, expense: 3500),
+      InsightTestSupport.monthlySpending(month: "202604", expense: 2000),
+      InsightTestSupport.monthlySpending(month: "202605", expense: 2200),
+      InsightTestSupport.monthlySpending(month: "202606", expense: 3500),
     ]
     let chart = try #require(
       InsightChartBuilders.monthlySpend(
@@ -111,13 +111,13 @@ struct InsightChartBuildersTests {
     #expect(chart.highlight?.date == FinancialMonth.date(forKey: "202606"))
   }
 
-  /// A net-refund month (positive `totalExpense`) clamps to a zero bar rather
+  /// A net-refund month (positive `expense`) clamps to a zero bar rather
   /// than plotting a negative spend.
   @Test
   func monthlySpendChartClampsRefundMonthToZero() throws {
     let monthly = [
-      InsightTestSupport.monthly(month: "202604", income: 5000, expense: 2000),
-      InsightTestSupport.monthly(month: "202605", income: 5000, expense: -300),
+      InsightTestSupport.monthlySpending(month: "202604", expense: 2000),
+      InsightTestSupport.monthlySpending(month: "202605", expense: -300),
     ]
     let chart = try #require(
       InsightChartBuilders.monthlySpend(
@@ -128,7 +128,7 @@ struct InsightChartBuildersTests {
 
   @Test
   func monthlySpendChartIsNilBelowTwoMonths() {
-    let monthly = [InsightTestSupport.monthly(month: "202606", income: 5000, expense: 3500)]
+    let monthly = [InsightTestSupport.monthlySpending(month: "202606", expense: 3500)]
     #expect(
       InsightChartBuilders.monthlySpend(
         monthly: monthly, reportingCurrency: currency, highlightMonth: "202606") == nil)

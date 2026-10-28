@@ -60,6 +60,10 @@ struct InsightInputBuilder: Sendable {
       unbudgetedCategorySpend: insightSummary.unbudgetedCategorySpend,
       accountSpend: insightSummary.accountSpend,
       monthly: snapshot.monthly,
+      monthlySpending: InsightMonthlySpending.aggregate(
+        insightSummary.dailyTotals,
+        unavailableDays: insightSummary.unavailableDailyExpenseDates,
+        context: context),
       expenseBreakdown: snapshot.expenseBreakdown,
       dailyBalances: snapshot.dailyBalances,
       scheduledBills: bills.items,

@@ -1,12 +1,12 @@
 import Foundation
 
 /// Month-over-month and year-over-year deltas (design §C-11) on overall
-/// spend. Operates on the pre-bucketed `MonthlyIncomeExpense` aggregates and
+/// spend. Operates on the posted-expense financial-month aggregates and
 /// only on *complete* financial months — the in-progress current bucket is
 /// excluded so a half-finished month never reads as a spending drop.
 enum PeriodComparisonInsights {
   static func detect(
-    monthly: [MonthlyIncomeExpense],
+    monthly: [InsightMonthlySpending],
     context: InsightContext,
     threshold: Double = 0.15
   ) -> [Insight] {
@@ -32,12 +32,12 @@ enum PeriodComparisonInsights {
 
   /// Compare the latest two complete months' total spend magnitude and emit a
   /// delta insight when the change clears `threshold`. Spend magnitude is
-  /// `-(totalExpense)` because expense aggregates are stored negative.
+  /// `-(expense)` because expense aggregates are stored negative.
   /// `completeMonths` (ascending, ≥2) is both the comparison source — its last
   /// two entries — and the full series the companion bar chart plots, with the
   /// latest month highlighted.
   private static func compare(
-    completeMonths: [MonthlyIncomeExpense],
+    completeMonths: [InsightMonthlySpending],
     label: String,
     context: InsightContext,
     threshold: Double
@@ -48,8 +48,8 @@ enum PeriodComparisonInsights {
     let latest = completeMonths[completeMonths.count - 1]
     let baseline = completeMonths[completeMonths.count - 2]
     guard !latest.hasUnavailableData, !baseline.hasUnavailableData else { return nil }
-    let latestSpend = magnitude(latest.totalExpense)
-    let baselineSpend = magnitude(baseline.totalExpense)
+    let latestSpend = magnitude(latest.expense)
+    let baselineSpend = magnitude(baseline.expense)
     guard baselineSpend > 0 else { return nil }
     let fraction = (latestSpend - baselineSpend) / baselineSpend
     let changeMagnitude = abs(fraction)

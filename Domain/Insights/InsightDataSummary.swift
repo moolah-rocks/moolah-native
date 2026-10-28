@@ -18,6 +18,7 @@ import Foundation
 struct InsightDataSummary: Sendable {
   struct Availability: Sendable {
     var dailyTotals = true
+    var dailyExpenseTotals = true
     var categorySpend = true
     var unbudgetedCategorySpend = true
     var accountSpend = true
@@ -27,7 +28,8 @@ struct InsightDataSummary: Sendable {
     var recentCandidates = true
 
     var isComplete: Bool {
-      dailyTotals && categorySpend && unbudgetedCategorySpend && accountSpend && payees
+      dailyTotals && dailyExpenseTotals && categorySpend && unbudgetedCategorySpend && accountSpend
+        && payees
         && categorySamples && incomeSourceSamples && recentCandidates
     }
   }
@@ -35,6 +37,10 @@ struct InsightDataSummary: Sendable {
   /// Per-UTC-calendar-day income / expense totals over all history. Drives
   /// the unusual-day and weekend-skew detectors. `O(active days)`.
   let dailyTotals: [DailySpendSummary]
+
+  /// UTC days with at least one expense bucket that failed conversion.
+  /// Retained even when no convertible bucket exists on that day.
+  let unavailableDailyExpenseDates: Set<Date>
 
   /// Per-category expense totals over a trailing window. Drives fee-spend
   /// and unbudgeted-category. `O(categories)`.
@@ -65,6 +71,7 @@ struct InsightDataSummary: Sendable {
 
   init(
     dailyTotals: [DailySpendSummary] = [],
+    unavailableDailyExpenseDates: Set<Date> = [],
     categorySpend: [CategorySpendSummary] = [],
     unbudgetedCategorySpend: [CategorySpendSummary] = [],
     accountSpend: [AccountSpendSummary] = [],
@@ -75,6 +82,7 @@ struct InsightDataSummary: Sendable {
     availability: Availability = Availability()
   ) {
     self.dailyTotals = dailyTotals
+    self.unavailableDailyExpenseDates = unavailableDailyExpenseDates
     self.categorySpend = categorySpend
     self.unbudgetedCategorySpend = unbudgetedCategorySpend
     self.accountSpend = accountSpend

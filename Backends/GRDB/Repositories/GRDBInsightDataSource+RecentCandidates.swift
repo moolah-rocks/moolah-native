@@ -210,6 +210,7 @@ extension GRDBInsightDataSource {
     let candidates = try await candidatesResult
     return InsightDataSummary(
       dailyTotals: daily.items,
+      unavailableDailyExpenseDates: daily.unavailableExpenseDays,
       categorySpend: categorySpendSummaries.items,
       unbudgetedCategorySpend: unbudgetedSpendSummaries.items,
       accountSpend: accountSpendSummaries.items,
@@ -218,7 +219,8 @@ extension GRDBInsightDataSource {
       incomeSourceSamples: incomeSamples.items,
       recentCandidates: candidates.items,
       availability: InsightDataSummary.Availability(
-        dailyTotals: daily.dropped == 0,
+        dailyTotals: daily.unavailableDays.isEmpty,
+        dailyExpenseTotals: daily.unavailableExpenseDays.isEmpty,
         categorySpend: categorySpendSummaries.dropped == 0,
         unbudgetedCategorySpend: unbudgetedSpendSummaries.dropped == 0,
         accountSpend: accountSpendSummaries.dropped == 0,
